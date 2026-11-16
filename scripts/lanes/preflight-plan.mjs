@@ -146,9 +146,11 @@ export const PLAN_SECS = Number(process.env.PREFLIGHT_PLAN_SECS || 330);
 /** Past the guards and the changed tests, at most this many pins, scanners and importers in one package (closest first). */
 export const MAX_EXTRA = Number(process.env.PREFLIGHT_MAX_EXTRA || 60);
 /** Estimates of the fixed steps, seconds (the Mac, 15 Nov: checks 68-118 s, words 6 s, guest-view 41 s, health-cors 3 s,
- *  standby-health 29 s, replica-hashes under 1 s, each plus the suite runner's start). */
+ *  standby-health 29 s, replica-hashes under 1 s, each plus the suite runner's start). The script tests are a start plus
+ *  each file: 17 Nov at load 6.5, the seven test-all.sh does not run took 21 s side by side (words/draft.test.mjs 26 s
+ *  alone, glossary 10 s, the rest 0-2 s), so seven plan 33 s. */
 export const EST = { checks: 120, words: 8, 'test-guest-view': 45, 'test-health-cors': 8, 'test-standby-health': 32,
-  'test-replica-hashes': 5, scriptTests: 10 };
+  'test-replica-hashes': 5, scriptTestsStart: 5, scriptTestsPerFile: 4 };
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 const TEST_FILE = /\.test\.(ts|tsx|js|jsx|mjs)$/;
@@ -234,10 +236,13 @@ function classify(pkg, mine, repo) {
 
 /**
  * The steps for these touched files. `repo` gives the tree: `tests(dir)` lists a package's test files (repo-relative),
- * `files(dir)` all its tracked files, `read(file)` returns a file's text ('' when missing), `exists(file)`, and
- * `testAllText` / `ciYml` are those files' text. Each step is { name, est (seconds), why, cmd }.
+ * `files(dir)` all its tracked files, `read(file)` returns a file's text ('' when missing), `exists(file)`, `serverRuns()`
+ * the server-suite manifest's runs (manifestRuns; only the draft's tests part reads it), and `testAllText` / `ciYml` are
+ * those files' text. Each step is { name, est (seconds), why, cmd }. `leftTo` is where a vitest
+ * step's why says the files past the budget go (the draft check's are left to the full run).
  */
-export function planSteps(touched, repo, { planSecs = PLAN_SECS, maxExtra = MAX_EXTRA } = {}) {
+export function planSteps(touched, repo, { planSecs = PLAN_SECS, maxExtra = MAX_EXTRA,
+  leftTo = `CI (past ${maxExtra} a package or the ${planSecs} s plan budget)` } = {}) {
   const steps = [];
   const files = [...touched.keys()];
   const checks = readChecksShard(repo.ciYml);
@@ -268,7 +273,7 @@ export function planSteps(touched, repo, { planSecs = PLAN_SECS, maxExtra = MAX_
     const t = /\.test\.m?js$/.test(f) ? f : f.replace(/\.(m?js)$/, '.test.$1');
     if (repo.exists(t) && !repo.testAllText.includes(t)) scriptTests.add(t);
   }
-  const scriptStep = scriptTests.size ? { name: 'script-tests', est: EST.scriptTests,
+  const scriptStep = scriptTests.size ? { name: 'script-tests', est: EST.scriptTestsStart + EST.scriptTestsPerFile * scriptTests.size,
     why: `script tests test-all.sh does not run: ${[...scriptTests].sort().join(', ')}`,
     cmd: `node --test ${[...scriptTests].sort().map(shq).join(' ')}` } : null;
 
@@ -308,7 +313,7 @@ export function planSteps(touched, repo, { planSecs = PLAN_SECS, maxExtra = MAX_
     const leftText = CLASSES.filter(c => left[c]).map(c => `${left[c]} ${c}`).join(', ');
     const why = `${p.sources.length} source + ${p.changedTests.length} test file(s) touched in ${pkg.dir}: ${p.guards.length} guards, `
       + `${ran('changed')} changed tests, ${ran('pins')} pins/co-located, ${ran('importers')} importers, ${ran('scanners')} tree scanners`
-      + (leftText ? `; left to CI (past ${maxExtra} a package or the ${planSecs} s plan budget): ${leftText}` : '');
+      + (leftText ? `; left to ${leftTo}: ${leftText}` : '');
     const rel = p.chosen.map(t => path.posix.relative(pkg.dir, t)).sort();
     steps.push({ name: `vitest:${pkg.name}`, est: stepEst(pkg, rel.length), why,
       files: rel.length, left: CLASSES.reduce((k, c) => k + left[c], 0),
@@ -327,8 +332,20 @@ export function planSteps(touched, repo, { planSecs = PLAN_SECS, maxExtra = MAX_
 //           config changed), and a syntax check of changed scripts
 //   guards  CI's "checks" shard minus build, lint and typecheck (the types part runs those narrowed), and words lint + check
 //   tests   the targeted steps above (route and table suites, the vitest files picked within the budget, changed scripts'
-//           tests), plus the server suites the diff itself changes
+//           tests), plus the server suites the diff itself changes, shortest first, while the part stays inside its budget
 // The full run (ready_for_review, then every push) and the merge queue's run decide; this only fails a draft sooner.
+//
+// TIME (Opus review of #3280, 17 Nov: the changed suites had no budget, so #3054's diff planned 4850 s, preflight stopped
+// past ci.yml's PREFLIGHT_HARD_SECS=1200 and exited 75, and the draft was red on every push with nothing to fix). A draft
+// check is never red for time alone: every step whose time grows with the diff has a budget or a bound, and no part plans
+// past DRAFT_PART_SECS, a quarter of the job's 1200 s.
+//   types   scripts-syntax: each changed script, ~0.03 s a node --check (17 Nov); the tree's 145 scripts plan 8 s. It runs
+//           first. turbo: one step, 180 s for the packages reached, 240 s for every package (CI's checks shard, 16 Nov:
+//           build 2m22s, lint 3m29s, typecheck 2m24s side by side); never more than every package. It runs last.
+//   guards  fixed: the shard's guards and words, whatever the diff.
+//   tests   the route and table suites: four at most, fixed. script-tests: a start plus each file, of the seven the tree
+//           has. vitest: within DRAFT_PLAN_SECS (planSteps). server:changed: within what the others leave of it (below).
+// Replayed over main's last 600 merges (17 Nov), before this: the tests part planned past 300 s on 32, past 1200 s on 3.
 export const DRAFT_PARTS = ['types', 'guards', 'tests'];
 /** Root files whose change reaches every package's build, lint or typecheck: the types part then runs every package. */
 export const ROOT_WIDE = new Set(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'turbo.json',
@@ -337,8 +354,48 @@ export const ROOT_WIDE = new Set(['package.json', 'pnpm-lock.yaml', 'pnpm-worksp
 export const DRAFT_TURBO_CHECKS = ['build', 'lint', 'typecheck'];
 /** The tests part's budget (seconds of estimate): its job is about a minute of setup and this, inside the 5-minute aim. */
 export const DRAFT_PLAN_SECS = Number(process.env.PREFLIGHT_DRAFT_PLAN_SECS || 200);
+/** No draft part plans past this (seconds of estimate), whatever the diff: ci.yml's PREFLIGHT_HARD_SECS (1200) then stops
+ *  a step only when a part runs at four times its estimate. preflight.test.mjs holds every part to it. */
+export const DRAFT_PART_SECS = 300;
+/** The changed server suites run this many at a time (the step's TEST_ALL_JOBS, and its estimate). */
+export const DRAFT_SERVER_JOBS = 2;
+/** A run the durations snapshot lacks (most often a suite the PR adds): past the known runs' p90 (28 s), p50 6.5 s. */
+export const UNKNOWN_RUN_SECS = 60;
+/** run-server-suites.mjs's own start, before its first suite. */
+const SERVER_START_SECS = 10;
 const WORKSPACE_DIR = /^(apps|packages|workers)\/[^/]+\//;
 const SERVER_SUITE_FILE = /^apps\/server\/src\/(test-[\w-]+)\.ts$/;
+
+// The server-suite manifest's runs (scripts/server-suites.mjs: each suite, its variants, which run serially). Loaded here
+// and not imported, so a manifest that does not load fails only a draft plan that needs it (suite_registration, in the
+// guards part, says why), never the lane's preflight or the other parts.
+let MANIFEST = null, MANIFEST_ERROR = null;
+try { MANIFEST = await import('../server-suites.mjs'); } catch (e) { MANIFEST_ERROR = e; }
+/** The manifest's runs, each { id, name, serial }: a suite's id is its name, a variant's `name(tag)`. */
+export function manifestRuns(m = MANIFEST) {
+  if (!m) throw new Error(`scripts/server-suites.mjs does not load: ${MANIFEST_ERROR && MANIFEST_ERROR.message}`);
+  return [
+    ...m.SUITES.map(e => (typeof e === 'string' ? e : e.name)).map(name => ({ id: name, name })),
+    ...m.VARIANTS.map(v => ({ id: v.tag ? `${v.name}(${v.tag})` : v.name, name: v.name })),
+  ].map(r => ({ ...r, serial: Object.hasOwn(m.SERIAL, r.id) }));
+}
+
+/**
+ * Seconds these runs take as run-server-suites.mjs runs them, DRAFT_SERVER_JOBS at a time: its start, then the pooled runs
+ * longest first (one the snapshot lacks first of all), each to the worker free soonest, then the serial runs one at a time,
+ * alone. `durations` is the committed snapshot (run id -> seconds; medians of CI's passing runs, which on a CI shard of 16
+ * Nov added up to within 10% of the shard's suite time).
+ */
+export function serverRunsEst(runs, durations, jobs = DRAFT_SERVER_JOBS) {
+  const known = r => typeof durations[r.id] === 'number';
+  const secs = r => (known(r) ? durations[r.id] : UNKNOWN_RUN_SECS);
+  const weight = r => (known(r) ? durations[r.id] : Infinity);
+  const pooled = runs.filter(r => !r.serial).sort((a, b) => weight(b) - weight(a));
+  const workers = Array(jobs).fill(0);
+  for (const r of pooled) workers[workers.indexOf(Math.min(...workers))] += secs(r);
+  const serial = runs.filter(r => r.serial).reduce((k, r) => k + secs(r), 0);
+  return Math.ceil(SERVER_START_SECS + Math.max(...workers) + serial);
+}
 
 /** The draft check's steps for one part, against `mergeBase` (the commit the PR's diff starts from). */
 export function planDraft(part, touched, repo, { mergeBase, planSecs = DRAFT_PLAN_SECS, maxExtra = MAX_EXTRA } = {}) {
@@ -350,11 +407,6 @@ export function planDraft(part, touched, repo, { mergeBase, planSecs = DRAFT_PLA
     const wide = files.filter(f => ROOT_WIDE.has(f));
     const pkgs = [...new Set(files.filter(f => WORKSPACE_DIR.test(f) && repo.exists(f.match(WORKSPACE_DIR)[0] + 'package.json'))
       .map(f => f.match(WORKSPACE_DIR)[0].slice(0, -1)))].sort();
-    if (wide.length) steps.push({ name: 'turbo', est: 240, why: `every package: ${wide.join(', ')} changed`,
-      cmd: 'pnpm turbo run build lint typecheck --continue' });
-    else if (pkgs.length) steps.push({ name: 'turbo', est: 180,
-      why: `${pkgs.join(', ')} and every package that depends on ${pkgs.length > 1 ? 'them' : 'it'}`,
-      cmd: `pnpm turbo run build lint typecheck --continue --filter=${shq(`...[${mergeBase}]`)}` });
     const scripts = files.filter(f => !WORKSPACE_DIR.test(f) && !/(^|\/)node_modules\//.test(f) && repo.exists(f)).sort();
     const js = scripts.filter(f => /\.(m?js|cjs)$/.test(f));
     // A shell script parses in the shell its #! names; zsh only where the runner has it. One with no #! is a library sourced by
@@ -362,8 +414,15 @@ export function planDraft(part, touched, repo, { mergeBase, planSecs = DRAFT_PLA
     const sh = scripts.filter(f => /\.sh$/.test(f)).map(f => [f, (/^#!.*\b(bash|zsh|sh)\b/.exec(repo.read(f).split('\n')[0]) || [])[1]])
       .filter(([, shell]) => shell);
     const shCmd = ([f, shell]) => (shell === 'zsh' ? `{ ! command -v zsh >/dev/null || zsh -n ${shq(f)}; }` : `bash -n ${shq(f)}`);
-    if (js.length || sh.length) steps.push({ name: 'scripts-syntax', est: 5, why: `${js.length + sh.length} changed script(s) parse`,
+    // The quick step first: turbo, the long one, goes last, so no step waits behind it for the clock.
+    if (js.length || sh.length) steps.push({ name: 'scripts-syntax', est: Math.ceil(2 + 0.05 * js.length + 0.01 * sh.length),
+      why: `${js.length + sh.length} changed script(s) parse`,
       cmd: [...js.map(f => `node --check ${shq(f)}`), ...sh.map(shCmd)].join(' && ') });
+    if (wide.length) steps.push({ name: 'turbo', est: 240, why: `every package: ${wide.join(', ')} changed`,
+      cmd: 'pnpm turbo run build lint typecheck --continue' });
+    else if (pkgs.length) steps.push({ name: 'turbo', est: 180,
+      why: `${pkgs.join(', ')} and every package that depends on ${pkgs.length > 1 ? 'them' : 'it'}`,
+      cmd: `pnpm turbo run build lint typecheck --continue --filter=${shq(`...[${mergeBase}]`)}` });
   } else if (part === 'guards') {
     const checks = readChecksShard(repo.ciYml).split(' ').filter(c => !DRAFT_TURBO_CHECKS.includes(c));
     steps.push({ name: 'guards', est: 120, why: 'CI\'s "checks" shard but build, lint and typecheck (the types part runs those)',
@@ -371,21 +430,46 @@ export function planDraft(part, touched, repo, { mergeBase, planSecs = DRAFT_PLA
     steps.push({ name: 'words', est: EST.words, why: 'words lint + check',
       cmd: 'node scripts/words/words.mjs lint && node scripts/words/words.mjs check' });
   } else {
-    // The targeted steps of a preflight, its two whole-tree steps left to the guards part (so out of the budget too).
+    // The targeted steps of a preflight, its two whole-tree steps left to the guards part (so out of the budget too), all
+    // inside planSecs: the route and table suites and the script tests (bounded, always), the vitest guards and changed tests,
+    // then the server suites the diff changes, then the vitest pins, importers and scanners with what is left.
     const fixed = EST.checks + EST.words;
-    const targeted = planSteps(touched, repo, { planSecs: planSecs + fixed, maxExtra }).filter(s => s.name !== 'checks' && s.name !== 'words');
-    steps.push(...targeted);
-    // A server suite the diff changes runs itself (a route or table step may have it already). Registered suites only: an
-    // unregistered one is suite_registration's red, in the guards part.
-    const have = new Set(targeted.filter(s => s.name.startsWith('server:')).map(s => s.name.slice(7)));
-    const registered = repo.read('scripts/server-suites.mjs');
-    let durations = {};
-    try { durations = JSON.parse(repo.read('scripts/server-suite-durations.json') || '{}'); } catch { /* no estimates: 60 s each */ }
-    const changed = [...new Set(files.map(f => (SERVER_SUITE_FILE.exec(f) || [])[1]).filter(Boolean))]
-      .filter(n => !have.has(n) && repo.exists(`apps/server/src/${n}.ts`) && registered.includes(`'${n}'`)).sort();
-    if (changed.length) steps.push({ name: 'server:changed', est: Math.ceil(changed.reduce((k, n) => k + (Number(durations[n]) || 60), 10)),
-      why: `the server suites this diff changes: ${changed.join(', ')}`,
-      cmd: `SERVER_SUITES_ONLY=${shq(changed.join(' '))} TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs` });
+    const leftTo = `the full run (past ${maxExtra} a package or the draft's ${planSecs} s budget)`;
+    const targetedWithin = (secs, extra) => planSteps(touched, repo, { planSecs: secs + fixed, maxExtra: extra, leftTo })
+      .filter(s => s.name !== 'checks' && s.name !== 'words');
+    const total = ss => ss.reduce((k, s) => k + s.est, 0);
+    // A server suite the diff changes runs itself, every run of it (its variants too), unless a route or table step has it.
+    // Registered suites only: an unregistered one is suite_registration's red, in the guards part.
+    const names = [...new Set(files.map(f => (SERVER_SUITE_FILE.exec(f) || [])[1]).filter(Boolean))]
+      .filter(n => repo.exists(`apps/server/src/${n}.ts`));
+    const picked = [], left = [];
+    let serverEst = 0;
+    if (names.length) {
+      const runs = repo.serverRuns();
+      let durations = {};
+      try { durations = JSON.parse(repo.read('scripts/server-suite-durations.json') || '{}'); } catch { /* none: each run unknown */ }
+      // What the suites must fit beside: the plan without the vitest pins, importers and scanners (maxExtra 0). planSteps
+      // takes every package's changed tests before any of those, so the full plan below, with the suites' time taken off its
+      // budget, still takes the same changed tests.
+      const first = targetedWithin(planSecs, 0);
+      const have = new Set(first.filter(s => s.name.startsWith('server:')).map(s => s.name.slice(7)));
+      const suites = names.filter(n => !have.has(n)).map(n => ({ name: n, runs: runs.filter(r => r.name === n) }))
+        .filter(s => s.runs.length).map(s => ({ ...s, alone: serverRunsEst(s.runs, durations) }))
+        .sort((a, b) => a.alone - b.alone || (a.name < b.name ? -1 : 1));
+      const est = ss => serverRunsEst(ss.flatMap(s => s.runs), durations);
+      // Shortest first while they fit: from the first that does not, the rest are left.
+      for (const s of suites) (left.length || total(first) + est([...picked, s]) > planSecs ? left : picked).push(s);
+      if (picked.length) serverEst = est(picked);
+    }
+    steps.push(...targetedWithin(planSecs - serverEst, maxExtra));
+    if (picked.length || left.length) {
+      const list = ss => ss.map(s => s.name).sort().join(', ');
+      const why = (picked.length ? `the server suites this diff changes, ${DRAFT_SERVER_JOBS} at a time: ${list(picked)}` : 'no server suite this diff changes fits')
+        + (left.length ? `; left to the full run (past the draft's ${planSecs} s budget), ${left.length}: ${list(left)}` : '');
+      steps.push({ name: 'server:changed', est: serverEst, why, cmd: picked.length
+        ? `SERVER_SUITES_ONLY=${shq(picked.map(s => s.name).sort().join(' '))} TEST_ALL_JOBS=${DRAFT_SERVER_JOBS} node scripts/run-server-suites.mjs`
+        : 'true' });
+    }
     if (!steps.length) steps.push({ name: 'none', est: 0, why: 'no test this diff calls for (the full run runs them all)', cmd: 'true' });
   }
   if (!steps.length) steps.push({ name: 'none', est: 0, why: 'nothing in this part for this diff', cmd: 'true' });
@@ -414,6 +498,7 @@ export function gitRepo(root = REPO_ROOT) {
       return cache.get(f);
     },
     exists: f => fs.existsSync(path.join(root, f)),
+    serverRuns: () => manifestRuns(),
   };
 }
 

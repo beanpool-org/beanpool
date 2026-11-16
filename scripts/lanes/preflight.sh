@@ -17,7 +17,11 @@
 #   1   a step was red (every step it reached still ran, so one run names every red)
 #   2   no plan (ci.yml has no "checks" shard, git could not diff, bad arguments)
 #   75  not finished: the heavy-test lock stayed held past its wait, or the next step would have ended past the hard
-#       limit; the steps not run are named. Run it again; a second 75 goes in the PR body (CI runs every step)
+#       limit; the steps not run are named. Run it again; a second 75 goes in the PR body (CI runs every step). On a
+#       draft check (--draft) it is never the branch's red: every part plans inside a quarter of ci.yml's limit
+#       (preflight-plan.mjs DRAFT_PART_SECS), so the machine ran slow; the log says to name it in the PR body and go on.
+# A red's logs are kept in the run's temp dir, and copied to $TEST_ALL_LOG_DIR/preflight when that is set (ci.yml's draft
+# job uploads that folder on a red, as draft-check-logs-<part>).
 #
 # Time (Opus review of #3180, 15 Nov: the slowest plans overran a lane's 600 s Bash call). Each plan line carries the
 # planner's estimate in seconds; the planner keeps the plan under 330 s (PREFLIGHT_PLAN_SECS). Replayed over the last 120
@@ -44,7 +48,7 @@ while [ $# -gt 0 ]; do
     --plan) PLAN_ONLY=1 ;;
     --base) shift; BASE="${1:-}"; [ -n "$BASE" ] || { echo "preflight: --base needs a ref"; exit 2; } ;;
     --draft) shift; DRAFT="${1:-}"; [ -n "$DRAFT" ] || { echo "preflight: --draft needs a part (types, guards, tests)"; exit 2; } ;;
-    -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "preflight: unknown argument $1 (--plan, --base <ref>)"; exit 2 ;;
   esac
   shift
@@ -163,12 +167,27 @@ for log in $RED_LOGS; do
 done
 echo ""
 if [ $RED -gt 0 ]; then
-  echo "preflight: $RED of $N steps RED in $(fmt $WALL)${STOPPED:+ (and $((TOTAL - N)) not run: $STOPPED)}. Fix every red this branch caused, then run it again; logs kept in $LOGDIR"
+  KEPT="logs kept in $LOGDIR"
+  # On CI the temp dir goes with the runner: the red steps' logs go where the job uploads its logs from.
+  if [ -n "${TEST_ALL_LOG_DIR:-}" ] && mkdir -p "$TEST_ALL_LOG_DIR/preflight" && cp $RED_LOGS "$TEST_ALL_LOG_DIR/preflight/"; then
+    KEPT="logs copied to $TEST_ALL_LOG_DIR/preflight"
+  fi
+  if [ -n "$DRAFT" ]; then
+    echo "preflight: $RED of $N steps RED in $(fmt $WALL)${STOPPED:+ (and $((TOTAL - N)) not run: $STOPPED)}. Fix every red this branch caused and push; a red this branch cannot reach goes in the PR body as 'red not caused here'. $KEPT (on GitHub: the run's draft-check-logs-$DRAFT artifact)"
+  else
+    echo "preflight: $RED of $N steps RED in $(fmt $WALL)${STOPPED:+ (and $((TOTAL - N)) not run: $STOPPED)}. Fix every red this branch caused, then run it again; $KEPT"
+  fi
   exit 1
 fi
 rm -rf "$LOGDIR"
 if [ -n "$STOPPED" ]; then
-  echo "preflight: $N of $TOTAL steps passed in $(fmt $WALL), $((TOTAL - N)) NOT RUN ($STOPPED). Not a pass: run preflight.sh again; if it stops again, say so in the PR body (CI runs every step)."
+  if [ -n "$DRAFT" ] && [ "${STOPPED#the heavy-test lock}" = "$STOPPED" ]; then
+    # A draft check stopped by the clock (CI holds no lock): running it again or pushing gives the same plan, so "run it
+    # again" is no advice here.
+    echo "preflight: $N of $TOTAL steps passed in $(fmt $WALL), $((TOTAL - N)) NOT RUN ($STOPPED). Not a pass, and not this branch's red: this part planned ${EST_TOTAL}s of steps against ${HARD}s, so the machine ran slow. Say so in the PR body as 'red not caused here' and go on; the full run at ready runs every step."
+  else
+    echo "preflight: $N of $TOTAL steps passed in $(fmt $WALL), $((TOTAL - N)) NOT RUN ($STOPPED). Not a pass: run preflight.sh again; if it stops again, say so in the PR body (CI runs every step)."
+  fi
   exit 75
 fi
 echo "preflight: all $N steps passed in $(fmt $WALL)"

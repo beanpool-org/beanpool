@@ -190,7 +190,10 @@ jobs:
   #   guards  the "checks" shard's guards, every one but build, lint and typecheck (no_node_names, native_dark_contrast,
   #           no_google_fonts, words, workflows ...), and words lint + check
   #   tests   the tests the changed files call for: the vitest files preflight picks (guards, changed tests, pins, importers),
-  #           the server suites a route or table change needs and the suites the diff changes, and changed scripts' tests
+  #           the server suites a route or table change needs and the suites the diff changes, and changed scripts' tests,
+  #           within 200 s: the changed suites go shortest first and the rest are named as left to the full run
+  # No part plans past 300 s (preflight-plan.mjs DRAFT_PART_SECS), so PREFLIGHT_HARD_SECS below stops a step only on a runner
+  # four times slower than the estimates: a draft check is never red for its diff's size alone.
   # It decides nothing: it is never the required check, and the full run (ready_for_review, then every push) and the merge
   # queue's run are what a merge needs. Skipped on every other event.
   draft:

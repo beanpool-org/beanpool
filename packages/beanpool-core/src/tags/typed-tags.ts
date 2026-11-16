@@ -21,6 +21,8 @@ export const TYPED_TAG_WORDS = {
     /** The composer's two hints, under the field (§5, §7). */
     arePublic: word('Tags are public with your listing'),
     yourWords: word('A tag you type is in your own words. Pick a library tag to be found in every language.'),
+    /** The field's hint where only the member's own tags are taken (Learn's pages): there is no library to search. */
+    typeOne: word('Type a tag'),
 };
 
 /** What commits a typed tag as a comma does: the comma of the keyboards a member has, Arabic's and Chinese's among them. */
@@ -69,11 +71,15 @@ export function exactLibraryTag(text: string, index: TagIndex = tagIndex()): str
  */
 export type MergedInto = (text: string) => string | null;
 
-/** What this text would become beside the tags held, or null for nothing to commit (an empty field, a lone `#`). */
-export function typedTag(text: string, held: TagsHeld, index: TagIndex = tagIndex(), merged?: MergedInto): TypedTag | null {
+/**
+ * What this text would become beside the tags held, or null for nothing to commit (an empty field, a lone `#`). `freeOnly`: a
+ * field that takes the member's own tags alone (a page of Local knowledge, which carries no library ids): a library label
+ * typed there is the member's own word, under the same rule as any other.
+ */
+export function typedTag(text: string, held: TagsHeld, index: TagIndex = tagIndex(), merged?: MergedInto, freeOnly = false): TypedTag | null {
     const tag = freeTagStored(text);
     if (!tag) return null;
-    const id = exactLibraryTag(text, index) ?? (merged && freeTagRefusal(text) === null ? merged(text) : null);
+    const id = freeOnly ? null : exactLibraryTag(text, index) ?? (merged && freeTagRefusal(text) === null ? merged(text) : null);
     if (id) {
         if (!held.tags.includes(id) && held.tags.length >= POST_TAGS_MAX) return TOO_MANY_TAGS;
         return { kind: 'library', id };
@@ -99,13 +105,13 @@ export interface TagEntry {
  * the last piece; without it the piece after the last comma is still being typed and stays in the field. A refused piece
  * stops there: the ones before it are in, and it stays in the field with the words to say why.
  */
-export function enterTypedTags(text: string, held: TagsHeld, done: boolean, index: TagIndex = tagIndex(), merged?: MergedInto): TagEntry {
+export function enterTypedTags(text: string, held: TagsHeld, done: boolean, index: TagIndex = tagIndex(), merged?: MergedInto, freeOnly = false): TagEntry {
     const pieces = text.split(TAG_COMMA);
     const typing = done ? '' : pieces.pop() ?? '';
     const tags = [...held.tags];
     const freeTags = [...held.freeTags];
     for (let i = 0; i < pieces.length; i++) {
-        const typed = typedTag(pieces[i], { tags, freeTags }, index, merged);
+        const typed = typedTag(pieces[i], { tags, freeTags }, index, merged, freeOnly);
         if (!typed) continue;
         if (typed.kind === 'refused') {
             const rest = [...pieces.slice(i).map((piece) => piece.trim()), typing.trimStart()].filter(Boolean).join(', ');

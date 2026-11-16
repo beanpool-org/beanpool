@@ -7,7 +7,8 @@ import { setLanguage } from '@beanpool/core';
 import { BRAND_SETS, brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, editMessageApi, createGroup, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
+import { getConversationMessages, getEventChat, postEventChatMessage, createConversationApi, sendMessageApi, editMessageApi, createGroup, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
+import { resetChatListSendsForTest } from '../lib/chat-list-order';
 import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
 import { consumeChatPrefill } from '../lib/archetypes';
 import { sealDmLine, encodePlaintext } from '../lib/e2e-crypto';
@@ -957,6 +958,68 @@ describe('MessagesPage: event chat (docs/events-on-the-map.md §2.2, §3)', () =
         }];
         render(<MessagesPage identity={mockIdentity} />);
         expect(await screen.findByText('Working bee')).toBeInTheDocument();
+    });
+});
+
+describe("MessagesPage: the list goes by each chat's newest line, the member's own included (16 Nov 2026)", () => {
+    const EVENT_ID = '9e107d9d-372b-4b6a-8f1e-2c3d4e5f6a7b';
+    const NAMES = ['Bob', 'Garden crew', 'Working bee'];
+    /** The rows' names in the order the list draws them. */
+    const rowNames = () => {
+        const list = screen.getByTestId('chat-list');
+        const at = (name: string) => within(list).queryByText(name);
+        return NAMES.filter((n) => at(n)).sort((a, b) => (at(a)!.compareDocumentPosition(at(b)!) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    };
+    const bob = (extra: Partial<Conversation>): Conversation => ({
+        id: 'conv-bob', type: 'dm', name: null, participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'peer-pubkey', peerCallsign: 'Bob',
+        unreadCount: 0, createdAt: '2026-10-01T00:00:00Z', ...extra,
+    });
+    const workingBee = (extra: Partial<Conversation>): Conversation => ({
+        id: EVENT_ID, type: 'event_thread', name: 'Working bee', participants: ['my-pubkey'], createdBy: 'host-pk', unreadCount: 0,
+        createdAt: '2026-10-02T00:00:00Z', ...extra,
+    });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        resetChatListSendsForTest();
+        mockConversationDetails = {};
+        mockMessagesByConv = {};
+    });
+
+    it('unread is the badge, not the order: a chat read a minute ago sits above one unread since last week, and creation decides nothing', async () => {
+        mockConversations = [
+            // Made last and three lines unread, but its newest line is a week old.
+            bob({ unreadCount: 3, createdAt: '2026-11-16T09:00:00Z', lastMessageAt: '2026-11-09T09:00:00Z' }),
+            { id: 'grp-fresh', type: 'group_thread', name: 'Garden crew', participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+                unreadCount: 0, createdAt: '2026-09-01T00:00:00Z', lastMessageAt: '2026-11-16T09:59:00Z' },
+            workingBee({ lastMessageAt: '2026-11-15T12:00:00Z' }),
+        ];
+        render(<MessagesPage identity={mockIdentity} />);
+        await screen.findByText('Garden crew');
+        expect(rowNames()).toEqual(['Garden crew', 'Working bee', 'Bob']);
+    });
+
+    it("a line the member sends moves that chat to the top of their own list at once, before the community's list has it", async () => {
+        mockConversations = [bob({ lastMessageAt: '2026-11-16T09:59:00Z' }), workingBee({ lastMessageAt: '2026-11-15T12:00:00Z' })];
+        vi.mocked(getEventChat).mockResolvedValue({
+            conversation: { id: EVENT_ID, type: 'event_thread', name: 'Working bee', participants: [], createdBy: 'host-pk', createdAt: '' },
+            messages: [], readOnly: false, readOnlyReason: null, canPost: true, isHost: false, title: 'Working bee', eventEndAt: null,
+            eventState: 'scheduled', privateNote: null, notice: "Visible to the host, everyone going, and this node's operator.",
+        } as any);
+        vi.mocked(postEventChatMessage).mockResolvedValue({ success: true, message: {} } as any);
+        render(<MessagesPage identity={mockIdentity} />);
+        await screen.findByText('Working bee');
+        expect(rowNames()).toEqual(['Bob', 'Working bee']);
+
+        fireEvent.click(screen.getByText('Working bee'));
+        const box = await screen.findByPlaceholderText('Message everyone going…');
+        fireEvent.change(box, { target: { value: 'Bringing gloves' } });
+        await act(async () => { fireEvent.keyDown(box, { key: 'Enter' }); });
+        await waitFor(() => expect(postEventChatMessage).toHaveBeenCalledWith(EVENT_ID, 'Bringing gloves'));
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        await screen.findByTestId('chat-list');
+        // The community's list (this test's node) still knows no line of hers: the move is this tab's own, at once.
+        await waitFor(() => expect(rowNames()).toEqual(['Working bee', 'Bob']));
     });
 });
 

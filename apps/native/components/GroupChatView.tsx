@@ -548,6 +548,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             setReplyToMessage(null);
             setSecuring(null);
             setKeyNotice(null);
+            yourGroupsStore.noteSent(id);
             hapticSuccess();
             while (inFlight.current) await new Promise(r => setTimeout(r, 100));
             await load();
@@ -587,6 +588,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             }));
             setReplyToMessage(null);
             setKeyNotice(null);
+            yourGroupsStore.noteSent(id);
             hapticSuccess();
             while (inFlight.current) await new Promise(r => setTimeout(r, 100));
             await load();
@@ -629,6 +631,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             };
             clientIdRef.current = Crypto.randomUUID();
             setPending(prev => [...prev, p]);
+            // On Talk → Groups at once, as in the chat: the chat goes to the top, whatever becomes of the line (a failed one waits there).
+            yourGroupsStore.noteSent(id);
             setReplyToMessage(null);
             scrollChatToBottom(listRef, true);
             await deliver(p);

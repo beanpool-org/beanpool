@@ -82,7 +82,8 @@ import { FoldedChatText } from '../components/FoldedChatText';
 import { CopyMessageButton } from '../components/CopyMessageButton';
 import { copyableChatText } from '../lib/copy-chat-text';
 import { CreateGroupModal } from '../components/CreateGroupModal';
-import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
+import { groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
+import { chatListAskBegins, noteLineSentHere, orderChatList, settleChatListSends, useChatListSends } from '../lib/chat-list-order';
 import { ListPhoto } from '../components/ListPhoto';
 import { bundledGroupEmblem, dealMoves, dealStep, dealsNeedingMe, formatDate, itemTrustLine, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
@@ -411,6 +412,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [sending, setSending] = useState(false);
     // The lines this tab is sending (lib/pending-chat-lines.ts): apart from `messages`, and from everything worked out of them.
     const pendingChatLines = usePendingChatLines();
+    // The lines this tab sent that the community's list doesn't show yet: their chats sit at the top (lib/chat-list-order.ts).
+    const chatListSends = useChatListSends();
     const [showNewDm, setShowNewDm] = useState(false);
     // The member's private contacts (DESIGN-private-contacts-fable.md §3.1, slice C4): the page, opened on its list or on
     // Import, and the ⓘ. The button reads Import contacts until there is someone in the list.
@@ -925,6 +928,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     async function loadConversations() {
         try {
+            // Asked now: a line sent before this is settled by its answer, one sent while it is on its way is not.
+            const askMark = chatListAskBegins();
             const result = await getConversations(identity.publicKey);
             // A DM stays a DM, and a group seen locked here stays a group, whatever type the node gives it now
             // (lib/dm-guard.ts, lib/group-hold.ts).
@@ -946,6 +951,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 }
                 return c;
             });
+            settleChatListSends(filtered, askMark);
             setConversations(filtered);
             // The requests waiting for this member, apart (lib/dm-requests.ts): direct chats only, never from someone
             // blocked here. Where requests are off the list has none, and there is no Requests pill.
@@ -1590,6 +1596,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 if (saidGroupRefusal(e, conv.id, check.chat, check.chatErr)) return false;
                 throw e;
             }
+            movedByMyLine(conv.id);
             setReplyToMessage(null);
             setChatRefusal(null);
             await loadMessages(conv.id);
@@ -1600,6 +1607,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         } finally {
             setSending(false);
         }
+    }
+
+    /** A line of mine left this tab in `convId`: its chat goes to the top of the list at once (lib/chat-list-order.ts). */
+    function movedByMyLine(convId: string) {
+        noteLineSentHere(convId, conversations, outsideChats.filter((c) => c.state === 'open'));
     }
 
     /**
@@ -1681,6 +1693,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         setChatRefusal(null);
         if (about) chatAboutDrafts.drop(activeConv.id);
         sendChatLine(line, lineSender(line, activeConv));
+        // On the list at once, as on screen: the chat goes to the top, whatever becomes of the line (a failed one waits there).
+        movedByMyLine(activeConv.id);
     }
 
     /**
@@ -1716,6 +1730,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
             ownLineTaken(activeConv.id);
+            movedByMyLine(activeConv.id);
             setReplyToMessage(null);
             setChatRefusal(null);
             await loadMessages(activeConv.id);
@@ -1789,6 +1804,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 ownLineTaken(conv0.id);
             }
             if (signal.aborted) throw new Error(t(VOICE_WORDS.givenUp));
+            movedByMyLine(conv0.id);
             if (activeConvIdRef.current === conv0.id) { setReplyToMessage(null); setChatRefusal(null); }
             // The node has it: the 60 s give-up stops here. The chat's reload goes on without it (as the phone's does), so a
             // slow reload never says a sent voice message is taking too long; one that fails leaves it to the next poll.
@@ -2307,6 +2323,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 postId={activeConv.id}
                 identity={identity}
                 onOpenEvent={() => onNavigate?.('marketplace', activeConv.id)}
+                onSent={() => movedByMyLine(activeConv.id)}
                 onBack={() => {
                     setActiveConv(null);
                     loadConversations();
@@ -4084,12 +4101,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 />
             )}
 
-            {!showingRequests && outsideShown.length > 0 && (
-                <div data-testid="outside-chats" style={{ marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '1rem', overflow: 'hidden' }}>
-                    {outsideShown.map((c) => <OutsideChatRow key={c.id} chat={c} onOpen={() => setOpenOutside(c.id)} />)}
-                </div>
-            )}
-
             {showingRequests ? (
                 <MessageRequestsList
                     entries={requests?.conversations ?? []}
@@ -4148,33 +4159,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         </button>
                     </div>
                 </div>
-            ) : conversations.length === 0 && outsideShown.length > 0 ? null : conversations.length === 0 ? (
+            ) : conversations.length === 0 && outsideShown.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-faint)' }}>
                     <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💬</p>
                     <p>{t('No conversations yet.')}</p>
                     <p style={{ fontSize: '0.85rem' }}>{t('Start by sending a DM or creating a group.')}</p>
                 </div>
             ) : (
-                <div className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
-                    {listedConversations
-                        .filter(c => inConversationTab(c, activeTab))
-                        .sort((a, b) => {
-                            // Transactions Tab sorting priority
-                            if (activeTab === 'transactions') {
-                                const isAActive = ['active', 'pending'].includes(a.postStatus || '');
-                                const isBActive = ['active', 'pending'].includes(b.postStatus || '');
-                                if (isAActive && !isBActive) return -1;
-                                if (!isAActive && isBActive) return 1;
-                            }
-                            
-                            // Default Unread & Date sorting priority
-                            const aUnread = a.unreadCount || 0;
-                            const bUnread = b.unreadCount || 0;
-                            if (aUnread > 0 && bUnread === 0) return -1;
-                            if (bUnread > 0 && aUnread === 0) return 1;
-                            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                        })
-                        .map(conv => {
+                <div data-testid="chat-list" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
+                    {/* Every chat by its newest line, the member's own included, newest first; a chat with another community among
+                        them (lib/chat-list-order.ts, both apps' rule; Marty, 16 Nov 2026). Unread is the badge and the bold, never
+                        the order. Transactions keeps a live listing above the rest. */}
+                    {orderChatList(listedConversations, outsideShown, activeTab, chatListSends)
+                        .map(row => {
+                            if (row.kind === 'outside') return <OutsideChatRow key={row.chat.id} chat={row.chat} onOpen={() => setOpenOutside(row.chat.id)} />;
+                            const conv = row.conv;
                             // A finished trade with this DM's other person that I haven't rated (lib/trade-review) — the
                             // same answer the chat's rate button gives, as the phone's chat list does. Not the thread's
                             // last line: a trade chat is one DM per pair, its post_id NULL, so that read "unrated" forever.

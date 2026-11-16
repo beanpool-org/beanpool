@@ -20,9 +20,11 @@ export interface KnowledgeFormValues {
     sources: KnowledgeSource[];
     /** The member's own photos as data URLs (utils/post-photo.ts), at most KNOWLEDGE_LIMITS.photos. */
     photos: string[];
+    /** Its own tags (Learn's tags): free tags only, as the Market's Tags field stores them (TagPicker `freeOnly`). */
+    freeTags: string[];
 }
 
-export const EMPTY_KNOWLEDGE_FORM: KnowledgeFormValues = Object.freeze({ title: '', body: '', topic: '', place: '', sources: [], photos: [] }) as KnowledgeFormValues;
+export const EMPTY_KNOWLEDGE_FORM: KnowledgeFormValues = Object.freeze({ title: '', body: '', topic: '', place: '', sources: [], photos: [], freeTags: [] }) as KnowledgeFormValues;
 
 /** What a fresh link row holds, so the member types the rest. */
 export const LINK_START = 'https://';
@@ -51,7 +53,7 @@ export function knowledgeFormProblem(v: KnowledgeFormValues): string | null {
 
 /** What the form sends (POST /api/knowledge/drafts or /posts): trimmed, with only the links filled in and the writer's language. */
 export function knowledgeFormBody(v: KnowledgeFormValues, lang: string): {
-    title: string; body: string; topic: string; place?: string; sources: KnowledgeSource[]; lang: string; photos?: string[];
+    title: string; body: string; topic: string; place?: string; sources: KnowledgeSource[]; lang: string; photos?: string[]; freeTags?: string[];
 } {
     const place = v.place.trim();
     return {
@@ -62,6 +64,7 @@ export function knowledgeFormBody(v: KnowledgeFormValues, lang: string): {
         sources: linked(v.sources).map((s) => ({ url: s.url.trim(), label: s.label.trim() })),
         lang,
         ...(v.photos.length > 0 ? { photos: [...v.photos] } : {}),
+        ...((v.freeTags ?? []).length > 0 ? { freeTags: [...v.freeTags] } : {}),
     };
 }
 

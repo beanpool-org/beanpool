@@ -85,7 +85,10 @@ export function itemTotal(p: PerItemListing, choice: { option: 'each'; n: number
     return isItemCount(choice.n) && choice.n <= p.unitsLeft ? itemsAmount(p.price_c, choice.n) : null;
 }
 
-/** How much less the price for all is than the same number one by one, while it is on offer; null otherwise. */
+/**
+ * How much less the price for all is than the same number one by one, while it is on offer (0 when it is the same: a seller
+ * may ask the same for all as one by one, never more); null otherwise. A saving of 0 is never shown (itemTakeUpBox).
+ */
 export function lotSaving(p: PerItemListing): Hundredths | null {
     return lotOffered(p) ? itemsAmount(p.price_c, p.lot!.units) - p.lot!.price_c : null;
 }
@@ -101,7 +104,10 @@ export type PerItemRefusal = (typeof PER_ITEM_REFUSALS)[number];
 
 export interface PerItemRefusalOf {
     code: PerItemRefusal;
-    /** units_changed: how many are left now. lot_not_less: how many the price for all is for. */
+    /**
+     * units_changed: how many are left now. lot_not_less (a price for all MORE than one by one; the same is allowed, Marty
+     * 16 Nov; the code keeps its name because it is on the wire to apps already installed): how many the price for all is for.
+     */
     count?: number;
     /** lot_not_less: what that many come to one by one. */
     total_c?: Hundredths;
@@ -119,8 +125,10 @@ export function lotPriceIn(raw: unknown): { ok: true; price_c: Hundredths | null
 
 /**
  * The rules on a listing's three columns as they will be stored (design §3), on a create and an edit alike: a count from 0 to
- * 9,999; the two lot columns set together or not at all, the number at least 2, and the price less than that many one by one
- * (a free listing has no price for all). Null when they hold.
+ * 9,999; the two lot columns set together or not at all, the number at least 2, and the price not more than that many one by
+ * one: the same is allowed ("10 each or 10 for 100 should be okay, as long as it's not 10 for 120", Marty 16 Nov), so the
+ * seller's price game the rule stops, a price for all above one by one, is still stopped. A free listing has no price for all
+ * (any price above 0 is more than 0). Null when they hold.
  */
 export function itemColumnsRefusal(price_c: Hundredths, cols: ItemColumns): PerItemRefusalOf | null {
     if (!isUnitsLeft(cols.units_left)) return { code: 'units_refused' };
@@ -128,7 +136,7 @@ export function itemColumnsRefusal(price_c: Hundredths, cols: ItemColumns): PerI
     if (!isHundredths(cols.lot_price_c) || cols.lot_price_c <= 0) return { code: 'lot_price_refused' };
     if (!isUnitsLeft(cols.lot_units) || cols.lot_units < LOT_UNITS_MIN) return { code: 'lot_needs_two' };
     const total_c = itemsAmount(price_c, cols.lot_units);
-    return cols.lot_price_c < total_c ? null : { code: 'lot_not_less', count: cols.lot_units, total_c };
+    return cols.lot_price_c <= total_c ? null : { code: 'lot_not_less', count: cols.lot_units, total_c };
 }
 
 /** Is the node's features answer offering Each (`perItem`)? Off until every slice is in: then the forms offer it (§6). */
@@ -187,8 +195,8 @@ export const PER_ITEM_WORDS = {
     orAllOfThemFor: word('OR ALL OF THEM FOR (OPTIONAL)'),
     lotEmpty: word('Leave this empty to sell them one by one only.'),
     lotGood: wordn('All {count} for {n} Beans. One by one they come to {total}.', 'All {count} for {n} Beans. One by one they come to {total}.'),
-    lotNotLess: wordn('One by one, {count} come to {n} Beans. A price for all of them has to be less.',
-        'One by one, {count} come to {n} Beans. A price for all of them has to be less.'),
+    lotMore: wordn('One by one, {count} come to {n} Beans. A price for all of them can\'t be more than that.',
+        'One by one, {count} come to {n} Beans. A price for all of them can\'t be more than that.'),
     feeLine: wordn('1.5% goes to the community. You receive {n} Beans for each one.', '1.5% goes to the community. You receive {n} Beans for each one.'),
     feeLineLot: wordn('1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.',
         '1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.'),
@@ -266,9 +274,9 @@ export const perItemLines = {
     lotEmpty: () => t(W.lotEmpty),
     lotGood: (count: number, lot_c: Hundredths, price_c: Hundredths) =>
         tn(beansOf(lot_c), W.lotGood.one, W.lotGood.other, { n: fig(lot_c), count, total: fig(itemsAmount(price_c, count)) }),
-    lotNotLess: (count: number, price_c: Hundredths) => {
+    lotMore: (count: number, price_c: Hundredths) => {
         const total = itemsAmount(price_c, count);
-        return tn(beansOf(total), W.lotNotLess.one, W.lotNotLess.other, { n: fig(total), count });
+        return tn(beansOf(total), W.lotMore.one, W.lotMore.other, { n: fig(total), count });
     },
     feeLine: (price_c: Hundredths, lot_c: Hundredths | null) => (lot_c === null
         ? tn(beansOf(price_c), W.feeLine.one, W.feeLine.other, { n: fig(sellerReceives(price_c)) })
@@ -386,7 +394,7 @@ export function perItemRefusalText(r: PerItemRefusalOf, w?: Pick<Words, 't' | 't
         case 'lot_needs_two': return words.t(W.lotNeedsTwo);
         case 'lot_not_less': {
             const total = r.total_c ?? 0;
-            return words.tn(beansOf(total), W.lotNotLess.one, W.lotNotLess.other, { n: formatHundredths(total, w?.lang), count: r.count ?? 0 });
+            return words.tn(beansOf(total), W.lotMore.one, W.lotMore.other, { n: formatHundredths(total, w?.lang), count: r.count ?? 0 });
         }
     }
 }

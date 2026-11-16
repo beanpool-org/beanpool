@@ -241,6 +241,21 @@ async function main(): Promise<void> {
         assert(!!cleanedRow && !/[\u202E\u200B]/.test(cleanedRow.title) && !cleanedRow.title.includes('<<<') && JSON.parse(cleanedRow.sources)[0].label === 'Label form',
             `2. its words are cleaned as member text is; a source's label may come as label (${cleanedRow?.title})`);
 
+        // Its own tags (16 Nov): stored in their stored form, as a member's; none sent, none; [] is none.
+        const tagged = structured(await c.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'Bulk waste days', free_tags: ['#Bulk  Waste', 'Tip', 'tip'] } }));
+        const taggedRow = tagged?.draftId ? draftRow(tagged.draftId) : null;
+        assert(taggedRow?.free_tags === JSON.stringify(['bulk waste', 'tip']), `2. free_tags: stored as a member's are, each once (${taggedRow?.free_tags})`);
+        assert(row?.free_tags === '', `2. none sent: none stored (${JSON.stringify(row?.free_tags)})`);
+        const emptyTags = structured(await c.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'Ferry days', free_tags: [], tags: [] } }));
+        assert((emptyTags?.draftId ? draftRow(emptyTags.draftId) : null)?.free_tags === '', '2. [] in free_tags and in tags: none stored, nothing refused');
+        const whole = await call(owen, 'GET', `/api/knowledge/drafts/${tagged?.draftId}`);
+        assert(JSON.stringify(whole.body?.draft?.freeTags) === JSON.stringify(['bulk waste', 'tip']), `2. To check shows its tags (${show(whole)})`);
+        const schema = (await c.listTools()).tools.find((x) => x.name === 'knowledge_draft');
+        const props = (schema?.inputSchema as { properties?: Record<string, { description?: string }> } | undefined)?.properties ?? {};
+        assert(!!props.free_tags && !props.tags && /search Learn for/.test(props.free_tags.description ?? '') && /never a list of tags: those go in free_tags/.test(props.body?.description ?? '')
+            && !/later version|Tags line/.test(JSON.stringify(schema)), '2. the tool lists free_tags in plain words, no library tags, and the body keeps no list of tags');
+        db.prepare('DELETE FROM knowledge_drafts WHERE id IN (?, ?)').run(tagged?.draftId ?? '', emptyTags?.draftId ?? '');
+
         // ── 3. Refused in words, nothing written ────────────────────────────────────────────────────
         console.log('── 3. refusals ──');
         const before3 = draftCount();
@@ -255,9 +270,15 @@ async function main(): Promise<void> {
             ['photo_urls', { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, /^A draft carries no picture from the web: the admin adds their own when they check it\.$/],
             ['a topic not on the list', { ...DRAFT, topic: 'gossip' }, /Pick a topic/],
             ['a fix', { ...DRAFT, fix_of: 'some-page', note: 'The bus moved' }, /later version of this server/],
-            // Learn's tags (16 Nov): members can't add them in the apps yet, so neither can an assistant: refused, never dropped.
-            ['tags', { ...DRAFT, tags: ['recycling'] }, /Tags on Local knowledge come with a later version/],
-            ['free_tags', { ...DRAFT, free_tags: ['recycling'] }, /never write a Tags line/],
+            // Learn's tags (16 Nov): free tags only, under the Market's rule, as a member's; library ids refused as the node refuses
+            // them, never dropped, so the assistant never believes a tag is on.
+            ['library ids in tags', { ...DRAFT, tags: ['food.fruit.lemon'] }, /^Local knowledge takes no tags from the library: put its own words in free_tags\.$/],
+            ['a word in tags', { ...DRAFT, tags: ['recycling'] }, /takes no tags from the library/],
+            ['freeTags by another name', { ...DRAFT, freeTags: ['recycling'] }, /^Its own tags go in free_tags\.$/],
+            ['a tag that is a phone number', { ...DRAFT, free_tags: ['0412 345 678'] }, /^free_tags: A tag is a word to find your listing by, not a contact$/],
+            ['a tag of one letter', { ...DRAFT, free_tags: ['x'] }, /^free_tags: A tag needs at least two letters or numbers$/],
+            ['six tags', { ...DRAFT, free_tags: ['one', 'two', 'three', 'four', 'five', 'six'] }, /^free_tags: Five tags at most$/],
+            ['free_tags not a list', { ...DRAFT, free_tags: 'recycling' }, /^free_tags: /],
         ];
         for (const [what, args, words] of refusals) {
             const r = await c.callTool({ name: 'knowledge_draft', arguments: args });

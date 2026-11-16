@@ -90,7 +90,8 @@
       "import": "./dist/words-dates/*.js",
       "default": "./dist/words-dates/*.js"
     },
-    "./words/*.json": "./words/*.json"
+    "./words/*.json": "./words/*.json",
+    "./vectors/*.json": "./vectors/*.json"
   },
   "scripts": {
     "build": "tsc",

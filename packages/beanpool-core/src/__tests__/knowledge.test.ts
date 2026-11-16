@@ -26,6 +26,7 @@ import {
     isSampleId,
     knowledgeFeatureMode,
     knowledgeFirstLine,
+    knowledgeTagsDiffer,
     knowledgeTopicRank,
     marketPinMatchesFilter,
     sortKnowledge,
@@ -187,5 +188,17 @@ describe('the Pulse card', () => {
         // A Pulse item's id is 'item_' and hex (the Daily Pulse's 'item_pulse_<date>'): none starts as the card's does.
         expect(`${PULSE_KNOWLEDGE_ID_PREFIX}2026-11-15`).toBe('know_2026-11-15');
         expect('item_pulse_2026-11-15'.startsWith(PULSE_KNOWLEDGE_ID_PREFIX)).toBe(false);
+    });
+});
+
+describe("a page's own tags: what a fix sends only when changed (Learn's tags)", () => {
+    it('differ only by their stored forms, in order, as the node compares a part', () => {
+        expect(knowledgeTagsDiffer(['tip', 'bulk waste'], ['tip', 'bulk waste'])).toBe(false);
+        expect(knowledgeTagsDiffer(['#Tip', 'Bulk  Waste'], ['tip', 'bulk waste'])).toBe(false);
+        expect(knowledgeTagsDiffer(undefined, [])).toBe(false);
+        expect(knowledgeTagsDiffer(['tip'], [])).toBe(true);
+        expect(knowledgeTagsDiffer([], ['tip'])).toBe(true);
+        expect(knowledgeTagsDiffer(['tip', 'bulk waste'], ['bulk waste', 'tip'])).toBe(true);
+        expect(knowledgeTagsDiffer(['tip', 'ferry'], ['tip', 'bulk waste'])).toBe(true);
     });
 });

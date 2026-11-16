@@ -141,6 +141,7 @@ import {
     getNodeRoleBreakGlassHash,
     NODE_ROLE_ACTS,
     dropNodeRoleRow,
+    noteListedRoleStatus,
     isOwnerWaitingOnRekey,
     heldPrivilegedRole,
     type MemberNodeRole,
@@ -8930,6 +8931,8 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     if (status !== 'pruned' && (was === 'pruned' || (wasRetired && status !== 'disabled'))) {
         db.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(new Date().toISOString(), publicKey);
     }
+    // Into or out of 'active', a role holder's listed role shows or goes (node-roles.ts noteListedRoleStatus).
+    if (was !== undefined && (was === 'active') !== (status === 'active')) noteListedRoleStatus(publicKey);
     // Into or out of 'pruned', the key leaves or rejoins every group chat roster they hold a row in (isNodeMember; a
     // prune keeps the group rows, so a reinstate vote brings the key back): stale, and the roster to the guests' homes.
     // A pause ('disabled') changes no roster: the account keeps every membership and its key while it lasts.

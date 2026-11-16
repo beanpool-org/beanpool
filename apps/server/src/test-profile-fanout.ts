@@ -94,7 +94,7 @@ async function main() {
     const { getMembersVersion, getPostsVersion } = await import('./engine/versions.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
     const { grantNodeRole, revokeNodeRole } = await import('./engine/node-roles.js');
-    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+    const { issueRekeyCode, completeRekey, cancelRekeyCode } = await import('./engine/member-wizards.js');
     const { adminEmergencySuspend, adminLiftSuspension } = await import('./decisions-engine.js');
     const { retireEmptyDuplicate, bringBackRetired } = await import('./engine/retire-duplicate.js');
     const { seedGenesisMember } = await import('./engine/members.js');
@@ -296,7 +296,7 @@ async function main() {
         // and revoke rows pin what was right. Not a row, and why: a removal or a retire takes the card OUT of the list,
         // which no delta carries (it lists rows changed, never rows gone); the phone's hourly full read drops it.
         const kit = member('Kit'), kitNew = keypair();
-        const sue = member('Sue'), ray = member('Ray'), tam = member('Tam'), gen = member('Gen');
+        const sue = member('Sue'), ray = member('Ray'), tam = member('Tam'), gen = member('Gen'), mo = member('Mo'), pat = member('Pat'), lee = member('Lee');
         const reason = 'Held aside while the table is read.';
         type Change = { what: string; who: Id; setup?: () => void; change: () => void; field: string; want: (r: any) => boolean; movesTo?: Id; comesBack?: true };
         const changes: Change[] = [
@@ -315,6 +315,20 @@ async function main() {
             // Its lift (adminLiftSuspension) gives the same role back.
             { what: 'the role a lifted suspension gives back', who: sue, field: 'nodeRole', want: r => r.nodeRole === 'moderator',
                 change: () => { const r = adminLiftSuspension(sue.pubKeyHex, 'owner:password'); done(r.success, 'the lift', r); } },
+            // A re-key code (issueRekeyCode) holds the member 'suspended' while it waits: a role holder keeps the node_roles
+            // row, but the list names a role only while the member is active (listNodeRoles). Review of #3268, finding 1.
+            { what: 'a role a re-key code holds', who: mo, setup: () => grantNodeRole(mo.pubKeyHex, 'moderator', 'owner:password'), field: 'nodeRole', want: r => r.nodeRole === null,
+                change: () => { issueRekeyCode(mo.pubKeyHex, 'owner:password'); } },
+            // Its cancel (cancelRekeyCode) puts the member back to active, and the role shows again.
+            { what: 'the role back after a re-key code is cancelled', who: mo, field: 'nodeRole', want: r => r.nodeRole === 'moderator',
+                change: () => { const r = cancelRekeyCode(mo.pubKeyHex, 'owner:password'); done(r.status === 'active', 'the cancel', r); } },
+            // A pause written as a status alone (setUserStatusRow, adminSetUserStatus 'disabled'): it takes the role (dropNodeRoleRow).
+            { what: 'a role a pause takes', who: pat, setup: () => grantNodeRole(pat.pubKeyHex, 'moderator', 'owner:password'), field: 'nodeRole', want: r => r.nodeRole === null,
+                change: () => se.adminSetUserStatus(pat.pubKeyHex, 'disabled') },
+            // A re-key code's hold keeps the role row (above); a status write back to 'active' (setUserStatusRow) shows it again.
+            { what: "the role back when a status write ends a re-key code's hold", who: lee, field: 'nodeRole', want: r => r.nodeRole === 'moderator',
+                setup: () => { grantNodeRole(lee.pubKeyHex, 'moderator', 'owner:password'); issueRekeyCode(lee.pubKeyHex, 'owner:password'); },
+                change: () => se.adminSetUserStatus(lee.pubKeyHex, 'active') },
             // A removed member back, as a passed reinstate vote brings them (setUserStatusRow, the one writer of a status).
             { what: 'a removed member back', who: ray, comesBack: true, setup: () => se.adminSetUserStatus(ray.pubKeyHex, 'pruned'),
                 change: () => se.adminSetUserStatus(ray.pubKeyHex, 'active'), field: 'callsign', want: r => r.callsign === 'Ray' },

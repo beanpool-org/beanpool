@@ -62,7 +62,7 @@ import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
 import { moveBlocks } from './member-blocks.js';
 import { moveMemberKeyRows } from './key-move.js';
-import { roleKeyReplacedAlert, accountMovedAlert } from './node-roles.js';
+import { roleKeyReplacedAlert, accountMovedAlert, noteListedRoleStatus } from './node-roles.js';
 import { escapeLike } from '@beanpool/engine';
 
 // ===================== TYPES =====================
@@ -283,7 +283,11 @@ export function issueRekeyCode(
         // Suspend member row so assertMemberActive rejects operations from old device. A member already
         // suspended by an admin or the community (status 'disabled') stays 'disabled': the invalidated key
         // already stops the old device, and overwriting it would let a rekey end the suspension.
+        const wasActive = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanOld) as { status: string | null } | undefined)?.status === 'active';
         db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ? AND status != 'disabled'").run(nowIso, cleanOld);
+        // Out of 'active': a role holder's listed role goes while the code holds them (listNodeRoles), so the next members
+        // delta carries the card. Not from an earlier code's hold, which took it already.
+        if (wasActive) noteListedRoleStatus(cleanOld);
 
         // Insert new pending rekey request
         db.prepare(`
@@ -687,6 +691,8 @@ export function cancelRekeyCode(
             exactly(db.prepare('UPDATE members SET status = ?, updated_at = ? WHERE public_key = ? AND status = \'suspended\'').run(target, nowIso, cleanOld).changes,
                 'the member’s status changed meanwhile');
             restored = target;
+            // Back to 'active': a role holder's listed role shows again (listNodeRoles), and the next members delta carries it.
+            if (target === 'active') noteListedRoleStatus(cleanOld);
         }
         exactly(db.prepare(`
             INSERT INTO system_logs (timestamp, level, category, message, metadata)

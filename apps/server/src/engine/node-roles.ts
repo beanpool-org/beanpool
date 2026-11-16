@@ -47,10 +47,23 @@ export const NODE_ROLE_ACTS = "m.status = 'active' AND m.is_visitor = 0";
  * revokeNodeRole, after their transaction), so a phone holding the old list isn't answered 304. Neither moved before,
  * and a phone kept the old role until its hourly full read. Every way a role changes calls it: a grant, a revoke, a
  * role a suspension or removal takes (dropNodeRoleRow) and one given back (noteNodeRoleBack), whose callers move the
- * version by the profile_updated they broadcast once their transaction is done (test-profile-fanout section 4).
+ * version by the profile_updated they broadcast once their transaction is done (test-profile-fanout section 4). A role
+ * the listing shows or hides by the member's status alone goes through noteListedRoleStatus.
  */
 function noteRoleChanged(pubkey: string): void {
     db.prepare("UPDATE members SET profile_updated_at = ? WHERE public_key = ?").run(new Date().toISOString(), pubkey);
+}
+
+/**
+ * A member's status moved into or out of 'active' (a re-key code's hold and its cancel, a pause and its lift, a removal and
+ * a reinstate): the directory lists a node role only while the member is active (listNodeRoles), so a role holder's listed
+ * role changed with it, though the node_roles row stayed. The next delta carries the card, as noteRoleChanged's does. A key
+ * with no node_roles row lists no role either way, and is not stamped. Its callers move the version by the profile_updated
+ * they broadcast once their transaction is done.
+ */
+export function noteListedRoleStatus(pubkey: string): void {
+    db.prepare(`UPDATE members SET profile_updated_at = ? WHERE public_key = ? AND EXISTS (SELECT 1 FROM node_roles WHERE member_pubkey = ?)`)
+        .run(new Date().toISOString(), pubkey, pubkey);
 }
 
 /**

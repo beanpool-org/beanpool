@@ -84,6 +84,9 @@ import { TOPICS } from './forum-visitor-fixture';
 const LOOKS = [['Classic', 'dark'], ['Light', 'light'], ['Dark', 'night']] as const;
 const GLOBAL = { forum: true, forumPublic: true, guestListingsOnly: true, beans: false };
 const LOCAL = { forum: true, guestListingsOnly: true };
+// The global community in a private preview: the server drops `forumPublic` (feat/forum-f7-server round 2, node-profile.ts),
+// because a preview shows visitors nothing.
+const PREVIEW = { forum: true, guestListingsOnly: true, beans: false, openJoin: false, wordsDoor: false, privatePreview: true };
 
 async function draw(element: unknown, set: keyof typeof COLOUR_SETS = 'dark'): Promise<HTMLElement> {
     look.colors = COLOUR_SETS[set];
@@ -147,6 +150,7 @@ describe("who sees the visitors' forum: the table (card + tab)", () => {
         ['a visitor on the global community', 'visitor', GLOBAL],
         ['a member of the global community', 'member', GLOBAL],
         ['a visitor on a local community', 'visitor', LOCAL],
+        ['a visitor on the global community in a private preview', 'visitor', PREVIEW],
     ] as const;
     for (const [who, reader, features] of readers) {
         for (const answer of ['topics', 'none', 'unreachable'] as ForumPublicAnswer[]) {

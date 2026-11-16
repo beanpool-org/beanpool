@@ -26,6 +26,9 @@ import { GuestLobby } from './GuestLobby';
 
 const GLOBAL = { forum: true, forumPublic: true, guestListingsOnly: true, beans: false };
 const LOCAL = { forum: true, guestListingsOnly: true };
+// The global community in a private preview: the server drops `forumPublic` (feat/forum-f7-server round 2, node-profile.ts),
+// because a preview shows visitors nothing.
+const PREVIEW = { forum: true, guestListingsOnly: true, beans: false, openJoin: false, wordsDoor: false, privatePreview: true };
 const day = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
 const writer = { name: 'Asha', community: null };
 const topic = (id: string, title: string, created: number, sectionId = 's-ideas') => ({
@@ -85,6 +88,7 @@ describe('who sees the visitors\' forum: the table (card + tab)', () => {
         ['a visitor on the global community', 'visitor', GLOBAL],
         ['a member of the global community', 'member', GLOBAL],
         ['a visitor on a local community', 'visitor', LOCAL],
+        ['a visitor on the global community in a private preview', 'visitor', PREVIEW],
     ] as const;
     const answers: ForumPublicAnswer[] = ['topics', 'none', 'unreachable'];
     for (const [who, reader, features] of readers) {
@@ -189,11 +193,13 @@ describe('the lobby: the tab where the forum is public, and the door that lands 
         expect(await screen.findAllByTestId('forum-visitor-topic-row')).toHaveLength(4);
     });
 
-    it('a local community: no Forum tab (its forum is for its members)', () => {
-        stubForum('topics');
-        render(<GuestLobby info={info(LOCAL)} onComplete={vi.fn()} />);
-        expect(screen.getByTestId('lobby-bottom-nav')).not.toHaveTextContent('Forum');
-    });
+    for (const [where, features] of [['a local community (its forum is for its members)', LOCAL], ['the global community in a private preview (it shows visitors nothing)', PREVIEW]] as const) {
+        it(`${where}: no Forum tab`, () => {
+            stubForum('topics');
+            render(<GuestLobby info={info(features)} onComplete={vi.fn()} />);
+            expect(screen.getByTestId('lobby-bottom-nav')).not.toHaveTextContent('Forum');
+        });
+    }
 
     it("a public page's Join to reply (/app?forumTopic=<id>): the Forum tab opens on that topic, read only, with the door", async () => {
         stubForum('topics');

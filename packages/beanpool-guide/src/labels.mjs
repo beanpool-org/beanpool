@@ -48,7 +48,7 @@ const PLACEHOLDER = /\{([a-zA-Z0-9_]+)\}/g;
 
 /** A label without what the app draws around it: leading emoji, symbols and spaces; trailing arrows and spaces. */
 export function bareLabel(text) {
-    return String(text).replace(/^[^\p{L}\p{N}{]+/u, '').replace(/[\s›→»>]+$/u, '').trim();
+    return String(text).replace(/^[^\p{L}\p{N}{]+/u, '').replace(/[\s›→»>‹←«<]+$/u, '').trim();
 }
 
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

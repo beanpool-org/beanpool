@@ -14,12 +14,14 @@
  * this app that draws one, followed through the props that make it visible) and the `useState` setters its visibility reads.
  * Then it reads every function in that file: one that, before its first `await`, sets one Modal's state to closed (false, null,
  * undefined, '') and another Modal's state to open (anything else), directly or through a local function, fails, unless the
- * same function goes through a useAfterDismiss `hold`. A verified exception goes in ALLOWED with the reason; an entry that no
- * longer matches anything fails too, so the list cannot rot.
+ * same function goes through a useAfterDismiss `hold`. One state behind two Modals (`sheet === 'a'`, `sheet === 'b'`) fails too
+ * when a handler drawn inside one of them sets it open. A ternary is open on its condition only (`addOpen ? groups(layout) : null`
+ * opens on `addOpen`, not on `layout`). A verified exception goes in ALLOWED with the reason; an entry that no longer matches
+ * anything fails too, so the list cannot rot.
  *
  * What it cannot see, and was checked by hand instead (PR #3250 lists them): a close and an open split across components (a
- * sheet that calls `onClose()` and then a parent callback that opens a Modal, which is NewPostTypeSheet's own case), and one
- * state that switches between two Modals.
+ * sheet that calls `onClose()` and then a parent callback that opens a Modal, which is NewPostTypeSheet's own case), and an
+ * open that goes through a timer of the screen's own (Home's `afterModal`, 350 ms on iOS).
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';

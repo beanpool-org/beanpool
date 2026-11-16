@@ -11,6 +11,8 @@
  *
  * **On the community asked** (routes/knocks.ts): the knock's `forumPosts` (at most three) and `forumSecret` are read whole, and
  * the proof the SIGNING key and that secret make is kept for each post (`join_requests.forum_posts`); the secret is not kept.
+ * Each post is kept as the post it names and its proof, nothing else (core ForumAskNamed): a title or words sent with it are
+ * dropped, since the admins' apps show only what the worldwide forum answers at their check.
  * No call goes to the worldwide community, so the request is taken whether it is up, down or slow (§12: a member's request
  * never makes a server call another; a local community never needs global). The members who answer read each row with the
  * worldwide community this server points its members to (config/global-community.ts) as `forum.at`; where it points to none,
@@ -18,8 +20,8 @@
  */
 import crypto from 'node:crypto';
 import {
-    FORUM_ASK_OFFERED, FORUM_ASK_POSTS, isForumAskHex, readForumAskPick, readKnockForum,
-    word, type ForumAskPick, type KnockForum, type KnockForumPost,
+    FORUM_ASK_OFFERED, FORUM_ASK_POSTS, isForumAskHex, readForumAskNamed, readForumAskPick, readKnockForum,
+    word, type ForumAskNamed, type ForumAskPick, type KnockForum, type KnockForumPost,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
@@ -84,24 +86,26 @@ function forumOrigin(): string | null {
 /**
  * What a knock keeps of `forumPosts` and `forumSecret`: none sent, nothing; more than {@link FORUM_ASK_POSTS}, a post that
  * doesn't read, the same post twice, or posts without a secret, refused; else each post with the proof `applicant` (the key
- * that signed the knock) and the secret make, as the JSON `join_requests.forum_posts` holds. Where this server points its
- * members to no worldwide community, nothing is kept and the knock is taken plain. The secret is in no answer and no row.
+ * that signed the knock) and the secret make, as the JSON `join_requests.forum_posts` holds: the post it names and the proof,
+ * nothing else (ids are 64 ASCII characters at most, so three rows stay far inside the column's 2,000). Where this server
+ * points its members to no worldwide community, nothing is kept and the knock is taken plain. The secret is in no answer and
+ * no row.
  */
 export function knockForumPosts(rawPosts: unknown, rawSecret: unknown, applicant: string): KnockForumOutcome {
     if (rawPosts === undefined || rawPosts === null) return { ok: true, kept: null };
     if (!Array.isArray(rawPosts)) return { ok: false, code: 'bad_forum_posts', error: FORUM_ASK_REFUSALS.malformed };
     if (rawPosts.length === 0) return { ok: true, kept: null };
     if (rawPosts.length > FORUM_ASK_POSTS) return { ok: false, code: 'too_many_forum_posts', error: FORUM_ASK_REFUSALS.tooMany };
-    const picks = rawPosts.map(readForumAskPick);
+    const picks = rawPosts.map(readForumAskNamed);
     if (picks.some((p) => p === null) || new Set(picks.map((p) => p!.postId)).size !== picks.length || !isForumAskHex(rawSecret)) {
         return { ok: false, code: 'bad_forum_posts', error: FORUM_ASK_REFUSALS.malformed };
     }
     if (!forumOrigin()) return { ok: true, kept: null };
     const kept: KnockForumPost[] = [];
-    for (const p of picks as ForumAskPick[]) {
-        const proof = publicPostProof(p.postId, applicant, rawSecret);
+    for (const { postId, topicId, number } of picks as ForumAskNamed[]) {
+        const proof = publicPostProof(postId, applicant, rawSecret);
         if (!proof) return { ok: false, code: 'bad_forum_posts', error: FORUM_ASK_REFUSALS.malformed };
-        kept.push({ ...p, proof });
+        kept.push({ postId, topicId, number, proof });
     }
     return { ok: true, kept: JSON.stringify(kept) };
 }

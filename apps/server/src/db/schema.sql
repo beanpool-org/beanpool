@@ -1475,9 +1475,10 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 -- the request (the post's title as it is now and the sharer's name); never the applicant's status read, the card or the
 -- directory. Cleared with what the applicant sent once the knock is off the list. A re-key moves `via_sharer_pubkey`.
 -- `forum_posts` (forums F11, DESIGN-forums-fable.md §13): up to three of the applicant's posts on the worldwide forum, as a
--- JSON list of { postId, topicId, number, title, proof }, or NULL. `proof` is made here when the knock is taken, from the key
--- that signed it and the secret it carried (@beanpool/core forumPostProof); the secret is kept nowhere, and this server
--- never calls the worldwide community. Only the members who answer read it (`forum` in the list); an admin's app compares
+-- JSON list of { postId, topicId, number, proof } (no words: the admins' apps show only what the worldwide forum answers), or
+-- NULL. `proof` is made here when the knock is taken, from the key that signed it and the secret it carried (@beanpool/core
+-- forumPostProof); the secret is kept nowhere, and this server never calls the worldwide community. Only the members who
+-- answer read it (`forum` in the list); an admin's app compares
 -- each proof with the one the worldwide forum's public page shows. Cleared with what the applicant sent.
 CREATE TABLE IF NOT EXISTS join_requests (
     id TEXT PRIMARY KEY,

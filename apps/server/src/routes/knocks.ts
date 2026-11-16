@@ -7,8 +7,9 @@
  *   POST /api/join/knock          { message, callsign, avatar?, fromNode?, toNode?, peek?, forumPosts?, forumSecret? }
  *                                   → 201 { knock: { status: 'pending' } }
  *                                   (`forumPosts`: up to three of the applicant's posts on the worldwide forum, each
- *                                   { postId, topicId, number, title }, with `forumSecret`, their secret there (forums F11,
- *                                   engine/forum-ask-posts.ts): 400 `too_many_forum_posts` for a fourth, 400 `bad_forum_posts`
+ *                                   { postId, topicId, number }, anything else sent with one dropped, with `forumSecret`,
+ *                                   their secret there (forums F11, engine/forum-ask-posts.ts): 400 `too_many_forum_posts`
+ *                                   for a fourth, 400 `bad_forum_posts`
  *                                   for one that doesn't read or comes without a secret. The proof of each is made here with
  *                                   the signing key; the secret is kept nowhere; no other server is asked anything, so the
  *                                   request is taken whatever the worldwide community does)
@@ -23,7 +24,7 @@
  * and anyone else is answered 403 `admins_only`:
  *   GET  /api/join/knocks?limit&offset          → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt, via, forum }], total, limit, offset }
  *                                               (`via`: { title, sharer } of the listing shared outside it came after, or null;
- *                                               `forum`: { at, posts: [{ postId, topicId, number, title, proof }] }, the
+ *                                               `forum`: { at, posts: [{ postId, topicId, number, proof }] }, the
  *                                               applicant's forum posts on the worldwide community at `at`, or null)
  *   POST /api/join/knocks/:id/approve           { vouchAmount?, namesEntry?, namesEntryId? }
  *                                               → { knock: { id, status: 'approved' }, invite: { code, expiresAt, vouchAmount? } }

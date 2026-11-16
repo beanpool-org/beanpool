@@ -2,19 +2,20 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Linking } from 'react-native';
 import { useStyles } from '../app/ThemeContext';
 import {
-    FORUM_ASK_CHECK_WORDS, FORUM_ASK_WORDS, checkKnockForumPost, forumAskPageUrl, t,
-    type ForumAskResult, type KnockForum, type KnockForumPost,
+    FORUM_ASK_WORDS, checkKnockForumPost, knockForumRowView, t,
+    type KnockForum, type KnockForumPost, type KnockForumRowState,
 } from '@beanpool/core';
 
 /**
  * Under a request to join (components/WantsToJoin.tsx): up to three of the asker's posts on the worldwide forum (forums F11,
- * DESIGN-forums-fable.md §13). Each row is "From the worldwide forum: {title} ›"; a tap reads the post there, shows its words,
- * and checks who wrote it (@beanpool/core checkKnockForumPost: "Written by the same key that is asking ✓", not that key, not
- * there now, or "Could not check"). Nothing else from the forum: no score, no count. The request is answered the same
- * whatever the check says. The web's components/KnockForumPosts.tsx is its twin, word for word.
+ * DESIGN-forums-fable.md §13). A row reads "A post on the worldwide forum ›" until a tap reads the post there and checks who
+ * wrote it (@beanpool/core checkKnockForumPost: "Written by the same key that is asking ✓", not that key, not there now, or
+ * "Could not check"); then it shows the forum's own title and words. Everything on the row is @beanpool/core
+ * knockForumRowView: nothing the request carried is drawn as the forum's. No score, no count. The request is answered the
+ * same whatever the check says. The web's components/KnockForumPosts.tsx is its twin, word for word.
  */
 export function KnockForumPosts({ forum, knockId }: { forum: KnockForum; knockId: string }) {
-    const [checks, setChecks] = useState<Record<string, ForumAskResult | 'checking'>>({});
+    const [checks, setChecks] = useState<Record<string, KnockForumRowState>>({});
     const styles = useStyles(({ colors }) => StyleSheet.create({
         list: { marginTop: 10, gap: 8 },
         row: { minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card },
@@ -40,23 +41,24 @@ export function KnockForumPosts({ forum, knockId }: { forum: KnockForum; knockId
         <View style={styles.list}>
             {forum.posts.map(p => {
                 const c = checks[p.postId];
-                const done = c && c !== 'checking' ? c : null;
-                const line = c === undefined ? t(FORUM_ASK_WORDS.tapToCheck) : t(FORUM_ASK_CHECK_WORDS[c === 'checking' ? 'checking' : c.check]);
-                const title = t(FORUM_ASK_WORDS.fromForum, { title: p.title });
+                const v = knockForumRowView(forum.at, p, c);
+                const openUrl = v.openUrl;
                 return (
                     <View key={p.postId} style={styles.row} testID={`knock-forum-${knockId}-${p.postId}`}>
-                        <Pressable onPress={() => check(p)} accessibilityRole="button" accessibilityLabel={title} accessibilityHint={t(FORUM_ASK_WORDS.tapToCheck)}
+                        {/* The label is the headline and the check's line, so VoiceOver says the answer with the row (a live region
+                            is Android's only); the line itself says what a tap does. */}
+                        <Pressable onPress={() => check(p)} accessibilityRole="button" accessibilityLabel={v.label}
                             accessibilityState={{ busy: c === 'checking' }}>
                             <View style={styles.head}>
-                                <Text style={styles.title}>{title}</Text>
+                                <Text style={styles.title}>{v.headline}</Text>
                                 <Text style={styles.chevron} accessible={false}>›</Text>
                             </View>
-                            <Text style={[styles.line, done?.check === 'same' && styles.same, done?.check === 'other' && styles.other]}
-                                accessibilityLiveRegion="polite" testID={`knock-forum-check-${p.postId}`}>{line}</Text>
+                            <Text style={[styles.line, v.tone === 'same' && styles.same, v.tone === 'other' && styles.other]}
+                                accessibilityLiveRegion="polite" testID={`knock-forum-check-${knockId}-${p.postId}`}>{v.line}</Text>
                         </Pressable>
-                        {!!done?.words && <Text style={styles.words} numberOfLines={6}>{done.words}</Text>}
-                        {done && done.check !== 'gone' && (
-                            <Pressable style={styles.open} onPress={() => { void Linking.openURL(forumAskPageUrl(forum.at, p)); }} accessibilityRole="link"
+                        {!!v.words && <Text style={styles.words} numberOfLines={6}>{v.words}</Text>}
+                        {openUrl && (
+                            <Pressable style={styles.open} onPress={() => { void Linking.openURL(openUrl); }} accessibilityRole="link"
                                 accessibilityLabel={t(FORUM_ASK_WORDS.open)}>
                                 <Text style={styles.openText}>{t(FORUM_ASK_WORDS.open)}</Text>
                             </Pressable>

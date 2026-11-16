@@ -90,16 +90,18 @@ describe('the list', () => {
         });
     });
 
-    it('keeps the forum posts a request carried (forums F11): an https address, each post with its proof; a post without one is left out', async () => {
+    it('keeps the forum posts a request carried (forums F11): an https address, each post it names with its proof, nothing else; a post without a proof is left out', async () => {
         const proof = 'ab'.repeat(32);
-        const post = { postId: 'fp-1', topicId: 'ft-1', number: 2, title: '  Seed swap  ', proof };
+        const named = { postId: 'fp-1', topicId: 'ft-1', number: 2, proof };
+        // A title or words beside a post are not the forum's: the reader drops them (the rows show only what the forum answers).
+        const post = { ...named, title: 'Ran the seed swap for two years', words: 'I organised every swap.' };
         const withPosts = { ...knock, id: 'k5', forum: { at: 'https://forum.example', posts: [post, { ...post, postId: 'fp-2', proof: 'no' }] } };
         const plainHttp = { ...knock, id: 'k6', forum: { at: 'http://forum.example', posts: [post] } };
         answer = () => ({ status: 200, body: { knocks: [withPosts, plainHttp], total: 2 } });
         expect(await fetchJoinRequests(NODE, await member())).toEqual({
             ok: true, total: 2,
             knocks: [
-                { ...withPosts, via: null, forum: { at: 'https://forum.example', posts: [{ ...post, title: 'Seed swap' }] } },
+                { ...withPosts, via: null, forum: { at: 'https://forum.example', posts: [named] } },
                 { ...plainHttp, via: null, forum: null },
             ],
         });

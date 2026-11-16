@@ -19,7 +19,8 @@
  *     a group's section) x (count 0..4) x (the worldwide forum reachable / unreachable / slow) -> accepted with a tick /
  *     accepted without / refused, the admins' row read through @beanpool/core checkKnockForumPost, the apps' own call. The
  *     request never waits on the worldwide community and no request to it is made while it is taken.
- *  4. The secret is kept nowhere on the community asked: not in the row, not in the list.
+ *  4. The secret is kept nowhere on the community asked: not in the row, not in the list. A title and words the asker sends
+ *     with a real post of their own are kept nowhere either, and the admin's check shows the forum's title and words.
  *  5. Kept and cleared like the rest of a request: the copy carries `forum_posts` and a standby merges it; a decline's tidy-up
  *     and a prune clear it. On the worldwide forum a re-key moves the secret with the posts (the proof follows the new key),
  *     and deleting the account deletes it.
@@ -281,7 +282,8 @@ async function main(): Promise<void> {
     console.log('\n── 2. the request: what is refused, and what is kept ──');
     // Asha and Ben are strangers to the community asked: one process plays both servers.
     db.prepare('DELETE FROM members WHERE public_key IN (?, ?)').run(asha.pk, ben.pk);
-    const pick = (p: Post) => ({ postId: p.postId, topicId: p.topicId, number: p.number, title: p.title });
+    // A request names a post: the post, its topic and its number (no title: the admins' apps show the forum's own).
+    const pick = (p: Post) => ({ postId: p.postId, topicId: p.topicId, number: p.number });
     const fresh = () => db.prepare('DELETE FROM join_requests').run();
     const knock = (id: Id, extra: Record<string, unknown>) => call(id, 'POST', '/api/join/knock', { callsign: id.name, message: 'Hello, I live nearby.', ...extra });
     const rowOf = (id: Id) => db.prepare('SELECT * FROM join_requests WHERE pubkey = ? ORDER BY created_at DESC LIMIT 1').get(id.pk) as any;
@@ -293,7 +295,7 @@ async function main(): Promise<void> {
         ['posts without a secret', { forumPosts: [pick(a1)] }, 'bad_forum_posts'],
         ['a secret not in lower-case hex', { forumPosts: [pick(a1)], forumSecret: secret.toUpperCase() }, 'bad_forum_posts'],
         ['the same post twice', { forumPosts: [pick(a1), pick(a1)], forumSecret: secret }, 'bad_forum_posts'],
-        ['a post with no title', { forumPosts: [{ ...pick(a1), title: '  ' }], forumSecret: secret }, 'bad_forum_posts'],
+        ['a post with no topic', { forumPosts: [{ ...pick(a1), topicId: '' }], forumSecret: secret }, 'bad_forum_posts'],
         ['a post numbered 0', { forumPosts: [{ ...pick(a1), number: 0 }], forumSecret: secret }, 'bad_forum_posts'],
         ['posts that are not a list', { forumPosts: pick(a1), forumSecret: secret }, 'bad_forum_posts'],
     ];
@@ -380,6 +382,25 @@ async function main(): Promise<void> {
     const benCheck = benRow ? await checkKnockForumPost(benRow.at, benRow.posts[0], { timeoutMs: 3_000 }) : null;
     asCommunity();
     assert(benKnock.status === 201 && benCheck?.check === 'other', `Ben, sending Asha's post with his own secret, is taken, and the check says it isn't his (${benCheck?.check})`);
+    // Round 2 of #3242: Ben names a real post of his own, his one-line reply, so the check honestly says it is his, with a title
+    // and words he made up. Neither is kept or listed, and what the admin's app reads is the forum's own title and words.
+    db.prepare('DELETE FROM join_requests WHERE pubkey = ?').run(ben.pk);
+    const MADE_UP_TITLE = 'Ran the seed swap for two years';
+    const MADE_UP_WORDS = 'I organised every swap since 2019.';
+    const bensReplyPost = another[1];
+    const forged = await knock(ben, { forumPosts: [{ ...pick(bensReplyPost), title: MADE_UP_TITLE, words: MADE_UP_WORDS }], forumSecret: secretOf(ben) });
+    const forgedList = await get(owner, '/api/join/knocks');
+    const forgedRow = readKnockForum((await listed(ben))?.forum);
+    asWorldwide();
+    const forgedCheck = forgedRow ? await checkKnockForumPost(forgedRow.at, forgedRow.posts[0], { timeoutMs: 3_000 }) : null;
+    asCommunity();
+    const keptForged = (rowOf(ben)?.forum_posts ?? null) as string | null;
+    assert(forged.status === 201 && keptForged !== null && ![MADE_UP_TITLE, MADE_UP_WORDS].some((s) => keptForged.includes(s) || forgedList.text.includes(s))
+        && (JSON.parse(keptForged) as object[]).every((p) => Object.keys(p).sort().join() === 'number,postId,proof,topicId'),
+        `a title and words sent with a post are kept nowhere: the row and the list hold the post it names and its proof (${keptForged?.slice(0, 60)})`);
+    assert(forgedCheck?.check === 'same' && forgedCheck.shown?.title === a1.title && forgedCheck.shown.words === 'Ben replies to Asha.'
+        && forgedCheck.shown.topicId === a1.topicId && forgedCheck.shown.number === bensReplyPost.number,
+        `the check says the post is Ben's, and shows the forum's title and words, not his ("${forgedCheck?.shown?.title}", ${forgedCheck?.check})`);
 
     // ── 5. Kept and cleared like the rest ───────────────────────────────────────────────────────
     console.log('\n── 5. the copy, the tidy-up, a prune; a re-key and a deleted account on the worldwide forum ──');

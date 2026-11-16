@@ -69,11 +69,11 @@ s0=$(date +%s)
 CI_WAIT_PR_STATE=$T/reader.cjs LANE_CI_WAIT_POLL_SECS=0.2 LANE_CI_WAIT_SECS=2 "$LANES/ci-wait.sh" 42 > "$T/out" 2>&1; RC=$?
 check "exit 2 after at least 2 s and more than one read" eval '[ "$RC" = 2 ] && [ $(( $(date +%s) - s0 )) -ge 2 ] && [ "$(calls "pr checks")" -gt 1 ]'
 
-case_ "6. no checks yet (gh says so on stderr) → a wait, never green"
+case_ "6. no checks yet (gh says so on stderr) → a wait, never green, that says what it saw"
 print none > "$FAKE_STATE/checks"
 LANE_CI_WAIT_SECS=0 wait_ci 42
 check "exit 2, not 0"                             [ "$RC" = 2 ]
-check "PENDING with nothing counted"              out_has "PENDING on fakehead (): call ci-wait.sh 42 again"
+check "PENDING: no checks yet, and the PR merges with its base" out_has "PENDING on fakehead (no checks yet: it merges with main, but no run has listed a check yet): call ci-wait.sh 42 again"
 check "gh's stderr is not shown"                  eval '! out_has "no checks reported"'
 
 case_ "7. a red while others still run → waits for them; then RED, exit 1, with only the reader's failing block"
@@ -162,7 +162,63 @@ print $OLD > "$FAKE_STATE/head"; print "1 " > "$FAKE_STATE/lands"
 LANE_CI_WAIT_SECS=30 wait_ci 42 $NEW
 check "exit 3, GitHub gave no head"               eval '[ "$RC" = 3 ] && out_has "PR unreadable (GitHub gave no head): call ci-wait.sh 42 $NEW again"'
 
-case_ "11. read-only: every gh call ci-wait.sh made in this file was a pr view or pr checks"
+# ── the class (#3257 round 3): a PR that conflicts with its base starts no run, and "no checks" read as PENDING forever.
+#    Invariant: every exit is bounded and named. In every state a PR can be in, one call ends at once or when its time is up, with an
+#    exit code of its own and a line that says what it saw and what to do; no state gives an unexplained PENDING ("()").
+case_ "11. every state → one bounded call, an exit code and a line that names it (one table)"
+H=aaa11111aaaa OLD=aaa00000aaaa NEW=bbb11111bbbb
+again_h="call ci-wait.sh 42 $H again"
+second='If the next call says no checks yet too, no run is coming: stop and say so in the PR'
+conflict='no pull_request run starts until the branch is synced. Merge origin/main, push, and call ci-wait.sh 42 $(git rev-parse HEAD) once more; if it conflicts again, stop and say so in the PR'
+row(){ # LABEL EXIT LINE SECS SETUP [SHA] — SETUP runs in a fresh fake state where the head is $H; SECS is the call's time.
+  # Rows that should end at once get 30 s, rows that end PENDING 0 s: no row may take 10 s.
+  local label=$1 rc=$2 line=$3 secs=$4 setup=$5 sha=${6-$H} s0
+  cat "$FAKE_STATE/gh.calls" >> "$T/all-calls" 2>/dev/null; rm -rf "$FAKE_STATE"; mkdir -p "$FAKE_STATE"; print $H > "$FAKE_STATE/head"
+  eval "$setup"; print -r -- "  ── $label"; s0=$(date +%s)
+  LANE_CI_WAIT_SECS=$secs wait_ci 42 ${sha:+$sha}
+  check "$label → exit $rc, within 10 s"          eval '[ "$RC" = $rc ] && [ $(( $(date +%s) - s0 )) -lt 10 ]'
+  check "... names it: ${line[1,72]}…"            out_has "$line"
+  check "... no unexplained ()"                   eval '! out_has "()"'; }
+p=$FAKE_STATE
+row "no checks + CONFLICTING"                     4 "CONFLICTING with main on aaa11111: $conflict" 30 \
+  'print none > $p/checks; print CONFLICTING > $p/mergeable'
+check "... one read of the checks and one of the conflict: no waiting for a run that cannot start" eval '[ "$(calls mergeable)" = 1 ] && [ "$(calls "pr checks")" = 1 ]'
+row "no checks + CONFLICTING, base not main"      4 "CONFLICTING with release on aaa11111: no pull_request run starts until the branch is synced. Merge origin/release," 30 \
+  'print none > $p/checks; print CONFLICTING > $p/mergeable; print release > $p/base'
+row "no checks + UNKNOWN, then CONFLICTING within the call" 4 "CONFLICTING with main on aaa11111" 30 \
+  'print none > $p/checks; print -l UNKNOWN UNKNOWN CONFLICTING > $p/mergeable'
+row "no checks + UNKNOWN all call"                2 "PENDING on aaa11111 (no checks yet: GitHub is still working out whether it merges with main): $again_h. $second" 0 \
+  'print none > $p/checks; print UNKNOWN > $p/mergeable'
+row "no checks + MERGEABLE all call"              2 "PENDING on aaa11111 (no checks yet: it merges with main, but no run has listed a check yet): $again_h. $second" 0 \
+  'print none > $p/checks; print MERGEABLE > $p/mergeable'
+row "no checks + MERGEABLE, then the run lists its checks" 0 "GREEN on aaa11111 (pass=2)" 30 \
+  'print -l none pending "pass pass" > $p/checks'
+row "no checks + an empty mergeable answer"       2 "PENDING on aaa11111 (no checks yet: GitHub did not say whether it merges with main): $again_h. $second" 0 \
+  'print none > $p/checks; : > $p/mergeable'
+row "no checks + the mergeable read fails"        2 "PENDING on aaa11111 (no checks yet: GitHub did not say whether it merges with <its base>): $again_h. $second" 0 \
+  'print none > $p/checks; touch $p/mergeable-down'
+row "checks still running all call"               2 "PENDING on aaa11111 (pass=1 pending=1): $again_h" 0 \
+  'print "pass pending" > $p/checks; print CONFLICTING > $p/mergeable'
+check "... a PR with checks has a run: its mergeable state is not read" [ "$(calls mergeable)" = 0 ]
+row "head lagging all call"                       2 "PENDING: the PR doesn't show bbb11111 yet (head aaa00000): check your push landed (git ls-remote origin <branch>), then call ci-wait.sh 42 $NEW again. If the next call says this too, your push is not the PR's head (it did not land, or a later push replaced it): stop and say so in the PR" 0 \
+  'print $OLD > $p/head; print "100000 $NEW" > $p/lands' $NEW
+row "head lagging, then the sha shows, and it conflicts" 4 "CONFLICTING with main on bbb11111: $conflict" 30 \
+  'print $OLD > $p/head; print "2 $NEW" > $p/lands; print none > $p/checks-$NEW; print "fail" > $p/checks-$OLD; print CONFLICTING > $p/mergeable' $NEW
+row "head moved while checks run"                 3 "HEAD MOVED to bbb22222 (you pushed again): call ci-wait.sh 42 <the sha you pushed> again" 30 \
+  'print bbb22222 > $p/pushes; print "pending+push" > $p/checks'
+row "head moved during the read that found the conflict" 3 "HEAD MOVED to bbb22222" 30 \
+  'print bbb22222 > $p/pushes; print "none+push" > $p/checks; print CONFLICTING > $p/mergeable'
+check "... no CONFLICTING line: that read may have been the new head's" eval '! out_has "CONFLICTING"'
+row "PR unreadable at the start"                  3 "PR unreadable (GitHub gave no head for #42 on example/fake): check the PR number, then $again_h" 30 \
+  ': > $p/head'
+row "PR unreadable while checks run"              3 "PR unreadable (GitHub gave no head): $again_h" 30 \
+  'print "" > $p/pushes; print "pending+push" > $p/checks'
+row "PR unreadable while it waits for the sha"    3 "PR unreadable (GitHub gave no head): call ci-wait.sh 42 $NEW again" 30 \
+  'print $OLD > $p/head; print "1 " > $p/lands' $NEW
+row "no checks + CONFLICTING, no sha given"       4 "CONFLICTING with main on aaa11111: $conflict" 30 \
+  'print none > $p/checks; print CONFLICTING > $p/mergeable' ''
+
+case_ "11b. read-only: every gh call ci-wait.sh made in this file was a pr view or pr checks"
 check "calls were recorded, and none was another gh command" eval '[ -s "$T/all-calls" ] && ! grep -vqE "^gh pr (view|checks) " "$T/all-calls"'
 
 # ── tsc-slot.sh ─────────────────────────────────────────────────────────────────────────────────────────────────

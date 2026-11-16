@@ -8,6 +8,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Linking, Alert, ScrollView } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -182,7 +183,7 @@ export default function UnlockKeysScreen() {
     }
 
     if (!permission) {
-        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={colors.brand.primary} /></View>;
+        return <View style={[styles.center, { backgroundColor: '#000' }]}><StatusBar style="light" /><ActivityIndicator size="large" color={colors.brand.primary} /></View>;
     }
 
     if (!permission.granted) {
@@ -208,6 +209,8 @@ export default function UnlockKeysScreen() {
 
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
+            {/* The camera's black under the status bar in every theme: light icons while it shows (the root layout's bar, by theme, is for the page; status-bar-every-screen.test.ts). */}
+            <StatusBar style="light" />
             <CameraView
                 style={StyleSheet.absoluteFillObject}
                 barcodeScannerSettings={{ barcodeTypes: ['qr'] }}

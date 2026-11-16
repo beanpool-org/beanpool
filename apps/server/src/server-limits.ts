@@ -10,7 +10,8 @@
  *     off, and a phone on a poor link posting a listing with five photos (about 1 MB of JSON) needs minutes too. A JSON
  *     body is capped at 2 MB (MAX_JSON_BODY_BYTES), and a request claiming a signature is charged before its body is read
  *     (gateway-rate-limit.ts `claim:`), so what a slow sender can hold is bounded by those and the cap below.
- *   - keepAliveTimeout, 5 s: Node's default, explicit.
+ *   - keepAliveTimeout, 5 s: Node's default, explicit. The close it makes never resets a request that has already
+ *     arrived on the connection (closeIdleWithoutReset, below).
  *   - maxConnections, 4,096 a listener: every live socket the WebSocket caps allow (2,000 on /ws and 16 on /ws/logs:
  *     ws-limits.ts), and as many again for HTTP beside them. Past it Node closes a new connection at once. It follows
  *     the socket caps: on the global node's 5,000 it is 10,032, and an operator's WS_MAX_SOCKETS moves it too
@@ -19,7 +20,8 @@
  *   - connectionsCheckingInterval, 5 s: how often Node looks for a connection past either timeout (its default, 30 s,
  *     would let a 20 s header timeout run to 50).
  */
-import type { Server as HttpServer } from 'node:http';
+import type { IncomingMessage, Server as HttpServer } from 'node:http';
+import type { Socket } from 'node:net';
 import { wsLimits, type WsLimits } from './ws-limits.js';
 
 export interface ServerLimits {
@@ -73,4 +75,48 @@ export function applyServerLimits(server: HttpServer): void {
     server.requestTimeout = limits.requestTimeoutMs;
     server.keepAliveTimeout = limits.keepAliveTimeoutMs;
     server.maxConnections = limits.maxConnections;
+    closeIdleWithoutReset(server);
+}
+
+/** Requests (and upgrades) each socket has carried, so an idle close can tell whether one came in after its timer fired. */
+const requestsOn = new WeakMap<object, number>();
+const countRequest = (req: IncomingMessage) => { requestsOn.set(req.socket, (requestsOn.get(req.socket) ?? 0) + 1); };
+
+/**
+ * An idle connection the server closes never resets a request that has already reached it.
+ *
+ * Node closes a kept-alive connection from a timer, keepAliveTimeout and about a second more (6.0 s measured, Node 22 and
+ * 26) after its last answer, and the event loop runs its timers BEFORE it reads the sockets. When the loop was held across that moment (a node
+ * busy with another request's synchronous work, or a server suite's own synchronous stretch, where client and server share
+ * one process), a request that arrived on the connection meanwhile is still unread when the timer fires: Node destroys the
+ * socket, the kernel answers the unread bytes with a reset, and the client gets ECONNRESET ("TypeError: fetch failed") for a
+ * request the server never looked at. Measured on Node 22.23 (CI's and the node image's): a fetch whose loop was held past
+ * the close was reset 6 times in 6, and a separate client process, keeping its socket as a phone, a browser or cloudflared
+ * does, whose request reached a server busy 3 s across the close, 5 in 5 (on Node 26 too). test-keepalive-idle-close.ts
+ * holds both.
+ *
+ * With a 'timeout' listener on the server, Node leaves the close to it ("timeouts must be handled explicitly", Node's
+ * http docs). This closes one turn later, after the loop has read what was waiting, and only when no request came in on
+ * the socket meanwhile: an idle connection closes as before, one turn later, and a request that arrived is answered. The
+ * listeners keep server.timeout at 0, so a socket's timer runs only between requests (Node clears it when one starts) and
+ * this sees only idle connections.
+ */
+function closeIdleWithoutReset(server: HttpServer): void {
+    server.on('request', countRequest);
+    // An upgrade (a live-updates socket) is counted too, but only on a server that takes upgrades: a listener here would
+    // make Node treat every Upgrade request as one even where nothing answers it. Both listeners add theirs after this.
+    let countingUpgrades = false;
+    const countUpgrades = () => {
+        if (countingUpgrades) return;
+        countingUpgrades = true;
+        server.prependListener('upgrade', countRequest);
+    };
+    if (server.listenerCount('upgrade') > 0) countUpgrades();
+    server.on('newListener', (event) => { if (event === 'upgrade') countUpgrades(); });
+    server.on('timeout', (socket: Socket) => {
+        const seen = requestsOn.get(socket) ?? 0;
+        setImmediate(() => {
+            if (!socket.destroyed && (requestsOn.get(socket) ?? 0) === seen) socket.destroy();
+        });
+    });
 }

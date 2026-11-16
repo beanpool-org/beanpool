@@ -65,6 +65,7 @@ import { signedRequestWords } from '../../components/signed-request-lines';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn, wordsOfLine } from '../../utils/request-report';
+import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
 // the composer all moved to utils/chat-actions, components/chat/* and core's chat-links (chat parity,
@@ -202,6 +203,9 @@ function ChatScreen({ id }: { id: string }) {
     // (y + height − the keyboard's top), so a wrapper starting under the header made the padding short by the header and
     // the keyboard covered the composer in every DM (1.2.61; utils/__tests__/chat-keyboard-tree.test.ts).
     const columnEdges = useRef({ header: 0, bottom: 0 });
+    // The screen's top in the window, for the KeyboardAvoidingView: a DM opened from a listing is an iPhone sheet that
+    // starts ~50 pt down, and without it the keyboard covered the message box (Rob, 17 Nov; utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const measuredEdge = (edge: 'header' | 'bottom') => (e: { nativeEvent: { layout: { y: number; height: number } } }) => {
         columnEdges.current[edge] = Math.round(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
         const { header, bottom } = columnEdges.current;
@@ -1555,7 +1559,7 @@ function ChatScreen({ id }: { id: string }) {
     ];
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top']} onLayout={screenKeyboard.onScreenLayout}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             
             {/* Header */}
@@ -1745,6 +1749,7 @@ function ChatScreen({ id }: { id: string }) {
             <KeyboardAvoidingView
                 style={styles.keyboardView}
                 behavior="padding"
+                keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}
                 onLayout={measuredEdge('bottom')}
             >
                 {/* The thread. Inverted, day-separated and keyboard-following — the shared list every chat uses. */}

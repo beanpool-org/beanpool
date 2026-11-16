@@ -21,6 +21,7 @@ import { outsideErrorWords } from '../../utils/outside-chat-live';
 import { GUEST_CHATS_UPDATED, answerInvitation, leaveGuestChatNow, loadGuestChats, sendGuestLineNow, syncGuestMailNow } from '../../utils/guest-chat-live';
 import { guestClosedWords, guestLineStateWords } from '../../utils/guest-chat-words';
 import { loadIdentity } from '../../utils/identity';
+import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 
 const W = GUEST_CHAT_WORDS;
 /** How often an open chat asks for what waits, while it is on screen. */
@@ -29,6 +30,8 @@ const POLL_MS = 15_000;
 export default function GuestChatScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { colors } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const [me, setMe] = useState<string | null>(null);
     const [chat, setChat] = useState<GuestChat | null | undefined>(undefined);
     const [text, setText] = useState('');
@@ -168,8 +171,8 @@ export default function GuestChatScreen() {
         : null;
 
     return (
-        <SafeAreaView style={styles.safeArea} testID="guest-chat">
-            <KeyboardAvoidingView style={styles.container} behavior="padding">
+        <SafeAreaView style={styles.safeArea} testID="guest-chat" onLayout={screenKeyboard.onScreenLayout}>
+            <KeyboardAvoidingView style={styles.container} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}>
                 <View style={styles.header}>
                     <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Go back')}>
                         <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.body} />

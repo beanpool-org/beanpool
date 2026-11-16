@@ -29,6 +29,7 @@ import { t, tn } from '@beanpool/core';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { useTheme, useStyles } from './ThemeContext';
+import { useScreenKeyboardOffset } from '../components/useScreenKeyboardOffset';
 
 // ── Fixed Row Height for getItemLayout ──────────────────────────────────────
 const MEMBER_ROW_HEIGHT = 72;
@@ -64,6 +65,8 @@ export default function NewMessageScreen() {
     // The record beside the list, never the list (use-contacts.ts): with none yet the row reads Import contacts (design §3.1).
     const hasContacts = (useContactsRecord(identity)?.fileSeq ?? 0) > 0;
     const { theme, colors } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const styles = useStyles(({ theme, colors, patternEnabled }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: patternEnabled ? colors.surface.page : colors.surface.card },
         container: { flex: 1 },
@@ -408,10 +411,11 @@ export default function NewMessageScreen() {
 
     // ── Main Return ─────────────────────────────────────────────────────────
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} onLayout={screenKeyboard.onScreenLayout}>
             <KeyboardAvoidingView
                 style={styles.container}
                 behavior="padding"
+                keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}
             >
                 {/* Header Bar */}
                 <View style={styles.header}>

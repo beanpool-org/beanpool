@@ -47,6 +47,7 @@ vi.mock('react-native', async () => {
         View: el('div'), Text: el('span'), Pressable: el('button'), TextInput: el('textarea'), FlatList,
         StyleSheet: { create: (s: any) => s, hairlineWidth: 1 },
         Dimensions: { get: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }) },
+        useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
         DeviceEventEmitter: { addListener: () => ({ remove: () => {} }), emit: () => {} },
         Alert: { alert: vi.fn() },
     };

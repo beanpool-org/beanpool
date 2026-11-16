@@ -41,6 +41,7 @@ import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, pe
 import { switchCommunity } from '../utils/use-communities';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
+import { useScreenKeyboardOffset } from '../components/useScreenKeyboardOffset';
 
 // Loaded when a row's Invite is tapped: the sheet brings the clipboard and the ask, which the list itself never needs.
 const ContactInviteSheet = lazy(() => import('../components/ContactInviteSheet').then((m) => ({ default: m.ContactInviteSheet })));
@@ -55,6 +56,8 @@ type Row = { kind: 'head'; title: string } | { kind: 'contact'; c: Contact };
 export default function ContactsScreen() {
     const { identity } = useIdentity();
     const { colors } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const view = useContacts(identity);
     // Opened from Chat's "Import contacts" (no list yet), it starts on Import, and Back from there goes back to Chat.
     const { start } = useLocalSearchParams<{ start?: string }>();
@@ -116,8 +119,8 @@ export default function ContactsScreen() {
         </View>
     );
     const shell = (title: string, body: React.ReactNode) => (
-        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']} onLayout={screenKeyboard.onScreenLayout}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}>
                 {header(title)}
                 {body}
             </KeyboardAvoidingView>

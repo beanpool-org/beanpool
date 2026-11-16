@@ -25,6 +25,8 @@ type Listed = Pick<Conversation, 'id' | 'lastMessageAt' | 'createdAt'>;
 let sends: ReadonlyMap<string, ChatSentHere> = new Map();
 /** Lists asked for so far in this tab: a send carries the count at its time, and only a later ask can settle it. */
 let asks = 0;
+/** The newest ask whose answer the list shows: an answer to an earlier ask, landing after it, is older than what is shown. */
+let applied = 0;
 const listeners = new Set<() => void>();
 
 function put(next: ReadonlyMap<string, ChatSentHere>) {
@@ -75,9 +77,15 @@ export function noteLineSentHere(conversationId: string, convs: readonly Listed[
 /**
  * The community's list answered the ask marked `answerMark`: each send it shows a newer line for, asked after the send, is
  * the list's to order from now on. A send in a chat the list no longer has goes too: there is no row for it.
+ *
+ * False, and nothing settled, when an answer to a later ask is already shown: two loads can overlap (each sync nudge asks),
+ * and the older answer landing last would put back the list as it was before the newer one, a chat dropping to its old
+ * place until the next load (#3225 review). The caller then shows nothing of it.
  */
-export function settleChatListSends(convs: readonly Listed[], answerMark: number) {
-    if (sends.size === 0) return;
+export function settleChatListSends(convs: readonly Listed[], answerMark: number): boolean {
+    if (answerMark < applied) return false;
+    applied = answerMark;
+    if (sends.size === 0) return true;
     const byId = new Map(convs.map((c) => [c.id, c]));
     let changed = false;
     const next = new Map(sends);
@@ -89,6 +97,7 @@ export function settleChatListSends(convs: readonly Listed[], answerMark: number
         }
     }
     if (changed) put(next);
+    return true;
 }
 
 /** A Transactions row whose listing is still live: above the rest under that chip, as before. */
@@ -116,5 +125,6 @@ export function orderChatList(
 /** For tests: a fresh tab. */
 export function resetChatListSendsForTest() {
     asks = 0;
+    applied = 0;
     put(new Map());
 }

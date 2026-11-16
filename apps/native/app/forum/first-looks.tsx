@@ -10,7 +10,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { forumSectionName, t, timeAgo } from '@beanpool/core';
+import { forumSectionName, forumWriterLine, t, timeAgo } from '@beanpool/core';
 import { useTheme } from '../ThemeContext';
 import { FIRST_LOOK_NO_REASONS, keptForumFront, listFirstLooks, noFirstLook, okFirstLook, type FirstLookNoReason, type ForumFront, type ForumWaiting } from '../../utils/forum';
 import { ForumPhotos, ForumWords } from '../../components/forum/ForumBits';
@@ -63,7 +63,7 @@ export default function ForumFirstLooksScreen() {
                     const section = front?.sections.find((s) => s.id === w.sectionId);
                     return (
                         <View key={w.id} style={styles.card} testID="forum-first-look">
-                            <Text style={styles.muted}>{[section ? forumSectionName(section) : '', w.writer.name, timeAgo(Math.max(0, Date.now() - Date.parse(w.createdAt)))].filter(Boolean).join(' · ')}</Text>
+                            <Text style={styles.muted}>{[section ? forumSectionName(section) : '', forumWriterLine(w.writer, t(TOPIC_WORDS.member)), timeAgo(Math.max(0, Date.now() - Date.parse(w.createdAt)))].filter(Boolean).join(' · ')}</Text>
                             <Text style={styles.rowTitle}>{w.title}</Text>
                             {w.place ? <Text style={styles.muted}>📍 {w.place}</Text> : null}
                             {/* A new writer's words: their links stay plain text here too, until a moderator says OK. */}

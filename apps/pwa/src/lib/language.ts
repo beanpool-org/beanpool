@@ -241,6 +241,19 @@ export function languageHeaders(nodeApiUrl: string): Record<string, string> {
     return sameOrigin ? { [LANGUAGE_HEADER]: lang } : {};
 }
 
+/**
+ * The header a request to ANOTHER community carries, on a route that allows it from any origin, so that community's refusal
+ * comes back in the member's language too (#3271 review 4590770780): the signed requests of an "ask to join" and its push,
+ * and the note for the worldwide forum (apps/pwa api.ts signedFetchAt, sendSignedAt). Each route names
+ * `x-language` among the headers it allows (apps/server https-server.ts SIGNED_KNOCK_HEADERS, ALLOWED_REQUEST_HEADERS);
+ * lib/cross-origin-language.test.ts checks that, and lists every request that goes without it, and why. Never the
+ * pseudo-locale.
+ */
+export function crossOriginLanguageHeaders(): Record<string, string> {
+    const lang = currentLanguage();
+    return isLang(lang) ? { [LANGUAGE_HEADER]: lang } : {};
+}
+
 /** Tests only: forget this page load's language, as a new page load would. */
 export function resetLanguageForTests(): void {
     latest++;

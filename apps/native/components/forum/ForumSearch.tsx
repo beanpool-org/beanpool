@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t, timeAgo, word } from '@beanpool/core';
+import { forumWriterLine, t, timeAgo, word } from '@beanpool/core';
 import { useStyles, useTheme } from '../../app/ThemeContext';
 import { searchForum, type ForumSearchHit } from '../../utils/forum-search';
 
@@ -121,7 +121,7 @@ export function ForumSearch({ onOpen, onShowing, sectionName }: {
             {failed && <Text testID="forum-search-failed" accessibilityRole="alert" style={styles.note}>{failed}</Text>}
             {answer && answer.hits.length === 0 && <Text testID="forum-search-none" style={styles.note}>{t(FORUM_SEARCH_WORDS.none, { q: answer.q })}</Text>}
             {answer?.hits.map((hit) => {
-                const meta = [hit.writer.name || t('A member'), sectionName?.(hit.sectionId) ?? '', timeAgo(Math.max(0, Date.now() - Date.parse(hit.createdAt)))].filter(Boolean).join(' · ');
+                const meta = [forumWriterLine(hit.writer, t('A member')), sectionName?.(hit.sectionId) ?? '', timeAgo(Math.max(0, Date.now() - Date.parse(hit.createdAt)))].filter(Boolean).join(' · ');
                 const title = hit.title || t(FORUM_SEARCH_WORDS.removedTopic);
                 return (
                     // TalkBack reads the card's own lines, title first: no label of its own to translate.

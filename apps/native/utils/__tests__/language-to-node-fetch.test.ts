@@ -2,8 +2,10 @@
  * The phone's language on every request to its own community (Marty's call M6; translation design §3), from the fetch
  * wrapper (utils/node-request-signing.ts): the helpers that sign a request themselves (the names list, a knock, the
  * member area) and a screen's own fetch get it too, so the community's refusal comes back in the member's language.
- * Following a switch at once, never the pseudo-locale, never to another host, never over a header the caller set; in a
- * build without an app version (the web build) as well.
+ * Following a switch at once, never the pseudo-locale, never over a header the caller set; in a build without an app
+ * version (the web build) as well. Since #3271 (review 4590770483) every other community's API gets it too, as its
+ * refusals reach the member just the same (cross-community-language.test.ts is the guard); a host that is no
+ * community's API still never does.
  *
  * Nothing here contacts a node.
  */
@@ -63,14 +65,17 @@ describe("X-Language on every request to the phone's own community", () => {
         expect(sentHeaders(1)['X-Language']).toBe('en');
     });
 
-    it('never to another host, and nothing with no community on the phone', async () => {
+    it('another community\'s API, and any with no community on the phone (a join), get it; a host that is no community\'s API never does', async () => {
         setLanguage('fr');
         await fetch('https://bellingen.test/api/x');
-        await fetch('https://mullum.test.evil.example/api/x');
         await fetch('https://itunes.apple.com/lookup?bundleId=x');
+        await fetch('https://riverside.example/logo.png');
         mem.clear();
         await fetch('https://mullum.test/api/x');
-        for (let i = 0; i < 4; i++) expect(sentHeaders(i)['X-Language']).toBeUndefined();
+        expect(sentHeaders(0)['X-Language']).toBe('fr');
+        expect(sentHeaders(1)['X-Language']).toBeUndefined();
+        expect(sentHeaders(2)['X-Language']).toBeUndefined();
+        expect(sentHeaders(3)['X-Language']).toBe('fr');
     });
 
     it('never over one the caller set, and never into a Headers object it would replace', async () => {

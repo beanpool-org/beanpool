@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Call = { method: string; path: string; body?: any };
-const node = vi.hoisted(() => ({ calls: [] as Call[], answer: null as null | ((c: Call) => unknown), role: 'member' as string | null, linkables: { groups: [] as any[], listings: [] as any[], events: [] as any[], hosted: [] as any[] } }));
+const node = vi.hoisted(() => ({ calls: [] as Call[], answer: null as null | ((c: Call) => unknown), role: 'member' as string | null, linkables: { groups: [], listings: [], events: [], hosted: [] } as { groups: any[]; listings: any[]; events: any[]; hosted?: any[] } }));
 vi.mock('../lib/api', async (orig) => ({
     ...(await orig<typeof import('../lib/api')>()),
     request: vi.fn(async (method: string, path: string, body?: unknown) => {

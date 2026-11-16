@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, nameLine, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
+import { clipName, detectMentions, groupPictureUrlOf, guestNameLine, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, nameLine, NAME_LINE_CHARS, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -50,10 +50,14 @@ export { detectMentions };
  * name their card gave, their community (their home, which the envelope proved) and "guest", in core's one name line
  * (joint design §2.6: as a guest the community always shows), "Dax · riverside.example · guest". Never the card's name
  * alone, which a guest chooses and nothing checks: a guest whose card says a member's name never passes as that member.
+ * Core's guestNameLine makes it under NAME_LINE_CHARS: the card's name read clean (nothing that shows nothing) and cut so the
+ * line fits, " · <home> · guest" never cut. The places that pass it on cap it with core's servedName, which cuts nothing it
+ * made (#3275 round 3: Home cut a 60-character card name's line at 60, so " · a.example · guest" went and a guest read as
+ * a bare name).
  */
 export function guestLineName(groupId: string, key: string): string | null {
     const g = db.prepare('SELECT name, home FROM group_guests WHERE group_id = ? AND guest_key = ?').get(groupId, key) as { name: string; home: string } | undefined;
-    return g ? nameLine({ kind: 'guest', name: nameLine({ kind: 'community', name: g.name, community: g.home }) }) : null;
+    return g ? guestNameLine(g.name, g.home, NAME_LINE_CHARS) : null;
 }
 
 /**
@@ -68,7 +72,8 @@ export function guestLineName(groupId: string, key: string): string | null {
  * "2b3be71a · no longer in this group" (the phone names a signer outside its roster by the name the node serves).
  */
 export function groupLineAuthorName(groupId: string, authorPubkey: string, memberCallsign: string | null | undefined): string | null {
-    if (memberCallsign) return memberCallsign;
+    // A member's name by the rule a guest's card name goes by (core clipName): read clean, cut at NAME_LINE_CHARS.
+    if (memberCallsign) return clipName(memberCallsign) || null;
     if (!authorPubkey || authorPubkey === 'SYSTEM') return null;
     return guestLineName(groupId, authorPubkey);
 }

@@ -26,10 +26,11 @@ export const RELAY_FIND_PATH = '/api/relay/find';
 export const FIND_NOBODY_BODY = '{"v":1,"card":null}';
 
 /**
- * A typed name as it is looked up: runs of spaces made one, trimmed at both ends, as an address card writes a name. Letter
- * case is the server's name rule (@beanpool/engine foldName: the one rule by which two names on a community are the same).
- * Nothing else is forgiven: a part of a name, a missing letter or a dropped accent is another name. A line break or a tab
- * is a space like any other (so it is forgiven too). Null for text no card could carry (empty, past 60 characters).
+ * A typed name as it is looked up: runs of spaces made one, trimmed at both ends, characters that show nothing (a zero-width
+ * space, a direction mark) taken out, as an address card writes a name (outside-chat.ts addressCardName). Letter case is the
+ * server's name rule (@beanpool/engine foldName: the one rule by which two names on a community are the same). Nothing
+ * else is forgiven: a part of a name, a missing letter or a dropped accent is another name. A line break or a tab is a
+ * space like any other (so it is forgiven too). Null for text no card could carry (empty, past 60 characters).
  */
 export function findTypedName(name: unknown): string | null {
     if (typeof name !== 'string') return null;

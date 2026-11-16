@@ -76,7 +76,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 // Imported, never the global: a browser has no Buffer, and neither has Hermes on the phone (WALK 3, 16 Nov: every guest round
 // in the web app stopped at "Buffer is not defined" once the roster came, so a guest never read or sent a line).
 import { Buffer } from 'buffer';
-import { nameLine } from './name-line.js';
+import { cleanName, clipName, nameLine } from './name-line.js';
 import { t, word } from './words.js';
 
 /**
@@ -883,9 +883,20 @@ export function guestClosedWords(chat: Pick<GuestChat, 'state' | 'why'>): string
     return null;
 }
 
-/** A guest's name in the chat, as both apps write it: their card's name, their community, "guest" (name-line.ts). */
-export function guestNameLine(name: string, home: string): string {
-    return nameLine({ kind: 'guest', name: nameLine({ kind: 'community', name, community: home }) });
+/**
+ * A guest's name in the chat, as both apps write it and the node serves it: their card's name, their community, "guest"
+ * (name-line.ts), "Dax · riverside.example · guest". The card's name is read clean (cleanName: nothing that shows nothing,
+ * one space at a time), so "Ana" padded with zero-width spaces is "Ana · a.example · guest". Given `max` (the node gives
+ * NAME_LINE_CHARS), only the card's name is cut, so the whole line fits `max`: their community and "guest" are never cut.
+ * A home so long that they alone leave no room keeps the name's first character and "…", and the line runs past `max`.
+ */
+export function guestNameLine(name: string, home: string, max?: number): string {
+    const line = (n: string) => nameLine({ kind: 'guest', name: nameLine({ kind: 'community', name: n, community: home }) });
+    const clean = cleanName(name) || '…';
+    if (max === undefined) return line(clean);
+    // The line's own words and community, in the reader's language: the line around a one-character name, less that name.
+    const around = Array.from(line('x')).length - 1;
+    return line(clipName(clean, max - around));
 }
 
 /** The name a line's author goes by in a guest's chat: a member by their name, a guest by the guest line, else a short key. */

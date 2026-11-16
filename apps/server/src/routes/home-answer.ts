@@ -74,7 +74,7 @@ import {
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
     type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder, firstStepsOver, homeCardType, type HomeNodeFacts,
-    type HomeLearnCard,
+    type HomeLearnCard, clipName, servedName,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -579,6 +579,11 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  * length cap (engine/post-fields.ts), so each text is cut here: the answer stays a few kilobytes whatever anyone typed.
  */
 const TITLE_CHARS = 120;
+/**
+ * A group's, a shop's or a place's name. A person's name goes by core's one rule instead: clipName (NAME_LINE_CHARS, also
+ * 60, read clean), and a name another place already made by it, a chat line's author, by servedName, which never cuts it
+ * again: a guest's line keeps " · <their community> · guest" (#3275 round 3).
+ */
 const NAME_CHARS = 60;
 /** A category: one of the catalogue's ids, or a short word an older app or a peer stored. Only checked to be text (engine/post-fields.ts). */
 const CATEGORY_CHARS = 40;
@@ -815,7 +820,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     const unread = getListedUnreadCounts(me);
     const dms = getConversationsByMember(me)
         .filter(conv => conv.type === 'dm' && (unread[conv.id] ?? 0) > 0 && !chatHiddenFrom(conv, me))
-        .map(conv => ({ id: conv.id, unread: unread[conv.id], peer: clip(conv.peerCallsign || 'Someone', NAME_CHARS) }));
+        .map(conv => ({ id: conv.id, unread: unread[conv.id], peer: clipName(conv.peerCallsign) || 'Someone' }));
     if (dms.length) {
         const total = dms.reduce((n, d) => n + d.unread, 0);
         items.push({
@@ -991,7 +996,7 @@ function dealsCard(c: Ctx): HomeCards['deals'] | undefined {
         .map((t): DealItem => {
             const other = t.buyerPublicKey === me ? t.sellerCallsign : t.buyerCallsign;
             return {
-                txId: t.id, postId: t.postId, title: clip(t.postTitle ?? '', TITLE_CHARS), with: other ? clip(other, NAME_CHARS) : null,
+                txId: t.id, postId: t.postId, title: clip(t.postTitle ?? '', TITLE_CHARS), with: clipName(other) || null,
                 waitsOnMe: waitingSet.has(t.id), at: bounded(t.createdAt, ID_CHARS),
             };
         });
@@ -1010,7 +1015,7 @@ function enterpriseLineOf(e: EnterpriseLedgerEntry): EnterpriseLine | null {
     if (!bounded(e.timestamp, ID_CHARS)) return null;
     const cp = e.counterparty;
     const kind: EnterpriseLine['kind'] = cp === 'COMMONS_POOL' ? 'commons' : cp.startsWith('escrow_') ? 'deal' : getMember(cp) ? 'member' : 'other';
-    return { amount_c: e.netAmount, at: e.timestamp, kind, who: kind === 'member' ? clip(e.counterpartyName, NAME_CHARS) : null };
+    return { amount_c: e.netAmount, at: e.timestamp, kind, who: kind === 'member' ? clipName(e.counterpartyName) : null };
 }
 
 function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
@@ -1026,7 +1031,7 @@ function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     const lifecycle = (db.prepare('SELECT lifecycle FROM members WHERE public_key = ?').get(id) as { lifecycle: string | null } | undefined)?.lifecycle === 'bounded' ? 'bounded' : 'ongoing';
     // W3 (§2): the keepers who can act for it (stewardship is public to members, treasuryKeepers).
     const keepers = treasuryKeepers(id).filter(k => !k.suspended).length;
-    const card: NonNullable<HomeCards['enterprise']> = { id, name: clip(getMember(id)?.callsign ?? '', NAME_CHARS), requests, others: kept.length - 1, lifecycle, keepers };
+    const card: NonNullable<HomeCards['enterprise']> = { id, name: clipName(getMember(id)?.callsign), requests, others: kept.length - 1, lifecycle, keepers };
     if (!c.switches.beans) return card;
     // Its book this month as its own screen reads it (routes/treasury.ts): the balance (getBalance, open, #1286), the
     // month's lines and Beans in and out, and the latest line, whose other party its keeper reads by name.
@@ -1082,7 +1087,7 @@ function shopCard(c: Ctx): NonNullable<HomeCards['shop']> {
     const shop = memberShop(row, c.me!, c.now);
     return {
         shop: {
-            id: shop.id, name: shop.name === null ? null : clip(shop.name, NAME_CHARS), ownerName: clip(shop.ownerName, NAME_CHARS),
+            id: shop.id, name: shop.name === null ? null : clip(shop.name, NAME_CHARS), ownerName: clipName(shop.ownerName),
             category: shop.category, counts: shop.counts, paused: shop.paused, backOn: shop.backOn,
         },
     };
@@ -1332,7 +1337,7 @@ function lastLineOf(m: YourChatLastMessage | null): GroupLastLine | null {
     const l = m.locked;
     const short = !!l && l.ciphertext.length + l.nonce.length + (l.metadata?.length ?? 0) <= LOCKED_LINE_CHARS;
     return {
-        who: m.authorCallsign === null ? null : clip(m.authorCallsign, NAME_CHARS), at: m.timestamp, text: clip(m.text, TITLE_CHARS),
+        who: m.authorCallsign === null ? null : servedName(m.authorCallsign), at: m.timestamp, text: clip(m.text, TITLE_CHARS),
         ...(l && short ? { locked: { ciphertext: l.ciphertext, nonce: l.nonce, metadata: l.metadata } } : {}),
     };
 }
@@ -1367,7 +1372,7 @@ interface ChatRow {
 function chatLineOf(r: ChatRow): HomeChatLine | null {
     const id = bounded(r.id, ID_CHARS), at = bounded(r.timestamp, ID_CHARS), author = bounded(r.authorPubkey, ID_CHARS), type = bounded(r.type, ID_CHARS);
     if (!id || !at || !author || !type) return null;
-    const who = author === 'SYSTEM' ? null : clip(r.authorCallsign || getMember(author)?.callsign || author.slice(0, 8), NAME_CHARS);
+    const who = author === 'SYSTEM' ? null : (servedName(r.authorCallsign) || clipName(getMember(author)?.callsign) || author.slice(0, 8));
     const line = { id, author, who, at, type, systemType: type === 'system' ? bounded(r.systemType, ID_CHARS) : null };
     const metadata = r.metadata ?? null;
     if (type === 'system' || r.nonce === 'plaintext-v1') {
@@ -1389,7 +1394,7 @@ function directChat(c: Ctx, id: string, other: string | null, rows: ChatRow[], u
     const name = other ? getMember(other)?.callsign : null;
     const peer = bounded(other, ID_CHARS);
     return {
-        kind: 'dm', name: name ? clip(name, NAME_CHARS) : null, unread, muted: muted(getChatMutesFor(c.me!).get(id), c.now), lines: chatLinesOf(rows),
+        kind: 'dm', name: clipName(name) || null, unread, muted: muted(getChatMutesFor(c.me!).get(id), c.now), lines: chatLinesOf(rows),
         ...(peer ? { peer } : {}),
     };
 }
@@ -1473,7 +1478,7 @@ function joinedCard(c: Ctx): HomeCards['joined'] | undefined {
         return count ? { count7d: count, radiusKm: p ? JOINED_RADIUS_KM : null } : undefined;
     }
     if (!rows.length) return undefined;
-    return { count7d: rows.length, radiusKm: null, names: rows.slice(0, JOINED_NAMES).map(r => ({ callsign: clip(r.callsign, NAME_CHARS), avatarUrl: bounded(avatarUrlOf(r.public_key, r.avatar_ref), URL_CHARS) })) };
+    return { count7d: rows.length, radiusKm: null, names: rows.slice(0, JOINED_NAMES).map(r => ({ callsign: clipName(r.callsign), avatarUrl: bounded(avatarUrlOf(r.public_key, r.avatar_ref), URL_CHARS) })) };
 }
 
 function pulseCard(c: Ctx): HomeCards['pulse'] | undefined {
@@ -1484,7 +1489,7 @@ function pulseCard(c: Ctx): HomeCards['pulse'] | undefined {
     // harvester stores a feed's links uncut: pulse-submit's MAX_ITEM_URL_LENGTH is for submissions).
     const usable = recent.filter(i => !!bounded(i.id, ID_CHARS) && !!bounded(i.platform, ID_CHARS));
     const items = starredFirst(usable, i => i.category, c.interests).slice(0, PULSE_ITEMS).map(i => ({
-        id: i.id, title: i.title === null ? null : clip(i.title, TITLE_CHARS), platform: i.platform, callsign: clip(i.callsign, NAME_CHARS),
+        id: i.id, title: i.title === null ? null : clip(i.title, TITLE_CHARS), platform: i.platform, callsign: clipName(i.callsign),
         category: clip(String(i.category ?? ''), CATEGORY_CHARS), url: bounded(i.url, URL_CHARS),
         // Through the node's own proxy (an <img> can't sign; no member's address reaches a CDN), as the Pulse screen.
         thumbnailUrl: i.thumbnailUrl ? `/api/pulse/items/${encodeURIComponent(i.id)}/thumbnail` : null,

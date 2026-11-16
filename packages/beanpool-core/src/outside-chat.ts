@@ -27,6 +27,7 @@ import { isNodeHost, signatureBytesOf } from './node-request-signing.js';
 import { relayConversationId, type RelayEnvelope } from './relay-envelope.js';
 import { toBase64, utf8Bytes, type Signer } from './request-signing.js';
 import { t } from './words.js';
+import { cleanName } from './name-line.js';
 
 /** First value of what a card's owner signs: this use's own name, so no other signature by the key can be taken for one. */
 export const ADDRESS_CARD_TAG = 'beanpool-address-card/1';
@@ -53,11 +54,16 @@ export interface AddressCard {
     sig: string;
 }
 
-/** A name a card may carry, trimmed, or null. */
+/**
+ * A name a card may carry, as it reads (name-line.ts cleanName: nothing that shows nothing, such as a zero-width space or a
+ * direction override, and one space at a time, trimmed), or null: none left, past 60 characters, or a line break or other
+ * control character inside it. A card carries only a name in this form ({@link addressCardVerifies}), so a guest can't pad
+ * the name a member sees, and {@link signAddressCard} signs the name in it.
+ */
 export function addressCardName(name: unknown): string | null {
-    if (typeof name !== 'string') return null;
-    const n = name.trim();
-    return n.length > 0 && n.length <= ADDRESS_CARD_NAME_MAX && !CONTROL.test(n) ? n : null;
+    if (typeof name !== 'string' || CONTROL.test(name.trim())) return null;
+    const n = cleanName(name);
+    return n.length > 0 && n.length <= ADDRESS_CARD_NAME_MAX ? n : null;
 }
 
 /** What a card's owner signs: SHA-256 of the UTF-8 of the JSON array [tag, key, home, name]. */

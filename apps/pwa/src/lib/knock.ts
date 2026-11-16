@@ -7,7 +7,7 @@
  * lib/api.ts's (signedFetchAt): the member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import { DEFAULT_GLOBAL_COMMUNITY_HOST, isPeekTicket, isPublicIpv4, knockStillAnswerable, notANameLine, retryAfterSecondsOf, t, tn, word } from '@beanpool/core';
+import { DEFAULT_GLOBAL_COMMUNITY_HOST, isPeekTicket, isPublicIpv4, knockStillAnswerable, notANameLine, retryAfterSecondsOf, t, tn, word, type ForumAskSend } from '@beanpool/core';
 import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
 import { isNodeTooOldError } from './node-version-gate';
@@ -56,6 +56,11 @@ export interface KnockRequest {
      * community never refuses a request for one that opens nothing.
      */
     peek?: string | null;
+    /**
+     * Up to three of the asker's own posts on the worldwide forum and their secret there, as core's forumAskSend makes them
+     * from the picker (forums F11b, lib/forum-ask-picks.ts). Left out when null: the request goes plain.
+     */
+    forum?: ForumAskSend | null;
 }
 
 export type KnockStatus =
@@ -150,7 +155,7 @@ export function knockFromNode(): string | undefined {
  * The body a knock sends, as the phone's: no key in it, `fromNode`, never `from` (the node's signature check reads a
  * `from` field as the sender's key), and `toNode` naming the community it is for, inside what is signed.
  */
-export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string; peek?: string } {
+export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string; peek?: string } & Partial<ForumAskSend> {
     const avatar = knockAvatar(req.avatar);
     const fromNode = knockFromNode();
     return {
@@ -160,6 +165,7 @@ export function knockBody(req: KnockRequest, toNode?: string): { message: string
         ...(toNode ? { toNode } : {}),
         ...(avatar ? { avatar } : {}),
         ...(isPeekTicket(req.peek) ? { peek: req.peek } : {}),
+        ...(req.forum ? { forumPosts: req.forum.forumPosts, forumSecret: req.forum.forumSecret } : {}),
     };
 }
 

@@ -26,8 +26,8 @@ import { fetchNodeProfile, getCachedNodeProfile, membersByKey, nodeProfileIsFres
 import { readerFeaturesHeld, readerFeaturesKey, readsOwnWith } from '../utils/reads-own';
 import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
 import { nearbySetHash } from '../utils/nearby-hash';
-import {
 import { moveCommunityAddress } from '../utils/community-move-lock';
+import {
     nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
 } from '../utils/nearby-area';
 

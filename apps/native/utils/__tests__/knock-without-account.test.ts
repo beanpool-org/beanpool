@@ -380,7 +380,7 @@ describe('the welcome screen joins a yes through the invite step, and Safety Bac
     it('the knock\'s mark is read with the record, before the community is set, and makes the key new', () => {
         const record = handleCreate.indexOf('const joinRecord = storedIdentity ? await getPendingOnboarding() : null;');
         const mark = handleCreate.indexOf('const knockMade = storedIdentity ? await knockKeyIsNew(storedIdentity.publicKey) : false;');
-        const community = handleCreate.indexOf("await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);\n                // The update screen");
+        const community = handleCreate.indexOf("await moveCommunityAddress(nodeUrl);\n                // The update screen");
         expect(record).toBeGreaterThan(-1);
         expect(mark).toBeGreaterThan(record);
         expect(community).toBeGreaterThan(mark);

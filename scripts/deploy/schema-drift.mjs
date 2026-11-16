@@ -1,0 +1,477 @@
+#!/usr/bin/env node
+/**
+ * Schema drift, before a deploy: which tables a node's database already holds in a shape the new build's schema.sql would
+ * not give it. schema.sql makes each table with CREATE TABLE IF NOT EXISTS, which never touches a table that is there, so a
+ * CHECK edited in place (day zero), a column added, a NOT NULL, a key or a UNIQUE changed reaches a fresh install and never
+ * a kept node. It happened twice on 16 Nov 2026: group_guest_outbox and group_guest_mail (#3233), relay_mail and
+ * relay_outbox (#3244), each already on a live node under the old CHECK. docs/schema-drift-check.md is the operators' page.
+ *
+ * READ-ONLY. The database is opened read-only (and query_only); nothing is written, dropped or copied. The director acts
+ * on the lines it prints.
+ *
+ *   node scripts/deploy/schema-drift.mjs --db <state.db> [--schema <schema.sql>] [--manifest <replication-manifest.ts>]
+ *       [--boot-steps <db.ts>]
+ *   node scripts/deploy/schema-drift.mjs --pack [same three] | ssh <host> 'sudo docker exec -i -w /app/apps/server <container>
+ *       node --input-type=module - --db /data/state.db'
+ *
+ * --schema, --manifest and --boot-steps default to this checkout's apps/server/src/db/schema.sql,
+ * apps/server/src/engine/replication-manifest.ts and apps/server/src/db/db.ts: check out the build about to deploy first.
+ * --pack prints this script with those three read into it, for `node -` inside the node container, whose files are the
+ * running build's (better-sqlite3 is found from the working directory, /app/apps/server there).
+ *
+ * One line per table that is in the database and in schema.sql:
+ *   OK <table> <kind>
+ *   DRIFT-EMPTY-LOCAL <table> rows=0 local: <what differs>   never copied to a standby, and empty: a candidate to drop so the
+ *                                                            new build makes it again
+ *   DRIFT-HAS-ROWS <table> rows=<n> local: <what differs>    stop and ask
+ *   DRIFT-REPLICATED <table> rows=<n> <kind>: <what differs> copied to standbys or carried by a take-over (or not found in
+ *                                                            the manifest), whatever its rows: stop and ask
+ * <kind> is the table's entry in engine/replication-manifest.ts TABLES. Compared: the column set, each column's type,
+ * NOT NULL, default, collation and generated form, the primary key, CHECKs, UNIQUEs, foreign keys, WITHOUT ROWID and
+ * STRICT, and a virtual table's whole definition. Not compared: indexes and triggers (CREATE ... IF NOT EXISTS keeps an old
+ * one of the same name too), and tables schema.sql doesn't make. A column a boot step in db.ts adds before the schema.sql
+ * exec (initSchema's ALTER TABLE ... ADD COLUMN) counts as there: the line names it.
+ *
+ * Exit 0 only when every table compared is OK; 1 on any drift; 2 when it could not run.
+ */
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// --pack replaces this one line with what it read, so the copy needs no file but the database.
+const PACKED = null;
+
+const USAGE = 'usage: node scripts/deploy/schema-drift.mjs --db <state.db> [--schema <schema.sql>] [--manifest <replication-manifest.ts>] [--boot-steps <db.ts>]\n'
+    + '       node scripts/deploy/schema-drift.mjs --pack [--schema ...] [--manifest ...] [--boot-steps ...]   (a copy for `node --input-type=module - --db <state.db>`)';
+
+/** The checkout this file is in, when it runs from a file (not as a packed copy on stdin). */
+function repoRoot() {
+    return resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+}
+
+// ── SQL text ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const TWO_CHAR_OPS = new Set(['||', '<=', '>=', '<>', '!=', '==', '<<', '>>', '->']);
+const SAME_OP = { '<>': '!=', '==': '=' };
+
+/**
+ * SQL text as tokens, comments and spaces left out: `id` (a keyword or a name, lower case; a quoted name unquoted), `str` (a
+ * string literal's value), `num` and `op`.
+ */
+export function sqlTokens(sql) {
+    const out = [];
+    const n = sql.length;
+    const quoted = (i, close) => {
+        let value = '';
+        for (let j = i + 1; ;) {
+            const end = sql.indexOf(close, j);
+            if (end < 0) return [value + sql.slice(j), n];
+            value += sql.slice(j, end);
+            if (close !== ']' && sql[end + 1] === close) { value += close; j = end + 2; continue; }
+            return [value, end + 1];
+        }
+    };
+    for (let i = 0; i < n;) {
+        const c = sql[i];
+        if (/\s/.test(c)) { i++; continue; }
+        if (c === '-' && sql[i + 1] === '-') { const end = sql.indexOf('\n', i); i = end < 0 ? n : end + 1; continue; }
+        if (c === '/' && sql[i + 1] === '*') { const end = sql.indexOf('*/', i + 2); i = end < 0 ? n : end + 2; continue; }
+        if (c === "'") { const [value, past] = quoted(i, "'"); out.push({ kind: 'str', text: value }); i = past; continue; }
+        if (c === '"' || c === '`' || c === '[') {
+            const [value, past] = quoted(i, c === '[' ? ']' : c);
+            out.push({ kind: 'id', text: value.toLowerCase(), quoted: true });
+            i = past;
+            continue;
+        }
+        if (/[A-Za-z_\u0080-￿]/.test(c)) {
+            let j = i + 1;
+            while (j < n && /[A-Za-z0-9_$\u0080-￿]/.test(sql[j])) j++;
+            out.push({ kind: 'id', text: sql.slice(i, j).toLowerCase() });
+            i = j;
+            continue;
+        }
+        const num = /^(?:0x[0-9a-f]+|(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:e[+-]?[0-9]+)?)/i.exec(sql.slice(i, i + 64));
+        if (num) { out.push({ kind: 'num', text: num[0].toLowerCase() }); i += num[0].length; continue; }
+        const two = sql.slice(i, i + 2);
+        const op = TWO_CHAR_OPS.has(two) ? two : c;
+        out.push({ kind: 'op', text: SAME_OP[op] ?? op });
+        i += op.length;
+    }
+    return out;
+}
+
+/** Tokens as one canonical line: the same SQL however it is spaced, commented, cased or quoted reads the same. */
+export function canonical(tokens) {
+    let out = '';
+    let prev = null;
+    for (const t of tokens) {
+        const text = t.kind === 'str' ? `'${t.text.replace(/'/g, "''")}'` : t.text;
+        const tight = prev === null || prev.text === '(' && prev.kind === 'op' || t.kind === 'op' && (t.text === ')' || t.text === ',');
+        out += (tight ? '' : ' ') + text;
+        prev = t;
+    }
+    return out;
+}
+
+const isOp = (t, text) => t?.kind === 'op' && t.text === text;
+const isWord = (t, text) => t?.kind === 'id' && !t.quoted && t.text === text;
+
+/** The index of the `)` that closes the `(` at `open`; -1 when none does. */
+function closing(tokens, open) {
+    let depth = 0;
+    for (let k = open; k < tokens.length; k++) {
+        if (isOp(tokens[k], '(')) depth++;
+        else if (isOp(tokens[k], ')') && --depth === 0) return k;
+    }
+    return -1;
+}
+
+const TABLE_CONSTRAINT = new Set(['constraint', 'primary', 'unique', 'check', 'foreign']);
+
+/**
+ * What a CREATE TABLE text says that SQLite's pragmas don't: every CHECK, a column's own or the table's (the same rule
+ * either way), canonical; and each column's COLLATE.
+ */
+export function createTableParts(sql) {
+    const tokens = sqlTokens(sql);
+    const open = tokens.findIndex((t) => isOp(t, '('));
+    const close = open < 0 ? -1 : closing(tokens, open);
+    const checks = [];
+    const collate = new Map();
+    if (close < 0) return { checks, collate };
+    const items = [[]];
+    let depth = 0;
+    for (const t of tokens.slice(open + 1, close)) {
+        if (isOp(t, '(')) depth++;
+        if (isOp(t, ')')) depth--;
+        if (depth === 0 && isOp(t, ',')) { items.push([]); continue; }
+        items[items.length - 1].push(t);
+    }
+    for (const item of items) {
+        if (item.length === 0) continue;
+        const column = item[0].quoted || !TABLE_CONSTRAINT.has(item[0].text) ? item[0].text : null;
+        for (let k = column === null ? 0 : 1, d = 0; k < item.length; k++) {
+            const t = item[k];
+            if (d === 0 && isWord(t, 'check') && isOp(item[k + 1], '(')) {
+                const end = closing(item, k + 1);
+                if (end < 0) break;
+                checks.push(canonical(item.slice(k + 2, end)));
+                k = end;
+                continue;
+            }
+            if (d === 0 && column !== null && isWord(t, 'collate') && item[k + 1]) collate.set(column, item[k + 1].text);
+            if (isOp(t, '(')) d++;
+            if (isOp(t, ')')) d--;
+        }
+    }
+    return { checks, collate };
+}
+
+// ── Shapes ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const quoteName = (name) => `"${String(name).replace(/"/g, '""')}"`;
+
+/** The tables of a database, by lower-case name: plain and virtual (a virtual table's shadow tables are its own). */
+function tablesOf(db) {
+    const rows = db.prepare(`SELECT name, type, wr, strict FROM pragma_table_list
+        WHERE schema = 'main' AND type IN ('table', 'virtual') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'`).all();
+    return new Map(rows.map((r) => [r.name.toLowerCase(), r]));
+}
+
+/** One table's shape, as SQLite reads it from the table's own CREATE text: everything IF NOT EXISTS leaves as it is. */
+export function tableShape(db, name) {
+    const info = db.prepare("SELECT type, wr, strict FROM pragma_table_list WHERE schema = 'main' AND name = ?").get(name);
+    const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(name)?.sql ?? '';
+    if (info?.type === 'virtual') {
+        const tokens = sqlTokens(sql);
+        return { virtual: canonical(tokens.slice(tokens.findIndex((t) => isWord(t, 'using')))) };
+    }
+    const parts = createTableParts(sql);
+    const columns = new Map();
+    for (const c of db.prepare('SELECT name, type, "notnull" AS nn, dflt_value AS dflt, pk, hidden FROM pragma_table_xinfo(?)').all(name)) {
+        const key = c.name.toLowerCase();
+        columns.set(key, {
+            type: String(c.type ?? '').replace(/\s+/g, ' ').trim().toUpperCase(),
+            notnull: c.nn ? 'NOT NULL' : 'NULL allowed',
+            dflt: c.dflt === null ? 'none' : canonical(sqlTokens(String(c.dflt))),
+            collate: parts.collate.get(key) ?? 'binary',
+            generated: ['no', 'hidden', 'virtual', 'stored'][c.hidden] ?? String(c.hidden),
+            pk: c.pk,
+        });
+    }
+    const pk = [...columns].filter(([, c]) => c.pk > 0).sort((a, b) => a[1].pk - b[1].pk).map(([n]) => n);
+    const uniques = db.prepare("SELECT name FROM pragma_index_list(?) WHERE origin = 'u'").all(name)
+        .map((ix) => `(${db.prepare('SELECT name FROM pragma_index_info(?) ORDER BY seqno').all(ix.name)
+            .map((r) => String(r.name).toLowerCase()).sort().join(', ')})`);
+    const fkById = new Map();
+    for (const f of db.prepare('SELECT id, "table" AS parent, "from" AS f, "to" AS t, on_update, on_delete FROM pragma_foreign_key_list(?) ORDER BY id, seq').all(name)) {
+        const fk = fkById.get(f.id) ?? { parent: f.parent.toLowerCase(), from: [], to: [], rule: `on update ${f.on_update} on delete ${f.on_delete}`.toLowerCase() };
+        fk.from.push(String(f.f).toLowerCase());
+        fk.to.push(f.t === null ? '' : String(f.t).toLowerCase());
+        fkById.set(f.id, fk);
+    }
+    const fks = [...fkById.values()].map((f) => `(${f.from.join(', ')}) references ${f.parent}(${f.to.join(', ')}) ${f.rule}`);
+    return {
+        columns, pk, checks: parts.checks, uniques, fks,
+        withoutRowid: info?.wr ? 'WITHOUT ROWID' : 'a rowid table',
+        strict: info?.strict ? 'STRICT' : 'not STRICT',
+    };
+}
+
+/** What is in `a` and not in `b`, counting repeats. */
+function bagMinus(a, b) {
+    const left = [...b];
+    return a.filter((x) => { const k = left.indexOf(x); if (k < 0) return true; left.splice(k, 1); return false; });
+}
+
+/** Every way this database's table (`here`) differs from schema.sql's (`fresh`), in words; [] when none. */
+export function shapeDiffs(here, fresh) {
+    const d = [];
+    if ('virtual' in here || 'virtual' in fresh) {
+        if (here.virtual !== fresh.virtual) d.push(`virtual table: ${here.virtual ?? 'a plain table'} here, ${fresh.virtual ?? 'a plain table'} in schema.sql`);
+        return d;
+    }
+    const missing = [...fresh.columns.keys()].filter((k) => !here.columns.has(k));
+    const extra = [...here.columns.keys()].filter((k) => !fresh.columns.has(k));
+    if (missing.length) d.push(`columns only in schema.sql: ${missing.join(', ')}`);
+    if (extra.length) d.push(`columns only here: ${extra.join(', ')}`);
+    for (const [name, f] of fresh.columns) {
+        const h = here.columns.get(name);
+        if (!h) continue;
+        for (const [key, label] of [['type', 'type'], ['notnull', ''], ['dflt', 'default'], ['collate', 'collate'], ['generated', 'generated']]) {
+            if (h[key] !== f[key]) d.push(`${name}: ${label ? `${label} ` : ''}${h[key] || "''"} here, ${f[key] || "''"} in schema.sql`);
+        }
+    }
+    if (here.pk.join() !== fresh.pk.join()) d.push(`primary key (${here.pk.join(', ')}) here, (${fresh.pk.join(', ')}) in schema.sql`);
+    for (const key of ['withoutRowid', 'strict']) if (here[key] !== fresh[key]) d.push(`${here[key]} here, ${fresh[key]} in schema.sql`);
+    for (const [key, label] of [['checks', 'CHECK'], ['uniques', 'UNIQUE'], ['fks', 'FOREIGN KEY']]) {
+        for (const x of bagMinus(here[key], fresh[key])) d.push(`${label} only here: ${x}`);
+        for (const x of bagMinus(fresh[key], here[key])) d.push(`${label} only in schema.sql: ${x}`);
+    }
+    return d;
+}
+
+// ── What the build about to deploy says ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Each table's kind in engine/replication-manifest.ts TABLES (`local`, `replicated`, `replicated-except`,
+ * `takeover-bundle`), by lower-case name, read from its text: every entry starts at four spaces, `<table>: {` with its
+ * `kind` first, or `<table>: plain(` (a plain table, copied: `replicated`). A table not found reads as not local.
+ */
+export function manifestKinds(manifestTs) {
+    const start = manifestTs.indexOf('export const TABLES');
+    const end = start < 0 ? -1 : manifestTs.indexOf('\n};', start);
+    const kinds = {};
+    if (end < 0) return kinds;
+    for (const m of manifestTs.slice(start, end).matchAll(/^ {4}([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:\{\s*kind:\s*'([a-z-]+)'|(plain)\()/gm)) {
+        kinds[m[1].toLowerCase()] = m[2] ?? 'replicated';
+    }
+    return kinds;
+}
+
+/**
+ * The columns db.ts's initSchema adds before the schema.sql exec (ALTER TABLE ... ADD COLUMN, each in its own try): what a
+ * kept node's tables hold once the new build has booted, schema.sql aside. Read from the text in its three forms: a literal
+ * statement, a loop over one table's column definitions, a loop over [table, column] pairs. `unread` counts the ADD COLUMNs
+ * in none of those forms: a column one adds reads as drift (the safe way round).
+ */
+export function bootSteps(dbTs) {
+    const start = dbTs.indexOf('export function initSchema');
+    // The exec on a line of its own: the one every boot runs (a fresh install's, in its transaction, comes first).
+    const exec = start < 0 ? null : /^[ \t]+db\.exec\(schemaSql\);/m.exec(dbTs.slice(start));
+    if (!exec) return { steps: [], unread: 0, found: false };
+    const text = dbTs.slice(start, start + exec.index);
+    const steps = [];
+    let read = 0;
+    const strings = (s) => [...s.matchAll(/(['"`])((?:(?!\1)[^\\]|\\.)*)\1/g)].map((m) => m[2]);
+    for (const m of text.matchAll(/db\.prepare\((['"`])ALTER TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+ADD COLUMN\s+((?:(?!\1)[^$\\])+)\1\s*\)/g)) {
+        steps.push({ table: m[2].toLowerCase(), def: m[3] });
+        read++;
+    }
+    for (const m of text.matchAll(/for\s*\(\s*const\s+(\w+)\s+of\s+\[((?:(?!for\s*\()[\s\S])*?)\]\s*\)\s*\{\s*try\s*\{\s*db\.prepare\(`ALTER TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+ADD COLUMN\s+\$\{\1\}`\)/g)) {
+        for (const def of strings(m[2])) steps.push({ table: m[3].toLowerCase(), def });
+        read++;
+    }
+    for (const m of text.matchAll(/for\s*\(\s*const\s+\[\s*(\w+)\s*,\s*(\w+)\s*\]\s+of\s+\[((?:(?!for\s*\()[\s\S])*?)\]\s*\)\s*\{\s*try\s*\{\s*db\.prepare\(`ALTER TABLE\s+\$\{\1\}\s+ADD COLUMN\s+\$\{\2\}`\)/g)) {
+        for (const pair of m[3].matchAll(/\[\s*(['"`])([A-Za-z_][A-Za-z0-9_]*)\1\s*,\s*(['"`])((?:(?!\3)[^\\]|\\.)*)\3\s*\]/g)) {
+            steps.push({ table: pair[2].toLowerCase(), def: pair[4] });
+        }
+        read++;
+    }
+    const all = (text.match(/ADD COLUMN/g) ?? []).length;
+    return { steps, unread: all - read, found: true };
+}
+
+/** What the check compares against, read from the checkout (or from the packed copy). */
+export function readBuild({ schema, manifest, boot }) {
+    const schemaSql = readFileSync(schema, 'utf8');
+    const boots = bootSteps(readFileSync(boot, 'utf8'));
+    return {
+        schemaSql,
+        schemaSha: createHash('sha256').update(schemaSql).digest('hex').slice(0, 12),
+        kinds: manifestKinds(readFileSync(manifest, 'utf8')),
+        bootSteps: boots.steps,
+        bootUnread: boots.found ? boots.unread : -1,
+    };
+}
+
+// ── The check ────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** better-sqlite3, from the working directory first (in the node container: /app/apps/server), else from this checkout. */
+export function loadSqlite() {
+    const from = [join(process.cwd(), 'noop.js'), fileURLToPath(import.meta.url)];
+    if (PACKED === null) from.push(join(repoRoot(), 'apps', 'server', 'package.json'));
+    for (const base of from) {
+        try { return createRequire(base)('better-sqlite3'); } catch { /* the next place */ }
+    }
+    throw new Error('better-sqlite3 not found: run it from apps/server (in the node container: docker exec -w /app/apps/server)');
+}
+
+/** The database, opened so that no statement can write it: read-only, the file must exist, and query_only. */
+export function openReadOnly(Database, path) {
+    const db = new Database(path, { readonly: true, fileMustExist: true });
+    db.pragma('query_only = ON');
+    return db;
+}
+
+/**
+ * Compares each table the database `db` holds with the one schema.sql makes. Returns one result per table in both (sorted by
+ * name), and counts of the tables in only one. Reads `db` only.
+ */
+export function checkDrift(Database, db, build) {
+    const fresh = new Database(':memory:');
+    try {
+        fresh.exec(build.schemaSql);
+        const freshTables = tablesOf(fresh);
+        const hereTables = tablesOf(db);
+        const results = [];
+        for (const [key, f] of [...freshTables].sort((a, b) => a[0].localeCompare(b[0]))) {
+            const h = hereTables.get(key);
+            if (!h) continue;
+            const kind = build.kinds[key] ?? 'not in the manifest';
+            const freshShape = tableShape(fresh, f.name);
+            let diffs = shapeDiffs(tableShape(db, h.name), freshShape);
+            const added = [];
+            const steps = build.bootSteps.filter((s) => s.table === key);
+            if (diffs.length > 0 && steps.length > 0 && h.type === 'table') {
+                // The table as the new build's boot leaves it before schema.sql: its CREATE text here, in a scratch database
+                // in memory, with the boot's ADD COLUMNs run on it as db.ts runs them (a column that is there refuses one).
+                const scratch = new Database(':memory:');
+                try {
+                    scratch.exec(db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(h.name).sql);
+                    for (const s of steps) {
+                        try {
+                            scratch.exec(`ALTER TABLE ${quoteName(h.name)} ADD COLUMN ${s.def}`);
+                            added.push(sqlTokens(s.def)[0]?.text ?? s.def);
+                        } catch { /* as db.ts: the column is there, or the step doesn't apply */ }
+                    }
+                    if (added.length > 0) diffs = shapeDiffs(tableShape(scratch, h.name), freshShape);
+                } finally {
+                    scratch.close();
+                }
+            }
+            let status = 'OK';
+            let rows = null;
+            if (diffs.length > 0) {
+                rows = db.prepare(`SELECT COUNT(*) AS n FROM ${quoteName(h.name)}`).get().n;
+                status = kind !== 'local' ? 'DRIFT-REPLICATED' : rows > 0 ? 'DRIFT-HAS-ROWS' : 'DRIFT-EMPTY-LOCAL';
+            }
+            results.push({ status, table: h.name, kind, rows, diffs, bootAdds: added });
+        }
+        return {
+            results,
+            ok: results.every((r) => r.status === 'OK'),
+            onlyInSchema: [...freshTables.keys()].filter((k) => !hereTables.has(k)).length,
+            onlyHere: [...hereTables.keys()].filter((k) => !freshTables.has(k)).length,
+        };
+    } finally {
+        fresh.close();
+    }
+}
+
+/** One line per result, as the header of this file says. */
+export function formatResult(r) {
+    const boot = r.bootAdds.length > 0 ? ` (with the columns a boot step in db.ts adds: ${r.bootAdds.join(', ')})` : '';
+    if (r.status === 'OK') return `OK ${r.table} ${r.kind}${boot}`;
+    return `${r.status} ${r.table} rows=${r.rows} ${r.kind}${boot}: ${r.diffs.join('; ')}`;
+}
+
+/** The command line; `{ error }` when it can't be read. */
+export function parseArgs(argv) {
+    const opts = { pack: false };
+    const names = { '--db': 'db', '--schema': 'schema', '--manifest': 'manifest', '--boot-steps': 'boot' };
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        if (a === '--pack') { opts.pack = true; continue; }
+        if (a === '--help' || a === '-h') return { help: true };
+        const [flag, inline] = a.startsWith('--') && a.includes('=') ? [a.slice(0, a.indexOf('=')), a.slice(a.indexOf('=') + 1)] : [a, undefined];
+        if (!(flag in names)) return { error: `unknown argument: ${a}` };
+        const value = inline ?? argv[++i];
+        if (!value) return { error: `${flag} needs a value` };
+        opts[names[flag]] = value;
+    }
+    if (!opts.pack && !opts.db) return { error: '--db <state.db> is needed' };
+    if (opts.pack && opts.db) return { error: '--pack prints a copy to run elsewhere; give --db to that copy' };
+    return opts;
+}
+
+/** Prints the copy for `node -`: this file with what it read in place of its PACKED line. */
+export function packed(build) {
+    const self = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    const line = /^const PACKED = null;$/m;
+    if (!line.test(self)) throw new Error('this file has no PACKED line to fill');
+    return self.replace(line, () => `const PACKED = ${JSON.stringify(build)};`);
+}
+
+export function main(argv, out = console.log, err = console.error) {
+    const opts = parseArgs(argv);
+    if (opts.help) { out(USAGE); return 0; }
+    if (opts.error) { err(`schema-drift: ${opts.error}\n${USAGE}`); return 2; }
+    let build = PACKED;
+    if (build === null) {
+        const root = repoRoot();
+        try {
+            build = readBuild({
+                schema: opts.schema ?? join(root, 'apps/server/src/db/schema.sql'),
+                manifest: opts.manifest ?? join(root, 'apps/server/src/engine/replication-manifest.ts'),
+                boot: opts.boot ?? join(root, 'apps/server/src/db/db.ts'),
+            });
+        } catch (e) {
+            err(`schema-drift: could not read the build: ${e.message}`);
+            return 2;
+        }
+    }
+    if (opts.pack) { out(packed(build)); return 0; }
+    let Database;
+    let db;
+    try {
+        Database = loadSqlite();
+        db = openReadOnly(Database, opts.db);
+    } catch (e) {
+        err(`schema-drift: could not open ${opts.db} read-only: ${e.message}`);
+        return 2;
+    }
+    let result;
+    try {
+        result = checkDrift(Database, db, build);
+    } catch (e) {
+        err(`schema-drift: could not compare: ${e.message}`);
+        return 2;
+    } finally {
+        db.close();
+    }
+    out(`schema-drift: ${opts.db} against schema.sql ${build.schemaSha}, read-only`);
+    if (build.bootUnread !== 0) {
+        out(`schema-drift: note: ${build.bootUnread < 0 ? "db.ts's initSchema was not found" : `${build.bootUnread} ADD COLUMN step(s) in db.ts not read`}; a column such a step adds reads as drift here`);
+    }
+    for (const r of result.results) out(formatResult(r));
+    const drift = result.results.filter((r) => r.status !== 'OK').length;
+    out(`schema-drift: ${result.results.length} tables compared, ${drift} drift; ${result.onlyInSchema} in schema.sql not in this database yet (the deploy makes them); ${result.onlyHere} here not in schema.sql (not compared)`);
+    return result.ok ? 0 : 1;
+}
+
+// Runs as a command (a file, or a packed copy on stdin); imported by its test, it runs nothing.
+const asCommand = PACKED !== null || process.argv[1] === '-' || (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url));
+if (asCommand) process.exitCode = main(process.argv.slice(2));

@@ -45,7 +45,10 @@
  *      line, or that place's own stand-in; and (round 3) a guest whose card's name is 1, 40, 41, 58, 59 or 60 characters,
  *      from a long home, or padded with each kind of character that shows nothing (a right-to-left override among them)
  *      x every one of those places -> the line ends " · <home> · guest", fits 60 unless the home can't, and holds nothing
- *      invisible; a card signed over a padded name is refused, and a phone's own card carries the clean name
+ *      invisible; a card signed over a padded name is refused, and a phone's own card carries the clean name; and (round 4)
+ *      members and guests whose real names are spelled with a joiner, a non-joiner, a flag's tags, a chillu or a variation
+ *      selector -> served as written (the assistant's fence, agent/fence.ts, reads them without those, as on main), and a
+ *      card main signed over each is a card at the invite route
  *  15  each home on its own: while one home doesn't answer, another gets its line at once; a row queued during a send goes
  *      when that send ends; a home that refuses costs one try for all its rows, which wait, then go
  *  16  close the class: every timer job https-server.ts runs from group-guests x (standby, main server) -> a standby returns
@@ -896,17 +899,21 @@ async function main(): Promise<void> {
     const { ensureGroupThread, syncGroupThreadMembership } = await import('./engine/group-thread.js');
     const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
     const { AGENT_TOOLS } = await import('./agent/tools.js');
+    const { cleanMemberText } = await import('./agent/fence.js');
     const K = createGroup({ name: 'Bike Kitchen', joinPolicy: 'open', createdBy: ana.pk }).id;
     const mo = addLocal('Mo');
+    // #3275 round 4: members whose names are spelled with a joiner (an emoji sequence) and a non-joiner (a Persian surname):
+    // a group line names them as they wrote it, at every place below.
+    const samFlag = addLocal('Sam \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}'), mehdi = addLocal('\u{645}\u{647}\u{62F}\u{6CC}\u{200C}\u{632}\u{627}\u{62F}\u{647}');
     // Rowan reads and Cyd, a second convenor, takes lines down for the card-name rows below: each account's signed requests
     // have their own share of the node's nonces (engine/member-signature.ts), and Jo's and Ana's carry the sections around.
     const k14Reader = addLocal('Rowan'), k14Convenor = addLocal('Cyd');
-    for (const who of [jo, ben, mo, k14Reader]) {
+    for (const who of [jo, ben, mo, k14Reader, samFlag, mehdi]) {
         db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(K, who.pk);
     }
     db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'convenor', 'active', 1)`).run(K, k14Convenor.pk);
     ensureGroupThread(K);
-    for (const who of [ana, jo, ben, mo, k14Reader, k14Convenor]) syncGroupThreadMembership(K, who.pk);
+    for (const who of [ana, jo, ben, mo, k14Reader, k14Convenor, samFlag, mehdi]) syncGroupThreadMembership(K, who.pk);
     let reader14c = jo, convenor14c = ana;
     const at14c = new Date().toISOString();
     const listGuest14c = (who: Id, home: string, state: 'invited' | 'in' | 'left' | 'removed', name = who.name) => db.prepare(
@@ -920,6 +927,8 @@ async function main(): Promise<void> {
     listGuest14c(mo, 'a.example', 'left', 'Ana');   // a member here on this group's guest list whose card said "Ana"
     const authors14c: Array<{ who: string; key: string; name: string | null }> = [
         { who: 'a member', key: ben.pk, name: 'Ben' },
+        { who: 'a member whose name ends in an emoji sequence (a joiner)', key: samFlag.pk, name: samFlag.name },
+        { who: 'a member whose Persian surname has its non-joiner', key: mehdi.pk, name: mehdi.name },
         { who: 'a member who is also on the group\'s guest list (their name here wins)', key: mo.pk, name: 'Mo' },
         { who: 'a guest in, whose card says a member\'s name', key: inAna.pk, name: 'Ana · a.example · guest' },
         { who: 'a guest who left', key: una.pk, name: 'Una · c.example · guest' },
@@ -959,9 +968,19 @@ async function main(): Promise<void> {
         ...padded14c.map(([what, c]) => ({ what: `"Ana" padded to 59 characters with ${what}`, card: `Ana${[...c.repeat(56)].slice(0, 56).join('')}`, clean: 'Ana' })),
         { what: '"Ana" inside a right-to-left override', card: '\u202EAna\u202C', clean: 'Ana' },
         { what: 'a right-to-left override that shows "anA" as "Ana"', card: '\u202EanA', clean: 'anA' },
-        { what: 'invisible characters before, between and after its letters', card: '\u200BA\u200Dn\u2066a\u202E\uFEFF', clean: 'Ana' },
+        // Round 4: one joiner alone between two letters stays (it is how emoji and joining scripts spell names); the rest go.
+        { what: 'invisible characters before, between and after its letters', card: '\u200BA\u200Dn\u2066a\u202E\uFEFF', clean: 'A\u{200D}na' },
         { what: '57 characters with three invisible ones among them (60 stored)', card: `${NAME60.slice(0, 30)}\u200B\u202E${NAME60.slice(30, 57)}\u2069`, clean: NAME60.slice(0, 57) },
         { what: 'runs of spaces and no-break spaces', card: 'Ana \u00A0 \u3000Ríos', clean: 'Ana Ríos' },
+        // #3275 round 4: names people really write, served as written (core name-line.test.ts holds the whole corpus).
+        ...([
+            ['a rainbow flag after "Sam" (a joiner)', 'Sam \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}'],
+            ['a Persian surname with its non-joiner', '\u{645}\u{647}\u{62F}\u{6CC}\u{200C}\u{632}\u{627}\u{62F}\u{647}'],
+            ['Scotland\'s flag (tag characters)', 'Ewan \u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}'],
+            ['a Malayalam name ending in a chillu written with a joiner', '\u{D05}\u{D30}\u{D4D}\u{200D}\u{D1C}\u{D41}\u{D28}\u{D4D}\u{200D}'],
+            ['a Bengali ra-phala with a joiner', '\u{9B0}\u{200D}\u{9CD}\u{9AF}\u{9BE}\u{9AC}'],
+            ['a Japanese name with a variation selector and an ideographic space', '\u{845B}\u{E0100}\u{98FE}\u{3000}\u{5317}\u{658E}'],
+        ] as Array<[string, string]>).map(([what, card]) => ({ what: `a real name: ${what}`, card, clean: card })),
     ];
     const cards14c = new Map<string, { who: Id; home: string; card: string; clean: string }>();
     for (const [i, n] of names14c.entries()) {
@@ -972,6 +991,7 @@ async function main(): Promise<void> {
     }
     // Nothing is served that shows nothing: Unicode's format characters, the combining grapheme joiner, the Hangul fillers.
     const INVISIBLE14c = /[\p{Cf}\u034F\u115F\u1160\u3164\uFFA0]/u;
+    const invisibleOf14c = (s: string) => [...s].filter((ch) => INVISIBLE14c.test(ch)).join('');
     // The moderators' view of an assistant's suggestion about the report (agent/suggestions-route.ts): Olive is the owner,
     // and her assistants file one suggestion a line, each declined once read: a new assistant at each one's day's limit.
     const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
@@ -992,7 +1012,10 @@ async function main(): Promise<void> {
     const reportGet = AGENT_TOOLS.find((t) => t.name === 'report_get');
     const short = (k: string) => k.slice(0, 8);
     interface Line14c { id: string; at: string; report: string }
-    const paths14c: Array<{ where: string; unnamed: (key: string) => string | null; read: (l: Line14c) => Promise<unknown> }> = [
+    // `fenced`: a place that hands the name on inside the assistant's fence (agent/fence.ts cleanMemberText, as on main), which
+    // takes joiners, tag characters and the supplement's selectors out of any member's words an assistant reads, a name too: they
+    // can carry words a reader never sees. The name rule (core cleanName) is every other place's (#3275 round 4).
+    const paths14c: Array<{ where: string; unnamed: (key: string) => string | null; read: (l: Line14c) => Promise<unknown>; fenced?: true }> = [
         { where: 'the chat as a member reads it', unnamed: short,
             read: async (l) => ((await call('GET', reader14c, `/api/groups/${K}/chat`)).body?.messages ?? []).find((m: any) => m.id === l.id)?.authorCallsign },
         { where: 'the Groups list (its last line)', unnamed: short, read: async (l) => {
@@ -1009,11 +1032,11 @@ async function main(): Promise<void> {
             read: async (l) => (await adminGet(`/api/local/admin/reports/${l.report}/message`))?.message?.authorCallsign },
         { where: 'the moderators\' report queue', unnamed: (k) => `@${short(k)}`,
             read: async (l) => ((await adminGet('/api/local/admin/reports?status=all&limit=500'))?.reports ?? []).find((r: any) => r.id === l.report)?.targetCallsign },
-        { where: 'the owner\'s assistant reading the report', unnamed: (k) => `@${short(k)}`, read: async (l) => {
+        { where: 'the owner\'s assistant reading the report', unnamed: (k) => `@${short(k)}`, fenced: true, read: async (l) => {
             const got: any = await reportGet?.run({} as any, { report_id: l.report }, 'b14c');
             return got?.result?.report?.authorCallsign?.text?.split('\n')[1];
         } },
-        { where: 'the moderators\' view of an assistant\'s suggestion about the report', unnamed: (k) => `@${short(k)}`, read: async (l) => {
+        { where: 'the moderators\' view of an assistant\'s suggestion about the report', unnamed: (k) => `@${short(k)}`, fenced: true, read: async (l) => {
             const grant = grants14c[Math.floor(suggested14c++ / SUGGESTIONS_PER_DAY)];
             if (!grant?.ok) return `no assistant to suggest (${grant ? grant.error : 'past the grants made'})`;
             const filed = fileSuggestion(grant.record.id, 'dismiss_report', l.report, 'Looks fine to me');
@@ -1039,11 +1062,13 @@ async function main(): Promise<void> {
         const card = cards14c.get(a.key);
         [reader14c, convenor14c] = card ? [k14Reader, k14Convenor] : [jo, ana];
         for (const p of paths14c) {
-            const want = a.name ?? p.unnamed(a.key);
+            const as = (n: string) => (p.fenced ? cleanMemberText(n) : n);
+            const want = a.name === null ? p.unnamed(a.key) : as(a.name);
             const got = await p.read(line);
             if (got !== want) misses.push(`${p.where}: ${JSON.stringify(got)}`);
-            // A guest's line, wherever it goes: " · <home> · guest" whole at its end, and nothing in it that shows nothing.
-            else if (card && (typeof got !== 'string' || !got.endsWith(` · ${card.home} · guest`) || INVISIBLE14c.test(got))) misses.push(`${p.where}: ${JSON.stringify(got)} (cut or invisible)`);
+            // A guest's line, wherever it goes: " · <home> · guest" whole at its end, and nothing in it that shows nothing but
+            // what the name itself is spelled with (a joiner, a flag's tags: round 4).
+            else if (card && (typeof got !== 'string' || !got.endsWith(` · ${card.home} · guest`) || invisibleOf14c(got) !== invisibleOf14c(as(card.clean)))) misses.push(`${p.where}: ${JSON.stringify(got)} (cut or invisible)`);
         }
         if (card && card.card !== card.clean) {
             // The way in: a card signed over the padded name is no card; a phone's own card (core signAddressCard) carries the clean name.
@@ -1053,6 +1078,16 @@ async function main(): Promise<void> {
             if (invited.status !== 400 || invited.body?.code !== 'bad_card') misses.push(`the invite route, a card signed over this name: ${invited.status} ${invited.body?.code}`);
             const phones = await signAddressCard({ key: card.who.pk, home: card.home, name }, signerOf(card.who.seed)).then((c) => c.name, (e) => `refused: ${e?.message}`);
             if (phones !== card.clean) misses.push(`a phone's own card over this name: ${JSON.stringify(phones)}`);
+        } else if (card) {
+            // A real name (round 4): a card signed over it as main's core signs one (the name as written) is a card at the
+            // invite route. It names Ben's key, a member here, so the route stops at 'is_member' after the card's check,
+            // and nothing is written or sent; 'bad_card' would be the card refused.
+            const name = card.card, digest = addressCardDigest({ key: ben.pk, home: card.home, name });
+            const asMain = { v: 1, key: ben.pk, home: card.home, name, sig: Buffer.from(ed25519.sign(digest, ben.seed)).toString('base64') };
+            const invited = await call('POST', k14Convenor, `/api/groups/${K}/guests`, { card: asMain });
+            if (invited.status !== 400 || invited.body?.code !== 'is_member') misses.push(`the invite route, a card main signed over this name: ${invited.status} ${invited.body?.code}`);
+            const phones = await signAddressCard({ key: card.who.pk, home: card.home, name }, signerOf(card.who.seed)).then((c) => c.name, (e) => `refused: ${e?.message}`);
+            if (phones !== name) misses.push(`a phone's own card over this name: ${JSON.stringify(phones)}`);
         }
         assert(misses.length === 0, `14c. ${a.who}: every place serves ${JSON.stringify(a.name ?? 'no name, only its own stand-in')} (${misses.length} of ${paths14c.length} miss${misses.length ? `: ${misses.join('; ')}` : ''})`);
     }

@@ -191,8 +191,13 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
             const words = failureWords(e, lost);
             setError(words);
             // The node refused in its words: read again, so a bill paid, withdrawn or changed meanwhile closes the sheet (its
-            // refusal said on the list). A lost answer reads nothing: the same press finds out.
-            if (!billAnswerLost(e)) onRefused?.(words);
+            // refusal said on the list), and the balance too, so a refusal for money (the payer's figures moved since the sheet
+            // read them) shows the node's figures and Pay from them, not the old ones. A lost answer reads nothing: the same
+            // press finds out.
+            if (!billAnswerLost(e)) {
+                setReadNo((n) => n + 1);
+                onRefused?.(words);
+            }
         } finally {
             setBusy(false);
             setConfirming(false);

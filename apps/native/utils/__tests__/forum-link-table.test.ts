@@ -107,8 +107,9 @@ function expected(link: string, names: Names, reader: Reader, initial: boolean):
     const at = READERS[reader];
     if (names === null || named(link) !== forumOrigin(at.anchor)) return nothing;
     const topic = forumLinkFromSystemPath(link)!.topic;
-    if (reader === 'visitor' || reader === 'visitor-with-key') return names === 'topic' ? `/forum-public/${topic}` : VISITOR_FORUM_TAB;
-    if (reader === 'member') return names === 'topic' ? `/forum/${topic}` : MEMBER_FORUM_LIST;
+    // As the phone reads the community in use: a guest whose forum anyone may read is a visitor; a key and no guest mark, a member.
+    if (at.guest && at.forumPublic) return names === 'topic' ? `/forum-public/${topic}` : VISITOR_FORUM_TAB;
+    if (!at.guest && at.identity) return names === 'topic' ? `/forum/${topic}` : MEMBER_FORUM_LIST;
     return nothing;
 }
 
@@ -218,9 +219,9 @@ describe('the links the table reads are the ones the server pages emit, and no r
         const all = routePaths();
         const seen = new Map<string, string[]>();
         for (const [url, file] of all) seen.set(url, [...(seen.get(url) ?? []), file]);
-        const shared = [...seen].filter(([, files]) => files.length > 1);
+        const shared = [...seen].filter(([, files]) => files.length > 1).map(([url, files]) => [url, files.slice().sort()]);
         // The app's start (app/index.tsx) and the tabs' Home ((tabs)/index.tsx) are both "/": Expo Router's own pair, as before.
-        expect(shared).toEqual([['', ['index.tsx', path.join('(tabs)', 'index.tsx')]]]);
+        expect(shared).toEqual([['', [path.join('(tabs)', 'index.tsx'), 'index.tsx'].sort()]]);
         for (const [url, file] of all) {
             if (url === 'forum' || url.startsWith('forum/')) expect(file.startsWith(`forum${path.sep}`)).toBe(true);
         }

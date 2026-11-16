@@ -37,6 +37,10 @@
  *  11  close the class, invariant C: (the host's fan-out, a member's sends) x (success then failure, failure alone, mixed
  *      batches with and without a 2xx, a 2xx refusing in its answer, failure then success) -> the next due time; any 2xx
  *      starts the steps over, and another host's step is untouched
+ *  14  close the class, a complaint about a member's line as a guest (G1b part 2: the host's moderators had it reported,
+ *      and it tells this server): (a line the host took, still queued, refused by the host, failed, another member's id,
+ *      a direct line's id) x (signed by the group's host, by another server) -> filed once here as "from another
+ *      community" (never naming who reported it), or the one 422 every drop gets; a repeat is the same 202
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests-home node scripts/run-server-suites.mjs
  */
@@ -201,9 +205,9 @@ async function main(): Promise<void> {
     }
     let seq = 0;
     const newItemId = () => `ggh-${String(++seq).padStart(4, '0')}-${crypto.randomBytes(6).toString('hex')}`;
-    async function item(from: Id, kind: RelayItemKind, group: string, payload: string, host = 'b.example') {
+    async function item(from: Id, kind: RelayItemKind, group: string, payload: string, host = 'b.example', itemId = newItemId()) {
         const envelope = await signRelayEnvelope({
-            kind, itemId: newItemId(), senderKey: from.pk, senderHome: 'a.example', recipient: `group:${group}`, recipientHome: host,
+            kind, itemId, senderKey: from.pk, senderHome: 'a.example', recipient: `group:${group}`, recipientHome: host,
             at: Date.now(), payloadHash: relayPayloadHash(payload),
         }, signerOf(from.seed));
         return { envelope, payload };
@@ -1019,6 +1023,83 @@ async function main(): Promise<void> {
             }
         }
     }
+
+    // ── 14. A complaint about a member's line as a guest ────────────────────────────────────
+    console.log('\n14. Close the class: a complaint from a group\'s host about a member\'s line there -> filed here, or the one 422');
+    /** A server brings a complaint to a.example, in a request it signed (engine/relay-complaint.ts). */
+    async function complain(origin: string, c: Record<string, unknown>): Promise<Res> {
+        const k = hostKey[origin];
+        const body = JSON.stringify({ complaint: { v: 1, id: crypto.randomUUID(), reason: 'spam or scam', words: 'what the line said', at: Date.now(), ...c } });
+        const headers = await buildNodeRequestHeaders({ method: 'POST', url: 'https://a.example/api/relay/complaint', body, origin, keyHex: k.pk, sign: signerOf(k.seed) });
+        const res = await suiteFetch(`${BASE}/api/relay/complaint`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
+        let parsed: any = null;
+        try { parsed = await res.json(); } catch { /* none */ }
+        return { status: res.status, body: parsed };
+    }
+    const filedFrom = (origin: string, itemId: string) => db.prepare('SELECT target_pubkey, reporter_pubkey, disclosure FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?')
+        .all(`community:${origin}`, itemId) as Array<{ target_pubkey: string; reporter_pubkey: string; disclosure: string }>;
+    const G14 = 'g14';
+    setLink(gus, 'b.example', G14, 'in');
+    setLink(gia, 'b.example', G14, 'in');
+    const lineItem = (who: Id) => {
+        const id = crypto.randomUUID();
+        return item(who, 'group-line', G14, JSON.stringify({ v: 1, ciphertext: 'c', nonce: 'group-xc20p-v1:n', metadata: { epoch: 1 }, clientId: id }), 'b.example', id);
+    };
+    // Gus's lines in each state the host's answer leaves them in.
+    const taken = await lineItem(gus);
+    const sTaken = await send(gus, [taken]);
+    const refusedItem = await lineItem(gus);
+    refuseIds.set(refusedItem.envelope.itemId, 'group-refused');
+    const sRefused = await send(gus, [refusedItem]);
+    const failedItem = await lineItem(gus);
+    script.set('b.example', ['400']);
+    const sFailed = await send(gus, [failedItem]);
+    const giaItem = await lineItem(gia);
+    const sGia = await send(gia, [giaItem]);
+    // Last, and b.example stays down through the table: any send to it would take the whole queue.
+    const queuedItem = await lineItem(gus);
+    failing.add('b.example');
+    const sQueued = await send(gus, [queuedItem]);
+    const stateOfItem = (it: { envelope: { itemId: string } }) => db.prepare('SELECT state FROM group_guest_sent WHERE item_id = ?').pluck().get(it.envelope.itemId);
+    const setup14 = sTaken.status === 200 && sRefused.status === 200 && sFailed.status === 200 && sQueued.status === 200 && sGia.status === 200
+        && stateOfItem(taken) === 'sent' && stateOfItem(refusedItem) === 'refused' && stateOfItem(failedItem) === 'failed' && stateOfItem(queuedItem) === 'queued' && stateOfItem(giaItem) === 'sent';
+    assert(setup14, `14a. Gus's lines to b.example: one taken, one refused, one failed, one still queued; Gia's taken (got ${[taken, refusedItem, failedItem, queuedItem, giaItem].map(stateOfItem).join(', ')})`);
+    type Line14 = 'taken' | 'still queued' | 'refused' | 'failed' | "another member's id" | 'no such line';
+    const LINES14: Array<[Line14, () => { member: string; itemId: string }]> = [
+        ['taken', () => ({ member: gus.pk, itemId: taken.envelope.itemId })],
+        ['still queued', () => ({ member: gus.pk, itemId: queuedItem.envelope.itemId })],
+        ['refused', () => ({ member: gus.pk, itemId: refusedItem.envelope.itemId })],
+        ['failed', () => ({ member: gus.pk, itemId: failedItem.envelope.itemId })],
+        ["another member's id", () => ({ member: gus.pk, itemId: giaItem.envelope.itemId })],
+        ['no such line', () => ({ member: gus.pk, itemId: crypto.randomUUID() })],
+    ];
+    const SIGNERS14 = ['b.example', 'd.example'] as const;
+    /** Filed here: only the line the group's host took, complained of by that host. */
+    const FILED14: Record<Line14, Record<(typeof SIGNERS14)[number], boolean>> = {
+        taken: { 'b.example': true, 'd.example': false },
+        'still queued': { 'b.example': false, 'd.example': false },
+        refused: { 'b.example': false, 'd.example': false },
+        failed: { 'b.example': false, 'd.example': false },
+        "another member's id": { 'b.example': false, 'd.example': false },
+        'no such line': { 'b.example': false, 'd.example': false },
+    };
+    let rows14 = 0;
+    for (const [line, of] of LINES14) for (const signer of SIGNERS14) {
+        rows14++;
+        const c = of();
+        const r = await complain(signer, c);
+        const rows = filedFrom(signer, c.itemId);
+        const want = FILED14[line][signer];
+        const ok = want
+            ? r.status === 202 && r.body?.received === true && rows.length === 1 && rows[0].target_pubkey === gus.pk
+                && JSON.parse(rows[0].disclosure).kind === 'relay-complaint' && JSON.parse(rows[0].disclosure).from === signer
+            : r.status === 422 && r.body?.code === 'not_taken' && rows.length === 0;
+        assert(ok, `14. ${line} x signed by ${signer}: ${want ? 'filed once here, 202' : '422 not_taken, nothing filed'} (got ${r.status} ${r.body?.code ?? ''}, ${rows.length} filed)`);
+    }
+    assert(rows14 === LINES14.length * SIGNERS14.length && Object.keys(FILED14).length === LINES14.length, `14z. the table has a row for every line and every signer (${rows14} rows)`);
+    const again14 = await complain('b.example', { member: gus.pk, itemId: taken.envelope.itemId });
+    assert(again14.status === 202 && filedFrom('b.example', taken.envelope.itemId).length === 1, `14y. the same complaint again: 202, still one report (got ${again14.status})`);
+    failing.delete('b.example');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

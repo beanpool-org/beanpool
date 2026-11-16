@@ -28,6 +28,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { communityRecordsReady } from './community-record';
 import { readTipsRecord, type TipsRecord } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
@@ -101,6 +102,8 @@ export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null)
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         const raw = await AsyncStorage.getItem(homeAnswerStoreKey(publicKey, url));
         const parsed = raw ? JSON.parse(raw) : null;
@@ -114,6 +117,8 @@ export async function readStoredHome(publicKey: string, url: string): Promise<St
 }
 
 async function keep(stored: StoredHome, whose: HomeAccount): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     if (!stillOnPhone(whose)) return;
     try {
         await AsyncStorage.setItem(homeAnswerStoreKey(stored.publicKey, stored.url), JSON.stringify(stored));
@@ -310,6 +315,8 @@ export function resetHomeStoreForTests(): void {
 // ── The layout ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export async function readPhoneLayout(publicKey: string, url: string): Promise<HomeLayout | null> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         const raw = await AsyncStorage.getItem(homeLayoutStoreKey(publicKey, url));
         return raw ? readHomeLayout(JSON.parse(raw)) : null;
@@ -320,6 +327,8 @@ export async function readPhoneLayout(publicKey: string, url: string): Promise<H
 
 /** The phone's copy of the layout, for `whose` (by default the account as of now) while it is still on the phone. */
 export async function writePhoneLayout(publicKey: string, url: string, layout: HomeLayout, whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
     try {
         await AsyncStorage.setItem(homeLayoutStoreKey(publicKey, url), JSON.stringify(layout));
@@ -333,6 +342,8 @@ export async function writePhoneLayout(publicKey: string, url: string, layout: H
  * ('' when that list had none), or null for none (utils/home-cards.ts pickLayout `phoneOnlyOver`).
  */
 export async function readPhoneOnlyMark(publicKey: string, url: string): Promise<string | null> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         return await AsyncStorage.getItem(homeLayoutPhoneOnlyStoreKey(publicKey, url));
     } catch {
@@ -345,6 +356,8 @@ export async function readPhoneOnlyMark(publicKey: string, url: string): Promise
  * under it yet: the dates of those sent go too (writePhoneOnlySent).
  */
 export async function writePhoneOnlyMark(publicKey: string, url: string, over: string | null, whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
     try {
         if (over === null) await AsyncStorage.removeItem(homeLayoutPhoneOnlyStoreKey(publicKey, url));
@@ -360,6 +373,8 @@ export async function writePhoneOnlyMark(publicKey: string, url: string, over: s
  * ownMarkedSave), the latest MARK_SENT_MAX. An older build's dates alone still load. None when there is no mark.
  */
 export async function readPhoneOnlySent(publicKey: string, url: string): Promise<MarkSent[]> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         const raw = await AsyncStorage.getItem(homeLayoutPhoneOnlySentStoreKey(publicKey, url));
         return readMarkSent(raw ? JSON.parse(raw) : []);
@@ -370,6 +385,8 @@ export async function readPhoneOnlySent(publicKey: string, url: string): Promise
 
 /** Keeps those edits, while `whose` is still on the phone. */
 export async function writePhoneOnlySent(publicKey: string, url: string, sent: readonly MarkSent[], whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
     try {
         await AsyncStorage.setItem(homeLayoutPhoneOnlySentStoreKey(publicKey, url), JSON.stringify(sent));
@@ -524,6 +541,8 @@ export async function writePhoneInterests(list: readonly string[], whose?: HomeA
 type InterestsState = 'owed' | 'synced';
 
 async function interestsState(publicKey: string, url: string): Promise<InterestsState | null> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         const v = await AsyncStorage.getItem(homeInterestsOwedStoreKey(publicKey, url));
         return v === 'owed' || v === 'synced' ? v : null;
@@ -533,6 +552,8 @@ async function interestsState(publicKey: string, url: string): Promise<Interests
 }
 
 async function setInterestsState(publicKey: string, url: string, state: InterestsState | null, whose: HomeAccount): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     if (!stillOnPhone(whose)) return;
     try {
         if (state) await AsyncStorage.setItem(homeInterestsOwedStoreKey(publicKey, url), state);

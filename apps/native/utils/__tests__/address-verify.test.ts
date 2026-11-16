@@ -1,0 +1,272 @@
+/**
+ * The phone verifies its community's addresses and follows by itself (utils/address-verify.ts; scratch/fable-design/
+ * DESIGN-several-addresses-fable.md §3.2 to §3.5, §7, slice S4). Stand-in servers sign lists and proofs with real Ed25519
+ * keys through core's own code (@beanpool/core address-list.ts, the keys of its shared vectors); the phone's records,
+ * saved list and storage are the real modules over an in-memory store. Each attacker case of §7 is named.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mem = vi.hoisted(() => new Map<string, string>());
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (k: string) => mem.get(k) ?? null),
+        setItem: vi.fn(async (k: string, v: string) => { mem.set(k, v); }),
+        removeItem: vi.fn(async (k: string) => { mem.delete(k); }),
+    },
+}));
+
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { hexToBytes } from '@noble/hashes/utils.js';
+import { createRequire } from 'node:module';
+import {
+    ADDRESS_LIST_PATH, ADDRESS_PROOF_PATH, signAddressList, signAddressProof, type AddressListFields, type SignedAddressList,
+} from '@beanpool/core';
+import { forgetAddressChecks, takeAddressLine, verifyAddressInUse, type VerifyDeps } from '../address-verify';
+import { communityKeyOf, communityRecordOf, resetCommunityIndexForTests, type CommunityRecord } from '../community-index';
+import { loadCommunityRecords, parseCommunityRecords, resetCommunityRecordsForTests } from '../community-record';
+import { followSavedRow, getDatabaseFilenameForNode } from '../nodes';
+import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+
+const V = createRequire(import.meta.url)('@beanpool/core/vectors/address-list.json');
+const KEY = { seed: hexToBytes(V.keys.community.seedHex), peerId: V.keys.community.peerId as string };
+const OTHER_KEY = { seed: hexToBytes(V.keys.other.seedHex), peerId: V.keys.other.peerId as string };
+const CID = V.communityIds.community as string;
+
+const A = 'riverside.example';
+const M = 'coop.example.org';
+const L = 'lost.example.net';
+const ANCHOR = 'beanpool_anchor_url';
+const T0 = Date.UTC(2026, 10, 16, 2);
+
+type Key = typeof KEY;
+interface Server { key: Key; fields: AddressListFields; listKey?: Key; listFields?: AddressListFields; proofFor?: string; replay?: unknown; silent?: boolean }
+let servers: Record<string, Server>;
+let asked: string[];
+let now: number;
+
+function fields(over: Partial<AddressListFields> = {}): AddressListFields {
+    return { peerId: KEY.peerId, communityId: CID, epoch: 2, seq: 14, main: A, addresses: [A, M], spares: [], ...over };
+}
+
+async function signedList(f: AddressListFields, key: Key): Promise<SignedAddressList> {
+    // A list signed by another key than it names is built by hand: signAddressList refuses to make one.
+    if (key.peerId === f.peerId) return signAddressList(f, (b) => ed25519.sign(b, key.seed));
+    const good = await signAddressList({ ...f, peerId: key.peerId }, (b) => ed25519.sign(b, key.seed));
+    return { list: { ...good.list, peerId: f.peerId }, sig: good.sig };
+}
+
+/** The stand-in network: each address answers as its server says. */
+const get: VerifyDeps['get'] = async (url) => {
+    const u = new URL(url);
+    const address = u.host;
+    asked.push(`${address}${u.pathname}`);
+    const s = servers[address];
+    if (!s || s.silent) return null;
+    if (u.pathname === ADDRESS_LIST_PATH) return { status: 200, body: await signedList(s.listFields ?? s.fields, s.listKey ?? s.key) };
+    if (u.pathname === ADDRESS_PROOF_PATH) {
+        if (s.replay) return { status: 200, body: s.replay };
+        const forAddress = s.proofFor ?? u.searchParams.get('for')!;
+        if (!s.fields.addresses.includes(forAddress)) return { status: 421, body: { error: 'not listed' } };
+        const proof = await signAddressProof({ list: { v: 1, ...s.fields }, for: forAddress, nonce: u.searchParams.get('nonce')!, ts: 1 }, (b) => ed25519.sign(b, s.key.seed));
+        return { status: 200, body: proof };
+    }
+    return { status: 404, body: null };
+};
+
+let n = 0;
+const moves: Array<[string, string]> = [];
+const dupes: string[] = [];
+function deps(): VerifyDeps {
+    return {
+        get,
+        nonce: () => (++n).toString(16).padStart(32, '0'),
+        now: () => now,
+        anchor: async () => mem.get(ANCHOR) ?? null,
+        inHall: async () => false,
+        moveTo: async (from, to) => { moves.push([from, to]); mem.set(ANCHOR, to); },
+        followRow: followSavedRow,
+        forgetDuplicate: async (r) => { dupes.push(r.id); },
+    };
+}
+
+const records = (): CommunityRecord[] => parseCommunityRecords(mem.get(COMMUNITY_RECORDS_STORE_KEY) ?? null);
+const recordAt = (origin: string) => records().find((r) => r.id === origin)!;
+const saved = () => JSON.parse(mem.get(SAVED_NODES_STORE_KEY) ?? '[]') as Array<{ url: string; alias?: string }>;
+
+async function phoneAt(origin: string, over: Partial<CommunityRecord> = {}, rows: Array<{ url: string; alias?: string }> = [{ url: origin, alias: 'Riverside' }]) {
+    mem.set(ANCHOR, origin);
+    mem.set(SAVED_NODES_STORE_KEY, JSON.stringify(rows));
+    const base: CommunityRecord = { v: 1, id: origin, using: origin, proved: {}, refused: {}, ...over };
+    mem.set(COMMUNITY_RECORDS_STORE_KEY, JSON.stringify({ v: 1, records: [base] }));
+    resetCommunityRecordsForTests();
+    resetCommunityIndexForTests();
+    await loadCommunityRecords();
+}
+
+const round = (atOpen = false) => verifyAddressInUse({ atOpen }, deps());
+
+beforeEach(() => {
+    mem.clear();
+    forgetAddressChecks();
+    asked = [];
+    moves.length = 0;
+    dupes.length = 0;
+    now = T0;
+    servers = { [A]: { key: KEY, fields: fields() }, [M]: { key: KEY, fields: fields() } };
+});
+
+describe('S4: two addresses, the main changes, the phone follows by itself with one line', () => {
+    it('learns the key from the first list, proves both, then follows the new main with no tap; nothing is copied', async () => {
+        await phoneAt(`https://${A}`);
+        const fileBefore = getDatabaseFilenameForNode(`https://${A}`);
+        await round(true);
+        const r = recordAt(`https://${A}`);
+        expect(r.peerId).toBe(KEY.peerId);
+        expect(r.communityId).toBe(CID);
+        expect(Object.keys(r.proved).sort()).toEqual([`https://${M}`, `https://${A}`]);
+        expect(moves).toEqual([]);
+
+        // The owner makes M main: the list's number goes up, both servers say so.
+        for (const s of Object.values(servers)) s.fields = fields({ seq: 15, main: M });
+        now += 61 * 60 * 1000;
+        await round();
+        expect(moves).toEqual([[`https://${A}`, `https://${M}`]]);
+        expect(mem.get(ANCHOR)).toBe(`https://${M}`);
+        const after = recordAt(`https://${A}`);
+        expect(after.using).toBe(`https://${M}`);
+        expect(after.list?.list.seq).toBe(15);
+        // The same record, the same file and saved things: M keys to the record's id.
+        expect(communityKeyOf(`https://${M}`)).toBe(`https://${A}`);
+        expect(getDatabaseFilenameForNode(`https://${M}`)).toBe(fileBefore);
+        // One saved row, at M, with its name.
+        expect(saved()).toEqual([expect.objectContaining({ url: `https://${M}`, alias: 'Riverside' })]);
+        // The line, once.
+        expect(await takeAddressLine(`https://${M}`)).toEqual({ kind: 'followed', from: `https://${A}`, to: `https://${M}` });
+        expect(await takeAddressLine(`https://${M}`)).toBeNull();
+    });
+
+    it('asks the address in use at most hourly while it answers, and never anything before the list names it', async () => {
+        await phoneAt(`https://${A}`);
+        await round(true);
+        const first = asked.length;
+        now += 10 * 60 * 1000;
+        await round();
+        expect(asked).toHaveLength(first);
+        expect(asked.every((a) => a.startsWith(A) || a.startsWith(M))).toBe(true);
+    });
+
+    it('the address in use stops answering: at app open it switches by itself to the proved main, with a line', async () => {
+        await phoneAt(`https://${A}`);
+        for (const s of Object.values(servers)) s.fields = fields({ main: M });
+        servers[A].fields = fields({ main: M });
+        await round(true);
+        // Followed to M already (M main and proved). Now M goes quiet, and A is main again.
+        for (const s of Object.values(servers)) s.fields = fields({ seq: 16, main: A });
+        servers[M].silent = true;
+        now += 2 * 60 * 60 * 1000;
+        moves.length = 0;
+        await takeAddressLine(`https://${M}`);
+        await round(true);
+        expect(moves).toEqual([[`https://${M}`, `https://${A}`]]);
+        expect((await takeAddressLine(`https://${A}`))?.kind).toBe('not-answering');
+    });
+});
+
+describe('S4: the attacker cases of §7, by name', () => {
+    it('a list from another key: refused; nothing is followed, and the address serving it counts as answering as something else', async () => {
+        await phoneAt(`https://${A}`, { peerId: KEY.peerId, communityId: CID, epoch: 2 });
+        servers[A].fields = fields({ seq: 20 });
+        servers[A].listKey = OTHER_KEY;
+        servers[A].listFields = fields({ seq: 20, main: M });
+        await round(true);
+        const r = recordAt(`https://${A}`);
+        expect(r.list).toBeUndefined();
+        expect(r.refused[`https://${A}`]?.why).toBe('list bad-signature');
+        expect(moves).toEqual([]);
+    });
+
+    it('an older (epoch, seq): a kept list is never replaced by a lower one, and an address proving a lower take-over count is dropped', async () => {
+        await phoneAt(`https://${A}`);
+        servers[A].fields = fields({ seq: 30 });
+        await round(true);
+        expect(recordAt(`https://${A}`).list?.list.seq).toBe(30);
+        // A serves an older list naming M as main: the proof names 31 so the list is asked, and 29 is refused.
+        servers[A].fields = fields({ seq: 31 });
+        servers[A].listFields = fields({ seq: 29, main: M });
+        now += 61 * 60 * 1000;
+        await round();
+        expect(recordAt(`https://${A}`).list?.list.seq).toBe(30);
+        expect(moves).toEqual([]);
+        // M answers at take-over count 1, below the 2 held: dropped, never used.
+        servers[A].listFields = undefined;
+        servers[A].fields = fields({ seq: 32, main: M });
+        servers[M].fields = fields({ epoch: 1, seq: 32, main: M });
+        now += 61 * 60 * 1000;
+        await round();
+        expect(recordAt(`https://${A}`).refused[`https://${M}`]?.why).toBe('older');
+        expect(moves).toEqual([]);
+    });
+
+    it('a proof for another address: the main signs for the address in use instead; refused, never followed', async () => {
+        await phoneAt(`https://${A}`);
+        for (const s of Object.values(servers)) s.fields = fields({ main: M });
+        servers[M].proofFor = A;
+        await round(true);
+        expect(recordAt(`https://${A}`).refused[`https://${M}`]?.why).toBe('other-address');
+        expect(moves).toEqual([]);
+    });
+
+    it('a replayed nonce: the main hands back a proof made for an earlier question; refused, never followed', async () => {
+        await phoneAt(`https://${A}`);
+        const old = await signAddressProof({ list: { v: 1, ...fields({ main: M }) }, for: M, nonce: 'f'.repeat(32), ts: 1 }, (b) => ed25519.sign(b, KEY.seed));
+        for (const s of Object.values(servers)) s.fields = fields({ main: M });
+        servers[M].replay = old;
+        await round(true);
+        expect(recordAt(`https://${A}`).refused[`https://${M}`]?.why).toBe('other-nonce');
+        expect(moves).toEqual([]);
+    });
+
+    it('a lost name: not on the list, so never asked and never used, even when it passes every question through', async () => {
+        await phoneAt(`https://${A}`);
+        servers[L] = { key: KEY, fields: fields({ addresses: [A, L, M], main: L }) };
+        await round(true);
+        expect(asked.some((a) => a.startsWith(L))).toBe(false);
+        expect(Object.keys(recordAt(`https://${A}`).proved)).not.toContain(`https://${L}`);
+        expect(communityRecordOf(`https://${L}`)).toBeNull();
+    });
+
+    it('the address in use answers with another key: dropped at once, and the phone goes to the proved main with a line', async () => {
+        await phoneAt(`https://${A}`, { peerId: KEY.peerId, communityId: CID, epoch: 2 });
+        await round(true);
+        // Somebody else's server at A now: it signs with its own key, as its own community.
+        servers[A] = { key: OTHER_KEY, fields: fields({ peerId: OTHER_KEY.peerId, communityId: V.communityIds.other }) };
+        now += 61 * 60 * 1000;
+        await round();
+        expect(moves).toEqual([[`https://${A}`, `https://${M}`]]);
+        expect(recordAt(`https://${A}`).refused[`https://${A}`]?.why).toBe('other-key');
+        expect((await takeAddressLine(`https://${M}`))?.kind).toBe('left');
+    });
+});
+
+describe('S4: the same community saved twice (Marty\'s pick 5: the phone keeps the copy it is on, the other goes)', () => {
+    it('the second record at an address just proved goes before any move, so that address keys to the record in use', async () => {
+        mem.set(ANCHOR, `https://${A}`);
+        mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: `https://${A}` }, { url: `https://${M}` }]));
+        resetCommunityRecordsForTests();
+        resetCommunityIndexForTests();
+        await loadCommunityRecords();
+        expect(records().map((r) => r.id)).toEqual([`https://${A}`, `https://${M}`]);
+        await round(true);
+        expect(dupes).toEqual([`https://${M}`]);
+    });
+
+    it('an older server with no list: nothing changes, nothing is followed', async () => {
+        await phoneAt(`https://${A}`);
+        servers[A] = { ...servers[A], silent: false };
+        const plain = get;
+        const noList: VerifyDeps['get'] = async (url) => (url.includes(ADDRESS_LIST_PATH) ? { status: 404, body: null } : plain(url));
+        await verifyAddressInUse({ atOpen: true }, { ...deps(), get: noList });
+        expect(recordAt(`https://${A}`).peerId).toBeUndefined();
+        expect(moves).toEqual([]);
+    });
+});

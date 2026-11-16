@@ -1,0 +1,295 @@
+/**
+ * The phone verifies its community's addresses and follows by itself (scratch/fable-design/DESIGN-several-addresses-
+ * fable.md §3.2 to §3.5, slice S4; decided by Marty 16 Nov, all six picks). It replaces the follow card and its copy
+ * carry, and the fallback card (§9 S4): a change of address writes the record's `using` and the phone's address, and
+ * nothing else moves, because the community's file and saved things are kept under the record's id (S3).
+ *
+ * When (§3.3). The address in use is asked for a proof (core's `GET /api/node/proof`, a fresh nonce, the bytes built from
+ * the address dialled) at app open and then at most hourly while it answers, once a minute while it doesn't (Home's line
+ * asks every minute it is in view: components/AddressLine.tsx). The list is read only when a proof names a newer one, or
+ * before the first is kept. A listed address the phone has not proved is asked once when the list names it; the main,
+ * while it is not the address in use, at each round (the phone goes there only on a fresh proof), again after 5 minutes
+ * and then hourly when it gives no answer; a refused address at most once a day; and, on the main, the address proved
+ * longest ago once a day, so a take-over is seen. Everything listed is asked at once
+ * when the address in use answers as something else, is off the list, or has not answered for the 2 Nov card's time.
+ *
+ * Who the community is. A record with no key takes it from the first read: the key the phone kept from its first
+ * statement at that address (address-follow.ts keepCommunityIdentity), else the list the address serves over TLS, as a
+ * first contact is trusted today (§3.2). From then on every list must be that key's (core chooseAddressList), and an
+ * older list or number is never taken (§7).
+ *
+ * What it does: utils/address-decide.ts decides; here it is written. Proved and refused addresses and the highest count go
+ * into the record; a move writes `using`, the saved row follows to it (nodes.ts followSavedRow), then the phone's address
+ * (reconnect.ts switchPhoneTo, no carry: the file is the same), and Home shows the one line once (takeAddressLine). A
+ * second record of the same community, at an address this one just proved, goes with its copy and row first (Marty's
+ * pick 5: the phone keeps the copy it is on; no conversion code); one that holds another key is left alone, and that
+ * address is not used.
+ *
+ * Not here (later slices, named in the PR): the banner and the stop when the address in use answers as something else and
+ * there is nowhere proved to go (§3.5: `refuse` is recorded, nothing more yet); links, codes and the directory (S5); the
+ * worldwide community (followableOrigin leaves it out), an http address (no key on a home network) and the hall (its own
+ * check and number) are never verified here.
+ */
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    addressListUrl, addressOf, addressProofUrl, chooseAddressList, compareAddressNumbers, readAddressList, verifyAddressProof,
+    type SignedAddressList,
+} from '@beanpool/core';
+import { decideAddress, type AddressAnswer, type AddressLineKind } from './address-decide';
+import { followableOrigin, keptIdentityAt } from './address-follow';
+import { communityRecordOf, recordHolds, type CommunityRecord } from './community-index';
+import { changeCommunityRecords, communityRecordsReady } from './community-record';
+
+const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+/** The 2 Nov card's timings (DESIGN-dns-robustness-fable.md §3.2): 5 minutes of failed tries; a gap of an hour starts again. */
+export const SILENT_DUE_MS = 5 * MINUTE;
+const TRIES_GAP_MS = HOUR;
+const ASK_TIMEOUT_MS = 8_000;
+
+export interface VerifyDeps {
+    /** A public GET: its status and JSON, or null for no answer (no connection, a timeout). */
+    get(url: string): Promise<{ status: number; body: unknown } | null>;
+    nonce(): string;
+    now(): number;
+    anchor(): Promise<string | null>;
+    /** The phone is in the hall (utils/hall-state.ts): its number has its own check and is never on the list. */
+    inHall(): Promise<boolean>;
+    /**
+     * The phone's address goes from `from` to `to`, the same community and file (reconnect.ts switchPhoneTo, no carry). The
+     * stores still kept by address (S3's second part) that the old move took along go too: a guest visit's mark and alerts
+     * turned off (push-alerts-off.ts carryAlertsOff: no DELETE, the same server answers at both).
+     */
+    moveTo(from: string, to: string): Promise<void>;
+    /** The saved rows of the community `using` belongs to become one row at `using` (nodes.ts followSavedRow). */
+    followRow(using: string): Promise<void>;
+    /** A second record of the same community goes: its copy, its saved rows and its record. */
+    forgetDuplicate(record: CommunityRecord): Promise<void>;
+}
+
+async function getJson(url: string): Promise<{ status: number; body: unknown } | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal: controller.signal });
+        return { status: res.status, body: await res.json().catch(() => null) };
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function defaultDeps(): Promise<VerifyDeps> {
+    const [Crypto, { readHall }, { switchPhoneTo }, nodes, { removeCommunityCaches }, { carryAlertsOff }] = await Promise.all([
+        import('expo-crypto'), import('./hall-state'), import('./reconnect'), import('./nodes'), import('./community-cache'), import('./push-alerts-off'),
+    ]);
+    return {
+        get: getJson,
+        nonce: () => Array.from(Crypto.getRandomBytes(16), (b) => b.toString(16).padStart(2, '0')).join(''),
+        now: () => Date.now(),
+        anchor: async () => AsyncStorage.getItem(ANCHOR_STORE_KEY),
+        inHall: async () => !!(await readHall().catch(() => null)),
+        moveTo: async (from, to) => {
+            if (await nodes.isGuestNode(from).catch(() => false)) await nodes.markGuestNode(to);
+            await switchPhoneTo(to);
+            await carryAlertsOff(from, to);
+        },
+        followRow: nodes.followSavedRow,
+        forgetDuplicate: async (r) => {
+            await removeCommunityCaches([r.id]);
+            await nodes.takeOffSavedList(r.id, (url) => typeof url === 'string' && recordHolds(r, url));
+        },
+    };
+}
+
+async function depsWith(injected?: Partial<VerifyDeps>): Promise<VerifyDeps> {
+    const keys: (keyof VerifyDeps)[] = ['get', 'nonce', 'now', 'anchor', 'inHall', 'moveTo', 'followRow', 'forgetDuplicate'];
+    return keys.every((k) => injected?.[k]) ? (injected as VerifyDeps) : { ...(await defaultDeps()), ...injected };
+}
+
+const originOf = (address: string) => `https://${address}`;
+
+/** One proof asked of `address` for the community's key, as decide reads it. */
+async function prove(address: string, peerId: string, deps: VerifyDeps): Promise<AddressAnswer> {
+    const nonce = deps.nonce();
+    const answer = await deps.get(addressProofUrl(address, nonce)).catch(() => null);
+    // No answer, or a server error other than a replaced server's 503: not answering. Anything else that is not a good proof
+    // (421 not on its list, 404 no proof route, a 503 replaced, another key, another address or nonce) answers as
+    // something else: no downgrade (§7).
+    if (!answer || (answer.status >= 500 && answer.status !== 503)) return { kind: 'silent' };
+    if (answer.status !== 200) return { kind: 'other-key', why: `status ${answer.status}` };
+    const verdict = verifyAddressProof(answer.body, { peerId, for: address, nonce });
+    return verdict.ok ? { kind: 'proved', epoch: verdict.epoch, seq: verdict.seq } : { kind: 'other-key', why: verdict.why };
+}
+
+/** This run's last ask of each address: when, how many in a row gave no answer, and whether it answered. */
+const asked = new Map<string, { at: number; silent: number }>();
+let running: Promise<void> | null = null;
+/** The first round since the app started is at app open. */
+let opening = true;
+
+/** Tests only: forget this run's asks, mid-run (a cold start is this, then a round with `atOpen`). */
+export function forgetAddressChecks(): void {
+    asked.clear();
+    running = null;
+    opening = false;
+}
+
+/**
+ * Verify the address in use and follow by itself (the file's comment). `atOpen`: the app's open or its return to the
+ * front, when the address in use is asked whatever the last ask was and no answer at all makes the switch due at once.
+ * One round at a time. Never throws.
+ */
+export function verifyAddressInUse(opts: { atOpen?: boolean } = {}, injected?: Partial<VerifyDeps>): Promise<void> {
+    if (running) return running;
+    const atOpen = !!opts.atOpen || opening;
+    opening = false;
+    running = round(atOpen, injected)
+        .catch((e) => console.warn('[addresses] Could not verify the community\'s addresses; nothing changed', e))
+        .finally(() => { running = null; });
+    return running;
+}
+
+async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<void> {
+    const deps = await depsWith(injected);
+    const anchor = await deps.anchor();
+    const from = followableOrigin(anchor);
+    const usingAddress = from ? addressOf(from) : null;
+    if (!anchor || !from || !usingAddress || await deps.inHall()) return;
+    await communityRecordsReady();
+    const record = communityRecordOf(anchor);
+    if (!record) return;
+    const now = deps.now();
+    const last = asked.get(usingAddress);
+    const age = last ? now - last.at : -1;
+    if (!atOpen && last && age >= 0 && age < (last.silent ? MINUTE : HOUR)) return;
+
+    // Who the community is: the record's key, else what the phone first verified here, else the first list (over TLS).
+    let kept: SignedAddressList | null = record.list ? readAddressList(record.list) : null;
+    let peerId = record.peerId ?? (await keptIdentityAt(from).catch(() => null))?.peerId ?? null;
+    if (!peerId) {
+        const first = await deps.get(addressListUrl(usingAddress)).catch(() => null);
+        const list = first?.status === 200 ? readAddressList(first.body) : null;
+        // An older server (no list), or one that doesn't list where it was reached: works as today, follows nothing.
+        if (!list || !list.list.addresses.includes(usingAddress)) { asked.set(usingAddress, { at: now, silent: 0 }); return; }
+        peerId = list.list.peerId;
+        kept = list;
+    }
+    if (kept && kept.list.peerId !== peerId) kept = null;
+    const communityId = kept?.list.communityId ?? record.communityId ?? null;
+
+    const answers: Record<string, AddressAnswer> = { [usingAddress]: await prove(usingAddress, peerId, deps) };
+    const own = answers[usingAddress];
+    if (own.kind === 'proved' && (!kept || compareAddressNumbers(own, kept.list) > 0)) {
+        // The proof names a newer list: it must come from the same address, at least that new (§2.3).
+        const offered = await deps.get(addressListUrl(usingAddress)).catch(() => null);
+        const choice = offered?.status === 200 ? chooseAddressList(offered.body, { peerId, kept, communityId }) : null;
+        if (choice?.action === 'replace' && compareAddressNumbers(choice.signed.list, own) >= 0) kept = choice.signed;
+        else if (choice?.action === 'refuse') answers[usingAddress] = { kind: 'other-key', why: `list ${choice.why}` };
+        else if (!kept || compareAddressNumbers(kept.list, own) < 0) answers[usingAddress] = { kind: 'silent' };
+    }
+    const silentNow = answers[usingAddress].kind === 'silent';
+    asked.set(usingAddress, { at: now, silent: silentNow ? (last?.silent ?? 0) + 1 : 0 });
+
+    // The run of failed tries at the address in use (the 2 Nov card's timings).
+    const s = record.silent;
+    const goesOn = !!s && now - s.last >= 0 && now - s.last <= TRIES_GAP_MS;
+    const silent = silentNow
+        ? { since: goesOn ? s!.since : now, last: now, ...((goesOn && s!.due) || atOpen ? { due: true as const } : {}) }
+        : undefined;
+    const silentDue = !!silent && (silent.due === true || now - silent.since >= SILENT_DUE_MS);
+
+    const listed = kept?.list.addresses ?? [];
+    const main = kept?.list.main ?? null;
+    const epochHeld = record.epoch ?? 0;
+    const askAll = answers[usingAddress].kind === 'other-key' || silentDue || (!!kept && !listed.includes(usingAddress));
+    // The once-a-day ask on the main: the address proved longest ago (off the main, the main is asked at each round).
+    const daily = listed.filter((a) => a !== usingAddress).sort((a, b) => (record.proved[originOf(a)]?.at ?? 0) - (record.proved[originOf(b)]?.at ?? 0))[0];
+    const others = listed.filter((a) => {
+        if (a === usingAddress) return false;
+        const holder = communityRecordOf(originOf(a));
+        // Another community's record at that address (another key): never asked here, never used.
+        if (holder && holder !== record && holder.peerId && holder.peerId !== peerId) return false;
+        const p = record.proved[originOf(a)];
+        const refusedAt = record.refused[originOf(a)]?.at;
+        if (refusedAt !== undefined && now - refusedAt >= 0 && now - refusedAt < DAY) return false;
+        const m = asked.get(a);
+        const waited = !m || now - m.at < 0 || now - m.at >= (m.silent <= 1 ? 5 * MINUTE : HOUR);
+        if (askAll) return true;
+        if (!waited) return false;
+        // The main, whenever it is not the address in use: the phone goes there only on a fresh proof.
+        return !p || a === main || (a === daily && now - p.at >= DAY);
+    });
+    await Promise.all(others.map(async (a) => {
+        answers[a] = await prove(a, peerId!, deps);
+        asked.set(a, { at: now, silent: answers[a].kind === 'silent' ? (asked.get(a)?.silent ?? 0) + 1 : 0 });
+    }));
+
+    const proved: Record<string, { epoch?: number }> = {};
+    for (const [origin, p] of Object.entries(record.proved)) {
+        const a = addressOf(origin);
+        if (a) proved[a] = p;
+    }
+    const decision = decideAddress({
+        using: usingAddress, main, listed, mainSeen: record.mainSeen ? addressOf(record.mainSeen) : null, epoch: epochHeld,
+        proved, answers, silentDue,
+    });
+
+    // A second record of the same community at an address just proved goes first, so that address keys to this record.
+    for (const a of decision.proved) {
+        const holder = communityRecordOf(originOf(a));
+        if (holder && holder !== record && (!holder.peerId || holder.peerId === peerId)) {
+            console.warn(`[addresses] ${originOf(a)} is ${from}'s community too: this phone keeps the copy it is on, and the other one goes`);
+            await deps.forgetDuplicate(holder);
+        }
+    }
+    const to = decision.to ? originOf(decision.to) : null;
+    const standsOnMain = main !== null && (decision.to ?? usingAddress) === main && !decision.drop.includes(main);
+    await changeCommunityRecords((records) => {
+        const r = records.find((x) => x.id === record.id);
+        if (!r) return null;
+        const nextProved = { ...r.proved };
+        const nextRefused = { ...r.refused };
+        for (const a of decision.proved) {
+            nextProved[originOf(a)] = { at: now, epoch: decision.epoch };
+            delete nextRefused[originOf(a)];
+        }
+        for (const a of decision.drop) {
+            delete nextProved[originOf(a)];
+            const answer = answers[a];
+            nextRefused[originOf(a)] = { at: now, why: answer?.kind === 'other-key' ? answer.why : 'older' };
+        }
+        const line = to && decision.line ? { kind: decision.line, from: r.using, to, at: now } : r.line;
+        const next: CommunityRecord = {
+            ...r, peerId: peerId!, ...(communityId ? { communityId } : {}), epoch: decision.epoch, proved: nextProved, refused: nextRefused,
+            ...(kept ? { list: kept } : {}), using: to ?? r.using, ...(standsOnMain ? { mainSeen: originOf(main!) } : {}),
+            ...(silent && !to ? { silent } : { silent: undefined }), ...(line ? { line } : {}),
+        };
+        return records.map((x) => (x === r ? next : x));
+    });
+    if (to) asked.set(decision.to!, { at: now, silent: 0 });
+    await deps.followRow(to ?? anchor).catch((e) => console.warn('[addresses] The saved row could not follow', e));
+    if (to) {
+        console.log(`[addresses] ${from} → ${to} (${decision.action}${decision.line ? `, ${decision.line}` : ''})`);
+        await deps.moveTo(anchor, to);
+    }
+}
+
+/** The line Home shows once, for the community in use: taken off its record as it is read. Null for none. */
+export async function takeAddressLine(anchor: string | null): Promise<{ kind: AddressLineKind; from: string; to: string } | null> {
+    if (!anchor) return null;
+    await communityRecordsReady();
+    const record = communityRecordOf(anchor);
+    const line = record?.line;
+    if (!record || !line) return null;
+    try {
+        await changeCommunityRecords((records) => records.map((r) => (r.id === record.id ? { ...r, line: undefined } : r)));
+    } catch {
+        return null;
+    }
+    return { kind: line.kind, from: line.from, to: line.to };
+}

@@ -21,8 +21,7 @@ import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
-import { AddressFollowCard } from '../../components/AddressFollowCard';
-import { AddressFallbackCard } from '../../components/AddressFallbackCard';
+import { AddressLine } from '../../components/AddressLine';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
 import { BringListingsSheet } from '../../components/BringListingsSheet';
 import { takeListingAfterJoin } from '../../utils/listing-after-join';
@@ -1586,9 +1585,8 @@ export default function HomeScreen() {
                     {/* Looking around with no account (slice S12, utils/look-around.ts): nothing is kept until Join. */}
                     {lookingAround && <LookAroundCard colors={colors} />}
                     <KeyMovedCard colors={colors} />
-                    <AddressFollowCard colors={colors} />
-                    {/* The phone's address isn't answering and another the community published is the same community (DNS S3). */}
-                    <AddressFallbackCard colors={colors} />
+                    {/* The phone followed its community to another of its addresses by itself: one line, once (addresses S4). */}
+                    <AddressLine colors={colors} />
                     {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
                     {!lookingAround && <CopiesRuleCard colors={colors} />}
                     {/* No notifications card here (DESIGN-home-default-fable.md §2.5): First steps has the line, the first post,

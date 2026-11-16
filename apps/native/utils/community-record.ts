@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
 import { isPlainNodeAddress } from './node-url';
 import {
-    addressSpelling, communityRecordOf, makeCommunityRecord, setCommunityIndex, type CommunityRecord,
+    addressSpelling, communityRecordOf, makeCommunityRecord, recordHolds, setCommunityIndex, type CommunityRecord,
 } from './community-index';
 
 export interface RecordStorage {
@@ -123,17 +123,38 @@ export async function keepCommunityRecord(address: string, storage: RecordStorag
     });
 }
 
-/** `address`'s own record goes, with its saved row (nodes.ts takeOffSavedList, the one way a row comes off). Never throws. */
+/**
+ * The record that holds `address` (its id, its `using` or an address it proved) goes, with its saved row (nodes.ts
+ * takeOffSavedList, the one way a row comes off). Never the record of the community the phone is set to: the phone stays
+ * on it, and its file and saved things are kept under that record's id (S3 review: a Remove of the row in use, once
+ * `using` differs from the id, would open a new file named after `using` at the next read). Never throws.
+ */
 export async function forgetCommunityRecord(address: string, storage: RecordStorage = AsyncStorage): Promise<void> {
     await communityRecordsReady();
     await serially(async () => {
         try {
-            const records = parseCommunityRecords(await storage.getItem(COMMUNITY_RECORDS_STORE_KEY));
-            const kept = records.filter((r) => addressSpelling(r.id) !== addressSpelling(address));
+            const [raw, anchor] = await Promise.all([storage.getItem(COMMUNITY_RECORDS_STORE_KEY), storage.getItem(ANCHOR_STORE_KEY)]);
+            const records = parseCommunityRecords(raw);
+            const kept = records.filter((r) => !recordHolds(r, address) || (!!anchor && recordHolds(r, anchor)));
             if (kept.length !== records.length) await write(kept, storage);
         } catch (e) {
             console.warn('[records] Could not forget the record of a community', e);
         }
+    });
+}
+
+/**
+ * The records changed by `change` (utils/address-verify.ts, slice S4), read fresh and written in turn with every other
+ * write, then indexed. `change` answers the records to keep, or null to write nothing. Throws when they can't be read or
+ * written: the caller must not move the phone on a record that wasn't kept.
+ */
+export async function changeCommunityRecords(
+    change: (records: CommunityRecord[]) => CommunityRecord[] | null, storage: RecordStorage = AsyncStorage,
+): Promise<void> {
+    await communityRecordsReady();
+    await serially(async () => {
+        const next = change(parseCommunityRecords(await storage.getItem(COMMUNITY_RECORDS_STORE_KEY)));
+        if (next) await write(next, storage);
     });
 }
 

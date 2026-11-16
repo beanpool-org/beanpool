@@ -12,7 +12,7 @@
  * cache and check. Nothing here contacts a node: every answer comes from a fetch stub.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { forumPublicOn } from '@beanpool/core';
+import { DEFAULT_GLOBAL_COMMUNITY_URL, forumPublicOn } from '@beanpool/core';
 
 const store = new Map<string, string>();
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -23,7 +23,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
-const WORLDWIDE = 'https://global.beanpool.org';
+const WORLDWIDE = DEFAULT_GLOBAL_COMMUNITY_URL;
 const ELSEWHERE = 'https://riverside.example.org';
 /** The community in use (node-post.ts anchorUrl) and whether the phone visits it as a guest (nodes.ts isGuestNode). */
 const here = vi.hoisted(() => ({ anchor: null as string | null, guestAt: [] as string[] }));

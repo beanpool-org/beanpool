@@ -56,6 +56,8 @@ vi.mock('../../app/ThemeContext', () => ({
     useStyles: (make: (c: { colors: unknown }) => unknown) => make({ colors: theme.colors }),
 }));
 vi.mock('../db', () => ({}));
+const screen = vi.hoisted(() => ({ inFront: true }));
+vi.mock('expo-router', () => ({ useIsFocused: () => screen.inFront }));
 
 import { lightColors, darkColors } from '../../constants/colors';
 import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
@@ -65,7 +67,7 @@ import { layOut } from './yoga-dom-layout';
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); scroll.flashed = 0; keyboard.dismiss.mockClear(); });
-afterEach(() => { act(() => root.unmount()); host.remove(); keyboard.isVisible = false; keyboard.height = 0; });
+afterEach(() => { act(() => root.unmount()); host.remove(); keyboard.isVisible = false; keyboard.height = 0; screen.inFront = true; });
 
 /**
  * The DM screen's column under the header, as measured: the walk's phone from its dump (480 × 854 px at 1.5: the column
@@ -132,4 +134,9 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the veri
             expect(keyboard.dismiss).toHaveBeenCalledTimes(keyboardUp ? 1 : 0);
         });
     }
+    it('a screen opened over the paused chat keeps its keyboard: the card puts it away only while the chat is in front', () => {
+        screen.inFront = false;
+        renderColumn(PHONES[0], 1.3, 0, true);
+        expect(keyboard.dismiss).not.toHaveBeenCalled();
+    });
 });

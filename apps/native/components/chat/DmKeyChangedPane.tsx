@@ -6,11 +6,13 @@
  * with the new key" are never in a small scroll inside the card with no hint (walk of 17 Nov, 320 dp at 1.3× text).
  *
  * The box can't be typed in while the card is up (ChatComposer disabled), so a keyboard still up when the pause starts,
- * or raised meanwhile, is put away: with it up the card had only its title (the same walk).
+ * or raised meanwhile, is put away: with it up the card had only its title (the same walk). Only while the chat is the
+ * screen in front: the keyboard's state is the whole app's, and a screen opened over the chat keeps its own.
  */
 import React, { useEffect, useRef } from 'react';
 import { ScrollView } from 'react-native';
 import { KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
+import { useIsFocused } from 'expo-router';
 import { DmKeyChangedBanner, type DmKeyChangedBannerProps } from './DmKeyChangedBanner';
 
 export interface DmKeyChangedPaneProps extends DmKeyChangedBannerProps {
@@ -23,9 +25,10 @@ export const DM_KEY_PANE_FADE = 32;
 
 export function DmKeyChangedPane({ maxHeight, ...banner }: DmKeyChangedPaneProps) {
     const keyboardUp = useKeyboardState((s) => s.isVisible);
+    const inFront = useIsFocused();
     useEffect(() => {
-        if (keyboardUp) void KeyboardController.dismiss();
-    }, [keyboardUp]);
+        if (keyboardUp && inFront) void KeyboardController.dismiss();
+    }, [keyboardUp, inFront]);
     // iOS has no lasting scroll bar: show it once when the card opens taller than its room.
     const scrollRef = useRef<ScrollView>(null);
     const flashed = useRef(false);

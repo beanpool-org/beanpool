@@ -189,6 +189,30 @@ export function chatHiddenFrom(conv: { id: string; type: string }, pubkey: strin
 }
 
 /**
+ * Someone has posted in an event's chat: a line a person wrote, one the host since removed included (it was posted). A
+ * system line (EVENT_CHAT_OPENED_SYSTEM_TYPE) is the node's, not a post.
+ */
+export function eventChatHasPostedLine(postId: string): boolean {
+    return !!db.prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND type != 'system' LIMIT 1").get(postId);
+}
+
+/**
+ * Whether a chat is in this member's chat list (Marty, 16 Nov 2026: "yes only when someone posts and only if you are going
+ * or interested"). Every chat but an event's is, as before. An event's chat is listed once someone has posted a line in it
+ * (eventChatHasPostedLine), and only for the people who may read it (canReadEventThread: the host, or Going and let in;
+ * Interested can't open it, decision 17), while the event is there for them (chatHiddenFrom). One whose event is gone is not.
+ * Both lists (GET /api/messages/conversations, GET /api/your-groups) and every unread count behind a badge
+ * (state-engine.ts listedUnreadChats) go by this, so no badge comes from an event chat that isn't listed. The chat still
+ * opens from the event itself (GET /api/marketplace/posts/:id/chat), listed or not.
+ */
+export function chatListedFor(conv: { id: string; type: string }, pubkey: string | undefined): boolean {
+    if (conv.type !== 'event_thread') return true;
+    let row: EventRow;
+    try { row = loadEventForThread(conv.id); } catch { return false; }
+    return !eventUnknownTo(row, pubkey) && canReadEventThread(row, pubkey) && eventChatHasPostedLine(conv.id);
+}
+
+/**
  * Host, or Going to an event they can still see — checked on every read and every post, never trusted from the
  * participants mirror. Never a visitor's row (isVisitorKey), whatever RSVP it holds from before visitors were refused
  * one: the chat carries the private note.

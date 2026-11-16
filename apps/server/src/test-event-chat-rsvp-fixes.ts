@@ -77,6 +77,8 @@ async function main(): Promise<void> {
         const id = ev.body?.post?.id;
         await req('POST', `/api/marketplace/posts/${id}/rsvp`, eve, { status: 'going' });
         await req('POST', `/api/marketplace/posts/${id}/rsvp`, gus, { status: 'going' });
+        // An event's chat is in the list only once someone has posted in it (test-event-chat-listing; Marty, 16 Nov 2026).
+        await req('POST', `/api/marketplace/posts/${id}/chat/message`, host, { text: 'Ff hello' });
         se.removeGroupMember(g.id, eve.pk, eve.pk);
         const one = await req('GET', `/api/messages/${id}`, gus);
         check('E1', one.status === 200 && !one.body?.conversation?.participants?.includes(eve.pk), `GET /api/messages/:id as Gus leaves out Eve, who left the group (got ${JSON.stringify(one.body?.conversation?.participants?.map((p: string) => p === eve.pk ? 'EVE' : p.slice(0, 4)))})`);

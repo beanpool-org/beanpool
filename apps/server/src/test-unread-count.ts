@@ -256,6 +256,9 @@ async function main(): Promise<void> {
     } as any)!;
     ensureEventThread(eventPost.id);
     db.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(eventPost.id, ann.pk);
+    // Going (and let in, where the host lets people in), as the chat list asks of a reader (engine/event-thread.ts
+    // chatListedFor): a seat alone lists nothing.
+    db.prepare("INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, let_in_at, let_in_by) VALUES (?, ?, 'going', '', ?, ?)").run(eventPost.id, ann.pk, iso(Date.now()), cy.pk);
     se.postEventThreadMessage(eventPost.id, cy.pk, 'See you there');
     await counted(ann, 'a line in the chat of an event she is going to', { unread: 1, requests: 0 });
     db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(iso(Date.now()), eventPost.id);
@@ -319,6 +322,7 @@ async function main(): Promise<void> {
     } as any)!;
     ensureEventThread(fete.id);
     db.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(fete.id, mae.pk);
+    db.prepare("INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, let_in_at, let_in_by) VALUES (?, ?, 'going', '', ?, ?)").run(fete.id, mae.pk, iso(Date.now()), kit.pk);
     se.postEventThreadMessage(fete.id, kit.pk, 'Who is bringing chairs?');
     await says("an event's chat: unread, and it never pushes", { unread: 1, alerts: 0, told: 0 });
     await markRead(mae, fete.id);

@@ -370,6 +370,8 @@ async function main(): Promise<void> {
             photos: [TINY_PNG],
         })).post;
         built('Bo is going', await S_(bo, `/api/marketplace/posts/${event.id}/rsvp`, { status: 'going' }));
+        // An event's chat is in Bo's chat list only once someone has posted in it (test-event-chat-listing; Marty, 16 Nov 2026).
+        built('Rhea says hello in its chat', await S_(rhea, `/api/marketplace/posts/${event.id}/chat/message`, { text: 'See you on the lawn' }));
         const poll = built('Rhea asks a poll', await S_(rhea, '/api/marketplace/posts', {
             type: 'poll', category: 'general', title: POLL_QUESTION, description: 'Pick one', authorPublicKey: rhea.pk,
             pollOptions: [{ id: 'sat', text: 'Saturday' }, { id: 'sun', text: 'Sunday' }], durationDays: 7, pollOther: true,

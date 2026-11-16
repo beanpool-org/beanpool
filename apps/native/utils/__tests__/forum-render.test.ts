@@ -272,6 +272,19 @@ describe.each(LOOKS)('the forum list in %s (%s)', (_name, set) => {
         expectHoldsSmall(host);
     });
 
+    it('a group\'s "Topics ›" row (forum slice F9) opens the Forum on that group\'s section, once', async () => {
+        const { openForumAt } = await import('../forum-open');
+        const { getForumTopics } = await import('../forum');
+        openForumAt('skills');
+        const host = await render(set, ForumPane);
+        expect(vi.mocked(getForumTopics).mock.calls.at(-1)).toEqual(['skills', 0]);
+        const on = Array.from(byId(host, 'forum-section-pick').querySelectorAll('[data-role="button"]')).find((b) => b.getAttribute('aria-selected') === 'true');
+        expect(words(on ?? null)).toBe('Skills & how-to');
+        // Taken once: the Forum shown again for any other reason opens where the member left it.
+        const { takeForumAt } = await import('../forum-open');
+        expect(takeForumAt()).toBeNull();
+    });
+
     it('a tap anywhere on a row opens its topic; a section picked asks for that section', async () => {
         const host = await render(set, ForumPane);
         await press(allById(host, 'forum-topic-row')[1]);

@@ -133,6 +133,7 @@ import ForumTopicScreen from '../../app/forum/[id]';
 import { ForumLinkedTopics, forumLinkHref } from '../../components/forum/ForumLinks';
 import { cutTo, linkPostedNeed, needSeedFrom, noteNeedLinked, takeNeedLinked, takeNeedSeed, NEED_TITLE_MAX } from '../forum-need';
 import { COLOUR_SETS } from '../../constants/colors';
+import { takeForumAt } from '../forum-open';
 import * as forum from '../forum';
 
 const LOOKS = [['Classic', 'dark'], ['Light', 'light'], ['Dark', 'night']] as const;
@@ -201,7 +202,7 @@ const menuButton = (host: ParentNode, label: string) => Array.from(byId(host, 'f
 const refocus = async () => { await act(async () => { for (const f of nav.focus) f(); }); await act(async () => {}); await act(async () => {}); };
 
 /** Every text drawn: its ink against the nearest ground under it (the page where nothing nearer is drawn), at 4.5:1 or more. */
-function expectReadable(host: HTMLElement, set: Set) {
+function expectReadable(host: HTMLElement, set: Set, least = 3) {
     const c = COLOUR_SETS[set];
     let n = 0;
     for (const span of Array.from(host.querySelectorAll('span'))) {
@@ -218,7 +219,7 @@ function expectReadable(host: HTMLElement, set: Set) {
         expect(contrastRatio(ink!, on), `${words(span)} (${ink} on ${on})`).toBeGreaterThanOrEqual(4.5);
         n += 1;
     }
-    expect(n).toBeGreaterThan(2);
+    expect(n).toBeGreaterThanOrEqual(least);
 }
 /** At 320 dp and 1.3x: no width fixed on anything with words in it, no line count, every button at least 40 dp (48 for words). */
 function expectHoldsSmall(host: HTMLElement) {
@@ -427,6 +428,26 @@ describe.each(LOOKS)('the topics that link one thing in %s (%s)', (_name, set) =
         expect(nav.pushed).toEqual([{ pathname: '/forum/[id]', params: { id: 't7' } }]);
         expectReadable(box, set);
         expectHoldsSmall(box);
+    });
+
+    it('a group with its own section: "Topics ›" opens the Forum on that section (the sheet closes first), with no linking topic needed', async () => {
+        node.front = { ...FRONT, sections: [...FRONT.sections, { id: 'sec-g1', starter: null, name: 'Garden crew', about: null, position: 2, starts: 'members', listed: true, archived: false, group: { id: 'g1', name: 'Garden crew' } }] };
+        node.linked = [];
+        const onLeave = vi.fn();
+        const host = await render(set, () => createElement(ForumLinkedTopics, { kind: 'group', id: 'g1', onLeave }));
+        const row = byId(host, 'forum-group-section');
+        expect(words(row)).toBe('Topics ›');
+        expect(host.querySelector('[data-role="header"]')).toBeNull();
+        await press(row);
+        expect(onLeave).toHaveBeenCalled();
+        expect(nav.pushed).toEqual([{ pathname: '/(tabs)/chats', params: { view: 'forum' } }]);
+        expect(takeForumAt()).toBe('sec-g1');
+        expectReadable(byId(host, 'forum-linked-group'), set, 1);
+        expectHoldsSmall(byId(host, 'forum-linked-group'));
+        // Another group, or a listing, has no such row.
+        document.body.innerHTML = '';
+        const other = await render(set, () => createElement(ForumLinkedTopics, { kind: 'group', id: 'g2' }));
+        expect(byId(other, 'forum-group-section')).toBeNull();
     });
 
     it('nothing at all with no topics, or with no answer (a community with no forum, a node from before F9, no connection)', async () => {

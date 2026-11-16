@@ -19,7 +19,11 @@ import { loadIdentity } from './identity';
 import { anchorUrl, signedGet } from './node-post';
 import type { ForumDraft, ForumKeptStore } from './forum-kept';
 
-export interface ForumSection { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean }
+export interface ForumSection {
+    id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean;
+    /** The group whose own section this is (slice F8): only its members and the moderators read it. */
+    group?: { id: string; name: string } | null;
+}
 export interface ForumWriter { publicKey: string; name: string }
 export interface ForumTopic {
     id: string; sectionId: string; title: string; writer: ForumWriter; place: string | null; lang: string | null; replyCount: number;

@@ -11,6 +11,7 @@
  * - **ForumLinkedTopics**, the topics that link one thing (GET /api/forum/linked): "Talked about in the forum" on a listing,
  *   "Topics about this group" in a group's sheet, "From the forum" on a Learn page. Nothing at all when there are none, when the
  *   member can't see the thing, or with no answer (a community with no forum, or a node from before F9): never an empty heading.
+ *   A group with its own section (slice F8) also gets a "Topics ›" row there, opening the Forum side on that section.
  *
  * The node's calls and the member's lists are read when first needed (import()), as utils/worldwide-forum.ts does: the listing,
  * Learn and group screens that draw these rows load nothing more as they open.
@@ -26,6 +27,7 @@ import { t, tn, type ForumLink, type ForumLinkKind } from '@beanpool/core';
 import { useForumStyles } from './forum-style';
 import { FORUM_WORDS, LINK_WORDS, TOPIC_WORDS } from './forum-words';
 import type { ForumLinkedTopic } from '../../utils/forum';
+import { openForumAt } from '../../utils/forum-open';
 
 type Shown = Extract<ForumLink, { shown: true }>;
 /** What the picker offers: the design's three (§10.4). A Learn page is linked by "Turn into a Learn page" (§10.3), later. */
@@ -144,22 +146,37 @@ export function ForumLinkPicker({ open, me, linked, onPick, onClose }: {
 export function ForumLinkedTopics({ kind, id, onLeave }: { kind: 'listing' | 'group' | 'learn'; id: string | null | undefined; onLeave?: () => void }) {
     const styles = useForumStyles();
     const [topics, setTopics] = useState<ForumLinkedTopic[]>([]);
+    // A group with its own section (slice F8): its "Topics ›" row, as the forum's front lists the sections this member reads.
+    const [section, setSection] = useState<string | null>(null);
     useEffect(() => {
         setTopics([]);
+        setSection(null);
         if (!id) return undefined;
         let shown = true;
         void (async () => {
             try {
-                const list = await (await import('../../utils/forum')).forumTopicsLinking(kind, id);
+                const forum = await import('../../utils/forum');
+                if (kind === 'group') {
+                    const front = await forum.getForumFront().catch(() => forum.keptForumFront());
+                    const own = front?.sections.find((s) => s.group?.id === id && !s.archived);
+                    if (shown && own) setSection(own.id);
+                }
+                const list = await forum.forumTopicsLinking(kind, id);
                 if (shown) setTopics(Array.isArray(list) ? list : []);
             } catch { /* no answer: nothing drawn */ }
         })();
         return () => { shown = false; };
     }, [kind, id]);
-    if (!topics.length) return null;
+    if (!topics.length && !section) return null;
     return (
         <View style={{ marginTop: 12 }} testID={`forum-linked-${kind}`}>
-            <Text style={styles.label} accessibilityRole="header">{t(LINK_WORDS.about[kind])}</Text>
+            {section && (
+                <Pressable accessibilityRole="button" testID="forum-group-section" style={[styles.row, { alignItems: 'center' }]}
+                    onPress={() => { onLeave?.(); openForumAt(section); router.push({ pathname: '/(tabs)/chats', params: { view: 'forum' } } as never); }}>
+                    <Text style={[styles.rowTitle, { flex: 1 }]}>{t(LINK_WORDS.groupTopics)}</Text>
+                </Pressable>
+            )}
+            {topics.length > 0 && <Text style={styles.label} accessibilityRole="header">{t(LINK_WORDS.about[kind])}</Text>}
             {topics.map((topic) => (
                 <Pressable key={topic.id} accessibilityRole="button" testID="forum-linked-topic" onPress={() => { onLeave?.(); router.push({ pathname: '/forum/[id]', params: { id: topic.id } } as never); }}
                     style={[styles.row, { alignItems: 'center' }]}>

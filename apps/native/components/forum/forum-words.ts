@@ -135,6 +135,8 @@ export const LINK_WORDS = {
     postedAsNeed: word('Posted as a Need ›'),
     anEvent: word('An event ›'),
     aLearnPage: word('A Learn page ›'),
+    /** In a group's sheet, for a group with its own section: opens the Forum on it. */
+    groupTopics: word('Topics ›'),
     /** Over the topics that link one thing: on a listing, in a group's sheet, on a Learn page. */
     about: {
         listing: word('Talked about in the forum'),

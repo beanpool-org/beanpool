@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { readChecksShard, readTestTimeout, parseDiff, planSteps, gitRepo, namedPaths, REPO_ROOT, VITEST_PACKAGES, GUARD_TESTS,
-  PLAN_SECS, MAX_EXTRA } from './preflight-plan.mjs';
+  PLAN_SECS, MAX_EXTRA, planDraft, DRAFT_TURBO_CHECKS, DRAFT_PLAN_SECS } from './preflight-plan.mjs';
 
 const RUNNER = path.join(REPO_ROOT, 'scripts/lanes/preflight.sh');
 const real = gitRepo();
@@ -485,4 +485,83 @@ test('the step waits while the lock is held and runs once it is gone', async () 
   assert.equal(rc, 0, out);
   assert.match(out, /waiting: the heavy-test lock is held/);
   assert.ok(fs.existsSync(`${d}/ran`));
+});
+
+// ── the draft check: a draft PR's fast CI check, one part per job (ci.yml jobs.draft; Marty, 17 Nov 2026) ──
+
+const MB = 'abc1234def';
+const draftPlan = (part, files, opts = {}) => planDraft(part, parseDiff(diff(files)), real, { mergeBase: MB, ...opts });
+
+test('draft table: each part x the paths a diff touches -> the steps it runs', () => {
+  const ROUTE = "router.get('/api/x', h);";
+  const TABLE = [
+    // part      files touched                                              steps                          a command must have
+    ['types',  { 'apps/native/app/x.tsx': 'x' },                            ['turbo'],                     `--filter='...[${MB}]'`],
+    ['types',  { 'packages/beanpool-core/src/x.ts': 'x' },                  ['turbo'],                     `--filter='...[${MB}]'`],
+    ['types',  { 'apps/pwa/src/a.tsx': 'x', 'package.json': 'x' },          ['turbo'],                     'pnpm turbo run build lint typecheck --continue'],
+    ['types',  { 'pnpm-lock.yaml': 'x' },                                   ['turbo'],                     'pnpm turbo run build lint typecheck --continue'],
+    ['types',  { 'scripts/lanes/preflight-plan.mjs': 'x', 'scripts/lanes/preflight.sh': 'x' }, ['scripts-syntax'], 'node --check scripts/lanes/preflight-plan.mjs && bash -n scripts/lanes/preflight.sh'],
+    ['types',  { 'docs/merge-gate.md': 'x' },                               ['none'],                      'true'],
+    ['guards', { 'docs/merge-gate.md': 'x' },                               ['guards', 'words'],           'bash scripts/test-all.sh'],
+    ['guards', { 'apps/native/app/x.tsx': 'x' },                            ['guards', 'words'],           'node scripts/words/words.mjs check'],
+    ['tests',  { 'docs/merge-gate.md': 'x' },                               ['none'],                      'true'],
+    ['tests',  { 'apps/server/src/routes/x.ts': ROUTE },                    ['server:test-guest-view', 'server:test-health-cors'], 'SERVER_SUITES_ONLY=test-guest-view'],
+    ['tests',  { 'apps/server/src/test-guest-view.ts': 'x' },               ['server:changed'],            'SERVER_SUITES_ONLY=test-guest-view'],
+    ['tests',  { 'apps/server/src/test-not-registered-here.ts': 'x' },      ['none'],                      'true'],
+    ['tests',  { 'apps/pwa/src/darkModeHover.ts': 'x' },                    ['vitest:@beanpool/pwa'],      'src/darkModeHover.test.ts'],
+  ];
+  for (const [part, files, want, cmd] of TABLE) {
+    const steps = draftPlan(part, files);
+    const label = `${part} ${Object.keys(files).join(' ')}`;
+    assert.deepEqual(names(steps), want, label);
+    assert.ok(steps.some(s => s.cmd.includes(cmd)), `${label}: a step runs ${cmd}\n${steps.map(s => s.cmd).join('\n')}`);
+    for (const s of steps) assert.ok(Number.isInteger(s.est) && s.why, `${label}: ${s.name} has an estimate and a why`);
+  }
+});
+
+test('draft types: the packages a diff reaches are named, with their dependents; a package dir needs its package.json', () => {
+  const t = step(draftPlan('types', { 'apps/native/app/x.tsx': 'x', 'apps/pwa/src/a.ts': 'x' }), 'turbo');
+  assert.match(t.why, /^apps\/native, apps\/pwa and every package that depends on them$/);
+  assert.deepEqual(names(draftPlan('types', { 'apps/not-a-package/x.ts': 'x' })), ['none']);
+  assert.throws(() => planDraft('types', new Map(), real, {}), /needs the merge base/);
+  assert.throws(() => draftPlan('everything', {}), /--draft takes types, guards, tests/);
+});
+
+test('draft guards: the checks shard read from ci.yml, less build, lint and typecheck (the types part runs those narrowed)', () => {
+  const shard = readChecksShard(real.ciYml).split(' ');
+  const g = step(draftPlan('guards', {}), 'guards');
+  const ran = g.cmd.match(/^TEST_ALL_ONLY='([^']*)' bash scripts\/test-all\.sh$/)[1].split(' ');
+  assert.deepEqual(ran, shard.filter(c => !DRAFT_TURBO_CHECKS.includes(c)));
+  assert.deepEqual(DRAFT_TURBO_CHECKS.filter(c => shard.includes(c)), DRAFT_TURBO_CHECKS, 'build, lint and typecheck are still in the shard');
+  for (const guard of ['no_node_names', 'native_dark_contrast', 'no_google_fonts', 'words', 'workflows']) assert.ok(ran.includes(guard), guard);
+});
+
+test('draft tests: the budget is the draft\'s (PREFLIGHT_DRAFT_PLAN_SECS), and the two whole-tree steps are the guards part\'s', () => {
+  const big = Object.fromEntries(real.tests('apps/native').slice(0, 400).map(t => [t.replace(/\.test\.(tsx?|jsx?)$/, '.$1'), 'x']));
+  // No per-package cap here, so the time budget is what binds.
+  const steps = draftPlan('tests', big, { maxExtra: 10000 });
+  assert.ok(!names(steps).includes('checks') && !names(steps).includes('words'));
+  const est = steps.reduce((k, s) => k + s.est, 0);
+  assert.ok(est <= DRAFT_PLAN_SECS + 10, `estimate ${est} s within the draft budget ${DRAFT_PLAN_SECS} s`);
+  assert.ok(steps.some(s => s.left > 0), 'what did not fit is left to the full run, and counted');
+  const wider = draftPlan('tests', big, { maxExtra: 10000, planSecs: 400 }).reduce((k, s) => k + s.est, 0);
+  assert.ok(wider > est, 'a bigger budget plans more');
+});
+
+test('the runner heads a red step\'s lines "Failure Details", where pr-state.mjs reads a red job\'s lines', () => {
+  const d = tmpdir();
+  const r = run(planFile(d, [['bad', 'fails', 'echo "✗ the thing broke"; exit 1']]));
+  assert.equal(r.rc, 1, r.out);
+  assert.match(r.out, /^──── Failure Details ────\n\n━━━ 1-bad \(whole log: .*\) ━━━$/m);
+  const green = run(planFile(tmpdir(), [['one', 'first', 'true']]));
+  assert.doesNotMatch(green.out, /Failure Details/);
+});
+
+test('--draft passes the part to the planner: an unknown part is no plan (exit 2), nothing run', () => {
+  const r = spawnSync('bash', [RUNNER, '--draft', 'everything', '--plan'], { encoding: 'utf8' });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stdout + r.stderr, /--draft takes types, guards, tests/);
+  const ok = spawnSync('bash', [RUNNER, '--draft', 'guards', '--plan'], { encoding: 'utf8' });
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.match(ok.stdout, /^guards +120s/m);
 });

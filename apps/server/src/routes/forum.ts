@@ -55,7 +55,8 @@
  *        section (409 `section_polls`); the ordinary poll (2 to 4 answers, its lengths, one open a member), voted and read by
  *        the polls' own routes; a group's section's is the group's poll
  *   POST /api/forum/topics/:id/decision     { decisionId: id | null } → { topic }   its writer or an owner or admin (403
- *        `not_yours`); 404 `decision_not_found`; 404 `decisions_off` where Decisions are off
+ *        `not_yours`); 404 `decision_not_found`; 404 `decisions_off` where Decisions are off; 409 `topic_links` for a new chip
+ *        where the topic already links three other things (slice F9)
  * Links (slice F9, engine/forum-links.ts): a link never shows its reader anything they could not already see.
  *   POST /api/forum/topics/:id/links        { kind: 'group' | 'listing' | 'event' | 'learn', targetId, on? } → { topic }
  *        the topic's writer links one of their groups, one of their listings (Make this a Need), an event or a Learn page

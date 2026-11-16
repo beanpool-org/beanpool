@@ -3416,6 +3416,9 @@ CREATE TABLE IF NOT EXISTS forum_links (
     updated_at TEXT,
     PRIMARY KEY (topic_id, kind, target_id)
 );
+-- The topics that link one thing (slice F9, GET /api/forum/linked): "Talked about in the forum" reads it on every listing page,
+-- so it is found by its target, not by a scan of every topic's links.
+CREATE INDEX IF NOT EXISTS idx_forum_links_target ON forum_links (kind, target_id);
 -- The forum's search (slice F6, engine/forum-search.ts; design §3 "a search index", §8, §16): one row per post, keyed by the
 -- post's rowid, holding its words and, on an opening post (number 1), its topic's title and place. This server's own, never
 -- copied (engine/replication-manifest.ts 'local'): each server keeps it from the posts and topics it holds, by the triggers

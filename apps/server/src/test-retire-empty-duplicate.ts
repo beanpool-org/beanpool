@@ -149,6 +149,7 @@ const NOT_ACTIVITY: Record<string, string> = {
     'group_guest_links.member': "where it stands with a group at another community (invited, in, left ...) and that group's latest roster: its own answer, no act here",
     'group_guest_mail.member': "a group at another community's notices waiting for it: done to it, not its act",
     'group_guest_mail_got.member': 'which of its devices has which group notice waiting for it: its own reading, no act',
+    'group_guest_order.member': "the newest word a group's host at another community gave on where it stands (G2's order rule): done to it, not its act",
     'invalidated_keys.public_key': "a key closed or replaced: the key's state, no act",
     // The forum (engine/forum.ts). A topic it started or a post or reply it wrote is forum_topics/forum_posts.writer_pubkey (`posts`).
     'forum_members.member_pubkey': 'told once that the forum is public: its own reading, no act (what it wrote is `posts`)',

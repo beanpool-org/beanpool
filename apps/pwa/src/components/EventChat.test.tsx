@@ -179,7 +179,7 @@ describe('EventChat (docs/events-on-the-map.md §2.2, §3)', () => {
         renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} onBack={() => {}} />);
         const title = await screen.findByText(/Working bee at the hall/);
         expect(title.className).toMatch(/truncate/);
-        for (const name of ['Back', 'Send', 'Remove message from Goer']) {
+        for (const name of ['Back to chats', 'Send', 'Remove message from Goer']) {
             expect(screen.getByRole('button', { name }).className).toMatch(/min-h-\[48px\]/);
         }
         expect((screen.getByLabelText('Message everyone going') as HTMLElement).className).toMatch(/min-h-\[48px\]/);

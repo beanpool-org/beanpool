@@ -43,7 +43,7 @@ import { logger } from '../logger.js';
 import { assertDiskFloorSpace, assertFolderFloorSpace, STORAGE_NEARLY_FULL_MESSAGE } from '../engine/photo-upload-budget.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { admitAgentCall, admitAgentPhoto, agentPhotosPerDay, agentPhotosToday, returnAgentDayCall } from './limits.js';
-import { agentGrantFrom, aiAssistantsAllowed, logRefusal, ownOrigin } from './mcp-route.js';
+import { agentGrantFrom, aiAssistantsAllowed, isOwnOrigin, logRefusal } from './mcp-route.js';
 import { noteOAuthGrantUse } from './oauth.js';
 import {
     dropPhotoLink, keepUploadedPhoto, photoDayFull, photoLinkOf, PHOTO_LINK_LOG_PATH, PHOTO_LINK_PATH, PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES,
@@ -152,7 +152,7 @@ function doorOpen(ctx: any, methods: readonly string[]): boolean {
         return false;
     }
     const origin = ctx.get('origin');
-    if (origin && origin !== ownOrigin()) {
+    if (origin && !isOwnOrigin(origin)) {
         say(ctx, 403, 'This endpoint does not answer web pages from other sites');
         return false;
     }

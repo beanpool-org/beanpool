@@ -363,6 +363,76 @@ describe('an owner or admin', () => {
         expect(screen.getByLabelText('Add photo')).toBeInTheDocument();
     });
 
+    // Pictures (Damo's ask; Marty, 16 Nov 2026: "Yes, through the upload link only, the checker approves it"): each picture shows
+    // with Remove photo before Approve; Approve sends back only the kept ones, so only those are published; Edit first keeps the choice.
+    describe('the pictures a draft brings: Keep or Remove each before Approve', () => {
+        const P1 = 'data:image/jpeg;base64,AAAA';
+        const P2 = 'data:image/jpeg;base64,BBBB';
+        const openOne = async (draft: KnowledgeDraftWhole) => {
+            node.drafts = { [draft.id]: draft };
+            node.toCheck = [waitingRow(draft.id, { assistant: draft.assistant })];
+            await openLearn({ target: { kind: 'check' } });
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-check-row'));
+            await wait();
+            if (draft.needsSourcesTicked) fireEvent.click(screen.getByTestId('learn-check-tick'));
+        };
+        const byAssistant = () => whole('d3', { assistant: 'Claude', needsSourcesTicked: true, photos: [P1, P2] });
+        const toggles = () => screen.getAllByTestId('learn-check-photo-toggle');
+
+        it('shows each picture with Remove photo and the rule, before Approve', async () => {
+            await openOne(byAssistant());
+            const photos = screen.getAllByTestId('learn-check-photo');
+            expect(photos.map((p) => within(p).getByRole('img').getAttribute('src'))).toEqual([P1, P2]);
+            expect(screen.getByText('Approve adds only the photos you keep. Keep one only if it is the writer’s own, never a picture from the web.')).toBeInTheDocument();
+            expect(toggles().map((b) => b.textContent)).toEqual(['Remove photo', 'Remove photo']);
+            fireEvent.click(toggles()[0]);
+            expect(photos[0]).toHaveAttribute('data-kept', 'false');
+            expect(toggles()[0].textContent).toBe('Keep this photo');
+            // A plain action button: its words say what a tap does; no aria-pressed to contradict them (#3230 review).
+            expect(toggles()[0]).not.toHaveAttribute('aria-pressed');
+            expect(within(photos[0]).getByText('Left out: Approve won’t add it.')).toBeInTheDocument();
+            fireEvent.click(toggles()[0]);
+            expect(photos[0]).toHaveAttribute('data-kept', 'true');
+        });
+
+        const table: Array<[string, (t: HTMLElement[]) => void, string[]]> = [
+            ['Approve with every picture kept', () => {}, [P1, P2]],
+            ['remove one, then Approve', (t) => fireEvent.click(t[0]), [P2]],
+            ['remove all, then Approve', (t) => { fireEvent.click(t[0]); fireEvent.click(t[1]); }, []],
+            ['remove one and keep it again, then Approve', (t) => { fireEvent.click(t[1]); fireEvent.click(t[1]); }, [P1, P2]],
+        ];
+        for (const [what, doIt, sent] of table) {
+            it(`${what}: sends back only the kept pictures`, async () => {
+                await openOne(byAssistant());
+                doIt(toggles());
+                fireEvent.click(screen.getByTestId('learn-check-approve'));
+                await wait();
+                expect(writes()).toEqual([{ path: '/api/knowledge/drafts/d3/approve', body: { photos: sent, checkedSources: true } }]);
+            });
+        }
+
+        it('Edit first keeps the choice: the form opens on the kept pictures and sends those', async () => {
+            await openOne(byAssistant());
+            fireEvent.click(toggles()[0]);
+            fireEvent.click(screen.getByTestId('learn-check-edit'));
+            expect(screen.getByAltText('photo 1')).toHaveAttribute('src', P2);
+            expect(screen.queryByAltText('photo 2')).toBeNull();
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            expect(writes()[0].body.photos).toEqual([P2]);
+            expect(writes()[0].body.checkedSources).toBe(true);
+        });
+
+        it("a member's suggestion: the same Keep or Remove, and Approve sends the kept ones", async () => {
+            await openOne(whole('d4', { photos: [P1] }));
+            fireEvent.click(toggles()[0]);
+            fireEvent.click(screen.getByTestId('learn-check-approve'));
+            await wait();
+            expect(writes()).toEqual([{ path: '/api/knowledge/drafts/d4/approve', body: { photos: [] } }]);
+        });
+    });
+
     it('"Not this one" needs a reason from the list; the few words go with it, and the writer is told', async () => {
         node.drafts = { d1: whole('d1') };
         node.toCheck = [waitingRow('d1')];

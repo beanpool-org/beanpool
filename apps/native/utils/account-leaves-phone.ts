@@ -45,6 +45,7 @@ import { namesPinAddresses, saveNamesCopiesBeforeLeaving, type NamesCopyUnconfir
 import { confirmLeave, leaveStatementsSettled, leaveWrittenDown, pendingLeaveStatements, recordLeave } from './push-leave';
 import { markAlertsOff, markAlertsOn } from './push-alerts-off';
 import { dropCounts } from './notice-counts';
+import { forgetEveryCommunityRecord } from './community-record';
 import { forgetThisPhoneForMail } from './outside-mail';
 import { sameCommunity } from './push-pins';
 import {
@@ -367,6 +368,7 @@ export async function stopPushAlerts(account: LeavingAccount | null, storage: St
 export async function forgetCommunities(communities: readonly string[], storage: Storage = AsyncStorage, opts: LeaveOptions = {}): Promise<void> {
     await removeEveryCommunityCopy(communities, opts.keepDmMemoryOf);
     await storage.removeItem(SAVED_NODES_STORE_KEY);
+    await forgetEveryCommunityRecord(storage);
 }
 
 /**

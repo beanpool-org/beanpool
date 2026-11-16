@@ -24,6 +24,12 @@
  *   5. CF_RECORD_NAME stays a published own name whenever set (rename S1, design
  *      scratch/fable-design/DESIGN-rename-primary-name-fable.md §2): beside every stored address, in every spelling, and
  *      the outputs in 1 stay as they were. Blank adds nothing; marked lost, it is refused
+ *   6. the owner's main address (several-addresses S1, design scratch/fable-design/DESIGN-several-addresses-fable.md §2.1):
+ *      once chosen, every reader of "where it lives" names it (primaryAddress and /api/community/info, which invites and
+ *      share links carry; the directory push; the search canonical; the community card; the assistant's origin, welcome
+ *      and addressHost; the home other servers know it by), its port kept; a choice that may not be main (not published,
+ *      a number beside a name, a name waiting for approval, a home-network address beside one the Internet can reach)
+ *      moves none of them; a home-network address may be main only while the community has nothing the Internet reaches
  *
  * Other code that reads the address for another purpose, and is NOT this resolver's caller (left as it was):
  *   - routes/messaging.ts (a relayed message's `senderNodeUrl`): CF_RECORD_NAME, else the community's name squashed
@@ -198,7 +204,7 @@ function apply(row: Row): void {
     delete process.env.CF_RECORD_NAME;
     delete process.env.PUBLIC_IP;
     for (const [k, v] of Object.entries(row.env ?? {})) process.env[k] = v;
-    updateNodeConfig({ publicAddress: row.publicAddress, registrarNames: (row.lost ?? []).map(lostEntry) } as any);
+    updateNodeConfig({ publicAddress: row.publicAddress, registrarNames: (row.lost ?? []).map(lostEntry), mainAddress: null } as any);
     forgetOwnAddresses();
 }
 
@@ -272,7 +278,11 @@ async function main(): Promise<void> {
     assert(epochSrc.includes('resolvePublicNodeUrl(PUBLIC_URL_RULES.identityEpoch)') && !/pa\.hostname|lostRegistrarHosts/.test(epochSrc),
         'services/identity-epoch.ts: the resolver with PUBLIC_URL_RULES.identityEpoch, no copy left');
     assert(read('engine/own-addresses.ts').includes('resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config)'), 'engine/own-addresses.ts: the community rules');
-    assert(read('state-engine.ts').includes('publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config)'), "state-engine.ts getDirectoryInfo: the community rules");
+    // The directory's publicUrl follows the owner's main address (several-addresses S1, §6 below): mainPublicUrl, which is
+    // this resolver's community answer unchanged while no main is chosen (the table in 1 is that case).
+    assert(read('state-engine.ts').includes('publicUrl: mainPublicUrl()'), "state-engine.ts getDirectoryInfo: the main address (mainPublicUrl)");
+    assert(read('engine/own-addresses.ts').includes('const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community);\n    const main = chosenMainAddress();'),
+        'engine/own-addresses.ts mainPublicUrl: the community rules, then the owner\'s main');
 
     console.log('\n--- 4. an own address as the node stores it (beanpool claim --ip / --address) ---');
     apply({ name: 'nothing set', publicAddress: null, want: all(null) });
@@ -347,6 +357,97 @@ async function main(): Promise<void> {
     }
     assert(configuredAddresses().filter((a) => a.source === 'public-address').map((a) => a.address).join() === `${REG},${FLEET}`,
         `each once, the stored name first (${show(configuredAddresses())})`);
+
+    console.log('\n--- 6. the owner\'s main address: every reader follows it ---');
+    {
+        const { mainPublicUrl, chosenMainAddress } = await import('./engine/own-addresses.js');
+        const { webAppCanonicalUrl } = await import('./web-app-robots.js');
+        const { communityCard } = await import('./routes/community-card.js');
+        const { ownOrigin, nodeUrlFor } = await import('./agent/mcp-route.js');
+        const { ownNodeHome } = await import('./engine/node-key.js');
+        const { AGENT_TOOLS } = await import('./agent/tools.js');
+        // The assistant's overview names the address host (agent/tools.ts node_overview).
+        const statusTool = AGENT_TOOLS.find((t) => t.name === 'node_overview');
+        assert(!!statusTool, 'the assistant\'s node_overview tool is there');
+        const addressHost = async (): Promise<string | null> => {
+            const out: any = await statusTool!.run({ role: 'owner' } as any, {}, 'this suite');
+            return out?.result?.addressHost ?? null;
+        };
+        /** Every reader, as host[:port] or a URL. */
+        const readers = async () => ({
+            primary: primaryAddress(), directory: getDirectoryInfo().publicUrl, mainUrl: mainPublicUrl(), canonical: webAppCanonicalUrl(),
+            card: communityCard().host, origin: ownOrigin(), assistant: nodeUrlFor({ req: {}, host: 'unused' }), home: ownNodeHome(),
+            addressHost: await addressHost(),
+        });
+        const at = (host: string, home = host) => ({
+            primary: host.replace(/:\d+$/, ''), directory: `https://${host}`, mainUrl: `https://${host}`, canonical: `https://${host}/app`,
+            card: host, origin: `https://${host}`, assistant: `https://${host}`, home,
+            addressHost: host.replace(/:\d+$/, ''),
+        });
+        const choose = (main: string | null, row: Row, owned: string[] = []) => {
+            apply(row);
+            updateNodeConfig({ ownerAddresses: owned, mainAddress: main } as any);
+            forgetOwnAddresses();
+        };
+        const OWN = 'beans.example.org';
+        const named = TABLE.find((r) => r.name === 'a registrar name, by tunnel')!;
+
+        choose(null, named, [OWN]);
+        const unchosen = await readers();
+        assert(show(unchosen) === show(at(REG)), `no main chosen: every reader names the live registrar name, as before (${show(unchosen)})`);
+
+        choose(OWN, named, [OWN]);
+        assert(chosenMainAddress() === OWN, 'the own domain is the chosen main');
+        const chosen = await readers();
+        assert(show(chosen) === show(at(OWN)), `the own domain chosen over a live registrar name: every reader names it (${show(chosen)}; before S1 the name always won)`);
+        assert(publishedAddresses().includes(REG), 'and the registrar name is still published');
+
+        choose(REG, named, [OWN]);
+        assert(show(await readers()) === show(at(REG)), `and back: the registrar name chosen, every reader names it (${show(await readers())})`);
+
+        // A port survives: the main address is the stored domain on 8443.
+        choose('coop.example.org', TABLE.find((r) => r.name === 'a custom domain with a port')!, [OWN]);
+        assert(show(await readers()) === show(at('coop.example.org:8443')), `a main on a port keeps its port in every reader (${show(await readers())})`);
+
+        // Choices that may not be main move nothing: every reader stays as with no choice.
+        for (const [why, main, owned] of [
+            ['an address that is not published', 'elsewhere.example.org', [OWN]],
+            ['a number beside a name', '203.0.113.5', [OWN, '203.0.113.5']],
+        ] as [string, string, string[]][]) {
+            choose(main, named, owned);
+            assert(chosenMainAddress() === null && show(await readers()) === show(at(REG)), `${why} as the main moves no reader (${show(await readers())})`);
+        }
+        // A registrar name still waiting for approval has no route: a choice of it moves nothing either.
+        choose(REG, named, [OWN]);
+        updateNodeConfig({ registrarNames: [{ ...lostEntry(REG), lost: null, status: 'pending' }] } as any);
+        forgetOwnAddresses();
+        assert(chosenMainAddress() === null && primaryAddress() !== REG, `a main with no route (the current registrar name not live) is not the main (${show(chosenMainAddress())}, ${show(primaryAddress())})`);
+
+        // A number may be main while the community has no name.
+        const ownIp = TABLE.find((r) => r.name === "this server's own IP address")!;
+        choose('203.0.113.5', ownIp, ['203.0.113.5']);
+        assert(chosenMainAddress() === '203.0.113.5' && primaryAddress() === '203.0.113.5', `a number is main while there is no name (${show(primaryAddress())})`);
+
+        // The main answers from outside (design §2.1): an address on the home network is never main while the community has
+        // one the Internet can reach (review 4580901278). Beside a live registrar name, every reader stays on the name.
+        for (const home of ['nas.local', 'beans.lan', 'beans.home', 'beans.home.arpa', 'beans', '192.168.1.20', '10.0.0.5', '[fd00::1]']) {
+            choose(home, named, [OWN, home]);
+            assert(publishedAddresses().includes(home) && chosenMainAddress() === null && show(await readers()) === show(at(REG)),
+                `a home-network address (${home}) as the main beside a live name moves no reader (${show(chosenMainAddress())}, ${show(await readers())})`);
+        }
+        // Beside the server's public number too: a home-network number never stands above a public one.
+        choose('192.168.1.20', ownIp, ['203.0.113.5', '192.168.1.20']);
+        assert(chosenMainAddress() === null && primaryAddress() === '203.0.113.5' && show(await readers()) === show(at('203.0.113.5')),
+            `a home-network number as the main beside the public number moves no reader (${show(chosenMainAddress())}, ${show(await readers())})`);
+        // With nothing the Internet can reach, a home-network address may be main: it is the only way in.
+        choose('nas.local', TABLE.find((r) => r.name === 'nothing set')!, ['beans.lan', 'nas.local']);
+        assert(chosenMainAddress() === 'nas.local' && primaryAddress() === 'nas.local', `a home-network address is main while the community has nothing the Internet can reach (${show(primaryAddress())})`);
+        // Chosen then, it stops being main the moment an internet address is listed: the name wins, as before a choice.
+        choose('nas.local', named, ['beans.lan', 'nas.local']);
+        assert(chosenMainAddress() === null && primaryAddress() === REG, `a home-network main chosen before the community had a name gives way to the name (${show(primaryAddress())})`);
+        updateNodeConfig({ ownerAddresses: [], mainAddress: null } as any);
+        forgetOwnAddresses();
+    }
 
     console.log('\nThe table (for the PR):');
     console.log(table.join('\n'));

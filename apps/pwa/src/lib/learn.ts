@@ -302,13 +302,16 @@ export async function getLearnDraft(id: string): Promise<KnowledgeDraftWhole | n
  * "Edit first" sends no photos at all, an empty list included: a fix never changes a page's photos, and the node refuses any
  * (`fix_photos`).
  */
-export function approveLearnDraft(id: string, opts: { edits?: LearnInput; lang?: string | null; checkedSources?: boolean; fix?: boolean } = {}): Promise<{ post: LearnPost }> {
+export function approveLearnDraft(id: string, opts: { edits?: LearnInput; lang?: string | null; checkedSources?: boolean; fix?: boolean; photos?: string[] } = {}): Promise<{ post: LearnPost }> {
     // "Edit first" keeps the suggestion's own language (§2.8: the writer's), never the checker's: one sent with none stays
     // with none, which the node keeps when no `lang` is sent.
     const edits: Partial<LearnInput> | null = opts.edits ? learnInputToSend(opts.edits) : null;
     if (edits) { delete edits.lang; if (opts.lang) edits.lang = opts.lang; if (opts.fix) delete edits.photos; }
+    // Approve without "Edit first": the pictures To check kept, when it says (the node publishes all of them when none are sent).
+    const kept = !edits && !opts.fix && opts.photos ? { photos: opts.photos.slice(0, KNOWLEDGE_LIMITS.photos) } : {};
     return request('POST', `/api/knowledge/drafts/${encodeURIComponent(id)}/approve`, {
         ...(edits ?? {}),
+        ...kept,
         ...(opts.checkedSources ? { checkedSources: true } : {}),
     });
 }

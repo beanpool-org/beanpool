@@ -209,7 +209,8 @@ export const PROMPTS: PromptDef[] = [
         body: (a, f) => `Find out about ${arg(a, 'subject', 'what I tell you', 120)} for ${f.community} from public pages, with your own web search: `
             + "this server reaches no other server. Check knowledge_list first so you don't repeat what is there. Write it short, in your own "
             + 'words, the answer first; quote at most one sentence, in quotation marks. Give 1 to 5 sources. Nothing about private people. '
-            + 'File it with knowledge_draft and tell me it is waiting for me in the app.',
+            + 'File it with knowledge_draft and tell me it is waiting for me in the app. A picture only if I give you one I took or own: '
+            + 'upload it with photo_upload_link and add its photoId, never a picture found on the web. Whoever checks it sees each picture first.',
     },
     {
         name: 'check-old-knowledge',

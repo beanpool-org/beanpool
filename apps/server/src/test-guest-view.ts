@@ -1386,7 +1386,7 @@ async function main(): Promise<void> {
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',
             'POST /api/local/admin/announcements',
-            'GET /api/local/admin/app-addresses', 'POST /api/local/admin/app-addresses/check', 'POST /api/local/admin/app-addresses/confirm', 'POST /api/local/admin/app-addresses/remove',
+            'GET /api/local/admin/app-addresses', 'POST /api/local/admin/app-addresses/check', 'POST /api/local/admin/app-addresses/confirm', 'POST /api/local/admin/app-addresses/remove', 'POST /api/local/admin/app-addresses/main',
             'GET /api/local/admin/app-versions',
             'POST /api/local/admin/auth/break-glass/enrol', 'POST /api/local/admin/auth/break-glass/issue',
             'POST /api/local/admin/auth/challenge', 'GET /api/local/admin/auth/challenge/:challengeId',

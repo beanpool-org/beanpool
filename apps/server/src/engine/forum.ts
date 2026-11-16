@@ -951,7 +951,8 @@ const linkKind = (raw: unknown): ForumLinkKind => {
  * FORUM_LIMITS.topicLinks rows a topic, the Decision chip's included; linking one already linked changes nothing.
  */
 export function linkForumTarget(member: string, topicId: string, raw: { kind?: unknown; targetId?: unknown; on?: unknown }, now = Date.now()): ForumTopic {
-    writable(member, now);
+    // Taking one off says nothing to anyone, so a muted member may still do it, as removing their own post (writable's rule).
+    if (raw.on === false) assertPlainTablesWritable(); else writable(member, now);
     const kind = linkKind(raw.kind);
     if (typeof raw.targetId !== 'string' || raw.targetId.length === 0 || raw.targetId.length > 128) throw new ForumRefusal(400, 'bad_request', 'targetId is an id.');
     if (raw.on !== undefined && typeof raw.on !== 'boolean') throw new ForumRefusal(400, 'bad_request', 'on is true or false.');

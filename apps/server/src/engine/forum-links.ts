@@ -20,6 +20,7 @@ import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { visibleGroup } from './group-thread.js';
 import { showingKnowledgeRow } from './knowledge.js';
+import { readOfCopy } from './event-copy.js';
 
 /** One thing a link names, as `reader` may see it: its title, its maker, and what its chip draws; null when they may not. */
 export interface ForumLinkTarget { id: string; title: string; maker: string; photo: string | null; listingType: 'offer' | 'need' | null; startAt: string | null }
@@ -27,7 +28,11 @@ export interface ForumLinkTarget { id: string; title: string; maker: string; pho
 const blocked = (reader: string, maker: string) =>
     !!db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').get(reader, maker);
 
-/** The Market's read of one post by id, as `reader` would make it in their own app, of the kind the link says; or null. */
+/**
+ * The Market's read of one post by id, as `reader` would make it in their own app (state-engine getPosts: the engine's read,
+ * then readOfCopy, so a listing copied from another community reads as the reader's own read of it does, its author's name
+ * and key only to its author), of the kind the link says; or null.
+ */
 function postSeenBy(reader: string, kind: 'listing' | 'event' | 'learn', id: string): MarketplacePost | null {
     if (kind === 'learn' && (!getProfileSwitches().knowledge || !showingKnowledgeRow(id))) return null;
     const post = getPosts(db, { id, viewerPubkey: reader, ...(kind === 'learn' ? { type: 'knowledge', withKnowledge: true } : {}) })
@@ -35,7 +40,7 @@ function postSeenBy(reader: string, kind: 'listing' | 'event' | 'learn', id: str
     if (!post) return null;
     const fits = kind === 'listing' ? post.type === 'offer' || post.type === 'need' : kind === 'event' ? post.type === 'event' : post.type === 'knowledge';
     if (!fits || blocked(reader, post.authorPublicKey)) return null;
-    return post;
+    return readOfCopy(post, reader);
 }
 
 /** A group's card as `reader` may open it, not closed by its Decision; or null (an id nobody has reads the same). */

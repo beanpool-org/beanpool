@@ -286,6 +286,16 @@ async function main(): Promise<void> {
     assert(chip.status === 409 && chip.body?.code === 'topic_links', `2. the Decision chip counts among the three (${show(chip)})`);
     const offByOther = await linkTo(gil, W, 'learn', page, false);
     assert(offByOther.status === 403, `2. nobody but its writer, an owner or an admin takes a link off (${show(offByOther)})`);
+    // A muted writer links nothing new, and may still take their own off (it says nothing to anyone, as removing a post).
+    db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(new Date(Date.now() + DAY).toISOString(), wes.pk);
+    const mutedOn = await linkTo(wes, W, 'group', PRIV);
+    const mutedOff = await linkTo(wes, W, 'learn', page, false);
+    const mutedBack = await linkTo(wes, W, 'learn', page);
+    db.prepare('UPDATE members SET moderation_muted_until = NULL WHERE public_key = ?').run(wes.pk);
+    assert(mutedOn.status === 403 && mutedOn.body?.code === 'moderation_muted' && mutedOff.status === 200 && mutedOff.body?.topic?.links?.length === 2 && mutedBack.status === 403,
+        `2. a muted writer adds no link but takes their own off (${show(mutedOn)} / ${show(mutedOff)})`);
+    const relink = await linkTo(wes, W, 'learn', page);
+    require_(relink.status === 200 && relink.body?.topic?.links?.length === 3, `Wes links the page again once the mute ends (${show(relink)})`);
     const offByOwner = await linkTo(owner, W, 'learn', page, false);
     assert(offByOwner.status === 200 && offByOwner.body?.topic?.links?.length === 2, `2. an owner takes one off (${show(offByOwner)})`);
     const roomAgain = await call(wes, 'POST', `/api/forum/topics/${W}/decision`, { decisionId: 'd-f9' });

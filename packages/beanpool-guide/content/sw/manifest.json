@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "Kile majirani wanashiriki, video za Jifunze, na kuongeza chaneli zako.",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "Kile majirani wanashiriki, video za Jinsi inavyofanya kazi, na kuongeza chaneli zako.",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "Maamuzi na kupiga kura, maharagwe ya pamoja, vikundi, miradi na wasimamizi. Kura za maoni na matukio pia yapo; unayapata katika Soko.",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "Maamuzi na kupiga kura, maharagwe ya pamoja, vikundi, miradi na wasimamizi, na Maarifa ya eneo kwenye Jifunze. Kura za maoni na matukio pia yapo; unayapata katika Soko.",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "Sehemu ya Jifunze",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "Video: Jinsi inavyofanya",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "Video fupi kuhusu BeanPool, na kurasa za mwongozo zinazoambatana nazo.",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "Kumwomba mtu akulipe maharagwe kwa jambo fulani. Ombi la malipo halijilipi lenyewe; mtu huyo huchagua kama atalipa. Kwa sasa, ombi la malipo linaweza kuambatana na mwaliko.",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "Maarifa ya eneo",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "Jifunze, rafu ya jumuiya yako ya mambo yanayostahili kujulikana: kupata ukurasa, kupendekeza mmoja, kuuweka sahihi, na jinsi mmiliki au msimamizi anavyokagua kila mmoja.",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { tierForCredit } from '@beanpool/core';
+import { KNOWLEDGE_TYPE, tierForCredit } from '@beanpool/core';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { t } from '../../lib/fresh-proof';
 import { FLAG_WORDS as FW, flagHeading } from '../../lib/flag-words';
@@ -723,7 +723,8 @@ export function MembersModule({
                         </div>
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Active Listings</span>
-                            <span className="text-2xl font-black text-sky-400 font-mono">{posts.length}{nodeData?.postsNext ? '+' : ''}</span>
+                            {/* Pages of Local knowledge are in the posts list (Learn K9) but are never listings. */}
+                            <span className="text-2xl font-black text-sky-400 font-mono">{posts.filter((p) => (p as { type?: unknown } | null)?.type !== KNOWLEDGE_TYPE).length}{nodeData?.postsNext ? '+' : ''}</span>
                         </div>
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Community Standing</span>

@@ -145,4 +145,29 @@ describe('Prune Stale Posts sends batches of at most 200, one after another', ()
         expect(bulkCalls(fetchMock)).toHaveLength(0);
         expect(confirmSpy).not.toHaveBeenCalled();
     });
+
+    // Learn K9: the posts list holds the pages of Local knowledge (routes/admin.ts reads it withKnowledge), so a page can be
+    // taken down from it. A page never goes stale (it is sorted by topic and kept until someone takes it down), so the
+    // prune never sends one, however old.
+    it('pages of Local knowledge are kept, however old: only the stale posts are sent', async () => {
+        const fetchMock = vi.fn(async (_u: string, init: any) => okBatch(init));
+        vi.stubGlobal('fetch', fetchMock);
+        const pages = [
+            { id: 'page_1', type: 'knowledge', createdAt: '2020-01-01T00:00:00Z', title: 'How recycling works at the tip' },
+            { id: 'page_2', type: 'knowledge', createdAt: '2021-06-01T00:00:00Z', title: 'Who to call when the road floods' },
+        ];
+        renderPrune([...stale(2), ...pages]);
+        await prune();
+        await waitFor(() => expect(screen.getByText('Deleted 2 post(s).')).toBeInTheDocument());
+        expect(bulkCalls(fetchMock).flatMap(([, init]: any) => JSON.parse(init.body).postIds)).toEqual(['old_0', 'old_1']);
+    });
+
+    it('only old pages of Local knowledge: no request, none found', async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        renderPrune([{ id: 'page_1', type: 'knowledge', createdAt: '2020-01-01T00:00:00Z', title: 'How recycling works at the tip' }]);
+        await prune();
+        expect(bulkCalls(fetchMock)).toHaveLength(0);
+        expect(screen.getByText('No posts older than 30 days found.')).toBeInTheDocument();
+    });
 });

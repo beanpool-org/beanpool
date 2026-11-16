@@ -1031,7 +1031,9 @@ router.post('/api/local/admin/data', async (ctx) => {
             // shows its status and dates, not who took it or its deal (withoutTradeParty): a trade shows only its two people,
             // and an admin's look at one is the logged one, /admin/disputes (queue item 29, Marty 4 Oct). The manager and
             // the settings page read none of the three.
-            posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled').map(withoutTradeParty),
+            // Pages of Local knowledge too (`withKnowledge`): Settings' posts list is where an owner or admin takes one down
+            // (its Type Filter's "Local knowledge", DESIGN-local-knowledge-fable.md §8 K9). No app reads this answer.
+            posts: getPosts({ includeHidden: true, withKnowledge: true }).filter(p => p.status !== 'cancelled').map(withoutTradeParty),
             // Each member's posts and messages.
             memberStats: getMemberStats(),
         };
@@ -1091,7 +1093,8 @@ router.post('/api/local/admin/data/posts', async (ctx) => {
     await heavyRead(ctx, heavyReadKey('admin-data-posts', { limit }), () => {
         // One row past the page, as the members pages read: a full last page hands out no cursor (SyncPage.lookAhead).
         const page: SyncPage = { after: cursor, next: null, lookAhead: true };
-        const posts = getPosts({ includeHidden: true, syncPage: page, limit }).filter(p => p.status !== 'cancelled').map(withoutTradeParty);
+        // With Local knowledge, as the whole answer above: Settings' posts list holds every page.
+        const posts = getPosts({ includeHidden: true, withKnowledge: true, syncPage: page, limit }).filter(p => p.status !== 'cancelled').map(withoutTradeParty);
         ctx.body = { posts, nextCursor: page.next, limit };
     });
 });

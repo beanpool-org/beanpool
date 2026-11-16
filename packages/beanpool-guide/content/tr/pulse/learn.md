@@ -1,32 +1,31 @@
 ---
 slug: learn
-title: Öğren bölümü
+title: Nasıl çalışır videoları
 summary: BeanPool hakkında kısa videolar ve bunlara eşlik eden kılavuz sayfaları.
-related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: 166271998bd0833a
+related: the-pulse, the-bean, how-it-works, your-channels, local-knowledge
+source-hash: 82b7f80c056f15e8
 ---
 
-## İçinde neler var
+## İçinde ne var
 
-Telefonda **Nabız**'ı açın ve **Öğren**'e dokunun. Web uygulamasında Nabız'ı açın ve üst kısımda **Nasıl çalışır** seçeneğine dokunun. Şunları içerir:
+**Nabız**'ı açın ve üstte **Nasıl çalışır**'a dokunun, telefonda ve web uygulamasında. BeanPool'un nasıl çalıştığını anlatan BeanPool videoları burada.
 
-- BeanPool'dan nasıl çalıştığına dair videolar;
-- her sabah değişen kısa bir düşünce olan **Günlük Düşünce**. Günün düşüncesini açmak için üzerine dokunun.
+Bu, **Öğren** değildir: topluluğunuzun, yaşadığınız yerde bilmeye değer şeyler hakkındaki kendi sayfalarıdır. "Yerel bilgi"ye bakın.
 
-Üyeler bir kanal eklerken konu olarak **Nasıl çalışır**'ı seçerek Öğren bölümüne kendi nasıl yapılır kanallarını da ekleyebilirler. Bu videolar üyelerin kendilerine aittir, BeanPool'un değildir: tavsiyelerine uymadan önce videoyu kimin paylaştığını kontrol edin.
+Üyeler de kanal eklerken **Nasıl çalışır** konusunu seçerek kendi anlatım kanallarını buraya ekleyebilir. Bu videolar üyelerin kendisine aittir, BeanPool'a değil: bir videonun tavsiyesine uymadan önce onu kimin paylaştığına bakın.
 
-## Videolar ekstradır
+## Videolar ek bir şeydir
 
-İhtiyacınız olan her şey bu kılavuzda yazılmıştır. Videolar izlemeyi tercih ederseniz oradadır.
+İhtiyacınız olan her şey bu kılavuzda yazılı. İzlemeyi tercih ederseniz videolar da var.
 
-Telefonda Öğren şeridinde bir videonun resmine dokunun, kartın içinde oynatılır. Siz dokunana kadar YouTube'dan hiçbir şey yüklenmez. Web uygulamasında bir videoya dokunmak onu yeni bir sekmede YouTube'da açar. "Nabız Akışı" bölümüne bakın.
+Telefonda, **Nasıl çalışır** altında bir videonun resmine dokunun, orada kartın içinde oynar. Siz dokunana kadar YouTube'dan hiçbir şey yüklenmez. Web uygulamasında bir videoya dokunmak onu yeni bir sekmede YouTube'da açar. "Nabız Akışı"na bakın.
 
-BeanPool bir kılavuz sayfası için bir video hazırladığında ve bu video topluluğunuzun Öğren şeridinde yer aldığında, sayfa en üstte **İzle:** ve videonun adını gösterir. Videoyu YouTube'da açmak için üzerine dokunun. O sayfa için video yoksa veya çevrimdışıysanız bağlantı görünmez.
+BeanPool bir kılavuz sayfası için video yaptıysa ve o video topluluğunuzun Nabız'ında **Nasıl çalışır** altındaysa, sayfa en üstte **İzle:** ve videonun adını gösterir. Videoyu YouTube'da açmak için ona dokunun. O sayfa için video yoksa ya da çevrimdışıysanız bağlantı sadece görünmez.
 
-Bir kılavuz sayfasında yalnızca BeanPool'un kendi videoları görünür. Bir üyenin Öğren'e eklediği bir video, adı ne olursa olsun orada asla görünmez.
+Kılavuz sayfasında yalnızca BeanPool'un kendi videoları görünür. Bir üyenin **Nasıl çalışır** altına eklediği video, adı ne olursa olsun, orada asla görünmez.
 
-## Bir video neden görünmeyebilir?
+## Bir video neden görünmeyebilir
 
-- Telefonunuz çevrimdışıdır veya topluluğunuzun sunucusuna ulaşamıyordur.
+- Telefonunuz çevrimdışı ya da topluluğunuzun sunucusuna ulaşamıyor.
 - Yeni bir BeanPool videosu, kılavuz sayfalarında ancak topluluğunuzun sunucusu güncellendikten sonra görünür.
-- O sayfa için henüz bir video yoktur.
+- O sayfa için henüz video yok.

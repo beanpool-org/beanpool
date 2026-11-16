@@ -33,14 +33,14 @@
     {
       "id": "pulse",
       "title": "Pulse",
-      "summary": "What your neighbours share, the Learn videos, and adding your own channels.",
+      "summary": "What your neighbours share, the How it works videos, and adding your own channels.",
       "pages": ["the-pulse", "learn", "your-channels"]
     },
     {
       "id": "commons",
       "title": "Commons",
-      "summary": "Decisions and voting, the shared beans, your groups, enterprises and keepers. Polls and events are here too; you find them in the Market.",
-      "pages": ["decisions", "proposing-a-decision", "polls", "events", "enterprises", "keepers", "commons-fund"]
+      "summary": "Decisions and voting, the shared beans, your groups, enterprises and keepers, and Local knowledge in Learn. Polls and events are here too; you find them in the Market.",
+      "pages": ["decisions", "proposing-a-decision", "polls", "events", "local-knowledge", "enterprises", "keepers", "commons-fund"]
     },
     {
       "id": "ledger",

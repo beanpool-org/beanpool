@@ -25,7 +25,7 @@
  * from its store; a store that can't be read refuses, and a chat answer that can't be read refuses too (a never-held
  * browser sends readable words only when the chat answer says unlocked).
  */
-import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, toBase64, VOICE_MIME, type RemovedLineKind, type VoiceInput } from '@beanpool/core';
+import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, sealGroupLineEdit, toBase64, VOICE_MIME, type RemovedLineKind, type VoiceInput } from '@beanpool/core';
 import type { VoiceOpenResult } from './voice';
 import { detectMentions, groupMessageKey, sealLine, openLine, sealVoice, openVoice, type GroupEpochProgress } from './group-chat-crypto';
 import {
@@ -172,7 +172,11 @@ export async function sendSealedGroupLine(net: GroupKeysTransport, identity: Me,
 /** Refused before anything is sent: this browser doesn't hold the key the line was sealed under. */
 export const GROUP_EDIT_NO_KEY_TEXT = "This message's key isn't in this browser, so it can't be edited here.";
 
-/** Edit one of my lines: re-sealed under ITS epoch (part 'edit', after its own id, still answering what it answered). */
+/**
+ * Edit one of my lines: re-sealed under ITS epoch (part 'edit', after its own id, still answering what it answered). Sealed
+ * by core's sealGroupLineEdit, the one place an edit's binding is made, so every reader (members, and a guest's device in
+ * core group-guest-chat.ts) opens it with the same.
+ */
 export async function editSealedGroupLine(
     net: GroupKeysTransport, identity: Me, store: GroupLockStore,
     input: { groupId: string; messageId: string; metadata: unknown; text: string },
@@ -185,9 +189,8 @@ export async function editSealedGroupLine(
     if (!key) { await ring.sync([epoch]).catch(() => null); key = await ring.keyFor(epoch); }
     if (!key) throw new GroupChatKeyError(GROUP_EDIT_NO_KEY_TEXT, 'no_key');
     const replyToId = typeof meta.replyToId === 'string' ? meta.replyToId : null;
-    const sealed = sealLine(input.text, {
-        myEdPrivHex: identity.privateKey, groupKey: key, groupId: input.groupId, epoch, messageId: input.messageId,
-        part: 'edit', after: input.messageId, replyToId,
+    const sealed = sealGroupLineEdit(input.text, {
+        myEdPrivHex: identity.privateKey, groupKey: key, groupId: input.groupId, epoch, messageId: input.messageId, replyToId,
     });
     const res = await net.post('/api/messages/edit',
         { messageId: input.messageId, authorPubkey: identity.publicKey, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch } });

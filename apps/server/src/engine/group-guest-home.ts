@@ -149,17 +149,55 @@ function setLink(member: string, host: string, groupId: string, state: LinkState
 
 // ── What a host brings ──────────────────────────────────────────────────────────────────────
 
-interface Notice { kind: GroupNoticeKind; group: string; host: string; guests: string[]; data: Record<string, unknown> }
+/** `seq`: the host's order counter (engine/group-guests.ts issueGuestSeq), on what says where a guest stands or takes away. */
+interface Notice { kind: GroupNoticeKind; group: string; host: string; guests: string[]; seq: number | null; data: Record<string, unknown> }
 
 /** A notice as the host sends one (engine/group-guests.ts queueToHome), or null. */
 export function readGroupNotice(raw: unknown): Notice | null {
     if (!isObject(raw) || raw.v !== 1) return null;
-    const { kind, group, host, guests, data } = raw;
+    const { kind, group, host, guests, seq, data } = raw;
     if (typeof kind !== 'string' || !(GROUP_NOTICE_KINDS as readonly string[]).includes(kind)) return null;
     if (typeof group !== 'string' || !GROUP_ID.test(group) || typeof host !== 'string' || host.length < 1 || host.length > 260) return null;
     if (!Array.isArray(guests) || guests.length < 1 || guests.length > GROUP_GUESTS_MAX || !guests.every((g) => typeof g === 'string' && KEY_HEX.test(g))) return null;
+    if (seq !== undefined && !(typeof seq === 'number' && Number.isSafeInteger(seq) && seq > 0)) return null;
     if (new Set(guests).size !== guests.length || !isObject(data)) return null;
-    return { kind: kind as GroupNoticeKind, group, host, guests: guests as string[], data };
+    return { kind: kind as GroupNoticeKind, group, host, guests: guests as string[], seq: typeof seq === 'number' ? seq : null, data };
+}
+
+// ── The order rule (G2): the newest word of the host's on where a member stands wins ─────────────────
+
+/**
+ * The kinds that say where a member stands with a group (engine/group-guests.ts queueToHome stamps each with the group's
+ * counter): an invitation, a removal (its withdrawal, when only invited), the roster (they are in).
+ */
+const STANDING_KINDS: ReadonlySet<GroupNoticeKind> = new Set(['invite', 'removed', 'roster']);
+
+/**
+ * THE ORDER RULE at the home (G2; the host's side is engine/group-guests.ts, "The order rule"): of the host's notices that
+ * say where `member` stands with a group, only one with a counter newer than the newest this server took for them
+ * (group_guest_order) changes anything; an older or repeated one, from either of the host's servers (the main one, the one
+ * that took over, the first after a take-back), arriving in any order, after any outage, is dropped, a removal's drop of
+ * the held lines included. So nothing undoes a newer invitation or removal, and a home keeps the newest roster. A notice
+ * with no counter (a host from before the rule) is taken as before.
+ */
+function olderThanTaken(member: string, n: Notice): boolean {
+    if (n.seq === null || !STANDING_KINDS.has(n.kind)) return false;
+    const taken = db.prepare('SELECT seq FROM group_guest_order WHERE member = ? AND host = ? AND group_id = ?').pluck().get(member, n.host, n.group) as number | undefined;
+    return taken !== undefined && n.seq <= taken;
+}
+
+/** The newest counter taken for `member` moves on to `n`'s (a copied row: never on a standby). */
+function noteTaken(member: string, n: Notice): void {
+    if (n.seq === null || !STANDING_KINDS.has(n.kind)) return;
+    assertPlainTablesWritable();
+    db.prepare(`INSERT INTO group_guest_order (member, host, group_id, seq) VALUES (?, ?, ?, ?)
+                ON CONFLICT (member, host, group_id) DO UPDATE SET seq = MAX(seq, excluded.seq)`).run(member, n.host, n.group, n.seq);
+}
+
+/** The lines a takedown names: `ids` (an account's many, engine/group-guests.ts queueTakedowns) or its one `id`. */
+function takedownIds(data: Record<string, unknown>): string[] {
+    if (Array.isArray(data.ids)) return data.ids.filter((id): id is string => typeof id === 'string');
+    return typeof data.id === 'string' ? [data.id] : [];
 }
 
 /** What a notice carries for one member: an epoch's or a roster's wraps cut to that member's own. */
@@ -226,11 +264,12 @@ export function receiveGroupNotice(origin: string, raw: unknown, now = Date.now(
  * notices for that group are touched.
  */
 function applyToHeldCopies(member: string, n: Notice, taking: boolean): void {
-    if (n.kind === 'removed') { dropHeldLines(member, n.host, n.group); return; }
+    // A removal older than the newest word taken for them (the order rule) drops nothing: they were invited again since.
+    if (n.kind === 'removed') { if (!olderThanTaken(member, n)) dropHeldLines(member, n.host, n.group); return; }
+    if (n.kind !== 'edit') return;
+    if (n.data.action === 'removed') { dropHeldLinesOf(member, n.host, n.group, new Set(takedownIds(n.data))); return; }
     const id = n.data.id;
-    if (n.kind !== 'edit' || typeof id !== 'string') return;
-    if (n.data.action === 'removed') dropHeldLines(member, n.host, n.group, id);
-    else if (n.data.action === 'edited' && taking) replaceHeldWords(member, n.host, n.group, id, n.data);
+    if (n.data.action === 'edited' && taking && typeof id === 'string') replaceHeldWords(member, n.host, n.group, id, n.data);
 }
 
 /** The edits of line `id` held for `member` (`edited` ones only): what a newer edit, once held, replaces. */
@@ -244,6 +283,14 @@ function dropHeldLines(member: string, host: string, groupId: string, id?: strin
     const ids = db.prepare(`SELECT id FROM group_guest_mail WHERE member = ? AND host = ? AND group_id = ? AND kind IN ('line', 'edit')
                             ${id === undefined ? '' : "AND json_extract(body, '$.id') = ?"}`).pluck().all(member, host, groupId, ...(id === undefined ? [] : [id])) as string[];
     return dropNotices(member, ids);
+}
+
+/** `member`'s held copies of `host`'s lines `ids` in that group (each line and its edits), in one read: dropped. How many. */
+function dropHeldLinesOf(member: string, host: string, groupId: string, ids: ReadonlySet<string>): number {
+    if (!ids.size) return 0;
+    const held = db.prepare(`SELECT id, CASE WHEN json_valid(body) THEN json_extract(body, '$.id') END AS line FROM group_guest_mail
+                             WHERE member = ? AND host = ? AND group_id = ? AND kind IN ('line', 'edit')`).all(member, host, groupId) as Array<{ id: string; line: unknown }>;
+    return dropNotices(member, held.filter((h) => typeof h.line === 'string' && ids.has(h.line)).map((h) => h.id));
 }
 
 /**
@@ -264,14 +311,21 @@ function replaceHeldWords(member: string, host: string, groupId: string, id: str
 /** One named guest: the notice held for them, or dropped (the file's header says when). True when held. */
 function takeNoticeFor(member: string, n: Notice, now: number): boolean {
     if (!isNodeMember(member) || !readsAsMember(member)) return false;
+    // The order rule: an older word on where they stand changes nothing; a newer one is the newest taken, held or not.
+    if (olderThanTaken(member, n)) return false;
+    noteTaken(member, n);
     const standing = standingOf(member, n.host, n.group);
     const answered = standing === 'joining' || standing === 'in';
     const state = linkOf(member, n.host, n.group)?.state ?? null;
     const body = JSON.stringify(dataFor(member, n));
     switch (n.kind) {
         case 'invite': {
-            // Once per host and group: waiting, joining or in already, a repeat holds nothing and moves nothing.
-            if (state === 'invited' || answered || body.length > GROUP_INVITE_MAX_CHARS) return false;
+            // Once per host and group: waiting or joining already, a repeat holds nothing and moves nothing. In already: a
+            // repeat too, unless it is newer than the newest word taken for them (the order rule): the host took them out
+            // and asked again, and the removal never came here (it waited on a server that was taken over, or it is
+            // older and comes later). Then they are out, with nothing of the group held for them, and invited again.
+            const reinvited = standing === 'in' && n.seq !== null;
+            if (state === 'invited' || (answered && !reinvited) || body.length > GROUP_INVITE_MAX_CHARS) return false;
             const inviter = isObject(n.data.invitedBy) ? n.data.invitedBy.key : null;
             if (typeof inviter === 'string' && KEY_HEX.test(inviter) && hasBlocked(member, inviter)) return false;
             // Waiting: an invitation not yet answered (a yes queued is `joining`, not waiting, as it always was).
@@ -279,6 +333,7 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
                 member, ...(host ? [host] : []));
             if (waiting() >= GROUP_INVITES_WAITING || waiting(n.host) >= GROUP_INVITES_WAITING_PER_HOST) return false;
             if (!mayHold(member, n.host, false, body.length)) return false;
+            if (reinvited) dropHeldLines(member, n.host, n.group);
             setLink(member, n.host, n.group, 'invited', now, { body: null });
             break;
         }
@@ -428,6 +483,24 @@ function heldLinesStale(): number {
     let gone = 0;
     for (const [member, ids] of byMember) gone += dropNotices(member, ids);
     return gone;
+}
+
+/**
+ * A restore or a roll-back replaced this server's database before this start (services/restore-points.ts
+ * deliverRestoreNotices, at the boot after it; G2, #3233 round 3's "not covered"): the held copies of hosts' lines it brought
+ * back are from the backup's day, and the takedowns hosts sent since went to the database that is gone. So every held line
+ * and edit goes, as at a role change (heldLinesStale): a device misses lines it never fetched, never a line taken down.
+ * Invitations, rosters, epochs and removals stay. Never throws. How many went.
+ */
+export function heldLinesAfterSwap(): number {
+    try {
+        const gone = heldLinesStale();
+        if (gone) logger.warn('SYS', `Group guests: this server's database was restored or rolled back; ${gone} line(s) held for members' devices went, as hosts' takedowns since then went to the database it replaced.`);
+        return gone;
+    } catch (e) {
+        logger.warn('SYS', `Group guests: the lines held for members' devices could not be dropped after a restore (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
+        return 0;
+    }
 }
 
 onNodeRoleChange(() => {

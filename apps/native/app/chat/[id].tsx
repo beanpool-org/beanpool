@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { askPhotoSource } from '../../utils/post-photo';
-import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Linking, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
+import { LightBarModal } from '../../components/LightBarModal';
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
@@ -1978,14 +1979,14 @@ function ChatScreen({ id }: { id: string }) {
                 The Modal is its own full-screen window, outside this screen's SafeAreaView, so the close
                 button takes the status-bar inset itself: a fixed 50 is less than the 59pt inset on Dynamic Island iPhones. */}
             {viewerUri && (
-                <Modal visible transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
+                <LightBarModal visible transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
                     <Pressable accessibilityRole="button" accessibilityLabel={t('Dismiss full-size photo')} style={styles.imageViewerOverlay} onPress={() => setViewerUri(null)}>
                         <Image source={{ uri: viewerUri }} style={styles.imageViewerImage} resizeMode="contain" accessibilityLabel={t('Full-size photo')} />
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Close photo')} style={[styles.imageViewerClose, { top: Math.max(50, insets.top + 8) }]} onPress={() => setViewerUri(null)}>
                             <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                         </Pressable>
                     </Pressable>
-                </Modal>
+                </LightBarModal>
             )}
         </SafeAreaView>
     );

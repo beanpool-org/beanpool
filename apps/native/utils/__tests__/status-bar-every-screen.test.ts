@@ -40,19 +40,31 @@ import { SEE_THROUGH_SCREENS } from '../screen-showing';
  * expo-status-bar's StatusBar is that component with its style as a barStyle (styleToBarStyle): 'light' -> light icons,
  * 'dark' -> dark icons; 'auto' follows the PHONE's scheme, not the drawn theme, so a row gets no answer from it.
  */
-const bars = vi.hoisted(() => ({ stack: [] as Array<{ barStyle: string }> }));
+const bars = vi.hoisted(() => {
+    const b = {
+        stack: [] as Array<{ barStyle: string }>,
+        /** The bar the phone shows: the stack's top as last sent to it. StatusBar._updatePropsStack sends it on a setImmediate,
+         *  a microtask in bridgeless React Native, after the change that asked for it. */
+        native: 'none',
+        /** The bar each Modal's dialog copied from the phone as it opened (ReactModalHostView.updateSystemAppearance). */
+        copied: [] as string[],
+        changed() { queueMicrotask(() => { b.native = b.stack.at(-1)?.barStyle ?? 'none'; }); },
+    };
+    return b;
+});
 vi.mock('expo-status-bar', async () => {
     const React = await import('react');
     const barStyleOf = (style: string | undefined) => (style === 'light' ? 'light-content' : style === 'dark' ? 'dark-content' : `no answer (${style ?? 'auto'})`);
     class StatusBar extends React.Component<{ style?: string }> {
         entry = { barStyle: '' };
-        componentDidMount() { this.entry = { barStyle: barStyleOf(this.props.style) }; bars.stack.push(this.entry); }
+        componentDidMount() { this.entry = { barStyle: barStyleOf(this.props.style) }; bars.stack.push(this.entry); bars.changed(); }
         componentDidUpdate() {
             const at = bars.stack.indexOf(this.entry);
             this.entry = { barStyle: barStyleOf(this.props.style) };
             if (at >= 0) bars.stack[at] = this.entry;
+            bars.changed();
         }
-        componentWillUnmount() { const at = bars.stack.indexOf(this.entry); if (at >= 0) bars.stack.splice(at, 1); }
+        componentWillUnmount() { const at = bars.stack.indexOf(this.entry); if (at >= 0) bars.stack.splice(at, 1); bars.changed(); }
         render() { return null; }
     }
     return { StatusBar };
@@ -69,8 +81,33 @@ vi.mock('@react-navigation/native', async () => {
     };
 });
 
+/**
+ * React Native's own StatusBar stack calls (pushStackEntry / popStackEntry, the same stack as above), and its Modal on Android
+ * with edge-to-edge: a dialog window of its own, drawn under the status bar, that copies the phone's light/dark bar once,
+ * as it opens (ReactModalHostView.showOrUpdate -> updateSystemAppearance, React Native 0.83), and never reads it again.
+ */
+vi.mock('react-native', async () => {
+    const React = await import('react');
+    const StatusBar = {
+        pushStackEntry(props: { barStyle: string }) { const entry = { barStyle: props.barStyle }; bars.stack.push(entry); bars.changed(); return entry; },
+        popStackEntry(entry: { barStyle: string }) { const at = bars.stack.indexOf(entry); if (at >= 0) bars.stack.splice(at, 1); bars.changed(); },
+    };
+    function Modal({ visible = true, children }: { visible?: boolean; children?: React.ReactNode }) {
+        const open = React.useRef(false);
+        // The dialog is shown as the commit that makes it visible is mounted; its window copies the bar the phone has then.
+        React.useLayoutEffect(() => {
+            if (visible && !open.current) bars.copied.push(bars.native);
+            open.current = visible;
+        });
+        return visible ? React.createElement('section', null, children) : null;
+    }
+    return { Modal, StatusBar };
+});
+
 import { StatusBar } from 'expo-status-bar';
+import { Modal as NativeModal } from 'react-native';
 import { ScreenStatusBar } from '../../components/ScreenStatusBar';
+import { LightBarModal } from '../../components/LightBarModal';
 
 const NATIVE = path.resolve(__dirname, '../..');
 const APP = path.join(NATIVE, 'app');
@@ -212,6 +249,8 @@ afterEach(() => {
     host = null;
     root = null;
     bars.stack = [];
+    bars.native = 'none';
+    bars.copied = [];
 });
 const top = () => bars.stack.at(-1)?.barStyle ?? 'none';
 
@@ -289,5 +328,116 @@ describe.each(['light', 'dark'] as const)('every screen\'s status bar in %s', (t
         expect({ screen: id, theme, bar: on }).toEqual({ screen: id, theme, bar: want });
         // Closed again: the tabs' own light bar is back on top, over the root layout's.
         expect({ screen: id, theme, backOnTheTabs: back }).toEqual({ screen: id, theme, backOnTheTabs: 'light-content' });
+    });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// A Modal whose content is dark in every theme: a camera scanner, a full-size photo on near-black. On Android its dialog
+// copies the phone's bar as it opens, so the screen's bar (by theme: dark icons on Light) would show dark icons on black,
+// and a StatusBar mounted inside it comes too late (its flush follows the copy). components/LightBarModal.tsx puts a light
+// entry on first and opens the dialog after it has reached the phone. (Review of #3274: rekey-code, claim-community, and
+// ScanCodeModal's "known consequence"; the class, found from the files below.)
+// ---------------------------------------------------------------------------------------------------------------------------
+const SCANNER = 'a camera scanner, full screen: black around and under the camera in every theme';
+const PHOTO = "a full-size photo on the image viewer's near-black, in every theme";
+const DARK_MODALS: Record<string, string> = {
+    'app/rekey-code.tsx': `${SCANNER} (Scan the admin's code)`,
+    'app/claim-community.tsx': `${SCANNER} (Scan the claim code)`,
+    'app/names-list.tsx': `${SCANNER} (check another admin's key in person)`,
+    'components/ScanCodeModal.tsx': `${SCANNER} (Find a community, address card, pair-in, Welcome, a group's guests)`,
+    'components/chat/ChatPhoto.tsx': `${PHOTO} (a DM's or the guest chat's photo)`,
+    'app/chat/[id].tsx': `${PHOTO} (a group chat's photo)`,
+    'components/MemberAvatar.tsx': `${PHOTO} (a member's own photo, tapped)`,
+};
+
+/** Every RN-style Modal block in the app's files: its tag (Modal, or LightBarModal), its opening tag and what it holds. */
+type ModalBlock = { file: string; tag: 'Modal' | 'LightBarModal'; line: number; opening: string; body: string; src: string };
+function modalBlocks(): ModalBlock[] {
+    const files = [...walk(APP), ...walk(path.join(NATIVE, 'components'))].filter((f) => f.endsWith('.tsx'));
+    return files.flatMap((full) => {
+        const src = read(full);
+        const file = path.relative(NATIVE, full).split(path.sep).join('/');
+        return [...src.matchAll(/<(Modal|LightBarModal)\b/g)].flatMap((m): ModalBlock[] => {
+            const tag = m[1] as ModalBlock['tag'];
+            const close = src.indexOf(`</${tag}>`, m.index!);
+            if (close < 0) return []; // self-closing: nothing drawn in it
+            const body = src.slice(m.index!, close);
+            const opening = body.slice(0, body.search(/>\s*\n/) + 1);
+            return [{ file, tag, line: src.slice(0, m.index!).split('\n').length, opening, body, src }];
+        });
+    });
+}
+/** A ground dark in every theme: black, a near-black (85% or more), or the image viewer's token. A dim behind a sheet is less. */
+const DARK_GROUND = /backgroundColor:\s*(?:'(?:#000|#000000|black)'|'rgba\(0,\s*0,\s*0,\s*0?\.(?:8[5-9]|9)\d*\)'|colors\.overlay\.imageViewerBg)/;
+function holdsDark(block: ModalBlock): boolean {
+    if (/<CameraView\b/.test(block.body) || DARK_GROUND.test(block.body)) return true;
+    return [...block.body.matchAll(/\bstyles\.(\w+)/g)].some((m) => {
+        const def = new RegExp(`\\b${m[1]}:\\s*\\{([^{}]*)\\}`).exec(block.src);
+        return !!def && DARK_GROUND.test(def[1]);
+    });
+}
+const BLOCKS = modalBlocks();
+const DARK_BLOCKS = BLOCKS.filter(holdsDark);
+
+/** Microtasks (the stack's flush) and a timer tick (LightBarModal's open) run out, as the phone's next frame would. */
+const settle = () => act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+});
+
+/**
+ * A dark Modal opened over a screen that reads the root layout's bar (by theme), then closed: the bar its dialog copied as it
+ * opened, and the phone's bar once it has closed. A Modal drawn with `visible` alone opens as its opener mounts it (ScanCodeModal,
+ * the photo viewers); one with `visible={…}` opens and closes on that.
+ */
+async function openAndClose(block: Pick<ModalBlock, 'tag' | 'opening'>, theme: Theme, inside?: ReactElement) {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const Drawn: any = block.tag === 'LightBarModal' ? LightBarModal : NativeModal;
+    const byMount = /\bvisible(?=[\s>])/.test(block.opening) && !/\bvisible=/.test(block.opening);
+    const modal = (open: boolean) => (byMount
+        ? (open ? h(Drawn, { key: 'modal', visible: true }, h('p', null, 'camera'), inside) : null)
+        : h(Drawn, { key: 'modal', visible: open }, h('p', null, 'camera'), inside));
+    const tree = (open: boolean) => h('div', {}, drawBars(ROOT_BARS, theme, { key: 'root', name: 'root' }, 'root'), modal(open));
+    await act(async () => root!.render(tree(false)));
+    await settle();
+    const before = bars.native;
+    await act(async () => root!.render(tree(true)));
+    await settle();
+    const atOpen = bars.copied.length ? bars.copied.at(-1)! : 'never opened';
+    await act(async () => root!.render(tree(false)));
+    await settle();
+    return { before, atOpen, afterClose: bars.native, entries: bars.stack.length };
+}
+
+describe('a Modal dark in every theme shows light icons, and gives the screen\'s bar back', () => {
+    it('finds the app\'s dark Modals from the files (a guard on the search): exactly the listed ones, each once', () => {
+        expect(BLOCKS.length).toBeGreaterThan(60);
+        expect(DARK_BLOCKS.map((b) => b.file).sort()).toEqual(Object.keys(DARK_MODALS).sort());
+    });
+
+    it('each one is drawn with LightBarModal; no other Modal is', () => {
+        expect(DARK_BLOCKS.filter((b) => b.tag !== 'LightBarModal').map((b) => `${b.file}:${b.line} <${b.tag}>`)).toEqual([]);
+        expect(BLOCKS.filter((b) => b.tag === 'LightBarModal' && !holdsDark(b)).map((b) => `${b.file}:${b.line}`)).toEqual([]);
+    });
+
+    it('the model can fail: a StatusBar mounted inside a plain Modal is too late, the dialog has copied the screen\'s bar', async () => {
+        const { atOpen } = await openAndClose({ tag: 'Modal', opening: '<Modal visible={open}>' }, 'light', h(StatusBar, { key: 'own', style: 'light' }));
+        expect(atOpen).toBe('dark-content');
+    });
+
+    describe.each(['light', 'dark'] as const)('in %s', (theme) => {
+        it.each(Object.keys(DARK_MODALS).map((file) => [file] as const))('%s', async (file) => {
+            const block = DARK_BLOCKS.find((b) => b.file === file);
+            expect({ file, found: !!block }).toEqual({ file, found: true });
+            const themed = theme === 'dark' ? 'light-content' : 'dark-content';
+            const { before, atOpen, afterClose, entries } = await openAndClose(block!, theme);
+            expect({ file, theme, before }).toEqual({ file, theme, before: themed });
+            // Open: light icons over the dark content, in both themes.
+            expect({ file, theme, atOpen }).toEqual({ file, theme, atOpen: 'light-content' });
+            // Closed: the screen's own bar again, and nothing left on the stack.
+            expect({ file, theme, afterClose, entries }).toEqual({ file, theme, afterClose: themed, entries: ROOT_BARS.length });
+        });
     });
 });

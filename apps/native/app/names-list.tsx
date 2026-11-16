@@ -20,6 +20,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Switch, Modal, Share, ScrollView } from 'react-native';
+import { LightBarModal } from '../components/LightBarModal';
 import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -1320,7 +1321,7 @@ export default function NamesListScreen() {
                 ) : null}
             </KeyboardAwareScrollView>
             {/* The scanner: full screen, a camera and one button, no text field (so no keyboard provider in a Modal). */}
-            <Modal visible={scanning && !!permission?.granted} animationType="slide" onRequestClose={() => setScanning(false)}>
+            <LightBarModal visible={scanning && !!permission?.granted} animationType="slide" onRequestClose={() => setScanning(false)}>
                 <SafeAreaView style={styles.scanner} edges={['top', 'left', 'right', 'bottom']}>
                     <Text style={styles.scannerText}>{say(COPY.checkIntro(mode.kind === 'check' ? mode.picked?.callsign ?? '' : ''))}</Text>
                     <View style={styles.camera}>
@@ -1328,7 +1329,7 @@ export default function NamesListScreen() {
                     </View>
                     <View style={styles.buttonRow}>{btn(COPY.stopScan, () => setScanning(false), 'secondary')}</View>
                 </SafeAreaView>
-            </Modal>
+            </LightBarModal>
             <Modal visible={!!invited} animationType="slide" onRequestClose={() => setInvited(null)}>
                 <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
                     <ScrollView contentContainerStyle={styles.scroll}>

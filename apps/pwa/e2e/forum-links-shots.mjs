@@ -7,7 +7,8 @@
  * photographs each and CHECKS what jsdom can't:
  *   1. nothing of this slice runs past the page's right edge, and the page never scrolls sideways;
  *   2. every chip, every linked topic and every button of the sheet is a 44 px target or more;
- *   3. every chip's words, every linked topic's title and every row of the sheet read 4.5:1 or more against what is under them.
+ *   3. every chip's words, every linked topic's title and every row of the sheet read 4.5:1 or more against what is under them;
+ *   4. no words spill out of their own box, and no row of the sheet is drawn over the one above it.
  * It prints a table (markdown) and exits non-zero on any failed check. Nothing here touches a BeanPool node.
  *
  *   node e2e/forum-links-shots.mjs [shots-dir]
@@ -100,7 +101,22 @@ function measure() {
     };
     const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
     const MINE = '[data-testid="forum-topic"], [data-testid="listing-side"], [data-testid="forum-link-sheet"] > div';
-    const out = { pageScroll: document.documentElement.scrollWidth > window.innerWidth + 1, wide: [], small: [], faint: [], counts: {} };
+    const out = { pageScroll: document.documentElement.scrollWidth > window.innerWidth + 1, wide: [], small: [], faint: [], spill: [], overlap: [], counts: {} };
+    // Words that spill out of their own box, and a block drawn over the next one: a row squeezed below its words (the first
+    // run of this script, 16 Nov, passed a Link sheet whose rows lay on top of each other).
+    for (const el of Array.from(document.querySelectorAll('[data-testid="forum-link-chips"] li, [data-testid="forum-linked-topic"], [data-testid="forum-link-sheet"] > div *'))) {
+        if (el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY === 'visible' && el.clientHeight > 0) {
+            out.spill.push(`"${(el.textContent ?? '').trim().slice(0, 24)}" ${el.scrollHeight}>${el.clientHeight}`);
+        }
+    }
+    const sheetBox = document.querySelector('[data-testid="forum-link-sheet"] > div');
+    if (sheetBox) {
+        const kids = Array.from(sheetBox.children);
+        for (let i = 1; i < kids.length; i++) {
+            const a = kids[i - 1].getBoundingClientRect(), b = kids[i].getBoundingClientRect();
+            if (b.top < a.bottom - 0.5) out.overlap.push(`"${(kids[i].textContent ?? '').trim().slice(0, 24)}" starts ${Math.round(a.bottom - b.top)} px inside the row above`);
+        }
+    }
     for (const el of Array.from(document.querySelectorAll(`${MINE.split(', ').map((s) => `${s} *`).join(', ')}`))) {
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.right <= window.innerWidth + 1) continue;
@@ -152,6 +168,8 @@ try {
                 if (m.wide.length) problems.push(`runs past the page: ${m.wide.join('; ')}`);
                 if (m.small.length) problems.push(`under 44 px: ${m.small.join('; ')}`);
                 if (m.faint.length) problems.push(`under 4.5:1: ${m.faint.join('; ')}`);
+                if (m.spill.length) problems.push(`words spill out of their box: ${m.spill.slice(0, 4).join('; ')}`);
+                if (m.overlap.length) problems.push(`rows drawn over each other: ${m.overlap.slice(0, 4).join('; ')}`);
                 for (const p of problems) failures.push(`${name}: ${p}`);
                 rows.push(`| ${name} | ${m.counts.chips} | ${m.counts.linked} | ${sheet ? m.counts.sheet : ''} | ${problems.length ? 'FAIL' : 'ok'} |`);
                 await context.close();

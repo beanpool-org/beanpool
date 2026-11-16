@@ -163,7 +163,7 @@ export function ForumLinkSheet({ me, linked, room, onPick, onTakeOff, onClose }:
         if (!picks.length) return null;
         return (
             <>
-                <h3 className={heading} style={{ color: 'var(--text-muted)' }}>{title}</h3>
+                <h3 className={heading} style={{ color: 'var(--text-secondary)' }}>{title}</h3>
                 {picks.map((p) => (
                     <button key={`${p.kind}:${p.id}`} type="button" disabled={busy || isLinked(p)} onClick={() => void act(() => onPick!(p))}
                         data-testid={`forum-link-pick-${p.kind}`} className={row} style={{ color: 'var(--text-primary)' }}>
@@ -179,15 +179,18 @@ export function ForumLinkSheet({ me, linked, room, onPick, onTakeOff, onClose }:
     return createPortal(
         <div role="dialog" aria-modal="true" aria-label={t(LINK_WORDS.sheet)} data-testid="forum-link-sheet"
             className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-black/60" onClick={onClose}>
-            <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl p-2 flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }} onClick={(e) => e.stopPropagation()}>
+            {/* A block, not a flex column: in a column with a height cap, a row whose min-height is set shrinks to it and its
+                words spill over the next row (the 320 px shots, 16 Nov). */}
+            <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl p-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }} onClick={(e) => e.stopPropagation()}>
                 <h2 className="m-0 px-3 py-2 text-base font-bold" style={{ color: 'var(--text-primary)' }}>{t(LINK_WORDS.sheet)}</h2>
                 {linked.length > 0 && (
                     <>
-                        <h3 className={heading} style={{ color: 'var(--text-muted)' }}>{t(LINK_WORDS.linkedNow)}</h3>
+                        <h3 className={heading} style={{ color: 'var(--text-secondary)' }}>{t(LINK_WORDS.linkedNow)}</h3>
                         {linked.map((p) => (
-                            <div key={`${p.kind}:${p.id}`} className="flex items-center gap-2 px-3 min-h-[48px]">
+                            // Take off goes under the title where both don't fit (320 px at 1.3x): the title keeps whole words.
+                            <div key={`${p.kind}:${p.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1 min-h-[48px]">
                                 <span aria-hidden="true">{ICON[p.kind]}</span>
-                                <span className="min-w-0 flex-1 text-sm" style={{ color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{p.title}</span>
+                                <span className="min-w-[8rem] flex-1 text-sm break-words" style={{ color: 'var(--text-primary)' }}>{p.title}</span>
                                 {onTakeOff && (
                                     <button type="button" disabled={busy} onClick={() => void act(() => onTakeOff(p))} aria-label={t(LINK_WORDS.takeOffNamed, { title: p.title })}
                                         data-testid="forum-link-take-off" className="min-h-[44px] px-3 rounded-lg text-sm font-semibold shrink-0 disabled:opacity-50"
@@ -200,12 +203,12 @@ export function ForumLinkSheet({ me, linked, room, onPick, onTakeOff, onClose }:
                 {onPick && room <= 0 && <p data-testid="forum-link-full" className="m-0 px-3 py-2 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(LINK_WORDS.full, { n: FORUM_LIMITS.topicLinks })}</p>}
                 {onPick && room > 0 && (
                     failed ? <p className="m-0 px-3 py-2 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(LINK_WORDS.failed)}</p>
-                        : !lists ? <p className="m-0 px-3 py-2 text-sm" style={{ color: 'var(--text-muted)' }}>{t(LINK_WORDS.loading)}</p>
+                        : !lists ? <p className="m-0 px-3 py-2 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(LINK_WORDS.loading)}</p>
                         : empty ? <p className="m-0 px-3 py-2 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(LINK_WORDS.nothing)}</p>
                         : <>{group(t(LINK_WORDS.yourGroups), lists.groups)}{group(t(LINK_WORDS.yourListings), lists.listings)}{group(t(LINK_WORDS.yourEvents), lists.events)}</>
                 )}
                 {error && <p role="alert" className="m-0 px-3 py-2 text-sm" style={{ color: 'var(--bp-ink-danger)', overflowWrap: 'anywhere' }}>{error}</p>}
-                <button type="button" onClick={onClose} className="mt-1 min-h-[48px] px-4 rounded-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{t(LINK_WORDS.done)}</button>
+                <button type="button" onClick={onClose} className="w-full mt-1 min-h-[48px] px-4 rounded-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{t(LINK_WORDS.done)}</button>
             </div>
         </div>,
         document.body,

@@ -60,7 +60,7 @@ Se ritiri un invito e inviti di nuovo la stessa persona, entro un'ora non riceve
 - Scrivi **@** seguito dal nome di qualcuno per inviargli un avviso. Vedi "Menzioni".
 - Il messaggio più recente si trova subito sopra la casella del testo e vi rimane quando si apre la tastiera. Scorri verso l'alto per rileggere i messaggi precedenti; l'arrivo di un nuovo messaggio aspetterà la tua lettura senza trascinarti verso il basso.
 
-La chat di un gruppo è crittografata end-to-end: solo i membri del gruppo possono leggerla, non i gestori del server della tua comunità. Sopra la casella di testo viene indicato che è **Crittografia end-to-end**. Il server della tua comunità vede comunque chi ha scritto, quando, chi è stato menzionato, a quale messaggio risponde ciascuna riga, le reazioni emoji, e quali righe sono foto e quanto è grande ciascuna.
+La chat di un gruppo è crittografata end-to-end: solo i membri del gruppo possono leggerla, non i gestori del server della tua comunità. Sopra la casella di testo compare la scritta **Crittografia end-to-end**. Il server della tua comunità vede comunque chi ha scritto, quando, chi è stato menzionato, a quale messaggio risponde ciascuna riga, le reazioni emoji, e quali righe sono foto e quanto è grande ciascuna.
 
 - Vedi la chat solo a partire dal giorno in cui ti sei unito. Nulla di ciò che è stato scritto prima viene mostrato, e il tuo telefono non possiede mai la relativa chiave. Vedi comunque le righe grigie precedenti, ma non il testo né le foto di nessuno.
 - Quando qualcuno viene rimosso, o esce, il gruppo crea una nuova chiave. In un gruppo di 10 o più persone la chat indica **Protezione della chat per N persone…** mentre il tuo telefono la genera.

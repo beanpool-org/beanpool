@@ -35,7 +35,7 @@ Küresel toplulukta uygulama bir tür grubu kendiliğinden oluşturur: aynı yer
 - En fazla 60 karakterden oluşan bir **Grup Adı** ve isterseniz 300 karaktere kadar bir **Amaç / Açıklama** verin: grubun ne için ve kimin için olduğu.
 - Bir **Kategori** seçin: **Sosyal Çevre**, **Genel**, **Çalışma Grubu** veya **Lonca**. Sizin için **Sosyal Çevre** seçilidir.
 - Bir **Katılma İlkesi** seçin: **Açık**, **Katılma İsteği** veya **Yalnızca Davetle**.
-- **Grup Oluştur** seçeneğine dokunun. Grubun **baş koordinatör** olursunuz. Telefonda uygulama sizi doğrudan yeni grubun sohbetine götürür.
+- **Grup Oluştur** seçeneğine dokunun. Grubun **baş koordinatör**ü olursunuz. Telefonda uygulama sizi doğrudan yeni grubun sohbetine götürür.
 
 Herhangi bir 24 saat içinde en fazla 5 grup başlatabilirsiniz. Bir sahip veya yönetici, sahiplerin belirlediği **Owner and admin limit** ne kadarına izin veriyorsa o kadar grup başlatabilir (bir sahip değiştirmedikçe 100).
 
@@ -146,7 +146,7 @@ Web'de grubu **Ortak** içinde, **Gruplar** altında açın ve **Şuraya ilan ve
 
 ## Koordinatörler ve baş koordinatör
 
-Bir koordinatör grupla ilgilenir. Grubu kim oluşturduysa onun **baş koordinatör**dür ve grubun kartında adı **Baş koordinatör: Ali** şeklinde belirtilir. Üye listesinde satırları **LİDER** olarak işaretlenir.
+Bir koordinatör grupla ilgilenir. Grubu kim oluşturduysa onun **baş koordinatör**üdür ve grubun kartında adı **Baş koordinatör: Ali** şeklinde belirtilir. Üye listesinde satırları **LİDER** olarak işaretlenir.
 
 Herhangi bir koordinatör grubun resmini değiştirebilir: grubu açın (telefonda, sohbetinin **⋮** menüsündeki **Grup bilgisi**) ve **Resmi değiştir**'e dokunun (web uygulamasında ayrıca **Fotoğraf seç**). Bir grubun her zaman bir resmi olur; değiştirilebilir, asla kaldırılamaz.
 

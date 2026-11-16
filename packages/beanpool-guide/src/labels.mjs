@@ -20,7 +20,8 @@
 //   node packages/beanpool-guide/src/labels.mjs [--behind] [--shrink]
 //
 // labels-baseline.json holds the problems on older pages that were current when this check came (16 Nov 2026: 85
-// lines on 7 pages, more than that PR could take on), waiting for a follow-up words round. It may only shrink: the
+// lines on 7 pages, more than that PR could take on; plus 209 lines on the two pages #3248 brought to main while this
+// check was in review, Local knowledge and Learn in 24 languages), waiting for a follow-up words round. It may only shrink: the
 // check fails on a problem it does not hold and on one it holds that is gone (--shrink writes it without those).
 
 import fs from 'node:fs';

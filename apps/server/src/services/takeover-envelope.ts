@@ -120,6 +120,12 @@ export interface TakeoverBundle {
      *  (engine/registrar-names.ts), so the promoted server accepts members' signatures for all of them. Absent in a
      *  bundle sealed before this field existed. */
     registrarNames?: unknown[];
+    /** node_config.mainAddress: the owner's main address (engine/own-addresses.ts chosenMainAddress), so a promoted server
+     *  sends phones, invites and the directory where the owner chose while that address leads to it. Null when none chosen. */
+    mainAddress?: string | null;
+    /** node_config.addressList: the address list this server last signed, content and number (services/address-list.ts), so a
+     *  promoted server numbers its first list after it, at this epoch + 1. Null before the first list. */
+    addressList?: unknown;
     /** The public record of the current code, so the new main server can keep sealing to it. */
     recoveryCode: RecoveryCodeRecord | null;
     /** How many take-overs this identity has been through (services/identity-epoch.ts). A take-over writes this + 1.
@@ -213,6 +219,17 @@ function readRegistrarNames(): unknown[] {
     }
 }
 
+/** One field of the stored node_config object, as stored (null when absent or unreadable). */
+function readNodeConfigField(field: 'mainAddress' | 'addressList'): unknown {
+    const row = db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value?: string } | undefined;
+    if (!row?.value) return null;
+    try {
+        return JSON.parse(row.value)?.[field] ?? null;
+    } catch {
+        return null;
+    }
+}
+
 function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
     const config = getLocalConfig() as any;
     const localConfig: BundledLocalConfig = {};
@@ -228,6 +245,8 @@ function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
         publicAddress: readPublicAddress(),
         ownerAddresses: readOwnerAddresses(),
         registrarNames: readRegistrarNames(),
+        mainAddress: typeof readNodeConfigField('mainAddress') === 'string' ? readNodeConfigField('mainAddress') as string : null,
+        addressList: readNodeConfigField('addressList'),
         recoveryCode: config.recoveryCode ?? null,
         identityEpoch: Number.isSafeInteger(config.identityEpoch) && config.identityEpoch > 0 ? config.identityEpoch : 0,
         nodeProfile: readProfileRecord(),

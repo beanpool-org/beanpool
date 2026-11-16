@@ -10,9 +10,13 @@
  * - **The statement.** `GET /api/node/identity-epoch` (public) answers the epoch, signed with the node key. Only a
  *   holder of the node key can make one, and only a take-over raises the number.
  * - **The check.** A main server, at boot and every hour, asks ITS OWN public address (the registrar's hostname,
- *   else CF_RECORD_NAME; never a name another community holds, services/registrar-name-watch.ts) for the statement. If it sees a HIGHER epoch signed by its own node key, another server has
- *   taken over from it and the address now leads there: it goes read-only (members' writes refused, the reason in
- *   Settings and the log) and remembers it across restarts. It never refuses to boot.
+ *   else CF_RECORD_NAME; never a name another community holds, services/registrar-name-watch.ts) and every address on
+ *   its signed address list (several addresses S2, design scratch/fable-design/DESIGN-several-addresses-fable.md §6: after
+ *   a take-over a beanpool.org name can lead to the promoted server while an own domain or a number still leads here) for
+ *   the statement, each at once. If any of them shows a HIGHER epoch signed by its own node key, another server has
+ *   taken over from it and that address now leads there: it goes read-only (members' writes refused, the reason in
+ *   Settings and the log; its address list and proofs refused, services/address-list.ts, so phones on its addresses leave)
+ *   and remembers it across restarts. It never refuses to boot.
  * - **What it ignores.** An address it cannot reach, an old server with no such route, and anything not signed by
  *   its own key (a forgery, logged) change nothing: no hard gate. So the manual still says: don't start the old
  *   main server again after a take-over.
@@ -35,6 +39,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import type Koa from 'koa';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { getNodeRole, resolvePublicNodeUrl, PUBLIC_URL_RULES, type NodeConfig } from '../state-engine.js';
+import { addressListContent } from '../engine/own-addresses.js';
 import { logger } from '../logger.js';
 import { readNodeIdentity, type NodeIdentity } from './takeover-envelope.js';
 
@@ -102,7 +107,8 @@ export function signEpochStatement(statement: EpochStatement, seed: Uint8Array):
     return { statement, sig: Buffer.from(ed25519.sign(canonical(statement), seed)).toString('base64') };
 }
 
-function ownCommunityId(): string | null {
+/** The community id in genesis.json, or null when there is none to read. */
+export function ownCommunityId(): string | null {
     try {
         const dir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
         const g = JSON.parse(fs.readFileSync(path.join(dir, 'genesis.json'), 'utf-8'));
@@ -186,6 +192,31 @@ export function ownPublicEpochUrl(): string | null {
     if (test) return test;
     const origin = resolvePublicNodeUrl(PUBLIC_URL_RULES.identityEpoch);
     return origin ? `${origin}${IDENTITY_EPOCH_PATH}` : null;
+}
+
+/** Tests only: where each listed address answers (address → origin), so an in-process suite never asks a real host. */
+let addressOriginsForTests: ReadonlyMap<string, string> | null = null;
+export function askAddressesAtForTests(origins: Record<string, string> | null): void {
+    addressOriginsForTests = origins ? new Map(Object.entries(origins)) : null;
+}
+
+/**
+ * Every URL the check asks for the statement, each once: this server's own public address as before (ownPublicEpochUrl),
+ * then every address on its signed list (engine/own-addresses.ts addressListContent: published, with a route, a port kept).
+ * A suite's stand-in (BEANPOOL_TEST_IDENTITY_EPOCH_URL) is asked alone: a suite's nodes have real-looking names, never asked.
+ */
+export function ownEpochUrls(): string[] {
+    const test = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL;
+    if (test) return [test];
+    const urls: string[] = [];
+    const add = (url: string | null) => { if (url && !urls.includes(url)) urls.push(url); };
+    const origins = addressOriginsForTests;
+    if (!origins) add(ownPublicEpochUrl());
+    for (const address of addressListContent()?.addresses ?? []) {
+        if (!origins) add(`https://${address}${IDENTITY_EPOCH_PATH}`);
+        else if (origins.has(address)) add(`${origins.get(address)}${IDENTITY_EPOCH_PATH}`);
+    }
+    return urls;
 }
 
 export type EpochCheck =
@@ -286,50 +317,66 @@ function logOnce(key: string, log: () => void): void {
     log();
 }
 
+/** What the asks at one address found. */
+interface AddressSeen {
+    url: string;
+    best: EpochStatement | null;
+    /** The same epoch from another take-over (another `since`): only a take-over has an epoch above 0. */
+    rival: EpochStatement | null;
+    forged: string | null;
+    unreachable: string | null;
+    noRoute: boolean;
+}
+
+/** Up to ASKS_PER_CHECK asks at one address, stopping at the first proof (a higher epoch, or a rival take-over). */
+async function askAddress(url: string, identity: NodeIdentity, own: { epoch: number; since: string | null }): Promise<AddressSeen> {
+    const seen: AddressSeen = { url, best: null, rival: null, forged: null, unreachable: null, noRoute: false };
+    for (let i = 0; i < ASKS_PER_CHECK; i++) {
+        const got = await askOnce(url);
+        if ('error' in got) { seen.unreachable = got.error; break; }
+        if (got.status === 404) { seen.noRoute = true; continue; }
+        if (got.status !== 200) { seen.unreachable = `HTTP ${got.status}`; continue; }
+        const verdict = verifyEpochStatement(got.body, identity);
+        if (!verdict.ok) {
+            seen.forged = verdict.why;
+            continue;
+        }
+        if (!seen.best || verdict.statement.epoch > seen.best.epoch) seen.best = verdict.statement;
+        if (seen.best.epoch > own.epoch) break; // proof enough
+        if (own.epoch > 0 && verdict.statement.epoch === own.epoch && verdict.statement.since !== own.since) {
+            seen.rival = verdict.statement;
+            break; // proof enough
+        }
+    }
+    return seen;
+}
+
 /**
- * Ask this server's own public address for the epoch, and act on the answer. Never throws. Only a main server
- * checks: a standby has its own key and is not the one a take-over replaces.
+ * Ask this server's own public address and every address on its list for the epoch (ownEpochUrls), all at once, and act on
+ * the answers: a higher epoch at any one of them replaces this server. Never throws. Only a main server checks: a standby
+ * has its own key and is not the one a take-over replaces.
  */
 export async function checkIdentityEpoch(): Promise<EpochCheck> {
     try {
         if (getNodeRole() !== 'primary') return { state: 'not-primary' };
         const identity = readNodeIdentity();
         if (!identity) return { state: 'no-identity' };
-        const url = ownPublicEpochUrl();
-        if (!url) return { state: 'no-address' };
+        const urls = ownEpochUrls();
+        if (!urls.length) return { state: 'no-address' };
         const ownNow = ownIdentityEpoch();
         const own = ownNow.epoch;
+        const seen = await Promise.all(urls.map((u) => askAddress(u, identity, ownNow)));
 
-        let best: EpochStatement | null = null;
-        // The same epoch from another take-over (another `since`): only a take-over has an epoch above 0.
-        let rival: EpochStatement | null = null;
-        let forged: string | null = null;
-        let unreachable: string | null = null;
-        let noRoute = false;
-        for (let i = 0; i < ASKS_PER_CHECK; i++) {
-            const got = await askOnce(url);
-            if ('error' in got) { unreachable = got.error; break; }
-            if (got.status === 404) { noRoute = true; continue; }
-            if (got.status !== 200) { unreachable = `HTTP ${got.status}`; continue; }
-            const verdict = verifyEpochStatement(got.body, identity);
-            if (!verdict.ok) {
-                forged = verdict.why;
-                continue;
-            }
-            if (!best || verdict.statement.epoch > best.epoch) best = verdict.statement;
-            if (best.epoch > own) break; // proof enough
-            if (own > 0 && verdict.statement.epoch === own && verdict.statement.since !== ownNow.since) {
-                rival = verdict.statement;
-                break; // proof enough
-            }
+        // The highest epoch above this server's own, wherever it answered.
+        const higher = seen.filter((a) => a.best && a.best.epoch > own).sort((a, b) => b.best!.epoch - a.best!.epoch)[0];
+        if (higher) {
+            markReplaced(identity.peerId, higher.best!, own, higher.url);
+            return { state: 'replaced', url: higher.url, seen: higher.best!.epoch, own, since: higher.best!.since };
         }
-
-        if (best && best.epoch > own) {
-            markReplaced(identity.peerId, best, own, url);
-            return { state: 'replaced', url, seen: best.epoch, own, since: best.since };
-        }
-        if (rival) {
-            const other = rival;
+        const rivalAt = seen.find((a) => a.rival);
+        if (rivalAt) {
+            const url = rivalAt.url;
+            const other = rivalAt.rival!;
             const first = firstTakeover(ownNow.since, other.since) < 0;
             if (first) {
                 logOnce(`conflict-first|${url}|${own}|${other.since}`, () => logger.security('SYS', `[Split-brain] ⚠️ ${url} answers identity epoch ${own} `
@@ -341,24 +388,31 @@ export async function checkIdentityEpoch(): Promise<EpochCheck> {
             }
             return { state: 'conflict', url, epoch: own, ownSince: ownNow.since, otherSince: other.since, readOnly: !first };
         }
-        if (forged) {
-            logger.security('SYS', `[Split-brain] Ignored ${forged} at ${url}. This server carries on as the main server.`);
-            if (!best) return { state: 'forged', url, why: forged };
+        for (const a of seen) {
+            if (a.forged) logger.security('SYS', `[Split-brain] Ignored ${a.forged} at ${a.url}. This server carries on as the main server.`);
         }
-        if (best) {
+        const answered = seen.filter((a) => a.best);
+        if (answered.length) {
             // A take-over this server lost, seen before: still read-only, so never "current" (the address answered this server).
             const lost = getReplacedInfo();
+            const url = answered[0].url;
             if (lost?.conflict) return { state: 'conflict', url, epoch: lost.epoch, ownSince: lost.ownSince, otherSince: lost.since, readOnly: true };
-            logOnce(`current|${url}|${best.epoch}`, () => logger.info('SYS', `[Split-brain] ${url} answers identity epoch ${best!.epoch}; this server is at ${own}. No other server has taken over.`));
-            return { state: 'current', url, seen: best.epoch, own };
+            const best = Math.max(...answered.map((a) => a.best!.epoch));
+            const where = answered.map((a) => a.url).join(', ');
+            logOnce(`current|${where}|${best}`, () => logger.info('SYS', `[Split-brain] ${where} answer${answered.length === 1 ? 's' : ''} identity epoch ${best}; this server is at ${own}. No other server has taken over.`));
+            return { state: 'current', url, seen: best, own };
         }
-        if (noRoute && !unreachable) {
-            logOnce(`no-route|${url}`, () => logger.info('SYS', `[Split-brain] ${url} has no identity-epoch route (an older BeanPool, or another site). Carrying on.`));
-            return { state: 'no-epoch-route', url };
+        const forgedAt = seen.find((a) => a.forged);
+        if (forgedAt) return { state: 'forged', url: forgedAt.url, why: forgedAt.forged! };
+        const noRouteAt = seen.find((a) => a.noRoute && !a.unreachable);
+        if (noRouteAt) {
+            logOnce(`no-route|${noRouteAt.url}`, () => logger.info('SYS', `[Split-brain] ${noRouteAt.url} has no identity-epoch route (an older BeanPool, or another site). Carrying on.`));
+            return { state: 'no-epoch-route', url: noRouteAt.url };
         }
-        const why = unreachable || 'no answer';
-        logOnce(`unreachable|${url}`, () => logger.info('SYS', `[Split-brain] Could not ask ${url} for the identity epoch (${why}). Carrying on as the main server; checking again in an hour.`));
-        return { state: 'unreachable', url, why };
+        const why = seen[0].unreachable || 'no answer';
+        const where = seen.map((a) => a.url).join(', ');
+        logOnce(`unreachable|${where}`, () => logger.info('SYS', `[Split-brain] Could not ask ${where} for the identity epoch (${why}). Carrying on as the main server; checking again in an hour.`));
+        return { state: 'unreachable', url: seen[0].url, why };
     } catch (e: any) {
         logger.warn('SYS', `[Split-brain] Identity epoch check failed: ${e?.message || e}`);
         return { state: 'unreachable', url: '', why: e?.message || String(e) };
@@ -457,7 +511,8 @@ export function getReplacedInfo(): ReplacedInfo | null {
 }
 
 let readOnlyMemo: { at: number; info: ReplacedInfo | null } | null = null;
-function replacedNow(): ReplacedInfo | null {
+/** getReplacedInfo, read at most every 5 s: the members' writes and the address list's reads ask it on every request. */
+export function replacedNow(): ReplacedInfo | null {
     // Asked on every write; the answer changes only when a check runs (which clears the memo) or on restart.
     const now = Date.now();
     if (!readOnlyMemo || now - readOnlyMemo.at > 5_000) readOnlyMemo = { at: now, info: getReplacedInfo() };

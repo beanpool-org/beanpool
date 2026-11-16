@@ -98,6 +98,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { announceVaultTicketKeysAtBoot } from './services/vault-ticket-keys.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
+import { startAddressListWatch } from './services/address-list.js';
 import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
 import { startAddressCheck } from './services/address-check.js';
 import { removeDailyPulse } from './engine/daily-pulse-cleanup.js';
@@ -273,6 +274,10 @@ async function main() {
     // hourly, whether another server has taken over its identity; if so it refuses members' writes. Not awaited:
     // the boot never waits on the network, and an unreachable address changes nothing.
     void startIdentityEpochWatch();
+
+    // Step 7.35: the signed address list's number (services/address-list.ts, several addresses S2): a change of the community's
+    // addresses gets its number now and every 10 minutes, even with no phone asking. After libp2p, which makes the node key.
+    startAddressListWatch();
 
     // Step 7.4: the registrar name watch (services/registrar-name-watch.ts, lost-name L3). A registrar name another
     // community holds and answers at stops counting here; this server's own key answering there brings it back. Set

@@ -4,11 +4,11 @@
  * `keyboardVerticalOffset` to the KeyboardAvoidingView. 0 for a full-screen screen; the sheet's top on an iPhone page
  * sheet, where the keyboard otherwise covered the message box (utils/screen-keyboard-offset.ts).
  *
- * The window's height is keyboard-controller's own, the one its KeyboardAvoidingView reads, so the two always agree.
+ * The window's height is React Native's: on an iPhone it is the key window's bounds, the same height keyboard-controller's
+ * KeyboardAvoidingView reads (its windowDidResize reports the active window's bounds), and a sheet does not change it.
  */
 import { useCallback, useState } from 'react';
-import { Platform, type LayoutChangeEvent } from 'react-native';
-import { useWindowDimensions } from 'react-native-keyboard-controller';
+import { Platform, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { screenKeyboardOffset } from '../utils/screen-keyboard-offset';
 
 export function useScreenKeyboardOffset(): { keyboardVerticalOffset: number; onScreenLayout: (e: LayoutChangeEvent) => void } {

@@ -305,6 +305,8 @@ export function GroupGuestsPanel({ groupId, isConvenor }: { groupId: string; isC
     const [pasted, setPasted] = useState('');
     const [note, setNote] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    // The guest whose Remove was tapped: asked under their row (inside the group's page, which sits above any dialog of the chat's).
+    const [asking, setAsking] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         const next = await fetchGroupGuests(groupId).catch(() => null);
@@ -314,14 +316,10 @@ export function GroupGuestsPanel({ groupId, isConvenor }: { groupId: string; isC
     }, [groupId]);
     useEffect(() => { void load(); }, [load]);
 
-    /**
-     * Remove, once confirmed (asked as the group's page asks before it removes a member): the host takes them out (an
-     * invitation withdrawn) and tells their community.
-     */
+    /** Remove, once confirmed: the host takes them out (an invitation withdrawn) and tells their community. */
     const remove = async (g: GroupGuest) => {
+        setAsking(null);
         if (busy) return;
-        const name = guestNameLine(g.name, g.home);
-        if (!window.confirm(`${t(W.removeAsk, { name })}\n\n${g.state === 'invited' ? t(W.removeWhatAsked) : t(W.removeWhatIn)}`)) return;
         setBusy(true);
         setNote(null);
         try {
@@ -366,11 +364,27 @@ export function GroupGuestsPanel({ groupId, isConvenor }: { groupId: string; isC
                         <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{g.state === 'in' ? t(W.guestIn) : t(W.guestAsked)}</span>
                     </div>
                     {/* A convenor's Remove (the host refuses anyone else), asked first. */}
-                    {isConvenor && (g.state === 'in' || g.state === 'invited') && (
+                    {isConvenor && (g.state === 'in' || g.state === 'invited') && asking !== g.key && (
                         <button type="button" data-testid="group-guest-remove" disabled={busy} aria-label={t(W.removeLabel, { name: guestNameLine(g.name, g.home) })}
-                            style={{ ...button, flex: '0 0 auto', opacity: busy ? 0.6 : 1 }} onClick={() => void remove(g)}>
+                            style={{ ...button, flex: '0 0 auto', opacity: busy ? 0.6 : 1 }} onClick={() => { setAsking(g.key); setNote(null); }}>
                             {t(W.remove)}
                         </button>
+                    )}
+                    {isConvenor && asking === g.key && (
+                        <div role="group" data-testid="group-guest-remove-ask" aria-label={t(W.removeAsk, { name: guestNameLine(g.name, g.home) })} style={{ flex: '1 1 100%' }}>
+                            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', ...wrap }}>{t(W.removeAsk, { name: guestNameLine(g.name, g.home) })}</p>
+                            <p style={{ margin: '0.2rem 0 0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>
+                                {g.state === 'invited' ? t(W.removeWhatAsked) : t(W.removeWhatIn)}
+                            </p>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                <button type="button" data-testid="group-guest-remove-cancel" style={button} onClick={() => setAsking(null)}>{t('Cancel')}</button>
+                                <button type="button" data-testid="group-guest-remove-yes" disabled={busy}
+                                    style={{ ...button, border: 'none', background: 'var(--bp-danger-fill)', color: 'var(--bp-danger-on)', opacity: busy ? 0.6 : 1 }}
+                                    onClick={() => void remove(g)}>
+                                    {t(W.remove)}
+                                </button>
+                            </div>
+                        </div>
                     )}
                 </div>
             ))}

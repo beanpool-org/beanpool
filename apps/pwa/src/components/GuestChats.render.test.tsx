@@ -253,16 +253,22 @@ describe("part 2: the guest's Leave and a convenor's Remove, each asked first", 
         for (const b of buttons) expect(b.style.minHeight).toBe('44px');
     });
 
-    it('Remove asks first (as the group page asks before it removes a member): no -> nothing; yes -> removed, and says their community is told', async () => {
+    it('Remove asks first, under the row (inside the group page): one in -> what they lose; one asked -> their invitation withdrawn; Cancel -> nothing; Remove -> removed, their community told', async () => {
         const live = await calls();
         await openGuests(true);
-        const ask = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
         fireEvent.click(document.querySelectorAll('[data-testid="group-guest-remove"]')[0]);
-        expect(ask.mock.calls[0][0]).toBe('Remove Dax · eastside.example · guest?\n\nNothing more of this chat reaches them. What they already have stays with them.');
+        expect(q('group-guest-remove-ask')?.textContent).toContain('Remove Dax · eastside.example · guest?');
+        expect(q('group-guest-remove-ask')?.textContent).toContain('Nothing more of this chat reaches them. What they already have stays with them.');
+        for (const id of ['group-guest-remove-cancel', 'group-guest-remove-yes']) expect(q(id)!.style.minHeight).toBe('44px');
+        fireEvent.click(screen.getByTestId('group-guest-remove-cancel'));
+        expect(q('group-guest-remove-ask')).toBeNull();
         expect(live.removeGroupGuest).not.toHaveBeenCalled();
         fireEvent.click(document.querySelectorAll('[data-testid="group-guest-remove"]')[1]);
-        expect(ask.mock.calls[1][0]).toBe('Remove Me · hillside.example · guest?\n\nTheir invitation is withdrawn.');
+        expect(q('group-guest-remove-ask')?.textContent).toContain('Remove Me · hillside.example · guest?');
+        expect(q('group-guest-remove-ask')?.textContent).toContain('Their invitation is withdrawn.');
+        fireEvent.click(screen.getByTestId('group-guest-remove-yes'));
         await waitFor(() => expect(live.removeGroupGuest).toHaveBeenCalledWith('grp-tools', ME));
+        expect(live.removeGroupGuest).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(q('group-guest-note')?.textContent).toBe('Removed. Their community is told.'));
     });
 });

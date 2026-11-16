@@ -169,7 +169,7 @@ async function sendLeave(io: GuestMailIO, id: string): Promise<boolean> {
     const chat = (await io.load())[id];
     const leave = chat?.leave ?? null;
     if (!chat || chat.state !== 'left' || !leave || leave.state !== 'sending') return false;
-    let it: RelayItem | null = null;
+    let it: RelayItem | null;
     try { it = leave.item ? JSON.parse(leave.item) as RelayItem : null; } catch { it = null; }
     if (it && (it.envelope?.itemId !== leave.itemId || !(io.now() - it.envelope.at < RESEND_WITHIN_MS))) it = null;
     if (!it) {

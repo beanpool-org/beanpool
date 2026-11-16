@@ -633,7 +633,7 @@ export default function PairDeviceScreen() {
                                 <View style={styles.infoRow}>
                                     <Text style={styles.infoLabel}>{t('Target Host')}</Text>
                                     <Text style={styles.infoValue}>
-                                        {scannedData?.target?.kind === 'ok' ? scannedData.target.nodeUrl.replace(/^https:\/\//, '') : scannedData?.target?.kind === 'foreign' ? scannedData.target.scannedHost : ''}
+                                        {scannedData?.target?.kind === 'ok' ? scannedData.target.nodeUrl.replace(/^https:\/\//, '') : scannedData?.target && 'scannedHost' in scannedData.target ? scannedData.target.scannedHost : ''}
                                     </Text>
                                 </View>
                                 <View style={[styles.infoRow, { marginBottom: 0 }]}>

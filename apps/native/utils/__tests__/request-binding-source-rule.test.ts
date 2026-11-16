@@ -224,8 +224,8 @@ describe('the phone\'s community address is written only after the plain-address
 
     /** Each writer, and what its function must contain: the check it makes before the write. */
     const CHECKED: Record<string, RegExp> = {
-        // The deep link's "Switch Nodes?": the address comes from deepLinkNodeOrigin, which refuses one that isn't plain.
-        'app/_layout.tsx RootLayoutNav': /deepLinkNodeOrigin\(/,
+        // (The deep link's "Switch Nodes?" and the header's community switcher write no address of their own since addresses
+        // S5: they move through reconnect.ts switchPhoneTo below, which holds the one move lock and asserts the address.)
         // The not-recognised screen's Reconnect, or a saved-node pick, once the community has let the key in (utils/reconnect.ts).
         'utils/reconnect.ts switchPhoneTo': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
         // The invite join: looksLikeNodeAddress, which requires isPlainNodeAddress (utils/node-url.ts).
@@ -243,9 +243,6 @@ describe('the phone\'s community address is written only after the plain-address
         // (utils/rekey-redeem.ts rekeyCommunityUrl), checked again before it is written.
         'app/rekey-code.tsx onBound': /assertPlainNodeAddress\(s\.community\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', s\.community\)/,
         'app/rekey-code.tsx moveOntoCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
-        // The header's community switcher (the BeanPool sheet's rows), and a tapped notice from another community the phone
-        // keeps (utils/push-notice-switch.ts): the one switch for both.
-        'utils/use-communities.ts switchCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
         // Both restores (12 words, sign-in).
         'utils/restore-account.ts saveRestoredAccount': /assertPlainNodeAddress\(anchorUrl\)/,
         // Development discovery: only plain candidates are probed.

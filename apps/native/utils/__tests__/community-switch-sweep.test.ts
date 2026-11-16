@@ -115,7 +115,7 @@ describe('every write or removal of the phone\'s community announces it', () => 
         expect(verify).not.toMatch(/carryCommunityCopy|carryFrom/);
         // switchPhoneTo writes the address and announces it (found by the sweep, and in this order).
         const reconnect = code(fs.readFileSync(path.join(NATIVE, 'utils/reconnect.ts'), 'utf8'));
-        expect(reconnect).toMatch(/await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await db\.initDB\(\);\s*communitySwitched\(\);/);
+        expect(reconnect).toMatch(/await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/);
         expect(writes.some(w => w.file === 'utils/reconnect.ts')).toBe(true);
     });
 

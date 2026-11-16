@@ -218,7 +218,8 @@ describe('the block, as it is wired (components/ForceUpdateBlock.tsx)', () => {
 
 describe('every way a member moves the phone to another community tells the update screen', () => {
     const sites: Array<[string, RegExp]> = [
-        ['utils/use-communities.ts', /await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*await initDB\(\);\s*communitySwitched\(\);/],
+        // The sheet's switch moves through reconnect.ts switchPhoneTo (the one move lock, addresses S5), pinned below.
+        ['utils/use-communities.ts', /assertPlainNodeAddress\(url\);[^]*?await switchPhoneTo\(url\);/],
         ['app/(tabs)/settings.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', targetUrl\);\s*await initDB\(\);\s*communitySwitched\(\);/],
         ['app/(tabs)/settings.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', finalAnchorUrl\);\s*communitySwitched\(\);/],
         // A plain switch writes the address and opens the new copy; a follow (carryFrom) has the carry write it once the copy is there.

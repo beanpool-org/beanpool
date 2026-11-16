@@ -198,9 +198,9 @@ describe('S4: two addresses, the main changes, the phone follows by itself with 
         const real = deps();
         await verifyAddressInUse({}, {
             ...real,
-            moveTo: async (from, to) => {
+            moveTo: async (from, to, held) => {
                 mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([...saved(), { url: from }]));
-                await real.moveTo(from, to);
+                await real.moveTo(from, to, held);
             },
         });
         expect(mem.get(ANCHOR)).toBe(`https://${M}`);
@@ -520,7 +520,7 @@ describe('S5: a switch started but not yet written (the S4 leftover race; one lo
         await verifyAddressInUse({}, {
             ...real,
             // The round is inside its writing steps (it has just moved the phone to M): the member taps another community.
-            moveTo: async (from, to) => { await real.moveTo(from, to); switching = switchPhoneTo(`https://${C}`); await settle(); },
+            moveTo: async (from, to, held) => { await real.moveTo(from, to, held); switching = switchPhoneTo(`https://${C}`); await settle(); },
         });
         // The switch waited for the round's last step (the rows following), so it never interleaved with it.
         expect(mem.get(ANCHOR)).toBe(`https://${M}`);
@@ -661,7 +661,7 @@ describe('S4 round 3: the member\'s switch beats every step that removes or writ
                         await real.takeOffSavedList(address, isGone);
                         if (where === 'before the record is written') land();
                     },
-                    moveTo: async (from, to) => { await real.moveTo(from, to); if (where === 'before the rows follow') land(); },
+                    moveTo: async (from, to, held) => { await real.moveTo(from, to, held); if (where === 'before the rows follow') land(); },
                 };
                 hooks.after = (key, next) => {
                     if (where === 'before the record goes' && key === SAVED_NODES_STORE_KEY) land();

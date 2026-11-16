@@ -430,8 +430,8 @@
         "sourceHash": "79c7dc48aa148094"
       },
       "summary": {
-        "text": "Sohbetin neden mesaj göndermeyi durdurduğu, anahtar kodunun kişiyle nasıl doğrulanacağı ve ne zaman devam edileceği.",
-        "sourceHash": "c7a3e58ca019f963"
+        "text": "Değişen bir anahtarla ilgili gri satırın ne anlama geldiği, anahtar kodunun kişiyle nasıl kontrol edileceği ve Doğrulanmış olarak işaretle seçeneğinin ne yaptığı.",
+        "sourceHash": "d59b33d9c938fae5"
       }
     },
     "the-pulse": {

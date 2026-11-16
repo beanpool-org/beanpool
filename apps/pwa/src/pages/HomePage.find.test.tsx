@@ -1360,7 +1360,7 @@ describe('told from another origin on the waiting row (global yes Y2)', () => {
             expect(scrolled).toEqual([ROW]);
             rowTop = 960; // the card above arrives: the row is pushed below a 320 px screen, Join still in focus
             await waitFor(() => expect(scrolled).toEqual([ROW, ROW]));
-            expect(document.activeElement).toBe(screen.getByTestId(`home-find-invited-join-${RIVERSIDE.url}`));
+            await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId(`home-find-invited-join-${RIVERSIDE.url}`)));
         } finally {
             Element.prototype.scrollIntoView = was;
             Element.prototype.getBoundingClientRect = wasRect;

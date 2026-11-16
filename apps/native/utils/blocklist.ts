@@ -264,6 +264,22 @@ function derive(list: readonly string[], chains: KeyChains, changes: Changes): s
     return out;
 }
 
+/**
+ * Each person's latest change only: an earlier change of another key the community has named as theirs decides nothing
+ * now or after any later merge (the latest of a merged person is the latest of its parts), and kept, it could outlast
+ * the change that overrode it when {@link CHANGES_MAX} drops the oldest unblocks, and bring a block back.
+ */
+function latestOnly(blocks: Blocks): void {
+    const done = new Set<string>();
+    for (const key of Object.keys(blocks.changes.of)) {
+        if (done.has(key)) continue;
+        const person = [...personKeys(key, blocks.chains)].filter(k => blocks.changes.of[k]);
+        person.forEach(k => done.add(k));
+        const latest = person.reduce((a, b) => (blocks.changes.of[b].n > blocks.changes.of[a].n ? b : a));
+        for (const k of person) if (k !== latest) delete blocks.changes.of[k];
+    }
+}
+
 let writing: Promise<unknown> = Promise.resolve();
 
 /**
@@ -302,6 +318,7 @@ function asRead(blocks: Blocks): { list: string[]; chains: string; changes: stri
  * still the one on the phone, the list in memory, and the screens hear of a list that changed. Only inside {@link serially}.
  */
 async function saveBlocks(owner: string, blocks: Blocks, was: ReturnType<typeof asRead>): Promise<void> {
+    latestOnly(blocks);
     const changes = JSON.stringify(blocks.changes);
     const chains = JSON.stringify(blocks.chains);
     if (changes !== was.changes) await AsyncStorage.setItem(blockChangesStoreKey(owner), changes);
@@ -581,8 +598,8 @@ const BLOCK_REQUESTS_PER_MINUTE = 30;
 const MINUTE_MS = 60 * 1000;
 
 /**
- * What this phone knows of one community's list for one account: `on`, keys this phone put there that the community's
- * answer showed it holds; `sent`, keys sent whose answer never came, which it may hold. After a refusal asking again
+ * What this phone knows of one community's list for one account: `on`, the keys on the community's last answer of people
+ * this phone put there or blocks ({@link reconcile}); `sent`, keys sent since whose answer never came, which it may hold. After a refusal asking again
  * won't soon change: `waitUntil`, when it may be asked anything again (it has no block list, or refused a removal);
  * `addsWaitUntil`, when it may be sent blocks again (it refused one), while unblocks still go.
  */

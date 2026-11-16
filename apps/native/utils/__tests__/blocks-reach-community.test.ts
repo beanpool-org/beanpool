@@ -1459,8 +1459,9 @@ describe('a block is of a person, from every screen that blocks or unblocks (a t
         console.log(`[table] ${steps.length} steps (${steps.map((s) => s.name).join(' | ')}); ${stepsRun} steps run; ${checked} states checked (new at each depth 0-6: ${perDepth.join(', ')}); ${disagreements.length} disagree`);
         expect(disagreements.slice(0, 12)).toEqual([]);
         expect(disagreements).toHaveLength(0);
-        // Every depth reached something new: the walk went the whole 6 steps.
+        // Every depth reached something new: the walk went the whole 6 steps. (States, not orders: every order of up to 6
+        // offered steps reaches one of these, and orders that leave the same stores and the same community are one state.)
         expect(perDepth.every((n) => n > 0)).toBe(true);
-        expect(checked).toBeGreaterThan(300);
+        expect(checked).toBeGreaterThan(200);
     }, 600_000);
 });

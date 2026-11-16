@@ -4,7 +4,7 @@ title: Grupos
 summary: Seus grupos e chats, conversas, criar um grupo, convidar pessoas, entrar por convite e as votações internas do grupo.
 related: messages, mute, mentions, enterprises, event-chat, posting, decisions, keepers
 help: Seus grupos e chats. Crie um grupo, convide pessoas ou abra um para conversar e votar juntos.
-source-hash: 5093ecbc7c68e8dc
+source-hash: 7669768827172c66
 ---
 
 ## O que é um grupo
@@ -15,35 +15,42 @@ As pessoas que cuidam de um grupo de bate-papo são seus **coordenadores**; um d
 
 ## Seus grupos
 
-Toque em **Bate-papo** e depois em **Grupos**. Todos os grupos dos quais você participa estão listados lá, com a mensagem mais recente primeiro, acompanhados dos projetos que você lidera ou nos quais trabalha (🎯), dos empreendimentos de que é custódio (🥖) e dos eventos que organiza ou aos quais vai comparecer (📅). A conversa de um empreendimento é a sua discussão pública: qualquer membro da sua comunidade pode lê-la. Veja "Mensagens". Cada item exibe a mensagem mais recente e quantas você ainda não leu. Em uma conversa criptografada, a linha exibe quem escreveu por último e **🔒 Mensagem**, não as palavras.
+Toque em **Bate-papo** e depois em **Grupos**. Todos os grupos dos quais você participa estão listados lá, com a mensagem mais recente primeiro, acompanhados dos projetos que você lidera ou nos quais trabalha (🎯), dos empreendimentos de que é custódio (🥖) e dos eventos que organiza ou aos quais vai comparecer (📅), depois que alguém escreve na conversa do evento. A conversa de um empreendimento é a sua discussão pública: qualquer membro da sua comunidade pode lê-la. Veja "Mensagens". Cada item exibe a mensagem mais recente e quantas você ainda não leu. Em uma conversa criptografada, a linha exibe quem escreveu por último e **🔒 Mensagem**, não as palavras.
 
 - O número em **Grupos** no topo soma suas mensagens não lidas, exceto nas conversas que você silenciou.
 - Toque em um grupo para abrir a conversa dele. Isso a marca como lida.
 - Puxe a lista para baixo para atualizá-la.
 
-No celular, a mesma lista fica em **Bens comuns**, sob **Grupos**, como **Seus grupos**, sem os números de não lidas. Ela abre as mesmas conversas.
+No celular, **Bens comuns** mostra **Seus** no topo de **Grupos**: primeiro os empreendimentos e projetos de que você é custódio (com um botão **Gerenciar** para administrá-los), depois os grupos dos quais você participa, que abrem as mesmas conversas.
+
+## Círculos locais
+
+Na comunidade global, o app cria sozinho um tipo de grupo: um **place circle** (círculo local), para pessoas que esperam perto do mesmo lugar e disseram que ajudariam a começar uma comunidade. Somente os membros dele podem vê-lo, e o nome, o objetivo e quem pode entrar continuam como estão. Veja "Achar uma comunidade próxima".
 
 ## Criando um grupo
 
-- No celular, em **Bate-papo**, sob **Grupos**, toque em **Novo grupo**. Ou em **Bens comuns**, sob **Grupos**, toque no botão redondo **+**. Ambos abrem o mesmo formulário **Criar grupo**. (No chip **Projetos** ou **Empreendimentos**, o **+** inicia um projeto ou empreendimento em vez disso.)
-- No app web, abra **Bens comuns**, depois **Grupos** e toque em **+ Criar grupo**. Você permanece em **Bens comuns** depois. Para convidar pessoas, abra o grupo e toque em **Convidar pessoas**. Você também pode abrir **Bate-papo**, tocar em **Grupos** e depois em **Novo grupo**: isso leva você diretamente para a conversa do novo grupo.
+- No celular, em **Bate-papo**, sob **Grupos**, toque em **Novo grupo**. Ou toque em **+** em **Bens comuns**, depois em **Começar algo** e escolha **Grupo de bate-papo**. Ambos abrem o formulário **Criar um grupo**.
+- No app web, abra **Bens comuns**, depois **Grupos**, toque em **Começar algo** e escolha **Grupo de bate-papo**. Você permanece em **Bens comuns** depois. Para convidar pessoas, abra o grupo e toque em **Convidar pessoas**. Você também pode abrir **Bate-papo**, tocar em **Grupos** e depois em **Novo grupo**: isso leva você diretamente para a conversa do novo grupo.
+- Todo grupo tem uma imagem: a do seu tipo já vem escolhida e acompanha a **Categoria** até você mesmo escolher uma. Para escolher outra, toque em **Escolher outra**. No celular, ele oferece sua câmera, suas fotos e as imagens prontas. No app web, ele mostra as imagens prontas, e **Escolher uma foto** escolhe uma das suas.
 - Dê um **Nome do grupo**, de até 60 caracteres, e, se desejar, um **Objetivo / Descrição**, de até 300: para que serve o grupo e a quem se destina.
-- Escolha uma **Categoria**: **Círculo social**, **Geral**, **Grupo de trabalho** ou **Guilda**. No celular, **Círculo social** já vem selecionado para você. No app web, **Grupo de trabalho** é o selecionado.
+- Escolha uma **Categoria**: **Círculo social**, **Geral**, **Grupo de trabalho** ou **Guilda**. **Círculo social** já vem selecionado para você.
 - Escolha uma **Política de adesão**: **Aberto**, **Pedir para entrar** ou **Apenas por convite**.
 - Toque em **Criar grupo**. Você se torna o **coordenador principal**. No celular, o app leva você diretamente para a conversa do novo grupo.
 
-Você pode criar até 5 grupos em qualquer período de 24 horas.
+Você pode criar até 5 grupos em qualquer período de 24 horas. Um proprietário ou administrador pode criar quantos a configuração **Owner and admin limit** dos proprietários permitir (100, a menos que um proprietário a altere).
 
-Envolve feijões? Inicie um projeto ou empreendimento em vez disso, a partir do final das categorias: no celular, **Iniciar um projeto ou um empreendimento**; na web, **Iniciar um projeto** ou **Iniciar um empreendimento**. Veja "Projetos e empreendimentos".
+Envolve feijões? Inicie um projeto ou empreendimento em vez disso: toque em **Começar algo** (no celular, o botão redondo **+**) em **Bens comuns** e escolha **Projeto** ou **Empreendimento** (ou pelo link no final do formulário do grupo, **Iniciar um projeto ou empreendimento →**). Veja "Projetos e empreendimentos".
 
 ## Convidando pessoas
 
 Você pode convidar pessoas no celular e no app web. No celular, a conversa de um novo grupo pergunta: **Quem você quer convidar?**
 
-- Toque em **Convidar pessoas**, marque as pessoas que deseja e toque no botão na parte inferior (por exemplo, **Convidar 2 pessoas**).
+- Toque em **Convidar pessoas**, marque as pessoas que deseja e toque no botão na parte inferior (por exemplo, **Convidar 2 pessoas**). Um prefixo curto da chave aparece sob o nome de cada pessoa, para que você possa distinguir pessoas com o mesmo nome.
 - Ou toque em **Agora não** para pular essa etapa.
 
-Mais tarde, um coordenador pode convidar pessoas a partir do menu **⋮** da conversa, em **Convidar pessoas**. No app web, o coordenador abre o grupo e toca em **Convidar pessoas**, marca as pessoas e toca no botão na parte inferior da mesma forma. Cada pessoa convidada vê o grupo em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular (no celular, em uma comunidade sem a aba **Bens comuns**, em **Encontrar grupos** em **Bate-papo**). O app web ainda não marca convites: lá, a pessoa abre o grupo e toca em **Aceitar convite**. Quando a pessoa entra, a conversa avisa.
+Mais tarde, um coordenador pode convidar pessoas a partir do menu **⋮** da conversa, em **Convidar pessoas**. No app web, o coordenador abre o grupo e toca em **Convidar pessoas**, marca as pessoas e toca no botão na parte inferior da mesma forma. Cada pessoa convidada é avisada: um alerta no celular, "Convidaram você para um grupo.", e uma linha em **Precisa de você** no Início (no celular e no app web, também um ícone no topo). Ninguém mais recebe alerta, nem mesmo os outros membros do grupo. A pessoa também vê o grupo em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** (no celular, em uma comunidade sem a aba **Bens comuns**, em **Buscar grupos** em **Bate-papo**). Quando a pessoa entra, a conversa avisa.
+
+Se você retirar um convite e convidar a mesma pessoa de novo, ela não recebe um segundo alerta antes de passar uma hora. Quem bloqueou você ainda recebe o convite, sem alerta.
 
 ## A conversa do grupo
 
@@ -53,15 +60,15 @@ Mais tarde, um coordenador pode convidar pessoas a partir do menu **⋮** da con
 - Digite **@** e o nome de alguém para alertar a pessoa. Veja "Menções".
 - A mensagem mais recente fica logo acima da caixa de mensagem e permanece ali quando o teclado se abre. Role para cima para ler mensagens anteriores; a chegada de uma nova mensagem aguardará você, em vez de rolar a tela para baixo à força.
 
-A conversa de um grupo é criptografada de ponta a ponta: somente os membros do grupo podem lê-la, não os responsáveis pelo servidor da sua comunidade. Acima da caixa de mensagem, o app informa que ela é **Criptografada de ponta a ponta**. O servidor da comunidade ainda vê quem escreveu, quando, quem foi mencionado, a qual mensagem cada linha responde e as reações com emojis.
+A conversa de um grupo é criptografada de ponta a ponta: somente os membros do grupo podem lê-la, não os responsáveis pelo servidor da sua comunidade. Acima da caixa de mensagem, o app informa que ela é **Criptografada de ponta a ponta**. O servidor da comunidade ainda vê quem escreveu, quando, quem foi mencionado, a qual mensagem cada linha responde, as reações com emojis, e quais linhas são fotos e o tamanho de cada uma.
 
-- Você vê a conversa somente a partir do dia em que entrou. Nada escrito antes é exibido, e o seu celular nunca detém a chave para isso. Você ainda vê as linhas cinzas de antes, mas não as palavras de ninguém.
+- Você vê a conversa somente a partir do dia em que entrou. Nada escrito antes é exibido, e o seu celular nunca detém a chave para isso. Você ainda vê as linhas cinzas de antes, mas não as palavras nem as fotos de ninguém.
 - Quando alguém é removido ou sai, o grupo gera uma nova chave. Em um grupo de 10 ou mais pessoas, a conversa exibe **Protegendo a conversa para N pessoas…** enquanto o celular a gera.
-- Uma mensagem que não puder ser protegida não é enviada. Ela exibe **! não entregue**, e uma linha acima da caixa de mensagem pode dizer o motivo. Toque nela para **Reenviar** ou **Descartar**.
+- Uma mensagem que não puder ser protegida não é enviada. Ela exibe **! não entregue**, e uma linha acima da caixa de mensagem pode dizer o motivo. Toque nela para **Reenviar** ou **Descartar**; no app web, use **Tentar de novo** ou **Descartar** na mensagem.
 - Uma mensagem que não for verificada como escrita por um membro aparece como **Não verificada**, como de ninguém, acompanhada de **Esta mensagem não pôde ser verificada.** Uma mensagem cuja chave ainda não chegou ao seu celular informa **Aguardando a chave desta mensagem.**
 - Se o servidor da comunidade for mais antigo e ainda não puder proteger conversas em grupo, o bate-papo avisa que o servidor pode lê-lo e que será protegido assim que o servidor for atualizado. Quando for atualizado, as mensagens anteriores do grupo, que o servidor conseguia ler, são removidas, e uma linha na conversa avisa isso. Cada mensagem anterior passa a exibir **Uma mensagem anterior foi removida quando esta conversa foi protegida**, e várias em sequência aparecem em uma única linha, como **11 mensagens anteriores removidas quando esta conversa foi protegida**.
 
-No app web, suas conversas de grupo ficam em **Bate-papo**, marcadas com 👥. Você pode ler e escrever lá, com criptografia de ponta a ponta como no celular: responder, reagir, editar por 15 minutos e pesquisar na conversa. Silenciar, **Excluir** e **Remover** existem apenas no celular. No app web, toque no nome do grupo no topo da conversa para abrir o grupo; um coordenador pode convidar pessoas por lá. A conversa de um empreendimento não é criptografada: veja "Mensagens".
+No app web, suas conversas de grupo ficam em **Bate-papo**, marcadas com 👥. Você pode ler e escrever lá, com criptografia de ponta a ponta como no celular: responder, reagir, editar por 15 minutos, excluir, remover, silenciar notificações, pesquisar na conversa e denunciar a mensagem de alguém (**Denunciar**, abaixo dela). Toque no nome do grupo no topo da conversa para abrir o grupo; um coordenador pode convidar pessoas por lá. A conversa de um empreendimento não é criptografada: veja "Mensagens".
 
 ## Falando na conversa de um grupo
 
@@ -69,17 +76,22 @@ A conversa de um grupo funciona exatamente como a conversa com uma pessoa. Toque
 
 - **Responder** inclui uma citação dela acima do que você escrever a seguir. Toque na citação para voltar até a mensagem respondida.
 - **Reagir** abre sete emojis. Um por pessoa; toque nele novamente para retirá-lo. As reações aparecem como um selo sob a mensagem.
-- **Editar**, nas suas próprias mensagens, por 15 minutos. A mensagem exibe então **editada**.
+- **Editar**, nas suas próprias mensagens, por 15 minutos. A mensagem exibe então **editado**. Fotos não podem ser editadas.
 - **Excluir**, nas suas próprias mensagens, a qualquer momento. O app pergunta **Excluir para todos?** uma vez, e a mensagem passa a exibir **Esta mensagem foi apagada** para todos no grupo.
 - **Remover**, para coordenadores, na mensagem de qualquer outra pessoa. O app pergunta uma vez, e a mensagem passa a exibir **Removido por um coordenador**. Sua própria mensagem é uma ação de **Excluir**, não de **Remover**.
+- **Denunciar** (uma bandeira), na mensagem de qualquer outra pessoa. Escolha um motivo, acrescente algumas palavras se quiser e toque em **Enviar denúncia**. Os moderadores da sua comunidade recebem só essa mensagem, com a foto dela, se houver, e quem a enviou, e nada mais da conversa. Veja "Denunciar problema".
 
 Duas ou mais mensagens seguidas que seus autores excluíram aparecem em uma única linha, como **3 mensagens foram apagadas**. Duas ou mais mensagens removidas por um coordenador aparecem como **3 mensagens removidas por um coordenador**.
 
-Abaixo da sua própria mensagem: um relógio enquanto ela está sendo enviada, uma marca de confirmação quando o servidor do grupo a recebe ou **! não entregue** se não pôde ser enviada — toque nisso para **Reenviar** ou **Descartar**. Não há marcas de confirmação azuis duplas em um grupo: um grupo não possui um leitor único.
+Abaixo da sua própria mensagem: um relógio enquanto ela está sendo enviada, uma marca de confirmação quando o servidor do grupo a recebe ou **! não entregue** se não pôde ser enviada — toque nisso para **Reenviar** ou **Descartar**, ou no app web use **Tentar de novo** ou **Descartar** na mensagem. Não há marcas de confirmação azuis duplas em um grupo: um grupo não possui um leitor único.
 
-Fotos não podem ser enviadas na conversa de um grupo, e um acordo não pode ser iniciado nela. Ambos pertencem a uma conversa entre duas pessoas. Veja "Mensagens".
+Em uma conversa de grupo protegida, você pode enviar uma foto por mensagem, com ou sem legenda, no celular e na web. As fotos ficam com no máximo 800 px no lado mais longo. Toque em uma foto para abri-la em tela cheia, no celular e na web. As fotos em uma conversa de grupo são criptografadas como as palavras: somente os membros do grupo podem abri-las, e somente as do período em que estavam no grupo (quem acabou de entrar não vê fotos de antes da sua entrada; um membro removido não vê nenhuma de depois). Uma foto que não pode ser aberta, como uma que outra pessoa trocou no servidor, mostra **🔒 Imagem indisponível**. Uma mensagem com foto não pode ser editada. Ela pode ser excluída como qualquer mensagem (por quem a escreveu; um coordenador pode removê-la), no celular e na web.
 
-Um **observador** pode ler a conversa, mas não pode escrever nela, reagir ou responder.
+Em uma conversa de grupo protegida, você também pode enviar uma mensagem de voz, no celular e no app web: no celular, segure o microfone e solte para enviar; no app web, clique nele para começar. Veja "Mensagens de voz".
+
+Um acordo não pode ser iniciado na conversa de um grupo: acordos pertencem a uma conversa entre duas pessoas. Veja "Mensagens".
+
+Um **observador** pode ler a conversa, mas não pode escrever nela, reagir ou responder. Pode denunciar uma mensagem.
 
 O servidor da sua comunidade precisa estar atualizado para que responder, reagir, editar e excluir funcionem. Somente se o seu servidor não estiver atualizado é que o aplicativo exibirá **Ainda não disponível nesta comunidade** — vale a pena falar sobre isso com os responsáveis pelo servidor.
 
@@ -99,7 +111,7 @@ Ao final, o seu celular informa o que aconteceu: **Concluído** apenas quando tr
 
 ## Entrando em um grupo
 
-No celular, em **Bens comuns**, sob **Grupos**, a seção **Grupos que você poderia entrar** lista os grupos em que você não está. Filtre-os por categoria usando os botões acima da lista. No app web, **Grupos** lista todos os grupos que você pode ver, marcando os seus com a sua função; **Meus grupos** mostra apenas os seus. Cada um mostra o início da descrição. Abra um grupo para lê-la por inteiro e depois:
+Em **Bens comuns**, sob **Grupos**, os grupos dos quais você participa vêm primeiro, em **Seus**. Abaixo deles, a lista mostra aquilo em que você poderia entrar, com um título que diz o que está sendo mostrado (como **Grupos, projetos e empreendimentos aqui**, que muda com os chips **Tudo**, **Projetos**, **Empreendimentos** e **Grupos de conversa**). Cada um mostra o início da descrição. Abra um grupo para lê-la por inteiro e depois:
 
 - **Entrar no grupo** se for aberto a todos;
 - **Pedir para entrar** se um coordenador aprova membros. Você verá **Pedido aguardando aprovação** até que ele aprove.
@@ -108,7 +120,7 @@ No celular, um grupo em que você pediu para entrar não aparece em nenhuma das 
 
 Um grupo **Apenas por convite** fica oculto para todos que não estão nele nem foram convidados para ele.
 
-No celular, uma comunidade local sem feijões não tem a aba **Bens comuns**. Lá, toque em **Bate-papo**, depois em **Grupos** e em **Encontrar grupos**: isso abre a mesma lista. Antes de você estar em qualquer grupo, o link exibido é **Encontrar um grupo para entrar**. A comunidade global possui a aba **Bens comuns**: os grupos dela ficam lá, abaixo de um exemplo de comunidade local (veja "Feijões e a comunidade global").
+No celular, uma comunidade local sem feijões e sem Decisões não tem a aba **Bens comuns**. Lá, toque em **Bate-papo**, depois em **Grupos** e em **Buscar grupos**: isso abre a mesma lista. Antes de você estar em qualquer grupo, o link exibido é **Encontrar um grupo para entrar**. Se as Decisões estiverem ativadas, a aba **Bens comuns** continua para as Decisões e os grupos. A comunidade global possui a aba **Bens comuns**: os grupos dela ficam lá, abaixo de um exemplo de comunidade local (veja "Feijões e comunidade global").
 
 Se um coordenador removeu você de um grupo, você não pode entrar nele novamente por conta própria.
 
@@ -116,14 +128,17 @@ Enquanto sua conta estiver suspensa, você não pode criar um grupo, entrar em u
 
 ## Entrando por convite
 
-Um grupo para o qual você foi convidado aparece em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular. No celular, em uma comunidade sem a aba **Bens comuns**, ele fica sob **Encontrar grupos** em **Bate-papo**. Toque nele para ver o convite: quem convidou você, o que é o grupo, quem participa (para um grupo apenas por convite, quantas pessoas) e quem pode ler a conversa dele. No celular:
+Quando alguém convida você para um grupo, seu celular recebe um alerta, "Convidaram você para um grupo.", e **Precisa de você** mostra o convite, no Início e, no celular e no app web, como um ícone no topo (um envelope). Toque no alerta ou na linha para abrir o convite. Ele fica em **Precisa de você** até você entrar ou recusar, ou até o coordenador retirá-lo. O alerta vem junto com seus alertas de **Mensagens diretas**, então ele não chega se você desativá-los.
+
+Um grupo para o qual você foi convidado também aparece em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO**. No celular, em uma comunidade sem a aba **Bens comuns**, ele fica sob **Buscar grupos** em **Bate-papo**. Toque nele para ver o convite: quem convidou você, o que é o grupo, quem participa (para um grupo apenas por convite, quantas pessoas) e quem pode ler a conversa dele. No celular:
 
 - Toque em **Entrar no grupo**. Você é direcionado para a conversa dele.
 - Toque em **Agora não** para decidir mais tarde. O convite permanece.
+- Toque em **Recusar convite** para dizer não. O app pergunta mais uma vez e, então, o convite some, inclusive de **Precisa de você**. Quem convidou você pode convidar de novo.
 - Se o app disser **Este convite não está mais aberto**, ele foi revogado. Peça a quem convidou você para enviar um novo convite.
 - Se disser **Não foi possível abrir este grupo**, seu celular não conseguiu contatar o servidor da comunidade. Toque em **Tentar novamente**.
 
-O app web ainda não marca convites. Abra o grupo em **Bens comuns**, sob **Grupos**, e toque em **Aceitar convite**. Você entra nele e permanece na página do grupo.
+No app web, toque na linha em **Precisa de você** no Início, ou no grupo marcado como **CONVITE** em **Bens comuns**, sob **Grupos**, e toque em **Aceitar convite**. Você entra nele e permanece na página do grupo. Para recusar, toque em **Recusar convite** abaixo dele.
 
 ## Publicando em um grupo
 
@@ -132,6 +147,8 @@ Na web, abra o grupo em **Bens comuns**, sob **Grupos**, e toque em **Publicar e
 ## Coordenadores e o coordenador principal
 
 Um coordenador cuida do grupo. Quem o criou é seu **coordenador principal**, e o cartão do grupo exibe seu nome, como **Coordenador principal: Ali**. Na lista de membros, a linha correspondente é marcada como **LÍDER**.
+
+Qualquer coordenador pode mudar a imagem do grupo: abra o grupo (no celular, **Informações do grupo** no menu **⋮** da conversa) e toque em **Mudar a imagem** (no app web, também **Escolher uma foto**). Um grupo sempre mantém uma imagem; ela pode ser trocada, nunca removida.
 
 Em **Ferramentas do coordenador**, qualquer coordenador pode:
 
@@ -143,7 +160,7 @@ Ao lado de um nome na lista de **Membros**, qualquer coordenador pode:
 - alterar a função de um membro ou observador (**Função** no celular, um menu suspenso no app web), incluindo torná-lo um coordenador;
 - remover um membro ou observador (**✕**).
 
-Um coordenador remove uma publicação a partir do próprio anúncio e, no celular, uma mensagem na conversa. O nome e a descrição de um grupo ainda não podem ser alterados no aplicativo.
+Um coordenador remove uma publicação a partir do próprio anúncio, e uma mensagem na conversa. O nome e a descrição de um grupo ainda não podem ser alterados no aplicativo.
 
 Apenas o **coordenador principal** pode remover um coordenador ou retirar a função de coordenador de alguém. Ao lado de uma linha sobre a qual você não tem autoridade, nenhuma opção de **Função** ou **✕** é exibida — é o app informando que essa ação não cabe a você.
 

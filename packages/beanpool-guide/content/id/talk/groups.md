@@ -4,7 +4,7 @@ title: Grup
 summary: Grupmu dan obrolannya, berbicara di dalamnya, membuat grup, mengundang orang, bergabung dengan undangan, dan pemungutan suara internal grup.
 related: messages, mute, mentions, enterprises, event-chat, posting, decisions, keepers
 help: Grup dan obrolanmu. Buat grup, undang orang, atau buka untuk berbincang dan memilih bersama.
-source-hash: 5093ecbc7c68e8dc
+source-hash: 7669768827172c66
 ---
 
 ## Apa itu grup
@@ -15,35 +15,42 @@ Orang-orang yang mengurus grup obrolan adalah **koordinator** grup tersebut; sal
 
 ## Grup milikmu
 
-Ketuk **Obrolan**, lalu **Grup**. Setiap grup tempat kamu bergabung tercantum di sana, pesan terbaru di urutan pertama, bersama proyek yang kamu pimpin atau kerjakan (🎯), usaha yang kamu kelola (🥖), dan acara yang kamu adakan atau akan kamu hadiri (📅). Obrolan usaha adalah diskusi publiknya: setiap anggota komunitasmu dapat membacanya. Lihat "Pesan". Masing-masing menampilkan pesan terbarunya dan berapa banyak yang belum kamu baca. Dalam obrolan yang terenkripsi, baris tersebut menampilkan siapa yang terakhir menulis dan **🔒 Pesan**, bukan kata-katanya.
+Ketuk **Obrolan**, lalu **Grup**. Setiap grup tempat kamu bergabung tercantum di sana, pesan terbaru di urutan pertama, bersama proyek yang kamu pimpin atau kerjakan (🎯), usaha yang kamu kelola (🥖), dan acara yang kamu adakan atau akan kamu hadiri (📅), setelah ada yang menulis di obrolan acara tersebut. Obrolan usaha adalah diskusi publiknya: setiap anggota komunitasmu dapat membacanya. Lihat "Pesan". Masing-masing menampilkan pesan terbarunya dan berapa banyak yang belum kamu baca. Dalam obrolan yang terenkripsi, baris tersebut menampilkan siapa yang terakhir menulis dan **🔒 Pesan**, bukan kata-katanya.
 
 - Angka pada **Grup** di bagian atas menjumlahkan pesan yang belum dibaca, kecuali dalam obrolan yang telah kamu bisukan.
 - Ketuk grup untuk membuka obrolannya. Tindakan itu menandainya telah dibaca.
 - Tarik daftar ke bawah untuk menyegarkannya.
 
-Di ponsel, daftar yang sama ada di **Sarana Bersama**, di bawah **Grup**, sebagai **Grup Anda**, tanpa angka belum dibaca. Opsi ini membuka obrolan yang sama.
+Di ponsel, **Sarana Bersama** menampilkan **Milikmu** di bagian atas **Grup**: usaha dan proyek yang kamu kelola lebih dulu (dengan tombol **Manage** untuk menjalankannya), lalu grup tempat kamu bergabung, yang membuka obrolan yang sama.
+
+## Lingkaran setempat
+
+Di komunitas global, aplikasi membuat satu jenis grup dengan sendirinya: **place circle** (lingkaran setempat), untuk orang-orang yang menunggu di dekat tempat yang sama dan mengatakan akan membantu memulai komunitas. Hanya anggotanya yang dapat melihatnya, dan nama, tujuan, serta siapa yang dapat bergabung tetap seperti semula. Lihat "Menemukan komunitas di dekatmu".
 
 ## Memulai grup
 
-- Di ponsel, di **Obrolan**, di bawah **Grup**, ketuk **Grup baru**. Atau di **Sarana Bersama**, di bawah **Grup**, ketuk tombol bulat **+**. Keduanya membuka formulir **Buat Grup** yang sama. (Pada tab **Proyek** atau **Usaha**, tanda **+** akan memulai proyek atau usaha sebagai gantinya.)
-- Di aplikasi web, buka **Sarana Bersama**, lalu **Grup**, dan ketuk **+ Buat Grup**. Kamu tetap berada di **Sarana Bersama** setelahnya. Untuk mengundang orang, buka grup dan ketuk **Undang orang**. Kamu juga dapat membuka **Obrolan**, ketuk **Grup**, lalu **Grup baru**: itu akan membawamu langsung ke obrolan grup baru.
+- Di ponsel, di **Obrolan**, di bawah **Grup**, ketuk **Grup baru**. Atau ketuk **+** di **Sarana Bersama**, lalu **Mulai sesuatu** dan pilih **Grup obrolan**. Keduanya membuka formulir **Buat Grup**.
+- Di aplikasi web, buka **Sarana Bersama**, lalu **Grup**, ketuk **Mulai sesuatu** dan pilih **Grup obrolan**. Kamu tetap berada di **Sarana Bersama** setelahnya. Untuk mengundang orang, buka grup dan ketuk **Undang orang**. Kamu juga dapat membuka **Obrolan**, ketuk **Grup**, lalu **Grup baru**: itu akan membawamu langsung ke obrolan grup baru.
+- Setiap grup punya gambar: gambar untuk jenisnya sudah dipilih, dan gambar itu mengikuti **Kategori** sampai kamu memilih sendiri. Untuk memilih yang lain, ketuk **Pilih yang lain**. Di ponsel, pilihannya adalah kamera, fotomu, dan gambar siap pakai. Di aplikasi web, yang ditampilkan adalah gambar siap pakai, dan **Pilih foto** memilih salah satu fotomu sendiri.
 - Beri **Nama Grup**, hingga 60 karakter, dan, jika ingin, **Tujuan / Deskripsi**, hingga 300 karakter: untuk apa grup itu dan untuk siapa.
-- Pilih **Kategori**: **Lingkaran Sosial**, **Umum**, **Kelompok Kerja**, atau **Serikat**. Di ponsel **Lingkaran Sosial** sudah dipilihkan untukmu. Di aplikasi web **Kelompok Kerja** yang dipilih.
+- Pilih **Kategori**: **Lingkaran Sosial**, **Umum**, **Kelompok Kerja**, atau **Serikat**. **Lingkaran Sosial** sudah dipilihkan untukmu.
 - Pilih **Kebijakan Bergabung**: **Terbuka**, **Minta Bergabung**, atau **Khusus Undangan**.
 - Ketuk **Buat Grup**. Kamu menjadi **koordinator utama** grup tersebut. Di ponsel, aplikasi membawamu langsung ke obrolan grup yang baru.
 
-Kamu dapat memulai hingga 5 grup dalam rentang 24 jam mana pun.
+Kamu dapat memulai hingga 5 grup dalam rentang 24 jam mana pun. Pemilik atau admin dapat memulai sebanyak yang diizinkan oleh **Owner and admin limit** dari para pemilik (100, kecuali jika pemilik mengubahnya).
 
-Melibatkan Kacang? Mulai proyek atau usaha sebagai gantinya, dari bagian bawah kategori: di ponsel **Mulai proyek atau usaha**, di web **Mulai proyek** atau **Mulai usaha**. Lihat "Proyek dan usaha".
+Melibatkan Kacang? Mulai proyek atau usaha sebagai gantinya: ketuk **Mulai sesuatu** (di ponsel, tombol bulat **+**) di **Sarana Bersama**, lalu pilih **Proyek** atau **Usaha** (atau dari tautan di bagian bawah formulir grup, **Mulai proyek atau usaha →**). Lihat "Proyek dan usaha".
 
 ## Mengundang orang
 
 Kamu dapat mengundang orang di ponsel dan di aplikasi web. Di ponsel, obrolan grup baru akan menanyakan **Siapa yang ingin kamu undang?**
 
-- Ketuk **Undang orang**, centang orang yang kamu inginkan, dan ketuk tombol di bagian bawah (misalnya **Undang 2 orang**).
+- Ketuk **Undang orang**, centang orang yang kamu inginkan, dan ketuk tombol di bagian bawah (misalnya **Undang 2 orang**). Awalan kunci yang pendek muncul di bawah nama setiap orang agar kamu dapat membedakan orang-orang yang bernama sama.
 - Atau ketuk **Nanti saja** untuk melewatinya.
 
-Nantinya, seorang koordinator dapat mengundang orang dari menu **⋮** obrolan, **Undang orang**. Di aplikasi web, koordinator membuka grup dan mengetuk **Undang orang**, mencentang orang-orangnya, dan mengetuk tombol di bagian bawah dengan cara yang sama. Setiap orang yang kamu undang melihat grup tersebut di **Sarana Bersama**, di bawah **Grup**, bertanda **DIUNDANG** di aplikasi ponsel (di ponsel, pada komunitas tanpa tab **Sarana Bersama**, di bawah **Cari grup** di **Obrolan**). Aplikasi web belum menandai undangan: di sana, mereka membuka grup dan mengetuk **Terima undangan**. Saat mereka bergabung, obrolan akan memberitahukannya.
+Nantinya, seorang koordinator dapat mengundang orang dari menu **⋮** obrolan, **Undang orang**. Di aplikasi web, koordinator membuka grup dan mengetuk **Undang orang**, mencentang orang-orangnya, dan mengetuk tombol di bagian bawah dengan cara yang sama. Setiap orang yang kamu undang akan diberi tahu: notifikasi di ponsel mereka, "Kamu diundang bergabung dengan sebuah grup.", dan sebuah baris di **Membutuhkanmu** di Beranda mereka (di ponsel dan di aplikasi web, juga sebuah ikon di bagian atas). Tidak ada orang lain yang mendapat notifikasi, bahkan anggota grup lainnya pun tidak. Mereka juga melihat grup tersebut di **Sarana Bersama**, di bawah **Grup**, bertanda **DIUNDANG** (di ponsel, pada komunitas tanpa tab **Sarana Bersama**, di bawah **Cari grup** di **Obrolan**). Saat mereka bergabung, obrolan akan memberitahukannya.
+
+Jika kamu menarik kembali undangan lalu mengundang orang yang sama lagi, mereka tidak mendapat notifikasi kedua dalam satu jam itu. Orang yang telah memblokirmu tetap menerima undangan, tanpa notifikasi.
 
 ## Obrolan grup
 
@@ -53,15 +60,15 @@ Nantinya, seorang koordinator dapat mengundang orang dari menu **⋮** obrolan, 
 - Tulis **@** dan nama seseorang untuk memberi tahu mereka. Lihat "Penyebutan".
 - Pesan terbaru berada tepat di atas kotak pesan, dan tetap berada di sana saat keyboard terbuka. Gulir ke atas untuk membaca pesan lama; pesan baru yang masuk kemudian menunggu tanpa menarik layarmu ke bawah.
 
-Obrolan grup dienkripsi dari ujung ke ujung: hanya anggota grup yang dapat membacanya, bukan orang-orang yang menjalankan server komunitasmu. Di atas kotak pesan tertera **Terenkripsi ujung-ke-ujung**. Server komunitasmu masih melihat siapa yang menulis, kapan, siapa yang disebut, pesan mana yang dijawab oleh setiap baris, dan reaksi emoji.
+Obrolan grup dienkripsi dari ujung ke ujung: hanya anggota grup yang dapat membacanya, bukan orang-orang yang menjalankan server komunitasmu. Di atas kotak pesan tertera **Terenkripsi ujung-ke-ujung**. Server komunitasmu masih melihat siapa yang menulis, kapan, siapa yang disebut, pesan mana yang dijawab oleh setiap baris, reaksi emoji, serta baris mana yang berupa foto dan seberapa besar ukuran masing-masing.
 
-- Kamu melihat obrolan hanya sejak hari kamu bergabung. Tidak ada yang ditulis sebelumnya yang ditampilkan, dan ponselmu tidak pernah memegang kuncinya. Kamu masih melihat baris abu-abu dari sebelumnya, tetapi bukan kata-kata siapa pun.
+- Kamu melihat obrolan hanya sejak hari kamu bergabung. Tidak ada yang ditulis sebelumnya yang ditampilkan, dan ponselmu tidak pernah memegang kuncinya. Kamu masih melihat baris abu-abu dari sebelumnya, tetapi bukan kata-kata atau foto siapa pun.
 - Ketika seseorang dikeluarkan, atau keluar, grup membuat kunci baru. Dalam grup beranggotakan 10 orang atau lebih, obrolan bertuliskan **Mengamankan obrolan untuk N orang…** saat ponselmu membuatnya.
-- Pesan yang tidak dapat dikunci tidak akan dikirim. Pesan menampilkan **! tidak terkirim**, dan sebuah baris di atas kotak pesan dapat menjelaskan alasannya. Ketuk pesan untuk **Kirim ulang** atau **Buang**.
+- Pesan yang tidak dapat dikunci tidak akan dikirim. Pesan menampilkan **! tidak terkirim**, dan sebuah baris di atas kotak pesan dapat menjelaskan alasannya. Ketuk pesan untuk **Kirim ulang** atau **Buang**; di aplikasi web, gunakan **Coba lagi** atau **Buang** pada pesan tersebut.
 - Pesan yang tidak terverifikasi ditulis oleh seorang anggota ditampilkan sebagai **Belum diverifikasi**, bukan milik siapa pun, dengan **Pesan ini tidak dapat diverifikasi.**. Pesan yang kuncinya belum sampai di ponselmu bertuliskan **Menunggu kunci untuk pesan ini.**.
 - Jika server komunitasmu lebih lama dan belum dapat mengunci obrolan grup, obrolan menyatakan bahwa server dapat membacanya, dan akan dikunci begitu server diperbarui. Ketika server diperbarui, pesan-pesan sebelumnya dari grup, yang dapat dibaca server, akan dihapus, dan sebuah baris di obrolan menyatakan hal itu. Setiap pesan sebelumnya kemudian bertuliskan **Pesan sebelumnya telah dihapus saat obrolan ini dikunci**, dan beberapa pesan berturut-turut ditampilkan sebagai satu baris, seperti **11 pesan sebelumnya dihapus saat obrolan ini dikunci**.
 
-Di aplikasi web obrolan grupmu berada di **Obrolan**, bertanda 👥. Kamu dapat membaca dan menulis di sana, terenkripsi dari ujung ke ujung seperti di ponsel: balas, reaksi, edit selama 15 menit, dan cari di obrolan. Membisukan, **Hapus** dan **Hapus oleh pengelola** hanya ada di ponsel. Di aplikasi web, ketuk nama grup di bagian atas obrolannya untuk membuka grup; seorang koordinator dapat mengundang orang dari sana. Obrolan usaha tidak dienkripsi: lihat "Pesan".
+Di aplikasi web obrolan grupmu berada di **Obrolan**, bertanda 👥. Kamu dapat membaca dan menulis di sana, terenkripsi dari ujung ke ujung seperti di ponsel: balas, reaksi, edit selama 15 menit, hapus, hapus oleh pengelola, bisukan pemberitahuan, cari di obrolan, dan laporkan pesan seseorang (**Laporkan**, di bawahnya). Ketuk nama grup di bagian atas obrolannya untuk membuka grup; seorang koordinator dapat mengundang orang dari sana. Obrolan usaha tidak dienkripsi: lihat "Pesan".
 
 ## Berbicara dalam obrolan grup
 
@@ -69,17 +76,22 @@ Obrolan grup bekerja persis seperti obrolan dengan satu orang. Ketuk pesan dan t
 
 - **Balas** mengutipnya di atas pesan yang kamu tulis berikutnya. Ketuk kutipan untuk melompat kembali ke pesan yang dijawabnya.
 - **Beri reaksi** membuka tujuh emoji. Satu untuk setiap orang; ketuk lagi untuk membatalkannya. Reaksi muncul sebagai lencana di bawah pesan.
-- **Edit**, pada pesanmu sendiri, selama 15 menit. Pesan tersebut kemudian menampilkan keterangan disunting.
+- **Edit**, pada pesanmu sendiri, selama 15 menit. Pesan tersebut kemudian menampilkan **diedit**. Foto tidak dapat diedit.
 - **Hapus**, pada pesanmu sendiri, kapan saja. Aplikasi menanyakan **Hapus untuk semua orang?** sekali, dan pesan tersebut kemudian bertuliskan **Pesan ini telah dihapus** bagi semua orang di grup.
 - **Hapus**, untuk koordinator, pada pesan orang lain mana pun. Aplikasi menanyakannya sekali, dan pesan tersebut kemudian bertuliskan **Dihapus oleh pengelola**. Pesanmu sendiri adalah **Hapus**, bukan penghapusan oleh koordinator.
+- **Laporkan** (sebuah bendera), pada pesan orang lain. Pilih alasan, tambahkan beberapa kata jika mau, lalu ketuk **Kirim laporan**. Moderator komunitasmu menerima satu pesan itu saja, beserta fotonya jika ada, dan siapa pengirimnya, tanpa isi obrolan lainnya. Lihat "Melaporkan masalah".
 
 Dua pesan atau lebih berturut-turut yang dihapus penulisnya ditampilkan sebagai satu baris, seperti **3 pesan telah dihapus**. Dua atau lebih yang dihapus koordinator ditampilkan sebagai **3 pesan dihapus oleh pengelola**.
 
-Di bawah pesanmu sendiri: jam saat pesan sedang dikirim, centang begitu server grup menerimanya, atau **! tidak terkirim** jika tidak dapat dikirim — ketuk untuk **Kirim ulang** atau **Buang**. Tidak ada dua centang biru di grup: sebuah grup tidak memiliki satu pembaca tunggal.
+Di bawah pesanmu sendiri: jam saat pesan sedang dikirim, centang begitu server grup menerimanya, atau **! tidak terkirim** jika tidak dapat dikirim — ketuk untuk **Kirim ulang** atau **Buang**, atau di aplikasi web gunakan **Coba lagi** atau **Buang** pada pesan tersebut. Tidak ada dua centang biru di grup: sebuah grup tidak memiliki satu pembaca tunggal.
 
-Foto tidak dapat dikirim dalam obrolan grup, dan transaksi tidak dapat dimulai di dalamnya. Keduanya harus berada di obrolan antara dua orang. Lihat "Pesan".
+Di obrolan grup yang terkunci, kamu dapat mengirim satu foto per pesan, dengan atau tanpa keterangan, di ponsel dan di web. Foto dibuat paling besar 800 px pada sisi terpanjangnya. Ketuk foto untuk membukanya dalam layar penuh, di ponsel dan di web. Foto di obrolan grup dienkripsi seperti kata-katanya: hanya anggota grup yang dapat membukanya, dan hanya untuk masa mereka berada di grup (pendatang baru tidak melihat foto dari sebelum mereka bergabung; anggota yang dikeluarkan tidak melihat foto apa pun dari setelahnya). Foto yang tidak dapat dibuka, misalnya foto yang ditukar orang lain di server, bertuliskan **🔒 Gambar tidak tersedia**. Pesan foto tidak dapat diedit. Pesan foto dapat dihapus seperti pesan lainnya (oleh penulisnya; koordinator dapat menghapusnya), di ponsel dan di web.
 
-Seorang **pengamat** dapat membaca obrolan tetapi tidak dapat menulis di dalamnya, bereaksi, atau membalas.
+Di obrolan grup yang terkunci kamu juga dapat mengirim pesan suara, di ponsel dan di aplikasi web: di ponsel, tahan mikrofon lalu lepaskan untuk mengirim; di aplikasi web, klik mikrofon untuk mulai. Lihat "Pesan suara".
+
+Transaksi tidak dapat dimulai di obrolan grup: transaksi harus berada di obrolan antara dua orang. Lihat "Pesan".
+
+Seorang **pengamat** dapat membaca obrolan tetapi tidak dapat menulis di dalamnya, bereaksi, atau membalas. Mereka dapat melaporkan pesan.
 
 Server komunitasmu harus diperbarui untuk fitur balas, reaksi, edit, dan hapus. Hanya jika servermu belum diperbarui maka aplikasi menampilkan **Belum tersedia di komunitas ini** — hal ini perlu disampaikan kepada pihak yang mengelola server.
 
@@ -99,7 +111,7 @@ Pada akhirnya ponselmu memberitahukan apa yang terjadi: **Selesai** hanya ketika
 
 ## Bergabung dengan grup
 
-Di ponsel, di **Sarana Bersama**, di bawah **Grup**, **Grup yang bisa Anda ikuti** mencantumkan grup yang belum kamu ikuti. Filter grup berdasarkan jenis dengan tombol-tombol di atas daftar. Di aplikasi web, **Grup** mencantumkan setiap grup yang dapat kamu lihat, grupmu ditandai dengan peranmu; **Grup saya** hanya menampilkan grup milikmu. Masing-masing menampilkan awal dari deskripsinya. Buka grup untuk membaca seluruh isinya, lalu:
+Di **Sarana Bersama**, di bawah **Grup**, grup tempat kamu bergabung ada paling atas di bawah **Milikmu**. Di bawahnya, daftar menampilkan apa yang bisa kamu ikuti, dengan judul yang menyebut apa yang ditampilkan (misalnya **Grup, proyek, dan usaha di sini**, yang berubah sesuai chip **Semua**, **Proyek**, **Usaha**, dan **Chat groups**). Masing-masing menampilkan awal dari deskripsinya. Buka grup untuk membaca seluruh isinya, lalu:
 
 - **Gabung ke Grup** jika terbuka untuk siapa saja;
 - **Minta Bergabung** jika seorang koordinator menyetujui anggota. Kamu melihat **Permintaan Menunggu Persetujuan** sampai mereka menyetujuinya.
@@ -108,7 +120,7 @@ Di ponsel, grup yang kamu minta untuk bergabung tidak ada di kedua daftar sampai
 
 Grup **Khusus Undangan** disembunyikan dari setiap orang yang tidak berada di dalamnya atau tidak diundang ke dalamnya.
 
-Di ponsel, komunitas lokal tanpa Kacang tidak memiliki tab **Sarana Bersama**. Di sana, ketuk **Obrolan**, lalu **Grup**, kemudian **Cari grup**: itu membuka daftar yang sama. Sebelum kamu bergabung dengan grup mana pun, tautannya adalah **Cari grup untuk bergabung**. Komunitas global memiliki tab **Sarana Bersama**: grupnya ada di sana, di bawah contoh dari komunitas lokal (lihat "Kacang dan komunitas global").
+Di ponsel, komunitas lokal tanpa Kacang dan tanpa Keputusan tidak memiliki tab **Sarana Bersama**. Di sana, ketuk **Obrolan**, lalu **Grup**, kemudian **Cari grup**: itu membuka daftar yang sama. Sebelum kamu bergabung dengan grup mana pun, tautannya adalah **Cari grup untuk bergabung**. Jika Keputusan aktif, tab **Sarana Bersama** tetap ada untuk Keputusan dan grup. Komunitas global memiliki tab **Sarana Bersama**: grupnya ada di sana, di bawah contoh dari komunitas lokal (lihat "Kacang dan komunitas global").
 
 Jika seorang koordinator mengeluarkanmu dari grup, kamu tidak dapat bergabung lagi sendiri.
 
@@ -116,14 +128,17 @@ Saat akunmu ditangguhkan, kamu tidak dapat memulai grup, bergabung ke grup, memi
 
 ## Bergabung melalui undangan
 
-Grup tempat kamu diundang muncul di **Sarana Bersama**, di bawah **Grup**, bertanda **DIUNDANG** di aplikasi ponsel. Di ponsel, pada komunitas tanpa tab **Sarana Bersama**, letaknya di bawah **Cari grup** di **Obrolan**. Ketuk grup tersebut untuk melihat undangannya: siapa yang mengundangmu, grup apa itu, siapa saja di dalamnya (untuk grup khusus undangan, berapa banyak), dan siapa yang dapat membaca obrolannya. Di ponsel:
+Saat seseorang mengundangmu ke grup, ponselmu mendapat notifikasi, "Kamu diundang bergabung dengan sebuah grup.", dan **Membutuhkanmu** menampilkan undangan itu, di Beranda dan, di ponsel serta di aplikasi web, sebagai ikon di bagian atas (sebuah amplop). Ketuk notifikasi atau barisnya untuk membuka undangan. Undangan tetap ada di **Membutuhkanmu** sampai kamu bergabung atau menolak, atau koordinator menariknya kembali. Notifikasi ini datang bersama notifikasi **Pesan Langsung** milikmu, jadi tidak akan datang jika kamu mematikannya.
+
+Grup tempat kamu diundang juga muncul di **Sarana Bersama**, di bawah **Grup**, bertanda **DIUNDANG**. Di ponsel, pada komunitas tanpa tab **Sarana Bersama**, letaknya di bawah **Cari grup** di **Obrolan**. Ketuk grup tersebut untuk melihat undangannya: siapa yang mengundangmu, grup apa itu, siapa saja di dalamnya (untuk grup khusus undangan, berapa banyak), dan siapa yang dapat membaca obrolannya. Di ponsel:
 
 - Ketuk **Gabung ke grup**. Kamu akan masuk ke obrolannya.
 - Ketuk **Nanti saja** untuk memutuskan nanti. Undangan tetap ada.
+- Ketuk **Tolak undangan** untuk menolak. Aplikasi akan bertanya sekali lagi, lalu undangan itu hilang, juga dari **Membutuhkanmu**. Siapa pun yang mengundangmu dapat mengundangmu lagi.
 - Jika tertulis **Undangan ini sudah tidak dibuka**, undangan tersebut telah ditarik. Minta siapa pun yang mengundangmu untuk mengundangmu lagi.
 - Jika tertulis **Tidak dapat membuka obrolan ini**, ponselmu tidak dapat menjangkau server komunitasmu. Ketuk **Coba lagi**.
 
-Aplikasi web belum menandai undangan. Buka grup di **Sarana Bersama**, di bawah **Grup**, dan ketuk **Terima undangan**. Kamu bergabung dan tetap berada di halaman grup.
+Di aplikasi web, ketuk baris di **Membutuhkanmu** di Beranda, atau grup bertanda **DIUNDANG** di **Sarana Bersama**, di bawah **Grup**, lalu ketuk **Terima undangan**. Kamu bergabung dan tetap berada di halaman grup. Untuk menolak, ketuk **Tolak undangan** di bawahnya.
 
 ## Memposting ke grup
 
@@ -132,6 +147,8 @@ Di web, buka grup di **Sarana Bersama**, di bawah **Grup**, dan ketuk **Posting 
 ## Koordinator dan koordinator utama
 
 Seorang koordinator mengurus grup. Siapa pun yang membuatnya adalah **koordinator utama**, dan kartu grup menyebutkan nama mereka, sebagai **Koordinator utama: Ali**. Di daftar anggota baris mereka bertanda **PEMIMPIN**.
+
+Koordinator mana pun dapat mengganti gambar grup: buka grup (di ponsel, **Info grup** di menu **⋮** obrolannya) dan ketuk **Ganti gambar** (di aplikasi web, juga **Pilih foto**). Grup selalu memiliki gambar; gambar dapat diganti, tetapi tidak pernah dihapus.
 
 Di **Peralatan Koordinator**, koordinator mana pun dapat:
 
@@ -143,7 +160,7 @@ Di samping nama di **Daftar anggota**, koordinator mana pun dapat:
 - mengubah peran anggota atau pengamat (**Peran** di ponsel, menu tarik-turun di aplikasi web), termasuk menjadikan mereka koordinator;
 - mengeluarkan anggota atau pengamat (**✕**).
 
-Koordinator menghapus postingan dari postingan itu sendiri, dan di ponsel menghapus pesan di obrolan. Nama dan deskripsi grup belum dapat diubah di dalam aplikasi.
+Koordinator menghapus postingan dari postingan itu sendiri, dan pesan di obrolan. Nama dan deskripsi grup belum dapat diubah di dalam aplikasi.
 
 Hanya **koordinator utama** yang dapat mengeluarkan koordinator, atau mencabut peran koordinator dari seseorang. Di samping baris yang tidak dapat kamu tindak lanjuti, tidak ada tombol **Peran** atau **✕** yang ditampilkan sama sekali — itu adalah cara aplikasi memberitahumu bahwa tindakan itu bukan hakmu.
 

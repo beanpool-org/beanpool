@@ -4,7 +4,7 @@ title: Gruppen
 summary: Einer Gruppe beitreten, eine gründen, Gruppenchats, offene und geschlossene Gruppen, Koordinatoren und neue Leitung wählen.
 related: messages, mute, mentions, enterprises, event-chat, posting, decisions, keepers
 help: Deine Gruppen und Gruppen zum Beitreten. Tippe auf eine Gruppe zum Öffnen des Chats oder auf + zum Starten.
-source-hash: 5093ecbc7c68e8dc
+source-hash: 7669768827172c66
 ---
 
 ## Was eine Gruppe ist
@@ -15,35 +15,42 @@ Die Personen, die eine Chat-Gruppe betreuen, sind ihre **Koordinatoren**; einer 
 
 ## Deine Gruppen
 
-Tippe auf **Chat**, dann auf **Gruppen**. Jede Gruppe, in der du bist, ist dort aufgelistet – mit der neuesten Nachricht zuerst –, zusammen mit den Projekten, die du leitest oder an denen du mitarbeitest (🎯), den Betrieben, die du verwaltest (🥖), und den Veranstaltungen, die du veranstaltest oder besuchst (📅). Der Chat eines Betriebs ist dessen öffentliche Diskussion: Jedes Mitglied deiner Community kann darin lesen. Siehe „Nachrichten“. Jede Gruppe zeigt ihre neueste Nachricht und die Anzahl deiner ungelesenen Nachrichten an. In einem verschlüsselten Chat zeigt die Zeile, wer zuletzt geschrieben hat, und **🔒 Nachricht**, nicht den Text.
+Tippe auf **Chat**, dann auf **Gruppen**. Jede Gruppe, in der du bist, ist dort aufgelistet – mit der neuesten Nachricht zuerst –, zusammen mit den Projekten, die du leitest oder an denen du mitarbeitest (🎯), den Betrieben, die du verwaltest (🥖), und den Veranstaltungen, die du veranstaltest oder besuchst (📅), sobald jemand im Chat der Veranstaltung geschrieben hat. Der Chat eines Betriebs ist dessen öffentliche Diskussion: Jedes Mitglied deiner Community kann darin lesen. Siehe „Nachrichten“. Jede Gruppe zeigt ihre neueste Nachricht und die Anzahl deiner ungelesenen Nachrichten an. In einem verschlüsselten Chat zeigt die Zeile, wer zuletzt geschrieben hat, und **🔒 Nachricht**, nicht den Text.
 
 - Die Zahl auf **Gruppen** ganz oben summiert deine ungelesenen Nachrichten, außer in stummgeschalteten Chats.
 - Tippe auf eine Gruppe, um ihren Chat zu öffnen. Dadurch wird sie als gelesen markiert.
 - Ziehe die Liste nach unten, um sie zu aktualisieren.
 
-Auf dem Telefon befindet sich dieselbe Liste im **Gemeingut** unter **Gruppen** als **Deine Gruppen**, ohne die ungelesenen Zahlen. Sie öffnet dieselben Chats.
+Auf dem Telefon zeigt **Gemeingut** ganz oben unter **Gruppen** den Bereich **Deine**: zuerst die Betriebe und Projekte, die du verwaltest (mit einer Schaltfläche **Verwalten**, um sie zu führen), dann die Gruppen, in denen du bist; sie öffnen dieselben Chats.
+
+## Ortskreise
+
+In der globalen Community legt die App eine Art von Gruppe selbst an: einen **place circle** (Ortskreis), für Menschen, die in der Nähe desselben Ortes warten und gesagt haben, dass sie beim Gründen einer Community helfen würden. Nur seine Mitglieder können ihn sehen, und sein Name, sein Zweck und wer beitreten kann, bleiben, wie sie sind. Siehe „Community in der Nähe finden“.
 
 ## Eine Gruppe gründen
 
-- Auf dem Telefon tippst du im **Chat** unter **Gruppen** auf **Neue Gruppe**. Oder im **Gemeingut** unter **Gruppen** auf die runde **+**-Schaltfläche. Beide öffnen dasselbe Formular **Gruppe erstellen**. (Auf dem Chip **Projekte** oder **Betriebe** startet das **+** stattdessen ein Projekt oder einen Betrieb.)
-- In der Web-App öffnest du das **Gemeingut**, dann **Gruppen**, und tippst auf **+ Gruppe erstellen**. Danach bleibst du im **Gemeingut**. Um Personen einzuladen, öffne die Gruppe und tippe auf **Personen einladen**. Du kannst auch den **Chat** öffnen, auf **Gruppen** und dann auf **Neue Gruppe** tippen: Das führt dich direkt in den Chat der neuen Gruppe.
+- Auf dem Telefon tippst du im **Chat** unter **Gruppen** auf **Neue Gruppe**. Oder tippe im **Gemeingut** auf **+**, dann auf **Etwas starten** und wähle **Chatgruppe**. Beide öffnen das Formular **Gruppe erstellen**.
+- In der Web-App öffnest du das **Gemeingut**, dann **Gruppen**, tippst auf **Etwas starten** und wählst **Chatgruppe**. Danach bleibst du im **Gemeingut**. Um Personen einzuladen, öffne die Gruppe und tippe auf **Personen einladen**. Du kannst auch den **Chat** öffnen, auf **Gruppen** und dann auf **Neue Gruppe** tippen: Das führt dich direkt in den Chat der neuen Gruppe.
+- Jede Gruppe hat ein Bild: Das Bild für ihre Art ist schon ausgewählt, und es folgt der **Kategorie**, bis du selbst eines wählst. Um ein anderes zu wählen, tippe auf **Anderes wählen**. Auf dem Telefon bietet es deine Kamera, deine Fotos und die fertigen Bilder an. In der Web-App zeigt es die fertigen Bilder, und mit **Foto auswählen** wählst du eines deiner eigenen.
 - Gib einen **Gruppennamen** ein, bis zu 60 Zeichen, und, wenn du möchtest, einen **Zweck / Beschreibung**, bis zu 300 Zeichen: wofür die Gruppe da ist und an wen sie sich richtet.
-- Wähle eine **Kategorie**: **Freundeskreis**, **Allgemein**, **Arbeitsgruppe** oder **Gilde**. Auf dem Telefon ist standardmäßig **Freundeskreis** ausgewählt. In der Web-App ist es **Arbeitsgruppe**.
+- Wähle eine **Kategorie**: **Freundeskreis**, **Allgemein**, **Arbeitsgruppe** oder **Gilde**. Standardmäßig ist **Freundeskreis** ausgewählt.
 - Wähle eine **Beitrittsrichtlinie**: **Offen**, **Beitritt anfragen** oder **Nur auf Einladung**.
 - Tippe auf **Gruppe erstellen**. Du wirst ihr **Hauptkoordinator**. Auf dem Telefon führt dich die App direkt in den Chat der neuen Gruppe.
 
-Du kannst innerhalb von 24 Stunden bis zu 5 Gruppen gründen.
+Du kannst innerhalb von 24 Stunden bis zu 5 Gruppen gründen. Ein Eigentümer oder Admin kann so viele gründen, wie das **Owner and admin limit** der Eigentümer erlaubt (100, sofern ein Eigentümer es nicht ändert).
 
-Sind Bohnen im Spiel? Starte stattdessen ein Projekt oder einen Betrieb ganz unten bei den Kategorien: auf dem Telefon **Projekt oder Betrieb starten**, im Web **Projekt starten** oder **Betrieb starten**. Siehe „Projekte und Betriebe“.
+Sind Bohnen im Spiel? Starte stattdessen ein Projekt oder einen Betrieb: Tippe im **Gemeingut** auf **Etwas starten** (auf dem Telefon die runde **+**-Schaltfläche) und wähle dann **Projekt** oder **Betrieb** (oder über den Link unten im Gruppenformular, **Starte ein Projekt oder einen Betrieb →**). Siehe „Projekte und Betriebe“.
 
 ## Personen einladen
 
 Du kannst Personen auf dem Telefon und in der Web-App einladen. Auf dem Telefon fragt der Chat einer neuen Gruppe: **Wen möchtest du einladen?**
 
-- Tippe auf **Personen einladen**, hake die gewünschten Personen an und tippe auf die Schaltfläche unten (beispielsweise **2 Personen einladen**).
+- Tippe auf **Personen einladen**, hake die gewünschten Personen an und tippe auf die Schaltfläche unten (beispielsweise **2 Personen einladen**). Unter dem Namen jeder Person erscheint der kurze Anfang ihres Schlüssels, damit du Personen mit demselben Namen unterscheiden kannst.
 - Oder tippe auf **Nicht jetzt**, um dies zu überspringen.
 
-Später kann ein Koordinator Personen über das Menü **⋮** des Chats unter **Personen einladen** einladen. In der Web-App öffnet ein Koordinator die Gruppe, tippt auf **Personen einladen**, wählt die Personen aus und tippt unten auf dieselbe Weise auf die Schaltfläche. Jede eingeladene Person sieht die Gruppe im **Gemeingut** unter **Gruppen**, in der Telefon-App mit **EINGELADEN** gekennzeichnet (auf dem Telefon in einer Community ohne **Gemeingut**-Reiter unter **Gruppen finden** im **Chat**). Die Web-App kennzeichnet Einladungen noch nicht: Dort öffnet man die Gruppe und tippt auf **Einladung annehmen**. Wenn jemand beitritt, weist der Chat darauf hin.
+Später kann ein Koordinator Personen über das Menü **⋮** des Chats unter **Personen einladen** einladen. In der Web-App öffnet ein Koordinator die Gruppe, tippt auf **Personen einladen**, wählt die Personen aus und tippt unten auf dieselbe Weise auf die Schaltfläche. Jede eingeladene Person wird benachrichtigt: eine Benachrichtigung auf ihrem Telefon, „Du wurdest eingeladen, einer Gruppe beizutreten.“, und eine Zeile in **Braucht dich** auf ihrer Startseite (auf dem Telefon und in der Web-App zusätzlich ein Symbol oben). Sonst bekommt niemand eine Benachrichtigung, nicht einmal die anderen Mitglieder der Gruppe. Die Person sieht die Gruppe außerdem im **Gemeingut** unter **Gruppen**, mit **EINGELADEN** gekennzeichnet (auf dem Telefon in einer Community ohne **Gemeingut**-Reiter unter **Gruppen finden** im **Chat**). Wenn sie beitritt, weist der Chat darauf hin.
+
+Wenn du eine Einladung zurückziehst und dieselbe Person erneut einlädst, bekommt sie innerhalb einer Stunde keine zweite Benachrichtigung. Wer dich blockiert hat, bekommt die Einladung trotzdem, aber ohne Benachrichtigung.
 
 ## Der Gruppenchat
 
@@ -53,15 +60,15 @@ Später kann ein Koordinator Personen über das Menü **⋮** des Chats unter **
 - Schreibe **@** und den Namen von jemandem, um die Person zu benachrichtigen. Siehe „Erwähnungen (@Name)“.
 - Die neueste Nachricht befindet sich direkt über dem Eingabefeld und bleibt dort, wenn sich die Tastatur öffnet. Scrolle nach oben, um zurückzulesen; eine neu eintreffende Nachricht wartet dann auf dich, statt dich nach unten zu ziehen.
 
-Der Chat einer Gruppe ist Ende-zu-Ende verschlüsselt: Nur die Mitglieder der Gruppe können ihn lesen, nicht die Betreiber des Servers deiner Community. Über dem Eingabefeld steht **Ende-zu-Ende verschlüsselt**. Der Server deiner Community sieht weiterhin, wer wann geschrieben hat, wer erwähnt wurde, auf welche Nachricht geantwortet wurde und die Emoji-Reaktionen.
+Der Chat einer Gruppe ist Ende-zu-Ende verschlüsselt: Nur die Mitglieder der Gruppe können ihn lesen, nicht die Betreiber des Servers deiner Community. Über dem Eingabefeld steht **Ende-zu-Ende verschlüsselt**. Der Server deiner Community sieht weiterhin, wer wann geschrieben hat, wer erwähnt wurde, auf welche Nachricht geantwortet wurde, die Emoji-Reaktionen sowie welche Zeilen Fotos sind und wie groß jedes davon ist.
 
-- Du siehst den Chat erst ab dem Tag deines Beitritts. Vorher Geschriebenes wird nicht angezeigt, und dein Telefon besitzt niemals den Schlüssel dazu. Du siehst die grauen Zeilen von früher, aber niemandes Worte.
+- Du siehst den Chat erst ab dem Tag deines Beitritts. Vorher Geschriebenes wird nicht angezeigt, und dein Telefon besitzt niemals den Schlüssel dazu. Du siehst die grauen Zeilen von früher, aber niemandes Worte oder Fotos.
 - Wenn jemand entfernt wird oder austritt, erstellt die Gruppe einen neuen Schlüssel. In einer Gruppe ab 10 Personen meldet der Chat: **Chat für N Personen wird gesichert…**, während dein Telefon ihn erstellt.
-- Eine Nachricht, die nicht verschlüsselt werden kann, wird nicht gesendet. Sie zeigt **! nicht zugestellt**, und eine Zeile über dem Eingabefeld kann den Grund nennen. Tippe darauf, um sie **Erneut senden** oder **Verwerfen**.
+- Eine Nachricht, die nicht verschlüsselt werden kann, wird nicht gesendet. Sie zeigt **! nicht zugestellt**, und eine Zeile über dem Eingabefeld kann den Grund nennen. Tippe darauf, um sie **Erneut senden** oder **Verwerfen**; in der Web-App nutzt du **Erneut versuchen** oder **Verwerfen** an der Nachricht.
 - Eine Nachricht, die sich nicht als von einem Mitglied verfasst bestätigt, erscheint als **Unbestätigt** ohne Zuordnung, mit dem Hinweis: **Diese Nachricht konnte nicht verifiziert werden.** Eine Nachricht, deren Schlüssel dein Telefon noch nicht erreicht hat, zeigt: **Warten auf den Schlüssel zu dieser Nachricht.**
 - Wenn der Server deiner Community älter ist und Gruppenchats noch nicht verschlüsseln kann, meldet der Chat, dass der Server mitlesen kann und dass er verschlüsselt wird, sobald der Server aktualisiert wird. Nach der Aktualisierung werden frühere Nachrichten, die der Server lesen konnte, entfernt, worauf eine Zeile im Chat hinweist. Jede frühere Nachricht lautet dann **Eine frühere Nachricht wurde entfernt, als dieser Chat verschlüsselt wurde**, und mehrere hintereinander erscheinen als eine Zeile, etwa **11 frühere Nachrichten entfernt, als dieser Chat verschlüsselt wurde**.
 
-In der Web-App befinden sich deine Gruppenchats unter **Chat**, gekennzeichnet mit 👥. Du kannst dort Ende-zu-Ende verschlüsselt wie auf dem Telefon lesen und schreiben: antworten, reagieren, 15 Minuten lang bearbeiten und den Chat durchsuchen. Stummschalten, **Löschen** und **Entfernen** gibt es nur auf dem Telefon. In der Web-App klickst du oben im Chat auf den Gruppennamen, um die Gruppe zu öffnen; Koordinatoren können von dort aus Personen einladen. Der Chat eines Betriebs ist nicht verschlüsselt: Siehe „Nachrichten“.
+In der Web-App befinden sich deine Gruppenchats unter **Chat**, gekennzeichnet mit 👥. Du kannst dort Ende-zu-Ende verschlüsselt wie auf dem Telefon lesen und schreiben: antworten, reagieren, 15 Minuten lang bearbeiten, löschen, entfernen, Benachrichtigungen stummschalten, den Chat durchsuchen und die Nachricht einer anderen Person melden (**Melden**, darunter). Klicke oben im Chat auf den Gruppennamen, um die Gruppe zu öffnen; Koordinatoren können von dort aus Personen einladen. Der Chat eines Betriebs ist nicht verschlüsselt: Siehe „Nachrichten“.
 
 ## Im Gruppenchat sprechen
 
@@ -69,17 +76,22 @@ Der Chat einer Gruppe funktioniert genau wie ein Chat mit einer einzelnen Person
 
 - **Antworten** zitiert die Nachricht über deiner nächsten Eingabe. Tippe auf das Zitat, um zur beantworteten Nachricht zu springen.
 - **Reagieren** öffnet sieben Emojis. Eins pro Person; tippe erneut darauf, um es zurückzunehmen. Die Reaktionen erscheinen als kleines Abzeichen unter der Nachricht.
-- **Bearbeiten**, bei eigenen Nachrichten, 15 Minuten lang. Die Nachricht zeigt danach **bearbeitet**.
+- **Bearbeiten**, bei eigenen Nachrichten, 15 Minuten lang. Die Nachricht zeigt danach **bearbeitet**. Fotos können nicht bearbeitet werden.
 - **Löschen**, bei eigenen Nachrichten, jederzeit. Es erfolgt eine einmalige Nachfrage: **Für alle löschen?**, und die Nachricht lautet danach für alle in der Gruppe: **Diese Nachricht wurde gelöscht**.
 - **Entfernen**, für Koordinatoren, bei jeder fremden Nachricht. Es erfolgt eine einmalige Nachfrage, und die Nachricht lautet danach: **Von einem Koordinator entfernt**. Eine eigene Nachricht wird über **Löschen** gelöscht, nicht über **Entfernen**.
+- **Melden** (eine Fahne), bei der Nachricht einer anderen Person. Wähle einen Grund, füge auf Wunsch ein paar Worte hinzu und tippe auf **Meldung absenden**. Die Moderatoren deiner Community erhalten nur diese eine Nachricht, mit ihrem Foto, falls sie eines hat, und wer sie gesendet hat, sonst nichts aus dem Chat. Siehe „Ein Problem melden“.
 
 Zwei oder mehr aufeinanderfolgende Nachrichten, die ihre Verfasser gelöscht haben, erscheinen als eine Zeile, wie etwa **3 Nachrichten wurden gelöscht**. Zwei oder mehr von einem Koordinator entfernte Nachrichten erscheinen als **3 Nachrichten von einem Koordinator entfernt**.
 
-Unter deiner eigenen Nachricht: eine Uhr, während sie gesendet wird, ein Haken, sobald der Server der Gruppe sie erhalten hat, oder **! nicht zugestellt**, falls sie nicht gesendet werden konnte – tippe darauf, um sie **Erneut senden** oder **Verwerfen**. In einer Gruppe gibt es keine blauen Doppelhaken: Eine Gruppe hat keinen einzelnen Leser.
+Unter deiner eigenen Nachricht: eine Uhr, während sie gesendet wird, ein Haken, sobald der Server der Gruppe sie erhalten hat, oder **! nicht zugestellt**, falls sie nicht gesendet werden konnte — tippe darauf, um sie **Erneut senden** oder **Verwerfen**, oder nutze in der Web-App **Erneut versuchen** oder **Verwerfen** an der Nachricht. In einer Gruppe gibt es keine blauen Doppelhaken: Eine Gruppe hat keinen einzelnen Leser.
 
-Fotos können in einem Gruppenchat nicht gesendet werden, und ein Deal kann darin nicht gestartet werden. Beides gehört in einen Chat zwischen zwei Personen. Siehe „Nachrichten“.
+In einem verschlüsselten Gruppenchat kannst du ein Foto pro Nachricht senden, mit oder ohne Bildunterschrift, auf dem Telefon und im Web. Fotos werden an ihrer längsten Seite auf höchstens 800 px verkleinert. Tippe auf ein Foto, um es im Vollbild zu öffnen, auf dem Telefon und im Web. Fotos in einem Gruppenchat sind wie die Worte verschlüsselt: Nur die Mitglieder der Gruppe können sie öffnen, und nur für die Zeit, in der sie in der Gruppe waren (wer neu dazukommt, sieht keine Fotos von vor dem Beitritt; ein entferntes Mitglied sieht keine von danach). Ein Foto, das sich nicht öffnen lässt, etwa eines, das jemand anderes auf dem Server ausgetauscht hat, zeigt **🔒 Bild nicht verfügbar**. Eine Fotonachricht kann nicht bearbeitet werden. Sie kann wie jede Nachricht gelöscht werden (von der Person, die sie gesendet hat; ein Koordinator kann sie entfernen), auf dem Telefon und im Web.
 
-Ein **Beobachter** kann den Chat lesen, aber darin weder schreiben noch reagieren oder antworten.
+In einem verschlüsselten Gruppenchat kannst du auch eine Sprachnachricht senden, auf dem Telefon und in der Web-App: Auf dem Telefon hältst du das Mikrofon gedrückt und lässt zum Senden los; in der Web-App klickst du darauf, um zu beginnen. Siehe „Sprachnachrichten“.
+
+In einem Gruppenchat kann kein Deal gestartet werden: Deals gehören in einen Chat zwischen zwei Personen. Siehe „Nachrichten“.
+
+Ein **Beobachter** kann den Chat lesen, aber darin weder schreiben noch reagieren oder antworten. Eine Nachricht melden kann er aber.
 
 Der Server deiner Community muss aktuell sein, damit Antworten, Reaktionen, Bearbeiten und Löschen funktionieren. Nur wenn er das nicht ist, meldet die App **In dieser Community noch nicht verfügbar** – diesen Hinweis lohnt es sich, an die Verantwortlichen des Servers weiterzugeben.
 
@@ -99,7 +111,7 @@ Am Ende zeigt dein Telefon an, was geschehen ist: **Fertig** nur dann, wenn es j
 
 ## Einer Gruppe beitreten
 
-Auf dem Telefon listet im **Gemeingut** unter **Gruppen** der Bereich **Gruppen, denen du beitreten kannst** die Gruppen auf, in denen du noch nicht bist. Filtere sie nach Art mit den Schaltflächen über der Liste. In der Web-App listet **Gruppen** jede sichtbare Gruppe auf, deine eigenen mit deiner Rolle gekennzeichnet; **Meine Gruppen** zeigt nur deine eigenen an. Jede Gruppe zeigt den Beginn ihrer Beschreibung. Öffne eine Gruppe, um alles zu lesen, und wähle dann:
+Im **Gemeingut** unter **Gruppen** stehen die Gruppen, in denen du bist, ganz oben unter **Deine**. Darunter zeigt die Liste, wo du beitreten könntest, mit einer Überschrift, die nennt, was angezeigt wird (zum Beispiel **Gruppen, Projekte und Betriebe hier**; sie ändert sich mit den Chips **Alle**, **Projekte**, **Betriebe** und **Chatgruppen**). Jede Gruppe zeigt den Beginn ihrer Beschreibung. Öffne eine Gruppe, um alles zu lesen, und wähle dann:
 
 - **Gruppe beitreten**, wenn sie für alle offen ist;
 - **Beitritt anfragen**, wenn ein Koordinator Mitglieder bestätigt. Bis zur Bestätigung siehst du **Anfrage wartet auf Genehmigung**.
@@ -108,7 +120,7 @@ Auf dem Telefon befindet sich eine angefragte Gruppe in keiner der Listen, bis e
 
 Eine Gruppe **Nur auf Einladung** ist für alle unsichtbar, die weder Mitglied noch eingeladen sind.
 
-Auf dem Telefon hat eine lokale Community ohne Bohnen keinen **Gemeingut**-Reiter. Tippe dort auf **Chat**, dann auf **Gruppen** und anschließend auf **Gruppen finden**: Dies öffnet dieselbe Liste. Bevor du in einer Gruppe bist, lautet der Link **Eine Gruppe zum Beitreten finden**. Die globale Gemeinschaft besitzt den **Gemeingut**-Reiter: Ihre Gruppen befinden sich dort unter einem Beispiel aus einer lokalen Community (siehe „Regeln und Entscheidungen“).
+Auf dem Telefon hat eine lokale Community ohne Bohnen und ohne Beschlüsse keinen **Gemeingut**-Reiter. Tippe dort auf **Chat**, dann auf **Gruppen** und anschließend auf **Gruppen finden**: Dies öffnet dieselbe Liste. Bevor du in einer Gruppe bist, lautet der Link **Eine Gruppe zum Beitreten finden**. Wenn Beschlüsse eingeschaltet sind, bleibt der **Gemeingut**-Reiter für Beschlüsse und Gruppen. Die globale Gemeinschaft besitzt den **Gemeingut**-Reiter: Ihre Gruppen befinden sich dort unter einem Beispiel aus einer lokalen Community (siehe „Bohnen & globale Community“).
 
 Wenn ein Koordinator dich aus einer Gruppe entfernt hat, kannst du ihr nicht mehr selbstständig beitreten.
 
@@ -116,14 +128,17 @@ Während dein Konto gesperrt ist, kannst du weder Gruppen gründen noch ihnen be
 
 ## Per Einladung beitreten
 
-Eine Gruppe, zu der du eingeladen wurdest, erscheint im **Gemeingut** unter **Gruppen**, in der Telefon-App mit **EINGELADEN** markiert. Auf dem Telefon in einer Community ohne **Gemeingut**-Reiter findest du sie unter **Gruppen finden** im **Chat**. Tippe darauf, um die Einladung anzusehen: wer dich eingeladen hat, worum es in der Gruppe geht, wer dabei ist (bei geschlossenen Gruppen: wie viele) und wer den Chat lesen kann. Auf dem Telefon:
+Wenn dich jemand in eine Gruppe einlädt, bekommt dein Telefon eine Benachrichtigung, „Du wurdest eingeladen, einer Gruppe beizutreten.“, und **Braucht dich** zeigt die Einladung, auf der Startseite und, auf dem Telefon und in der Web-App, als Symbol oben (ein Briefumschlag). Tippe auf die Benachrichtigung oder die Zeile, um die Einladung zu öffnen. Sie bleibt in **Braucht dich**, bis du beitrittst oder ablehnst oder der Koordinator sie zurückzieht. Die Benachrichtigung kommt zusammen mit deinen Benachrichtigungen für **Direktnachrichten**, sie kommt also nicht, wenn du diese ausschaltest.
+
+Eine Gruppe, zu der du eingeladen wurdest, erscheint auch im **Gemeingut** unter **Gruppen**, mit **EINGELADEN** markiert. Auf dem Telefon in einer Community ohne **Gemeingut**-Reiter findest du sie unter **Gruppen finden** im **Chat**. Tippe darauf, um die Einladung anzusehen: wer dich eingeladen hat, worum es in der Gruppe geht, wer dabei ist (bei geschlossenen Gruppen: wie viele) und wer den Chat lesen kann. Auf dem Telefon:
 
 - Tippe auf **Der Gruppe beitreten**. Du landest direkt in ihrem Chat.
 - Tippe auf **Nicht jetzt**, um später zu entscheiden. Die Einladung bleibt bestehen.
+- Tippe auf **Einladung ablehnen**, um abzulehnen. Die App fragt noch einmal nach, dann verschwindet die Einladung, auch aus **Braucht dich**. Wer dich eingeladen hat, kann dich erneut einladen.
 - Steht dort **Diese Einladung ist nicht mehr gültig**, wurde sie zurückgezogen. Bitte die einladende Person um eine erneute Einladung.
 - Steht dort **Diese Gruppe konnte nicht geöffnet werden**, konnte dein Telefon den Server deiner Community nicht erreichen. Tippe auf **Erneut versuchen**.
 
-Die Web-App kennzeichnet Einladungen noch nicht. Öffne die Gruppe im **Gemeingut** unter **Gruppen** und klicke auf **Einladung annehmen**. Du trittst ihr bei und bleibst auf der Gruppenseite.
+Tippe in der Web-App auf die Zeile in **Braucht dich** auf der Startseite oder auf die mit **EINGELADEN** markierte Gruppe im **Gemeingut** unter **Gruppen**, und klicke auf **Einladung annehmen**. Du trittst ihr bei und bleibst auf der Gruppenseite. Um abzulehnen, tippe darunter auf **Einladung ablehnen**.
 
 ## In einer Gruppe inserieren
 
@@ -132,6 +147,8 @@ Die Web-App kennzeichnet Einladungen noch nicht. Öffne die Gruppe im **Gemeingu
 ## Koordinatoren und der Hauptkoordinator
 
 Ein Koordinator betreut die Gruppe. Wer sie gegründet hat, ist ihr **Hauptkoordinator**, und die Gruppenkarte nennt ihn: **Hauptkoordinator: Ali**. In der Mitgliederliste ist diese Zeile mit **LEITUNG** gekennzeichnet.
+
+Jeder Koordinator kann das Bild der Gruppe ändern: Öffne die Gruppe (auf dem Telefon **Gruppeninfo** im Menü **⋮** ihres Chats) und tippe auf **Bild ändern** (in der Web-App auch **Foto auswählen**). Eine Gruppe hat immer ein Bild; es kann geändert, aber nie entfernt werden.
 
 In den **Koordinator-Werkzeuge** kann jeder Koordinator:
 
@@ -143,7 +160,7 @@ Neben einem Namen in der **Mitgliederliste** kann jeder Koordinator:
 - die Rolle eines Mitglieds oder Beobachters ändern (**Rolle** auf dem Telefon, ein Dropdown-Menü in der Web-App), einschließlich der Ernennung zum Koordinator;
 - ein Mitglied oder einen Beobachter entfernen (**✕**).
 
-Ein Koordinator entfernt ein Inserat direkt am Inserat selbst, und auf dem Telefon eine Nachricht im Chat. Der Name und die Beschreibung einer Gruppe können in der App derzeit noch nicht geändert werden.
+Ein Koordinator entfernt ein Inserat direkt am Inserat selbst, und eine Nachricht im Chat. Der Name und die Beschreibung einer Gruppe können in der App derzeit noch nicht geändert werden.
 
 Nur der **Hauptkoordinator** kann einen Koordinator entfernen oder jemandem die Koordinator-Rolle entziehen. Neben Zeilen, die du nicht bearbeiten kannst, wird weder **Rolle** noch **✕** angezeigt – so teilt die App dir mit, dass dir diese Berechtigung fehlt.
 

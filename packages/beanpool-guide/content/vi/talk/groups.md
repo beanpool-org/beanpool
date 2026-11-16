@@ -4,7 +4,7 @@ title: Nhóm
 summary: Các nhóm và đoạn chat nhóm, trò chuyện, tạo nhóm, mời người khác, tham gia qua lời mời và các cuộc bỏ phiếu riêng của nhóm.
 related: messages, mute, mentions, enterprises, event-chat, posting, decisions, keepers
 help: Các nhóm và đoạn chat của bạn. Tạo nhóm, mời người khác, hoặc mở nhóm để trò chuyện và bỏ phiếu cùng nhau.
-source-hash: 5093ecbc7c68e8dc
+source-hash: 7669768827172c66
 ---
 
 ## Nhóm là gì
@@ -15,35 +15,42 @@ Những người trông coi một nhóm trò chuyện là các **điều hành v
 
 ## Các nhóm của bạn
 
-Nhấn **Chat**, sau đó chọn **Nhóm**. Mọi nhóm bạn tham gia đều được liệt kê ở đó, tin nhắn mới nhất xếp trước, cùng các dự án bạn phụ trách hoặc cộng tác (🎯), các doanh nghiệp bạn quản lý (🥖) và các sự kiện bạn tổ chức hoặc sẽ tham gia (📅). Cuộc trò chuyện của một doanh nghiệp là cuộc thảo luận công khai: bất kỳ thành viên nào trong cộng đồng của bạn đều có thể đọc. Xem "Tin nhắn". Mỗi nhóm hiển thị tin nhắn mới nhất và số lượng tin nhắn bạn chưa đọc. Trong một cuộc trò chuyện được mã hóa, hàng hiển thị người đã viết tin nhắn cuối cùng và **🔒 Tin nhắn**, chứ không phải nội dung chữ.
+Nhấn **Chat**, sau đó chọn **Nhóm**. Mọi nhóm bạn tham gia đều được liệt kê ở đó, tin nhắn mới nhất xếp trước, cùng các dự án bạn phụ trách hoặc cộng tác (🎯), các doanh nghiệp bạn quản lý (🥖) và các sự kiện bạn tổ chức hoặc sẽ tham gia (📅), khi đã có người viết trong cuộc trò chuyện của sự kiện. Cuộc trò chuyện của một doanh nghiệp là cuộc thảo luận công khai: bất kỳ thành viên nào trong cộng đồng của bạn đều có thể đọc. Xem "Tin nhắn". Mỗi nhóm hiển thị tin nhắn mới nhất và số lượng tin nhắn bạn chưa đọc. Trong một cuộc trò chuyện được mã hóa, hàng hiển thị người đã viết tin nhắn cuối cùng và **🔒 Tin nhắn**, chứ không phải nội dung chữ.
 
 - Con số trên mục **Nhóm** ở trên cùng cộng dồn các tin nhắn chưa đọc của bạn, ngoại trừ các cuộc trò chuyện bạn đã tắt thông báo.
 - Nhấn vào một nhóm để mở cuộc trò chuyện của nhóm đó. Thao tác này sẽ đánh dấu nhóm là đã đọc.
 - Kéo danh sách xuống để làm mới.
 
-Trên điện thoại, danh sách tương tự nằm trong **Chung**, dưới mục **Nhóm**, với tên **Nhóm của bạn**, không có các số lượng tin nhắn chưa đọc. Nó sẽ mở các cuộc trò chuyện tương tự.
+Trên điện thoại, **Commons** hiển thị **Của bạn** ở đầu mục **Nhóm**: các doanh nghiệp và dự án bạn quản lý được xếp trước (kèm nút **Manage** để điều hành chúng), sau đó là các nhóm bạn tham gia, mở ra cùng các cuộc trò chuyện đó.
+
+## Nhóm khu vực
+
+Trên cộng đồng toàn cầu, ứng dụng tự tạo một loại nhóm: **place circle** (nhóm khu vực), dành cho những người đang chờ ở gần cùng một nơi và đã nói rằng họ sẽ giúp khởi lập một cộng đồng. Chỉ các thành viên của nhóm mới thấy được nhóm, và tên, mục đích cũng như ai có thể tham gia đều được giữ nguyên. Xem "Tìm một cộng đồng gần bạn".
 
 ## Bắt đầu một nhóm
 
-- Trên điện thoại, trong **Chat**, dưới mục **Nhóm**, nhấn **Nhóm mới**. Hoặc trong **Chung**, dưới mục **Nhóm**, nhấn nút tròn **+**. Cả hai đều mở cùng một biểu mẫu **Tạo nhóm**. (Trên thẻ phân loại **Dự án** hoặc **Doanh nghiệp**, nút **+** sẽ bắt đầu một dự án hoặc doanh nghiệp thay thế.)
-- Trong ứng dụng web, mở **Chung**, sau đó chọn **Nhóm**, và nhấn **+ Tạo nhóm**. Bạn sẽ ở lại trang **Chung** sau đó. Để mời mọi người, hãy mở nhóm và nhấn **Mời mọi người**. Bạn cũng có thể mở **Chat**, nhấn **Nhóm**, sau đó chọn **Nhóm mới**: thao tác đó sẽ đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.
+- Trên điện thoại, trong **Chat**, dưới mục **Nhóm**, nhấn **Nhóm mới**. Hoặc nhấn **+** trên **Commons**, sau đó chọn **Bắt đầu điều gì đó** và chọn **Nhóm chat**. Cả hai đều mở biểu mẫu **Tạo nhóm**.
+- Trong ứng dụng web, mở **Commons**, sau đó chọn **Nhóm**, nhấn **Bắt đầu một việc gì đó** và chọn **Nhóm chat**. Bạn sẽ ở lại trang **Commons** sau đó. Để mời mọi người, hãy mở nhóm và nhấn **Mời mọi người**. Bạn cũng có thể mở **Chat**, nhấn **Nhóm**, sau đó chọn **Nhóm mới**: thao tác đó sẽ đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.
+- Mỗi nhóm đều có một ảnh: ảnh dành cho loại nhóm đó đã được chọn sẵn, và ảnh sẽ đổi theo **Danh mục** cho đến khi bạn tự chọn một ảnh. Để chọn ảnh khác, nhấn **Chọn cái khác**. Trên điện thoại, bạn có thể chọn từ máy ảnh, ảnh của bạn và các ảnh có sẵn. Trong ứng dụng web, nút này hiển thị các ảnh có sẵn, còn **Chọn ảnh** cho phép chọn một ảnh của riêng bạn.
 - Đặt **Tên nhóm**, tối đa 60 ký tự, và nếu muốn, nhập **Mục đích / Mô tả**, tối đa 300 ký tự: nhóm dùng để làm gì và dành cho ai.
-- Chọn một **Danh mục**: **Nhóm giao lưu**, **Chung**, **Nhóm làm việc** hoặc **Hội nghề**. Trên điện thoại, **Nhóm giao lưu** được chọn sẵn cho bạn. Trong ứng dụng web, **Nhóm làm việc** được chọn sẵn.
+- Chọn một **Danh mục**: **Nhóm giao lưu**, **Chung**, **Nhóm làm việc** hoặc **Hội nghề**. **Nhóm giao lưu** được chọn sẵn cho bạn.
 - Chọn một **Chính sách tham gia**: **Mở**, **Yêu cầu tham gia** hoặc **Chỉ theo lời mời**.
 - Nhấn **Tạo nhóm**. Bạn trở thành **trưởng ban điều hành** của nhóm. Trên điện thoại, ứng dụng đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.
 
-Bạn có thể bắt đầu tối đa 5 nhóm trong bất kỳ 24 giờ nào.
+Bạn có thể bắt đầu tối đa 5 nhóm trong bất kỳ 24 giờ nào. Chủ sở hữu hoặc quản trị viên có thể bắt đầu nhiều nhóm tới mức **Owner and admin limit** của các chủ sở hữu cho phép (100, trừ khi một chủ sở hữu thay đổi mức này).
 
-Có liên quan đến Đậu? Hãy bắt đầu một dự án hoặc một doanh nghiệp thay thế, từ cuối danh sách danh mục: trên điện thoại là **Bắt đầu một dự án hoặc doanh nghiệp**, trên web là **Bắt đầu một dự án** hoặc **Bắt đầu một doanh nghiệp**. Xem "Dự án và doanh nghiệp".
+Có liên quan đến Đậu? Hãy bắt đầu một dự án hoặc một doanh nghiệp thay thế: nhấn **Bắt đầu điều gì đó** (trên điện thoại là nút tròn **+**) trên **Commons**, sau đó chọn **Dự án** hoặc **Doanh nghiệp** (hoặc từ liên kết ở cuối biểu mẫu nhóm, **Bắt đầu dự án hoặc dự án cộng đồng →**). Xem "Dự án và sáng kiến chung".
 
 ## Mời mọi người
 
 Bạn có thể mời mọi người trên điện thoại và trong ứng dụng web. Trên điện thoại, cuộc trò chuyện của nhóm mới sẽ hỏi **Bạn muốn mời ai?**
 
-- Nhấn **Mời mọi người**, tích chọn những người bạn muốn mời, và nhấn nút ở dưới cùng (ví dụ **Mời 2 người**).
+- Nhấn **Mời mọi người**, tích chọn những người bạn muốn mời, và nhấn nút ở dưới cùng (ví dụ **Mời 2 người**). Một đoạn đầu ngắn của khóa hiện dưới tên mỗi người để bạn phân biệt được những người trùng tên.
 - Hoặc nhấn **Không phải bây giờ** để bỏ qua bước này.
 
-Sau đó, một điều hành viên có thể mời mọi người từ menu **⋮** của cuộc trò chuyện, chọn **Mời mọi người**. Trong ứng dụng web, một điều hành viên mở nhóm và nhấn **Mời mọi người**, tích chọn mọi người và nhấn nút ở dưới cùng theo cách tương tự. Mỗi người bạn mời sẽ thấy nhóm trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại (trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Chat**). Ứng dụng web chưa đánh dấu lời mời: ở đó, họ mở nhóm và nhấn **Chấp nhận lời mời**. Khi họ tham gia, cuộc trò chuyện sẽ thông báo điều đó.
+Sau đó, một điều hành viên có thể mời mọi người từ menu **⋮** của cuộc trò chuyện, chọn **Mời mọi người**. Trong ứng dụng web, một điều hành viên mở nhóm và nhấn **Mời mọi người**, tích chọn mọi người và nhấn nút ở dưới cùng theo cách tương tự. Mỗi người bạn mời sẽ được báo: một thông báo trên điện thoại của họ, "Bạn được mời tham gia một nhóm.", và một dòng trong **Cần bạn xử lý** trên Trang chủ của họ (trên điện thoại và trong ứng dụng web, còn có một biểu tượng ở trên cùng). Không ai khác nhận được thông báo, kể cả các thành viên khác của nhóm. Họ cũng thấy nhóm trong **Commons**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** (trên điện thoại, trong cộng đồng không có tab **Commons**, mục này nằm dưới **Tìm nhóm** trong **Chat**). Khi họ tham gia, cuộc trò chuyện sẽ thông báo điều đó.
+
+Nếu bạn rút lại lời mời rồi mời lại cùng một người, họ sẽ không nhận được thông báo thứ hai trong vòng một giờ. Người đã chặn bạn vẫn nhận được lời mời, nhưng không có thông báo.
 
 ## Cuộc trò chuyện của nhóm
 
@@ -53,15 +60,15 @@ Sau đó, một điều hành viên có thể mời mọi người từ menu **�
 - Viết **@** cùng tên của ai đó để thông báo cho họ. Xem "Lượt nhắc".
 - Tin nhắn mới nhất nằm ngay phía trên ô tin nhắn và vẫn ở đó khi bàn phím mở lên. Cuộn lên để đọc lại các tin nhắn trước; một tin nhắn mới đến khi đó sẽ chờ bạn thay vì kéo bạn xuống dưới.
 
-Cuộc trò chuyện của một nhóm được mã hóa đầu cuối: chỉ các thành viên của nhóm mới có thể đọc, những người vận hành máy chủ cộng đồng của bạn thì không thể. Phía trên ô tin nhắn có ghi rõ nhóm được **Mã hóa đầu cuối**. Máy chủ cộng đồng của bạn vẫn thấy ai đã viết, vào lúc nào, ai được nhắc đến, mỗi dòng trả lời tin nhắn nào, và các biểu tượng cảm xúc phản hồi.
+Cuộc trò chuyện của một nhóm được mã hóa đầu cuối: chỉ các thành viên của nhóm mới có thể đọc, những người vận hành máy chủ cộng đồng của bạn thì không thể. Phía trên ô tin nhắn có ghi rõ nhóm được **Mã hóa đầu cuối**. Máy chủ cộng đồng của bạn vẫn thấy ai đã viết, vào lúc nào, ai được nhắc đến, mỗi dòng trả lời tin nhắn nào, các biểu tượng cảm xúc phản hồi, cũng như dòng nào là ảnh và kích thước của từng ảnh.
 
-- Bạn chỉ nhìn thấy cuộc trò chuyện kể từ ngày bạn tham gia. Không có nội dung nào được viết trước đó hiển thị, và điện thoại của bạn không bao giờ giữ khóa cho nội dung đó. Bạn vẫn thấy các dòng màu xám từ trước đó, nhưng không thấy lời nói của ai.
+- Bạn chỉ nhìn thấy cuộc trò chuyện kể từ ngày bạn tham gia. Không có nội dung nào được viết trước đó hiển thị, và điện thoại của bạn không bao giờ giữ khóa cho nội dung đó. Bạn vẫn thấy các dòng màu xám từ trước đó, nhưng không thấy lời nói hay ảnh của ai.
 - Khi ai đó bị gỡ bỏ, hoặc rời đi, nhóm sẽ tạo một khóa mới. Trong một nhóm từ 10 người trở lên, cuộc trò chuyện sẽ ghi **Đang bảo mật cuộc trò chuyện cho N người…** trong khi điện thoại của bạn tạo khóa.
-- Một tin nhắn không thể khóa sẽ không được gửi đi. Nó sẽ hiển thị **! chưa được gửi**, và một dòng phía trên ô tin nhắn có thể cho biết lý do. Nhấn vào đó để **Gửi lại** hoặc **Hủy bỏ**.
+- Một tin nhắn không thể khóa sẽ không được gửi đi. Nó sẽ hiển thị **! chưa được gửi**, và một dòng phía trên ô tin nhắn có thể cho biết lý do. Nhấn vào đó để **Gửi lại** hoặc **Hủy bỏ**; trong ứng dụng web, hãy dùng **Thử lại** hoặc **Hủy bỏ** trên tin nhắn.
 - Một tin nhắn không kiểm tra được là do thành viên viết sẽ hiển thị dưới dạng **Chưa xác minh**, như là của người lạ, kèm dòng **Không thể xác minh tin nhắn này.** Một tin nhắn mà khóa chưa đến điện thoại của bạn sẽ hiển thị **Đang đợi khóa cho tin nhắn này.**
 - Nếu máy chủ cộng đồng của bạn cũ hơn và chưa thể khóa các cuộc trò chuyện nhóm, cuộc trò chuyện sẽ thông báo rằng máy chủ có thể đọc được và nhóm sẽ được khóa khi máy chủ được cập nhật. Khi máy chủ được cập nhật, các tin nhắn trước đó của nhóm mà máy chủ có thể đọc được sẽ bị gỡ bỏ, và một dòng trong cuộc trò chuyện sẽ thông báo điều đó. Mỗi tin nhắn trước đó sau đó sẽ hiển thị **Một tin nhắn trước đó đã bị xóa khi đoạn chat này bị khóa**, và nhiều tin nhắn liên tiếp sẽ hiển thị thành một dòng, chẳng hạn như **11 tin nhắn trước đó đã bị xóa khi đoạn chat này bị khóa**.
 
-Trong ứng dụng web, các cuộc trò chuyện nhóm của bạn nằm trong mục **Chat**, được đánh dấu 👥. Bạn có thể đọc và viết ở đó, được mã hóa đầu cuối như trên điện thoại: trả lời, bày tỏ cảm xúc, chỉnh sửa trong vòng 15 phút và tìm kiếm trong cuộc trò chuyện. Việc tắt thông báo, **Xóa** và **Gỡ** chỉ có trên điện thoại. Trong ứng dụng web, hãy nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện để mở nhóm; một điều hành viên có thể mời mọi người từ đó. Cuộc trò chuyện của một doanh nghiệp không được mã hóa: xem "Tin nhắn".
+Trong ứng dụng web, các cuộc trò chuyện nhóm của bạn nằm trong mục **Chat**, được đánh dấu 👥. Bạn có thể đọc và viết ở đó, được mã hóa đầu cuối như trên điện thoại: trả lời, bày tỏ cảm xúc, chỉnh sửa trong vòng 15 phút, xóa, gỡ, tắt thông báo, tìm kiếm trong cuộc trò chuyện và báo cáo tin nhắn của ai đó (**Báo cáo**, bên dưới tin nhắn). Hãy nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện để mở nhóm; một điều hành viên có thể mời mọi người từ đó. Cuộc trò chuyện của một doanh nghiệp không được mã hóa: xem "Tin nhắn".
 
 ## Nói chuyện trong đoạn chat của nhóm
 
@@ -69,17 +76,22 @@ Cuộc trò chuyện của nhóm hoạt động giống hệt như cuộc trò c
 
 - **Trả lời** trích dẫn tin nhắn đó phía trên nội dung bạn viết tiếp theo. Nhấn vào phần trích dẫn để nhảy về nội dung được trả lời.
 - **Bày tỏ cảm xúc** mở bảy biểu tượng cảm xúc. Mỗi người một biểu cảm; nhấn lại vào biểu cảm để rút lại. Các phản hồi hiển thị dưới dạng huy hiệu bên dưới tin nhắn.
-- **Chỉnh sửa**, trên các tin nhắn của chính bạn, trong vòng 15 phút. Tin nhắn sau đó sẽ hiển thị **đã chỉnh sửa**.
+- **Chỉnh sửa**, trên các tin nhắn của chính bạn, trong vòng 15 phút. Tin nhắn sau đó sẽ hiển thị **đã sửa**. Không thể chỉnh sửa ảnh.
 - **Xóa**, trên các tin nhắn của chính bạn, bất cứ lúc nào. Ứng dụng sẽ hỏi **Xóa cho mọi người?** một lần, và tin nhắn sau đó sẽ hiển thị **Tin nhắn này đã bị xóa** đối với mọi người trong nhóm.
 - **Gỡ**, dành cho điều hành viên, trên tin nhắn của bất kỳ ai khác. Ứng dụng sẽ hỏi một lần, và tin nhắn sau đó sẽ hiển thị **Đã bị người điều hành gỡ**. Tin nhắn của chính bạn là **Xóa**, không phải là **Gỡ**.
+- **Báo cáo** (một lá cờ), trên tin nhắn của bất kỳ ai khác. Chọn một lý do, thêm vài lời nếu muốn, rồi nhấn **Gửi báo cáo**. Người kiểm duyệt của cộng đồng bạn chỉ nhận được đúng tin nhắn đó, kèm ảnh nếu có, và người đã gửi nó, ngoài ra không có gì khác trong cuộc trò chuyện. Xem "Báo cáo vấn đề".
 
 Hai hoặc nhiều tin nhắn liên tiếp bị tác giả xóa sẽ hiển thị thành một dòng, chẳng hạn như **3 tin nhắn đã bị xóa**. Hai hoặc nhiều tin nhắn bị điều hành viên gỡ sẽ hiển thị thành **3 tin nhắn đã bị điều phối viên xóa**.
 
-Bên dưới tin nhắn của chính bạn: hình đồng hồ trong khi đang gửi, dấu tích khi máy chủ của nhóm đã nhận được, hoặc **! chưa được gửi** nếu không thể gửi — nhấn vào đó để **Gửi lại** hoặc **Hủy bỏ**. Không có hai dấu tích màu xanh lam trong một nhóm: một nhóm không có một người đọc đơn lẻ.
+Bên dưới tin nhắn của chính bạn: hình đồng hồ trong khi đang gửi, dấu tích khi máy chủ của nhóm đã nhận được, hoặc **! chưa được gửi** nếu không thể gửi — nhấn vào đó để **Gửi lại** hoặc **Hủy bỏ**, hoặc trong ứng dụng web hãy dùng **Thử lại** hoặc **Hủy bỏ** trên tin nhắn. Không có hai dấu tích màu xanh lam trong một nhóm: một nhóm không có một người đọc đơn lẻ.
 
-Ảnh không thể gửi trong cuộc trò chuyện của nhóm, và một giao dịch không thể bắt đầu trong đó. Cả hai việc này đều thuộc về cuộc trò chuyện giữa hai người. Xem "Tin nhắn".
+Trong cuộc trò chuyện nhóm đã khóa, bạn có thể gửi một ảnh cho mỗi tin nhắn, có hoặc không kèm chú thích, trên điện thoại và trên web. Ảnh được thu nhỏ tối đa 800 px ở cạnh dài nhất. Nhấn vào ảnh để mở toàn màn hình, trên điện thoại và trên web. Ảnh trong cuộc trò chuyện nhóm được mã hóa giống như chữ: chỉ các thành viên của nhóm mới mở được, và chỉ trong thời gian họ ở trong nhóm (người mới vào không thấy ảnh từ trước khi họ tham gia; thành viên bị gỡ khỏi nhóm không thấy ảnh nào từ sau đó). Ảnh không mở được, chẳng hạn ảnh bị người khác tráo trên máy chủ, sẽ hiển thị **🔒 Không có hình ảnh**. Không thể chỉnh sửa tin nhắn ảnh. Tin nhắn ảnh có thể bị xóa như mọi tin nhắn khác (bởi người viết; điều hành viên có thể gỡ nó), trên điện thoại và trên web.
 
-Một **quan sát viên** có thể đọc cuộc trò chuyện nhưng không thể viết, bày tỏ cảm xúc hoặc trả lời.
+Trong cuộc trò chuyện nhóm đã khóa, bạn cũng có thể gửi tin nhắn thoại, trên điện thoại và trong ứng dụng web: trên điện thoại, giữ micrô rồi thả ra để gửi; trong ứng dụng web, nhấp vào micrô để bắt đầu. Xem "Tin nhắn thoại".
+
+Không thể bắt đầu một giao dịch trong cuộc trò chuyện của nhóm: giao dịch thuộc về cuộc trò chuyện giữa hai người. Xem "Tin nhắn".
+
+Một **quan sát viên** có thể đọc cuộc trò chuyện nhưng không thể viết, bày tỏ cảm xúc hoặc trả lời. Họ có thể báo cáo một tin nhắn.
 
 Máy chủ cộng đồng của bạn cần được cập nhật để có tính năng trả lời, bày tỏ cảm xúc, chỉnh sửa và xóa. Chỉ khi máy chủ của bạn chưa được cập nhật thì ứng dụng mới thông báo **Chưa khả dụng trên cộng đồng này** — điều này đáng để báo cho người phụ trách máy chủ.
 
@@ -99,7 +111,7 @@ Khi kết thúc, điện thoại của bạn cho biết điều gì đã xảy r
 
 ## Tham gia một nhóm
 
-Trên điện thoại, trong **Chung**, dưới mục **Nhóm**, phần **Các nhóm bạn có thể tham gia** liệt kê các nhóm mà bạn chưa tham gia. Lọc các nhóm theo loại bằng các nút phía trên danh sách. Trong ứng dụng web, **Nhóm** liệt kê mọi nhóm bạn có thể thấy, các nhóm của bạn được đánh dấu kèm vai trò của bạn; **Nhóm của tôi** chỉ hiển thị các nhóm của bạn. Mỗi nhóm hiển thị phần đầu của phần mô tả. Mở một nhóm để đọc toàn bộ mô tả, sau đó:
+Trong **Commons**, dưới mục **Nhóm**, các nhóm bạn tham gia được xếp trước dưới **Của bạn**. Bên dưới, danh sách hiển thị những gì bạn có thể tham gia, với một tiêu đề cho biết nội dung đang hiển thị (chẳng hạn **Các nhóm, dự án và doanh nghiệp ở đây**, thay đổi theo các thẻ **Tất cả**, **Dự án**, **Doanh nghiệp** và **Chat groups**). Mỗi nhóm hiển thị phần đầu của phần mô tả. Mở một nhóm để đọc toàn bộ mô tả, sau đó:
 
 - **Tham gia nhóm** nếu nhóm mở cho bất kỳ ai;
 - **Yêu cầu tham gia** nếu điều hành viên là người phê duyệt thành viên. Bạn sẽ thấy **Yêu cầu đang chờ phê duyệt** cho đến khi họ duyệt.
@@ -108,7 +120,7 @@ Trên điện thoại, một nhóm bạn đã yêu cầu tham gia sẽ không n�
 
 Một nhóm **Chỉ theo lời mời** sẽ bị ẩn khỏi tất cả những ai không ở trong nhóm hoặc không được mời vào nhóm.
 
-Trên điện thoại, một cộng đồng địa phương không có Đậu sẽ không có tab **Chung**. Ở đó, hãy nhấn **Chat**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Cộng đồng toàn cầu có tab **Chung**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem "Đậu và cộng đồng toàn cầu").
+Trên điện thoại, một cộng đồng địa phương không có Đậu và không có Quyết định sẽ không có tab **Commons**. Ở đó, hãy nhấn **Chat**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Nếu Quyết định được bật, tab **Commons** vẫn còn cho Quyết định và các nhóm. Cộng đồng toàn cầu có tab **Commons**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem "Đậu và cộng đồng toàn cầu").
 
 Nếu một điều hành viên đã gỡ bạn khỏi một nhóm, bạn không thể tự mình tham gia lại nhóm đó.
 
@@ -116,14 +128,17 @@ Trong khi tài khoản của bạn bị đình chỉ, bạn không thể bắt �
 
 ## Tham gia theo lời mời
 
-Một nhóm bạn được mời tham gia hiển thị trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại. Trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Chat**. Nhấn vào nhóm để xem lời mời: ai đã mời bạn, nhóm là gì, ai ở trong nhóm (đối với nhóm chỉ theo lời mời, có bao nhiêu người), và ai có thể đọc cuộc trò chuyện của nhóm. Trên điện thoại:
+Khi ai đó mời bạn vào một nhóm, điện thoại của bạn nhận được thông báo, "Bạn được mời tham gia một nhóm.", và **Cần bạn xử lý** hiển thị lời mời, trên Trang chủ và, trên điện thoại cũng như trong ứng dụng web, dưới dạng một biểu tượng ở trên cùng (một phong bì). Nhấn vào thông báo hoặc dòng đó để mở lời mời. Lời mời vẫn nằm trong **Cần bạn xử lý** cho đến khi bạn tham gia hoặc từ chối, hoặc điều hành viên rút lại. Thông báo này đi cùng các thông báo **Tin nhắn trực tiếp** của bạn, nên sẽ không đến nếu bạn tắt chúng.
+
+Một nhóm bạn được mời tham gia cũng hiển thị trong **Commons**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI**. Trên điện thoại, trong cộng đồng không có tab **Commons**, mục này nằm dưới **Tìm nhóm** trong **Chat**. Nhấn vào nhóm để xem lời mời: ai đã mời bạn, nhóm là gì, ai ở trong nhóm (đối với nhóm chỉ theo lời mời, có bao nhiêu người), và ai có thể đọc cuộc trò chuyện của nhóm. Trên điện thoại:
 
 - Nhấn **Tham gia nhóm**. Bạn sẽ vào thẳng cuộc trò chuyện của nhóm.
 - Nhấn **Không phải bây giờ** để quyết định sau. Lời mời vẫn còn đó.
+- Nhấn **Từ chối lời mời** để từ chối. Ứng dụng sẽ hỏi lại một lần nữa, sau đó lời mời sẽ biến mất, kể cả khỏi **Cần bạn xử lý**. Người đã mời bạn có thể mời bạn lại.
 - Nếu thông báo ghi **Lời mời này không còn mở nữa**, lời mời đã bị thu hồi. Hãy nhờ người đã mời bạn gửi lại lời mời.
 - Nếu thông báo ghi **Không thể mở nhóm này**, điện thoại của bạn không thể kết nối tới máy chủ cộng đồng. Nhấn **Thử lại**.
 
-Ứng dụng web chưa đánh dấu lời mời. Hãy mở nhóm trong **Chung**, dưới mục **Nhóm**, và nhấn **Chấp nhận lời mời**. Bạn tham gia nhóm và ở lại trang của nhóm.
+Trong ứng dụng web, nhấn vào dòng trong **Cần bạn** trên Trang chủ, hoặc nhóm được đánh dấu **ĐÃ ĐƯỢC MỜI** trong **Commons**, dưới mục **Nhóm**, rồi nhấn **Chấp nhận lời mời**. Bạn tham gia nhóm và ở lại trang của nhóm. Để từ chối, nhấn **Từ chối lời mời** bên dưới.
 
 ## Đăng bài vào một nhóm
 
@@ -132,6 +147,8 @@ Trên web, hãy mở nhóm trong **Chung**, dưới mục **Nhóm**, và nhấn 
 ## Điều hành viên và trưởng ban điều hành
 
 Một điều hành viên trông coi nhóm. Bất kỳ ai tạo ra nhóm là **trưởng ban điều hành** của nhóm, và thẻ của nhóm nêu tên họ, chẳng hạn như **Trưởng ban điều hành: Ali**. Trong danh sách thành viên, hàng của họ được đánh dấu **TRƯỞNG BAN**.
+
+Bất kỳ điều hành viên nào cũng có thể đổi ảnh của nhóm: mở nhóm (trên điện thoại, chọn **Thông tin nhóm** trong menu **⋮** của cuộc trò chuyện) và nhấn **Đổi ảnh** (trong ứng dụng web, còn có **Chọn ảnh**). Nhóm luôn có một ảnh; ảnh có thể được thay đổi nhưng không bao giờ bị gỡ bỏ.
 
 Trong mục **Công cụ cho điều hành viên**, bất kỳ điều hành viên nào cũng có thể:
 
@@ -143,7 +160,7 @@ Bên cạnh một cái tên trong danh sách thành viên, bất kỳ điều h�
 - thay đổi vai trò của một thành viên hoặc quan sát viên (**Vai trò** trên điện thoại, một menu thả xuống trong ứng dụng web), bao gồm cả việc chỉ định họ làm điều hành viên;
 - gỡ bỏ một thành viên hoặc quan sát viên (**✕**).
 
-Một điều hành viên gỡ bỏ một bài đăng ngay từ chính bài đăng đó, và trên điện thoại là một tin nhắn trong cuộc trò chuyện. Tên và mô tả của nhóm hiện chưa thể thay đổi trong ứng dụng.
+Một điều hành viên gỡ bỏ một bài đăng ngay từ chính bài đăng đó, và một tin nhắn ngay trong cuộc trò chuyện. Tên và mô tả của nhóm hiện chưa thể thay đổi trong ứng dụng.
 
 Chỉ **trưởng ban điều hành** mới có thể gỡ bỏ một điều hành viên, hoặc tước bỏ vai trò điều hành viên của ai đó. Bên cạnh một hàng mà bạn không thể thao tác, nút **Vai trò** hoặc dấu **✕** hoàn toàn không hiển thị — đó là ứng dụng cho bạn biết đó không phải việc bạn được quyền làm.
 

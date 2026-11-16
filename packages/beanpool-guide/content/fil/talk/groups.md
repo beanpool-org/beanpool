@@ -4,7 +4,7 @@ title: Mga Grupo
 summary: Iyong mga grupo at kanilang mga chat, pakikipag-usap sa mga ito, pagsisimula ng grupo, pag-imbita ng tao, pagsali sa pamamagitan ng imbitasyon, at sariling botohan ng grupo.
 related: messages, mute, mentions, enterprises, event-chat, posting, decisions, keepers
 help: Iyong mga grupo at kanilang mga chat. Magsimula ng grupo, mag-imbita ng mga tao, o magbukas ng isa upang mag-usap at sama-samang bumoto.
-source-hash: 5093ecbc7c68e8dc
+source-hash: 7669768827172c66
 ---
 
 ## Ano ang isang grupo
@@ -15,35 +15,42 @@ Ang mga taong nag-aalaga sa isang chat group ay ang mga **tagapag-ugnay** (conve
 
 ## Iyong mga grupo
 
-I-tap ang **Usapan**, pagkatapos ay **Mga Grupo**. Ang bawat grupong kinabibilangan mo ay nakalista roon, pinakabagong mensahe ang una, kasama ang mga proyektong pinamumunuan mo o pinagtatrabahuan mo (🎯), ang mga negosyong pinapangalagaan mo (🥖) at ang mga kaganapang hino-host mo o pupuntahan mo (📅). Ang chat ng isang negosyo ay ang pampublikong talakayan nito: mababasa ito ng sinumang miyembro ng iyong komunidad. Tingnan ang "Mga Mensahe". Ipinapakita ng bawat isa ang pinakabagong mensahe nito at kung ilan ang hindi mo pa nababasa. Sa isang naka-encrypt na chat, ipinapakita ng hilera kung sino ang huling sumulat at **🔒 Mensahe**, hindi ang mga salita.
+I-tap ang **Usapan**, pagkatapos ay **Mga Grupo**. Ang bawat grupong kinabibilangan mo ay nakalista roon, pinakabagong mensahe ang una, kasama ang mga proyektong pinamumunuan mo o pinagtatrabahuan mo (🎯), ang mga negosyong pinapangalagaan mo (🥖) at ang mga kaganapang hino-host mo o pupuntahan mo (📅), kapag may sumulat na sa chat ng kaganapan. Ang chat ng isang negosyo ay ang pampublikong talakayan nito: mababasa ito ng sinumang miyembro ng iyong komunidad. Tingnan ang "Mga Mensahe". Ipinapakita ng bawat isa ang pinakabagong mensahe nito at kung ilan ang hindi mo pa nababasa. Sa isang naka-encrypt na chat, ipinapakita ng hilera kung sino ang huling sumulat at **🔒 Mensahe**, hindi ang mga salita.
 
 - Ang numero sa **Mga Grupo** sa itaas ay nagdaragdag ng iyong mga hindi pa nababasang mensahe, maliban sa mga chat na iyong na-mute.
 - I-tap ang isang grupo upang buksan ang chat nito. Minamarkahan nito iyon na nabasa na.
 - Hilahin pababa ang listahan upang i-refresh ito.
 
-Sa telepono, ang parehong listahan ay nasa **Komun**, sa ilalim ng **Mga Grupo**, bilang **Iyong mga grupo**, nang walang mga numero ng hindi pa nababasa. Binubuksan nito ang parehong mga chat.
+Sa telepono, ipinapakita ng **Komun** ang **Iyo** sa itaas ng **Mga Grupo**: una ang mga negosyo at proyektong pinapangalagaan mo (may button na **Pamahalaan** para patakbuhin ang mga ito), pagkatapos ang mga grupong kinabibilangan mo, na nagbubukas ng parehong mga chat.
+
+## Mga place circle
+
+Sa pandaigdigang komunidad, ang app mismo ang gumagawa ng isang uri ng grupo: isang **place circle**, para sa mga taong naghihintay malapit sa iisang lugar na nagsabing tutulong silang magsimula ng komunidad. Ang mga miyembro lang nito ang nakakakita rito, at hindi nagbabago ang pangalan, layunin at kung sino ang puwedeng sumali rito. Tingnan ang "Paghahanap ng kalapit na komunidad".
 
 ## Pagsisimula ng grupo
 
-- Sa telepono, sa **Usapan**, sa ilalim ng **Mga Grupo**, i-tap ang **Bagong grupo**. O sa **Komun**, sa ilalim ng **Mga Grupo**, i-tap ang bilog na **+** na button. Parehong binubuksan ng dalawa ang parehong form na **Gumawa ng Grupo**. (Sa chip na **Mga Proyekto** o **Mga Negosyo**, ang **+** ay nagpapasimula ng proyekto o negosyo sa halip.)
-- Sa web app, buksan ang **Komun**, pagkatapos ay **Mga Grupo**, at i-tap ang **+ Gumawa ng Grupo**. Mananatili ka sa **Komun** pagkatapos. Upang mag-imbita ng mga tao, buksan ang grupo at i-tap ang **Mag-imbita ng mga tao**. Maaari mo ring buksan ang **Usapan**, i-tap ang **Mga Grupo**, pagkatapos ay **Bagong grupo**: dadalhin ka niyon nang diretso sa chat ng bagong grupo.
+- Sa telepono, sa **Usapan**, sa ilalim ng **Mga Grupo**, i-tap ang **Bagong grupo**. O i-tap ang **+** sa **Komun**, pagkatapos ay **Magsimula ng bago** at piliin ang **Grupo sa usapan**. Parehong binubuksan ng dalawa ang form na **Gumawa ng Grupo**.
+- Sa web app, buksan ang **Komun**, pagkatapos ay **Mga Grupo**, at i-tap ang **Magsimula ng isang bagay** at piliin ang **Grupo sa usapan**. Mananatili ka sa **Komun** pagkatapos. Upang mag-imbita ng mga tao, buksan ang grupo at i-tap ang **Mag-imbita ng mga tao**. Maaari mo ring buksan ang **Usapan**, i-tap ang **Mga Grupo**, pagkatapos ay **Bagong grupo**: dadalhin ka niyon nang diretso sa chat ng bagong grupo.
+- May larawan ang bawat grupo: napili na ang para sa uri nito, at sumusunod ito sa **Kategorya** hanggang pumili ka mismo ng isa. Para pumili ng iba, i-tap ang **Pumili ng iba**. Sa telepono, iniaalok nito ang iyong camera, ang iyong mga larawan at ang mga handang larawan. Sa web app, ipinapakita nito ang mga handang larawan, at pumipili ang **Pumili ng larawan** ng isa sa sarili mong mga larawan.
 - Bigyan ito ng **Pangalan ng Grupo**, hanggang 60 character, at, kung gusto mo, ng **Layunin / Deskripsyon**, hanggang 300: para saan ang grupo at para kanino ito.
-- Pumili ng **Kategorya**: **Social Circle**, **Pangkalahatan**, **Working Group** o **Guild**. Sa telepono, **Social Circle** ang pinili para sa iyo. Sa web app, **Working Group**.
+- Pumili ng **Kategorya**: **Social Circle**, **Pangkalahatan**, **Working Group** o **Guild**. **Social Circle** ang pinili para sa iyo.
 - Pumili ng **Patakaran sa Pagsali**: **Bukas**, **Humiling na Sumali** o **Imbitasyon Lamang**.
 - I-tap ang **Gumawa ng Grupo**. Ikaw ang magiging **punong tagapag-ugnay** nito. Sa telepono, dadalhin ka agad ng app sa chat ng bagong grupo.
 
-Maaari kang magsimula ng hanggang 5 grupo sa anumang 24 oras.
+Maaari kang magsimula ng hanggang 5 grupo sa anumang 24 oras. Ang isang may-ari o admin ay maaaring magsimula ng kasindami ng pinapayagan ng **Owner and admin limit** ng mga may-ari (100 maliban kung baguhin ito ng isang may-ari).
 
-May kinalaman ba sa Munggo? Magsimula ng proyekto o negosyo sa halip, mula sa ibaba ng mga kategorya: sa telepono **Magsimula ng proyekto o negosyo**, sa web **Magsimula ng proyekto** o **Magsimula ng negosyo**. Tingnan ang "Mga proyekto at negosyo".
+May kinalaman ba sa Munggo? Magsimula ng proyekto o negosyo sa halip: i-tap ang **Magsimula ng isang bagay** (sa telepono, ang bilog na **+** na button) sa **Komun**, pagkatapos ay piliin ang **Proyekto** o **Negosyo** (o mula sa link sa ibaba ng form ng grupo, **Magsimula ng proyekto o negosyo →**). Tingnan ang "Mga proyekto at negosyo".
 
 ## Pag-imbita ng mga tao
 
 Maaari kang mag-imbita ng mga tao sa telepono at sa web app. Sa telepono, nagtatanong ang chat ng bagong grupo ng **Sino ang nais mong imbitahan?**
 
-- I-tap ang **Mag-imbita ng mga tao**, lagyan ng tsek ang mga taong gusto mo, at i-tap ang button sa ibaba (halimbawa **Mag-imbita ng 2 tao**).
+- I-tap ang **Mag-imbita ng mga tao**, lagyan ng tsek ang mga taong gusto mo, at i-tap ang button sa ibaba (halimbawa **Mag-imbita ng 2 tao**). May lumalabas na maikling simula ng susi sa ilalim ng pangalan ng bawat tao para makilala mo ang mga taong magkapareho ang pangalan.
 - O i-tap ang **Huwag muna** upang laktawan ito.
 
-Mamaya, maaaring mag-imbita ang isang tagapag-ugnay ng mga tao mula sa menu na **⋮** ng chat, **Mag-imbita ng mga tao**. Sa web app, binubuksan ng isang tagapag-ugnay ang grupo at tina-tap ang **Mag-imbita ng mga tao**, nilalagyan ng tsek ang mga tao, at tina-tap ang button sa ibaba sa parehong paraan. Bawat taong inimbitahan mo ay makikita ang grupo sa **Komun**, sa ilalim ng **Mga Grupo**, na minarkahang **IMBITADO** sa app sa telepono (sa telepono, sa isang komunidad na walang tab na **Komun**, sa ilalim ng **Maghanap ng mga grupo** sa **Usapan**). Hindi pa minamarkahan ng web app ang mga imbitasyon: doon, binubuksan nila ang grupo at tina-tap ang **Tanggapin ang imbitasyon**. Kapag sumali sila, sinasabi ito ng chat.
+Mamaya, maaaring mag-imbita ang isang tagapag-ugnay ng mga tao mula sa menu na **⋮** ng chat, **Mag-imbita ng mga tao**. Sa web app, binubuksan ng isang tagapag-ugnay ang grupo at tina-tap ang **Mag-imbita ng mga tao**, nilalagyan ng tsek ang mga tao, at tina-tap ang button sa ibaba sa parehong paraan. Inaabisuhan ang bawat taong inimbitahan mo: isang alerto sa kanilang telepono, "Inimbitahan kang sumali sa isang grupo.", at isang linya sa **Kailangan ka** sa kanilang Home (sa telepono at sa web app, may icon din sa itaas). Walang ibang nakakatanggap ng alerto, kahit ang ibang miyembro ng grupo. Nakikita rin nila ang grupo sa **Komun**, sa ilalim ng **Mga Grupo**, na minarkahang **INIMBITAHAN** (sa telepono, sa isang komunidad na walang tab na **Komun**, sa ilalim ng **Maghanap ng mga grupo** sa **Usapan**). Kapag sumali sila, sinasabi ito ng chat.
+
+Kung babawiin mo ang isang imbitasyon at iimbitahan muli ang parehong tao, wala silang matatanggap na pangalawang alerto sa loob ng isang oras. Natatanggap pa rin ng taong nag-block sa iyo ang imbitasyon, nang walang alerto.
 
 ## Ang chat ng grupo
 
@@ -53,15 +60,15 @@ Mamaya, maaaring mag-imbita ang isang tagapag-ugnay ng mga tao mula sa menu na *
 - Sumulat ng **@** at ang pangalan ng isang tao upang alertuhan sila. Tingnan ang "Mga Pagbanggit".
 - Ang pinakabagong mensahe ay nasa itaas lamang ng kahon ng mensahe, at nananatili roon kapag bumukas ang keyboard. Mag-scroll pataas upang basahin ang mga nauna; ang isang bagong mensaheng dumarating ay maghihintay sa iyo sa halip na hilahin ka pababa.
 
-Naka-encrypt nang end-to-end ang chat ng isang grupo: ang mga miyembro lamang ng grupo ang makakabasa nito, hindi ang mga taong nagpapatakbo ng server ng iyong komunidad. Sa itaas ng kahon ng mensahe sinasabi nitong ito ay **Naka-encrypt nang end-to-end**. Nakikita pa rin ng server ng iyong komunidad kung sino ang sumulat, kailan, sino ang na-mention, aling mensahe ang sinasagot ng bawat linya, at ang mga reaksyon ng emoji.
+Naka-encrypt nang end-to-end ang chat ng isang grupo: ang mga miyembro lamang ng grupo ang makakabasa nito, hindi ang mga taong nagpapatakbo ng server ng iyong komunidad. Sa itaas ng kahon ng mensahe sinasabi nitong ito ay **Naka-encrypt nang end-to-end**. Nakikita pa rin ng server ng iyong komunidad kung sino ang sumulat, kailan, sino ang na-mention, aling mensahe ang sinasagot ng bawat linya, ang mga reaksyon ng emoji, at kung aling mga linya ang larawan at gaano kalaki ang bawat isa.
 
-- Makikita mo lamang ang chat mula sa araw na sumali ka. Walang nakasulat bago noon ang ipinapakita, at hindi kailanman hawak ng iyong telepono ang susi para rito. Nakikita mo pa rin ang mga kulay-abong linya mula noon, ngunit walang salita ninuman.
+- Makikita mo lamang ang chat mula sa araw na sumali ka. Walang nakasulat bago noon ang ipinapakita, at hindi kailanman hawak ng iyong telepono ang susi para rito. Nakikita mo pa rin ang mga kulay-abong linya mula noon, ngunit walang salita o larawan ninuman.
 - Kapag may inalis, o umalis, ang grupo ay gumagawa ng bagong susi. Sa isang grupong may 10 o higit pa, sinasabi ng chat na **Sine-secure ang chat para sa {n} tao…** habang ginagawa ito ng iyong telepono.
-- Ang isang mensaheng hindi mai-lock ay hindi ipinapadala. Ipinapakita nito ang **! hindi naihatid**, at maaaring sabihin ng isang linya sa itaas ng kahon ng mensahe kung bakit. I-tap ito upang **Ipadala Muli** o **I-discard** ito.
+- Ang isang mensaheng hindi mai-lock ay hindi ipinapadala. Ipinapakita nito ang **! hindi naihatid**, at maaaring sabihin ng isang linya sa itaas ng kahon ng mensahe kung bakit. I-tap ito upang **Ipadala Muli** o **Ibalewala** ito; sa web app, gamitin ang **Subukan ulit** o **Ibalewala** sa mensahe.
 - Ang isang mensaheng hindi pumasa bilang isinulat ng isang miyembro ay ipinapakita bilang **Hindi Na-verify**, bilang walang nagmamay-ari, na may **Hindi ma-verify ang mensaheng ito.** Ang isang mensaheng ang susi ay hindi pa nakakarating sa iyong telepono ay mababasang **Naghihintay ng key para sa mensaheng ito.**
 - Kung mas luma ang server ng iyong komunidad at hindi pa makapag-lock ng mga group chat, sinasabi ng chat na mababasa ito ng server, at mai-lock ito kapag na-update na ang server. Kapag na-update ito, ang mga naunang mensahe ng grupo, na mababasa ng server, ay aalisin, at sinasabi ito ng isang linya sa chat. Bawat naunang mensahe ay mababasang **May naunang mensahe na inalis noong na-lock ang chat na ito**, at ang ilan na magkakasunod ay ipinapakita bilang isang linya, tulad ng **11 naunang mensahe ang inalis noong na-lock ang chat na ito**.
 
-Sa web app ang iyong mga group chat ay nasa **Usapan**, na minarkahang 👥. Maaari kang magbasa at sumulat doon, na naka-encrypt nang end-to-end tulad sa telepono: tumugon, mag-react, mag-edit sa loob ng 15 minuto, at maghanap sa chat. Ang pag-mute, **Burahin**, at **Alisin** ay sa telepono lamang. Sa web app, i-tap ang pangalan ng grupo sa itaas ng chat nito upang buksan ang grupo; maaaring mag-imbita ang isang tagapag-ugnay ng mga tao mula roon. Ang chat ng isang negosyo ay hindi naka-encrypt: tingnan ang "Mga Mensahe".
+Sa web app ang iyong mga group chat ay nasa **Usapan**, na minarkahang 👥. Maaari kang magbasa at sumulat doon, na naka-encrypt nang end-to-end tulad sa telepono: tumugon, mag-react, mag-edit sa loob ng 15 minuto, magbura, mag-alis, i-mute ang mga abiso, maghanap sa chat at i-report ang mensahe ng iba (**Iulat**, sa ilalim nito). I-tap ang pangalan ng grupo sa itaas ng chat nito upang buksan ang grupo; maaaring mag-imbita ang isang tagapag-ugnay ng mga tao mula roon. Ang chat ng isang negosyo ay hindi naka-encrypt: tingnan ang "Mga Mensahe".
 
 ## Pakikipag-usap sa chat ng grupo
 
@@ -69,17 +76,22 @@ Ang chat ng isang grupo ay gumagana nang eksakto tulad ng isang chat sa isang ta
 
 - Ang **Tumugon** ay nagko-quote nito sa itaas ng susunod mong isusulat. I-tap ang quote upang lumukso pabalik sa sinasagot nito.
 - Binubuksan ng **Mag-react** ang pitong emoji. Isa para sa bawat isa; i-tap ito muli upang bawiin. Ipinapakita ang mga reaksyon bilang isang badge sa ilalim ng mensahe.
-- **I-edit**, sa sarili mong mga mensahe, sa loob ng 15 minuto. Ipinapakita ng mensahe pagkatapos ang **na-edit**.
+- **I-edit**, sa sarili mong mga mensahe, sa loob ng 15 minuto. Ipinapakita ng mensahe pagkatapos ang **na-edit**. Hindi maaaring i-edit ang mga larawan.
 - **Burahin**, sa sarili mong mga mensahe, anumang oras. Nagtatanong ito ng **Burahin para sa lahat?** nang isang beses, at ang mensahe ay mababasang **Binura ang mensaheng ito** sa lahat sa grupo.
 - **Alisin**, para sa mga tagapag-ugnay, sa mensahe ng sinumang iba pa. Nagtatanong ito nang isang beses, at ang mensahe ay mababasang **Inalis ng convenor**. Ang sarili mong mensahe ay isang **Burahin**, hindi isang **Alisin**.
+- **I-report** (isang bandila), sa mensahe ng sinumang iba. Pumili ng dahilan, magdagdag ng ilang salita kung gusto mo, at i-tap ang **Isumite ang ulat**. Matatanggap ng mga moderator ng iyong komunidad ang isang mensaheng iyon, kasama ang larawan nito kung mayroon, at kung sino ang nagpadala, at wala nang iba pa sa chat. Tingnan ang "Pag-ulat ng problema".
 
 Ang dalawa o higit pang mensahe na magkakasunod na binura ng kanilang mga may-akda ay ipinapakita bilang isang linya, tulad ng **3 mensahe ang binura**. Ang dalawa o higit pa na inalis ng isang tagapag-ugnay ay ipinapakita bilang **3 mensahe ang inalis ng tagapag-ugnay**.
 
-Sa ilalim ng sarili mong mensahe: isang orasan habang ipinapadala ito, isang tsek kapag nasa server na ng grupo, o **! hindi naihatid** kung hindi ito maipadala — i-tap iyon upang **Ipadala Muli** o **I-discard** ito. Walang asul na dobleng tsek sa isang grupo: ang grupo ay walang iisang mambabasa.
+Sa ilalim ng sarili mong mensahe: isang orasan habang ipinapadala ito, isang tsek kapag nasa server na ng grupo, o **! hindi naihatid** kung hindi ito maipadala — i-tap iyon upang **Ipadala Muli** o **Ibalewala** ito, o sa web app gamitin ang **Subukan ulit** o **Ibalewala** sa mensahe. Walang asul na dobleng tsek sa isang grupo: ang grupo ay walang iisang mambabasa.
 
-Hindi maaaring magpadala ng mga larawan sa chat ng grupo, at hindi maaaring magsimula ng kasunduan dito. Parehong nabibilang ang dalawa sa chat sa pagitan ng dalawang tao. Tingnan ang "Mga Mensahe".
+Sa isang naka-lock na group chat, maaari kang magpadala ng isang larawan bawat mensahe, may caption man o wala, sa telepono at sa web. Ginagawang hindi hihigit sa 800 px sa pinakamahabang gilid ang mga larawan. I-tap ang isang larawan upang buksan ito nang full screen, sa telepono at sa web. Naka-encrypt ang mga larawan sa group chat tulad ng mga salita: ang mga miyembro lang ng grupo ang makakapagbukas ng mga ito, at para lang sa panahong nasa grupo sila (hindi nakikita ng bagong sali ang mga larawan bago siya sumali; walang nakikita ang inalis na miyembro mula nang alisin siya). Ang larawang hindi mabuksan, gaya ng pinalitan ng ibang tao sa server, ay nagsasabing **🔒 Hindi available ang larawan**. Hindi maaaring i-edit ang mensaheng larawan. Maaari itong burahin tulad ng anumang mensahe (ng sumulat; maaari itong alisin ng isang tagapag-ugnay), sa telepono at sa web.
 
-Mababasa ng isang **tagamasid** (observer) ang chat ngunit hindi makakasulat dito, makakapag-react o makakatugon.
+Sa isang naka-lock na group chat, maaari ka ring magpadala ng mensaheng boses, sa telepono at sa web app: sa telepono, pindutin nang matagal ang mikropono at bitawan para ipadala; sa web app, i-click ito para magsimula. Tingnan ang "Mensaheng boses".
+
+Hindi maaaring magsimula ng kasunduan sa chat ng grupo: nabibilang ang mga kasunduan sa chat sa pagitan ng dalawang tao. Tingnan ang "Mga Mensahe".
+
+Mababasa ng isang **tagamasid** (observer) ang chat ngunit hindi makakasulat dito, makakapag-react o makakatugon. Maaari silang mag-report ng mensahe.
 
 Kailangang updated ang server ng iyong komunidad para sa tugon, mga reaksyon, pag-edit, at pagbura. Kapag hindi lamang updated ang sa iyo sinasabi ng app ang **Hindi pa available sa komunidad na ito** — sulit na dalhin iyon sa sinumang nag-aalaga sa server.
 
@@ -99,7 +111,7 @@ Sa dulo sinasabi ng iyong telepono kung ano ang nangyari: **Tapos na** lamang ka
 
 ## Pagsali sa isang grupo
 
-Sa telepono, sa **Komun**, sa ilalim ng **Mga Grupo**, inililista ng **Mga grupong maaari mong salihan** ang mga grupong hindi mo kinabibilangan. I-filter ang mga ito ayon sa uri gamit ang mga button sa itaas ng listahan. Sa web app, inililista ng **Mga Grupo** ang bawat grupong makikita mo, minarkahan ang sa iyo kasama ang iyong tungkulin; ang **Aking mga grupo** ay nagpapakita lamang ng sa iyo. Ipinapakita ng bawat isa ang simula ng deskripsyon nito. Buksan ang isang grupo upang basahin ang lahat nito, pagkatapos ay:
+Sa **Komun**, sa ilalim ng **Mga Grupo**, nauuna sa ilalim ng **Iyo** ang mga grupong kinabibilangan mo. Sa ibaba nila, ipinapakita ng listahan ang maaari mong salihan, na may heading na nagsasabi kung ano ang ipinapakita (gaya ng **Mga grupo, proyekto at negosyo rito**, na nagbabago ayon sa mga chip na **Lahat**, **Mga Proyekto**, **Mga Negosyo** at **Mga chat group**). Ipinapakita ng bawat isa ang simula ng deskripsyon nito. Buksan ang isang grupo upang basahin ang lahat nito, pagkatapos ay:
 
 - **Sumali sa Grupo** kung ito ay bukas sa sinuman;
 - **Humiling na Sumali** kung nag-aapruba ang isang tagapag-ugnay ng mga miyembro. Makikita mo ang **Naghihintay ng Pag-apruba ang Kahilingan** hanggang sa aprubahan nila ito.
@@ -108,7 +120,7 @@ Sa telepono, ang isang grupong hiniling mong salihan ay wala sa alinmang listaha
 
 Ang isang grupong **Imbitasyon Lamang** ay nakatago mula sa lahat ng hindi kasama rito o hindi inimbitahan dito.
 
-Sa telepono, ang isang lokal na komunidad na walang Munggo ay walang tab na **Komun**. Doon, i-tap ang **Usapan**, pagkatapos ay **Mga Grupo**, pagkatapos ay **Maghanap ng mga grupo**: binubuksan nito ang parehong listahan. Bago ka mapabilang sa anumang grupo, ang link ay **Maghanap ng grupong sasalihan**. Ang pandaigdigang komunidad ay may tab na **Komun**: naroroon ang mga grupo nito, sa ilalim ng isang halimbawa mula sa isang lokal na komunidad (tingnan ang "Munggo at ang pandaigdigang komunidad").
+Sa telepono, ang isang lokal na komunidad na walang Munggo at walang Mga Desisyon ay walang tab na **Komun**. Doon, i-tap ang **Usapan**, pagkatapos ay **Mga Grupo**, pagkatapos ay **Maghanap ng mga grupo**: binubuksan nito ang parehong listahan. Bago ka mapabilang sa anumang grupo, ang link ay **Maghanap ng grupong sasalihan**. Kung naka-on ang Mga Desisyon, nananatili ang tab na **Komun** para sa Mga Desisyon at mga grupo. Ang pandaigdigang komunidad ay may tab na **Komun**: naroroon ang mga grupo nito, sa ilalim ng isang halimbawa mula sa isang lokal na komunidad (tingnan ang "Munggo at pandaigdigang komunidad").
 
 Kung inalis ka ng isang tagapag-ugnay mula sa isang grupo, hindi ka makakasaling muli nang mag-isa.
 
@@ -116,14 +128,17 @@ Habang suspendido ang iyong account, hindi ka maaaring magsimula ng grupo, sumal
 
 ## Pagsali sa pamamagitan ng imbitasyon
 
-Ang isang grupong inimbita ka ay ipinapakita sa **Komun**, sa ilalim ng **Mga Grupo**, na minarkahang **IMBITADO** sa app sa telepono. Sa telepono, sa isang komunidad na walang tab na **Komun**, ito ay nasa ilalim ng **Maghanap ng mga grupo** sa **Usapan**. I-tap ito upang makita ang imbitasyon: sino ang nag-imbita sa iyo, ano ang grupo, sino ang kasama rito (para sa grupong imbitasyon lamang, ilan), at sino ang makakabasa sa chat nito. Sa telepono:
+Kapag may nag-imbita sa iyo sa isang grupo, makakatanggap ang telepono mo ng alerto, "Inimbitahan kang sumali sa isang grupo.", at ipinapakita ng **Kailangan ka** ang imbitasyon, sa Home at, sa telepono at sa web app, bilang icon sa itaas (isang sobre). I-tap ang alerto o ang linya para buksan ang imbitasyon. Mananatili ito sa **Kailangan ka** hanggang sumali ka o tumanggi, o bawiin ito ng tagapag-ugnay. Kasama ng iyong mga alerto sa **Mga Direktang Mensahe** ang alertong ito, kaya hindi ito darating kung papatayin mo ang mga iyon.
+
+Ipinapakita rin ang isang grupong inimbita ka sa **Komun**, sa ilalim ng **Mga Grupo**, na minarkahang **INIMBITAHAN**. Sa telepono, sa isang komunidad na walang tab na **Komun**, ito ay nasa ilalim ng **Maghanap ng mga grupo** sa **Usapan**. I-tap ito upang makita ang imbitasyon: sino ang nag-imbita sa iyo, ano ang grupo, sino ang kasama rito (para sa grupong imbitasyon lamang, ilan), at sino ang makakabasa sa chat nito. Sa telepono:
 
 - I-tap ang **Sumali sa grupo**. Mapupunta ka sa chat nito.
 - I-tap ang **Huwag muna** upang magpasya mamaya. Nananatili ang imbitasyon.
+- I-tap ang **Tanggihan ang imbitasyon** para tumanggi. Magtatanong pa ang app nang isang beses, pagkatapos ay mawawala ang imbitasyon, pati sa **Kailangan ka**. Maaari kang imbitahan muli ng nag-imbita sa iyo.
 - Kung sinasabi nitong **Hindi na bukas ang imbitasyong ito**, binawi ito. Hilingin sa nag-imbita sa iyo na imbitahan ka muli.
 - Kung sinasabi nitong **Hindi mabuksan ang grupong ito**, hindi maabot ng iyong telepono ang server ng iyong komunidad. I-tap ang **Subukan muli**.
 
-Hindi pa minamarkahan ng web app ang mga imbitasyon. Buksan ang grupo sa **Komun**, sa ilalim ng **Mga Grupo**, at i-tap ang **Tanggapin ang imbitasyon**. Sasali ka rito at mananatili sa pahina ng grupo.
+Sa web app, i-tap ang linya sa **Kailangan ka** sa Home, o ang grupong minarkahang **INIMBITAHAN** sa **Komun**, sa ilalim ng **Mga Grupo**, at i-tap ang **Tanggapin ang imbitasyon**. Sasali ka rito at mananatili sa pahina ng grupo. Para tumanggi, i-tap ang **Tanggihan ang imbitasyon** sa ilalim nito.
 
 ## Pag-post sa isang grupo
 
@@ -132,6 +147,8 @@ Sa web, buksan ang grupo sa **Komun**, sa ilalim ng **Mga Grupo**, at i-tap ang 
 ## Mga tagapag-ugnay at ang punong tagapag-ugnay
 
 Ang isang tagapag-ugnay ang nag-aalaga sa grupo. Sinumang gumawa nito ang **punong tagapag-ugnay** nito, at pinapangalanan sila ng card ng grupo, bilang **Punong tagapag-ugnay: Ali**. Sa listahan ng mga miyembro ang kanilang hilera ay minarkahang **PUNO**.
+
+Maaaring palitan ng sinumang tagapag-ugnay ang larawan ng grupo: buksan ang grupo (sa telepono, **Impormasyon ng grupo** sa menu na **⋮** ng chat nito) at i-tap ang **Palitan ang larawan** (sa web app, mayroon ding **Pumili ng larawan**). Laging may larawan ang isang grupo; maaari itong palitan, hindi kailanman alisin.
 
 Sa **Mga Tool ng Tagapag-ugnay**, maaaring gawin ng sinumang tagapag-ugnay ang:
 
@@ -143,7 +160,7 @@ Katabi ng isang pangalan sa **Listahan**, maaaring gawin ng sinumang tagapag-ugn
 - baguhin ang tungkulin ng isang miyembro o tagamasid (**Tungkulin** sa telepono, isang drop-down sa web app), kabilang ang paggawa sa kanila bilang tagapag-ugnay;
 - mag-alis ng miyembro o tagamasid (**✕**).
 
-Nag-aalis ang isang tagapag-ugnay ng post mula sa mismong post, at sa telepono ng isang mensahe sa chat. Hindi pa maaaring baguhin ang pangalan at deskripsyon ng grupo sa app.
+Nag-aalis ang isang tagapag-ugnay ng post mula sa mismong post, at ng isang mensahe sa chat. Hindi pa maaaring baguhin ang pangalan at deskripsyon ng grupo sa app.
 
 Ang **punong tagapag-ugnay** lamang ang maaaring mag-alis ng isang tagapag-ugnay, o mag-alis ng tungkulin ng tagapag-ugnay mula sa isang tao. Katabi ng isang hilera na hindi mo maaaring aksyunan, walang **Tungkulin** o **✕** na ipinapakita — iyon ang pagsasabi sa iyo ng app na hindi mo ito tungkulin.
 

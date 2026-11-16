@@ -3,7 +3,7 @@ slug: event-chat
 title: Soga ya tukio
 summary: Zungumza na mwenyeji na kila mtu anayeenda kwenye tukio.
 related: events, messages, pin-locations, reporting
-source-hash: 5db33c065b67e6b8
+source-hash: 6da207cb35f1e3c7
 ---
 
 ## Nani aliyemo
@@ -12,8 +12,8 @@ Kila tukio lina gumzo lake lenyewe. Mwenyeji na kila mtu aliyegusa **Ninahudhuri
 
 ## Kulifungua
 
-- Fungua tukio na uguse **Fungua gumzo la tukio**.
-- Au lipate katika **Gumzo**, chini ya **Vikundi**, likiwa limetiwa alama ya 📅 **Tukio**. Kwenye programu ya wavuti lipo katika kichupo cha **Gumzo**, pamoja na gumzo zako zingine.
+- Fungua tukio na uguse **Piga gumzo na wanaohudhuria**. Kukiwa na jumbe ambazo hujazisoma, kitufe kinaonyesha ni ngapi, kwa mfano **3 mpya**.
+- Mara mtu anapoandika ndani yake, linapatikana pia katika **Gumzo**, chini ya **Vikundi**, likiwa limetiwa alama ya 📅 **Tukio**. Kwenye programu ya wavuti lipo katika kichupo cha **Gumzo**, pamoja na gumzo zako zingine. Hadi wakati huo halipo kwenye orodha hizo: lifungue kutoka kwenye tukio.
 
 Juu kabisa, kisanduku kilichobandikwa huonyesha **Dokezo kwa watu wanaohudhuria** la mwenyeji, kama vile anwani kamili. Gusa jina la tukio juu kabisa (kwenye programu ya wavuti, **Tazama tukio**) ili kurudi kwenye tukio.
 
@@ -23,7 +23,7 @@ Andika kwenye **Tuma ujumbe kwa kila mtu anayekwenda…** na uguse kitufe cha ku
 
 ## Vyema kujua
 
-- Gumzo za matukio hazijalindwa kwa njia fiche kutoka mwisho hadi mwisho. Mwenyeji, kila mtu anayeenda (ambapo mwenyeji huwaruhusu watu kuingia, wale ambao mwenyeji amewaruhusu kuingia), na watu wanaoendesha seva ya jumuiya yako wanaweza kuzisoma. Gumzo linasema hivyo juu ya kisanduku cha ujumbe.
+- Gumzo za matukio hazijalindwa kwa njia fiche kutoka mwisho hadi mwisho. Mwenyeji, kila mtu anayeenda (ambapo mwenyeji huwaruhusu watu kuingia, wale ambao mwenyeji amewaruhusu kuingia), na watu wanaoendesha seva ya jumuiya yako wanaweza kuzisoma. Gumzo linasema hivyo juu ya kisanduku cha ujumbe. Kwa sababu seva inaweza kusoma gumzo, picha haziwezi kutumwa katika gumzo la tukio.
 - Mwenyeji anaweza kuondoa ujumbe wowote. Uguse, kisha **Ondoa**. Kisha inasema "imeondolewa na mwenyeji".
 - Gumzo la tukio halina kujibu, halina hisia za emoji, halina kuhariri na halina kufuta ujumbe wako mwenyewe — tofauti na gumzo na mtu au gumzo la kikundi. Mwombe mwenyeji aondoe kitu unachojutia. Ukifuta akaunti yako, kila ujumbe ulioandika hapa unasomeka **Ujumbe huu ulifutwa**.
 - Tukio linapoisha au linapoghairiwa, gumzo linakuwa la kusoma tu. Gumzo la tukio linalojirudia hubaki wazi kati ya tarehe: hadi tarehe yake ya mwisho ikiwa mwenyeji aliweka **Hadi**, na hadi mwenyeji alighairi tukio ikiwa hakuweka. Siku thelathini baada ya mwisho linaondoka.

@@ -1,0 +1,12 @@
+[package]
+name = "beanpool-ratchet-oracle"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Test-time oracle only: writes packages/beanpool-core/vectors/ratchet-vodozemac.json from vodozemac. Never shipped, never a dependency of any package."
+license = "AGPL-3.0-only"
+
+[dependencies]
+vodozemac = { version = "=0.11.2", features = ["experimental-session-config"] }
+serde_json = "1"
+base64 = "0.22"

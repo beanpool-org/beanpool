@@ -63,6 +63,7 @@ import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY, homeAnswerStoreKey,
 import { communityCachesRenamed, CACHE_NAMES_DONE_KEY, resetCommunityCachesRenamedForTests } from '../cache-file-migration';
 import { communityKey as toolCommunityKey } from '../../tools/community';
 import { leaveThisCommunity } from '../delete-here';
+import { clearPendingProfileChange } from '../pending-profile-sync';
 import { leaveFromUpdateBlock, planLeaveFromUpdateBlock } from '../update-block-escape';
 
 const RIVERSIDE = 'https://riverside.example';
@@ -180,6 +181,25 @@ describe('every way a community comes off the saved list takes its record (#3227
         expect(recordIds()).toEqual([HILLSIDE]);
     });
 
+    it('Delete here at a followed address: what is kept under the record goes first, then the record and every row of it, any capitals (S3 review)', async () => {
+        await onRiversideWithHillside();
+        const SECOND = 'https://second.riverside.example';
+        const records = JSON.parse(h.store.get(COMMUNITY_RECORDS_STORE_KEY)!);
+        records.records[0] = { ...records.records[0], using: SECOND, proved: { [SECOND]: { at: 1 } } };
+        h.store.set(COMMUNITY_RECORDS_STORE_KEY, JSON.stringify(records));
+        // The rows: the record's own, one at the followed address in other capitals, and Hillside.
+        h.store.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: RIVERSIDE }, { url: 'https://Second.Riverside.example' }, { url: HILLSIDE }]));
+        h.store.set('beanpool_anchor_url', SECOND);
+        resetCommunityRecordsForTests();
+        await loadCommunityRecords();
+        const keyedAt: string[] = [];
+        vi.mocked(clearPendingProfileChange).mockImplementationOnce(async (c) => { keyedAt.push(communityKeyOf(c ?? "")); });
+        await leaveThisCommunity(SECOND, HILLSIDE);
+        expect(keyedAt).toEqual([RIVERSIDE]);
+        expect(savedKept()).toEqual([HILLSIDE]);
+        expect(recordIds()).toEqual([HILLSIDE]);
+    });
+
     it("the update block's Leave, with another community on the phone (the phone moves there)", async () => {
         await onRiversideWithHillside();
         const plan = await planLeaveFromUpdateBlock();
@@ -204,12 +224,32 @@ describe('every way a community comes off the saved list takes its record (#3227
         expect(communityRecordOf(RIVERSIDE)).toBeNull();
     });
 
+    // The phone is on Riverside here: the row that comes off is Hillside's. Until S4 this took Riverside's own row and
+    // record while the phone stayed on it, which the S3 review asked S4 to guard (the next test).
     it('a row comes off with its record even when the list holds rows that are not communities', async () => {
         await onRiversideWithHillside();
         h.store.set(SAVED_NODES_STORE_KEY, JSON.stringify([null, 'stray', { url: RIVERSIDE }, { url: HILLSIDE }]));
+        await removeSavedNode(HILLSIDE);
+        expect(JSON.parse(h.store.get(SAVED_NODES_STORE_KEY)!)).toEqual([null, 'stray', { url: RIVERSIDE }]);
+        expect(recordIds()).toEqual([RIVERSIDE]);
+    });
+
+    it('the row of the community in use comes off, but its record stays while the phone is on it (S3 review, guarded in S4)', async () => {
+        await onRiversideWithHillside();
+        // Followed: the phone reaches Riverside at a second address of its own, kept under its id.
+        const SECOND = 'https://second.riverside.example';
+        const records = JSON.parse(h.store.get(COMMUNITY_RECORDS_STORE_KEY)!);
+        records.records[0] = { ...records.records[0], using: SECOND, proved: { [SECOND]: { at: 1 } } };
+        h.store.set(COMMUNITY_RECORDS_STORE_KEY, JSON.stringify(records));
+        h.store.set('beanpool_anchor_url', SECOND);
+        resetCommunityRecordsForTests();
+        await loadCommunityRecords();
+        const file = getDatabaseFilenameForNode(SECOND);
         await removeSavedNode(RIVERSIDE);
-        expect(JSON.parse(h.store.get(SAVED_NODES_STORE_KEY)!)).toEqual([null, 'stray', { url: HILLSIDE }]);
-        expect(recordIds()).toEqual([HILLSIDE]);
+        await removeSavedNode(SECOND);
+        expect(recordIds()).toEqual([RIVERSIDE, HILLSIDE]);
+        expect(getDatabaseFilenameForNode(SECOND)).toBe(file);
+        expect(communityKeyOf(SECOND)).toBe(RIVERSIDE);
     });
 });
 

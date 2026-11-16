@@ -260,6 +260,17 @@ describe('S4: the same community saved twice (Marty\'s pick 5: the phone keeps t
         expect(dupes).toEqual([`https://${M}`]);
     });
 
+    it('a server from before proofs, with the key the phone first read there: nothing is written, its address is never refused', async () => {
+        await phoneAt(`https://${A}`);
+        mem.set('beanpool_community_identity', JSON.stringify({ [`https://${A}`]: { peerId: KEY.peerId, communityId: CID, epoch: 0 } }));
+        const old: VerifyDeps['get'] = async () => ({ status: 404, body: null });
+        await verifyAddressInUse({ atOpen: true }, { ...deps(), get: old });
+        const r = recordAt(`https://${A}`);
+        expect(r.peerId).toBeUndefined();
+        expect(r.refused).toEqual({});
+        expect(moves).toEqual([]);
+    });
+
     it('an older server with no list: nothing changes, nothing is followed', async () => {
         await phoneAt(`https://${A}`);
         servers[A] = { ...servers[A], silent: false };

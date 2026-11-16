@@ -184,6 +184,10 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
 
     const answers: Record<string, AddressAnswer> = { [usingAddress]: await prove(usingAddress, peerId, deps) };
     const own = answers[usingAddress];
+    // Before any list of the community is kept, only a good proof goes on: a server from before lists and proofs (404), or
+    // one that knows none of its names (421 for every address), works as today and follows nothing (§3.1). Nothing is
+    // written, so its address is never refused for being older. Once a list is kept, a missing proof is no downgrade (§7).
+    if (!kept && own.kind !== 'proved') { asked.set(usingAddress, { at: now, silent: own.kind === 'silent' ? (last?.silent ?? 0) + 1 : 0 }); return; }
     if (own.kind === 'proved' && (!kept || compareAddressNumbers(own, kept.list) > 0)) {
         // The proof names a newer list: it must come from the same address, at least that new (§2.3).
         const offered = await deps.get(addressListUrl(usingAddress)).catch(() => null);

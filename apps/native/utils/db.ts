@@ -1286,6 +1286,21 @@ function isRequestFor(request: unknown, me: string): boolean {
 const NOT_A_REQUEST_FOR_ME = (column: string) => `(CASE WHEN json_valid(${column}) THEN (CASE WHEN json_type(${column}, '$.from') = 'text'
     AND json_extract(${column}, '$.from') != ? AND json_extract(${column}, '$.state') IS NOT 'accepted' THEN 0 ELSE 1 END) ELSE 1 END)`;
 
+/**
+ * One column of the other person in a conversation (`memb.<column>` from their card, or `cp.public_key`), for every
+ * reader that names a chat by the person in it, each the same person. After a re-key the phone keeps the old key's
+ * participant row beside the new one until a send (#1872 U7), and holds a card for either, both or neither until its
+ * members delta or whole read brings them. So the read takes a participant whose card the phone holds, the newest card
+ * first (the node stamps the card it moves on a re-key, member-wizards.ts completeRekey), then by key: never whichever
+ * row the index gives first, which named the person by the conversation's id (walk of #3263, 16 Nov 2026). Its one `?`
+ * is my key, as before.
+ */
+const otherParticipantSql = (column: 'callsign' | 'avatar_url' | 'profile_updated_at' | 'public_key', conversation = 'c.id') =>
+    `(SELECT ${column === 'public_key' ? 'cp.public_key' : `memb.${column}`} FROM conversation_participants cp
+         LEFT JOIN members memb ON memb.public_key = cp.public_key
+         WHERE cp.conversation_id = ${conversation} AND cp.public_key != ?
+         ORDER BY (memb.public_key IS NULL), memb.profile_updated_at DESC, cp.public_key LIMIT 1)`;
+
 export async function getConversations(myPubkey: string) {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
@@ -1307,17 +1322,10 @@ export async function getConversations(myPubkey: string) {
                p.author_pubkey as postAuthor, p.type as postType,
                (SELECT mt3.buyer_pubkey FROM marketplace_transactions mt3 WHERE mt3.post_id = c.post_id ORDER BY mt3.created_at DESC LIMIT 1) as latestTxBuyer,
                (SELECT mt3.seller_pubkey FROM marketplace_transactions mt3 WHERE mt3.post_id = c.post_id ORDER BY mt3.created_at DESC LIMIT 1) as latestTxSeller,
-        (SELECT memb.callsign FROM conversation_participants cp 
-         LEFT JOIN members memb ON memb.public_key = cp.public_key
-         WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherCallsign,
-        (SELECT memb.avatar_url FROM conversation_participants cp 
-         LEFT JOIN members memb ON memb.public_key = cp.public_key
-         WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherAvatar,
-        (SELECT memb.profile_updated_at FROM conversation_participants cp 
-         LEFT JOIN members memb ON memb.public_key = cp.public_key
-         WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherProfileUpdatedAt,
-        (SELECT cp.public_key FROM conversation_participants cp 
-         WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherPubkey,
+        ${otherParticipantSql('callsign')} as otherCallsign,
+        ${otherParticipantSql('avatar_url')} as otherAvatar,
+        ${otherParticipantSql('profile_updated_at')} as otherProfileUpdatedAt,
+        ${otherParticipantSql('public_key')} as otherPubkey,
         (SELECT COUNT(msg.id) FROM messages msg 
          WHERE msg.conversation_id = c.id 
          AND msg.author_pubkey != ?
@@ -1610,9 +1618,7 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
         SELECT c.id, c.type, c.name, COUNT(m.id) as unread,
-               (SELECT memb.callsign FROM conversation_participants other
-                LEFT JOIN members memb ON memb.public_key = other.public_key
-                WHERE other.conversation_id = c.id AND other.public_key != ? LIMIT 1) as otherCallsign
+               ${otherParticipantSql('callsign')} as otherCallsign
         FROM conversation_participants cp
         JOIN conversations c ON c.id = cp.conversation_id
         JOIN messages m ON m.conversation_id = c.id
@@ -5692,14 +5698,9 @@ export async function getConversation(id: string, myPubkey?: string) {
                 c.post_status
             ) as postStatus,
             p.price_type, p.price_c,
-            (SELECT memb.callsign FROM conversation_participants cp 
-             LEFT JOIN members memb ON memb.public_key = cp.public_key
-             WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherCallsign,
-            (SELECT cp.public_key FROM conversation_participants cp 
-             WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherPubkey,
-            (SELECT memb.avatar_url FROM conversation_participants cp 
-             LEFT JOIN members memb ON memb.public_key = cp.public_key
-             WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherAvatar,
+            ${otherParticipantSql('callsign')} as otherCallsign,
+            ${otherParticipantSql('public_key')} as otherPubkey,
+            ${otherParticipantSql('avatar_url')} as otherAvatar,
             mt.id as pendingTxId,
             mt.amount_c as pendingAmount_c,
             mt.buyer_pubkey as txBuyerPubkey,

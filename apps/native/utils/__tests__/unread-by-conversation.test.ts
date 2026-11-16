@@ -8,7 +8,7 @@ sql.exec(`
     CREATE TABLE conversations (id TEXT PRIMARY KEY, type TEXT NOT NULL, post_id TEXT, name TEXT, request TEXT);
     CREATE TABLE conversation_participants (conversation_id TEXT, public_key TEXT, last_read_at DATETIME, PRIMARY KEY (conversation_id, public_key));
     CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, author_pubkey TEXT, ciphertext TEXT, nonce TEXT, type TEXT DEFAULT 'text', system_type TEXT, metadata TEXT, timestamp TEXT);
-    CREATE TABLE members (public_key TEXT PRIMARY KEY, callsign TEXT);
+    CREATE TABLE members (public_key TEXT PRIMARY KEY, callsign TEXT, profile_updated_at DATETIME);
 `);
 
 const mockDb = {
@@ -44,8 +44,8 @@ function seed() {
     const conv = sql.prepare('INSERT INTO conversations (id, type, name) VALUES (?, ?, ?)');
     const part = sql.prepare('INSERT INTO conversation_participants VALUES (?, ?, ?)');
     const msg = sql.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, timestamp) VALUES (?, ?, ?, ?, ?, ?)');
-    sql.prepare('INSERT INTO members VALUES (?, ?)').run('ana', 'Ana');
-    sql.prepare('INSERT INTO members VALUES (?, ?)').run('bo', 'Bo');
+    sql.prepare('INSERT INTO members (public_key, callsign) VALUES (?, ?)').run('ana', 'Ana');
+    sql.prepare('INSERT INTO members (public_key, callsign) VALUES (?, ?)').run('bo', 'Bo');
     // A DM with Ana: read up to 10:00; two of Ana's lines after, one before, and one of mine after.
     conv.run('dm1', 'dm', null); part.run('dm1', 'me', '2026-09-19T10:00:00Z'); part.run('dm1', 'ana', null);
     msg.run('a1', 'dm1', 'ana', 'x', 'v2enc', '2026-09-19T09:00:00Z');

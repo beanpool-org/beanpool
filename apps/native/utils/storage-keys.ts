@@ -103,6 +103,16 @@ export function communityBlocksStoreKey(publicKey: string): string {
     return `beanpool_community_blocks:${publicKey.toLowerCase()}`;
 }
 
+/**
+ * The keys one blocked person is known by on one account's block list, as the community's read of it said (utils/blocklist.ts
+ * `followRekeyedBlocks`): an object, a key a re-key put in place of others → those others. One person, one block: an
+ * unblock of any of their keys lifts them all, and Settings shows them once. Kept with {@link blockedUsersStoreKey}, the
+ * list it describes, when the account leaves the phone; never read for another account.
+ */
+export function blockedKeyChainsStoreKey(publicKey: string): string {
+    return `beanpool_blocked_key_chains:${publicKey.toLowerCase()}`;
+}
+
 /** Every {@link messageRequestsStoreKey} key starts with this. */
 export const MESSAGE_REQUESTS_STORE_PREFIX = 'beanpool_message_requests:';
 

@@ -59,6 +59,25 @@ export function rekeyedFromOf(pubkey: string): { pubkey: string; at: string; att
 }
 
 /**
+ * The key `key`'s member holds here now: `key` itself, or the key completed re-keys moved it to, followed forward
+ * (attested or not, as rekeyedFromChains follows them back), at most KEY_SUCCESSION_MAX links; a loop stops. A block or an
+ * unblock of a key a re-key replaced acts on the member as they are now (member-blocks.ts), as the re-key's own move of
+ * the blocks did: a phone's copy of the list may still name the old key (apps/native utils/blocklist.ts).
+ */
+export function rekeyedToNow(key: string): string {
+    const next = db.prepare(`SELECT rekeyed_to FROM invalidated_keys WHERE public_key = ? AND reason = 'rekeyed' AND rekeyed_to IS NOT NULL`);
+    const seen = new Set<string>([key]);
+    let at = key;
+    for (let hop = 0; hop < KEY_SUCCESSION_MAX; hop++) {
+        const to = (next.get(at) as { rekeyed_to: string } | undefined)?.rekeyed_to;
+        if (!to || seen.has(to)) break;
+        seen.add(to);
+        at = to;
+    }
+    return at;
+}
+
+/**
  * For each of `keys`, every key a completed re-key replaced with it, followed back through earlier re-keys (attested or
  * not: an admin's re-key of a lost phone is never attested until its member confirms it), newest first, at most
  * KEY_SUCCESSION_MAX. GET /api/blocks names them for the keys on the signer's list: a re-key moved the community's row of

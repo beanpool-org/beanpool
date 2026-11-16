@@ -25,6 +25,13 @@
  * brings the list the community the phone is set to keeps for the account in line with the phone's, after each block and
  * unblock, at start and as the app comes back. The phone's own list stays the one the screens read: it holds offline,
  * and on a community whose node has no block list.
+ *
+ * A block is of a person, not of one key (review of #3268, round 3). After an admin re-keys someone, the phone's list holds
+ * every key the community's read says they are known by ({@link followRekeyedBlocks}), and remembers which keys are one
+ * person (storage-keys.ts `blockedKeyChainsStoreKey`): an unblock of any of them lifts them all, so no old key is left on
+ * the list holding their DM blocked, and Settings lists them once ({@link getBlockedPeople}). The community does the same
+ * with a key a re-key replaced (apps/server member-blocks.ts: a block or an unblock of it acts on the key its member holds
+ * now), so the phone, the community and the web app agree whatever order the block, the unblock and the re-key came in.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -33,7 +40,7 @@ import { onAccountOnPhone } from './account-on-phone';
 import { loadIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { isGuestNode } from './nodes';
-import { blockedUsersStoreKey, communityBlocksStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
+import { blockedKeyChainsStoreKey, blockedUsersStoreKey, communityBlocksStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
 
 export const BLOCKLIST_UPDATED_EVENT = 'beanpool_blocklist_updated';
 
@@ -108,6 +115,61 @@ function parseKeys(raw: string | null): string[] {
     } catch {
         return [];
     }
+}
+
+/** The keys a person on the list is known by (storage-keys.ts blockedKeyChainsStoreKey): a key a re-key put in place of others → those others. */
+type KeyChains = Record<string, string[]>;
+
+function parseChains(raw: string | null): KeyChains {
+    if (!raw) return {};
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const chains: KeyChains = {};
+        for (const [key, formers] of Object.entries(parsed as Record<string, unknown>)) {
+            if (Array.isArray(formers)) chains[key] = formers.filter((f): f is string => typeof f === 'string');
+        }
+        return chains;
+    } catch {
+        return {};
+    }
+}
+
+async function chainsOf(owner: string): Promise<KeyChains> {
+    return parseChains(await AsyncStorage.getItem(blockedKeyChainsStoreKey(owner)));
+}
+
+/** Every key the person known by `key` is known by on the chains, `key` among them: the chains that share a key, joined. */
+function personKeys(key: string, chains: KeyChains): Set<string> {
+    const keys = new Set([key]);
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const [now, formers] of Object.entries(chains)) {
+            const chain = [now, ...formers];
+            if (chain.some(k => keys.has(k)) && chain.some(k => !keys.has(k))) {
+                chain.forEach(k => keys.add(k));
+                grew = true;
+            }
+        }
+    }
+    return keys;
+}
+
+/**
+ * `list` with each person on it once, under the key they hold now: the one of theirs on the list no re-key replaced. For
+ * tests too (blocks-reach-community.test.ts), and {@link getBlockedPeople}.
+ */
+export function onePerPerson(list: readonly string[], chains: KeyChains): string[] {
+    const replaced = new Set(Object.values(chains).flat());
+    const seen = new Set<string>();
+    const people: string[] = [];
+    for (const key of list) {
+        if (seen.has(key)) continue;
+        const person = personKeys(key, chains);
+        person.forEach(k => seen.add(k));
+        people.push(list.find(k => person.has(k) && !replaced.has(k)) ?? key);
+    }
+    return people;
 }
 
 /**
@@ -219,6 +281,22 @@ export async function isUserBlocked(pubkey: string): Promise<boolean> {
 }
 
 /**
+ * The people the account on this phone has blocked, each once, by the key they hold now (Settings' Manage Blocked Users):
+ * a person re-keyed since has several keys on the list ({@link followRekeyedBlocks}), and one Unblock lifts them all.
+ */
+export async function getBlockedPeople(): Promise<string[]> {
+    try {
+        const owner = await accountOnPhone();
+        if (!owner) return [];
+        const [list, chains] = await Promise.all([getBlockedUsers(), chainsOf(owner)]);
+        return onePerPerson(list, chains);
+    } catch (e) {
+        console.error('[blocklist] Failed to read the blocked people', e);
+        return [];
+    }
+}
+
+/**
  * Blocks a user for the account on this phone, notifies server moderation (per Apple Guideline 1.2) in that account's
  * name, queues a report the node didn't take for retry, and dispatches a global event for immediate UI updates.
  * With no account on the phone, nothing is blocked.
@@ -286,8 +364,9 @@ async function reportBlock(owner: string, targetPubkey: string, reporterPubkey: 
 }
 
 /**
- * Unblocks a single user for the account on this phone, takes it off the community's list ({@link syncBlocks}), and
- * dispatches a global event.
+ * Unblocks a person for the account on this phone: the key, and every other key the phone knows them by (a re-key's,
+ * {@link followRekeyedBlocks}), so none is left on the list holding their DM blocked. Takes them off the community's list
+ * ({@link syncBlocks}), and dispatches a global event.
  */
 export async function unblockUser(targetPubkey: string): Promise<boolean> {
     if (!targetPubkey) return false;
@@ -297,9 +376,16 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
         if (!owner) return false;
         const generation = accountGeneration;
         const list = await listOf(owner);
-        if (list.includes(targetPubkey)) {
-            const newList = list.filter(pk => pk !== targetPubkey);
+        const chains = await chainsOf(owner);
+        const person = personKeys(targetPubkey, chains);
+        if (list.some(pk => person.has(pk))) {
+            const newList = list.filter(pk => !person.has(pk));
             await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(newList));
+            // Their chains go with the block: a later block of them learns them again from the community.
+            const left = Object.entries(chains).filter(([now, formers]) => !person.has(now) && !formers.some(f => person.has(f)));
+            if (left.length < Object.keys(chains).length) {
+                await AsyncStorage.setItem(blockedKeyChainsStoreKey(owner), JSON.stringify(Object.fromEntries(left)));
+            }
             if (generation === accountGeneration) {
                 cached = { owner, list: newList };
                 DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
@@ -326,6 +412,7 @@ export async function clearBlocklist(): Promise<boolean> {
         // First, so a list an older build kept can't come back after it.
         await movePhoneWide(owner);
         await AsyncStorage.removeItem(blockedUsersStoreKey(owner));
+        await AsyncStorage.removeItem(blockedKeyChainsStoreKey(owner));
         if (generation === accountGeneration) {
             cached = { owner, list: [] };
             DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, []);
@@ -518,11 +605,14 @@ async function syncBlocksOnce(): Promise<void> {
  * A re-key of someone the member blocked (an admin helping them back into their account after a lost phone): the community
  * moved its copy of the block to their new key (apps/server engine/member-blocks.ts moveBlocks), and its read of the list
  * names, for each key on it, the keys a re-key replaced with it (GET /api/blocks `formerKeys`). This phone's own list
- * follows: a key the community holds in place of one this phone blocks is blocked here too, so every screen that reads the
- * list (the DM's thread and Talk, a profile, the market, the forum) holds the block under the new key (review of #3268,
- * finding 2; the DM screens also hold it before this runs, utils/dm-blocked.ts). A key that replaced one this phone put
- * there and has since unblocked is marked as this phone's on the community's list, so the next sync takes it off there
- * too. Nothing is reported (it is the same block) and nothing is sent but the one read.
+ * follows: when any key of that chain is blocked here, every key of it is, the new and the ones between, so every screen
+ * that reads the list (the DM's thread and Talk, a profile, the market, the forum) holds the block under any key the
+ * person is known by (review of #3268, finding 2; the DM screens also hold it before this runs, utils/dm-blocked.ts). The
+ * chain is kept (storage-keys.ts blockedKeyChainsStoreKey): it is one person, so an unblock of any of their keys lifts
+ * them all ({@link unblockUser}; round 3: an unblock of the new key alone left the old one holding the DM blocked), and
+ * Settings lists them once. Their keys count as this phone's on the community's list: the sync sends none of them as a
+ * new block, and takes the person off there when they are unblocked here, an unblock made before the re-key too.
+ * Nothing is reported (it is the same block) and nothing is sent but the one read.
  *
  * Only while the account has a block here or on the community's list from this phone, only for the account on the phone
  * at the community it is set to, never on a guest visit, and one at a time with every sync ({@link syncBlocks}). It runs
@@ -554,24 +644,47 @@ async function followRekeysOnce(): Promise<void> {
         if (at.waitUntil !== undefined && Date.now() < at.waitUntil) return;
         const moves = await readRekeyMoves(owner, community);
         if (!moves || generation !== accountGeneration) return;
-        const follow: string[] = [];
+        // Each person this phone blocked, or put on the community's list, whom a re-key gave a new key: all their keys.
+        const people: [string, string[]][] = [];
         let marked = false;
         for (const [key, formers] of moves) {
-            if (key === owner || !formers.some(f => mine.has(f))) continue;
-            if (!at.on.includes(key)) {
-                at.on = [...at.on, key];
-                marked = true;
+            const chain = [key, ...formers].filter(k => k !== owner);
+            if (key === owner || !chain.some(k => mine.has(k))) continue;
+            people.push([key, chain.slice(1)]);
+            // Held on the community's list (it moved the block to `key`, and takes a block or an unblock of a former key as
+            // one of `key`): the new key always, so an unblock made here reaches it, and its former ones when blocked here.
+            const held = list.some(k => chain.includes(k)) ? chain : [key];
+            for (const k of held) {
+                if (!at.on.includes(k)) {
+                    at.on = [...at.on, k];
+                    marked = true;
+                }
             }
-            if (!list.includes(key) && formers.some(f => list.includes(f))) follow.push(key);
         }
         if (marked) {
             record[community] = at;
             await AsyncStorage.setItem(storeKey, JSON.stringify(record));
         }
-        if (follow.length === 0) return;
+        if (people.length === 0) return;
+        // Read again: an unblock made while the community answered is never undone here.
         const now = await listOf(owner);
+        const chains = await chainsOf(owner);
+        const follow: string[] = [];
+        let learned = false;
+        for (const [key, formers] of people) {
+            const chain = [key, ...formers];
+            if (!chain.some(k => now.includes(k))) continue;
+            follow.push(...chain.filter(k => !now.includes(k)));
+            const known = chains[key] ?? [];
+            if (formers.some(f => !known.includes(f))) {
+                chains[key] = [...new Set([...known, ...formers])];
+                learned = true;
+            }
+        }
+        if (learned) await AsyncStorage.setItem(blockedKeyChainsStoreKey(owner), JSON.stringify(chains));
+        if (follow.length === 0 && !learned) return;
         const next = [...new Set([...now, ...follow])];
-        await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(next));
+        if (follow.length > 0) await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(next));
         if (generation === accountGeneration) {
             cached = { owner, list: next };
             DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, next);

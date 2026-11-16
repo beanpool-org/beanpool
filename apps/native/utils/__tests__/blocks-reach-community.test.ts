@@ -134,6 +134,12 @@ const net = {
      * (apps/server key-succession.ts rekeyedFromChains), by community, then key. Null: a node from before it, naming none.
      */
     formerKeys: new Map<string, Map<string, string[]> | null>(),
+    /**
+     * Each community's completed re-keys, old key → new (invalidated_keys.rekeyed_to): a block or an unblock of a key a
+     * re-key replaced acts on the key its member holds now, as apps/server member-blocks.ts does (key-succession.ts
+     * rekeyedToNow; test-member-blocks.ts section 7 holds the real node to it).
+     */
+    rekeyedTo: new Map<string, Map<string, string>>(),
 };
 
 const listAt = (community: string, owner: string) => {
@@ -166,6 +172,7 @@ beforeEach(async () => {
     net.sent = [];
     net.lists.clear();
     net.formerKeys.clear();
+    net.rekeyedTo.clear();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         const headers = (init?.headers ?? {}) as Record<string, string>;
@@ -196,16 +203,25 @@ beforeEach(async () => {
         if (refusal && !(refusal.addsOnly && url.endsWith('/remove'))) return reply(refusal.status, { error: 'Refused', code: refusal.code });
         const list = listAt(community, signer);
         const path = url.slice(community.length);
+        // The key its member holds here now: a re-key's old key is answered as the new one.
+        const heldNow = (key: string) => {
+            let at = key;
+            for (let hop = 0; hop < 8 && net.rekeyedTo.get(community)?.has(at); hop++) at = net.rekeyedTo.get(community)!.get(at)!;
+            return at;
+        };
         let extra: Record<string, unknown>;
         if (path === '/api/blocks' && typeof body.targetPubkey === 'string') {
-            extra = { added: list.has(body.targetPubkey) ? [] : [body.targetPubkey] };
-            list.add(body.targetPubkey);
+            const key = heldNow(body.targetPubkey);
+            extra = { added: list.has(key) ? [] : [key] };
+            list.add(key);
         } else if (path === '/api/blocks' && Array.isArray(body.targetPubkeys)) {
-            const here = body.targetPubkeys.filter((k: string) => net.known.has(k));
-            extra = { added: here.filter((k: string) => !list.has(k)), skipped: body.targetPubkeys.length - here.length };
+            const keys = [...new Set<string>(body.targetPubkeys.map(heldNow))];
+            const here = keys.filter((k: string) => net.known.has(k));
+            extra = { added: here.filter((k: string) => !list.has(k)), skipped: keys.length - here.length };
             here.forEach((k: string) => list.add(k));
         } else if (path === '/api/blocks/remove') {
-            extra = { removed: list.delete(body.targetPubkey) };
+            const gone = [...new Set<string>([body.targetPubkey, heldNow(body.targetPubkey)])].map((k) => list.delete(k));
+            extra = { removed: gone.some(Boolean) };
         } else if (path === '/api/blocks' && init?.method === 'GET') {
             // The read: the list, and for each key on it a re-key put in place of others, those others.
             const named = net.formerKeys.get(community);
@@ -1075,4 +1091,117 @@ describe("a block of someone since re-keyed follows them to their new key (follo
         expect(await app.isUserBlocked(HARASSER_NEW)).toBe(false);
         expect(await app.isUserBlocked(HARASSER)).toBe(true);
     });
+});
+
+describe('a block is of a person: any order of block, unblock, re-key, follow and sync leaves the phone, the community and the web agreeing (review of #3268, round 3)', () => {
+    const OLD = 'a1'.repeat(32);
+    const NEW = 'a2'.repeat(32);
+    const NEWER = 'a3'.repeat(32);
+    const STEPS = ['block old', 're-key old→new', 'follow', 'unblock new', 'unblock old', 'sync', 're-key new→newer'] as const;
+    type Step = (typeof STEPS)[number];
+
+    /** Every order of up to `most` of the steps, each at most once in an order: 3,620 orders for 5 of the 7. */
+    function orders(most: number): Step[][] {
+        const out: Step[][] = [[]];
+        const grow = (order: Step[]) => {
+            if (order.length === most) return;
+            for (const step of STEPS) {
+                if (order.includes(step)) continue;
+                const next = [...order, step];
+                out.push(next);
+                grow(next);
+            }
+        };
+        grow([]);
+        return out;
+    }
+
+    it('every order of up to 5 steps, then the app coming back (follow + sync): the DM, every key of theirs, Settings, the community and the web say the same', async () => {
+        const { dmPeerKeys, isDmBlocked } = await import('../dm-blocked');
+        const app = await startApp();
+        net.known = new Set([...net.known, OLD, NEW, NEWER]);
+        // One app run for every order, as one phone: the clock moves two minutes between orders, so none waits for room
+        // in the 30 requests a minute, and each order starts on an account with nothing on the phone or the community.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const startedAt = Date.now();
+        const all = orders(5);
+        expect(all).toHaveLength(3620);
+        const disagreements: string[] = [];
+        for (const [i, order] of all.entries()) {
+            vi.setSystemTime(startedAt + i * 2 * 60 * 1000);
+            mem.async.clear();
+            mem.secure.clear();
+            mem.async.set(ANCHOR, NODE);
+            mem.async.set('beanpool_blocked_users_moved', '1');
+            net.lists.clear();
+            net.formerKeys.clear();
+            net.rekeyedTo.clear();
+            // A change of account empties the list the module holds in memory.
+            const owner = i % 2 === 0 ? ana : ben;
+            await app.identity.importIdentity(owner);
+            await app.getBlockedUsers();
+
+            const chain = [OLD];
+            let blocked = false;
+            const rekey = (from: string, to: string) => {
+                if (chain[chain.length - 1] !== from) return;
+                for (const [k, list] of net.lists) if (k.startsWith(`${NODE}|`) && list.delete(from)) list.add(to);
+                const moved = net.rekeyedTo.get(NODE) ?? new Map<string, string>();
+                moved.set(from, to);
+                net.rekeyedTo.set(NODE, moved);
+                const named = net.formerKeys.get(NODE) ?? new Map<string, string[]>();
+                named.set(to, [from, ...(named.get(from) ?? [])]);
+                net.formerKeys.set(NODE, named);
+                chain.push(to);
+            };
+            for (const step of order) {
+                if (step === 'block old') {
+                    await app.blockUser(OLD);
+                    blocked = true;
+                } else if (step === 'unblock new' || step === 'unblock old') {
+                    const key = step === 'unblock new' ? NEW : OLD;
+                    // Unblock is offered only where the phone says they are blocked (a profile, Contacts, Settings' rows).
+                    if (await app.isUserBlocked(key)) {
+                        await app.unblockUser(key);
+                        blocked = false;
+                    }
+                } else if (step === 're-key old→new') {
+                    rekey(OLD, NEW);
+                } else if (step === 're-key new→newer') {
+                    rekey(NEW, NEWER);
+                } else if (step === 'follow') {
+                    await app.followRekeyedBlocks();
+                } else {
+                    await app.syncBlocks();
+                }
+                await app.blockSyncsEndedForTests();
+            }
+            // The app comes back (app/_layout.tsx): the follow, then the sync.
+            await app.followRekeyedBlocks();
+            await app.syncBlocks();
+
+            const now = chain[chain.length - 1];
+            const list = await app.getBlockedUsers();
+            const community = [...listAt(NODE, owner.publicKey)];
+            const said: Record<string, boolean> = {
+                // The thread and Talk: both participant rows and the pin followed; the old row gone after a send; a phone
+                // that hasn't heard of the re-key.
+                dmBothRows: isDmBlocked(dmPeerKeys(chain.join(','), { peer: now, former: chain.slice(0, -1) }), list),
+                dmNewRow: isDmBlocked(dmPeerKeys([now], { peer: now, former: chain.slice(0, -1) }), list),
+                dmOldRow: isDmBlocked(dmPeerKeys([OLD], null), list),
+                // A profile, the market, the forum: each key they are or were known by.
+                ...Object.fromEntries(await Promise.all(chain.map(async (k, n) => [`key${n}`, await app.isUserBlocked(k)] as const))),
+                // The node delivers by it, and the web app's list and thread read the participants the re-key moved: their key now.
+                community: community.length === 1 && community[0] === now,
+                web: community.includes(now),
+                // Settings' Manage Blocked Users: one row.
+                settingsRow: (await app.getBlockedPeople()).length === 1,
+            };
+            const wrong = Object.entries(said).filter(([, v]) => v !== blocked).map(([k]) => k);
+            if (community.some((k) => k !== now)) wrong.push(`community-holds-${community.length}-keys`);
+            if (wrong.length > 0) disagreements.push(`${order.join(', ') || '(nothing)'} → ${blocked ? 'blocked' : 'unblocked'}, but: ${wrong.join(' ')}`);
+        }
+        expect(disagreements.slice(0, 12)).toEqual([]);
+        expect(disagreements).toHaveLength(0);
+    }, 180_000);
 });

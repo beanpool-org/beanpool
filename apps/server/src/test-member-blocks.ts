@@ -466,6 +466,20 @@ async function main(): Promise<void> {
         `Bo's read names her old key as her new key's former one, and nothing else (${JSON.stringify(boRead.body?.formerKeys)})`);
     assert(newRead.body?.formerKeys && Object.keys(newRead.body.formerKeys).length === 0,
         `a list of keys no re-key replaced names no former keys (${JSON.stringify(newRead.body?.formerKeys)})`);
+    // A block is of a person, both ways (review of #3268, round 3): Bo's phone may still name her old key, and its unblock
+    // of it, or its block, acts on her as she is now (key-succession.ts rekeyedToNow), never on a key nobody signs with.
+    const boUnblocksOld = await call('POST', bo, '/api/blocks/remove', { targetPubkey: ann.pk });
+    assert(boUnblocksOld.status === 200 && boUnblocksOld.body?.removed === true && same(listed(boUnblocksOld), []),
+        `Bo's unblock of her old key takes her new key off his list (${show(boUnblocksOld)})`);
+    const boBlocksOld = await call('POST', bo, '/api/blocks', { targetPubkey: ann.pk });
+    assert(boBlocksOld.status === 200 && same(boBlocksOld.body?.added ?? [], [annNew.pk]) && same(listed(boBlocksOld), [annNew.pk]),
+        `his block of her old key blocks her new one, and the old key is never on his list (${show(boBlocksOld)})`);
+    const boMovesOld = await call('POST', bo, '/api/blocks', { targetPubkeys: [ann.pk] });
+    assert(boMovesOld.status === 200 && same(boMovesOld.body?.added ?? [], []) && boMovesOld.body?.skipped === 0 && same(listed(boMovesOld), [annNew.pk]),
+        `a list naming her old key finds her new one on it already (${show(boMovesOld)})`);
+    const annBlocksOwnOld = await call('POST', annNew, '/api/blocks', { targetPubkey: ann.pk });
+    assert(annBlocksOwnOld.status === 400 && annBlocksOwnOld.body?.code === 'block_self' && sameSet(keysOf(annNew), [bo.pk, eve.pk]),
+        `her own old key is hers: she can't block it, and her list is as it was (${show(annBlocksOwnOld)})`);
 
     // ── 8. replication ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 8. replication: a standby holds every list ──');

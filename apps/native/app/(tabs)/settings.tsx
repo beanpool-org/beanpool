@@ -27,7 +27,7 @@ import {
     clearWaitingArchetype, keepPendingProfileChange, nameRefusedForGood, pendingNameAccepted, pendingNameRefused, pendingProfileChange, takeNameRefusal,
 } from '../../utils/pending-profile-sync';
 import { MemberAvatar } from '../../components/MemberAvatar';
-import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
+import { getBlockedPeople, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/node-url';
 import { withNodeScheme } from '../../utils/node-address-scheme';
@@ -1111,7 +1111,9 @@ export default function SettingsScreen() {
         setLoadingBlockedList(true);
         setShowBlockedModal(true);
         try {
-            const pubkeys = await getBlockedUsers();
+            // Each person once, by the key they hold now: one re-keyed since is on the list under each of their keys, and
+            // Unblock lifts them all (utils/blocklist.ts).
+            const pubkeys = await getBlockedPeople();
             const items = await Promise.all(pubkeys.map(async (pk) => {
                 let callsign = pk.length > 16 ? `${pk.slice(0, 8)}...${pk.slice(-6)}` : pk;
                 try {

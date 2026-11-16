@@ -25,6 +25,10 @@
  *   move of a list it kept in the browser (addKnownBlocks) takes only keys this node has a row for, and counts the rest.
  * - Gone with the member on a prune or a self-deletion. A re-key moves it: the owner's list to their new key, and every
  *   block of the old key to the new one, so a blocked member re-keyed stays blocked.
+ * - A block is of a person, both ways: a block or an unblock of a key a re-key replaced acts on the key its member holds
+ *   now (key-succession.ts rekeyedToNow), as the re-key's move did. A phone keeps its own copy of the list and may still
+ *   name the old key (apps/native utils/blocklist.ts): its unblock of it lifts the block the community moved, and its
+ *   block of it blocks the member, never a key nobody signs with any more (review of #3268, round 3).
  *
  * ## A standby holds every list (mergeReplicatedBlocks)
  *
@@ -54,6 +58,7 @@
  */
 import { db, rethrowUnlessRowRefused } from '../db/db.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './member-key.js';
+import { rekeyedToNow } from './key-succession.js';
 import type { SyncMemberBlock } from '@beanpool/engine';
 import { word, wordsFor } from '@beanpool/core';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
@@ -324,9 +329,10 @@ function foldTombstones(owner: string, now: number): void {
 }
 
 /**
- * Blocks each of `blocked` for `owner`, in one transaction: all of them or none. A key already on the list is left as it
- * is. Refused (BlockRefusal), with nothing written, for a key not in the one spelling (400 bad_key), the owner's own
- * (400), or when the list would pass MEMBER_BLOCKS_MAX (409 block_limit). Returns the keys it added.
+ * Blocks each of `blocked` for `owner`, in one transaction: all of them or none. A key a re-key replaced blocks the key
+ * its member holds now. A key already on the list is left as it is. Refused (BlockRefusal), with nothing written, for a
+ * key not in the one spelling (400 bad_key), the owner's own or one of its former keys (400), or when the list would pass
+ * MEMBER_BLOCKS_MAX (409 block_limit). Returns the keys it added.
  */
 export function addBlocks(owner: string, blocked: readonly string[], now: number = Date.now()): string[] {
     const keys = checkedKeys(owner, blocked);
@@ -355,22 +361,31 @@ export function addKnownBlocks(owner: string, blocked: readonly string[], now: n
     return { added: addBlocks(owner, here, now), skipped: keys.length - here.length };
 }
 
-/** The keys once each, or a BlockRefusal for one not in the one spelling or the owner's own. */
+/**
+ * The keys their members hold now, once each, or a BlockRefusal for one not in the one spelling, or the owner's own (a
+ * former key of theirs is theirs too).
+ */
 function checkedKeys(owner: string, blocked: readonly string[]): string[] {
-    const keys = [...new Set(blocked)];
-    for (const k of keys) {
+    for (const k of blocked) {
         if (!isMemberKeySpelling(k)) throw new BlockRefusal(400, BAD_KEY_CODE, BAD_KEY_ERROR);
-        if (k === owner) throw new BlockRefusal(400, 'block_self', BLOCK_SELF_ERROR);
     }
+    const keys = [...new Set(blocked.map(k => rekeyedToNow(k)))];
+    if (keys.includes(owner)) throw new BlockRefusal(400, 'block_self', BLOCK_SELF_ERROR);
     return keys;
 }
 
-/** Unblocks one key. False when it wasn't on the owner's list. */
+/**
+ * Unblocks one person: the key, and the key its member holds now when a re-key replaced it (the re-key moved the block
+ * there). False when neither was on the owner's list.
+ */
 export function removeBlock(owner: string, blocked: string, now: number = Date.now()): boolean {
     return db.transaction(() => {
-        const row = db.prepare('SELECT * FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').get(owner, blocked) as BlockRow | undefined;
-        if (!row) return false;
-        deleteBlockRows([row], now);
+        const read = db.prepare('SELECT * FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?');
+        const rows = [...new Set([blocked, rekeyedToNow(blocked)])]
+            .map(k => read.get(owner, k) as BlockRow | undefined)
+            .filter((r): r is BlockRow => !!r);
+        if (rows.length === 0) return false;
+        deleteBlockRows(rows, now);
         return true;
     })();
 }

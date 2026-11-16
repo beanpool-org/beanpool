@@ -27,6 +27,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('expo-sqlite', () => ({ defaultDatabaseDirectory: 'file:///phone/SQLite' }));
 vi.mock('expo-file-system/legacy', () => ({
+    documentDirectory: 'file:///phone/',
     getInfoAsync: vi.fn(async () => ({ exists: false })),
     moveAsync: vi.fn(async () => {}),
     copyAsync: vi.fn(async () => {}),

@@ -60,10 +60,10 @@ function writesIn(src: string): number[] {
     });
 }
 
-/** The function `index` sits in: the last one declared before it whose body hasn't closed yet. */
+/** The top-level function `index` sits in: the last one declared before it whose body hasn't closed yet. */
 function enclosingFunction(src: string, index: number): string {
     let name = '(top level)';
-    for (const m of src.slice(0, index).matchAll(/(?:function\s+(\w+)\s*[(<]|(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\()/g)) {
+    for (const m of src.slice(0, index).matchAll(/^(?:export\s+)?(?:(?:async\s+)?function\s+(\w+)\s*[(<]|const\s+(\w+)\s*=\s*(?:async\s*)?\()/gm)) {
         const end = src.indexOf('\n}', m.index!);
         if (end === -1 || end > index) name = m[1] ?? m[2];
     }
@@ -128,7 +128,7 @@ describe('the saved list is written in one place per job, and a row comes off it
         expect(uses(`const listKey = ${KEY};`)).toBe(1);
         expect(uses(`await storage.multiRemove([${KEY}]);`)).toBe(1);
         expect(code(`await storage.removeItem('${KEY_TEXT}'); // https://riverside.example`)).toContain(KEY_TEXT);
-        const src = 'export async function a() {\n    x();\n}\nconst y = 1; setItem(K);\n';
+        const src = 'export async function a() {\n    const isHere = (u: unknown) => u === 1;\n    x();\n}\nconst y = 1; setItem(K);\n';
         expect(enclosingFunction(src, src.indexOf('x()'))).toBe('a');
         expect(enclosingFunction(src, src.indexOf('setItem'))).toBe('(top level)');
     });

@@ -3,7 +3,7 @@
  *
  * Provides endpoints for inter-node communication:
  * - GET /api/node/info — Node metadata + peer list (for PWA node discovery)
- * - POST /api/federation/verify-member — Check if pubkey is a local member
+ * - POST /api/federation/verify-member — Check if pubkey is a local member (commented out: an unsigned stub)
  *
  * Also exports the dynamic CORS middleware that whitelists peer connector origins.
  */
@@ -11,9 +11,8 @@
 import type Koa from 'koa';
 import type Router from '@koa/router';
 import { getPeerOrigins, getConnectorsByLevel } from './connector-manager.js';
-import { getMembers, getPosts, createConversation, sendMessage, registerVisitor, communityCountsCached } from './state-engine.js';
+import { getMembers, getPosts, communityCountsCached } from './state-engine.js';
 import { getLocalConfig } from './config/local-config.js';
-import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './engine/member-key.js';
 
 /**
  * Dynamic CORS middleware for federation.
@@ -80,9 +79,9 @@ export function mountFederationRoutes(router: Router): void {
         };
     });
 
-    // [SECURITY PATCH]: The following routes are currently unauthenticated HTTP stubs. 
-    // They are disabled to prevent remote message spoofing until cross-node 
-    // cryptographic PeerID signatures are fully implemented for federation routing.
+    // [SECURITY PATCH]: The following route is an unauthenticated HTTP stub, disabled until cross-node requests are
+    // signed. Its old neighbour, POST /api/federation/relay-message, is deleted (X7): a line between communities goes
+    // through the mailbox over signed HTTPS (POST /api/relay/mail, engine/relay-mail.ts).
     /*
     // Verify member — used by remote nodes before accepting visitor trades
     router.post('/api/federation/verify-member', async (ctx) => {
@@ -106,60 +105,6 @@ export function mountFederationRoutes(router: Router): void {
         ctx.body = {
             isMember: true,
             callsign: member.callsign,
-        };
-    });
-
-    // Relay message — receive a DM from a remote node
-    router.post('/api/federation/relay-message', async (ctx) => {
-        const body = (ctx as any).requestBody || {};
-        const { senderPublicKey, senderCallsign, senderNodeUrl, recipientPublicKey, ciphertext, nonce } = body;
-
-        if (!senderPublicKey || !recipientPublicKey || !ciphertext || !nonce) {
-            ctx.status = 400;
-            ctx.body = { error: 'Missing required fields: senderPublicKey, recipientPublicKey, ciphertext, nonce' };
-            return;
-        }
-        // One key, one spelling (engine/member-key.ts), before any lookup or write, as the libp2p relay.
-        if (!isMemberKeySpelling(senderPublicKey) || !isMemberKeySpelling(recipientPublicKey)) {
-            ctx.status = 400;
-            ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
-            return;
-        }
-
-        // Verify recipient exists locally
-        const members = getMembers();
-        const recipient = members.find(m => m.publicKey === recipientPublicKey);
-        if (!recipient) {
-            ctx.status = 404;
-            ctx.body = { error: 'Recipient not found on this node' };
-            return;
-        }
-
-        // Register sender as a visitor with their callsign and home node URL
-        registerVisitor(senderPublicKey, senderCallsign || undefined, senderNodeUrl || undefined);
-
-        // Create or find the DM conversation
-        const conversation = createConversation('dm', [senderPublicKey, recipientPublicKey], senderPublicKey);
-        if (!conversation) {
-            ctx.status = 500;
-            ctx.body = { error: 'Failed to create conversation' };
-            return;
-        }
-
-        // Store the message
-        const message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce);
-        if (!message) {
-            ctx.status = 500;
-            ctx.body = { error: 'Failed to store message' };
-            return;
-        }
-
-        console.log(`📨 Federation relay: ${senderCallsign || senderPublicKey.substring(0, 8)} → ${recipient.callsign} (from ${senderNodeUrl || 'unknown'})`);
-
-        ctx.body = {
-            success: true,
-            conversationId: conversation.id,
-            messageId: message.id,
         };
     });
     */

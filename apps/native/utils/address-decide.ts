@@ -24,7 +24,17 @@ Per address, this round:
  *     again"); else keep;
  *   - keep with addresses dropped this round is `drop`: the phone stays, and those addresses are refused.
  * One address answering with another key is dropped alone; the rest stay one community (Marty's pick 3).
+ *
+ * Spares (§6 'Spares', slice S8; Marty's pick 6): a standby's own address the owner named in the list's `spares`, apart from
+ * its addresses. A spare is nothing until needed: a standby that has not taken over has no key to prove with. So the phone
+ * asks a spare only when no listed address answers as the community (everything listed was asked this round, none proved,
+ * nowhere to go), and takes it ({@link takeSpare}) only when it proves with the community's key at a take-over count
+ * HIGHER than the one the phone holds, and the list it serves (the community's key and id, newer than the one kept) names
+ * it as an address. Unproved, another key, or a count equal or lower: never taken, and never refused either (a standby may
+ * take over an hour later).
  */
+
+import { compareAddressNumbers } from '@beanpool/core';
 
 /**
  * How long a proof stays fresh: the wait before an address that proved is asked again (utils/address-verify.ts). Past it,
@@ -118,4 +128,25 @@ export function decideAddress(s: AddressSituation): AddressDecision {
     if (s.answers[s.using]?.kind === 'silent') return s.silentDue && target ? out('switch', target, 'not-answering') : keep();
     if (mainOk) return out('follow', s.main, s.mainSeen === s.main ? null : 'followed');
     return keep();
+}
+
+/** What a spare said this round: its proof, and the list it served (as core chooseAddressList took it), or null for none. */
+export interface SpareAnswer {
+    proof: AddressAnswer;
+    /** The list the spare served when the community's key signed it and it is newer than the one kept; else null. */
+    list: { epoch: number; seq: number; addresses: readonly string[] } | null;
+}
+
+/**
+ * Whether the phone goes to `spare` (the file's comment, "Spares"). `listedAnswers`: some listed address answers as the
+ * community this round, or there is somewhere listed to go: then no spare is ever taken. `epoch`: the highest take-over
+ * count the phone holds, this round's included. The invariant: never an address that has not proved with the community's
+ * key at a count above `epoch`, and never one the newer list doesn't name.
+ */
+export function takeSpare(s: { listedAnswers: boolean; epoch: number; spare: string; answer: SpareAnswer }): boolean {
+    if (s.listedAnswers) return false;
+    const p = s.answer.proof;
+    if (p.kind !== 'proved' || p.epoch <= s.epoch) return false;
+    const l = s.answer.list;
+    return !!l && l.epoch > s.epoch && compareAddressNumbers(l, p) >= 0 && l.addresses.includes(s.spare);
 }

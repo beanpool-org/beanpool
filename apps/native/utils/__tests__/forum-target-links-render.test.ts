@@ -28,7 +28,9 @@ import { BRAND_SETS, contrastRatio, type ForumLink } from '@beanpool/core';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock('react-native', () => {
+vi.mock('react-native', async () => {
+    // Modal and Platform are the shared harness's, so a test can be an iPhone: a Modal that closes takes its time (modalControl).
+    const { modalStandIn, platformStandIn } = await import('./profile-events-words-harness');
     const flat = (s: unknown): Record<string, unknown> => Object.assign({}, ...[s].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, accessibilityLabel, accessibilityRole, accessibilityState, testID, numberOfLines, style, disabled, value, onChangeText, visible } = props;
@@ -44,9 +46,9 @@ vi.mock('react-native', () => {
         return createElement(tag, attrs, children);
     };
     return {
-        Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
+        Platform: platformStandIn(),
         StyleSheet: { create: (s: unknown) => s },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Modal: el('div'), Image: el('img'), TextInput: el('input'), ActivityIndicator: el('i'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Modal: modalStandIn, Image: el('img'), TextInput: el('input'), ActivityIndicator: el('i'),
         Linking: { openURL: vi.fn(async () => true) },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
@@ -87,7 +89,11 @@ vi.mock('../../components/chat/ChatComposer', async () => {
 vi.mock('expo-image-picker', () => ({}));
 vi.mock('../chat-photo', () => ({ chatPhotoDataUri: vi.fn(), withinMs: (p: Promise<unknown>) => p }));
 vi.mock('../post-photo', () => ({ askPhotoSource: vi.fn() }));
-vi.mock('../../components/ReportMessageSheet', () => ({ ReportMessageSheet: () => null }));
+// The report sheet is a Modal of its own: here only whether it is up (the iPhone check below).
+vi.mock('../../components/ReportMessageSheet', async () => {
+    const { modalStandIn } = await import('./profile-events-words-harness');
+    return { ReportMessageSheet: ({ isOpen }: { isOpen: boolean }) => createElement(modalStandIn, { visible: isOpen }, createElement('div', { 'data-testid': 'forum-report-sheet' })) };
+});
 // The member's own things the picker lists (utils/db): their groups (and other chats, which it leaves out), their listings
 // (and ones done or taken down, which it leaves out), the events they are going to.
 const mine = vi.hoisted(() => ({ failed: false }));
@@ -130,6 +136,7 @@ vi.mock('../forum', () => ({
 }));
 
 import ForumTopicScreen from '../../app/forum/[id]';
+import { modalControl } from './profile-events-words-harness';
 import { ForumLinkedTopics, forumLinkHref } from '../../components/forum/ForumLinks';
 import { cutTo, linkPostedNeed, needSeedFrom, noteNeedLinked, takeNeedLinked, takeNeedSeed, NEED_TITLE_MAX } from '../forum-need';
 import { COLOUR_SETS } from '../../constants/colors';
@@ -243,6 +250,7 @@ beforeEach(() => {
     Object.assign(node, { front: FRONT, topic: pageOf(undefined), kept: null, linked: [], linkedFails: false, linkRefusal: null });
     takeNeedSeed('t1');
     takeNeedLinked('t1');
+    modalControl.reset();
     vi.clearAllMocks();
 });
 
@@ -323,6 +331,44 @@ describe.each(LOOKS)('the link-kind table in %s (%s)', (_name, set) => {
         mine.failed = true;
         await press(byId(host, 'forum-link-kind-group'));
         expect(words(byId(host, 'forum-link-picker'))).toContain('Couldn’t load these. Check your connection and try again.');
+    });
+});
+
+/**
+ * On an iPhone a Modal asked for while another is still closing is dropped for good (utils/screen-presented.ts; the stand-in
+ * refuses it as UIKit does). Round 2 of #3250: ⋯ → Link closed the menu and opened the picker in one go, so on iOS the picker
+ * never came. Now a row that opens another sheet waits for the menu's onDismiss there.
+ */
+describe('on an iPhone, a ⋯ row that opens another sheet waits for the menu to go', () => {
+    const dismissalEnds = async () => { await act(async () => { modalControl.finishClosing(); }); await act(async () => {}); };
+
+    it('Link a group, listing or event: the picker opens once the menu has gone, not while it closes', async () => {
+        modalControl.ios = true;
+        const host = await render('dark', ForumTopicScreen);
+        await press(byId(host, 'forum-topic-menu'));
+        await press(menuButton(host, 'Link a group, listing or event')!);
+        expect(byId(host, 'forum-menu'), 'the menu is going').toBeNull();
+        expect(byId(host, 'forum-link-picker'), 'not asked for while the menu still closes').toBeNull();
+        await dismissalEnds();
+        expect(byId(host, 'forum-link-picker'), 'up once the menu has gone').not.toBeNull();
+        expect(buttonsIn(byId(host, 'forum-link-picker')).map(words)).toEqual(['One of your groups', 'One of your listings', 'An event', 'Cancel']);
+    });
+
+    it('Report on another member\'s post: the report sheet opens once the menu has gone', async () => {
+        modalControl.ios = true;
+        const host = await render('dark', ForumTopicScreen);
+        await press(byId(host, 'forum-post-menu-2'));
+        await press(menuButton(host, 'Report')!);
+        expect(byId(host, 'forum-report-sheet'), 'not asked for while the menu still closes').toBeNull();
+        await dismissalEnds();
+        expect(byId(host, 'forum-report-sheet'), 'up once the menu has gone').not.toBeNull();
+    });
+
+    it('on Android the picker opens at once (Dialogs stack)', async () => {
+        const host = await render('dark', ForumTopicScreen);
+        await press(byId(host, 'forum-topic-menu'));
+        await press(menuButton(host, 'Link a group, listing or event')!);
+        expect(byId(host, 'forum-link-picker')).not.toBeNull();
     });
 });
 

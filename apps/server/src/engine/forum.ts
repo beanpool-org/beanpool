@@ -37,6 +37,10 @@
  *   never in the community's five, still one open a member (engine/posts.ts assertActivePollRoom).
  * - **The Decision chip** (slice F8; linkForumDecision): the topic's writer or an owner or admin links one of the community's
  *   Decisions (forum_links), where Decisions are on; whoever reads the topic sees its title and state.
+ * - **Links** (slice F9; linkForumTarget, engine/forum-links.ts): the topic's writer links one of their groups, one of their
+ *   listings (a Need made with "Make this a Need" is one), an event or a Learn page; at most FORUM_LIMITS.topicLinks rows of
+ *   forum_links a topic, the Decision chip's included. A topic's read answers each as its reader may see it, else a placeholder
+ *   with its kind alone; forumTopicsLinking answers the topics a reader may read that link one thing they may see.
  * - **Starter sections** are made once, by the main server, the first time it finds the forum with none, and a marker in
  *   node_config stops them coming back (design §20). A standby makes nothing: its main server's come in its copy.
  *
@@ -44,8 +48,8 @@
  */
 import crypto from 'node:crypto';
 import {
-    FORUM_DAY_LIMITS, FORUM_LIMITS, FORUM_STARTER_SECTIONS, FORUM_TIMES, forumLinksFit, forumMentionsFit, isLang, word, wordsFor,
-    type ForumFollow, type ForumSectionStarts, type ForumWriterLabel,
+    FORUM_DAY_LIMITS, FORUM_LIMITS, FORUM_LINKED_TOPICS_MAX, FORUM_STARTER_SECTIONS, FORUM_TIMES, forumLinksFit, forumMentionsFit, isForumLinkKind, isLang, word,
+    wordsFor, type ForumFollow, type ForumLink, type ForumLinkKind, type ForumSectionStarts, type ForumWriterLabel,
 } from '@beanpool/core';
 import { getMember, validatePostPhotos } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
@@ -70,6 +74,7 @@ import { forumSectionOpenPolls, sectionAccess, sectionReadSql, type SectionAcces
 import { postOutOfSight } from './post-sight.js';
 import { forumStarterNeverListed, stampForumPublicFrom } from './forum-public.js';
 import { getDecision, titleForMembers } from '../decisions-engine.js';
+import { FORUM_LINKING_SQL, FORUM_TARGET_LINKS_WHERE, forumLinkTarget, forumLinksOf } from './forum-links.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -120,6 +125,11 @@ export const FORUM_WORDS = {
     decisionsOff: word('Decisions are switched off in this community, so a topic can’t link one.'),
     decisionNotFound: word('That Decision isn’t here any more.'),
     decisionNotYours: word('Only its writer, an owner or an admin can link a Decision to this topic.'),
+    linkNotFound: word('That isn’t here, or you can’t see it.'),
+    linkWriterOnly: word('Only the topic’s writer can link something to it.'),
+    unlinkNotYours: word('Only its writer, an owner or an admin can take a link off this topic.'),
+    linkListingNotYours: word('You can link only your own listings.'),
+    linkGroupNotYours: word('You can link only a group you are in.'),
 };
 
 /** A member's own text: control and hidden characters out, at most `max` characters, or a refusal over it. */
@@ -207,6 +217,11 @@ export interface ForumTopic {
     pollId: string | null;
     /** The community Decision it links (slice F8, the Decision chip): its title and state; null for none. */
     decision: { id: string; title: string; status: string } | null;
+    /**
+     * What it links (slice F9; engine/forum-links.ts), each as the reader may see it, else a placeholder with its kind alone.
+     * In a topic's own read and the answers that end in one (a new topic, an edit, a pin...); never in a list row.
+     */
+    links?: ForumLink[];
 }
 export interface ForumPost {
     id: string; topicId: string; number: number; writer: ForumWriter; words: string; quotes: number | null; lang: string | null;
@@ -482,7 +497,10 @@ export function forumTopic(reader: string, id: string, after: number): { topic: 
     const lastNumber = (db.prepare(`SELECT ${LAST_SHOWN('@id')}`).pluck().get({ id, reader }) as number | null) ?? 0;
     const writer = forumWriters([t.writer_pubkey, ...posts.map((p) => p.writer_pubkey)]);
     return {
-        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }, reader, writer),
+        topic: {
+            ...topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }, reader, writer),
+            links: forumLinksOf(reader, t.id, t.writer_pubkey),
+        },
         posts: postsOut(posts, reader, writer),
         next: more ? posts[posts.length - 1].number : null,
         lastRead,
@@ -750,6 +768,8 @@ const othersReplied = (topic: TopicRow) =>
  */
 function blankTopic(topic: TopicRow, at: string, by: 'writer' | 'moderator' = 'writer'): void {
     const gone = !othersReplied(topic);
+    // Its links were its writer's, under the opening words that go (slice F9): they go too, with tombstones.
+    deletePlainRows('forum_links', FORUM_TARGET_LINKS_WHERE, topic.id);
     db.prepare(`UPDATE forum_topics SET title = '', place = NULL, pinned_at = CASE WHEN ? THEN NULL ELSE pinned_at END,
         closed_at = COALESCE(closed_at, ?), closed_by = CASE WHEN ? THEN 'removed' ELSE COALESCE(closed_by, ?) END WHERE id = ?`)
         .run(gone ? 1 : 0, at, gone ? 1 : 0, by, topic.id);
@@ -905,12 +925,80 @@ export function linkForumDecision(member: string, topicId: string, decisionId: u
         throw new ForumRefusal(404, 'decision_not_found', FORUM_WORDS.decisionNotFound);
     }
     db.transaction(() => {
+        // A new chip where the topic already links as many things as it may (slice F9): the chip it replaces frees its own room.
+        if (decisionId !== null && linkRows(topic.id, "kind != 'decision'") >= FORUM_LIMITS.topicLinks) throw tooManyLinks();
         deletePlainRows('forum_links', "topic_id = ? AND kind = 'decision'", topic.id);
         if (decisionId !== null) {
             db.prepare("INSERT INTO forum_links (topic_id, kind, target_id, created_at) VALUES (?, 'decision', ?, ?)").run(topic.id, decisionId, iso(now));
         }
     })();
     return forumTopic(member, topic.id, 0).topic;
+}
+
+// ── Links: a group, a listing, an event, a Learn page (slice F9) ──────────────────────────────────────────────────
+
+const linkRows = (topicId: string, where = '1') =>
+    db.prepare(`SELECT COUNT(*) FROM forum_links WHERE topic_id = ? AND ${where}`).pluck().get(topicId) as number;
+const tooManyLinks = () => new ForumRefusal(409, 'topic_links', tr('A topic can link at most {n} things. Take one off first.', { n: FORUM_LIMITS.topicLinks }));
+const linkKind = (raw: unknown): ForumLinkKind => {
+    if (!isForumLinkKind(raw)) throw new ForumRefusal(400, 'bad_request', "kind is 'group', 'listing', 'event' or 'learn'.");
+    return raw;
+};
+
+/**
+ * The topic's writer links one thing to it (design §10.2 to §10.4), or its writer, an owner or an admin takes one off
+ * (`on` false). What may be linked is what the writer could already see, and theirs where the design says "your": one of
+ * their own listings (Make this a Need links the Need it made), a group they are an active member of, any event or Learn page
+ * they may open. Something they may not see is refused exactly as an id nobody has (404 `link_not_found`). At most
+ * FORUM_LIMITS.topicLinks rows a topic, the Decision chip's included; linking one already linked changes nothing.
+ */
+export function linkForumTarget(member: string, topicId: string, raw: { kind?: unknown; targetId?: unknown; on?: unknown }, now = Date.now()): ForumTopic {
+    // Taking one off says nothing to anyone, so a muted member may still do it, as removing their own post (writable's rule).
+    if (raw.on === false) assertPlainTablesWritable(); else writable(member, now);
+    const kind = linkKind(raw.kind);
+    if (typeof raw.targetId !== 'string' || raw.targetId.length === 0 || raw.targetId.length > 128) throw new ForumRefusal(400, 'bad_request', 'targetId is an id.');
+    if (raw.on !== undefined && typeof raw.on !== 'boolean') throw new ForumRefusal(400, 'bad_request', 'on is true or false.');
+    const targetId = raw.targetId;
+    const topic = visibleTopic(member, topicId);
+    if (raw.on === false) {
+        if (topic.writer_pubkey !== member && !isStaff(member)) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.unlinkNotYours);
+        deletePlainRows('forum_links', 'topic_id = ? AND kind = ? AND target_id = ?', topic.id, kind, targetId);
+        return forumTopic(member, topic.id, 0).topic;
+    }
+    if (topic.writer_pubkey !== member) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.linkWriterOnly);
+    assertWritesIn(member, topic.section_id);
+    const target = forumLinkTarget(member, kind, targetId);
+    if (!target) throw new ForumRefusal(404, 'link_not_found', FORUM_WORDS.linkNotFound);
+    if (kind === 'listing' && target.maker !== member) throw new ForumRefusal(403, 'not_yours_to_link', FORUM_WORDS.linkListingNotYours);
+    if (kind === 'group' && !db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(targetId, member)) {
+        throw new ForumRefusal(403, 'not_yours_to_link', FORUM_WORDS.linkGroupNotYours);
+    }
+    db.transaction(() => {
+        if (db.prepare('SELECT 1 FROM forum_links WHERE topic_id = ? AND kind = ? AND target_id = ?').get(topic.id, kind, targetId)) return;
+        if (linkRows(topic.id) >= FORUM_LIMITS.topicLinks) throw tooManyLinks();
+        db.prepare('INSERT INTO forum_links (topic_id, kind, target_id, created_at) VALUES (?, ?, ?, ?)').run(topic.id, kind, targetId, iso(now));
+    })();
+    return forumTopic(member, topic.id, 0).topic;
+}
+
+export interface ForumLinkedTopic { id: string; sectionId: string; title: string; replyCount: number; lastActivityAt: string }
+
+/**
+ * The topics `reader` may read that link one thing ("Talked about in the forum ›" on a listing, "Topics about this group",
+ * "From the forum" on a Learn page): the newest activity first, at most FORUM_LINKED_TOPICS_MAX. Asked about something the
+ * reader may not see, the answer is the empty list, as for an id nobody has: nobody learns from it that the thing is there,
+ * or that a topic names it.
+ */
+export function forumTopicsLinking(reader: string, kind: unknown, targetId: unknown): { topics: ForumLinkedTopic[] } {
+    const k = linkKind(kind);
+    if (typeof targetId !== 'string' || !forumLinkTarget(reader, k, targetId)) return { topics: [] };
+    const rows = db.prepare(`SELECT t.id, t.section_id, t.title, t.reply_count, t.last_activity_at FROM forum_topics t
+        WHERE t.id IN (${FORUM_LINKING_SQL}) AND COALESCE(t.closed_by, '') != 'removed' AND ${NOT_BLOCKED('t.writer_pubkey')} AND ${NOT_HIDDEN_TO_READER}
+          AND t.section_id IN (SELECT id FROM forum_sections WHERE archived_at IS NULL) AND ${sectionReadSql('t.section_id', '@reader')}
+        ORDER BY t.last_activity_at DESC, t.id ASC LIMIT @limit`)
+        .all({ kind: k, target: targetId, reader, mod: isForumModerator(reader) ? 1 : 0, limit: FORUM_LINKED_TOPICS_MAX }) as
+        { id: string; section_id: string; title: string; reply_count: number; last_activity_at: string }[];
+    return { topics: rows.map((r) => ({ id: r.id, sectionId: r.section_id, title: r.title, replyCount: r.reply_count, lastActivityAt: r.last_activity_at })) };
 }
 
 // ── Sections ────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -442,6 +442,12 @@ export function completeRekey(
         // 2. Enumerate and transfer ALL 32 consumers of members.public_key (engine/key-move.ts, which a standby's copy
         // follows with too), each row but a copy of an event stamped so the standby's next copy carries the move.
         moveMemberKeyRows(cleanOld, cleanNew, nowIso, { keepStamps: false });
+        // The member directory (GET /api/members) lists them under the new key now: a card that moved, so a phone's delta
+        // read (joined_at or profile_updated_at after its cursor) must carry the row, as a node role's change does
+        // (node-roles.ts noteRoleChanged). It didn't: a phone kept only the old key's card until its hourly full read, and a
+        // DM with the member, its "key changed" line included, named them by the conversation's id (walk of #3263).
+        // Here, never in moveMemberKeyRows: a standby's follow keeps the main server's stamps.
+        db.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(nowIso, cleanNew);
         // The new key joins each of their groups' chat roster: stale, and the roster to the guests' homes. Here, never in
         // moveMemberKeyRows, which a standby's follow runs too, and a standby queues nothing (group-guests.ts queueToHome).
         markGroupEpochsStaleFor(cleanNew);

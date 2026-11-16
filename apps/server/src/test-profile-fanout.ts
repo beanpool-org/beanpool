@@ -21,6 +21,10 @@
  *      operator's node_config row nodeProfile.announceProfiles = true puts card edits back on every socket.
  *   4. The member list never misses a change: a node role granted and revoked, and a tier badge each move the list's
  *      ETag (a held one is answered 200) and put the member's row in the next delta, with the new role or credit. Neither moved for a role, and none was in a delta (#1467's finding).
+ *      An admin's re-key too: the list and the next delta have the member under the new key, by name, and the old key is
+ *      in neither. Neither moved for a re-key (walk of #3263 on the API 26 phone, 16 Nov 2026): the phone kept the old
+ *      key's card until its hourly full read, so a DM with the re-keyed member, and its "{name}'s key changed" line,
+ *      named them by the conversation's id.
  *
  * On origin/main sections 2 and 4 fail; 1 and 3 pin what must not change, and pass there by design.
  *
@@ -88,6 +92,7 @@ async function main() {
     const { getMembersVersion, getPostsVersion } = await import('./engine/versions.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
     const { grantNodeRole, revokeNodeRole } = await import('./engine/node-roles.js');
+    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
 
     await initTls();
@@ -253,22 +258,32 @@ async function main() {
     {
         const wes = member('Wes');
         /** Hold the list's ETag and a cursor, make the change, then read both as a phone's sync does. */
-        async function afterChange(what: string, change: () => void, field: string, want: (row: any) => boolean) {
+        /** `key`: the key the member is listed under after the change (a re-key moves it). */
+        async function afterChange(what: string, change: () => void, field: string, want: (row: any) => boolean, key = wes.pubKeyHex) {
             const held = await get(olive, '/api/members');
             const cursor = new Date(Date.now() - 1).toISOString();
             await sleep(5);
             change();
             const full = await get(olive, '/api/members', held.etag ?? undefined);
-            const row = (full.json ?? []).find((m: any) => m.publicKey === wes.pubKeyHex);
+            const row = (full.json ?? []).find((m: any) => m.publicKey === key);
             assert(full.status === 200 && !!row && want(row),
                 `${what}: a held ETag of the list is not confirmed (${full.status}), and the list has it (${field} ${JSON.stringify(row?.[field])})`);
             const delta = await get(olive, `/api/members?updatedAfter=${encodeURIComponent(cursor)}`);
-            const inDelta = (delta.json ?? []).find((m: any) => m.publicKey === wes.pubKeyHex);
+            const inDelta = (delta.json ?? []).find((m: any) => m.publicKey === key);
             assert(delta.status === 200 && !!inDelta && want(inDelta),
                 `${what}: the next delta has the member's row (${inDelta ? `${field} ${JSON.stringify(inDelta[field])}` : 'not in it'})`);
+            return { full: full.json ?? [], delta: delta.json ?? [] };
         }
         await afterChange('a node role granted', () => grantNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), 'nodeRole', r => r.nodeRole === 'moderator');
         await afterChange('a node role revoked', () => revokeNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), 'nodeRole', r => r.nodeRole === null);
+        // An admin's re-key (the admin screen's issueRekeyCode + completeRekey): the member's card is under the new key now.
+        const kit = member('Kit');
+        const kitNew = keypair();
+        const rekeyed = await afterChange('an admin re-key',
+            () => { completeRekey(kit.pubKeyHex, kitNew.pubKeyHex, issueRekeyCode(kit.pubKeyHex, 'owner:password').code, 'owner:password'); },
+            'callsign', r => r.callsign === 'Kit', kitNew.pubKeyHex);
+        const oldKeyIn = (rows: any[]) => rows.some((m: any) => m.publicKey === kit.pubKeyHex);
+        assert(!oldKeyIn(rekeyed.full) && !oldKeyIn(rekeyed.delta), `an admin re-key: the old key is in neither the list nor the delta (list ${oldKeyIn(rekeyed.full)}, delta ${oldKeyIn(rekeyed.delta)})`);
         // A badge is recognition only (engine/badges.ts): it gives no credit, so the list's earnedCredit (the granted lane) stays 0.
         setMemberBadge('owner:password', wes.pubKeyHex, 'Steward');
         const listed = ((await get(olive, '/api/members')).json ?? []).find((m: any) => m.publicKey === wes.pubKeyHex);

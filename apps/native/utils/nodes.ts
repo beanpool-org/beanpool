@@ -4,7 +4,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { assertPlainNodeAddress, isPlainNodeAddress, plainOriginOf } from './node-url';
 import { clearPendingProfileChange } from './pending-profile-sync';
-import { communityKeyOf } from './community-index';
+import { communityKeyOf, communityRecordOf, recordHolds } from './community-index';
 import { forgetCommunityRecord, keepCommunityRecord } from './community-record';
 
 export interface SavedNode {
@@ -107,8 +107,38 @@ export async function takeOffSavedList(
  * this phone's push token first: call this from inside account-leaves-phone.ts `forgetCommunityPush`.
  */
 export async function removeSavedNode(url: string) {
-    await takeOffSavedList(url);
+    // The change waiting is kept under the community's record: cleared while the record still keys it, the row last.
     await clearPendingProfileChange(url);
+    await takeOffSavedList(url);
+}
+
+/**
+ * The saved rows of the community `using` belongs to (its record: community-index.ts recordHolds) become one row at
+ * `using`, with the first such row's name and currency (utils/address-verify.ts, after the phone followed the community to
+ * another of its addresses, slice S4). The community stays: no record goes and no other community's row is touched. Writes
+ * only when something changes; a list that can't be read is left as it is.
+ */
+export async function followSavedRow(using: string): Promise<void> {
+    const record = communityRecordOf(using);
+    if (!record) return;
+    let rows: unknown;
+    try {
+        const raw = await AsyncStorage.getItem(SAVED_NODES_STORE_KEY);
+        rows = raw ? JSON.parse(raw) : [];
+    } catch {
+        return;
+    }
+    if (!Array.isArray(rows)) return;
+    const mine = (rows as SavedNode[]).filter((n) => n && typeof n.url === 'string' && recordHolds(record, n.url));
+    if (mine.length === 0 || (mine.length === 1 && mine[0].url === using)) return;
+    const named = mine.find((n) => n.alias) ?? mine[0];
+    const one: SavedNode = { ...mine[0], url: using, ...(named.alias ? { alias: named.alias } : {}) };
+    const next: SavedNode[] = [];
+    for (const n of rows as SavedNode[]) {
+        if (!mine.includes(n)) next.push(n);
+        else if (n === mine[0]) next.push(one);
+    }
+    await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(next));
 }
 
 /** The file a phone with no community open uses (no anchor yet). The same before and after the rename below. */

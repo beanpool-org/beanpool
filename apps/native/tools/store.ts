@@ -16,6 +16,7 @@ import { getDb } from '../utils/db';
 import { cancelToolReminders, type ToolNotifications } from './reminders';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from './schema';
 import { communityKey } from './community';
+import { communityRecordsReady } from '../utils/community-record';
 
 export { TOOL_SETTINGS_PREFIX, communityKey };
 
@@ -52,6 +53,8 @@ export class ToolDocTooBigError extends Error {
 export const settingsKey = (community: string, owner: string, tool: string) => `${TOOL_SETTINGS_PREFIX}${community}:${owner}:${tool}`;
 
 export async function readToolSettings(owner: string, tool: string, url?: string | null): Promise<ToolSettings> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         const anchorUrl = url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
         const community = communityKey(anchorUrl);
@@ -64,6 +67,8 @@ export async function readToolSettings(owner: string, tool: string, url?: string
 }
 
 export async function writeToolSettings(owner: string, tool: string, next: ToolSettings, url?: string | null): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     const anchorUrl = url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
     const community = communityKey(anchorUrl);
     await AsyncStorage.setItem(settingsKey(community, owner, tool), JSON.stringify(next));
@@ -166,6 +171,8 @@ export async function writeToolDoc<D>(owner: string, manifest: ToolManifest<D>, 
  * this community and owner. Leaves other communities' documents, photos and reminders untouched.
  */
 export async function removeToolDataHere(owner: string, tool: string, url?: string | null, notifications?: ToolNotifications | null): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     const db = await getDb();
     await db.runAsync('DELETE FROM tool_docs WHERE owner = ? AND tool = ?', [owner, tool]);
     const anchorUrl = url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
@@ -181,6 +188,8 @@ export async function removeToolDataHere(owner: string, tool: string, url?: stri
  * (The SQLite file containing tool_docs is removed by community-cache.ts removeCommunityCaches).
  */
 export async function removeCommunityToolData(url: string | null, notifications?: ToolNotifications | null): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     const community = communityKey(url);
     try {
         await (await import('./photos')).removeCommunityPhotos(community);

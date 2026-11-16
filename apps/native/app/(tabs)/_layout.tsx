@@ -25,6 +25,7 @@ import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab
 import { useVisitorForum } from '../../utils/forum-public';
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
 import { keepCommunityIdentity } from '../../utils/address-follow';
+import { verifyAddressInUse } from '../../utils/address-verify';
 import { HallBanner } from '../../components/HallBanner';
 import { marketTabLit } from '../../utils/pulse-door';
 
@@ -190,6 +191,9 @@ export default function TabLayout() {
             // Who the community is at this address, kept the first time it answers here, before any move to follow is on
             // offer (utils/address-follow.ts keepCommunityIdentity): once per address, and the strip doesn't wait for it.
             if (fresh) keepCommunityIdentity(url).catch(() => {});
+            // Its addresses verified, and followed by itself (utils/address-verify.ts, addresses S4): at most hourly while
+            // the address in use answers, and the strip doesn't wait for it.
+            verifyAddressInUse().catch(() => {});
             // Nothing known of it (offline, and no copy yet): read it again at the next screen change rather than
             // show Commons and Ledger for the rest of the session. Only while the phone is still on it.
             if (!cached && !fresh && stripReadFor.current === url) stripReadFor.current = undefined;

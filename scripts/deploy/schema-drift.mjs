@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global process, console -- a Node script */
 /**
  * Schema drift, before a deploy: which tables a node's database already holds in a shape the new build's schema.sql would
  * not give it. schema.sql makes each table with CREATE TABLE IF NOT EXISTS, which never touches a table that is there, so a
@@ -182,8 +183,8 @@ function tablesOf(db) {
 
 /** One table's shape, as SQLite reads it from the table's own CREATE text: everything IF NOT EXISTS leaves as it is. */
 export function tableShape(db, name) {
-    const info = db.prepare("SELECT type, wr, strict FROM pragma_table_list WHERE schema = 'main' AND name = ?").get(name);
-    const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(name)?.sql ?? '';
+    const info = db.prepare("SELECT type, wr, strict FROM pragma_table_list WHERE schema = 'main' AND name = ? COLLATE NOCASE").get(name);
+    const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ? COLLATE NOCASE").get(name)?.sql ?? '';
     if (info?.type === 'virtual') {
         const tokens = sqlTokens(sql);
         return { virtual: canonical(tokens.slice(tokens.findIndex((t) => isWord(t, 'using')))) };

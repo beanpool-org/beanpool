@@ -129,6 +129,11 @@ const net = {
     sent: [] as { url: string; signedBy: string; body: any; time: number }[],
     lists: new Map<string, Set<string>>(),
     known: new Set<string>(),
+    /**
+     * What each community's read of a list (GET /api/blocks) names as `formerKeys`: a key a re-key put in place of others
+     * (apps/server key-succession.ts rekeyedFromChains), by community, then key. Null: a node from before it, naming none.
+     */
+    formerKeys: new Map<string, Map<string, string[]> | null>(),
 };
 
 const listAt = (community: string, owner: string) => {
@@ -160,6 +165,7 @@ beforeEach(async () => {
     net.alreadyMember = false;
     net.sent = [];
     net.lists.clear();
+    net.formerKeys.clear();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         const headers = (init?.headers ?? {}) as Record<string, string>;
@@ -200,6 +206,11 @@ beforeEach(async () => {
             here.forEach((k: string) => list.add(k));
         } else if (path === '/api/blocks/remove') {
             extra = { removed: list.delete(body.targetPubkey) };
+        } else if (path === '/api/blocks' && init?.method === 'GET') {
+            // The read: the list, and for each key on it a re-key put in place of others, those others.
+            const named = net.formerKeys.get(community);
+            const formerKeys = named === null ? undefined : Object.fromEntries([...(named ?? new Map()).entries()].filter(([k]) => list.has(k)));
+            return reply(200, { ...(formerKeys ? { formerKeys } : {}), blocked: [...list].map((publicKey) => ({ publicKey, blockedAt: 'x' })), max: 500 });
         } else {
             return reply(404, null, 'Not Found');
         }
@@ -984,5 +995,84 @@ describe('only ever the account\'s own', () => {
         expect(mem.async.has(record)).toBe(true);
         expect(mem.async.has(listKey(ana.publicKey))).toBe(true);
         expect([...mem.async.keys()].filter((k) => k.startsWith('beanpool_community_blocks'))).toEqual([record]);
+    });
+});
+
+describe("a block of someone since re-keyed follows them to their new key (followRekeyedBlocks; review of #3268, finding 2)", () => {
+    /** An admin re-keys `from` to `to` at `community`: its list's block moves (moveBlocks), and its read names the old key. */
+    function rekeyAt(community: string, owner: string, from: string, to: string) {
+        const list = listAt(community, owner);
+        if (list.delete(from)) list.add(to);
+        const named = net.formerKeys.get(community) ?? new Map<string, string[]>();
+        named.set(to, [from]);
+        net.formerKeys.set(community, named);
+    }
+    const HARASSER_NEW = 'ef'.repeat(32);
+    const reads = () => net.sent.filter((s) => s.url === `${NODE}/api/blocks` && Object.keys(s.body).length === 0);
+
+    it('the phone blocks the new key too, sends no change for it, and every screen hears the list changed', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        rekeyAt(NODE, ana.publicKey, HARASSER, HARASSER_NEW);
+        net.sent = [];
+        rn.emit.mockClear();
+
+        await app.followRekeyedBlocks();
+        expect(await app.isUserBlocked(HARASSER_NEW)).toBe(true);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+        expect(rn.emit).toHaveBeenCalledWith(app.BLOCKLIST_UPDATED_EVENT, expect.arrayContaining([HARASSER, HARASSER_NEW]));
+        expect(reads()).toHaveLength(1);
+        // The community holds it already: the sync after sends nothing, and a second follow changes nothing.
+        await app.syncBlocks();
+        expect(blockChanges().filter((c) => Object.keys(c.body).length > 0)).toEqual([]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER_NEW]);
+        rn.emit.mockClear();
+        await app.followRekeyedBlocks();
+        expect(rn.emit).not.toHaveBeenCalledWith(app.BLOCKLIST_UPDATED_EVENT, expect.anything());
+    });
+
+    it('an unblock the phone made before the re-key reached the community is taken off the new key there', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        net.up = false;
+        await app.unblockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
+        rekeyAt(NODE, ana.publicKey, HARASSER, HARASSER_NEW);
+        net.up = true;
+
+        await app.followRekeyedBlocks();
+        expect(await app.isUserBlocked(HARASSER_NEW)).toBe(false);
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toContainEqual({ at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER_NEW } });
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
+    });
+
+    it("nothing follows for a re-key of someone this phone never blocked, from a node that names no former keys, or with no blocks at all", async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        // No blocks: not even the read.
+        await app.followRekeyedBlocks();
+        expect(reads()).toEqual([]);
+
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        // A block made only in the web app, of someone since re-keyed: the phone never had it, and it stays the web's.
+        listAt(NODE, ana.publicKey).add(SPAMMER);
+        rekeyAt(NODE, ana.publicKey, SPAMMER, STRANGER);
+        await app.followRekeyedBlocks();
+        expect(await app.isUserBlocked(STRANGER)).toBe(false);
+
+        // A node from before the read named former keys: nothing to follow by.
+        net.formerKeys.set(NODE, null);
+        listAt(NODE, ana.publicKey).delete(HARASSER);
+        listAt(NODE, ana.publicKey).add(HARASSER_NEW);
+        await app.followRekeyedBlocks();
+        expect(await app.isUserBlocked(HARASSER_NEW)).toBe(false);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
     });
 });

@@ -58,6 +58,7 @@ import { ShowOnGlobalHostRow, listingForCopy } from '../../components/ShowOnGlob
 import { isHiddenAuthor } from '../../utils/posts-view';
 import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { ForumLinkedTopics } from '../../components/forum/ForumLinks';
 import { SharePostButtons } from '../../components/SharePost';
 import { useReaderFeatures, useShowcaseMode } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
@@ -2618,6 +2619,8 @@ function PostDetailModal() {
                 {/* 10. The description and the tags, after the action and the photo (DESIGN-detail-pages-fable.md question 1). */}
                 <Text style={styles.description} testID="post-description">{post.description || t('No description provided.')}</Text>
                 <PostTagChips tags={post.tags} freeTags={listingFreeTags(post)} />
+                {/* The forum's topics that link this listing (forum slice F9): only those this member may read; nothing when none. */}
+                {(post.type === 'offer' || post.type === 'need') && <ForumLinkedTopics kind="listing" id={post.id} />}
 
                 {/* 11. The person: the Author / Counterparty Card, components/AuthorCard.tsx, the one box an event's "HOSTED BY" is too. */}
                 {isOwnPost && targetPeerPubkey ? (

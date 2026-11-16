@@ -386,7 +386,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
-        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at via_post_id via_sharer_pubkey'),
+        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at via_post_id via_sharer_pubkey forum_posts'),
         except: { ip_hash: { reason: "the knock limiter's, for a day; never sent (engine/knocks.ts)" } },
     },
     moderation_notices: {
@@ -581,7 +581,7 @@ export const TABLES: Record<string, TableEntry> = {
     // and every delete (answered, taken back, 30 days after, the member gone) goes with a tombstone, so it leaves the standby too.
     // An older importer drops the suggestions waiting, their photos and taps: after a take-over from its copy their members
     // see none waiting and send them again; a page already approved is a post, copied whatever the importer.
-    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang free_tags about note fix_base state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
+    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang free_tags about note fix_base state answered_at answered_by reason reason_words result_post_id created_at updated_at from_forum_post_id'),
     knowledge_draft_photos: plain('draft_id order_num photo_data bytes updated_at'),
     knowledge_helped: plain('post_id member_pubkey counted at updated_at'),
     // The forum (engine/forum.ts, DESIGN-forums-fable.md §3, §16, slice F1): sections, topics, posts and their photos (in the
@@ -606,7 +606,7 @@ export const TABLES: Record<string, TableEntry> = {
     forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at taken_down_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
-    forum_members: plain('member_pubkey told_public_at updated_at known_at'),
+    forum_members: plain('member_pubkey told_public_at updated_at known_at proof_secret'),
     // What a member shows beside their name on a public forum (engine/membership-note.ts, slice F10): a standby draws the same
     // label, and "Don't show" goes with a tombstone, so it leaves the standby too. The note is never kept, so nothing of it
     // travels. An older importer drops it: after a take-over from its copy every label is gone until its member sets it again.
@@ -624,7 +624,7 @@ export const TABLES: Record<string, TableEntry> = {
     forum_follows: plain('topic_id member_pubkey state last_read created_at updated_at'),
     // What a topic links (slice F8: a community Decision; F9 the other kinds): a promoted standby shows the same chips; a removal
     // goes with its tombstone. Format 16 with the section's group above, so no older importer is sent it.
-    forum_links: plain('topic_id kind target_id created_at updated_at'),
+    forum_links: plain('topic_id kind target_id created_at updated_at post_id'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the

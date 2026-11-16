@@ -38,7 +38,8 @@ import {
 } from '../utils/group-history-unlock';
 import { LockedHistoryRow, LockedHistorySheet, SealedNoticeLine } from './LockedHistory';
 import { anchorUrl } from '../utils/node-post';
-import { View, Text, StyleSheet, Pressable, FlatList, Linking, TextInput, ScrollView } from 'react-native';
+import { useAfterDismiss } from '../utils/screen-presented';
+import { View, Text, StyleSheet, Pressable, FlatList, Linking, TextInput, ScrollView, Platform } from 'react-native';
 import { Alert } from '../utils/keyboard-alert';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -195,6 +196,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [muteOpen, setMuteOpen] = useState(false);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
+    // A ⋮ row that opens another Modal (Invite people, Group info): on iOS a Modal can't open while the menu is still closing
+    // (UIKit drops it; React Native never retries, utils/screen-presented.ts), so there it opens once the menu has gone.
+    const afterMenu = useAfterDismiss<() => void>((open) => open());
+    const closeMenuThen = (open: () => void) => {
+        setMenuOpen(false);
+        if (Platform.OS === 'ios') afterMenu.hold(open);
+        else open();
+    };
     // Opened once on the way in (openInfo), when the group has loaded; closing it then leaves the chat as it is.
     const infoOpenedOnArrival = useRef(false);
     const [inviteSkipped, setInviteSkipped] = useState(false);
@@ -859,11 +868,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     );
 
     const menuItems: ChatMenuItem[] = [
-        { icon: 'account-plus', label: t('Invite people'), hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
+        { icon: 'account-plus', label: t('Invite people'), hidden: kind !== 'group' || !isConvenor, onPress: () => closeMenuThen(() => setInviteOpen(true)) },
         { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
         { icon: 'magnify', label: t('Search this chat'), hidden: kind !== 'group', onPress: () => { setMenuOpen(false); setSearchOpen(true); } },
         { icon: 'cellphone-check', label: chatLineWords(NEW_PHONE_CONFIRM_MENU), hidden: kind !== 'group', onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
-        { icon: 'information-outline', label: kind === 'group' ? t('Group info') : t('Enterprise page'), onPress: () => { setMenuOpen(false); openOwner(); } },
+        { icon: 'information-outline', label: kind === 'group' ? t('Group info') : t('Enterprise page'), onPress: () => closeMenuThen(openOwner) },
     ];
 
     const renderMessage = (item: ChatMessage) => {
@@ -1113,6 +1122,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 onClose={() => { setMenuOpen(false); setMuteOpen(false); }}
                 onPickMute={setMuteTo}
                 bottomInset={insets.bottom}
+                onDismiss={afterMenu.release}
             />
             {kind === 'group' && (
                 <ReportMessageSheet

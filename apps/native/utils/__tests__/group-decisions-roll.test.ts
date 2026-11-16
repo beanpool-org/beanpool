@@ -65,6 +65,9 @@ vi.mock('../../components/PlaceCircleCard', () => ({ PlaceCircleCard: () => null
 // Guests from other communities (G2) is its own component with its own reads, through the phone's signed mail requests
 // (and so the key store): not this sheet's business here.
 vi.mock('../../components/GroupGuestsList', () => ({ GroupGuestsList: () => null }));
+// The sheet's forum rows (forum slice F9, components/forum/ForumLinks.tsx) open a topic through the router; none is opened here.
+vi.mock('expo-router', () => ({ router: { push: vi.fn() } }));
+vi.mock('../forum', () => ({ forumTopicsLinking: vi.fn(async () => []) }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: null }) }));
 const node = vi.hoisted(() => ({ decisions: null as ScopedDecisionList | null, group: null as unknown, members: [] as unknown[] }));
 vi.mock('../db', () => ({

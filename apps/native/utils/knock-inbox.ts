@@ -14,7 +14,7 @@
  * the section is simply not shown.
  */
 
-import { readKnockVia, type KnockVia } from '@beanpool/core';
+import { readKnockForum, readKnockVia, type KnockForum, type KnockVia } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
@@ -34,6 +34,8 @@ export interface JoinRequest {
     createdAt: string;
     /** The listing shared outside it came after and who shared it (shared-listing door A3), or null. */
     via: KnockVia | null;
+    /** Up to three of their posts on the worldwide forum, each with its proof (forums F11), or null. */
+    forum: KnockForum | null;
 }
 
 export type InboxResult =
@@ -64,6 +66,7 @@ function readRequest(raw: unknown): JoinRequest | null {
         fromNode: typeof k.fromNode === 'string' && k.fromNode ? k.fromNode : null,
         createdAt: typeof k.createdAt === 'string' ? k.createdAt : '',
         via: readKnockVia(k.via),
+        forum: readKnockForum(k.forum),
     };
 }
 

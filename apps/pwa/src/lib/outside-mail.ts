@@ -42,9 +42,10 @@
  * whenever it was kept for another address, so this browser never signs as a community it no longer talks to.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, audienceOf, gateOutsideItem, newDmMessageId, newOutsideDeviceId, nodeHomeOf,
-    openOutsideLine, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, t,
-    type AddressCard, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, audienceOf, gateOutsideItem, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId,
+    nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId,
+    relayEnvelopeVerifies, relayPayloadHash, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
+    type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { nodeAddress, signAddressCardFor, signedMailFetch, signRelayEnvelopeFor } from './api';
 import { accountEpoch, accountEpochHolds, onAccountEpochEnd } from './account-epoch';
@@ -104,7 +105,13 @@ function refusalWords(e: OutsideMailError): string {
 
 export async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
-    if (!res.ok) throw new OutsideMailError(res.status, typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`, body?.code);
+    if (!res.ok) {
+        // The server's sentence: `message` when it sent one beside a code in `error` (a report's 429: { error: 'rate_limited',
+        // message }), as the phone's answerOf reads it, the code kept; else `error`, its words beside `code`.
+        const said = typeof body?.message === 'string' && body.message ? body.message : null;
+        const error = typeof body?.error === 'string' ? body.error : null;
+        throw new OutsideMailError(res.status, said ?? error ?? `HTTP ${res.status}`, typeof body?.code === 'string' ? body.code : said && error ? error : undefined);
+    }
     return body;
 }
 
@@ -325,6 +332,23 @@ async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<A
 }
 
 /**
+ * Report a line from another community in chat `chatId` (X5; the phone's reportOutsideLine): the item as it came, kept in this
+ * browser (its sender's signed envelope and the sealed line inside), and the words it showed, to my own community's server.
+ * That server checks the sender's signatures, blocks them for me, and tells their community, never naming me (server:
+ * engine/relay-complaint.ts). Throws OutsideMailError with my server's words when it refuses.
+ */
+export async function reportOutsideLine(ctx: OutsideMailContext, chatId: string, lineId: string, reason: string): Promise<void> {
+    const me = ctx.identity.publicKey;
+    const kept = await ctx.store.kept(me, chatId, lineId);
+    let item: unknown = null;
+    try { item = kept ? JSON.parse(kept.sealed) : null; } catch { /* not kept as it came */ }
+    if (!kept || !item) throw new OutsideMailError(404, t('That did not go through. Please try again.'), 'not_kept');
+    // The words the member saw (core's one rule, the bubble's): its writer's newest edit, never only the first words (X6).
+    const words = outsideLineReportedWords({ id: lineId, author: kept.author, text: kept.text }, await ctx.store.changes(me, chatId), me);
+    await post(ctx, '/api/mail/report', { item, reason, words });
+}
+
+/**
  * Send `text` in open chat `chatId`: written first as `sending` (then `onKept`), then the state my server answers. Throws
  * OutsideMailError with my server's words when it refuses (the line is then `failed`). A throw before `onKept`: nothing kept.
  */
@@ -348,6 +372,44 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
     const state = answered.find((a) => a.itemId === messageId)?.state as OutsideLineState | undefined;
     if (state && STATES.includes(state)) await ctx.store.setMineState(me, chatId, messageId, state);
     return state && STATES.includes(state) ? state : 'sending';
+}
+
+/**
+ * A change to a line of chat `chatId` (X6): an edit or a delete of a line of mine, or my reaction to any line ('' takes it
+ * back). Applied here at once (kept `sending` with its signed item), then sent; one my server never answered goes again at
+ * the next round. Throws OutsideMailError with my server's words when it refuses it for good, or "Not delivered" when it
+ * answers the change failed at once. A change that fails, now or in any later round (a resend refused or failed, ageing
+ * out, the switch read off, a tick from my server's outbox), is taken back (outside-chat-store.ts answerChange): the line
+ * reads as its last change that reached them. A delete stops whatever of its line has not left this browser (stopUnsentOf).
+ * The phone's sendOutsideChange, the same rule.
+ */
+export async function sendOutsideChange(ctx: OutsideMailContext, chatId: string, c: { kind: OutsideChangeKind; lineId: string; text?: string; emoji?: string }): Promise<void> {
+    const me = ctx.identity.publicKey;
+    const chat = await ctx.store.chat(me, chatId);
+    const line = await ctx.store.lineOf(me, chatId, c.lineId);
+    if (!chat || chat.state !== 'open') throw new OutsideMailError(400, t('Accept the request first.'), 'not_accepted');
+    // Deleted as the chat shows it: a delete of mine still on its way counts.
+    const deleted = !!line && outsideLineShown({ id: c.lineId, author: line.author, text: '' }, await ctx.store.changes(me, chatId), me).deleted;
+    if (!line || line.chatId !== chatId || deleted || (c.kind !== 'dm-reaction' && line.author !== me)) {
+        throw new OutsideMailError(400, t('That did not go through. Please try again.'), 'not_yours');
+    }
+    const itemId = newDmMessageId();
+    const payload = sealOutsideChange({ ...c, myEdPrivHex: ctx.identity.privateKey, myKey: me, peerKey: chat.peerKey, itemId });
+    const at = Date.now();
+    const envelope = await envelopeFor(ctx, { kind: c.kind, itemId, recipient: chat.peerKey, recipientHome: chat.peerHome, at }, payload);
+    const change: OutsideChange = { kind: c.kind, itemId, lineId: c.lineId, author: me, at, ...(c.text !== undefined ? { text: c.text } : {}), ...(c.emoji !== undefined ? { emoji: c.emoji } : {}) };
+    await ctx.store.putChange(me, chatId, change, JSON.stringify({ envelope, payload }));
+    if (c.kind === 'dm-delete') await ctx.store.stopUnsentOf(me, chatId, c.lineId);
+    let state: string | undefined;
+    try {
+        state = (await postItems(ctx, [{ envelope, payload }])).find((a) => a.itemId === itemId)?.state;
+    } catch (e) {
+        if (refusedForGood(e)) await ctx.store.answerChange(me, chatId, itemId, 'failed');
+        throw e;
+    }
+    if (state) await ctx.store.answerChange(me, chatId, itemId, state);
+    // Failed at once (the other community refused it inside its answer): it never reached them, and was taken back above.
+    if (state === 'failed') throw new OutsideMailError(400, t('Not delivered'), 'not_delivered');
 }
 
 /**
@@ -417,7 +479,8 @@ export async function failUnsent(ctx: Pick<OutsideMailContext, 'identity' | 'sto
     }
 }
 
-export interface SyncOutcome { written: number; requests: number; dropped: number; confirmed: number; ticks: number }
+/** `changes`: changes to lines (X6) applied here. */
+export interface SyncOutcome { written: number; changes: number; requests: number; dropped: number; confirmed: number; ticks: number }
 
 /**
  * One round: unsent lines sent again, then my items' ticks applied (every page of them first), then what waits for this
@@ -425,7 +488,7 @@ export interface SyncOutcome { written: number; requests: number; dropped: numbe
  * a write that fails leaves its item unconfirmed.
  */
 export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now()): Promise<SyncOutcome> {
-    const out: SyncOutcome = { written: 0, requests: 0, dropped: 0, confirmed: 0, ticks: 0 };
+    const out: SyncOutcome = { written: 0, changes: 0, requests: 0, dropped: 0, confirmed: 0, ticks: 0 };
     const me = ctx.identity.publicKey;
     await resendUnsent(ctx, now).catch((e) => console.warn('[OutsideMail] Unsent lines wait for the next round:', e?.message ?? e));
     const open = await doorOpen(ctx);
@@ -467,14 +530,30 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     blocked: await ctx.isBlocked(env.senderKey),
                 });
                 if (verdict === 'drop') { done.push(env.itemId); out.dropped++; continue; }
+                if (verdict === 'change') {
+                    // A change to a line (X6), judged by core's one rule: applied, or dropped here; confirmed either way.
+                    let change: OutsideChange | null = null;
+                    try { change = openOutsideChange(h.payload, env, { key: me, edPrivHex: ctx.identity.privateKey }); } catch { /* not its sender's */ }
+                    const judged = change && outsideChangeVerdict({ change, gate: verdict, chatId, line: await ctx.store.lineOf(me, chatId, change.lineId) });
+                    if (change && judged === 'apply') {
+                        await ctx.store.putChange(me, chatId, change);
+                        // Their delete stops what of mine for that line has not left this browser (a reaction): it would change nothing there.
+                        if (change.kind === 'dm-delete') await ctx.store.stopUnsentOf(me, chatId, change.lineId);
+                        out.changes++;
+                    } else out.dropped++;
+                    done.push(env.itemId);
+                    continue;
+                }
                 let opened;
                 try {
                     opened = openOutsideLine(h.payload, env, { key: me, edPrivHex: ctx.identity.privateKey });
                 } catch {
                     done.push(env.itemId); out.dropped++; continue;
                 }
-                await ctx.store.writeTheirs(me, { id: env.itemId, chatId, author: env.senderKey, text: opened.text, replyTo: opened.replyToId, at: env.at },
-                    { home: env.senderHome, name: opened.name }, verdict, now);
+                await ctx.store.writeTheirs(me, {
+                    id: env.itemId, chatId, author: env.senderKey, text: opened.text, replyTo: opened.replyToId, at: env.at,
+                    sealed: JSON.stringify({ envelope: env, payload: h.payload }),
+                }, { home: env.senderHome, name: opened.name }, verdict, now);
                 await owe(env);   // past the gate only a line is written: its receipt owed before it is confirmed
                 done.push(env.itemId);
                 if (verdict === 'request') out.requests++; else out.written++;
@@ -534,9 +613,11 @@ async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): P
     for (const tick of ticks) {
         if (typeof tick?.itemId !== 'string' || !Number.isSafeInteger(tick?.at)) continue;
         last = { at: tick.at, itemId: tick.itemId };
-        if (tick.kind !== 'dm-line' || !STATES.includes(tick.state)) continue;
         if (typeof tick.recipient !== 'string' || !/^[0-9a-f]{64}$/.test(tick.recipient) || tick.recipient === me) continue;
         const chatId = relayConversationId(me, tick.recipient);
+        // A change of mine (X6): failed at their community, it is taken back here; at their community, it stays.
+        if (isOutsideChangeKind(tick.kind)) { if (await ctx.store.answerChange(me, chatId, tick.itemId, tick.state)) applied++; continue; }
+        if (tick.kind !== 'dm-line' || !STATES.includes(tick.state)) continue;
         if (await ctx.store.hasLine(me, chatId, tick.itemId)) {
             await ctx.store.setMineState(me, chatId, tick.itemId, tick.state);
             applied++;

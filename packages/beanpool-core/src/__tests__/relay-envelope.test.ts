@@ -95,7 +95,7 @@ describe('the envelope, frozen', () => {
 
     it('every kind of item signs and verifies; no other kind does', async () => {
         expect([...RELAY_ITEM_KINDS]).toEqual([
-            'dm-line', 'dm-blob', 'dm-delete', 'receipt', 'group-invite', 'group-roster', 'group-epoch', 'group-line', 'group-blob',
+            'dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction', 'receipt', 'group-invite', 'group-roster', 'group-epoch', 'group-line', 'group-blob',
             'group-leave', 'call-signal', 'complaint',
         ]);
         for (const kind of RELAY_ITEM_KINDS) {

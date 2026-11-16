@@ -86,6 +86,7 @@ import {
     showingKnowledgeRow, type CleanKnowledge, type KnowledgeInput, type ShowingKnowledgeRow,
 } from './knowledge.js';
 import { logger } from '../logger.js';
+import { FORUM_LEARN_WORDS, linkLearnPage, turnableAnswer } from './forum-learn.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -139,6 +140,8 @@ interface DraftRow {
     reason_words: string | null;
     result_post_id: string | null;
     created_at: string;
+    /** The member's own forum answer this came from ("Turn into a Learn page", engine/forum-learn.ts), else null. */
+    from_forum_post_id: string | null;
 }
 
 /** The assistant's grant id of an assistant's draft (`assistant:<grant id>`), or null for a member's from the app. */
@@ -203,13 +206,16 @@ const sentSince = (member: string, since: number) =>
  * admin (theirs publishes at once), muted, over a new account's limits, no name or face, 3 waiting, 5 sent today, a field
  * the form holds to its limits, a photo that isn't one. Returns the suggestion as My suggestions lists it.
  */
-export function suggestKnowledge(member: string, raw: KnowledgeInput & { photos?: unknown; fixOf?: unknown; note?: unknown }, now = Date.now()): KnowledgeDraftMine {
+export function suggestKnowledge(member: string, raw: KnowledgeInput & { photos?: unknown; fixOf?: unknown; note?: unknown; fromForumPostId?: unknown }, now = Date.now()): KnowledgeDraftMine {
     assertPlainTablesWritable();
     assertFeatureOn('knowledge');
+    if (raw.fixOf !== undefined && raw.fromForumPostId !== undefined) throw new KnowledgeRefusal(400, 'fix_from_forum', FORUM_LEARN_WORDS.fixFromForum);
     if (raw.fixOf !== undefined) return suggestKnowledgeFix(member, raw, now);
     if (checksKnowledge(member)) throw new KnowledgeRefusal(409, 'publish_instead', DRAFT_WORDS.publishInstead);
     assertNotMuted(member, now);
     assertDraftRoom(member, now);
+    // "Turn into a Learn page" (slice F9): only the writer's own answer, live, turnable now (engine/forum-learn.ts).
+    const fromForum = raw.fromForumPostId === undefined ? null : turnableAnswer(member, raw.fromForumPostId, 'writer').id;
     const k = cleanKnowledgeInput(raw);
     const photos = draftPhotos(raw.photos);
     assertMayPost(member, photos.length, now);
@@ -219,9 +225,9 @@ export function suggestKnowledge(member: string, raw: KnowledgeInput & { photos?
     const id = crypto.randomUUID();
     const at = iso(now);
     db.transaction(() => {
-        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, place, sources, lang, free_tags, state, created_at)
-                    VALUES (?, 'new', NULL, ?, 'app', ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
-            .run(id, member, k.title, k.body, k.topic, k.place, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.lang, storedFreeTags(k.freeTags), at);
+        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, place, sources, lang, free_tags, state, created_at, from_forum_post_id)
+                    VALUES (?, 'new', NULL, ?, 'app', ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?)`)
+            .run(id, member, k.title, k.body, k.topic, k.place, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.lang, storedFreeTags(k.freeTags), at, fromForum);
         const photo = db.prepare('INSERT INTO knowledge_draft_photos (draft_id, order_num, photo_data, bytes) VALUES (?, ?, ?, ?)');
         photos.forEach((p, i) => photo.run(id, i, p, incomingPhotosBytes([p])));
     })();
@@ -724,6 +730,8 @@ export function approveKnowledgeDraft(
         const answered = db.prepare(`UPDATE knowledge_drafts SET state = 'approved', answered_at = ?, answered_by = ?, result_post_id = ?
                                      WHERE id = ? AND state = 'waiting'`).run(iso(now), checker, post.id, r.id).changes;
         if (answered !== 1) throw new Error('a suggestion was answered twice');
+        // Made from the member's own forum answer (slice F9): the answer is linked to the page now, if it is still live.
+        if (grant === null && r.from_forum_post_id) linkLearnPage(r.from_forum_post_id, post.id, r.member_pubkey, now);
         deletePlainRows('knowledge_draft_photos', 'draft_id = ?', r.id);
         const notice = keepAnswer(r, { outcome: 'approved', title: post.title }, { outcome: 'approved', postId: post.id }, now);
         logger.info('ADMIN', 'Local knowledge approved', {

@@ -39,7 +39,7 @@ import { getNodeRole } from './sync.js';
 import { forumNewness, isForumModerator } from './forum-moderation.js';
 import { sectionGroupOf, sectionReadSql, sectionReaders } from './forum-sections.js';
 
-const { tn: trn } = wordsFor('en');
+const { tn: trn, t: tr } = wordsFor('en');
 const iso = (ms: number) => new Date(ms).toISOString();
 const seconds = (ms: number) => Math.floor(ms / 1000);
 
@@ -285,6 +285,38 @@ export function tellForumReply(cb: ForumNoticeCallbacks, post: ForumReplyFacts, 
         console.warn('[Forum] A reply\'s notices could not all go:', e?.message || e);
     }
     return out;
+}
+
+// ── "Ask {name} to make this a Learn page" (slice F9, design §10.3; engine/forum-learn.ts) ──────────────────────────
+
+export interface ForumLearnAskFacts { topicId: string; postId: string; number: number; writer: string; asker: string }
+
+const learnAskBody = (name: string) => tr('{name} asked you to make your answer a Learn page.', { name });
+
+/**
+ * An owner or admin asked an answer's writer to make it a Learn page: one bell row (`forum.learn-ask`, no push), landing on
+ * the answer, under the bell's rules for the forum: the writer an active member who reads the section, who blocked neither
+ * the asker nor the topic's writer, has not muted the topic, and has their Forum switch on (mayBeTold). Asked again while
+ * that row is unseen, by anyone: nothing new. The row says who asked and the topic's title, never the answer's words.
+ * Returns whether a row went. Never throws.
+ */
+export function tellForumLearnAsk(cb: ForumNoticeCallbacks, ask: ForumLearnAskFacts, now = Date.now()): boolean {
+    if (getNodeRole() !== 'primary') return false;
+    try {
+        const topic = topicFacts(ask.topicId);
+        if (!topic || mayBeTold([ask.writer], topic, ask.asker, true).length === 0) return false;
+        const nowS = seconds(now);
+        const unseen = db.prepare(`SELECT 1 FROM push_notices WHERE recipient = ? AND kind = 'forum.learn-ask' AND seen_at IS NULL AND sent_at >= ?
+                AND json_valid(data) AND json_extract(data, '$.postId') = ?`).get(ask.writer, nowS - PUSH_NOTICE_LIFETIME_SECONDS, ask.postId);
+        if (unseen) return false;
+        const name = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').pluck().get(ask.asker) as string | undefined) ?? '';
+        cb.deliverPushNotices([ask.writer], ask.asker, titleOf(topic.title), learnAskBody(name),
+            { screen: 'forum_topic', topicId: topic.id, postId: ask.postId, number: ask.number, from: ask.asker }, 'forum', 'forum.learn-ask', false, { bellOnly: true });
+        return true;
+    } catch (e: any) {
+        console.warn('[Forum] An ask for a Learn page could not go:', e?.message || e);
+        return false;
+    }
 }
 
 /**

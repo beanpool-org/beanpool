@@ -41,15 +41,34 @@ export function draftSent(key: string | null, sent: string): void {
     showing.get(key)?.(went);
 }
 
-/** Tests only: forget every kept draft. */
+/** An edit of a line already sent, in progress when its chat closed (the outside chats, X6): which line, and its words so far. */
+export interface KeptEdit { lineId: string; words: string }
+const edits = new Map<string, KeptEdit>();
+
+/** The edit in progress in the box of the chat `key` names as it closes, beside its draft; null: none. In memory only, as a draft. */
+export function keepEdit(key: string, edit: KeptEdit | null): void {
+    if (edit) edits.set(key, edit);
+    else edits.delete(key);
+}
+
+/** The edit kept for the chat `key` names, given back once (the box shows it again, with its Save and Cancel); null: none. */
+export function takeEdit(key: string): KeptEdit | null {
+    const edit = edits.get(key) ?? null;
+    edits.delete(key);
+    return edit;
+}
+
+/** Tests only: forget every kept draft, and every kept edit. */
 export function forgetDraftsForTests(): void {
     drafts.clear();
+    edits.clear();
 }
 
 /**
  * The box of the chat `key` names starts with the words kept for it, in the commit that draws it (a layout effect, so words
  * typed the moment the chat shows are never thrown away after), and keeps `keepable` when the chat closes or another opens.
- * `keepable` is what the box holds as a draft: empty while it holds something else (an edit of a line already sent).
+ * `keepable` is what the box holds as a draft: while it holds something else (an edit of a line already sent), the words
+ * set aside for it, never the line's (the edit is kept on its own: keepEdit).
  * A null key (no chat open) does nothing.
  */
 export function useKeptDraft(key: string | null, keepable: string, setDraft: Dispatch<SetStateAction<string>>): void {

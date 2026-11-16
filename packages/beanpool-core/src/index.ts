@@ -63,6 +63,7 @@ export * from './knowledge-write-words.js';
 export * from './pulse-knowledge-words.js';
 export * from './forum.js';
 export * from './forum-visitors.js';
+export * from './forum-ask.js';
 export * from './name-line.js';
 export * from './membership-note.js';
 export * from './chat-frame.js';

@@ -23,6 +23,7 @@ import {
     getForumFront, getForumTopics, keptForumFront, keptForumList, myFirstLook, takeForumBack, withdrawFirstLook,
     type ForumFront, type ForumList, type ForumTopic, type ForumWaiting,
 } from '../../utils/forum';
+import { takeForumAt } from '../../utils/forum-open';
 import { FORUM_WORDS, TOPIC_WORDS } from './forum-words';
 import { useForumStyles } from './forum-style';
 import { ForumSearch } from './ForumSearch';
@@ -72,6 +73,9 @@ export function ForumPane() {
     useFocusEffect(useCallback(() => {
         void worldwideForumJoined().then(setWorldwide);
         setBack(takeForumBack());
+        // A group's "Topics ›" row asked for its section (utils/forum-open.ts, slice F9).
+        const at = takeForumAt();
+        if (at) { setList(null); setSection(at); }
         void keptForumFront().then((f) => { if (f) setFront((now) => now ?? f); });
         void loadFront();
     }, [loadFront]));

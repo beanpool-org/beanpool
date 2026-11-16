@@ -11,6 +11,7 @@ import { communityName, realName } from './community-name';
 import { fetchMembership } from './membership-probe';
 import { communitySwitched } from './community-switch';
 import { sameCommunity } from './push-pins';
+import { sameCommunityRecord } from './community-index';
 
 // The communities this phone knows, for the BeanPool sheet: which one is in use, whether each answers and
 // whether the member belongs to it, and switching between them. It used to live in the header's own modal;
@@ -145,8 +146,10 @@ export function useCommunities() {
                         setRows(prev => prev.filter(r => r.url !== row.url));
                     };
                     // The row of the community in use comes off the list, but the phone stays set to it and it comes
-                    // back with the next read (nodes.ts getSavedNodes): its alerts stay.
-                    if (sameCommunity(row.url, active)) return takeOffList();
+                    // back with the next read (nodes.ts getSavedNodes): its alerts stay, and its record stays
+                    // (community-record.ts forgetCommunityRecord never forgets the one in use). Any address of it, by its
+                    // record too: a row at another of its addresses is the same community (S4).
+                    if (sameCommunity(row.url, active) || sameCommunityRecord(row.url, active)) return takeOffList();
                     const { forgetCommunityPush } = await import('./account-leaves-phone');
                     await forgetCommunityPush(identity, row.url, takeOffList);
                 },

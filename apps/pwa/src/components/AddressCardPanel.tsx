@@ -13,11 +13,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-    OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_DOOR_SWITCH_BROWSER, OUTSIDE_LINE_TEXT_MAX, addressCardFromText, addressCardLink, t, type AddressCard,
+    FIND_WORDS, OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_DOOR_SWITCH_BROWSER, OUTSIDE_LINE_TEXT_MAX, addressCardFromText,
+    addressCardLink, findRefusal, t, type AddressCard,
 } from '@beanpool/core';
 import {
-    OUTSIDE_SEND_MS, doorOpen, myAddressCard, myHome, openChatFromCard, outsideContext, outsideErrorWords, outsideMessagesHere, ring, sendFromBox,
-    setDoor,
+    OUTSIDE_SEND_MS, OutsideMailError, doorOpen, findByName, findMeOn, myAddressCard, myHome, openChatFromCard, outsideContext, outsideErrorWords,
+    outsideMessagesHere, ring, sendFromBox, setDoor, setFindMe,
 } from '../lib/outside-mail';
 
 /** Core's sentences, the phone's too (@beanpool/core outside-devices.ts): the door is this browser's own (X2b). */
@@ -58,6 +59,11 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
     const [first, setFirst] = useState('');
     const [busy, setBusy] = useState(false);
     const [copied, setCopied] = useState(false);
+    // Find by name (N1): my community's switch, and a look-up at another community.
+    const [findable, setFindable] = useState<boolean | null>(null);
+    const [findNote, setFindNote] = useState<string | null>(null);
+    const [findHome, setFindHome] = useState('');
+    const [findName, setFindName] = useState('');
     const reader = useRef<Detector | null>(qrReader());
     const photo = useRef<HTMLInputElement | null>(null);
 
@@ -69,9 +75,24 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
             if (!alive) return;
             setHere(on === true);
             if (ctx && on) setOpen(await doorOpen(ctx).catch(() => false));
+            if (ctx && on) setFindable(await findMeOn(ctx).catch(() => null));
         })();
         return () => { alive = false; };
     }, []);
+
+    /** My community's switch. On also opens this browser's door: whoever finds me can then send a request here. */
+    const switchFindMe = async (next: boolean) => {
+        const ctx = await outsideContext();
+        if (!ctx) return;
+        try {
+            const now = await setFindMe(ctx, next);
+            setFindable(now);
+            setFindNote(null);
+            if (now) { await setDoor(ctx, true); setOpen(true); }
+        } catch (e) {
+            setFindNote(outsideErrorWords(e));
+        }
+    };
 
     /** Show my card: the first time, this is what opens the door. */
     const showMine = async () => {
@@ -100,6 +121,27 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
     const readCard = async (text: string) => {
         const c = addressCardFromText(text);
         if (!c) { setCardNote(t("That isn't an address card, or it was changed after it was made.")); return; }
+        await takeCard(c);
+    };
+
+    /** Their exact name at their community: their card, or the one "nobody", or why it couldn't be asked. */
+    const findThem = async () => {
+        const ctx = await outsideContext();
+        if (!ctx || busy) return;
+        setBusy(true);
+        try {
+            const c = await findByName(ctx, findHome.trim(), findName.trim());
+            if (c) await takeCard(c);
+            else setCardNote(t(FIND_WORDS.nobody));
+        } catch (e) {
+            setCardNote(t(FIND_WORDS[findRefusal(e instanceof OutsideMailError ? e.code : undefined)]));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    /** A card read or found: on to the first message, unless it is mine, someone here, or someone I blocked. */
+    const takeCard = async (c: AddressCard) => {
         const ctx = await outsideContext();
         if (!ctx) return;
         if (c.key === ctx.identity.publicKey) { setCardNote(t("That's your own card.")); return; }
@@ -198,6 +240,17 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
                                 <p data-testid="door-each-device" style={words}>{t(LINES.doorEachDevice)}</p>
                             </>
                         )}
+                        {findable !== null && (
+                            <>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minHeight: '44px', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
+                                    <input type="checkbox" data-testid="find-me-switch" checked={findable} onChange={(e) => void switchFindMe(e.target.checked)}
+                                        style={{ width: '22px', height: '22px', flexShrink: 0 }} />
+                                    <span>{t(FIND_WORDS.meSwitch)}</span>
+                                </label>
+                                <p style={words}>{t(FIND_WORDS.meHelp)}</p>
+                                {findNote && <p role="status" style={{ ...words, color: 'var(--text-primary)', fontWeight: 600 }}>{findNote}</p>}
+                            </>
+                        )}
                     </section>
                     <section data-testid="their-address-card" style={card}>
                         <h3 style={{ margin: 0, fontSize: '1rem' }}>{t("Someone else's card")}</h3>
@@ -224,6 +277,16 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
                                     aria-label={t('Paste a card link')} autoCapitalize="none" autoCorrect="off" spellCheck={false} style={input} />
                                 <button type="button" data-testid="read-card" style={{ ...plain, opacity: pasted.trim() ? 1 : 0.6 }} disabled={!pasted.trim()} onClick={() => void readCard(pasted)}>
                                     {t('Read the card')}
+                                </button>
+                                <h4 style={{ margin: '0.4rem 0 0', fontSize: '0.95rem' }}>{t('Someone in another community')}</h4>
+                                <p style={words}>{t('Pick their community, then type their exact name. Only people who said yes can be found.')}</p>
+                                <input data-testid="find-home" value={findHome} onChange={(e) => setFindHome(e.target.value)} placeholder={t("Their community's address")}
+                                    aria-label={t("Their community's address")} autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="url" style={input} />
+                                <input data-testid="find-name" value={findName} onChange={(e) => setFindName(e.target.value)} placeholder={t('Their exact name')}
+                                    aria-label={t('Their exact name')} autoCorrect="off" spellCheck={false} maxLength={60} style={input} />
+                                <button type="button" data-testid="find-them" style={{ ...plain, opacity: busy || !findHome.trim() || !findName.trim() ? 0.6 : 1 }}
+                                    disabled={busy || !findHome.trim() || !findName.trim()} onClick={() => void findThem()}>
+                                    {t('Find them')}
                                 </button>
                             </>
                         )}

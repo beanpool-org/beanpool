@@ -50,6 +50,7 @@ import {
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { getNodeRole, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
 import { hasBlocked } from './member-blocks.js';
@@ -239,6 +240,12 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
     }
     const isNew = (i: RelayItem) => !db.prepare('SELECT 1 FROM relay_mail_seen WHERE sender_key = ? AND item_id = ?').get(i.envelope.senderKey, i.envelope.itemId);
     const newItems = fresh.filter(isNew);
+    // A guest's group item to a standby: refused before its id is spent, so their home tries again (at the main server
+    // after a take-over). A guest's item writes the copied group_guests and messages, which a standby never does
+    // (engine/group-guests.ts). Said of the request by its kinds alone, never of whether such a group is here.
+    if (getNodeRole() === 'backup' && newItems.some((i) => forGroupHere(i.envelope))) {
+        return { status: 503, body: { error: STANDBY_WRITE_MESSAGE, code: 'standby' }, retryAfterSec: MAIL_RETRY_AFTER_SEC };
+    }
 
     // The caps on who brings how much, over every new item that passed its checks, whoever it is for.
     if (newItems.length) {

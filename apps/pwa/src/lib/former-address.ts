@@ -4,13 +4,16 @@
  * follows renames later).
  *
  * The node says both halves in `/api/community/info`: `primaryAddress`, where the community lives now, and
- * `formerAddresses`, the names it had before (still accepted, never published). Nothing here moves anyone: a member's
+ * `formerAddresses`, the names it had before (still accepted, never published). Which line to show is read from that; the
+ * address the line names is the one the main address PROVED (several addresses S6, lib/main-address-proof.ts provedNotice),
+ * so an unsigned answer never sends anyone anywhere. Nothing here moves anyone: a member's
  * key lives in this address's storage, so a redirect couldn't take it, and must never take it or anything signed. The
  * banner offers a plain link to the new address, which the member opens and signs in at.
  */
 
 import { audienceOf, isPrivateHost } from '@beanpool/core';
 import { getNodeApiUrl, type CommunityInfo } from './api';
+import type { MainAddressVerdict } from './main-address-proof';
 
 export interface FormerAddressNotice {
     /** Where the community lives now: a bare host. */
@@ -80,6 +83,21 @@ export function nonPrimaryAddressNotice(
     if (!Array.isArray(info.addresses) || !info.addresses.includes(host)) return null;
     if (Array.isArray(info.formerAddresses) && info.formerAddresses.includes(host)) return null;
     return { primaryAddress: primary, href: `https://${primary}/` };
+}
+
+/**
+ * The line, from the proof alone (several addresses S6, design §4; lib/main-address-proof.ts): the main address the proof
+ * names, never the unsigned `primaryAddress`, with a plain link to it. `kind` is which line the info chose (a former name,
+ * or another listed address). Null when the main has not proved itself this community from this browser; at a non-main
+ * address, also when the signed list does not name this address, or when the main is on a home network.
+ */
+export function provedNotice(kind: 'former' | 'main', verdict: MainAddressVerdict): FormerAddressNotice | null {
+    if (!verdict.ok) return null;
+    const { main } = verdict;
+    const mainHost = audienceOf(main);
+    if (!mainHost) return null;
+    if (kind === 'main' && (!verdict.onList || isPrivateHost(mainHost))) return null;
+    return { primaryAddress: main, href: `https://${main}/` };
 }
 
 /**

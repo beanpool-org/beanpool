@@ -22,6 +22,7 @@ const WRITES: Record<string, string> = {
     'utils/nodes.ts getSavedNodes': 'adds the community the phone is set to',
     'utils/nodes.ts addSavedNode': 'adds a community, and makes its record',
     'utils/nodes.ts takeOffSavedList': 'the one way a row comes off, with its record',
+    'utils/nodes.ts followSavedRow': 'a community followed to another of its addresses (S4): its rows become one row there, its record stays',
     'utils/account-leaves-phone.ts forgetCommunities': 'the account leaves the phone: the list goes, with every record',
 };
 

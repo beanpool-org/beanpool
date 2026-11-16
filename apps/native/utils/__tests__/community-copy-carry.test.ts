@@ -8,11 +8,11 @@
  * were seeded again from whatever the node listed then, so whoever runs the node could choose `primaryAddress` and have
  * each follower's DMs pinned to keys of its choosing.
  *
- * Measured here end to end: the real acceptAddressFollow, the real switch (utils/reconnect.ts switchPhoneTo), the real
- * database open (utils/db.ts getDb) over real SQLite files on disk (node:sqlite, in a directory of this test's own), the
- * real DM pins through the real sync against a stand-in node. Only the two identity statements are handed in (both name
- * the same community: address-follow.test.ts checks those). "The app starts again" is every module loaded afresh over the
- * same storage and files.
+ * Measured here end to end: the real carry as the hall door runs it (utils/hall.ts: utils/reconnect.ts switchPhoneTo with
+ * `carryFrom`; the follow card that also drove it went in addresses S4, where a follow writes the record's `using` and
+ * carries nothing), the real database open (utils/db.ts getDb) over real SQLite files on disk (node:sqlite, in a directory
+ * of this test's own), the real DM pins through the real sync against a stand-in node. "The app starts again" is every
+ * module loaded afresh over the same storage and files.
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import Module from 'node:module';
@@ -125,11 +125,9 @@ vi.mock('../crypto', async (orig) => ({
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as dbModule from '../db';
-import * as followModule from '../address-follow';
 import * as reconnectModule from '../reconnect';
 import * as nodesModule from '../nodes';
 import * as carryModule from '../community-copy-carry';
-import { type AddressFollowDeps, type CommunityIdentity } from '../address-follow';
 import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { MERGES } from '../community-copy-carry';
@@ -137,7 +135,6 @@ import {
     PER_FILE_STORE_KEYS, dmConversationsSeenSetAsideStoreKey, dmConversationsSeenStoreKey, dmLinesAtUpdateStoreKey,
     dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey,
 } from '../storage-keys';
-import type { NodeProfile } from '../node-profile';
 import type { StoredGroupEpoch } from '../group-chat-keys';
 
 // A finished sync ends with require('react-native') for a DeviceEventEmitter nudge: answered at node's loader for the file.
@@ -158,8 +155,6 @@ const TO = 'https://beans.example.org';
 const FROM_FILE = getDatabaseFilenameForNode(FROM);
 const TO_FILE = getDatabaseFilenameForNode(TO);
 const ANCHOR = 'beanpool_anchor_url';
-const COMMUNITY: CommunityIdentity = { peerId: '12D3KooWTestNodeKeyOfBeansTown', communityId: 'beans-town', epoch: 2 };
-const PROFILE = { addresses: ['203.0.113.5', 'beans.example.org'], primaryAddress: 'beans.example.org' } as NodeProfile;
 
 interface Person { publicKey: string; privateKey: string }
 function person(): Person {
@@ -168,14 +163,14 @@ function person(): Person {
 }
 
 /** One run of the app: its modules, each holding what that run keeps in memory. */
-interface App { db: typeof dbModule; follow: typeof followModule; reconnect: typeof reconnectModule; nodes: typeof nodesModule; carry: typeof carryModule }
-const firstApp: App = { db: dbModule, follow: followModule, reconnect: reconnectModule, nodes: nodesModule, carry: carryModule };
+interface App { db: typeof dbModule; reconnect: typeof reconnectModule; nodes: typeof nodesModule; carry: typeof carryModule }
+const firstApp: App = { db: dbModule, reconnect: reconnectModule, nodes: nodesModule, carry: carryModule };
 
 /** The app started again: every module loaded afresh (nothing kept in memory), over the same storage and files. */
 async function startedAgain(): Promise<App> {
     vi.resetModules();
     return {
-        db: await import('../db'), follow: await import('../address-follow'), reconnect: await import('../reconnect'), nodes: await import('../nodes'),
+        db: await import('../db'), reconnect: await import('../reconnect'), nodes: await import('../nodes'),
         carry: await import('../community-copy-carry'),
     };
 }
@@ -242,7 +237,6 @@ beforeEach(async () => {
     h.stopAt = null;
     await firstApp.db.closeDB();
     firstApp.db._resetDmPeerPinsForTests();
-    firstApp.follow.forgetFollowChecks();
     newPhone();
 });
 
@@ -306,25 +300,10 @@ async function phoneWasAtTheName(app: App = firstApp): Promise<void> {
     await app.db.groupKeyStore(FROM).raiseHighest('g-higher-here', 2);
 }
 
-function deps(app: App): AddressFollowDeps {
-    return {
-        anchor: async () => AsyncStorage.getItem(ANCHOR),
-        profile: async () => PROFILE,
-        statement: async () => COMMUNITY,
-        now: () => Date.now(),
-        switchTo: app.reconnect.switchPhoneTo,
-        savedNodes: app.nodes.getSavedNodes,
-        addSavedNode: app.nodes.addSavedNode,
-        removeSavedNode: app.nodes.removeSavedNode,
-        isGuestNode: app.nodes.isGuestNode,
-        markGuestNode: app.nodes.markGuestNode,
-    };
-}
-
-async function follow(app: App = firstApp) {
-    const offer = await app.follow.addressFollowOffer(deps(app));
-    expect(offer, 'precondition: the move is offered').toEqual({ from: FROM, to: TO, host: 'beans.example.org' });
-    return app.follow.acceptAddressFollow(offer!, deps(app));
+/** The carry from the number to the name, as the hall door runs it: 'moved', or 'moved-kept-both' when a copy was there. */
+async function follow(app: App = firstApp): Promise<'moved' | 'moved-kept-both'> {
+    expect(await AsyncStorage.getItem(ANCHOR), 'precondition: the phone is at the number').toBe(FROM);
+    return (await app.reconnect.switchPhoneTo(TO, FROM)) === 'kept-both' ? 'moved-kept-both' : 'moved';
 }
 
 /** The node lists another key for the DM: the pin must hold it back as an offer, never take it. */
@@ -473,10 +452,9 @@ describe('a copy already at the new address takes what guards the chats, add-onl
 
     it('the old copy is still on the phone, and the log says so; one already gone is never said to stay', async () => {
         await phoneAtTheNumber();
-        const offer = await firstApp.follow.addressFollowOffer(deps(firstApp));
         const warn = quiet();
-        // Two follows at once (the card's busy guard stops a double tap; the second finds the first's copy at the name).
-        const results = await Promise.all([firstApp.follow.acceptAddressFollow(offer!, deps(firstApp)), firstApp.follow.acceptAddressFollow(offer!, deps(firstApp))]);
+        // Two carries at once (the second finds the first's copy at the name).
+        const results = await Promise.all([follow(), follow()]);
         const said = warn.mock.calls.map((c) => String(c[0])).filter((s) => s.includes('already has a copy'));
         warn.mockRestore();
         expect(results).toEqual(['moved', 'moved-kept-both']);

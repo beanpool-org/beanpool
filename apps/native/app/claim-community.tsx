@@ -29,12 +29,12 @@ import { claimOutcomeWords, keyLineWords } from '../components/key-lines';
 import { coreSettingsNextWords } from '../components/settings/settings-lines';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStyles, useTheme } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import { useManageNode } from '../components/useManageNode';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { communitySwitched } from '../utils/community-switch';
+import { whileCommunityMoves, writeCommunityAddress } from '../utils/community-move-lock';
 import { fetchMembership } from '../utils/membership-probe';
 import { assertPlainNodeAddress, plainOriginOf } from '../utils/node-url';
 import { hasDeviceLock, requireDeviceUnlock, NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
@@ -396,9 +396,12 @@ export default function ClaimCommunityScreen() {
             assertPlainNodeAddress(origin);
             // Each community has its own local database: swapped the way node-mismatch.tsx and Settings do.
             const { closeDB, initDB } = await import('../utils/db');
-            await closeDB();
-            await AsyncStorage.setItem('beanpool_anchor_url', origin);
-            await initDB();
+            // A member move (utils/community-move-lock.ts): closed, written and opened in one move.
+            await whileCommunityMoves(async (held) => {
+                await closeDB();
+                await writeCommunityAddress(held, origin);
+                await initDB();
+            });
             communitySwitched();
             setIsAnchor(true);
         } catch (e: any) {

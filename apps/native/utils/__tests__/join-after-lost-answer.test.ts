@@ -569,7 +569,7 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
     it('into the app with the anchor on the community that said the key is in, before its recheck', () => {
         const enterApp = slice(handleCreate(), "if (spent === 'enterApp' && storedIdentity) {", 'return;');
         inOrder(enterApp, [
-            "await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);",
+            "await moveCommunityAddress(nodeUrl);",
             'await recheckNodeStatus()',
             'setIdentity(storedIdentity);',
         ]);

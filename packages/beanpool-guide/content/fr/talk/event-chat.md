@@ -3,7 +3,7 @@ slug: event-chat
 title: Chat événement
 summary: Échanger avec l'hôte et tous les participants à un événement.
 related: events, messages, pin-locations, reporting
-source-hash: 5db33c065b67e6b8
+source-hash: 6da207cb35f1e3c7
 ---
 
 ## Qui y participe
@@ -12,8 +12,8 @@ Chaque événement possède sa propre discussion. L'hôte et toutes les personne
 
 ## L'ouvrir
 
-- Ouvrez l'événement et touchez **Ouvrir le chat de l'événement**.
-- Ou retrouvez-la dans **Chat**, sous **Groupes**, marquée du repère 📅 **Événement**. Dans l'application web, elle se trouve dans l'onglet **Chat**, avec vos autres échanges.
+- Ouvrez l'événement et touchez **Discuter avec les personnes qui viennent**. Quand il y a des messages que vous n'avez pas lus, le bouton indique combien, par exemple **3 nouveaux**.
+- Dès que quelqu'un y a écrit, elle se trouve aussi dans **Chat**, sous **Groupes**, marquée du repère 📅 **Événement**. Dans l'application web, elle se trouve dans l'onglet **Chat**, avec vos autres échanges. D'ici là, elle n'apparaît pas dans ces listes : ouvrez-la depuis l'événement.
 
 En haut, un encadré épinglé affiche la **Note pour les participants** de l'hôte, telle que l'adresse exacte. Touchez le nom de l'événement tout en haut (dans l'application web, **Voir l'événement**) pour revenir à la fiche de l'événement.
 
@@ -23,7 +23,7 @@ Tapez dans **Envoyer un message à tous les participants…** et touchez le bout
 
 ## Bon à savoir
 
-- Les discussions d'événements ne sont pas chiffrées de bout en bout. L'hôte, tous les participants (lorsque l'hôte valide les accès, ceux qu'il a acceptés), et les personnes administrant le serveur de votre communauté peuvent les lire. La discussion le précise au-dessus du champ de saisie.
+- Les discussions d'événements ne sont pas chiffrées de bout en bout. L'hôte, tous les participants (lorsque l'hôte valide les accès, ceux qu'il a acceptés), et les personnes administrant le serveur de votre communauté peuvent les lire. La discussion le précise au-dessus du champ de saisie. Comme le serveur peut lire la discussion, il est impossible d'envoyer des photos dans une discussion d'événement.
 - L'hôte peut retirer n'importe quel message. Touchez-le, puis **Retirer**. Il indique alors « supprimé par l'hôte ».
 - Une discussion d'événement ne permet ni réponse directe, ni réactions, ni modification, ni suppression de son propre message — à la différence d'un échange individuel ou d'une discussion de groupe. Demandez à l'hôte de retirer un message que vous regrettez. Si vous supprimez votre compte, chaque message écrit par vous ici affichera **Ce message a été supprimé**.
 - Lorsque l'événement prend fin ou est annulé, la discussion passe en lecture seule. La discussion d'un événement récurrent reste ouverte entre les dates : jusqu'à sa dernière date si l'hôte a défini une mention **Jusqu'au**, et jusqu'à ce que l'hôte annule l'événement dans le cas contraire. Trente jours après la fin, elle disparaît.

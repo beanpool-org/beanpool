@@ -25,10 +25,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export { ErrorBoundary };
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStyles, useTheme } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import { communitySwitched } from '../utils/community-switch';
+import { moveCommunityAddress, whileCommunityMoves, writeCommunityAddress } from '../utils/community-move-lock';
 import { assertPlainNodeAddress } from '../utils/node-url';
 import { draftIdentity, getMnemonic, importIdentity, loadIdentity, StoredKeyUnreadableError, type BeanPoolIdentity } from '../utils/identity';
 import { forgetTheLook } from '../utils/look-around';
@@ -69,9 +69,12 @@ async function moveOntoCommunity(url: string, name: string): Promise<void> {
     assertPlainNodeAddress(url);
     const db = await import('../utils/db');
     const nodes = await import('../utils/nodes');
-    await db.closeDB();
-    await AsyncStorage.setItem('beanpool_anchor_url', url);
-    await db.initDB();
+    // A member move (utils/community-move-lock.ts): closed, written and opened in one move.
+    await whileCommunityMoves(async (held) => {
+        await db.closeDB();
+        await writeCommunityAddress(held, url);
+        await db.initDB();
+    });
     communitySwitched();
     await nodes.addSavedNode(url, name || undefined).catch(() => {});
 }
@@ -168,7 +171,7 @@ export default function RekeyCodeScreen() {
             const done = await finishRekey(s, answer, deps);
             if (done.newWords) {
                 assertPlainNodeAddress(s.community);
-                await AsyncStorage.setItem('beanpool_anchor_url', s.community);
+                await moveCommunityAddress(s.community);
                 communitySwitched();
             } else {
                 await moveOntoCommunity(s.community, answer.communityName);

@@ -124,6 +124,7 @@ import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, is
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
 import { communitySwitched } from '../utils/community-switch';
+import { moveCommunityAddress } from '../utils/community-move-lock';
 import { useWords } from '../components/LanguageProvider';
 import { LanguageSwitch } from '../components/LanguagePicker';
 import { CLAIM_NEW_SERVER_ROUTE, claimRouteFor } from '../utils/claim-link';
@@ -1395,7 +1396,7 @@ export default function WelcomeScreen() {
                         // before. Its words stay behind Settings' lock. Into the app on this community: the anchor is the app's
                         // node (its database, its sync, the recheck below), and the phone may have none ("Wipe & Join Fresh"
                         // removes it) or another community's.
-                        await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
+                        await moveCommunityAddress(nodeUrl);
                         // The update screen asks the community now in use (utils/community-switch.ts).
                         communitySwitched();
                         await clearPendingOnboarding();
@@ -1453,7 +1454,7 @@ export default function WelcomeScreen() {
                 if (knockMade) undoKnockRecord = () => (joinRecord ? setPendingOnboarding(joinRecord) : clearPendingOnboarding());
                 if (!storedIdentity || knockMade) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);
 
-                await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
+                await moveCommunityAddress(nodeUrl);
                 // The update screen asks the community now in use (utils/community-switch.ts).
                 communitySwitched();
 
@@ -1516,7 +1517,7 @@ export default function WelcomeScreen() {
                 setMode('profileSetup');
             } catch (err: any) {
                 if (undoCommunity) {
-                    await AsyncStorage.removeItem('beanpool_anchor_url').catch(() => {});
+                    await moveCommunityAddress(null).catch(() => {});
                     // No community on the phone again: the update screen asks none (utils/community-switch.ts).
                     communitySwitched();
                     // Nor the record Next wrote for a knock's key: the phone waits again as it did, with the knock's mark, which
@@ -2260,7 +2261,7 @@ export default function WelcomeScreen() {
         doorWork.stop();
         // In by 12 words: one way back. Safety Backup says so, and afterwards the card does (utils/one-way-back.ts).
         if (way === 'words') await startOneWayBack(identity.publicKey, GLOBAL_NODE_URL);
-        await AsyncStorage.setItem('beanpool_anchor_url', GLOBAL_NODE_URL);
+        await moveCommunityAddress(GLOBAL_NODE_URL);
         // The update screen asks the community now in use (utils/community-switch.ts).
         communitySwitched();
         await addSavedNode(GLOBAL_NODE_URL, 'Global community').catch(() => {});

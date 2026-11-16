@@ -3,7 +3,7 @@ slug: event-chat
 title: Chat sự kiện
 summary: Trò chuyện với người tổ chức và tất cả những người tham gia sự kiện.
 related: events, messages, pin-locations, reporting
-source-hash: 5db33c065b67e6b8
+source-hash: 6da207cb35f1e3c7
 ---
 
 ## Những ai có mặt trong đoạn chat
@@ -12,8 +12,8 @@ Mỗi sự kiện đều có cuộc trò chuyện riêng. Người tổ chức v
 
 ## Mở cuộc trò chuyện
 
-- Mở sự kiện và nhấn **Mở trò chuyện sự kiện**.
-- Hoặc tìm sự kiện trong mục **Chat**, dưới phần **Nhóm**, được đánh dấu 📅 **Sự kiện**. Trong ứng dụng web, mục này nằm trong tab **Chat**, cùng với các cuộc trò chuyện khác của bạn.
+- Mở sự kiện và nhấn **Trò chuyện với những người sẽ đến**. Khi có tin nhắn bạn chưa đọc, nút sẽ cho biết số lượng, chẳng hạn **3 tin mới**.
+- Khi đã có người viết trong đó, cuộc trò chuyện này cũng nằm trong mục **Chat**, dưới phần **Nhóm**, được đánh dấu 📅 **Sự kiện**. Trong ứng dụng web, mục này nằm trong tab **Chat**, cùng với các cuộc trò chuyện khác của bạn. Trước đó, nó không có trong các danh sách này: hãy mở nó từ sự kiện.
 
 Ở trên cùng, một hộp được ghim sẽ hiển thị **Ghi chú cho những người tham gia** của người tổ chức, chẳng hạn như địa chỉ chính xác. Nhấn vào tên sự kiện ở trên cùng (trong ứng dụng web là **Xem sự kiện**) để quay lại sự kiện.
 
@@ -23,7 +23,7 @@ Nhập vào ô **Nhắn tin cho tất cả người tham gia…** và nhấn nú
 
 ## Những điều nên biết
 
-- Các cuộc trò chuyện sự kiện không được mã hóa đầu cuối. Người tổ chức, tất cả những người tham gia (nơi người tổ chức duyệt người vào, là những người được người tổ chức cho vào), và những người vận hành máy chủ cộng đồng của bạn đều có thể đọc được chúng. Cuộc trò chuyện sẽ thông báo điều đó phía trên ô tin nhắn.
+- Các cuộc trò chuyện sự kiện không được mã hóa đầu cuối. Người tổ chức, tất cả những người tham gia (nơi người tổ chức duyệt người vào, là những người được người tổ chức cho vào), và những người vận hành máy chủ cộng đồng của bạn đều có thể đọc được chúng. Cuộc trò chuyện sẽ thông báo điều đó phía trên ô tin nhắn. Vì máy chủ có thể đọc cuộc trò chuyện, nên không thể gửi ảnh trong cuộc trò chuyện sự kiện.
 - Người tổ chức có thể gỡ bỏ bất kỳ tin nhắn nào. Nhấn vào tin nhắn, sau đó nhấn **Xóa**. Tin nhắn sau đó sẽ hiển thị "đã bị người tổ chức gỡ".
 - Một cuộc trò chuyện sự kiện không có tính năng trả lời, không có biểu cảm, không có chỉnh sửa và không thể xóa tin nhắn của chính bạn — không giống như cuộc trò chuyện với một người hoặc cuộc trò chuyện của nhóm. Hãy nhờ người tổ chức gỡ bỏ điều gì đó mà bạn hối tiếc. Nếu bạn xóa tài khoản của mình, mọi tin nhắn bạn đã viết tại đây sẽ hiển thị **Tin nhắn này đã bị xóa**.
 - Khi sự kiện kết thúc hoặc bị hủy, cuộc trò chuyện sẽ chuyển sang chế độ chỉ đọc. Cuộc trò chuyện của một sự kiện lặp lại vẫn mở giữa các ngày diễn ra: cho đến ngày cuối cùng nếu người tổ chức đặt **Đến ngày**, và cho đến khi người tổ chức hủy sự kiện nếu không đặt. Ba mươi ngày sau khi kết thúc, cuộc trò chuyện sẽ biến mất.

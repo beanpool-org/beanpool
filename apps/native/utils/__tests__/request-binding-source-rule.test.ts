@@ -182,23 +182,35 @@ describe('the member key signs only through core\'s builders', () => {
 //
 // Every signature is bound to the host of the phone's community address (`beanpool_anchor_url`). An address whose
 // authority isn't plain host[:port] names one host to core and reaches another on iOS (#1224 review 4113495290,
-// utils/node-url.ts). So every write of it is listed here with the check it passes first, and a new one fails
-// until it is added with its own. addSavedNode refuses by itself (utils/nodes.ts).
+// utils/node-url.ts). Since addresses S5 round 2 one function writes it (community-move-lock.ts writeCommunityAddress,
+// which checks it again itself); utils/__tests__/community-address-writer.test.ts fails on any other write. So every call
+// of that writer (or of moveCommunityAddress, the write alone in its own move) that writes an address is listed here with
+// the check its caller passes first, and a new one fails until it is added with its own. A removal (null) needs none.
+// addSavedNode refuses by itself (utils/nodes.ts).
 
 interface AnchorWrite { file: string; fn: string; fnText: string; value: string }
 
 const ANCHOR_KEY_ARG = /^(?:'beanpool_anchor_url'|"beanpool_anchor_url"|ANCHOR_STORE_KEY|ANCHOR_KEY)$/;
+/** The one writer, and the address argument of each call of it. */
+const WRITER_ARG: Record<string, number> = { writeCommunityAddress: 1, moveCommunityAddress: 0 };
+const LOCK_MODULE = 'utils/community-move-lock.ts';
 
 function anchorWrites(): AnchorWrite[] {
     const out: AnchorWrite[] = [];
     for (const file of sourceFiles()) {
         const text = fs.readFileSync(file, 'utf8');
-        if (!text.includes('setItem')) continue;
+        if (!text.includes('setItem') && !/(write|move)CommunityAddress\(/.test(text)) continue;
         const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
         const rel = path.relative(ROOT, file);
         const visit = (node: ts.Node) => {
+            let value: ts.Expression | undefined;
             if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'setItem'
                 && node.arguments.length >= 2 && ANCHOR_KEY_ARG.test(node.arguments[0].getText(sf))) {
+                value = node.arguments[1];
+            } else if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text in WRITER_ARG && rel !== LOCK_MODULE) {
+                value = node.arguments[WRITER_ARG[node.expression.text]];
+            }
+            if (value && value.kind !== ts.SyntaxKind.NullKeyword) {
                 // The nearest named function: declared, a method, or held by a const, directly or through a hook
                 // (`const switchTo = useCallback(async (url) => …)`).
                 let fn = '<top level>';
@@ -210,7 +222,7 @@ function anchorWrites(): AnchorWrite[] {
                         if (ts.isVariableDeclaration(holder)) { fn = holder.name.getText(sf); break; }
                     }
                 }
-                out.push({ file: rel, fn, fnText: fnNode?.getText(sf) ?? '', value: node.arguments[1].getText(sf) });
+                out.push({ file: rel, fn, fnText: fnNode?.getText(sf) ?? '', value: value.getText(sf) });
             }
             ts.forEachChild(node, visit);
         };
@@ -224,45 +236,43 @@ describe('the phone\'s community address is written only after the plain-address
 
     /** Each writer, and what its function must contain: the check it makes before the write. */
     const CHECKED: Record<string, RegExp> = {
-        // The deep link's "Switch Nodes?": the address comes from deepLinkNodeOrigin, which refuses one that isn't plain.
-        'app/_layout.tsx RootLayoutNav': /deepLinkNodeOrigin\(/,
+        // The one writer itself checks every address it writes (community-move-lock.ts), whoever calls it.
+        'utils/community-move-lock.ts writeCommunityAddress': /assertPlainNodeAddress\(url\)[\s\S]*store\.setItem\(ANCHOR_KEY, url\)/,
+        // (The deep link's "Switch Nodes?", the header's community switcher and Settings' saved-community Switch write no
+        // address of their own since addresses S5: they move through reconnect.ts switchPhoneTo below.)
         // The not-recognised screen's Reconnect, or a saved-node pick, once the community has let the key in (utils/reconnect.ts).
-        'utils/reconnect.ts switchPhoneTo': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
+        'utils/reconnect.ts switchPhoneTo': /assertPlainNodeAddress\(url\);[\s\S]*writeCommunityAddress\(held, url\)/,
         // The invite join: looksLikeNodeAddress, which requires isPlainNodeAddress (utils/node-url.ts).
         'app/welcome.tsx handleCreate': /looksLikeNodeAddress\(nodeUrl\)/,
-        'app/(tabs)/settings.tsx handleSwitchNode': /isPlainNodeAddress\(targetUrl\)/,
         'app/(tabs)/settings.tsx handleUpdateAnchor': /isPlainNodeAddress\(finalAnchorUrl\)/,
         // People's "Join another community", an approved knock, a directory pick; and the way back when a redeem fails.
         'utils/join-another-community.ts joinAnotherCommunity': /assertPlainNodeAddress\(targetUrl\)[\s\S]*isPlainNodeAddress\(opts\.returnUrl\)/,
         // The claim made the account (utils/claim-key.ts finishClaim): the origin came through claimNodeOrigin on the claim
         // screen; this is the write's own check.
-        'utils/claim-key.ts finishClaim': /assertPlainNodeAddress\(origin\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', origin\)/,
+        'utils/claim-key.ts finishClaim': /assertPlainNodeAddress\(origin\);[\s\S]*moveCommunityAddress\(origin\)/,
         // The claim's "Make ‹name› my community": the origin came through claimNodeOrigin; this is the write's own check.
-        'app/claim-community.tsx makeMine': /assertPlainNodeAddress\(origin\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', origin\)/,
+        'app/claim-community.tsx makeMine': /assertPlainNodeAddress\(origin\);[\s\S]*writeCommunityAddress\(held, origin\)/,
         // A re-key code bound this phone (app/rekey-code.tsx): the community the ask went to, a plain origin already
         // (utils/rekey-redeem.ts rekeyCommunityUrl), checked again before it is written.
-        'app/rekey-code.tsx onBound': /assertPlainNodeAddress\(s\.community\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', s\.community\)/,
-        'app/rekey-code.tsx moveOntoCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
-        // The header's community switcher (the BeanPool sheet's rows), and a tapped notice from another community the phone
-        // keeps (utils/push-notice-switch.ts): the one switch for both.
-        'utils/use-communities.ts switchCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
+        'app/rekey-code.tsx onBound': /assertPlainNodeAddress\(s\.community\);[\s\S]*moveCommunityAddress\(s\.community\)/,
+        'app/rekey-code.tsx moveOntoCommunity': /assertPlainNodeAddress\(url\);[\s\S]*writeCommunityAddress\(held, url\)/,
         // Both restores (12 words, sign-in).
         'utils/restore-account.ts saveRestoredAccount': /assertPlainNodeAddress\(anchorUrl\)/,
         // Development discovery: only plain candidates are probed.
         'services/pillar-sync.ts discoverAnchor': /isPlainNodeAddress\(url\)/,
         // Delete account, while another saved community keeps the key: the phone moves there (the plan only picks plain
         // saved addresses; this is the write's own check).
-        'utils/delete-here.ts leaveThisCommunity': /assertPlainNodeAddress\(next\);[\s\S]*storage\.setItem\(ANCHOR_STORE_KEY, next\)/,
+        'utils/delete-here.ts leaveThisCommunity': /assertPlainNodeAddress\(next\);[\s\S]*writeCommunityAddress\(held, next, storage\)/,
         // The full-screen "Update required"'s "Use another community": a saved community (only plain ones are offered;
         // this is the write's own check).
-        'utils/update-block-escape.ts switchFromUpdateBlock': /assertPlainNodeAddress\(url\);[\s\S]*deps\.storage\.setItem\(ANCHOR_STORE_KEY, url\)/,
+        'utils/update-block-escape.ts switchFromUpdateBlock': /assertPlainNodeAddress\(url\);[\s\S]*writeCommunityAddress\(held, url, deps\.storage\)/,
         // The door from an account the phone already has, once it is in (app/join-open-door.tsx): the community whose door
         // it is, the global community's (enterGlobalCommunity passes GLOBAL_NODE_URL) or any other's (slice P5). The door's
         // address came through utils/open-door.ts doorNodeAt; this is the write's own check.
-        'utils/global-join-existing.ts enterOpenDoorCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
+        'utils/global-join-existing.ts enterOpenDoorCommunity': /assertPlainNodeAddress\(url\);[\s\S]*writeCommunityAddress\(held, url\)/,
         // Another community's door on a phone with no account, once it is in (utils/open-door-key.ts, slice S2): the door's
         // address came through utils/open-door.ts doorNodeAt on the screen; this is the write's own check.
-        'utils/open-door-key.ts finishOpenDoorJoin': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
+        'utils/open-door-key.ts finishOpenDoorJoin': /assertPlainNodeAddress\(url\);[\s\S]*moveCommunityAddress\(url\)/,
     };
     /** Writers of a fixed address. */
     const CONSTANT: Record<string, string> = {

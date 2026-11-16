@@ -55,10 +55,11 @@ export interface AddressCard {
 }
 
 /**
- * A name a card may carry, as it reads (name-line.ts cleanName: nothing that shows nothing, such as a zero-width space or a
- * direction override, and one space at a time, trimmed), or null: none left, past 60 characters, or a line break or other
- * control character inside it. A card carries only a name in this form ({@link addressCardVerifies}), so a guest can't pad
- * the name a member sees, and {@link signAddressCard} signs the name in it.
+ * A name a card may carry, as it reads (name-line.ts cleanName: padding and spoofing out, such as zero-width spaces or a
+ * direction override, one space at a time, trimmed; a name a person really writes, emoji and joiners and all, as written),
+ * or null: none left, past 60 characters, or a line break or other control character inside it. A card carries only a name
+ * in this form ({@link addressCardVerifies}), so a guest can't pad the name a member sees, and {@link signAddressCard}
+ * signs the name in it. Every card main's core signed over a real name still verifies (name-line.test.ts, #3275 round 4).
  */
 export function addressCardName(name: unknown): string | null {
     if (typeof name !== 'string' || CONTROL.test(name.trim())) return null;

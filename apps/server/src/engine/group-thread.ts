@@ -50,7 +50,7 @@ export { detectMentions };
  * name their card gave, their community (their home, which the envelope proved) and "guest", in core's one name line
  * (joint design §2.6: as a guest the community always shows), "Dax · riverside.example · guest". Never the card's name
  * alone, which a guest chooses and nothing checks: a guest whose card says a member's name never passes as that member.
- * Core's guestNameLine makes it under NAME_LINE_CHARS: the card's name read clean (nothing that shows nothing) and cut so the
+ * Core's guestNameLine makes it under NAME_LINE_CHARS: the card's name read clean (padding and spoofing out) and cut so the
  * line fits, " · <home> · guest" never cut. The places that pass it on cap it with core's servedName, which cuts nothing it
  * made (#3275 round 3: Home cut a 60-character card name's line at 60, so " · a.example · guest" went and a guest read as
  * a bare name).

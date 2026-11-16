@@ -885,8 +885,8 @@ export function guestClosedWords(chat: Pick<GuestChat, 'state' | 'why'>): string
 
 /**
  * A guest's name in the chat, as both apps write it and the node serves it: their card's name, their community, "guest"
- * (name-line.ts), "Dax · riverside.example · guest". The card's name is read clean (cleanName: nothing that shows nothing,
- * one space at a time), so "Ana" padded with zero-width spaces is "Ana · a.example · guest". Given `max` (the node gives
+ * (name-line.ts), "Dax · riverside.example · guest". The card's name is read clean (cleanName: padding and spoofing
+ * out, a real name as written), so "Ana" padded with zero-width spaces is "Ana · a.example · guest". Given `max` (the node gives
  * NAME_LINE_CHARS), only the card's name is cut, so the whole line fits `max`: their community and "guest" are never cut.
  * A home so long that they alone leave no room keeps the name's first character and "…", and the line runs past `max`.
  */

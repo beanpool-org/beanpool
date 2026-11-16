@@ -24,8 +24,8 @@
  *     and deleting the account deletes it.
  *  6. Nothing left this machine: every fetch the process made was to its own servers.
  *
- * Fail-first: on origin/main (no `proof` in the public JSON, no ask-posts route, `forumPosts` ignored) section 1 stops at
- * "the worldwide forum gives Asha her secret" and the table is never reached.
+ * Fail-first: run against origin/main's server (core's forum-ask.ts in place), section 1 stops at its second check with
+ * "SqliteError: no such column: proof_secret": no member has a secret, no post a proof, and the table is never reached.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-knock-forum-links" node ../../scripts/run-server-suites.mjs
  */
@@ -217,7 +217,7 @@ async function main(): Promise<void> {
     }
 
     const mine = await get(asha, '/api/forum/ask-posts');
-    require_(mine.status === 200 && mine.body?.secret === secretOf(asha), `the worldwide forum gives Asha her secret (${show(mine)})`);
+    require_(mine.status === 200 && mine.body?.secret === secretOf(asha), `the worldwide forum gives Asha her secret (${mine.status})`);
     const secret = mine.body.secret as string;
     const ids = (mine.body.posts ?? []).map((p: any) => p.postId);
     const ownIds = [...own, spare].map((p) => p.postId);

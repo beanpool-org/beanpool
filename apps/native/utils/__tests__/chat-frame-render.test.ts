@@ -181,7 +181,10 @@ vi.mock('../node-post', () => ({
     signedGet: (origin: string) => knockReads.answers.get(origin)?.() ?? new Promise(() => {}), signedPost: () => new Promise(() => {}),
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
-vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
+vi.mock('../blocklist', () => ({
+    getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated',
+    blockUser: async (key: string) => { outside.blocked.push(key); return true; },
+}));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
 vi.mock('../member-statements', () => ({ makeOfflineTicket: () => new Promise(() => {}) }));
 const membership = vi.hoisted(() => ({ isMember: true }));
@@ -227,15 +230,33 @@ vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
  * Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts): none unless a test puts some. The
  * tab lists them through the real outside-mail.ts chatsShown; `blocked`, the keys this account blocked.
  */
-const outside = vi.hoisted(() => ({ chats: [] as any[], blocked: [] as string[] }));
+const outside = vi.hoisted(() => ({
+    chats: [] as any[], blocked: [] as string[], chat: null as any, lines: [] as any[], changes: [] as any[], sent: [] as any[],
+    reported: [] as Array<{ lineId: string; reason: string }>, decided: [] as string[],
+}));
 vi.mock('../outside-chat-live', () => ({
     OUTSIDE_CHATS_UPDATED: 'outside_chats_updated',
+    OUTSIDE_SEND_MS: 10_000,
+    outsideErrorWords: (e: unknown) => String((e as Error)?.message ?? e),
     syncOutsideMailNow: async () => null,
     outsideContext: async () => ({
-        identity: { publicKey: 'me-key' }, store: { chats: async () => outside.chats }, isBlocked: async (key: string) => outside.blocked.includes(key),
+        identity: { publicKey: 'me-key' },
+        store: {
+            chats: async () => outside.chats, chat: async () => outside.chat, lines: async () => outside.lines, changes: async () => outside.changes,
+            decide: async (_me: string, _id: string, state: string) => { outside.decided.push(state); },
+        },
+        isBlocked: async (key: string) => outside.blocked.includes(key),
     }),
 }));
+// A change to a line (X6) as the outside chat screen sends it: recorded here; the round itself is outside-mail.test.ts's.
+vi.mock('../outside-mail', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../outside-mail')>()),
+    sendOutsideChange: async (_ctx: unknown, chatId: string, c: unknown) => { outside.sent.push({ chatId, ...(c as object) }); },
+    // A report of their line (X5) as the screen makes it: recorded here; what it sends is outside-mail.test.ts's.
+    reportOutsideLine: async (_ctx: unknown, lineId: string, reason: string) => { outside.reported.push({ lineId, reason }); },
+}));
 import ChatsScreen from '../../app/(tabs)/chats';
+import OutsideChatScreen from '../../app/outside-chat/[id]';
 
 const NODE = 'https://riverside.example';
 const now = Date.now();
@@ -286,6 +307,12 @@ beforeEach(() => {
     yourGroupsStore.reset();
     outside.chats = [];
     outside.blocked = [];
+    outside.chat = null;
+    outside.lines = [];
+    outside.changes = [];
+    outside.sent = [];
+    outside.reported = [];
+    outside.decided = [];
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -816,6 +843,173 @@ describe('a chat with someone in another community, in the Chats list at 320 dp 
             expect(host.textContent).not.toContain('Ana Ríos');
         } finally {
             outside.blocked = [];
+        }
+    });
+});
+
+/**
+ * A chat with someone in another community (app/outside-chat/[id].tsx), its changes to lines (X6), on a phone 320 dp wide with
+ * text at 1.3x: an edit reads "edited", a deleted line "This message was deleted", reactions under the line; a tap on a line
+ * offers the chat's seven reactions and, on a line of mine only, Edit message and Delete message; Edit fills the box and its
+ * button reads Save; Delete asks first. Report message (X6 round 3): on every line of theirs not deleted, in every state of the
+ * chat, a request's included; the table of chat states x lines says what a tap offers (core outsideLineActions, the web's too).
+ */
+describe('an outside chat: changes to lines (X6)', () => {
+    const CHAT = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const THEIRS = 'bbbbbbbb-0000-4000-8000-000000000001', GONE = 'bbbbbbbb-0000-4000-8000-000000000002', MINE = 'bbbbbbbb-0000-4000-8000-000000000003';
+    beforeEach(() => {
+        params.now = { id: CHAT };
+        outside.chat = { id: CHAT, peerKey: 'sol-key', peerHome: 'riverside.example', peerName: 'Sol', state: 'open', restored: false, updatedAt: now, lastText: null, lastAt: null };
+        outside.lines = [
+            { id: THEIRS, chatId: CHAT, author: 'sol-key', text: 'Bikes at 3', replyTo: null, at: now - 3_000, state: null, note: null },
+            { id: GONE, chatId: CHAT, author: 'sol-key', text: 'Oops', replyTo: null, at: now - 2_000, state: null, note: null },
+            { id: MINE, chatId: CHAT, author: 'me-key', text: 'See you there', replyTo: null, at: now - 1_000, state: 'delivered', note: null },
+        ];
+        outside.changes = [
+            { kind: 'dm-edit', itemId: 'cccccccc-0000-4000-8000-000000000001', lineId: THEIRS, author: 'sol-key', at: now, text: 'Bikes at 4' },
+            { kind: 'dm-delete', itemId: 'cccccccc-0000-4000-8000-000000000002', lineId: GONE, author: 'sol-key', at: now },
+            { kind: 'dm-reaction', itemId: 'cccccccc-0000-4000-8000-000000000003', lineId: THEIRS, author: 'me-key', at: now, emoji: '👍' },
+            { kind: 'dm-reaction', itemId: 'cccccccc-0000-4000-8000-000000000004', lineId: THEIRS, author: 'sol-key', at: now, emoji: '👍' },
+        ];
+    });
+    const draw = async () => {
+        await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(OutsideChatScreen)) as any); });
+        await settle();
+    };
+    const byTest = (id: string) => Array.from(host.querySelectorAll(`[data-testid="${id}"]`)) as HTMLElement[];
+    const click = async (el: Element | null | undefined) => { await act(async () => { (el as HTMLElement).click(); }); await settle(24); };
+
+    it('reads its changes: edited, deleted, and reactions', async () => {
+        await draw();
+        expect(host.textContent).toContain('Bikes at 4');
+        expect(host.textContent).not.toContain('Bikes at 3');
+        expect(byTest('outside-line-edited').map((e) => e.textContent)).toEqual(['edited']);
+        expect(byTest('outside-line-deleted').map((e) => e.textContent)).toEqual(['This message was deleted']);
+        expect(host.textContent).not.toContain('Oops');
+        expect(byTest('outside-line-reactions').map((e) => e.textContent)).toEqual(['👍2']);
+    });
+
+    it('a tap on their line: the seven reactions and Report message, no Edit or Delete; a reaction tapped is sent, mine again takes it back', async () => {
+        await draw();
+        await click(byTest('outside-line-theirs')[0]);
+        const reacts = Array.from(host.querySelectorAll('[aria-label^="React with"]')) as HTMLElement[];
+        expect(reacts.map((b) => b.textContent)).toEqual(['👍', '❤️', '😂', '😮', '😢', '🙏', '😁']);
+        expect(byTest('outside-line-report')).toHaveLength(1);
+        expect(byTest('outside-line-edit')).toHaveLength(0);
+        expect(byTest('outside-line-delete')).toHaveLength(0);
+        expect(reacts[0].getAttribute('aria-selected')).toBe('true');
+        await click(reacts[2]);
+        expect(outside.sent).toEqual([{ chatId: CHAT, kind: 'dm-reaction', lineId: THEIRS, emoji: '😂' }]);
+        await click(byTest('outside-line-theirs')[0]);
+        await click(host.querySelectorAll('[aria-label^="React with"]')[0]);   // 👍 (jsdom's selectors miss an emoji inside an attribute value)
+        expect(outside.sent.at(-1)).toEqual({ chatId: CHAT, kind: 'dm-reaction', lineId: THEIRS, emoji: '' });
+    });
+
+    it('a deleted line offers nothing to tap', async () => {
+        await draw();
+        await click(byTest('outside-line-theirs')[1]);
+        expect(byTest('outside-line-actions')).toHaveLength(0);
+    });
+
+    it('a deleted line of mine shows no tick (nothing is left to deliver), and a screen reader hears what it shows', async () => {
+        outside.changes = [...outside.changes, { kind: 'dm-delete', itemId: 'cccccccc-0000-4000-8000-000000000005', lineId: MINE, author: 'me-key', at: now }];
+        await draw();
+        expect(byTest('outside-line-deleted').map((e) => e.textContent)).toEqual(['This message was deleted', 'This message was deleted']);
+        expect(byTest('outside-line-state')).toHaveLength(0);
+        expect(byTest('outside-line-mine')[0].getAttribute('aria-label')).toBe('This message was deleted');
+        expect(byTest('outside-line-theirs')[0].getAttribute('aria-label')).toBe('Bikes at 4. edited');
+    });
+
+    it('a tap on my line: Edit message fills the box and its button reads Save, and saving sends the edit; Delete message asks first', async () => {
+        await draw();
+        const typing = byTest('outside-chat-input')[0] as HTMLInputElement;
+        const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        await act(async () => { setValue.call(typing, 'half a thought'); typing.dispatchEvent(new Event('input', { bubbles: true })); });
+        await settle();
+        await click(byTest('outside-line-mine')[0]);
+        expect(byTest('outside-line-report')).toHaveLength(0);
+        await click(byTest('outside-line-edit')[0]);
+        const box = byTest('outside-chat-input')[0] as HTMLInputElement;
+        expect(box.value).toBe('See you there');
+        expect(byTest('outside-chat-send')[0].getAttribute('aria-label')).toBe('Save');
+        expect(byTest('outside-chat-editing')).toHaveLength(1);
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(box, 'See you at 4');
+            box.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await settle();
+        await click(byTest('outside-chat-send')[0]);
+        expect(outside.sent).toEqual([{ chatId: CHAT, kind: 'dm-edit', lineId: MINE, text: 'See you at 4' }]);
+        expect(byTest('outside-chat-send')[0].getAttribute('aria-label')).toBe('Send');
+        // What was typed before the edit is back in the box, never lost.
+        expect((byTest('outside-chat-input')[0] as HTMLInputElement).value).toBe('half a thought');
+        await click(byTest('outside-line-mine')[0]);
+        await click(byTest('outside-line-delete')[0]);
+        expect(alerts.said).toEqual(expect.arrayContaining(['Delete for everyone?', 'It will read "This message was deleted" for both of you.', 'Cancel', 'Delete']));
+        expect(outside.sent).toHaveLength(1);
+    });
+
+    it('a request: tapping its line offers Report message and no reactions; the report goes, and blocks its sender (design §3.5)', async () => {
+        outside.chat = { ...outside.chat, state: 'request' };
+        outside.lines = [outside.lines[0]];
+        outside.changes = [];
+        await draw();
+        await click(byTest('outside-line-theirs')[0]);
+        expect(byTest('outside-line-report')).toHaveLength(1);
+        expect(host.querySelectorAll('[aria-label^="React with"]')).toHaveLength(0);
+        await click(byTest('outside-line-report')[0]);
+        const sheet = host.querySelector('[data-modal="true"]') as HTMLElement;
+        expect(sheet.textContent).toContain('Reporting a request blocks its sender too.');
+        await click(Array.from(sheet.querySelectorAll('button')).find((b) => b.textContent === 'Spam or scam'));
+        await click(sheet.querySelector('[aria-label="Submit report"]'));
+        expect(outside.reported).toEqual([{ lineId: THEIRS, reason: 'Spam or scam' }]);
+        expect(outside.blocked).toEqual(['sol-key']);
+        expect(outside.decided).toEqual(['declined']);
+        expect(alerts.said).toContain('Reported');
+    });
+
+    /**
+     * The rule, as the screen draws it (core outsideLineActions): every line of theirs not deleted can be reported, in every state
+     * of the chat; only what changes the chat (reactions, Edit, Delete) needs it open. "blocked" is a chat as Block leaves it:
+     * declined, its sender on this account's blocklist.
+     */
+    describe('what a tap on a line offers, in every state of the chat', () => {
+        const states = { request: 'request', open: 'open', declined: 'declined', blocked: 'declined' } as const;
+        const lines = {
+            theirs: { id: THEIRS, author: 'sol-key', changes: [] as any[] },
+            mine: { id: MINE, author: 'me-key', changes: [] as any[] },
+            'theirs, deleted': { id: GONE, author: 'sol-key', changes: [{ kind: 'dm-delete', itemId: 'cccccccc-0000-4000-8000-000000000009', lineId: GONE, author: 'sol-key', at: now }] },
+            'mine, deleted': { id: MINE, author: 'me-key', changes: [{ kind: 'dm-delete', itemId: 'cccccccc-0000-4000-8000-00000000000a', lineId: MINE, author: 'me-key', at: now }] },
+        };
+        const offers = (react: boolean, edit: boolean, remove: boolean, report: boolean) => ({ react, edit, remove, report });
+        const nothing = offers(false, false, false, false);
+        const table: Record<keyof typeof states, Record<keyof typeof lines, ReturnType<typeof offers>>> = {
+            request: { theirs: offers(false, false, false, true), mine: nothing, 'theirs, deleted': nothing, 'mine, deleted': nothing },
+            open: { theirs: offers(true, false, false, true), mine: offers(true, true, true, false), 'theirs, deleted': nothing, 'mine, deleted': nothing },
+            declined: { theirs: offers(false, false, false, true), mine: nothing, 'theirs, deleted': nothing, 'mine, deleted': nothing },
+            blocked: { theirs: offers(false, false, false, true), mine: nothing, 'theirs, deleted': nothing, 'mine, deleted': nothing },
+        };
+        for (const s of Object.keys(states) as Array<keyof typeof states>) {
+            for (const l of Object.keys(lines) as Array<keyof typeof lines>) {
+                it(`${s} chat, ${l} line`, async () => {
+                    const line = lines[l];
+                    outside.chat = { ...outside.chat, state: states[s] };
+                    outside.blocked = s === 'blocked' ? ['sol-key'] : [];
+                    outside.lines = [{ id: line.id, chatId: CHAT, author: line.author, text: 'Bikes at 3', replyTo: null, at: now - 1_000, state: line.author === 'me-key' ? 'delivered' : null, note: null }];
+                    outside.changes = line.changes;
+                    await draw();
+                    await click(byTest(line.author === 'me-key' ? 'outside-line-mine' : 'outside-line-theirs')[0]);
+                    expect({
+                        react: host.querySelectorAll('[aria-label^="React with"]').length === 7,
+                        edit: byTest('outside-line-edit').length === 1,
+                        remove: byTest('outside-line-delete').length === 1,
+                        report: byTest('outside-line-report').length === 1,
+                    }).toEqual(table[s][l]);
+                    if (Object.values(table[s][l]).every((x) => !x)) expect(byTest('outside-line-actions')).toHaveLength(0);
+                    expect(host.querySelectorAll('[aria-label^="React with"]').length % 7).toBe(0);
+                });
+            }
         }
     });
 });

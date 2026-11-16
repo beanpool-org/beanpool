@@ -62,6 +62,9 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 // The quiet-lead panel is its own component with its own reads: here only whether the sheet draws it.
 vi.mock('../../components/GroupSuccessionPanel', () => ({ GroupSuccessionPanel: () => createElement('div', { 'data-testid': 'succession' }) }));
 vi.mock('../../components/PlaceCircleCard', () => ({ PlaceCircleCard: () => null }));
+// The sheet's forum rows (forum slice F9, components/forum/ForumLinks.tsx) open a topic through the router; none is opened here.
+vi.mock('expo-router', () => ({ router: { push: vi.fn() } }));
+vi.mock('../forum', () => ({ forumTopicsLinking: vi.fn(async () => []) }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: null }) }));
 const node = vi.hoisted(() => ({ decisions: null as ScopedDecisionList | null, group: null as unknown, members: [] as unknown[] }));
 vi.mock('../db', () => ({

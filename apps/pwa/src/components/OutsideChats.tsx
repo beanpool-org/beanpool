@@ -4,14 +4,22 @@
  * browser only (lib/outside-chat-store.ts), and the chat says so above its first line; a chat this browser learned of from the
  * outbox is empty, and says why. A request shows its one line with Accept, Decline and Block, and takes no reply until Accept.
  * The other person's community always shows, on its own line that wraps (joint design §2.6): their name is their own choice,
- * never checked by this community, shown "name not confirmed here".
+ * never checked by this community, shown "name not confirmed here". In an open chat a tap on a line offers the chat's
+ * reactions and, on a line of mine, Edit message and Delete message (X6: each a sealed item of its own, lib/outside-mail.ts
+ * sendOutsideChange). A tap on a line of theirs offers Report message in every state of the chat, a request's included (design
+ * §3.5: Accept, Decline, Report; lib/outside-mail.ts reportOutsideLine). One rule, the phone's too: core outsideLineActions.
  */
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_WRITES_STAY_THERE, t } from '@beanpool/core';
-import { blockUser } from '../lib/blocklist';
-import { draftKey, draftSent, useKeptDraft } from '../lib/chat-drafts';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-    OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, ring, sendFromBox, syncOutsideMailNow,
+    OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineActions, outsideLineShown, t, type OutsideChange, type OutsideChangeKind,
+} from '@beanpool/core';
+import { blockUser } from '../lib/blocklist';
+import { ChatConfirmDialog } from './ChatConfirmDialog';
+import { ReportModal } from './ReportModal';
+import { draftKey, draftSent, keepEdit, keptDraft, takeEdit, useKeptDraft } from '../lib/chat-drafts';
+import {
+    OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, OutsideMailError, outsideContext, outsideErrorWords, reportOutsideLine, ring, sendFromBox, sendOutsideChange,
+    syncOutsideMailNow,
 } from '../lib/outside-mail';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../lib/outside-chat-store';
 
@@ -112,9 +120,32 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     const [chat, setChat] = useState<OutsideChat | null | undefined>(undefined);
     const [lines, setLines] = useState<OutsideLine[]>([]);
     const [text, setText] = useState('');
+    // Changes to lines (X6): each person's newest edit, reaction and delete, kept here; the line tapped; the id of a line of mine
+    // being edited.
+    const [changes, setChanges] = useState<OutsideChange[]>([]);
+    const [picked, setPicked] = useState<string | null>(null);
+    const [editing, setEditing] = useState<string | null>(null);
+    const [deleting, setDeleting] = useState<OutsideLine | null>(null);
+    // A line of theirs being reported (X5): the card asks why; my server blocks them and tells their community.
+    const [reporting, setReporting] = useState<OutsideLine | null>(null);
+    // What was typed in the box when an edit began: set aside, and back in the box after Save or Cancel, never lost.
+    const [typedAside, setTypedAside] = useState('');
     // Words left unsent here wait in the box while the page is open (lib/chat-drafts.ts): Back, or Chat in the menu, keeps them.
+    // During an edit the box holds the line's words, so the draft kept is what was set aside, never the line's words (which a
+    // Send would post as a new line); the edit itself is kept beside it, and comes back with its Save and Cancel.
     const boxKey = draftKey(me, 'outside', chatId);
-    useKeptDraft(boxKey, text, setText);
+    useKeptDraft(boxKey, editing ? typedAside : text, setText);
+    const editNow = useRef<{ lineId: string; words: string } | null>(null);
+    editNow.current = editing ? { lineId: editing, words: text } : null;
+    useLayoutEffect(() => {
+        if (!boxKey) return;
+        // After useKeptDraft's own effect (declared before it), so the edit's words win the box over the draft.
+        const edit = takeEdit(boxKey);
+        setEditing(edit?.lineId ?? null);
+        setTypedAside(edit ? keptDraft(boxKey) : '');
+        if (edit) setText(edit.words);
+        return () => keepEdit(boxKey, editNow.current);
+    }, [boxKey]);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const alive = useRef(true);
@@ -127,9 +158,11 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
         setMe(ctx.identity.publicKey);
         const c = await ctx.store.chat(ctx.identity.publicKey, chatId).catch(() => null);
         const l = c ? await ctx.store.lines(ctx.identity.publicKey, c.id).catch(() => []) : [];
+        const x = c ? await ctx.store.changes(ctx.identity.publicKey, c.id).catch(() => []) : [];
         if (!alive.current) return;
         setChat(c);
         setLines(l);
+        setChanges(x);
     }, [chatId]);
 
     useEffect(() => {
@@ -142,9 +175,44 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     }, [load]);
     useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }); }, [lines.length]);
 
+    /** An edit, a reaction or a delete of a line, applied here at once and sent (X6); my server's words if it says no. */
+    const change = async (c: { kind: OutsideChangeKind; lineId: string; text?: string; emoji?: string }): Promise<boolean> => {
+        const ctx = await outsideContext().catch(() => null);
+        if (!ctx || !chat) return false;
+        setNote(null);
+        try {
+            await sendOutsideChange(ctx, chat.id, c);
+            return true;
+        } catch (e) {
+            if (alive.current) setNote(outsideErrorWords(e, !(e instanceof OutsideMailError)));
+            return false;
+        } finally {
+            if (alive.current) setPicked(null);
+            await load();
+        }
+    };
+
+
+    const startEditing = (line: OutsideLine, words: string) => {
+        if (!editing) setTypedAside(text);
+        setEditing(line.id);
+        setText(words);
+        setPicked(null);
+    };
+    const stopEditing = () => { setEditing(null); setText(typedAside); setTypedAside(''); };
+
     const send = async () => {
         const words = text.trim();
         if (!words || busy || !chat) return;
+        if (editing) {
+            setBusy(true);
+            try {
+                if (await change({ kind: 'dm-edit', lineId: editing, text: words }) && alive.current) stopEditing();
+            } finally {
+                if (alive.current) setBusy(false);
+            }
+            return;
+        }
         // This chat's key, taken now: the member may have left it when the line is kept (lib/chat-drafts.ts draftSent).
         const sentFrom = boxKey;
         setBusy(true);
@@ -189,6 +257,22 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
         await decide('declined');
     };
 
+    // Report on a line from another community always blocks its sender (the card says so), as on the phone. The line goes to my
+    // community's moderators with its sender's signatures; their community is told, never who reported. The card says why a
+    // send failed, keeping the choice and the words; once sent, Done takes the member back to the chats.
+    const submitReport = async (line: OutsideLine, reason: string) => {
+        const ctx = await outsideContext().catch(() => null);
+        if (!ctx || !chat) throw new Error(t('That did not go through. Please try again.'));
+        try {
+            await reportOutsideLine(ctx, chat.id, line.id, reason);
+        } catch (e) {
+            throw new Error(e instanceof OutsideMailError && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('That did not go through. Please try again.'));
+        }
+        await blockUser(chat.peerKey).catch(() => false);
+        await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined').catch(() => undefined);
+        ring();
+    };
+
     if (chat === undefined) return <div className="p-4 max-w-3xl mx-auto w-full" />;
     const name = chat ? outsideName(chat) : '';
 
@@ -227,22 +311,93 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                     <div role="log" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                         {lines.map((l) => {
                             const mine = l.author === me;
-                            const tick = mine ? stateWords(l.state) : null;
-                            const why = mine && l.state === 'failed' ? l.note : null;
+                            // The line with its changes applied (X6): its writer's newest edit, each person's newest reaction, or deleted.
+                            const shown = outsideLineShown(l, changes, me ?? '');
+                            // A deleted line has nothing left to deliver: no tick, no why.
+                            const tick = mine && !shown.deleted ? stateWords(l.state) : null;
+                            const why = mine && !shown.deleted && l.state === 'failed' ? l.note : null;
+                            // Only what changes the chat needs it open; Report message is on every line of theirs not deleted (core's rule).
+                            const can = outsideLineActions(chat.state, { mine, deleted: shown.deleted });
+                            const canPick = can.react || can.edit || can.remove || can.report;
+                            const myReaction = shown.reactions.find((r) => r.mine)?.emoji ?? null;
+                            const toggle = () => { if (canPick) setPicked((p) => (p === l.id ? null : l.id)); };
                             return (
-                                <div key={l.id} data-testid={mine ? 'outside-line-mine' : 'outside-line-theirs'} style={{
-                                    alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '85%', padding: '0.5rem 0.75rem', borderRadius: '14px',
-                                    background: mine ? 'var(--bp-sage-fill)' : 'var(--bg-card)', color: mine ? 'var(--bp-sage-on)' : 'var(--text-primary)',
-                                    border: mine ? 'none' : '1px solid var(--border-primary)',
-                                }}>
-                                    <span dir="auto" style={{ whiteSpace: 'pre-wrap', ...wrap }}>{l.text}</span>
-                                    {tick && <span data-testid="outside-line-state" style={{ display: 'block', fontSize: '0.75rem', textAlign: 'right', opacity: 0.9 }}>{tick}</span>}
-                                    {why && <span data-testid="outside-line-why" style={{ display: 'block', fontSize: '0.75rem', opacity: 0.9, ...wrap }}>{why}</span>}
+                                <div key={l.id} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '85%', display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', gap: '0.25rem' }}>
+                                    <div data-testid={mine ? 'outside-line-mine' : 'outside-line-theirs'} role={canPick ? 'button' : undefined} tabIndex={canPick ? 0 : undefined}
+                                        aria-expanded={canPick ? picked === l.id : undefined} onClick={toggle}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }} style={{
+                                            padding: '0.5rem 0.75rem', borderRadius: '14px', cursor: canPick ? 'pointer' : undefined,
+                                            background: mine ? 'var(--bp-sage-fill)' : 'var(--bg-card)', color: mine ? 'var(--bp-sage-on)' : 'var(--text-primary)',
+                                            border: mine ? 'none' : '1px solid var(--border-primary)',
+                                        }}>
+                                        {shown.deleted
+                                            ? <span data-testid="outside-line-deleted" style={{ fontStyle: 'italic', opacity: 0.85 }}>{t('This message was deleted')}</span>
+                                            : <span dir="auto" style={{ whiteSpace: 'pre-wrap', ...wrap }}>{shown.text}</span>}
+                                        {shown.edited && <span data-testid="outside-line-edited" style={{ display: 'block', fontSize: '0.75rem', textAlign: 'right', opacity: 0.9 }}>{t('edited')}</span>}
+                                        {tick && <span data-testid="outside-line-state" style={{ display: 'block', fontSize: '0.75rem', textAlign: 'right', opacity: 0.9 }}>{tick}</span>}
+                                        {why && <span data-testid="outside-line-why" style={{ display: 'block', fontSize: '0.75rem', opacity: 0.9, ...wrap }}>{why}</span>}
+                                    </div>
+                                    {shown.reactions.length > 0 && (
+                                        <div data-testid="outside-line-reactions" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                            {shown.reactions.map((r) => (
+                                                <span key={r.emoji} style={{
+                                                    display: 'inline-flex', gap: '0.25rem', padding: '0.1rem 0.5rem', borderRadius: '12px', fontSize: '0.85rem',
+                                                    background: r.mine ? 'var(--bg-hover)' : 'var(--bg-card)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)',
+                                                }}><span>{r.emoji}</span>{r.count > 1 && <span>{r.count}</span>}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {picked === l.id && canPick && (
+                                        <div data-testid="outside-line-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+                                            {can.react && OUTSIDE_REACTIONS.map((emoji) => (
+                                                <button key={emoji} type="button" aria-label={t('React with {emoji}', { emoji })} aria-pressed={myReaction === emoji}
+                                                    onClick={() => void change({ kind: 'dm-reaction', lineId: l.id, emoji: myReaction === emoji ? '' : emoji })} style={{
+                                                        minWidth: '44px', minHeight: '44px', borderRadius: '22px', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--text-primary)',
+                                                        border: myReaction === emoji ? '1px solid var(--border-primary)' : '1px solid transparent', background: myReaction === emoji ? 'var(--bg-hover)' : 'none',
+                                                    }}>{emoji}</button>
+                                            ))}
+                                            {can.edit && (
+                                                <button type="button" data-testid="outside-line-edit" style={{ ...button, flex: '0 0 auto' }}
+                                                    onClick={() => startEditing(l, shown.text)}>{t('Edit message')}</button>
+                                            )}
+                                            {can.remove && (
+                                                <button type="button" data-testid="outside-line-delete" style={{ ...danger, flex: '0 0 auto' }} onClick={() => { setDeleting(l); setPicked(null); }}>{t('Delete message')}</button>
+                                            )}
+                                            {can.report && (
+                                                <button type="button" data-testid="outside-line-report" style={{ ...danger, flex: '0 0 auto' }} onClick={() => { setReporting(l); setPicked(null); }}>
+                                                    {t('Report message')}
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                         <div ref={endRef} />
                     </div>
+                    <ChatConfirmDialog
+                        isOpen={!!deleting}
+                        title={t('Delete for everyone?')}
+                        message={t('It will read "This message was deleted" for both of you.')}
+                        cancelLabel={t('Cancel')}
+                        confirmLabel={t('Delete')}
+                        destructive
+                        onCancel={() => setDeleting(null)}
+                        onConfirm={() => { const l = deleting; setDeleting(null); if (l) void change({ kind: 'dm-delete', lineId: l.id }); }}
+                    />
+                    {reporting && (
+                        <ReportModal
+                            isOpen
+                            onClose={() => setReporting(null)}
+                            onReported={onBack}
+                            reporterPubkey={me ?? ''}
+                            targetPubkey={chat.peerKey}
+                            targetName=""
+                            title={t('Report this message')}
+                            note={t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")}
+                            onSubmitReason={(reason) => submitReport(reporting, reason)}
+                        />
+                    )}
                     {note && <p role="alert" style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>{note}</p>}
                     {chat.state === 'request' ? (
                         <div data-testid="outside-request" style={{ padding: '0.85rem', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
@@ -266,8 +421,8 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                                 value={text}
                                 onChange={(e) => setText(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}
-                                placeholder={t('Message')}
-                                aria-label={t('Message {name}', { name })}
+                                placeholder={editing ? t('Edit message') : t('Message')}
+                                aria-label={editing ? t('Edit message') : t('Message {name}', { name })}
                                 maxLength={OUTSIDE_LINE_TEXT_MAX}
                                 rows={2}
                                 style={{
@@ -275,8 +430,11 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                                     background: 'var(--bg-input)', color: 'var(--text-primary)', font: 'inherit', resize: 'vertical',
                                 }}
                             />
+                            {editing && (
+                                <button type="button" data-testid="outside-chat-edit-cancel" onClick={stopEditing} style={{ ...button, flex: '0 0 auto' }}>{t('Cancel')}</button>
+                            )}
                             <button type="submit" data-testid="outside-chat-send" disabled={busy || !text.trim()} style={{ ...commit, flex: '0 0 auto', opacity: busy || !text.trim() ? 0.6 : 1 }}>
-                                {t('Send')}
+                                {editing ? t('Save') : t('Send')}
                             </button>
                         </form>
                     ) : null}

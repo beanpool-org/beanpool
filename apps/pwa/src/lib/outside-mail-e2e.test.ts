@@ -18,6 +18,8 @@
  *      both browsers, the closed-door one opening the chat from the tick of her own line
  *   8  Dee signs out of the closed-door browser: her server forgets it (the real route, signed), so the next line goes as
  *      soon as her other browser has it
+ *   9  a request's line reported from the browser (X6 round 3): Vic's server takes the line as his browser kept it (its
+ *      sender's signatures check out) and files the report, with the words it showed
  *
  * Nothing else is contacted: the browsers reach only their own node, and the nodes refuse every host but this machine.
  */
@@ -33,7 +35,7 @@ import { memoryIndexedDB } from './memory-indexeddb';
 import { hearNodeVersionForTests } from './node-version-gate';
 import { clearOutsideChats, outsideChatStore, type OutsideChatStore } from './outside-chat-store';
 import {
-    forgetThisBrowserForMail, mailDevice, myAddressCard, sendOutsideLine, setDoor, syncOutsideMail, type OutsideMailContext,
+    forgetThisBrowserForMail, mailDevice, myAddressCard, reportOutsideLine, sendOutsideLine, setDoor, syncOutsideMail, type OutsideMailContext,
 } from './outside-mail';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -282,5 +284,25 @@ describe('a chat between two communities, browser to browser through two real no
         expect((await heldAt(nodes.b)).length).toBe(1);
         expect(await syncOutsideMail(deeWeb.ctx)).toMatchObject({ written: 1, confirmed: 1 });
         expect(await heldAt(nodes.b)).toEqual([]);
+    }, START_MS);
+
+    it('9. a request\'s line reported from the browser: the real server takes the line as this browser kept it, and files the report', async () => {
+        const [uma, vic] = [member('Uma'), member('Vic')];
+        await control(nodes.b, 'join', { key: vic.publicKey, callsign: 'Vic' });
+        await control(nodes.a, 'join', { key: uma.publicKey, callsign: 'Uma' });
+        const vicWeb = browser(vic, nodes.b);
+        const umaWeb = browser(uma, nodes.a);
+        await setDoor(vicWeb.ctx, true);
+        const chatId = relayConversationId(uma.publicKey, vic.publicKey);
+        await umaWeb.ctx.store.openChat(uma.publicKey, chatId, { key: vic.publicKey, home: 'b.example', name: 'Vic' });
+        expect(await sendOutsideLine(umaWeb.ctx, chatId, 'Buy my miracle seeds')).toBe('sent');
+        expect(await syncOutsideMail(vicWeb.ctx)).toMatchObject({ requests: 1 });
+        expect(await vicWeb.chat(uma.publicKey)).toMatchObject({ state: 'request' });
+        const [line] = await vicWeb.ctx.store.lines(vic.publicKey, chatId);
+        await reportOutsideLine(vicWeb.ctx, chatId, line.id, 'Spam or scam');
+        const filed = await control<any[]>(nodes.b, 'sql', {
+            sql: 'SELECT reporter_pubkey, target_pubkey, target_message_id, reason FROM abuse_reports WHERE target_message_id = ?', params: [line.id], all: true,
+        });
+        expect(filed).toEqual([{ reporter_pubkey: vic.publicKey, target_pubkey: uma.publicKey, target_message_id: line.id, reason: 'Spam or scam' }]);
     }, START_MS);
 });

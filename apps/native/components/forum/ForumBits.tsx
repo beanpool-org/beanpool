@@ -120,11 +120,14 @@ export function ForumAttached({ photos, onChange, disabled, band }: { photos: st
 /** [label, action, danger]; no action: a sentence at the top of the menu (a confirm's question). */
 export type ForumMenuItem = [string, (() => void) | null, boolean?];
 
-/** What a ⋯ opens: a sheet of 48 dp rows from the bottom, closed by a tap outside it or by Cancel (its last row). */
-export function ForumMenu({ label, items, onClose }: { label: string; items: ForumMenuItem[] | null; onClose: () => void }) {
+/**
+ * What a ⋯ opens: a sheet of 48 dp rows from the bottom, closed by a tap outside it or by Cancel (its last row).
+ * `onDismiss`: the sheet has gone (iOS), the moment a row that opens another Modal may open it (useAfterDismiss).
+ */
+export function ForumMenu({ label, items, onClose, onDismiss }: { label: string; items: ForumMenuItem[] | null; onClose: () => void; onDismiss?: () => void }) {
     const styles = useForumStyles();
     return (
-        <Modal visible={!!items} transparent animationType="fade" onRequestClose={onClose}>
+        <Modal visible={!!items} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismiss}>
             <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={label}>
                 <Pressable style={styles.sheet} onPress={() => {}} testID="forum-menu">
                     {(items ?? []).map(([words, fn, danger]) => (fn

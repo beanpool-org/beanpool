@@ -63,6 +63,8 @@ describe('the doors to the listing form', () => {
             'tools/doors.ts': ["'offer'", "'need'", "'offer'"],
             // A bill the payer can't pay yet: "Post an Offer" beside its money line (DESIGN-getting-paid-fable §4.3, slice B2).
             'components/Bills.tsx': ["'offer'"],
+            // A topic's own ⋯ "Make this a Need" (forum slice F9 part 3): the Need form, with the topic it links once posted.
+            'app/forum/[id].tsx': ["'need', fromTopic: topic.id"],
         });
         // Every fixed value a door passes is one the screen reads.
         for (const v of ['true', 'offer', 'need', 'poll', 'event']) expect(parseNewPostParam(v), v).not.toBeNull();

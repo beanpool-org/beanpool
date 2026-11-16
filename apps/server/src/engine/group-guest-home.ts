@@ -431,14 +431,22 @@ export interface HeldGroupNotice { id: string; host: string; group: string; kind
 export interface GroupLinkView { host: string; group: string; state: Standing; roster: unknown; rosterAt: number | null }
 export interface GroupSentTick { itemId: string; kind: string; host: string; group: string; state: string; refused: string | null; at: number }
 
+/** The last page's `linksAt` (heldGroupMailFor). */
+let lastLinksAt = 0;
+
 /**
  * What waits for `member` that `device` has not confirmed, oldest first, a page at a time; where they stand with each group
  * at another community, each with its latest roster (step 1); and what became of their own items to groups after the
- * device's last tick (`since`, `sinceId`, as the mailbox's ticks are paged).
+ * device's last tick (`since`, `sinceId`, as the mailbox's ticks are paged). `linksAt` is this server's clock when `groups`
+ * was read, the whole list as it stood then: a device that has applied a page with a later `linksAt` (another tab or
+ * window of the same device, whose fetch went out after and came back first) moves nothing by this page's `groups`, so a
+ * stale page never takes away an invitation a later one brought (G2 round 2, #3246 round 2 note: the apps' rule).
  */
 export function heldGroupMailFor(member: string, device: string, since = 0, sinceId = ''): {
-    items: HeldGroupNotice[]; more: boolean; groups: GroupLinkView[]; sent: GroupSentTick[]; sentMore: boolean;
+    items: HeldGroupNotice[]; more: boolean; groups: GroupLinkView[]; linksAt: number; sent: GroupSentTick[]; sentMore: boolean;
 } {
+    // Strictly later than every page before it (two in the same millisecond included), and after a restart the clock's.
+    const linksAt = lastLinksAt = Math.max(Date.now(), lastLinksAt + 1);
     // A standby serves no copy of a line (the copy rule, heldLinesStale): what it holds can't be kept up to date there.
     // Nothing held past MAIL_HELD_DAYS is served, swept yet or not (a server off for a month, back before its first sweep):
     // the host offers a take-away that long and a day more (group-guests.ts guestRowKeptMs), never shorter (#3233 round 4).
@@ -459,6 +467,7 @@ export function heldGroupMailFor(member: string, device: string, since = 0, sinc
         groups: links.map((l) => ({
             host: l.host, group: l.group_id, state: l.state === 'invited' && l.yes ? 'joining' : l.state, roster: l.roster ? JSON.parse(l.roster) : null, rosterAt: l.roster_at,
         })),
+        linksAt,
         sent: sent.slice(0, MAIL_FETCH_PAGE).map((r) => ({ itemId: r.item_id, kind: r.kind, host: r.host, group: r.group_id, state: r.state, refused: r.refused, at: r.updated_at })),
         sentMore: sent.length > MAIL_FETCH_PAGE,
     };

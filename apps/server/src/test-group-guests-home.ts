@@ -56,7 +56,9 @@
  *      the group however it comes (the host's removal, a newer invitation held, one refused so only its counter speaks,
  *      their leave) x (held: line, edit with words, takedown) x (device: fetched it, not) -> each device told it is out
  *      (but after its own leave), no words kept, a takedown still served to the device that did not fetch it; 16f every
- *      branch that holds a notice -> the answered flag stored is the allowance it was checked against; 16r a home restored
+ *      branch that holds a notice -> the answered flag stored is the allowance it was checked against; 16s each fetch's
+ *      `linksAt` is strictly later than the one before, so a page read before an invitation came is known as older (two
+ *      tabs: the apps' rule); 16r a home restored
  *      from an older snapshot: (line, edit, takedown, epoch, roster, removal,
  *      invitation held) x (a restore's notice, a roll-back's, an unreadable one) -> no line or edit is held after the boot
  *      (takedowns stay), and the boot wires it
@@ -1549,6 +1551,20 @@ async function main(): Promise<void> {
         const counted = (db.prepare("SELECT COUNT(*) FROM group_guest_mail WHERE member = ? AND host = 'b.example' AND answered = 0").pluck().get(who.pk) as number);
         assert(counted === (home.GROUP_INVITES_WAITING_PER_HOST as number),
             `16f. a re-invitation counts towards the ${home.GROUP_INVITES_WAITING_PER_HOST} invitations a host may have waiting (counted ${counted})`);
+    }
+
+    // 16s. Two tabs of one device (#3246 round 2 note: a stale page deleted an invitation): each page says when its list of
+    // groups was read, strictly later than any page before, so the page read before an invitation came is known as older.
+    {
+        const who = addLocal('S16-tabs');
+        const tab = device();
+        const before = await fetchGroup(who, tab);
+        await notice('b.example', { v: 1, kind: 'invite', group: 'g16s', host: 'b.example', guests: [who.pk], seq: Date.now(), data: DATA.invite });
+        const after = await fetchGroup(who, tab);
+        const lists = (r: Res) => (r.body?.groups ?? []).some((l: any) => l.group === 'g16s' && l.state === 'invited');
+        const same = [await fetchGroup(who, tab), await fetchGroup(who, tab)].map((r) => r.body?.linksAt as number);
+        assert(Number.isSafeInteger(before.body?.linksAt) && !lists(before) && lists(after) && after.body.linksAt > before.body.linksAt && same[1] > same[0],
+            `16s. the page read before the invitation came says it is older (${before.body?.linksAt} < ${after.body?.linksAt}; listed ${lists(before)} -> ${lists(after)}; back to back ${same[0]} < ${same[1]})`);
     }
 
     // ── 16r. A home restored from an older snapshot (G2) ──────────────────────────────────────

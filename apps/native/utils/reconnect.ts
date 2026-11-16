@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertPlainNodeAddress } from './node-url';
 import { membershipAnswerOf } from './membership-answer';
 import { communitySwitched } from './community-switch';
+import { whileCommunityMoves, type CommunityMoveHeld } from './community-move-lock';
 import type { NodeProfile } from './node-profile';
 import type { CopyCarry } from './community-copy-carry';
 
@@ -49,25 +50,30 @@ export interface ReconnectDeps {
  * `carryFrom`, following the community from that address to its new one (utils/address-follow.ts): its copy and what
  * guards its chats go to `url`'s name first, and the carry writes the address once they are there and before the old
  * copy goes (utils/community-copy-carry.ts), with no copy open and none opened until it is done. Resolves what the carry
- * did (null with none). A carry that fails throws, the address unchanged.
+ * did (null with none). A carry that fails throws, the address unchanged. One move at a time (community-move-lock.ts).
  */
-export async function switchPhoneTo(url: string, carryFrom?: string): Promise<CopyCarry | null> {
+export async function switchPhoneTo(url: string, carryFrom?: string, held?: CommunityMoveHeld): Promise<CopyCarry | null> {
     assertPlainNodeAddress(url);
-    // The community gets its record before the phone is set to it (community-record.ts), as at an app start.
-    await (await import('./community-record')).keepCommunityRecord(url);
-    const { closeDB, initDB, whileCopyMoves } = await import('./db');
-    let carried: CopyCarry | null = null;
-    if (carryFrom) {
-        const { carryCommunityCopy } = await import('./community-copy-carry');
-        carried = await whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => AsyncStorage.setItem('beanpool_anchor_url', url)));
-    } else {
-        await closeDB();
-        await AsyncStorage.setItem('beanpool_anchor_url', url);
-    }
-    await initDB();
-    // The update screen asks the community now in use (utils/community-switch.ts).
-    communitySwitched();
-    return carried;
+    // One move at a time, the address check's writing steps included (community-move-lock.ts): from the record to the new
+    // address written. `held`: the caller already holds the lock (the check's own move), so it doesn't wait for itself.
+    const move = async () => {
+        // The community gets its record before the phone is set to it (community-record.ts), as at an app start.
+        await (await import('./community-record')).keepCommunityRecord(url);
+        const db = await import('./db');
+        let carried: CopyCarry | null = null;
+        if (carryFrom) {
+            const { carryCommunityCopy } = await import('./community-copy-carry');
+            carried = await db.whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => AsyncStorage.setItem('beanpool_anchor_url', url)));
+        } else {
+            await db.closeDB();
+            await AsyncStorage.setItem('beanpool_anchor_url', url);
+        }
+        await db.initDB();
+        // The update screen asks the community now in use (utils/community-switch.ts).
+        communitySwitched();
+        return carried;
+    };
+    return held?.held ? move() : whileCommunityMoves(move);
 }
 
 async function defaultDeps(): Promise<ReconnectDeps> {

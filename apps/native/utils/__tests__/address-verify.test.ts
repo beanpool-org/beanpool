@@ -19,6 +19,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         removeItem: vi.fn(async (k: string) => { mem.delete(k); }),
     },
 }));
+/** The member's real switch (reconnect.ts switchPhoneTo) waits in closeDB, as it waits there for the sync lock. */
+const copy = vi.hoisted(() => ({ closing: null as null | Promise<void> }));
+vi.mock('../db', () => ({
+    closeDB: vi.fn(async () => { await copy.closing; }),
+    initDB: vi.fn(async () => {}),
+    whileCopyMoves: vi.fn(async (_to: string, move: () => Promise<unknown>) => move()),
+}));
+vi.mock('../community-switch', () => ({ communitySwitched: vi.fn() }));
 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
@@ -32,6 +40,7 @@ import {
 } from '../community-index';
 import { keepCommunityRecord, loadCommunityRecords, parseCommunityRecords, resetCommunityRecordsForTests } from '../community-record';
 import { followSavedRow, getDatabaseFilenameForNode, takeOffSavedList } from '../nodes';
+import { switchPhoneTo } from '../reconnect';
 import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const V = createRequire(import.meta.url)('@beanpool/core/vectors/address-list.json');
@@ -456,6 +465,68 @@ describe('S4 round 2: the deciding review\'s three reproductions (PR #3236, 7ff6
         expect(mem.get(ANCHOR)).toBe('https://elsewhere.example');
         expect(recordAt(`https://${A}`).using).toBe(`https://${A}`);
         expect(recordAt(`https://${A}`).line).toBeUndefined();
+    });
+});
+
+describe('S5: a switch started but not yet written (the S4 leftover race; one lock for the switch and the check)', () => {
+    /** Ticks enough for a round's proofs and record read to finish and reach its first writing step. */
+    const settle = () => new Promise((r) => setTimeout(r, 30));
+
+    for (const kind of ['a follow to the new main', 'a second record of the same community'] as const) {
+        it(`the member's switch waits in closeDB while the round would make ${kind}: no destructive step, the phone ends where the member put it`, async () => {
+            if (kind === 'a follow to the new main') {
+                await phoneAt(`https://${A}`);
+                await round(true);
+                for (const s of Object.values(servers)) s.fields = fields({ seq: 15, main: M });
+                now += 61 * 60_000;
+            } else {
+                // The same community saved at A and at M (two records), and a third community to switch to.
+                mem.set(ANCHOR, `https://${A}`);
+                mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: `https://${A}`, alias: 'Riverside' }, { url: `https://${M}` }, { url: `https://${C}`, alias: 'Hilltop' }]));
+                resetCommunityRecordsForTests();
+                resetCommunityIndexForTests();
+                await loadCommunityRecords();
+            }
+            const before = recordAt(`https://${A}`);
+            let release!: () => void;
+            copy.closing = new Promise<void>((r) => { release = r; });
+            // The member taps another community: the switch has started, the copy is closing, the address is not yet written.
+            const switching = switchPhoneTo(`https://${C}`);
+            const checking = verifyAddressInUse({ atOpen: true }, deps());
+            await settle();
+            expect(mem.get(ANCHOR)).toBe(`https://${A}`);
+            release();
+            await Promise.all([switching, checking]);
+            copy.closing = null;
+
+            expect(mem.get(ANCHOR)).toBe(`https://${C}`);
+            expect(moves).toEqual([]);
+            expect(dupes).toEqual([]);
+            const after = recordAt(`https://${A}`);
+            expect(after.using).toBe(before.using);
+            expect(after.line).toBeUndefined();
+            // Nothing came off the saved list: a second record's row stays while the member is leaving.
+            expect(saved().map((r) => r.url)).toEqual(kind === 'a follow to the new main' ? [`https://${A}`] : [`https://${A}`, `https://${M}`, `https://${C}`]);
+        });
+    }
+
+    it('a switch tapped while the round writes waits for it, then wins: the phone ends where the member put it', async () => {
+        await phoneAt(`https://${A}`);
+        await round(true);
+        for (const s of Object.values(servers)) s.fields = fields({ seq: 15, main: M });
+        now += 61 * 60_000;
+        let switching: Promise<unknown> | null = null;
+        const real = deps();
+        await verifyAddressInUse({}, {
+            ...real,
+            // The round is inside its writing steps (it has just moved the phone to M): the member taps another community.
+            moveTo: async (from, to) => { await real.moveTo(from, to); switching = switchPhoneTo(`https://${C}`); await settle(); },
+        });
+        // The switch waited for the round's last step (the rows following), so it never interleaved with it.
+        expect(mem.get(ANCHOR)).toBe(`https://${M}`);
+        await switching;
+        expect(mem.get(ANCHOR)).toBe(`https://${C}`);
+        expect(saved().map((r) => r.url)).toEqual([`https://${M}`]);
     });
 });
 

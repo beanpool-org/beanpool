@@ -109,13 +109,13 @@ describe('every write or removal of the phone\'s community announces it', () => 
         expect(verify).not.toMatch(/setItem\(\s*ANCHOR_STORE_KEY|setItem\('beanpool_anchor_url'/);
         // Its one move is the one it is handed, by default switchPhoneTo with no copy carried (the file is the record's).
         expect([...verify.matchAll(/deps\.moveTo\(/g)]).toHaveLength(1);
-        expect(verify).toMatch(/await deps\.moveTo\(anchor, to\);/);
+        expect(verify).toMatch(/await deps\.moveTo\(anchor, to, held\);/);
         expect([...verify.matchAll(/switchPhoneTo\(/g)]).toHaveLength(1);
-        expect(verify).toMatch(/await switchPhoneTo\(to\);/);
+        expect(verify).toMatch(/await switchPhoneTo\(to, undefined, held\);/);
         expect(verify).not.toMatch(/carryCommunityCopy|carryFrom/);
         // switchPhoneTo writes the address and announces it (found by the sweep, and in this order).
         const reconnect = code(fs.readFileSync(path.join(NATIVE, 'utils/reconnect.ts'), 'utf8'));
-        expect(reconnect).toMatch(/await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/);
+        expect(reconnect).toMatch(/await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await db\.initDB\(\);\s*communitySwitched\(\);/);
         expect(writes.some(w => w.file === 'utils/reconnect.ts')).toBe(true);
     });
 

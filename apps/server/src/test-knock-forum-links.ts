@@ -8,7 +8,8 @@
  * Asha and Ben write on the worldwide forum, then their rows here go, so the community asked meets them as strangers.
  *
  *  1. The worldwide forum: a member told the forum is public has a secret; GET /api/forum/ask-posts gives Asha hers and her
- *     own public posts only, newest first, never cached; unsigned 401, a stranger 403; each public post carries the proof its
+ *     own public posts only, newest first, never cached; a member with none gets one made at the first ask, and a standby
+ *     makes none (503) but gives the one its copy holds; unsigned 401, a stranger 403; each public post carries the proof its
  *     writer's key and secret make; no public answer holds any secret; the public topic JSON is readable from another origin,
  *     the secret's route is not. A local community: 404 `not_here`.
  *  2. The request: a fourth post refused (400 `too_many_forum_posts`); a post that doesn't read, the same post twice, posts
@@ -55,6 +56,7 @@ import { forumPublicOn } from './engine/forum-public.js';
 import { mergeReplicatedKnocks, scrubKnocksOf, tidyKnocks } from './engine/knocks.js';
 import { moveMemberKeyRows } from './engine/key-move.js';
 import { TABLES } from './engine/replication-manifest.js';
+import { setNodeRole } from './config/node-role.js';
 import { resetPhotoBudgetForTests } from './engine/photo-upload-budget.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -226,6 +228,22 @@ async function main(): Promise<void> {
     assert(ids[0] === spare.postId && mine.body.posts.every((p: any) => typeof p.title === 'string' && p.number >= 1 && p.topicId), 'newest first, each with its topic, number and title');
     assert(/no-store/.test(mine.headers.get('cache-control') ?? ''), `never cached (${mine.headers.get('cache-control')})`);
     assert((await get(asha, '/api/forum/ask-posts')).body?.secret === secret, 'asked again, the same secret: it never changes');
+    // A member never told the forum is public has no row at all: the first ask makes the secret. A standby makes none.
+    const una = newId('Una');
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, 'Una', ?, ?, 'TEST', 'active')`).run(una.pk, ago(60 * DAY), owner.pk);
+    const uli = newId('Uli');
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, 'Uli', ?, ?, 'TEST', 'active')`).run(uli.pk, ago(60 * DAY), owner.pk);
+    require_(secretOf(una) === null && secretOf(uli) === null, 'Una and Uli were never told: no secret yet');
+    const unaFirst = await get(una, '/api/forum/ask-posts');
+    assert(unaFirst.status === 200 && /^[0-9a-f]{64}$/.test(unaFirst.body?.secret ?? '') && unaFirst.body.secret === secretOf(una) && unaFirst.body.posts?.length === 0,
+        `a member with no secret asks: one is made and kept, with no posts to pick (${unaFirst.status})`);
+    setNodeRole('backup');
+    const onStandbyNone = await get(uli, '/api/forum/ask-posts');
+    const onStandbyKept = await get(asha, '/api/forum/ask-posts');
+    setNodeRole('primary');
+    assert(onStandbyNone.status === 503 && onStandbyNone.body?.code === 'standby' && secretOf(uli) === null,
+        `a standby makes no secret: 503 standby, nothing written (${onStandbyNone.status})`);
+    assert(onStandbyKept.status === 200 && onStandbyKept.body?.secret === secret, `a standby gives a member the secret its copy holds (${onStandbyKept.status})`);
     const stranger = newId('Stranger');
     const unsigned = await get(null, '/api/forum/ask-posts');
     const notMember = await get(stranger, '/api/forum/ask-posts');

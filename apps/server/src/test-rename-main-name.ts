@@ -104,7 +104,7 @@ const BYRON = 'byron.beanpool.org';
 const IP = '203.0.113.5';
 const DOMAIN = 'beans.example.org';
 const SOFT_TITLE = 'This community has a new address';
-const SOFT_BODY = 'This community is also at byron.beanpool.org. The old address keeps working.';
+const SOFT_BODY = "This community's main address is now byron.beanpool.org. Your app follows by itself. The old address keeps working.";
 const CRITICAL_BODY = "This community's address changed. Open the app to follow it.";
 
 async function main(): Promise<void> {

@@ -16,11 +16,15 @@
  * reads the screen's own source for what it hands its KeyboardAvoidingView (none = 0, the hook = the measured offset) and
  * whether the screen's root feeds the hook's measure, puts the bars and the box inside the KeyboardAvoidingView (so the
  * padding lifts them), and then lays the column out with the library's own padding formula and checks where the box lands.
- * The form sheets also run the caret-follow's own arithmetic (scrollTargetForCaret) on a field low in a long form.
+ * The form sheets also run the caret-follow's own arithmetic (scrollTargetForCaret) on a field low in a long form. Every
+ * row, and the DM's key-card rows after them, use one model of the window: a card's screen starts at the window's top
+ * and its header under the status bar (the safe-area top inset); a sheet's screen starts at the sheet's top, with no
+ * status bar inside it.
  *
- * Part 2 closes the class: a scan of every <KeyboardAvoidingView in app/ and components/. Each one is in the table above
- * or on the named exemption list below, whose reason the test checks against the source (a full-window Modal, a tab, a
- * full-window route). A new keyboard view in neither fails here first. Every caret-follow ScrollView
+ * Part 2 closes the class: a scan of every keyboard view in app/ and components/ (<KeyboardAvoidingView>, or one reached
+ * through a namespace such as <RN.KeyboardAvoidingView>). Each one is in the table above or on the named exemption list
+ * below, whose reason the test checks against the source (a full-window Modal, a tab, a full-window route). A new keyboard
+ * view in neither fails here first, and so does one given another name. Every caret-follow ScrollView
  * (useKeepCaretVisible) sits inside one of them.
  */
 import { describe, it, expect } from 'vitest';
@@ -29,6 +33,7 @@ import * as path from 'path';
 import ts from 'typescript';
 import { keyboardViewPadding, screenKeyboardOffset } from '../screen-keyboard-offset';
 import { scrollTargetForCaret } from '../scroll-caret-visible';
+import { dmKeyBannerMaxHeight } from '../dm-key-change';
 
 const NATIVE = path.join(__dirname, '..', '..');
 
@@ -94,14 +99,28 @@ function findComponent(sf: ts.SourceFile, name: string): ts.Node {
     return found;
 }
 
-function elements(root: ts.Node, tag: string): Jsx[] {
+function elementsWhere(root: ts.Node, match: (tag: string | null) => boolean): Jsx[] {
     const out: Jsx[] = [];
     const visit = (n: ts.Node) => {
-        if ((ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n)) && tagName(n) === tag) out.push(n);
+        if ((ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n)) && match(tagName(n))) out.push(n);
         ts.forEachChild(n, visit);
     };
     visit(root);
     return out;
+}
+
+function elements(root: ts.Node, tag: string): Jsx[] {
+    return elementsWhere(root, (t) => t === tag);
+}
+
+/** A keyboard view's tag: the bare name, or the same component reached through a namespace (<RN.KeyboardAvoidingView>). */
+function isKeyboardViewTag(tag: string | null): boolean {
+    return tag === 'KeyboardAvoidingView' || !!tag?.endsWith('.KeyboardAvoidingView');
+}
+
+/** Every keyboard view under `root`, bare or namespaced. */
+function keyboardViews(root: ts.Node): Jsx[] {
+    return elementsWhere(root, isKeyboardViewTag);
 }
 
 function attrs(node: Jsx): ts.JsxAttributes {
@@ -139,7 +158,7 @@ function hookVariable(component: ts.Node): string | null {
 function wiring(screen: Screen) {
     const sf = parse(screen.file);
     const component = findComponent(sf, screen.component);
-    const kavs = elements(component, 'KeyboardAvoidingView');
+    const kavs = keyboardViews(component);
     if (kavs.length !== 1) throw new Error(`${screen.file}: expected one KeyboardAvoidingView, found ${kavs.length}`);
     const kav = kavs[0];
     const hook = hookVariable(component);
@@ -154,10 +173,11 @@ function wiring(screen: Screen) {
 }
 
 // A 390 × 844 iPhone (Rob's), a 320 × 568 small one; the keyboard with its QuickType strip; the page sheet's top
-// (status bar + 10). Heights in points; the bars as drawn at 1.3× text.
+// (status bar + 10), and the status bar a full-screen screen's safe area starts under. Heights in points; the bars as
+// drawn at 1.3× text.
 const PHONES = [
-    { name: '390 × 844', window: 844, keyboard: 336, sheetTop: 57 },
-    { name: '320 × 568', window: 568, keyboard: 253, sheetTop: 30 },
+    { name: '390 × 844', window: 844, keyboard: 336, sheetTop: 57, statusBar: 47 },
+    { name: '320 × 568', window: 568, keyboard: 253, sheetTop: 30, statusBar: 20 },
 ];
 const HEADER = 64;
 const BAR = 52;
@@ -189,23 +209,29 @@ describe('composer above the keyboard: every composer screen × card or iPhone s
                     const screenTop = presentation === 'sheet' ? phone.sheetTop : 0;
                     const screenHeight = phone.window - screenTop;
                     const keyboardTop = phone.window - phone.keyboard;
+                    // A full-screen screen starts at the window's top, so its header sits under the status bar (the
+                    // safe-area top: a SafeAreaView's top edge, or paddingTop: insets.top); a sheet starts below the status
+                    // bar, so its header is at its own top. The same model as the DM's key-card rows below.
+                    const safeTop = presentation === 'card' ? phone.statusBar : 0;
+                    const headerBottom = safeTop + HEADER;
                     // The KeyboardAvoidingView's frame in its parent: under the header to the screen's bottom (the root
-                    // view when it is the screen itself), and where its content ends once the padding lifts it.
+                    // view when it is the screen itself, the safe area and the header then inside it), and where its
+                    // content ends once the padding lifts it.
                     const column = () => {
                         // What the screen hands the view on an iPhone: the hook's offset when it is wired, else nothing.
                         const offset = w.passesMeasuredOffset && w.measured
                             ? screenKeyboardOffset({ os: 'ios', windowHeight: phone.window, screenHeight })
                             : 0;
-                        const frameY = screen.kavIsRoot ? 0 : HEADER;
+                        const frameY = screen.kavIsRoot ? 0 : headerBottom;
                         const frameHeight = screenHeight - frameY;
                         const padding = keyboardViewPadding({ frameY, frameHeight, windowHeight: phone.window, keyboardHeight: phone.keyboard, keyboardVerticalOffset: offset });
-                        return { frameY, contentBottom: screenTop + frameY + frameHeight - padding };
+                        return { contentBottom: screenTop + frameY + frameHeight - padding };
                     };
 
                     const barSets = [[], ...screen.bars.map((b) => [b]), ...(screen.bars.length > 1 ? [screen.bars] : [])];
                     for (const bars of barSets) {
                         it(`${phone.name}, ${presentation}, bars: ${bars.join(' + ') || 'none'}: the text field and Send are above the keyboard`, () => {
-                            const { frameY, contentBottom } = column();
+                            const { contentBottom } = column();
                             // The column packs to its bottom: the box sits on the padding, the bars on the box.
                             const composerBottom = contentBottom;
                             const composerTop = composerBottom - COMPOSER;
@@ -213,7 +239,7 @@ describe('composer above the keyboard: every composer screen × card or iPhone s
                             expect(composerBottom, 'the box ends above the keyboard').toBeLessThanOrEqual(keyboardTop);
                             // Not lifted too far either: no gap between the box and the keyboard.
                             expect(composerBottom, 'the box sits on the keyboard').toBe(keyboardTop);
-                            expect(barsTop, 'the bars and the box fit under the header').toBeGreaterThanOrEqual(screenTop + (screen.kavIsRoot ? HEADER : frameY));
+                            expect(barsTop, 'the bars and the box fit under the header (and the status bar on a card)').toBeGreaterThanOrEqual(screenTop + headerBottom);
                         });
                     }
 
@@ -221,7 +247,7 @@ describe('composer above the keyboard: every composer screen × card or iPhone s
                         it(`${phone.name}, ${presentation}: the caret-follow brings a field low in a long form fully above the keyboard`, () => {
                             // The form's ScrollView runs from under the header to the lifted column's bottom: that height is
                             // the viewport useKeepCaretVisible scrolls by (its onLayout).
-                            const viewportTop = screenTop + HEADER;
+                            const viewportTop = screenTop + headerBottom;
                             const viewportHeight = column().contentBottom - viewportTop;
                             const field = { top: 900, height: 44 };
                             const target = scrollTargetForCaret({
@@ -239,6 +265,68 @@ describe('composer above the keyboard: every composer screen × card or iPhone s
             }
         });
     }
+
+    // The DM since #3278: under the header its column holds the key card's page (components/chat/DmKeyChangedPane: the
+    // card, then the deals strip, the listing's header and the release bar) and then the KeyboardAvoidingView (the thread,
+    // the box measured whole), held by dm-key-pane-fit-render.test.ts's source check. So the view's frame in its parent
+    // starts under the page, not under the header, and the page's room is dmKeyBannerMaxHeight: the column (the header's
+    // bottom to the view's bottom, both read in the screen's own frame, so a sheet's top is not in it) less the box and a
+    // keyboard still up. The two meet here: with the sheet's offset the view pads by the keyboard exactly, the very
+    // keyboard the room takes off, so the box sits on the keyboard and the page fills the rest. No double lift (the
+    // padding is never the keyboard plus the sheet's top) and no cut box (the view always holds the box under the page).
+    describe('app/chat/[id].tsx with the key card\'s page above the keyboard view: the box on the keyboard and the card\'s room, card or sheet', () => {
+        const dm = wiring(SCREENS[0]);
+        // The page's content: nothing; one bar; the card with its bars, which fits a tall phone; a page taller than any room.
+        const PAGES = [0, BAR, 360, 2000];
+        // The box measured whole: the composer alone, and with the About bar over it.
+        const BOXES = [COMPOSER, COMPOSER + BAR];
+        for (const phone of PHONES) {
+            for (const presentation of ['card', 'sheet'] as const) {
+                // A full-screen screen starts under the status bar inside the SafeAreaView; a sheet starts below it.
+                const safeTop = presentation === 'card' ? phone.statusBar : 0;
+                for (const kb of [0, phone.keyboard]) {
+                    for (const content of PAGES) {
+                        for (const box of BOXES) {
+                            it(`${phone.name}, ${presentation}, keyboard ${kb ? 'up' : 'down'}, page ${content}, box ${box}: the box sits on the keyboard, the page has the rest`, () => {
+                                expect(dm.passesMeasuredOffset && dm.measured).toBe(true);
+                                const screenTop = presentation === 'sheet' ? phone.sheetTop : 0;
+                                const screenHeight = phone.window - screenTop;
+                                const offset = screenKeyboardOffset({ os: 'ios', windowHeight: phone.window, screenHeight });
+                                const headerBottom = safeTop + HEADER;
+                                const column = screenHeight - headerBottom;
+                                const room = dmKeyBannerMaxHeight({ column, composer: box, windowHeight: phone.window, keyboard: kb });
+                                const page = Math.min(content, room);
+                                const frameY = headerBottom + page;
+                                const frameHeight = screenHeight - frameY;
+                                const padding = keyboardViewPadding({ frameY, frameHeight, windowHeight: phone.window, keyboardHeight: kb, keyboardVerticalOffset: offset });
+                                // The view pads by the keyboard, no more and no less, wherever the page ends.
+                                expect(padding, 'the padding is the keyboard').toBe(kb);
+                                const boxBottom = screenTop + frameY + frameHeight - padding;
+                                expect(boxBottom, 'the box sits on the keyboard (the window\'s bottom with none)').toBe(phone.window - kb);
+                                // The view holds the whole box under the page: the thread has what is left, never less than nothing.
+                                const thread = frameHeight - padding - box;
+                                expect(thread, 'the box is never cut').toBeGreaterThanOrEqual(0);
+                                if (content > room) {
+                                    // A page taller than its room fills it down to the box: the thread gives way, no strip of it left.
+                                    expect(page).toBe(room);
+                                    expect(thread).toBe(0);
+                                    expect(screenTop + headerBottom + page, 'the page\'s cut edge is the box\'s top').toBe(boxBottom - box);
+                                } else {
+                                    expect(thread).toBe(room - content);
+                                }
+                                // Without the sheet's offset the view came up short by the sheet's top, and the room's keyboard
+                                // and the padding's no longer agreed: the box went under the keyboard (Rob, 17 Nov).
+                                if (presentation === 'sheet' && kb > 0) {
+                                    const short = keyboardViewPadding({ frameY, frameHeight, windowHeight: phone.window, keyboardHeight: kb, keyboardVerticalOffset: 0 });
+                                    expect(kb - short).toBe(phone.sheetTop);
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    });
 
     it('the offset is the sheet top on an iPhone, 0 when the screen fills the window, and 0 on Android', () => {
         expect(screenKeyboardOffset({ os: 'ios', windowHeight: 844, screenHeight: 787 })).toBe(57);
@@ -306,7 +394,38 @@ for (const file of FILES) {
     const text = fs.readFileSync(path.join(NATIVE, file), 'utf8');
     if (!text.includes('KeyboardAvoidingView')) continue;
     const sf = parse(file);
-    for (const kav of elements(sf, 'KeyboardAvoidingView')) FOUND.push({ file, component: topLevelName(kav), kav, sf });
+    for (const kav of keyboardViews(sf)) FOUND.push({ file, component: topLevelName(kav), kav, sf });
+}
+
+/**
+ * Every place a file reaches KeyboardAvoidingView other than a JSX tag (bare, or through a namespace) or a plain import:
+ * a rename (`import { KeyboardAvoidingView as KAV }`, `const { KeyboardAvoidingView: KAV } = …`), an alias
+ * (`const KAV = RN.KeyboardAvoidingView`) or a wrapper (`createAnimatedComponent(KeyboardAvoidingView)`). Each one would
+ * render a keyboard view under a tag the scan above can't see. A type (`typeof KeyboardAvoidingView`) renders nothing.
+ */
+function otherNamesFor(sf: ts.SourceFile): string[] {
+    const out: string[] = [];
+    const isTagName = (x: ts.Node) => {
+        const p = x.parent;
+        return (ts.isJsxOpeningElement(p) || ts.isJsxClosingElement(p) || ts.isJsxSelfClosingElement(p)) && p.tagName === x;
+    };
+    const inType = (x: ts.Node) => {
+        for (let a = x.parent; a; a = a.parent) if (ts.isTypeNode(a)) return true;
+        return false;
+    };
+    const visit = (n: ts.Node) => {
+        if (ts.isIdentifier(n) && n.text === 'KeyboardAvoidingView') {
+            const p = n.parent;
+            const plainImport = ts.isImportSpecifier(p) && p.name === n && !p.propertyName;
+            const tag = isTagName(n) || (ts.isPropertyAccessExpression(p) && p.name === n && isTagName(p));
+            if (!plainImport && !tag && !inType(n)) {
+                out.push(`${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}: ${p.getText()}`);
+            }
+        }
+        ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    return out;
 }
 
 const ROOT_LAYOUT = fs.readFileSync(path.join(NATIVE, 'app/_layout.tsx'), 'utf8');
@@ -343,9 +462,44 @@ describe('every keyboard view in the app takes the sheet offset, or is exempt fo
         expect(FOUND.length).toBeGreaterThanOrEqual(SCREENS.length + EXEMPT.length);
     });
 
-    it('no file renames KeyboardAvoidingView on import (the scan looks for that tag)', () => {
-        const renamed = FILES.filter((f) => /\bKeyboardAvoidingView\s+as\s+\w+/.test(fs.readFileSync(path.join(NATIVE, f), 'utf8')));
-        expect(renamed).toEqual([]);
+    it('the scan sees a keyboard view reached through a namespace, and flags one given another name (its own self-check)', () => {
+        const sample = (code: string) => ts.createSourceFile('sample.tsx', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+        const clean = sample([
+            "import { KeyboardAvoidingView } from 'react-native-keyboard-controller';",
+            'type Props = React.ComponentProps<typeof KeyboardAvoidingView>;',
+            'export function A() { return <KeyboardAvoidingView behavior="padding" />; }',
+        ].join('\n'));
+        expect(keyboardViews(clean).length).toBe(1);
+        expect(otherNamesFor(clean)).toEqual([]);
+        const namespaced = sample([
+            "import * as RN from 'react-native';",
+            'export function B() { return <RN.KeyboardAvoidingView behavior="padding"><View /></RN.KeyboardAvoidingView>; }',
+        ].join('\n'));
+        expect(keyboardViews(namespaced).map((k) => tagName(k))).toEqual(['RN.KeyboardAvoidingView']);
+        expect(otherNamesFor(namespaced)).toEqual([]);
+        const renamed = sample([
+            "import { KeyboardAvoidingView as KAV } from 'react-native-keyboard-controller';",
+            "const { KeyboardAvoidingView: Other } = require('react-native');",
+            'const Alias = RN.KeyboardAvoidingView;',
+            'const Wrapped = Animated.createAnimatedComponent(KeyboardAvoidingView);',
+            'export function C() { return <KAV behavior="padding" />; }',
+        ].join('\n'));
+        expect(keyboardViews(renamed)).toEqual([]);
+        expect(otherNamesFor(renamed)).toEqual([
+            '1: KeyboardAvoidingView as KAV',
+            '2: KeyboardAvoidingView: Other',
+            '3: RN.KeyboardAvoidingView',
+            '4: Animated.createAnimatedComponent(KeyboardAvoidingView)',
+        ]);
+    });
+
+    it('no file gives KeyboardAvoidingView another name (the scan looks for its tag, bare or through a namespace)', () => {
+        const named: string[] = [];
+        for (const f of FILES) {
+            if (!fs.readFileSync(path.join(NATIVE, f), 'utf8').includes('KeyboardAvoidingView')) continue;
+            for (const where of otherNamesFor(parse(f))) named.push(`${f}:${where}`);
+        }
+        expect(named).toEqual([]);
     });
 
     for (const found of FOUND) {
@@ -395,7 +549,7 @@ describe('every keyboard view in the app takes the sheet offset, or is exempt fo
             const views = elements(sf, 'ScrollView').filter((v) => attrs(v).properties.some((p) => ts.isJsxSpreadAttribute(p) && spreads.includes(p.expression.getText())));
             expect(views.length, `${file}: the ScrollView that spreads ${spreads.join(', ')}`).toBeGreaterThan(0);
             for (const view of views) {
-                const kav = jsxAncestors(view).find((a) => tagName(a) === 'KeyboardAvoidingView');
+                const kav = jsxAncestors(view).find((a) => isKeyboardViewTag(tagName(a)));
                 expect(kav, `${file}: its caret-follow ScrollView is inside a KeyboardAvoidingView (its viewport is what that view leaves above the keyboard)`).toBeDefined();
                 expect(FOUND.some((f) => f.file === file && f.kav.getStart() === kav!.getStart()), `${file}: that keyboard view is one the scan above checks`).toBe(true);
             }

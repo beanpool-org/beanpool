@@ -27,7 +27,8 @@ console.log("  RED   Test-All shard server-3: test-thing.ts:12 AssertionError");
 console.log("SUMMARY: CLEAN+RED (1 reds)");
 console.log("after the block: must not be shown");' > "$T/reader.cjs"
 wait_ci(){ # ci-wait.sh ARGS... → $T/out, $RC
-  CI_WAIT_PR_STATE=$T/reader.cjs LANE_CI_WAIT_POLL_SECS=0 "$LANES/ci-wait.sh" "$@" > "$T/out" 2>&1; RC=$?
+  CI_WAIT_PR_STATE=$T/reader.cjs LANE_CI_WAIT_POLL_SECS=0 LANE_CI_WAIT_HEAD_POLL_SECS=${LANE_CI_WAIT_HEAD_POLL_SECS:-0} \
+    "$LANES/ci-wait.sh" "$@" > "$T/out" 2>&1; RC=$?
   sed 's/^/    │ /' "$T/out"; }
 
 # ── ci-wait.sh ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -103,6 +104,63 @@ print aaa11111 > "$FAKE_STATE/head"; print "" > "$FAKE_STATE/pushes"; print "pen
 LANE_CI_WAIT_SECS=30 wait_ci 42
 check "exit 3"                                    [ "$RC" = 3 ]
 check "says GitHub gave no head"                  out_has "PR unreadable (GitHub gave no head): call ci-wait.sh 42 again"
+
+# ── the sha the caller pushed (#3257 round 2): GitHub moves a PR's head a little after a push, so `git push && ci-wait.sh <PR>`
+#    can read the OLD head. Invariant: given the sha, ci-wait.sh never reports a verdict for any other commit.
+OLD=aaa00000aaaa NEW=bbb11111bbbb
+lagging(){ # GitHub shows the OLD head, whose run finished red, for N more reads; then NEW, pending and then green
+  print $OLD > "$FAKE_STATE/head"; print "$1 $NEW" > "$FAKE_STATE/lands"
+  print "fail pass pass" > "$FAKE_STATE/checks-$OLD"; print -l pending "pass pass" > "$FAKE_STATE/checks-$NEW"; }
+
+case_ "10b. the caller names the sha it pushed; GitHub shows the old head for 3 more reads → it waits, then the NEW sha's verdict"
+lagging 3
+LANE_CI_WAIT_SECS=30 wait_ci 42 $NEW
+check "exit 0"                                    [ "$RC" = 0 ]
+check "GREEN on the sha it was given"             out_has "GREEN on bbb11111 (pass=2)"
+check "never the old head's red"                  eval '! out_has "RED" && [ ! -e "$FAKE_STATE/reader.args" ]'
+check "no checks read until GitHub showed the sha (4 head reads first)" \
+  [ "$(awk '/headRefOid/ { v++ } /^gh pr checks/ { print v + 0; exit }' "$FAKE_STATE/gh.calls")" -ge 4 ]
+check "then the new head's checks, pending and then pass" [ "$(calls 'pr checks')" = 2 ]
+
+case_ "10c. the same lag with no sha (the call before round 2) → the head at call time: the old head's red at once"
+lagging 3
+LANE_CI_WAIT_SECS=30 wait_ci 42
+check "exit 1"                                    [ "$RC" = 1 ]
+check "RED on the old head: why LANE_ONE_PUSH always passes the sha" out_has "RED on aaa00000 (fail=1 pass=2)"
+
+case_ "10d. GitHub still has not shown the sha when the call's time is up → PENDING, exit 2, no checks read"
+lagging 100000
+s0=$(date +%s)
+LANE_CI_WAIT_SECS=2 LANE_CI_WAIT_HEAD_POLL_SECS=0.2 wait_ci 42 $NEW
+check "exit 2"                                    [ "$RC" = 2 ]
+check "names the sha it waits for and the head GitHub shows" out_has "PENDING: the PR doesn't show bbb11111 yet (head aaa00000)"
+check "says to call it again with the same sha"  out_has "call ci-wait.sh 42 $NEW again"
+check "waited out the call (2 s at a 0.2 s poll) and read the head more than twice" eval '[ $(( $(date +%s) - s0 )) -ge 2 ] && [ "$(calls headRefOid)" -gt 2 ]'
+check "never read the checks"                     [ "$(calls 'pr checks')" = 0 ]
+
+case_ "10e. a push lands during the read that would give the verdict → HEAD MOVED, exit 3, no verdict"
+print aaa11111 > "$FAKE_STATE/head"; print bbb22222 > "$FAKE_STATE/pushes"; print "pass+push" > "$FAKE_STATE/checks"
+LANE_CI_WAIT_SECS=30 wait_ci 42 aaa11111
+check "exit 3"                                    [ "$RC" = 3 ]
+check "names the new head and says to pass the sha" out_has "HEAD MOVED to bbb22222 (you pushed again): call ci-wait.sh 42 <the sha you pushed> again"
+check "no GREEN for a read GitHub may have answered about the new head" eval '! out_has "GREEN"'
+
+case_ "10f. a short sha (7 or more) that starts the head is the same commit → no wait"
+print bbb11111bbbb2222cccc > "$FAKE_STATE/head"; print "pass pass" > "$FAKE_STATE/checks"
+LANE_CI_WAIT_SECS=30 wait_ci 42 bbb1111
+check "exit 0, GREEN on it"                       eval '[ "$RC" = 0 ] && out_has "GREEN on bbb11111 (pass=2)"'
+
+case_ "10g. a second argument that is not a commit id (HEAD, a branch, too short, a space, 41 hex digits) → usage, exit 3, nothing read"
+for bad in HEAD feat/x bbb111 "bbb11111 bbbb" 0123456789abcdef0123456789abcdef012345678; do
+  wait_ci 42 "$bad"
+  check "'$bad' → exit 3 with the usage"          eval '[ "$RC" = 3 ] && out_has "usage: ci-wait.sh <PR> [<sha you pushed>]"'
+done
+check "no gh call for any of them"                [ "$(calls 'gh ')" = 0 ]
+
+case_ "10h. the head becomes unreadable while it waits for the sha → exit 3 that says so"
+print $OLD > "$FAKE_STATE/head"; print "1 " > "$FAKE_STATE/lands"
+LANE_CI_WAIT_SECS=30 wait_ci 42 $NEW
+check "exit 3, GitHub gave no head"               eval '[ "$RC" = 3 ] && out_has "PR unreadable (GitHub gave no head): call ci-wait.sh 42 $NEW again"'
 
 case_ "11. read-only: every gh call ci-wait.sh made in this file was a pr view or pr checks"
 check "calls were recorded, and none was another gh command" eval '[ -s "$T/all-calls" ] && ! grep -vqE "^gh pr (view|checks) " "$T/all-calls"'

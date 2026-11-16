@@ -7,6 +7,8 @@
 #   FAKE_GH_PR=N     what `gh pr list --head` returns (empty = no PR)
 #   $FAKE_STATE/comments   the PR's inline comment count
 #   $FAKE_STATE/head       the PR's head commit (no file: fakehead; empty: GitHub does not say)
+#   $FAKE_STATE/lands      "N SHA": a push GitHub has not shown yet. The next N head reads still give the old head, then the head is SHA
+#                          (GitHub moves a PR's head a little after a push lands; #3257 round 2).
 #   $FAKE_STATE/pushes     heads still to come, one per line: a push moves the PR to the next (fake agy/claude push in a CI fix stage)
 #   $FAKE_STATE/ci-<sha>   that commit's required check, one line per read, the last one sticks: success failure cancelled pending,
 #                          none (GitHub has not created the check), or any of those +push (a push lands during that read). No file: success.
@@ -18,6 +20,7 @@
 #                          gh's buckets separated by spaces (pass fail pending skipping cancel), none (no checks yet: gh says so on
 #                          stderr and exits 1), or either of those +push (a push lands during that read). No file: pass. Like gh, it
 #                          exits 8 while a check is pending and 1 when one failed, with the list on stdout either way.
+#   $FAKE_STATE/checks-<sha>  the same, for the checks GitHub lists while the PR's head is <sha>; when there is none, checks is read.
 # --jq filters run through real jq over GitHub's JSON shape (gh's own is gojq), so the library's filters are what gets tested.
 S=${FAKE_STATE:?}
 print -r -- "gh $*" >> "$S/gh.calls"
@@ -59,12 +62,18 @@ case "$1 $2" in
               esac;;
   "pr list")  print -r -- "$FAKE_GH_PR";;
   "pr view")  case "$*" in
-                *headRefOid*) cat "$S/head" 2>/dev/null || print fakehead;;
+                *headRefOid*)
+                  if [ -s "$S/lands" ]; then
+                    read -r n sha < "$S/lands"
+                    if (( n > 0 )); then print -r -- "$((n - 1)) $sha" > "$S/lands"; else print -r -- "$sha" > "$S/head"; rm -f "$S/lands"; fi
+                  fi
+                  cat "$S/head" 2>/dev/null || print fakehead;;
                 *isDraft*) print false;; *state*) print OPEN;; *headRefName*) print feat/x;;
                 *mergeable*) cat "$S/mergeable" 2>/dev/null || print MERGEABLE;; *title*) print "Fake title";;
               esac;;
   "pr checks") [ "$(grep -c '^gh pr checks' "$S/gh.calls")" -gt 100 ] && { print -u2 "fake gh: runaway polling"; exit 1; }
-              st=$(pop "$S/checks" pass)
+              h=$(cat "$S/head" 2>/dev/null || print fakehead); cf=$S/checks; [ -n "$h" ] && [ -e "$S/checks-$h" ] && cf=$S/checks-$h
+              st=$(pop "$cf" pass)
               [[ "$st" == *+push ]] && { st=${st%+push}; push; }
               [ "$st" = none ] && { print -u2 "no checks reported on the 'feat/x' branch"; exit 1; }
               print -r -- ${=st} | tr ' ' '\n' | jq -R '{bucket: .}' | jq -s . | jq -r "$jqf"

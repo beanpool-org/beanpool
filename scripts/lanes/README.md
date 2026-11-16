@@ -25,7 +25,7 @@ not repeat them; the code comments name the incident behind each rule.
 | `agy-brief-rules.md` | Appended to every AGY brief. |
 | `test/selftest.sh` | Proves all of the above against fake `agy`/`claude`/`gh`/`ssh`. No real model, PR or node is touched. |
 | `pr-state.mjs` | `node scripts/lanes/pr-state.mjs <PR>`: a PR's true state in one read-only look. Head, mergeable, base, merge queue; the last deciding verdict and MISMATCH when it names an older head; every check that is not success, with its log's failing lines and file:line (the summary job marked as the summary); each named file touched by the diff or not; one line `CLEAN+GREEN` / `CLEAN+RED (n reds)` / `NOT CLEAN` / `PENDING` (exit 0 / 3 / 4 / 5). It never comments, re-runs, requeues or boards. `test/pr-state.test.mjs` runs it against recorded GitHub answers, in test-all's `workflows` check. |
-| `ci-wait.sh` | `scripts/lanes/ci-wait.sh <PR>`: waits for GitHub CI on the PR's current head, at most about 9 minutes a call, so a headless stage's foreground call stays under the 10-minute cap. Exit 0 green, 1 red (with `pr-state.mjs`'s failing lines), 2 pending (call it again), 3 the head moved or the PR could not be read. Waits for every check, even beside a red; no checks yet is a wait, never green. Read-only. The CI-first flow in `LANE_ONE_PUSH` sends every stage here. |
+| `ci-wait.sh` | `scripts/lanes/ci-wait.sh <PR> $(git rev-parse HEAD)`: waits for GitHub CI on the commit you pushed, at most about 9 minutes a call, so a headless stage's foreground call stays under the 10-minute cap. ALWAYS pass that sha: GitHub moves a PR's head a little after a push, so a call right after `git push` can still read the old head, and without the sha it would hand back that head's verdict. With it, a head that does not show the sha yet is a wait (pending), never a verdict. With no sha it waits on the PR's head at call time. Exit 0 green, 1 red (with `pr-state.mjs`'s failing lines), 2 pending (call it again, with the same sha), 3 the head moved, the PR could not be read, or the second argument is not a commit id. Waits for every check, even beside a red; no checks yet is a wait, never green. Read-only. The CI-first flow in `LANE_ONE_PUSH` sends every stage here. |
 | `tsc-slot.sh` | `scripts/lanes/tsc-slot.sh <command…>`: runs a memory-heavy whole-app check (`tsc --noEmit`, a whole vitest run) only when one of `BP_SLOTS` (3) machine-wide slots, `~/.cache/bp-tsc-slot-<n>`, is free. A slot whose owner died is taken over; after 45 minutes it runs anyway. The command's exit code comes through. The heavy-test lock still comes first. |
 | `test/ci-wait-slot.test.sh` | Proves `ci-wait.sh`'s exit codes against the fake `gh`, and `tsc-slot.sh`'s slot limit, takeover, wait limit, signals and exit code. About 10 s. |
 
@@ -65,7 +65,7 @@ function describes its contract.
 A stage goes CI first (Marty, 16 Nov 2026: the Mac was overloaded). The FIX, FIX-CI and CONTINUE briefs carry `LANE_ONE_PUSH`,
 which takes precedence over the one-push line in both rule files. Locally a stage runs only the one test file or suite it is
 working on; a whole-app check it cannot avoid goes through `tsc-slot.sh`. It pushes, opens the PR as a draft if there is none,
-and waits with `ci-wait.sh <PR>`. Each red it caused gets a fix, that one test, and a push, at most 3 pushes for CI a round,
+and waits with `ci-wait.sh <PR> $(git rev-parse HEAD)`, always with the sha it just pushed. Each red it caused gets a fix, that one test, and a push, at most 3 pushes for CI a round,
 because each push cancels and restarts GitHub's run. A red it cannot reach is named in the PR body as "red not caused here".
 Once green it runs `preflight.sh`, then `gh pr ready`. Both scripts are named from the library's own directory, so a fix round
 on a branch cut before they existed still finds them. A branch with no PR starts no run, so a long first build may still push
@@ -162,7 +162,8 @@ Every setting is an env var with a default derived from the checkout (see the to
 `$TMPDIR`), `LANE_GH_REPO`, `LANE_AGY_BIN`, `LANE_CLAUDE_BIN`, `LANE_BUILD_TIMEOUT` (60m), `LANE_REVIEW_TIMEOUT`
 (40m), `LANE_HEADER_FILE`, `LANE_CI_CHECK`, `LANE_CI_WORKFLOW`, and the timing knobs (`LANE_IDLE_OUTPUT_SECS`,
 `LANE_IDLE_WT_SECS`, `LANE_WAIT_SECS`, `LANE_GREEN_TRIES`, `LANE_GREEN_NONE_TRIES`, `LANE_GREEN_SECS`, …).
-`ci-wait.sh` reads `LANE_GH_REPO`, `LANE_CI_WAIT_SECS` (530) and `LANE_CI_WAIT_POLL_SECS` (45). `tsc-slot.sh` reads `BP_SLOTS`
+`ci-wait.sh` reads `LANE_GH_REPO`, `LANE_CI_WAIT_SECS` (530), `LANE_CI_WAIT_POLL_SECS` (45) and `LANE_CI_WAIT_HEAD_POLL_SECS` (10, while
+GitHub has not shown the sha yet). `tsc-slot.sh` reads `BP_SLOTS`
 (3), `BP_SLOT_BASE` (keep the default: every copy on the machine must count the same slots), `BP_SLOT_WAIT_SECS` (2700) and
 `BP_SLOT_POLL_SECS` (15).
 

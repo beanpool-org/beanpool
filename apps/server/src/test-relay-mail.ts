@@ -41,6 +41,12 @@
  *  19  the device rules: no fetch, confirm or forget without a device (400); at most 5 devices, the one unseen longest
  *      forgotten; the caps count only items no device has, and those a device has keep the allowance again, the oldest going
  *      (an idle browser never stops new mail); the sweep forgets a lapsed device and a former member's; never copied
+ *  20  the old libp2p relay's hardening, on the mailbox (X7 deleted that relay; DESIGN-cross-chat-voice-fable.md §11 row X7):
+ *      an outside sender gets no row here, so no home is stamped (FED-02, FED-01, M5); a server naming a member here as
+ *      its item's sender, without that member's signature, is refused (A2-28), while a member of both communities signing
+ *      for herself is served (B1 7b); a line over the cap is refused with words, nothing spent (FED-09); a refusal inside
+ *      the other server's 202 is logged with its reason, never the line (N2); POST /api/federation/relay-message answers
+ *      exactly as a made-up route beside it does
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-relay-mail.ts
  */
@@ -764,6 +770,73 @@ async function main(): Promise<void> {
     assert(!db.prepare('SELECT 1 FROM relay_mail_devices WHERE member = ?').get(leaver.key) && heldCount('recipient = ?', leaver.key) === 0
         && !db.prepare('SELECT 1 FROM relay_mail_got WHERE recipient = ?').get(leaver.key),
         '19m. no member here any more: their devices go with their mail');
+
+    // ── 20. The old libp2p relay's hardening, on the mailbox (X7) ─────────────────────────
+    // X7 deleted the relay branch of the send route, the peer protocol's relay_message and the commented web relay
+    // (POST /api/federation/relay-message). Their hardening cases (test-federation-hardening FED-02, M5, A2-28, B1 7b/7d,
+    // N2, FED-09, FED-06; test-dm-line-relay) and where each now stands on the mailbox:
+    //   the sender's home is the server that signed, never the item's word: 11a (wrong-home), 1b, and 20a below
+    //   the sender's own id, kept verbatim, and a replay stored once: 2a, 5e
+    //   peers off: the owner's switch, 9b; a refusal the sender hears: 13i, and 20d below
+    console.log('\n20. The old relay\'s hardening, on the mailbox');
+    const outsiders = [ana.key, abe.key, cara.key];
+    const inList = outsiders.map(() => '?').join(', ');
+    const rowsFor = (sql: string) => (db.prepare(sql).get(...outsiders) as { n: number }).n;
+    const memberRows = rowsFor(`SELECT COUNT(*) AS n FROM members WHERE public_key IN (${inList})`);
+    const theirLines = rowsFor(`SELECT COUNT(*) AS n FROM messages WHERE author_pubkey IN (${inList})`);
+    const theirSeats = rowsFor(`SELECT COUNT(*) AS n FROM conversation_participants WHERE public_key IN (${inList})`);
+    assert(memberRows === 0 && theirLines === 0 && theirSeats === 0,
+        `20a. FED-02, FED-01, M5: after all their mail, Ana, Abe and Cara have no row here (no visitor's row, so no home is stamped on anyone), no stored line, no seat in a conversation (rows ${memberRows}, lines ${theirLines}, seats ${theirSeats})`);
+
+    const dot = keys();
+    addLocal(dot, 'Dot');
+    const asBen = await item({ seed: abe.seed, key: ben.key }, 'a.example', dot.key, 'b.example');
+    const r20b = await bring([asBen]);
+    assert(r20b.status === 202 && r20b.body?.items?.[0]?.refused === 'bad-signature' && heldCount('item_id = ?', asBen.envelope.itemId) === 0,
+        `20b. A2-28: a.example brings an item naming Ben, a member here, as its sender, signed by another key: refused (${r20b.body?.items?.[0]?.refused}), nothing stored`);
+    const benViaA = await item(ben, 'a.example', dot.key, 'b.example');
+    const r20c = await bring([benViaA]);
+    assert(r20c.status === 202 && r20c.body?.items?.[0]?.received === true && heldCount('item_id = ? AND recipient = ?', benViaA.envelope.itemId, dot.key) === 1,
+        `20c. B1 7b: Ben is a member of a.example too (one key on every node) and writes Dot through it, signed by his own key: held for her (got ${r20c.status} ${JSON.stringify(r20c.body?.items?.[0])})`);
+
+    const seen20 = seenCount();
+    const held20 = heldCount();
+    const longLine = await item(ana, 'a.example', dot.key, 'b.example', { payload: 'E'.repeat(mail.RELAY_LINE_MAX_CHARS + 1) });
+    const r20e = await bring([longLine]);
+    assert(r20e.status === 413 && typeof r20e.body?.error === 'string' && r20e.body.error.length > 0 && heldCount() === held20 && seenCount() === seen20,
+        `20e. FED-09: a line over ${mail.RELAY_LINE_MAX_CHARS} characters is refused with words, nothing held and nothing spent (got ${r20e.status} ${JSON.stringify(r20e.body)?.slice(0, 120)})`);
+
+    // N2: a refusal inside the other server's 202 reaches the sender's server's log with its reason, never the line's text.
+    const logged20: string[] = [];
+    const log20 = console.log;
+    otherNames.delete('a.example');
+    const refusedOut = await item(ben, 'b.example', ana.key, 'a.example', { payload: `secret-${crypto.randomBytes(12).toString('hex')}` });
+    let s20d: Answer;
+    console.log = (...args: unknown[]) => { logged20.push(args.map(String).join(' ')); };
+    try {
+        s20d = await asMember(ben, 'POST', '/api/mail/send', { items: [refusedOut] });
+    } finally {
+        console.log = log20;
+        otherNames.add('a.example');
+    }
+    const heard20 = logged20.find((l) => l.includes('refused') && l.includes('not-for-here'));
+    assert(s20d.body?.items?.[0]?.state === 'failed' && !!heard20 && !logged20.some((l) => l.includes(refusedOut.payload)),
+        `20d. N2: a.example refuses Ben's line inside its 202: failed (Not delivered), logged with the reason, never the line (got ${s20d.body?.items?.[0]?.state}; ${JSON.stringify(heard20)?.slice(0, 160)})`);
+
+    // The removed web relay answers as any route that does not exist does, to a member's server and to anyone.
+    const oldBody = JSON.stringify({ senderPublicKey: ana.key, senderCallsign: 'Ana', senderNodeUrl: 'https://a.example', recipientPublicKey: dot.key, ciphertext: 'c2VhbGVk', nonce: 'bm9uY2U=' });
+    const answerOf = (a: Answer) => JSON.stringify({ status: a.status, body: a.body });
+    const linesBefore20 = (db.prepare('SELECT COUNT(*) AS n FROM messages').get() as { n: number }).n;
+    const asServer = async (p: string) => send('POST', p, await buildNodeRequestHeaders({ method: 'POST', url: `https://b.example${p}`, body: oldBody, origin: 'a.example', keyHex: A.key, sign: signerOf(A.seed) }), oldBody);
+    const oldUnsigned = await send('POST', '/api/federation/relay-message', {}, oldBody);
+    const madeUpUnsigned = await send('POST', '/api/federation/no-such-route-x7', {}, oldBody);
+    const oldSigned = await asServer('/api/federation/relay-message');
+    const madeUpSigned = await asServer('/api/federation/no-such-route-x7');
+    const peersOn = process.env.ENABLE_PEER_CONNECTORS === 'true';
+    const linesAfter20 = (db.prepare('SELECT COUNT(*) AS n FROM messages').get() as { n: number }).n;
+    assert(answerOf(oldUnsigned) === answerOf(madeUpUnsigned) && answerOf(oldSigned) === answerOf(madeUpSigned)
+        && (!peersOn || madeUpUnsigned.status === 404) && linesAfter20 === linesBefore20 && rowsFor(`SELECT COUNT(*) AS n FROM members WHERE public_key IN (${inList})`) === 0,
+        `20f. POST /api/federation/relay-message, unsigned and signed by a.example's server, is answered exactly as a made-up route beside it (${answerOf(oldUnsigned).slice(0, 120)} vs ${answerOf(madeUpUnsigned).slice(0, 120)}; peer connectors ${peersOn ? 'on, so the router answers' : 'off'}), and nothing is stored`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

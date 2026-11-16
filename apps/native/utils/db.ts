@@ -1053,6 +1053,22 @@ export async function getMyPosts(pubkey: string) {
 }
 
 /**
+ * The events this member hosts, as this phone keeps them (their own posts are always kept: NEARBY_KEPT_SQL), still on: not
+ * cancelled or taken down, newest first, at most 50. The forum's Link picker lists them before the ones they RSVP'd to
+ * (components/forum/ForumLinks.tsx; a host has no RSVP row, so /api/events/mine alone leaves them out), as the web's
+ * linkablesOf reads its own posts of type event. getMyPosts above leaves events out.
+ */
+export async function getMyHostedEvents(pubkey: string): Promise<{ id: string; title: string }[]> {
+    const database = await waitForInit();
+    return await database.getAllAsync(`
+        SELECT id, title FROM posts
+        WHERE author_pubkey = ? AND type = 'event' AND status IN ('active', 'pending', 'paused') AND COALESCE(event_state, '') != 'cancelled'
+        ORDER BY created_at DESC
+        LIMIT 50
+    `, [pubkey]) as { id: string; title: string }[];
+}
+
+/**
  * Reads one listing from the node again and writes it through the sync's own row writer. Tells the screens
  * (`sync_data_updated`) only when what they show changed: post screens reload on that event and call getPost, which
  * calls this, so an unconditional emit fetch-loops. The photos are part of it: a node that now keys its listings'

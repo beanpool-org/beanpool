@@ -96,7 +96,8 @@ vi.mock('../../components/ReportMessageSheet', async () => {
 });
 // The member's own things the picker lists (utils/db): their groups (and other chats, which it leaves out), their listings
 // (and ones done or taken down, which it leaves out), the events they are going to.
-const mine = vi.hoisted(() => ({ failed: false }));
+// The events: the ones the member hosts (their own posts of type event, as this phone keeps them) and the ones they RSVP'd to.
+const mine = vi.hoisted(() => ({ failed: false, hosted: [] as { id: string; title: string }[], going: [{ postId: 'ev1', title: 'Working bee', startAt: '2026-12-01T10:00:00Z' }] as { postId: string; title: string; startAt: string }[] }));
 vi.mock('../db', () => ({
     fetchYourGroups: vi.fn(async () => {
         if (mine.failed) throw new Error('offline');
@@ -107,7 +108,8 @@ vi.mock('../db', () => ({
         { id: 'l2', title: 'Old offer', type: 'offer', status: 'removed' },
         { id: 'l3', title: 'A poll of mine', type: 'poll', status: 'active' },
     ]),
-    fetchMyEvents: vi.fn(async () => [{ postId: 'ev1', title: 'Working bee', startAt: '2026-12-01T10:00:00Z' }]),
+    getMyHostedEvents: vi.fn(async () => mine.hosted),
+    fetchMyEvents: vi.fn(async () => mine.going),
 }));
 
 const ME = 'm'.repeat(64);
@@ -247,6 +249,8 @@ beforeEach(() => {
     nav.params = { id: 't1' };
     nav.focus.clear();
     mine.failed = false;
+    mine.hosted = [];
+    mine.going = [{ postId: 'ev1', title: 'Working bee', startAt: '2026-12-01T10:00:00Z' }];
     Object.assign(node, { front: FRONT, topic: pageOf(undefined), kept: null, linked: [], linkedFails: false, linkRefusal: null });
     takeNeedSeed('t1');
     takeNeedLinked('t1');
@@ -331,6 +335,21 @@ describe.each(LOOKS)('the link-kind table in %s (%s)', (_name, set) => {
         mine.failed = true;
         await press(byId(host, 'forum-link-kind-group'));
         expect(words(byId(host, 'forum-link-picker'))).toContain('Couldn’t load these. Check your connection and try again.');
+    });
+
+    // #3252 phone parity: a host has no RSVP row, so the RSVP list alone left out the events the member hosts. As the web's
+    // linkablesOf: the ones they host first, then the ones they RSVP'd to, one row an event.
+    it('Events lists the ones the member hosts first, then the ones they go to, each event once', async () => {
+        mine.hosted = [{ id: 'ev2', title: 'Seed swap day' }, { id: 'ev1', title: 'Working bee' }];
+        mine.going = [{ postId: 'ev1', title: 'Working bee', startAt: '2026-12-01T10:00:00Z' }, { postId: 'ev3', title: 'Repair cafe', startAt: '2026-12-02T10:00:00Z' }];
+        const host = await render(set, ForumTopicScreen);
+        await press(byId(host, 'forum-topic-menu'));
+        await press(menuButton(host, 'Link a group, listing or event')!);
+        await press(byId(host, 'forum-link-kind-event'));
+        expect(buttonsIn(byId(host, 'forum-link-picker')).map(words)).toEqual(['Seed swap day', 'Working bee', 'Repair cafe', 'Back', 'Cancel']);
+        // A hosted event is linked as any other: the node decides.
+        await press(byId(host, 'forum-link-pick-ev2'));
+        expect(forum.linkForumTarget).toHaveBeenLastCalledWith('t1', 'event', 'ev2', true);
     });
 });
 

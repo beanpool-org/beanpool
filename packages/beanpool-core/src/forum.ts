@@ -239,6 +239,42 @@ export function compareForumTopics(a: ForumTopicOrder, b: ForumTopicOrder): numb
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+// ── What a topic links (slice F9) ───────────────────────────────────────────────────────────────────────────────
+
+/**
+ * What a topic's writer may link under its opening words (design §10.2 to §10.4): one of their groups, one of their listings
+ * (a Need made from the topic with "Make this a Need" is one), an event, or a Learn page. The Decision chip (slice F8) and
+ * the topic's poll are their own; together a topic links at most FORUM_LIMITS.topicLinks things.
+ */
+export const FORUM_LINK_KINDS = Object.freeze(['group', 'listing', 'event', 'learn'] as const);
+export type ForumLinkKind = (typeof FORUM_LINK_KINDS)[number];
+export function isForumLinkKind(v: unknown): v is ForumLinkKind {
+    return typeof v === 'string' && (FORUM_LINK_KINDS as readonly string[]).includes(v);
+}
+
+/**
+ * A link as one reader reads it. **A link never shows its reader anything they could not already see** (design §10.4): the
+ * server answers each reader with what their own read of the thing gives them (the Market's read by id, a group's card, a
+ * Learn page as it shows), and otherwise a placeholder that holds its kind alone: no id, no title, no photo. A visitor on
+ * the public pages reads no links at all (FORUM_PUBLIC_FIELDS has none).
+ */
+export type ForumLink =
+    | {
+        kind: ForumLinkKind; shown: true; id: string; title: string;
+        /** The first photo's address as the Market hands it to this reader; null for none, and for a group. */
+        photo: string | null;
+        /** A listing's kind: an Offer or a Need ("Posted as a Need ›" when it is a Need its topic's writer made). */
+        listingType: 'offer' | 'need' | null;
+        /** An event's start; null for anything else. */
+        startAt: string | null;
+        /** The topic's writer made it (their listing, their event, their page, a group they started). */
+        byWriter: boolean;
+    }
+    | { kind: ForumLinkKind; shown: false };
+
+/** The topics a reader may read that link one thing ("Talked about in the forum ›", "Topics about this group"), at most. */
+export const FORUM_LINKED_TOPICS_MAX = 10;
+
 // ── What a public answer may hold (slice F7) ────────────────────────────────────────────────────────────────────
 
 /**

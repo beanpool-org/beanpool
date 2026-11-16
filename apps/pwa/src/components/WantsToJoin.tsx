@@ -3,6 +3,7 @@ import { PEEK_WORDS, t, tn, word } from '@beanpool/core';
 import { answerJoinRequest, getJoinRequests, getMyVouching, type JoinRequest, type MyVouching } from '../lib/api';
 import { MemberAvatar } from './MemberAvatar';
 import { VouchPresetChoice } from './VouchPresetChoice';
+import { KnockForumPosts } from './KnockForumPosts';
 
 /**
  * The words of this section (the phone's components/WantsToJoin.tsx, word for word: one catalog entry serves both apps).
@@ -153,6 +154,8 @@ export function WantsToJoin({ onCount, canSee = true, fromNotice = false }: { on
                                 {t(PEEK_WORDS.askedAfter, { title: req.via.title, sharer: req.via.sharer })}
                             </p>
                         )}
+                        {/* Their posts on the worldwide forum (forums F11): a tap reads each and checks who wrote it. */}
+                        {req.forum && <KnockForumPosts forum={req.forum} knockId={req.id} />}
                         {myVouching?.voucher && (
                             <div className="mt-3">
                                 <VouchPresetChoice

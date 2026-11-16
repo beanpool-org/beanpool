@@ -172,7 +172,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('knowledge_drafts', 'member_pubkey');
     move('knowledge_drafts', 'answered_by');
     move('knowledge_helped', 'member_pubkey');
-    // Their forum topics and posts, and their told stamp (engine/forum.ts): still theirs to edit and remove.
+    // Their forum topics and posts, their told stamp and their proof secret (engine/forum.ts, engine/forum-ask-posts.ts): still
+    // theirs to edit and remove, and each public post's proof follows them to the new key.
     move('forum_topics', 'writer_pubkey');
     move('forum_posts', 'writer_pubkey');
     move('forum_members', 'member_pubkey');

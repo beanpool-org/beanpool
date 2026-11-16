@@ -78,11 +78,11 @@ export function UnclaimedCard({ codeId, primaryAddress, address, addresses, orig
                     {CLAIM_COMMAND}
                 </code>
             </div>
-            {/* The one claim path (DESIGN-new-operator-path-fable.md S4), by the phone's own labels: the camera, else the first
-                screen's link on a phone with no account, else the bean at the top and the BeanPool sheet's row. Find a community
-                is no way in from a local community. */}
+            {/* The one claim path (DESIGN-new-operator-path-fable.md S4), by the phone's own labels: the camera, else, on a phone with no
+                account, I'm New Here on its first question ("Used BeanPool before?", since #3209) and then the link under the doors,
+                else the bean at the top and the BeanPool sheet's row. Find a community is no way in from a local community. */}
             <p className="text-sm text-nature-300 m-0 leading-relaxed" data-testid="claim-phone-steps">
-                Then claim it with the BeanPool app on your phone. Claiming is done from the phone app only. Scan this with the phone&apos;s camera. Or, with no account on the phone yet, open BeanPool and tap <strong className="text-nature-100">Installed BeanPool on a server? Claim it</strong>; with an account already, tap the bean at the top, then <strong className="text-nature-100">Set up a new community server</strong>. Type this server&apos;s address and the code the server shows.
+                Then claim it with the BeanPool app on your phone. Claiming is done from the phone app only. Scan this with the phone&apos;s camera. Or, with no account on the phone yet, open BeanPool, tap <strong className="text-nature-100">I&apos;m New Here</strong> on its first screen, then <strong className="text-nature-100">Installed BeanPool on a server? Claim it</strong>; with an account already, tap the bean at the top, then <strong className="text-nature-100">Set up a new community server</strong>. Type this server&apos;s address and the code the server shows.
             </p>
             {showQr ? (
                 <>

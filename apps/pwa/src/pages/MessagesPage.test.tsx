@@ -7,7 +7,7 @@ import { setLanguage } from '@beanpool/core';
 import { BRAND_SETS, brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getConversationMessages, getEventChat, postEventChatMessage, createConversationApi, sendMessageApi, editMessageApi, createGroup, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
+import { getConversations, getConversationMessages, getEventChat, postEventChatMessage, createConversationApi, sendMessageApi, editMessageApi, createGroup, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
 import { resetChatListSendsForTest } from '../lib/chat-list-order';
 import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
 import { consumeChatPrefill } from '../lib/archetypes';
@@ -1020,6 +1020,28 @@ describe("MessagesPage: the list goes by each chat's newest line, the member's o
         await screen.findByTestId('chat-list');
         // The community's list (this test's node) still knows no line of hers: the move is this tab's own, at once.
         await waitFor(() => expect(rowNames()).toEqual(['Working bee', 'Bob']));
+    });
+
+    it('two list loads overlapping: the older answer landing last never replaces the newer list (#3225 review)', async () => {
+        syncActivityListeners = [];
+        const older = [bob({ lastMessageAt: '2026-11-16T09:59:00Z' }), workingBee({ lastMessageAt: '2026-11-15T12:00:00Z' })];
+        const newer = [bob({ lastMessageAt: '2026-11-16T09:59:00Z' }), workingBee({ lastMessageAt: '2026-11-16T10:01:00Z' })];
+        mockConversations = older;
+        render(<MessagesPage identity={mockIdentity} />);
+        await screen.findByText('Working bee');
+        expect(rowNames()).toEqual(['Bob', 'Working bee']);
+        // Two sync nudges: the first ask's answer is slow, the second's comes back first, with a new line in the event chat.
+        let answerFirst!: (v: unknown) => void;
+        vi.mocked(getConversations)
+            .mockImplementationOnce(() => new Promise((resolve) => { answerFirst = resolve; }) as any)
+            .mockImplementationOnce(async () => ({ conversations: newer, totalUnread: 0 }) as any);
+        const nudge = () => Promise.all(syncActivityListeners.map((l) => l()));
+        let first!: Promise<unknown>;
+        await act(async () => { first = nudge(); await nudge(); });
+        await waitFor(() => expect(rowNames()).toEqual(['Working bee', 'Bob']));
+        // The first ask answers last, with the list from before that line.
+        await act(async () => { answerFirst({ conversations: older, totalUnread: 0 }); await first; });
+        expect(rowNames()).toEqual(['Working bee', 'Bob']);
     });
 });
 

@@ -164,6 +164,54 @@ export interface KnowledgeFields {
      * `ids=`, not a sync), so a list or a copy never carries one member's taps. Absent elsewhere.
      */
     helpedByMe?: boolean;
+    /**
+     * Whether the page's writer is a Local guide now (slice K8; §2.10): on the same signed read by id alone, worked out as it is
+     * read, so a copy on the phone never holds one that has since gone. Absent elsewhere, and on a page gathered with the
+     * assistant (its writer earns no badge from it, and the page shows nobody's card).
+     */
+    writerLocalGuide?: boolean;
+}
+
+// ── Recognition (slice K8; §2.10) ────────────────────────────────────────────────────────
+
+/** The Local guide badge, as the trust profile's `badges` names it. Gates nothing, pays nothing. */
+export const LOCAL_GUIDE_BADGE = 'local-guide' as const;
+/** A page is "used" once this many counted members tapped "This helped" on it (`helped`, the counted taps). */
+export const LOCAL_GUIDE_HELPED = 3;
+/** Local guide: this many pages showing now, written by the member (never gathered with the assistant), each one used. */
+export const LOCAL_GUIDE_PAGES = 3;
+
+/** The badge as both apps draw it, on the writer's line of a page and under a name on a profile. One sentence, one key. */
+export const LOCAL_GUIDE_WORDS = Object.freeze({
+    line: word('🗺️ Local guide'),
+});
+
+/** Whether a trust profile's `badges` hold Local guide. Anything else (a node from before K8 sends none): no. */
+export function isLocalGuide(badges: unknown): boolean {
+    return Array.isArray(badges) && badges.includes(LOCAL_GUIDE_BADGE);
+}
+
+/**
+ * Thank (§2.10, §3.7): "🫘 Thank {name}" opens the ordinary Send form, the writer chosen and this note filled, both changeable.
+ * It is a gift of the member's own Beans under today's rules: the node pays nothing, ever.
+ */
+export const KNOWLEDGE_THANK = Object.freeze({
+    button: word('🫘 Thank {name}'),
+    note: word('Thanks for "{title}"'),
+});
+
+/** The note "Thank" fills in, in the reader's language. */
+export function knowledgeThankNote(title: string, words: Pick<Words, 't'> = { t }): string {
+    return words.t(KNOWLEDGE_THANK.note, { title });
+}
+
+/**
+ * Whether a reader is offered "🫘 Thank {name}" on a page (§2.10): a member with a key, on a live Learn, where Beans are live
+ * for them (not off, not the worldwide community's preview), on a page with a writer that isn't theirs and wasn't gathered with
+ * the assistant. Whether they can send yet is not asked here: the Send form answers that in today's words.
+ */
+export function knowledgeThankOffered(f: { signedIn: boolean; live: boolean; beansLive: boolean; own: boolean; gathered: boolean; writer: string | null | undefined }): boolean {
+    return f.signedIn && f.live && f.beansLive && !f.own && !f.gathered && !!f.writer;
 }
 
 /**

@@ -73,6 +73,7 @@ import { dropForumLabelOf, forumLabelsOf, forumLabelsTag } from './membership-no
 import { forumSectionOpenPolls, sectionAccess, sectionReadSql, type SectionAccess } from './forum-sections.js';
 import { postOutOfSight } from './post-sight.js';
 import { forumStarterNeverListed, stampForumPublicFrom } from './forum-public.js';
+import { forumProofSecret } from './forum-ask-posts.js';
 import { getDecision, titleForMembers } from '../decisions-engine.js';
 import { FORUM_LINKING_SQL, FORUM_TARGET_LINKS_WHERE, forumLinkTarget, forumLinksOf } from './forum-links.js';
 
@@ -547,6 +548,9 @@ export function markForumTold(member: string, now = Date.now()): void {
     if (toldAt(member)) return;
     db.prepare(`INSERT INTO forum_members (member_pubkey, told_public_at) VALUES (?, ?)
         ON CONFLICT(member_pubkey) DO UPDATE SET told_public_at = excluded.told_public_at`).run(member, iso(now));
+    // Their secret for the proof each public post of theirs carries (slice F11), made before any post of theirs can exist, so
+    // every post they write shows one and none tells anyone they once asked for it (engine/forum-ask-posts.ts).
+    if (getProfileSwitches().forumPublic) forumProofSecret(member, now);
 }
 
 /** On a public forum, no post until the member was told (design §5): the server holds it, so no app can skip the telling. */
@@ -790,6 +794,8 @@ export function removeForumPostAsModerator(postId: string, now = Date.now()): bo
     if (!topic) return false;
     const at = iso(now);
     blankPost(post.id, 'moderator', at);
+    // An assistant's takedown on hold ends here, whoever removed it (engine/forum-takedowns.ts): nothing waits on it now.
+    db.prepare('UPDATE agent_forum_takedowns SET final_at = ? WHERE forum_post_id = ? AND put_back_at IS NULL AND final_at IS NULL').run(at, post.id);
     if (post.number === 1) {
         blankTopic(topic, at, 'moderator');
         if (db.prepare('SELECT closed_by FROM forum_topics WHERE id = ?').pluck().get(topic.id) === 'removed') {

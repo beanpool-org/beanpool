@@ -135,15 +135,23 @@ export function closeOpenReportsOnPost(postId: string): string[] {
     return rows.map(r => r.reporter_pubkey);
 }
 
+/** What an assistant's takedown is on: a listing (engine/agent-takedowns.ts), or a forum post (engine/forum-takedowns.ts, slice F2b). */
+export type ReportTarget = 'post' | 'forum_post';
+/** SQL: a report names this post, `post` a column or a `?`. A Pulse report is about its item, whatever post id it carries. */
+const REPORTS_ON: Record<ReportTarget, (post: string, alias?: string) => string> = {
+    post: (post, a = '') => `${a}target_post_id = ${post} AND ${a}target_pulse_item_id IS NULL`,
+    forum_post: (post, a = '') => `${a}target_forum_post_id = ${post}`,
+};
+
 /**
  * What a takedown closes (engine/agent-takedowns.ts): every open report on the post but a Child safety one, which waits for a person,
  * first in the Open queue, and whose reporter hears nothing yet. Read as the alerts read it (`reportKind`). Returns the ids it closed,
  * so Put back can open them again, and who to tell: never a reporter whose Child safety report on this post is the one still waiting.
  */
-export function closeReportsForTakedown(postId: string): { ids: string[]; reporters: string[] } {
+export function closeReportsForTakedown(postId: string, on: ReportTarget = 'post'): { ids: string[]; reporters: string[] } {
     const open = db.prepare(
         `SELECT id, reporter_pubkey, reason FROM abuse_reports
-          WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
+          WHERE ${REPORTS_ON[on]('?')} AND (status = 'pending' OR status IS NULL)`
     ).all(postId) as { id: string; reporter_pubkey: string; reason: string | null }[];
     const isWaiting = (r: { reason: string | null }) => reportKind(r.reason) === 'child safety';
     const closing = open.filter(r => !isWaiting(r));
@@ -166,9 +174,9 @@ export function ensureChildSafetyFn(): void {
 }
 
 /** SQL: a Child safety report is open on `post`, a column or a `?`. A Pulse report is about its item, so it is never one of them. */
-export function childSafetyOpenOn(post: string): string {
+export function childSafetyOpenOn(post: string, on: ReportTarget = 'post'): string {
     ensureChildSafetyFn();
-    return `EXISTS (SELECT 1 FROM abuse_reports cs WHERE cs.target_post_id = ${post} AND cs.target_pulse_item_id IS NULL
+    return `EXISTS (SELECT 1 FROM abuse_reports cs WHERE ${REPORTS_ON[on](post, 'cs.')}
         AND (cs.status = 'pending' OR cs.status IS NULL) AND report_is_child_safety(cs.reason) = 1)`;
 }
 

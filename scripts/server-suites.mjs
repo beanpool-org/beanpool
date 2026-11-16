@@ -633,6 +633,9 @@ export const SUITES = [
     // Learn's tags, the node: free tags only, every path that writes a page or a draft x every kind of tags in one table, every
     // rewrite keeps them in search, a fix of only the tags, search as the Market's, never offered as a listing's, a standby's copy.
     'test-knowledge-tags',
+    // The Local guide badge (slice K8): 3 used pages of one's own, every way a page stops counting x the profile and the writer's
+    // line, by id alone on the wire, nothing paid or stored.
+    'test-knowledge-local-guide',
     'test-forum',
     // The forum's moderation (slice F2): reports, auto-hide, restore, removal, the mute, first looks, new accounts, bursts.
     'test-forum-moderation',
@@ -653,6 +656,9 @@ export const SUITES = [
     // The worldwide forum for anyone on the web (slice F7): every public route x visitor, member, removed member x every post
     // state in one table, only the allowed fields, caching signed and unsigned, the index rules, a local community not found.
     'test-forum-public',
+    // Forum posts on an Ask to join (slice F11): the secret and the proof on the worldwide forum, at most three on a request,
+    // one table of post x count x the worldwide forum reachable, unreachable or slow, the secret kept nowhere, no server asked.
+    'test-knock-forum-links',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

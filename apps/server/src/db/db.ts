@@ -563,6 +563,19 @@ export function initSchema() {
     // held by its section's starter. A file from before the forum finds no table; on a fresh install it finds its column.
     try { db.prepare('ALTER TABLE forum_topics ADD COLUMN never_listed INTEGER NOT NULL DEFAULT 0 CHECK (never_listed IN (0, 1))').run(); } catch { }
 
+    // Born with forum posts on an Ask to join (slice F11; DESIGN-forums-fable.md §13, §20): two empty columns, each with
+    // schema.sql's own CHECK, NULL on every row that is there. Additions, not conversion code, as F7's above: nothing is read,
+    // filled in or rewritten. A member's secret is made when it is first needed (engine/forum-ask-posts.ts), and a request to
+    // join holds forum posts only when one sends them. A file from before the forum finds no forum_members and does nothing;
+    // on a fresh install each finds its column.
+    try { db.prepare(`ALTER TABLE forum_members ADD COLUMN proof_secret TEXT CHECK (proof_secret IS NULL OR (length(proof_secret) = 64 AND proof_secret NOT GLOB '*[^0-9a-f]*'))`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN forum_posts TEXT CHECK (forum_posts IS NULL OR (json_valid(forum_posts) AND json_type(forum_posts) = 'array' AND length(forum_posts) <= 2000))`).run(); } catch { }
+
+    // Born with the assistant's forum takedowns (slice F2b, engine/forum-takedowns.ts): one empty column, NULL on every row that is
+    // there, so no post is on hold. An addition, as F2's above: nothing is read, filled in or rewritten. A file from before the forum
+    // finds no table and does nothing; schema.sql below makes it whole. On a fresh install it finds its column.
+    try { db.prepare('ALTER TABLE forum_posts ADD COLUMN taken_down_at TEXT').run(); } catch { }
+
     // Born with the community's name on its members' listings on the global community (list-on-global G5): one column on the
     // directory mirror's cache, as schema.sql has it, 1 (on) on every row that is there: SQLite gives a column added with a
     // constant default that value on every row at once, so nothing is read, filled in or rewritten, and the mirror's next run

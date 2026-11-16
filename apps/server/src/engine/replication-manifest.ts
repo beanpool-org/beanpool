@@ -386,7 +386,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
-        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at via_post_id via_sharer_pubkey'),
+        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at via_post_id via_sharer_pubkey forum_posts'),
         except: { ip_hash: { reason: "the knock limiter's, for a day; never sent (engine/knocks.ts)" } },
     },
     moderation_notices: {
@@ -601,10 +601,12 @@ export const TABLES: Record<string, TableEntry> = {
     // (engine/sync.ts OLDEST_STANDBY_FORMAT, the 426 the operators' manual names).
     forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at group_id'),
     forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at poll_post_id never_listed'),
-    forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
+    // An assistant's takedown on hold (slice F2b) travels with its post, so a standby that took over keeps it hidden and on hold. An
+    // older importer drops the column: there the post stays hidden, by its hide, as any hidden post.
+    forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at taken_down_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
-    forum_members: plain('member_pubkey told_public_at updated_at known_at'),
+    forum_members: plain('member_pubkey told_public_at updated_at known_at proof_secret'),
     // What a member shows beside their name on a public forum (engine/membership-note.ts, slice F10): a standby draws the same
     // label, and "Don't show" goes with a tombstone, so it leaves the standby too. The note is never kept, so nothing of it
     // travels. An older importer drops it: after a take-over from its copy every label is gone until its member sets it again.
@@ -706,6 +708,7 @@ export const TABLES: Record<string, TableEntry> = {
     // assistant's suggestion to restore it, approved: no screen does that by itself.
     agent_takedowns: { kind: 'local', reason: "this server's record of what its owners' AI assistants took down, for Put back and the 7-day sweep: the posts travel hidden in posts, and after a take-over a person restores them (engine/agent-takedowns.ts)" },
     agent_takedown_posts: { kind: 'local', reason: "the posts each assistant's takedown hid, for Put back and the sweep on this server (engine/agent-takedowns.ts)" },
+    agent_forum_takedowns: { kind: 'local', reason: "this server's record of the forum posts its owners' and admins' AI assistants took down, for Put back and the 7-day sweep: the hold travels in forum_posts.taken_down_at (engine/forum-takedowns.ts)" },
     // The note on Beans sent to someone who had blocked its sender, kept for the sender alone; the ledger row, which is
     // copied, stores none (engine/withheld-notes.ts).
     withheld_notes: { kind: 'local', reason: 'the note on Beans sent to someone who had blocked its sender, kept for the sender alone: never in a copy, so no standby can show it to them (engine/withheld-notes.ts)' },

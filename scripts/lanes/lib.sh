@@ -510,6 +510,10 @@ $(cat "$(lane_brief_path "$4")")" build
 sync_main(){ # BRANCH — merge origin/<base> into the branch so GitHub can build the merge ref and CI runs
   stage "SYNC-${1//\//-}" "$LANE_BUILD_TIMEOUT" "SYNC STAGE. Branch $1 (git fetch origin && git checkout $1 in the lane worktree). origin/$LANE_BASE has moved since this branch was created and GitHub cannot build the PR's merge ref, so CI has not run on it. MERGE origin/$LANE_BASE INTO the branch (git merge origin/$LANE_BASE — do NOT rebase; review comments reference these commits). Resolve every conflict so BOTH sides' intent survives: $LANE_BASE carries recent fixes and bot merges, the branch carries its feature — keep both. Then pnpm exec tsc --noEmit in apps/server, run the suites the branch touches, commit the merge, PUSH. Report each conflict and how you resolved it." build; }
 pr_head(){ gh_try gh pr view "$1" -R "$LANE_GH_REPO" --json headRefOid --jq .headRefOid; }   # PR → its head commit now
+pr_conflicting(){ # PR → 0 when GitHub says it conflicts with its base: no pull_request run starts until the branch is synced, so a
+  # wait for one only runs out its polls (#3201 sat 15 with no run). MERGEABLE, UNKNOWN (still being worked out after a push) or
+  # no answer are not a conflict.
+  [ "$(gh_try gh pr view "$1" -R "$LANE_GH_REPO" --json mergeable --jq .mergeable)" = CONFLICTING ]; }
 pr_only_md(){ # PR → 0 when ci.yml starts no run for it: every file is Markdown and none is a guide page, which still gets one
   local f
   f=$(gh_try gh api "repos/$LANE_GH_REPO/pulls/$1/files" --paginate --jq '.[].filename') || return 1

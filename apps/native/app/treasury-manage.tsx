@@ -351,8 +351,9 @@ export default function TreasuryManageScreen() {
 
     // Whole hundredths of a Bean, as the node sends every figure of the detail (`*_c`); a balance that isn't one counts 0.
     const balance = isHundredths(detail?.balance_c) ? detail.balance_c : 0;
-    // The name its members gave it, as written; the words only when there is none.
-    const name = detail?.name || nameParam || t('Community Enterprise');
+    // The name its members gave it, as written; the words only when there is none. The route's name stands in only until the
+    // node's read (review of #3243: no money screen names anyone from a route a link can fill).
+    const name = (detail ? detail.name : nameParam) || t('Community Enterprise');
 
     const controls = seasonControls(detail, identity?.publicKey);
     const postingBlocked = postingBlockedText(detail);

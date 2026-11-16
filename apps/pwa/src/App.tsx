@@ -58,7 +58,7 @@ import { ChatTabPage } from './pages/ChatTabPage';
 import { onConversationRead } from './lib/conversation-read';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
-import { LearnPage, type LearnTarget } from './pages/LearnPage';
+import { LearnPage, type LearnTarget, type LearnThank } from './pages/LearnPage';
 import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
 import { KNOWLEDGE_NAMES, dealsNeedingMe, forumDoorOfSearch, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
@@ -315,8 +315,12 @@ export function App() {
     // The one arrival that shows the Forum side instead: a forum notice, from the bell or a web push (slice F5).
     const [openChatForum, setOpenChatForum] = useState(false);
     // And the topic it opens on: a door to one topic (`/app?forumTopic=<id>`, or the one a visitor kept at Join to reply; slice F7).
+    // Cleared with the flag once ChatTabPage takes them, so a later forum notice opens the Forum's list (#3228 review).
     const [openForumTopic, setOpenForumTopic] = useState<string | null>(null);
     useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); } }, [activeTab]);
+    // Learn's "🫘 Thank {name}" (K8): the Ledger's Send form opens with the writer and the note filled in, taken once.
+    const [ledgerSend, setLedgerSend] = useState<LearnThank | null>(null);
+    const clearLedgerSend = useCallback(() => setLedgerSend(null), []);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     // The deal a door named with its listing (Home, the header's needs-you icons): the listing opens at that deal (deals S4).
     const [openMarketTxId, setOpenMarketTxId] = useState<string | null>(null);
@@ -1584,6 +1588,7 @@ export function App() {
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onNearYou={() => { closePagesOver(); setActiveTab('home'); }}
+                                    onThank={beansMode === 'live' ? (send) => { setLedgerSend(send); setActiveTab('ledger'); } : undefined}
                                 />
                             )}
                             {activeTab === 'messages' && (
@@ -1594,7 +1599,7 @@ export function App() {
                                     homeNonce={chatHomeNonce}
                                     openForum={openChatForum}
                                     openForumTopic={openForumTopic}
-                                    onForumOpened={() => setOpenChatForum(false)}
+                                    onForumOpened={() => { setOpenChatForum(false); setOpenForumTopic(null); }}
                                     onConversationOpened={() => setOpenConversationId(null)}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
@@ -1618,6 +1623,7 @@ export function App() {
                             )}
                             {activeTab === 'ledger' && (
                                 <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} preview={beansMode === 'preview'} deals={myTransactions}
+                                    sendStart={ledgerSend} onSendStartTaken={clearLedgerSend}
                                     onNearYou={() => setActiveTab('home')} onGuide={(slug) => navigateToTab('guide', slug)} />
                             )}
                             {activeTab === 'projects' && (

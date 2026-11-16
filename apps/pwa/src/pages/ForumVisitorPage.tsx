@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import {
-    FORUM_VISITOR_WORDS, forumSectionName, publicWriterLine, t, timeAgo, tn,
+    FORUM_VISITOR_WORDS, forumSectionName, forumWriterLine, t, timeAgo, tn,
     type ForumPublicList, type ForumPublicSection, type ForumPublicTopicPage,
 } from '@beanpool/core';
 import { getPublicForum, getPublicSection, getPublicTopic, keepLinkedTopic } from '../lib/forum-public';
@@ -100,7 +100,7 @@ export function ForumVisitorPage({ topicId = null, onTopic, onJoin }: {
                                         {topic.pinned && <span aria-hidden="true">📌 </span>}{topic.title}
                                     </span>
                                     <span className="text-xs" style={{ color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
-                                        {[publicWriterLine(topic.writer, t('A member')), section ? '' : nameOf(topic.sectionId)].filter(Boolean).join(' · ')}
+                                        {[forumWriterLine(topic.writer, t('A member')), section ? '' : nameOf(topic.sectionId)].filter(Boolean).join(' · ')}
                                     </span>
                                     <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{replies} · {timeAgo(Math.max(0, Date.now() - Date.parse(topic.lastActivityAt)))}</span>
                                 </button>
@@ -151,11 +151,11 @@ function VisitorTopic({ id, sections, onBack, onJoin }: { id: string; sections: 
                     <article key={post.id} data-testid={`forum-visitor-post-${post.number}`} className="flex flex-col gap-1 pt-2"
                         style={post.number > 1 ? { borderTop: '1px solid var(--border-primary)' } : undefined}>
                         <p className="m-0 text-xs font-semibold" style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
-                            {[publicWriterLine(post.writer, member), timeAgo(Math.max(0, Date.now() - Date.parse(post.createdAt))), post.edited ? t(TOPIC_WORDS.edited) : ''].filter(Boolean).join(' · ')}
+                            {[forumWriterLine(post.writer, member), timeAgo(Math.max(0, Date.now() - Date.parse(post.createdAt))), post.edited ? t(TOPIC_WORDS.edited) : ''].filter(Boolean).join(' · ')}
                         </p>
                         {q && q.words && (
                             <p className="m-0 pl-2 text-xs truncate" style={{ borderLeft: '3px solid var(--bp-accent-fill)', color: 'var(--text-secondary)' }}>
-                                {t(TOPIC_WORDS.quoteLine, { name: publicWriterLine(q.writer, member), words: q.words })}
+                                {t(TOPIC_WORDS.quoteLine, { name: forumWriterLine(q.writer, member), words: q.words })}
                             </p>
                         )}
                         <ForumWords words={post.words} linksOn testId={`forum-visitor-words-${post.number}`} />

@@ -14,7 +14,7 @@
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { FORUM_HOME_WORDS, t, timeAgo, tn } from '@beanpool/core';
+import { FORUM_HOME_WORDS, forumWriterLine, t, timeAgo, tn } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { getForumTopics, keptForumList, type ForumTopic } from '../../utils/forum';
 import { FORUM_WORDS, TOPIC_WORDS } from '../forum/forum-words';
@@ -45,7 +45,7 @@ export function ForumHomeBody({ colors, now, turn }: { colors: AppColors; now?: 
             {topics && rows.length === 0 && <Text style={{ fontSize: 14, lineHeight: 20, color: colors.text.secondary }}>{t(FORUM_WORDS.none)}</Text>}
             {rows.map((topic) => {
                 const replies = tn(topic.replyCount, FORUM_WORDS.replies.one, FORUM_WORDS.replies.other, { n: topic.replyCount });
-                const sub = [topic.writer.name || t(TOPIC_WORDS.member), replies, timeAgo(Math.max(0, at - Date.parse(topic.createdAt)))].join(' · ');
+                const sub = [forumWriterLine(topic.writer, t(TOPIC_WORDS.member)), replies, timeAgo(Math.max(0, at - Date.parse(topic.createdAt)))].join(' · ');
                 return (
                     <HomeRow
                         key={topic.id}

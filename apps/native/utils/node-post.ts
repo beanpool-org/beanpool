@@ -13,6 +13,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
+import { withoutLanguage } from './request-language';
+
+/**
+ * How a signed request goes out. `language: false`: without the member's language, which the fetch wrapper otherwise puts on
+ * every request to a community's API (utils/request-language.ts says the one request that asks this, and why).
+ */
+export interface SignedSendOptions { language?: false }
+
+function sendAs<T extends object>(init: T, options: SignedSendOptions | undefined): T {
+    return options?.language === false ? withoutLanguage(init) : init;
+}
 
 let _cachedAnchorUrl: string | null = null;
 
@@ -32,7 +43,7 @@ export async function anchorUrl(): Promise<string | null> {
 }
 
 export async function signedPost(
-    url: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
+    url: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal, options?: SignedSendOptions,
 ): Promise<Response> {
     const bodyString = JSON.stringify(body);
     // Covered by "does not double the slash when the stored node URL ends in one" in
@@ -42,9 +53,9 @@ export async function signedPost(
     const headers = await buildSignedHeaders(
         'POST', target, bodyString, identity.privateKey, identity.publicKey,
     );
-    return fetch(target, {
+    return fetch(target, sendAs({
         method: 'POST', headers, body: bodyString, ...(signal ? { signal } : {}),
-    });
+    }, options));
 }
 
 /**
@@ -52,15 +63,15 @@ export async function signedPost(
  * Empty body, as for {@link signedDelete}. `extra` headers ride along unsigned (an `If-None-Match`).
  */
 export async function signedGet(
-    url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal, extra?: Record<string, string>,
+    url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal, extra?: Record<string, string>, options?: SignedSendOptions,
 ): Promise<Response> {
     const target = `${url.replace(/\/+$/, '')}${path}`;
     const headers = await buildSignedHeaders(
         'GET', target, '', identity.privateKey, identity.publicKey,
     );
-    return fetch(target, {
+    return fetch(target, sendAs({
         method: 'GET', headers: extra ? { ...extra, ...headers } : headers, ...(signal ? { signal } : {}),
-    });
+    }, options));
 }
 
 /**
@@ -75,15 +86,15 @@ export async function signedGet(
  * for a request that carries none.
  */
 export async function signedDelete(
-    url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal,
+    url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal, options?: SignedSendOptions,
 ): Promise<Response> {
     const target = `${url.replace(/\/+$/, '')}${path}`;
     const headers = await buildSignedHeaders(
         'DELETE', target, '', identity.privateKey, identity.publicKey,
     );
-    return fetch(target, {
+    return fetch(target, sendAs({
         method: 'DELETE', headers, ...(signal ? { signal } : {}),
-    });
+    }, options));
 }
 
 /** How long the member's node has to answer Delete account before the phone stops waiting (PR #1303, 4128119830). */

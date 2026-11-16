@@ -5,7 +5,7 @@
  */
 import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
-import { languageHeaders } from './language';
+import { crossOriginLanguageHeaders, languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockForum, readKnockVia, signInsToRefresh, t, type DmLineDisclosure, type KnockForum, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
@@ -324,6 +324,8 @@ export async function signedFetchWithKey(
         ...(signal ? { signal } : {}),
         headers: {
             'Content-Type': 'application/json',
+            // The member's language, as request() sends it (lib/language.ts): a refusal read from here comes back in it.
+            ...languageHeaders(getNodeApiUrl()),
         } as Record<string, string>,
     };
 
@@ -791,8 +793,10 @@ export async function fetchMembershipAt(community: string, publicKey: string, si
 
 /**
  * A request signed by this browser's key to the community at `community` (an origin, any community, not only the one
- * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts) and the browser it asked
- * to be told on (lib/web-push.ts). Signed for that host only. The caller keeps its own timeout and reads the Response; a
+ * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts), the browser it asked
+ * to be told on (lib/web-push.ts), the member's note for the worldwide forum (lib/forum-label.ts). Signed for that host
+ * only, with the member's language (each of those routes allows it from any origin: lib/language.ts
+ * crossOriginLanguageHeaders), so a refusal comes back in it. The caller keeps its own timeout and reads the Response; a
  * POST or DELETE carries `bodyString` as JSON.
  */
 export async function signedFetchAt(
@@ -801,8 +805,8 @@ export async function signedFetchAt(
     await refuseIfNodeTooOld(community);
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
     return fetch(`${community}${path}`, method === 'GET'
-        ? { method, headers: signed, cache: 'no-cache' }
-        : { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString });
+        ? { method, headers: { ...crossOriginLanguageHeaders(), ...signed }, cache: 'no-cache' }
+        : { method, headers: { 'Content-Type': 'application/json', ...crossOriginLanguageHeaders(), ...signed }, body: bodyString });
 }
 
 /**
@@ -814,7 +818,7 @@ export async function signedFetchAt(
 export async function sendSignedAt(method: 'POST' | 'DELETE', community: string, path: string, bodyString: string, identity: BeanPoolIdentity): Promise<void> {
     await refuseIfNodeTooOld(community);
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
-    void fetch(`${community}${path}`, { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString, keepalive: true }).catch(() => null);
+    void fetch(`${community}${path}`, { method, headers: { 'Content-Type': 'application/json', ...crossOriginLanguageHeaders(), ...signed }, body: bodyString, keepalive: true }).catch(() => null);
 }
 
 /**
@@ -837,7 +841,9 @@ export async function signedCopyFetch(
 
 /**
  * A request for the member's own mail between communities at their community `community` (lib/outside-mail.ts: GET
- * /api/mail, POST /api/mail/send and /api/mail/confirm), signed by `identity` for that host. Every one carries the round's
+ * /api/mail, POST /api/mail/send and /api/mail/confirm; lib/guest-chat-live.ts, a group's guests): the community this web
+ * app talks to (outside-mail.ts standingNow), signed by `identity` for that host, with the member's language as request()
+ * sends it (lib/language.ts languageHeaders), so the community's refusal comes back in it. Every one carries the round's
  * `signal`, so its deadline ends a stalled request and the round with it.
  */
 export async function signedMailFetch(
@@ -847,7 +853,7 @@ export async function signedMailFetch(
     await refuseIfNodeTooOld(community, signal);
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
     return fetch(`${community}${path}`, {
-        method, headers: { 'Content-Type': 'application/json', ...signed }, cache: 'no-store',
+        method, headers: { 'Content-Type': 'application/json', ...languageHeaders(community), ...signed }, cache: 'no-store',
         ...(body === undefined ? {} : { body: bodyString }), ...(signal ? { signal } : {}),
     });
 }
@@ -3876,7 +3882,8 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     const path = `/api/home${qs ? `?${qs}` : ''}`;
     const base = getNodeApiUrl();
     const sameOrigin = !base || (typeof window !== 'undefined' && base === window.location.origin);
-    const headers: Record<string, string> = {};
+    // The member's language, as request() sends it (lib/language.ts), so a refusal comes back in it.
+    const headers: Record<string, string> = { ...languageHeaders(base) };
     // Signed as request() signs: by the member when there is one, nothing for a visitor.
     const identity = await loadIdentity();
     if (identity && identity.privateKey) {

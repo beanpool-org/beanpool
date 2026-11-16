@@ -13,7 +13,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { leaveScreen } from '../../utils/leave-screen';
-import { forumSectionName, publicWriterLine, t, timeAgo, type ForumPublicTopicPage } from '@beanpool/core';
+import { forumSectionName, forumWriterLine, t, timeAgo, type ForumPublicTopicPage } from '@beanpool/core';
 import { getPublicTopic } from '../../utils/forum-public';
 import { ForumWords } from '../../components/forum/ForumBits';
 import { useForumStyles } from '../../components/forum/forum-style';
@@ -66,11 +66,11 @@ export default function ForumPublicTopicScreen() {
                     return (
                         <View key={post.id} testID={`forum-visitor-post-${post.number}`} style={[{ gap: 4, paddingTop: 8 }, post.number > 1 && styles.row, post.number > 1 && { flexDirection: 'column' }]}>
                             <Text style={styles.muted}>
-                                {[publicWriterLine(post.writer, member), timeAgo(Math.max(0, Date.now() - Date.parse(post.createdAt))), post.edited ? t(TOPIC_WORDS.edited) : ''].filter(Boolean).join(' · ')}
+                                {[forumWriterLine(post.writer, member), timeAgo(Math.max(0, Date.now() - Date.parse(post.createdAt))), post.edited ? t(TOPIC_WORDS.edited) : ''].filter(Boolean).join(' · ')}
                             </Text>
                             {q?.words ? (
                                 <View style={styles.quote}>
-                                    <Text style={styles.small} numberOfLines={2}>{t(TOPIC_WORDS.quoteLine, { name: publicWriterLine(q.writer, member), words: q.words })}</Text>
+                                    <Text style={styles.small} numberOfLines={2}>{t(TOPIC_WORDS.quoteLine, { name: forumWriterLine(q.writer, member), words: q.words })}</Text>
                                 </View>
                             ) : null}
                             <ForumWords words={post.words} linksOn testID={`forum-visitor-words-${post.number}`} />

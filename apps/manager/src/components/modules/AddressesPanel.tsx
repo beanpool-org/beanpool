@@ -304,7 +304,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
             await setAddressSpare(activeNode.url, action, typed, cred, code);
             proof.close();
             if (action === 'add') setSpareInput('');
-            setActionMessage({ text: t(action === 'add' ? W.spareAdded : W.spareRemoved, { address: typed }), type: 'success' });
+            setActionMessage({ text: action === 'add' ? t(W.spareAdded, { address: typed }) : t(W.spareRemoved, { address: typed }), type: 'success' });
             await afterChange();
         } catch (e: unknown) {
             if (proof.checkError(e, (c) => handleSpare(action, typed, c), code)) return;

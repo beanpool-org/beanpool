@@ -1,10 +1,13 @@
-/* global process -- a Node script */
+/* global process, console -- a Node script */
 // scripts/deploy/schema-drift.mjs, the read-only pre-deploy check: a fixture database holding each case (an old CHECK on an
 // empty local table, the same with rows, a copied table's drift, a column IF NOT EXISTS misses, a table written another way
 // with a column a boot step adds, an identical one) reads the right line; a boot step is proved against the rows that are
-// there (a step the rows refuse reads as drift, the same step on an empty table as OK); it opens the database read-only (a
-// write fails) and leaves the file, and a live writer's WAL, byte for byte as they were; its packed copy for `node -` in the
-// container prints the same lines from what it carries; the repo's own schema.sql and replication manifest read whole.
+// there (a step the rows refuse reads as drift, the same step on an empty table as OK, a refused step is never OK); the steps
+// replay in the boot's order (a fixture's initSchema run for real on a copy leaves what the replay found, and this checkout's
+// db.ts, booted through tsx on a kept 1.4.0 file with a statement trace, runs the replay's statements in the replay's order);
+// it opens the database read-only (a write fails) and leaves the file, and a live writer's WAL, byte for byte as they were;
+// its packed copy for `node -` in the container prints the same lines from what it carries; the repo's own schema.sql and
+// replication manifest read whole.
 // Run by test-all.sh (the `schema_drift` check): node --test scripts/deploy/schema-drift.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
     checkDrift, shapeDiffs, tableShape, manifestKinds, bootSteps, readBuild, loadSqlite, openReadOnly, parseArgs, formatResult,
-    createTableParts, sqlTokens, canonical,
+    createTableParts, sqlTokens, canonical, replayBootSteps, withoutComments,
 } from './schema-drift.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -171,7 +174,7 @@ test('a database the build itself made reads OK everywhere and exits 0', () => {
 test('a boot step that is not before the exec counts for nothing: the column reads as missing', () => {
     // notes.lang's ALTER in the fixture's db.ts is AFTER the exec, so it isn't a step this build runs before schema.sql.
     const steps = bootSteps(DB_TS);
-    assert.deepEqual(steps, { steps: [{ table: 'settings', def: 'shown INTEGER NOT NULL DEFAULT 1 CHECK (shown IN (0, 1))' }], unread: 0, found: true });
+    assert.deepEqual(steps, { steps: [{ table: 'settings', def: 'shown INTEGER NOT NULL DEFAULT 1 CHECK (shown IN (0, 1))' }], unread: [], found: true });
 });
 
 test('the database is opened read-only: a write through it fails, and the file is left byte for byte', () => {
@@ -379,6 +382,209 @@ test("a table whose boot steps can't be run on a copy of its rows keeps its drif
     assert.match(line, /columns only in schema\.sql: b/);
 });
 
+// ── The steps run in the boot's order ────────────────────────────────────────────────────────────────────────────────
+
+// The order counts: a step can name a column a later step adds, or add a column an earlier one added (the first stands). db.ts
+// mixes its forms (a loop at the top, pair loops before literals), so the replay runs them as the boot does: by place.
+const ORDER_MANIFEST = `
+export const TABLES: Record<string, TableEntry> = {
+    t: { kind: 'local', reason: 'this server only' },
+};
+`;
+
+test('a refused step is never OK, even when schema.sql names no column of it: the line says so and it exits 1', () => {
+    const f = fixture("CREATE TABLE t (id TEXT PRIMARY KEY); INSERT INTO t VALUES ('t1');", {
+        schema: 'CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY, b TEXT);',
+        manifest: ORDER_MANIFEST,
+        boot: `
+export function initSchema() {
+    try { db.prepare('ALTER TABLE t ADD COLUMN b TEXT').run(); } catch { }
+    try { db.prepare('ALTER TABLE t ADD COLUMN z TEXT NOT NULL').run(); } catch { }
+    db.exec(schemaSql);
+}
+`,
+    });
+    try {
+        const r = run(f.args);
+        assert.equal(r.status, 1, r.stdout + r.stderr);
+        assert.deepEqual(tableLines(r.stdout), [
+            'DRIFT-HAS-ROWS t rows=1 local (with the columns a boot step in db.ts adds: b; boot steps in db.ts refused here: z (Cannot add a NOT NULL column with default value NULL)): nothing else differs',
+        ]);
+    } finally {
+        rmSync(f.dir, { recursive: true, force: true });
+    }
+});
+
+/**
+ * A real boot of a fixture db.ts on a copy of `file`: its initSchema's own JavaScript, run with `db` a connection to the copy,
+ * up to its schema.sql exec. So the steps run in the order the code runs them, not as the check reads them. Returns each
+ * ALTER it ran, in order, with what became of it, and the shape of `table` it left.
+ */
+function bootFixture(dbTs, file, table) {
+    const copy = `${file}-boot-copy`;
+    writeFileSync(copy, readFileSync(file));
+    const conn = new Database(copy);
+    const ran = [];
+    const schemaSql = Symbol('schema.sql');
+    const reached = new Error('the schema.sql exec');
+    const db = {
+        prepare: (sql) => ({
+            run: () => {
+                const step = { sql, taken: false, error: null };
+                ran.push(step);
+                try { conn.prepare(sql).run(); step.taken = true; } catch (e) { step.error = e.message; throw e; }
+            },
+        }),
+        exec: (sql) => { if (sql === schemaSql) throw reached; conn.exec(sql); },
+    };
+    const open = dbTs.indexOf('{', dbTs.indexOf('export function initSchema'));
+    let stopped = null;
+    try { new Function('db', 'schemaSql', dbTs.slice(open + 1, dbTs.lastIndexOf('}')))(db, schemaSql); } catch (e) { stopped = e; }
+    assert.equal(stopped, reached, 'the fixture boot ran to its schema.sql exec');
+    const shape = tableShape(conn, table);
+    conn.close();
+    rmSync(copy);
+    return { ran, shape };
+}
+
+/** A boot step's statement, as the boot prepares it. */
+const statementOf = (s) => `ALTER TABLE ${s.table} ADD COLUMN ${s.def}`;
+
+const ORDER_CASES = [
+    {
+        name: 'a step names a column a later step adds: a loop at the top, the literal it needs below',
+        schema: 'CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY, y INTEGER, x INTEGER CHECK (x IS NULL OR x < y));',
+        boot: `
+export function initSchema() {
+    for (const column of ['x INTEGER CHECK (x IS NULL OR x < y)']) {
+        try { db.prepare(\`ALTER TABLE t ADD COLUMN \${column}\`).run(); } catch { }
+    }
+    try { db.prepare('ALTER TABLE t ADD COLUMN y INTEGER').run(); } catch { }
+    db.exec(schemaSql);
+}
+`,
+        line: (rows) => `${rows ? 'DRIFT-HAS-ROWS t rows=1' : 'DRIFT-EMPTY-LOCAL t rows=0'} local (with the columns a boot step in db.ts adds: y; boot steps in db.ts refused here: x (error in table t after add column: no such column: y)): columns only in schema.sql: x; CHECK only in schema.sql: x is null or x < y`,
+    },
+    {
+        name: 'the same column twice: a pair loop adds it, a later literal adds it as schema.sql has it, and the first stands',
+        schema: "CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY, x TEXT NOT NULL DEFAULT '');",
+        boot: `
+export function initSchema() {
+    for (const [table, column] of [['t', 'x TEXT']]) {
+        try { db.prepare(\`ALTER TABLE \${table} ADD COLUMN \${column}\`).run(); } catch { }
+    }
+    try { db.prepare("ALTER TABLE t ADD COLUMN x TEXT NOT NULL DEFAULT ''").run(); } catch { }
+    db.exec(schemaSql);
+}
+`,
+        line: (rows) => `${rows ? 'DRIFT-HAS-ROWS t rows=1' : 'DRIFT-EMPTY-LOCAL t rows=0'} local (with the columns a boot step in db.ts adds: x): x: NULL allowed here, NOT NULL in schema.sql; x: default none here, '' in schema.sql`,
+    },
+    {
+        name: "the first case's steps written the other way round: the literal first, and both take",
+        schema: 'CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY, y INTEGER, x INTEGER CHECK (x IS NULL OR x < y));',
+        boot: `
+export function initSchema() {
+    try { db.prepare('ALTER TABLE t ADD COLUMN y INTEGER').run(); } catch { }
+    for (const column of ['x INTEGER CHECK (x IS NULL OR x < y)']) {
+        try { db.prepare(\`ALTER TABLE t ADD COLUMN \${column}\`).run(); } catch { }
+    }
+    db.exec(schemaSql);
+}
+`,
+        line: () => 'OK t local (with the columns a boot step in db.ts adds: y, x)',
+    },
+];
+
+test("the steps replay in the boot's order: each case reads as a real boot of a copy leaves the table, and exits 1 unless that is schema.sql's shape", () => {
+    for (const c of ORDER_CASES) {
+        for (const rows of ['', "INSERT INTO t (id) VALUES ('t1');"]) {
+            const what = `${c.name}${rows ? ', with a row' : ', empty'}`;
+            const f = fixture(`CREATE TABLE t (id TEXT PRIMARY KEY); ${rows}`, { schema: c.schema, manifest: ORDER_MANIFEST, boot: c.boot });
+            try {
+                const r = run(f.args);
+                const ok = c.line(rows).startsWith('OK ');
+                assert.deepEqual(tableLines(r.stdout), [c.line(rows)], what);
+                assert.equal(r.status, ok ? 0 : 1, `${what}: ${r.stdout}${r.stderr}`);
+                // The real boot of a copy, run by the fixture's own code: the same statements in the same order, each taken or
+                // refused as the replay found, and the same table left.
+                const { steps, unread } = bootSteps(c.boot);
+                assert.deepEqual(unread, [], what);
+                const boot = bootFixture(c.boot, f.db, 't');
+                assert.deepEqual(steps.map(statementOf), boot.ran.map((s) => s.sql), what);
+                const db = openReadOnly(Database, f.db);
+                try {
+                    const replay = replayBootSteps(Database, db, 't', steps);
+                    assert.equal(replay.error, null, what);
+                    assert.deepEqual(shapeDiffs(replay.shape, boot.shape), [], `${what}: the replay leaves the table a real boot leaves`);
+                    const column = (sql) => sqlTokens(sql.replace(/^ALTER TABLE \S+ ADD COLUMN /, ''))[0].text;
+                    assert.deepEqual(replay.added, boot.ran.filter((s) => s.taken).map((s) => column(s.sql)), what);
+                    assert.deepEqual(replay.refused, boot.ran.filter((s) => !s.taken && !/^duplicate column name/.test(s.error))
+                        .map((s) => `${column(s.sql)} (${s.error})`), what);
+                } finally {
+                    db.close();
+                }
+            } finally {
+                rmSync(f.dir, { recursive: true, force: true });
+            }
+        }
+    }
+});
+
+test("an ALTER TABLE the check can't place in the boot's order: its table (every table, where it names none) can't be proved and keeps its drift; a step in a comment is no step", () => {
+    const bootWith = (extra) => `
+export function initSchema() {
+    // try { db.prepare('ALTER TABLE t ADD COLUMN x TEXT').run(); } catch { }
+    /* try { db.prepare("ALTER TABLE t ADD COLUMN x TEXT").run(); } catch { }
+       for (const column of ['x TEXT']) { try { db.prepare(\`ALTER TABLE t ADD COLUMN \${column}\`).run(); } catch { } } */
+    const note = 'a string with // in it is no comment' + \`\${'}'}\`;
+    ${extra}
+    try { db.prepare("ALTER TABLE t ADD COLUMN x TEXT NOT NULL DEFAULT ''").run(); } catch { }
+    db.exec(schemaSql);
+}
+`;
+    const schema = "CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY, x TEXT NOT NULL DEFAULT '');";
+    const freshDb = new Database(':memory:');
+    freshDb.exec(schema);
+    const fresh = tableShape(freshDb, 't');
+    freshDb.close();
+    const cases = [
+        // The comments run nothing, so the one step stands, and the boot leaves schema.sql's shape.
+        { extra: '', unread: [], asBooted: [], line: 'OK t local (with the columns a boot step in db.ts adds: x)' },
+        // A form the check doesn't read (db.exec) runs first at boot, and x stays nullable: a replay of the read step alone
+        // would say OK. So no replay, and the drift stands.
+        { extra: "try { db.exec('ALTER TABLE t ADD COLUMN x TEXT'); } catch { }", unread: ['t'] },
+        // The same through a template that names no table: every table's replay is unproved.
+        { extra: "for (const name of ['t']) { try { db.exec(`ALTER TABLE ${name} ADD COLUMN x TEXT`); } catch { } }", unread: [null] },
+    ];
+    const NULLABLE = ['x: NULL allowed here, NOT NULL in schema.sql', "x: default none here, '' in schema.sql"];
+    for (const c of cases) {
+        const f = fixture('CREATE TABLE t (id TEXT PRIMARY KEY);', { schema, manifest: ORDER_MANIFEST, boot: bootWith(c.extra) });
+        try {
+            const read = bootSteps(bootWith(c.extra));
+            assert.deepEqual(read.steps, [{ table: 't', def: "x TEXT NOT NULL DEFAULT ''" }], c.extra);
+            assert.deepEqual(read.unread, c.unread, c.extra);
+            assert.deepEqual(shapeDiffs(bootFixture(bootWith(c.extra), f.db, 't').shape, fresh), c.asBooted ?? NULLABLE, c.extra);
+            const r = run(f.args);
+            assert.equal(r.status, c.line ? 0 : 1, r.stdout + r.stderr);
+            assert.deepEqual(tableLines(r.stdout), [c.line ?? "DRIFT-EMPTY-LOCAL t rows=0 local (can't prove its boot: 1 ALTER TABLE in db.ts before the schema.sql exec not read in the boot's order, so the drift stands as read): columns only in schema.sql: x"], c.extra);
+        } finally {
+            rmSync(f.dir, { recursive: true, force: true });
+        }
+    }
+    // A loop's array holding more than its literals (a name, a spread) runs steps the check can't read: its table is unread
+    // (a pair loop's, every table), and the steps it does read keep their places.
+    assert.deepEqual(bootSteps(`
+export function initSchema() {
+    for (const column of [EXTRA, 'y TEXT']) { try { db.prepare(\`ALTER TABLE t ADD COLUMN \${column}\`).run(); } catch { } }
+    for (const [table, column] of [...MORE, ['u', 'z TEXT']]) { try { db.prepare(\`ALTER TABLE \${table} ADD COLUMN \${column}\`).run(); } catch { } }
+    db.exec(schemaSql);
+}
+`), { steps: [{ table: 't', def: 'y TEXT' }, { table: 'u', def: 'z TEXT' }], unread: ['t', null], found: true });
+    // Comments go and every offset stays: strings, templates and their `${…}` are kept as written.
+    const js = "a /* b */ 'c // d' `e ${ f /* g */ } h // i` j // k\nl";
+    assert.equal(withoutComments(js), "a         'c // d' `e ${ f         } h // i` j     \nl");
+});
+
 test('the command line: no --db, an unknown flag, a missing database or an unreadable build exit 2', () => {
     const f = fixture();
     try {
@@ -506,5 +712,95 @@ test("this checkout: every table schema.sql makes has its kind in the manifest, 
         assert.ok(ok, results.filter((r) => r.status !== 'OK').map(formatResult).join('\n'));
     } finally {
         db.close();
+    }
+});
+
+/**
+ * Run by tsx in a temp data dir (the test below writes it there as a script): a kept 1.4.0 file (kept-node-test-fixture.ts)
+ * with one row in each of `tables`, written as stored, copied to before.db; then this checkout's real db.ts initSchema on
+ * it, every ALTER TABLE it runs before its schema.sql exec recorded in order, taken or refused. Prints BOOT_TRACE <json>.
+ */
+async function bootTraceMain(server, tables) {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { createRequire } = await import('node:module');
+    const dir = process.env.BEANPOOL_DATA_DIR;
+    const Sqlite = createRequire(path.join(server, 'package.json'))('better-sqlite3');
+    const { makeKeptNodeDatabase } = await import(path.join(server, 'src', 'kept-node-test-fixture.ts'));
+    const file = path.join(dir, 'state.db');
+    const d = new Sqlite(file);
+    makeKeptNodeDatabase(d);
+    d.pragma('foreign_keys = OFF');
+    d.pragma('ignore_check_constraints = ON');
+    for (const t of tables) {
+        const cols = d.prepare('SELECT name, type, "notnull" AS nn, dflt_value AS dflt, pk FROM pragma_table_info(?)').all(t)
+            .filter((c) => (c.nn && c.dflt === null) || c.pk);
+        if (cols.length === 0) continue;
+        d.prepare(`INSERT INTO "${t}" (${cols.map((c) => `"${c.name}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`)
+            .run(...cols.map((c) => (/INT|REAL|NUM/i.test(c.type) ? 1 : 'x1')));
+    }
+    d.close();
+    fs.copyFileSync(file, path.join(dir, 'before.db'));
+    const { db, initSchema } = await import(path.join(server, 'src', 'db', 'db.ts'));
+    const schemaSql = fs.readFileSync(path.join(server, 'src', 'db', 'schema.sql'), 'utf8');
+    const trace = [];
+    let reached = false;
+    const prepare = db.prepare.bind(db);
+    const exec = db.exec.bind(db);
+    const alter = (sql) => !reached && /\bALTER\s+TABLE\b/i.test(sql);
+    const record = (sql, go) => {
+        const step = { sql, taken: false, error: null };
+        trace.push(step);
+        try { const r = go(); step.taken = true; return r; } catch (e) { step.error = e.message; throw e; }
+    };
+    db.prepare = (sql) => (alter(sql) ? { run: (...a) => record(sql, () => prepare(sql).run(...a)) } : prepare(sql));
+    db.exec = (sql) => { if (sql === schemaSql) reached = true; return alter(sql) ? record(sql, () => exec(sql)) : exec(sql); };
+    let error = null;
+    try { initSchema(); } catch (e) { error = e.message; }
+    console.log(`BOOT_TRACE ${JSON.stringify({ reached, error, trace })}`);
+}
+
+test("this checkout's db.ts, booted for real on a kept 1.4.0 file with rows: the replay runs the boot's statements in the boot's order, and takes and refuses what that boot did", () => {
+    const read = bootSteps(readFileSync(join(ROOT, 'apps/server/src/db/db.ts'), 'utf8'));
+    assert.deepEqual(read.unread, [], "every ALTER TABLE before db.ts's schema.sql exec is read in one of the three forms");
+    const tables = [...new Set(read.steps.map((s) => s.table))];
+    const dir = mkdtempSync(join(tmpdir(), 'schema-drift-boot-'));
+    try {
+        const server = join(ROOT, 'apps/server');
+        const script = join(dir, 'boot-trace.mjs');
+        writeFileSync(script, `await (${bootTraceMain.toString()})(${JSON.stringify(server)}, ${JSON.stringify(tables)});\n`);
+        const r = spawnSync('pnpm', ['exec', 'tsx', script], {
+            cwd: server, encoding: 'utf8', env: { ...process.env, BEANPOOL_DATA_DIR: dir }, timeout: 240_000,
+        });
+        const out = (r.stdout ?? '').split('\n').find((l) => l.startsWith('BOOT_TRACE '));
+        assert.ok(out, `the traced boot printed no trace: ${r.error?.message ?? ''}\n${r.stdout}\n${r.stderr}`);
+        const { reached, trace } = JSON.parse(out.slice('BOOT_TRACE '.length));
+        assert.ok(reached, 'the boot ran to its schema.sql exec');
+        assert.ok(trace.length > 0, 'the boot ran its steps');
+        // The invariant: the replay's sequence of statements is the boot's, one for one, in order.
+        const parse = (sql) => {
+            const m = /^ALTER TABLE\s+(\S+)\s+ADD COLUMN\s+([\s\S]+)$/i.exec(sql);
+            return m ? [m[1].toLowerCase(), sqlTokens(m[2])[0].text, sql] : [null, null, sql];
+        };
+        assert.deepEqual(read.steps.map((s) => [s.table, sqlTokens(s.def)[0].text, statementOf(s)]), trace.map((t) => parse(t.sql)));
+        // What each step met: on the same file, the replay takes and refuses what the boot took and refused, table by table.
+        const build = readBuild({
+            schema: join(server, 'src/db/schema.sql'), manifest: join(server, 'src/engine/replication-manifest.ts'), boot: join(server, 'src/db/db.ts'),
+        });
+        const db = openReadOnly(Database, join(dir, 'before.db'));
+        try {
+            const replayed = checkDrift(Database, db, build).results.filter((x) => tables.includes(x.table.toLowerCase()));
+            assert.ok(replayed.length > 0, 'a 1.4.0 file holds tables the steps change');
+            for (const x of replayed) {
+                const mine = trace.filter((t) => parse(t.sql)[0] === x.table.toLowerCase());
+                assert.deepEqual(x.bootAdds, mine.filter((t) => t.taken).map((t) => parse(t.sql)[1]), x.table);
+                assert.deepEqual(x.bootRefused, mine.filter((t) => !t.taken && !/^duplicate column name/.test(t.error))
+                    .map((t) => `${parse(t.sql)[1]} (${t.error})`), x.table);
+            }
+        } finally {
+            db.close();
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
     }
 });

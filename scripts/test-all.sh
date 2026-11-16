@@ -401,7 +401,8 @@ run_check "deploy_package" bash scripts/test-deploy-package.sh
 # The read-only check a director runs before a deploy (scripts/deploy/schema-drift.mjs, docs/schema-drift-check.md): the
 # tables a node already holds in a shape schema.sql's CREATE TABLE IF NOT EXISTS won't change (16 Nov 2026: a CHECK edited
 # in place reached fresh installs and no kept node's table, #3233, #3244). Fixture databases in a temp dir, the packed
-# copy through `node -`, and this checkout's schema.sql and manifest. Nothing is contacted; about a second.
+# copy through `node -`, this checkout's schema.sql and manifest, and one traced boot of its db.ts through tsx on a kept
+# 1.4.0 file in a temp dir. Nothing is contacted; a few seconds.
 run_check "schema_drift" node --test scripts/deploy/schema-drift.test.mjs
 
 # The report below has to NAME what failed. On PR #1065 it did not: the Failure Details block prints the

@@ -33,10 +33,12 @@
  * and AUTOINCREMENT, and a virtual table's whole definition. Not compared: indexes and triggers (CREATE ... IF NOT EXISTS keeps an old
  * one of the same name too), and tables schema.sql doesn't make. A column a boot step in db.ts adds before the schema.sql
  * exec (initSchema's ALTER TABLE ... ADD COLUMN) counts as there only when the step, run on a copy of the table with its
- * rows, takes: the line names it. A step those rows refuse is named with SQLite's reason, and its column reads as missing.
+ * rows, in the order the boot runs the steps, takes: the line names it. A step those rows refuse is named with SQLite's
+ * reason, its column reads as missing, and the table is never OK. A table an ALTER TABLE before the exec names that the
+ * check can't read in the boot's order keeps its drift as read ("can't prove").
  *
- * Exit 0 only when every table compared is OK (proved against the rows that are there); 1 on any drift, or a boot step it
- * could not prove; 2 when it could not run.
+ * Exit 0 only when every table compared is OK (proved against the rows that are there); 1 on any drift, a boot step
+ * refused, or one it could not prove; 2 when it could not run.
  */
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -282,36 +284,89 @@ export function manifestKinds(manifestTs) {
 }
 
 /**
+ * `text` (JavaScript) with its comments blanked, a space for each character and every line break kept, so every offset
+ * stays where it was and a step in a comment, which no boot runs, isn't read as one. Strings and template literals, with
+ * their `${…}`, are kept as written.
+ */
+export function withoutComments(text) {
+    const out = text.split('');
+    const stack = ['code']; // 'code', or the quote of the string it is in; a template's `${` opens a 'code' of its own
+    const braces = [0]; // one count per 'code' on the stack: the `}` that closes a template's `${` is the one at 0
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const top = stack[stack.length - 1];
+        if (top !== 'code') {
+            if (c === '\\') i++;
+            else if (c === top) stack.pop();
+            else if (top === '`' && c === '$' && text[i + 1] === '{') { stack.push('code'); braces.push(0); i++; }
+            continue;
+        }
+        if (c === '/' && (text[i + 1] === '/' || text[i + 1] === '*')) {
+            const line = text[i + 1] === '/';
+            const end = line ? text.indexOf('\n', i) : text.indexOf('*/', i + 2);
+            const stop = end < 0 ? text.length : line ? end : end + 2;
+            for (; i < stop; i++) if (text[i] !== '\n') out[i] = ' ';
+            i--;
+            continue;
+        }
+        if (c === "'" || c === '"' || c === '`') stack.push(c);
+        else if (c === '{') braces[braces.length - 1]++;
+        else if (c === '}' && stack.length > 1 && braces[braces.length - 1] === 0) { stack.pop(); braces.pop(); }
+        else if (c === '}') braces[braces.length - 1]--;
+    }
+    return out.join('');
+}
+
+/**
  * The columns db.ts's initSchema adds before the schema.sql exec (ALTER TABLE ... ADD COLUMN, each in its own try): what a
  * kept node's tables hold once the new build has booted, schema.sql aside. Read from the text in its three forms: a literal
- * statement, a loop over one table's column definitions, a loop over [table, column] pairs. `unread` counts the ADD COLUMNs
- * in none of those forms: a column one adds reads as drift (the safe way round).
+ * statement, a loop over one table's column definitions, a loop over [table, column] pairs.
+ *
+ * `steps` are in the order the boot runs them: by where each sits in initSchema, a loop's in the loop's order at the loop's
+ * place. The order counts: a step can name a column a later one adds, or add a column an earlier one added (the first
+ * stands), so a replay in any other order can take what the boot refuses.
+ *
+ * `unread` names the table of each ALTER TABLE outside a comment in none of those forms, and of each loop whose array holds
+ * more than its literals (null where the text doesn't name one): where in the order it runs, and what it does, is not
+ * known, so a table it names (every table, for a null) can't be proved by a replay and keeps its drift as read (the safe
+ * way round). Comments are found as JavaScript's (withoutComments): a regex literal holding a quote would mislead that;
+ * initSchema has none, and the test that boots this checkout's db.ts holds the real file to what its boot runs.
  */
 export function bootSteps(dbTs) {
     const start = dbTs.indexOf('export function initSchema');
     // The exec on a line of its own: the one every boot runs (a fresh install's, in its transaction, comes first).
-    const exec = start < 0 ? null : /^[ \t]+db\.exec\(schemaSql\);/m.exec(dbTs.slice(start));
-    if (!exec) return { steps: [], unread: 0, found: false };
-    const text = dbTs.slice(start, start + exec.index);
-    const steps = [];
-    let read = 0;
-    const strings = (s) => [...s.matchAll(/(['"`])((?:(?!\1)[^\\]|\\.)*)\1/g)].map((m) => m[2]);
+    const blanked = start < 0 ? '' : withoutComments(dbTs.slice(start));
+    const exec = start < 0 ? null : /^[ \t]+db\.exec\(schemaSql\);/m.exec(blanked);
+    if (!exec) return { steps: [], unread: [], found: false };
+    const text = blanked.slice(0, exec.index);
+    const steps = []; // { table, def, at: where its statement or loop starts, k: its place in that loop }
+    const spans = []; // the text each read form covers
+    const unread = [];
+    const STRING = /(['"`])((?:(?!\1)[^\\]|\\.)*)\1/g;
+    const PAIR = /\[\s*(['"`])([A-Za-z_][A-Za-z0-9_]*)\1\s*,\s*(['"`])((?:(?!\3)[^\\]|\\.)*)\3\s*\]/g;
+    // A loop's array holding anything but its literals (a name, a spread) runs steps this can't read: its table is unread.
+    const whole = (array, form) => array.replace(form, '').replace(/[\s,]/g, '') === '';
     for (const m of text.matchAll(/db\.prepare\((['"`])ALTER TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+ADD COLUMN\s+((?:(?!\1)[^$\\])+)\1\s*\)/g)) {
-        steps.push({ table: m[2].toLowerCase(), def: m[3] });
-        read++;
+        steps.push({ table: m[2].toLowerCase(), def: m[3], at: m.index, k: 0 });
+        spans.push([m.index, m.index + m[0].length]);
     }
     for (const m of text.matchAll(/for\s*\(\s*const\s+(\w+)\s+of\s+\[((?:(?!for\s*\()[\s\S])*?)\]\s*\)\s*\{\s*try\s*\{\s*db\.prepare\(`ALTER TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+ADD COLUMN\s+\$\{\1\}`\)/g)) {
-        for (const def of strings(m[2])) steps.push({ table: m[3].toLowerCase(), def });
-        read++;
+        [...m[2].matchAll(STRING)].forEach((s, k) => steps.push({ table: m[3].toLowerCase(), def: s[2], at: m.index, k }));
+        spans.push([m.index, m.index + m[0].length]);
+        if (!whole(m[2], STRING)) unread.push(m[3].toLowerCase());
     }
     for (const m of text.matchAll(/for\s*\(\s*const\s+\[\s*(\w+)\s*,\s*(\w+)\s*\]\s+of\s+\[((?:(?!for\s*\()[\s\S])*?)\]\s*\)\s*\{\s*try\s*\{\s*db\.prepare\(`ALTER TABLE\s+\$\{\1\}\s+ADD COLUMN\s+\$\{\2\}`\)/g)) {
-        for (const pair of m[3].matchAll(/\[\s*(['"`])([A-Za-z_][A-Za-z0-9_]*)\1\s*,\s*(['"`])((?:(?!\3)[^\\]|\\.)*)\3\s*\]/g)) {
-            steps.push({ table: pair[2].toLowerCase(), def: pair[4] });
-        }
-        read++;
+        [...m[3].matchAll(PAIR)].forEach((pair, k) => steps.push({ table: pair[2].toLowerCase(), def: pair[4], at: m.index, k }));
+        spans.push([m.index, m.index + m[0].length]);
+        if (!whole(m[3], PAIR)) unread.push(null);
     }
-    const all = (text.match(/ADD COLUMN/g) ?? []).length;
-    return { steps, unread: all - read, found: true };
+    steps.sort((a, b) => a.at - b.at || a.k - b.k);
+    for (const m of text.matchAll(/\bALTER\s+TABLE\b/gi)) {
+        if (spans.some(([from, to]) => m.index >= from && m.index < to)) continue;
+        const named = /^ALTER\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_$.])/i.exec(text.slice(m.index, m.index + 200));
+        unread.push(named ? named[1].toLowerCase() : null);
+    }
+    return { steps: steps.map(({ table, def }) => ({ table, def })), unread, found: true };
 }
 
 /** What the check compares against, read from the checkout (or from the packed copy). */
@@ -323,7 +378,8 @@ export function readBuild({ schema, manifest, boot }) {
         schemaSha: createHash('sha256').update(schemaSql).digest('hex').slice(0, 12),
         kinds: manifestKinds(readFileSync(manifest, 'utf8')),
         bootSteps: boots.steps,
-        bootUnread: boots.found ? boots.unread : -1,
+        bootUnread: boots.found ? boots.unread.length : -1,
+        bootUnreadTables: boots.unread,
     };
 }
 
@@ -418,19 +474,23 @@ export function checkDrift(Database, db, build) {
             let diffs = shapeDiffs(tableShape(db, h.name), freshShape);
             let replay = { added: [], refused: [], error: null };
             const steps = build.bootSteps.filter((s) => s.table === key);
-            if (diffs.length > 0 && steps.length > 0 && h.type === 'table') {
-                // Only ever turns a drift into OK when the boot's steps, run on the table's own rows, give schema.sql's
-                // shape; a step the rows refuse, or a replay that can't be made, leaves the drift as read.
+            // An ALTER TABLE db.ts runs on it (or on a table it doesn't name) that the reader couldn't place in the boot's order.
+            const unread = (build.bootUnreadTables ?? []).filter((t) => t === key || t === null).length;
+            const unproved = diffs.length > 0 && unread > 0 ? unread : 0;
+            if (diffs.length > 0 && steps.length > 0 && h.type === 'table' && unproved === 0) {
+                // Only ever turns a drift into OK when the boot's steps, run on the table's own rows in the boot's order, give
+                // schema.sql's shape; a step the rows refuse, or a replay that can't be made, leaves the drift as read.
                 replay = replayBootSteps(Database, db, h.name, steps);
                 if (replay.added.length > 0) diffs = shapeDiffs(replay.shape, freshShape);
             }
             let status = 'OK';
             let rows = null;
-            if (diffs.length > 0) {
+            // A refused step is never OK, whatever its column: the boot drops it without a word on this node.
+            if (diffs.length > 0 || replay.refused.length > 0) {
                 rows = db.prepare(`SELECT COUNT(*) AS n FROM ${quoteName(h.name)}`).get().n;
                 status = kind !== 'local' ? 'DRIFT-REPLICATED' : rows > 0 ? 'DRIFT-HAS-ROWS' : 'DRIFT-EMPTY-LOCAL';
             }
-            results.push({ status, table: h.name, kind, rows, diffs, bootAdds: replay.added, bootRefused: replay.refused, replayError: replay.error });
+            results.push({ status, table: h.name, kind, rows, diffs, bootAdds: replay.added, bootRefused: replay.refused, replayError: replay.error, bootUnproved: unproved });
         }
         return {
             results,
@@ -449,9 +509,10 @@ export function formatResult(r) {
     if (r.bootAdds.length > 0) notes.push(`with the columns a boot step in db.ts adds: ${r.bootAdds.join(', ')}`);
     if (r.bootRefused?.length > 0) notes.push(`boot steps in db.ts refused here: ${r.bootRefused.join(', ')}`);
     if (r.replayError) notes.push(`its boot steps in db.ts could not be run on a copy of its rows (${r.replayError}), so the drift stands as read`);
+    if (r.bootUnproved > 0) notes.push(`can't prove its boot: ${r.bootUnproved} ALTER TABLE in db.ts before the schema.sql exec not read in the boot's order, so the drift stands as read`);
     const boot = notes.length > 0 ? ` (${notes.join('; ')})` : '';
     if (r.status === 'OK') return `OK ${r.table} ${r.kind}${boot}`;
-    return `${r.status} ${r.table} rows=${r.rows} ${r.kind}${boot}: ${r.diffs.join('; ')}`;
+    return `${r.status} ${r.table} rows=${r.rows} ${r.kind}${boot}: ${r.diffs.length > 0 ? r.diffs.join('; ') : 'nothing else differs'}`;
 }
 
 /** The command line; `{ error }` when it can't be read. */
@@ -520,7 +581,7 @@ export function main(argv, out = console.log, err = console.error) {
     }
     out(`schema-drift: ${opts.db} against schema.sql ${build.schemaSha}, read-only`);
     if (build.bootUnread !== 0) {
-        out(`schema-drift: note: ${build.bootUnread < 0 ? "db.ts's initSchema was not found" : `${build.bootUnread} ADD COLUMN step(s) in db.ts not read`}; a column such a step adds reads as drift here`);
+        out(`schema-drift: note: ${build.bootUnread < 0 ? "db.ts's initSchema was not found; a column a boot step adds reads as drift here" : `${build.bootUnread} ALTER TABLE in db.ts before the schema.sql exec not read; a table it names (every table, where it names none) can't be proved by its boot steps and keeps its drift as read`}`);
     }
     for (const r of result.results) out(formatResult(r));
     const drift = result.results.filter((r) => r.status !== 'OK').length;

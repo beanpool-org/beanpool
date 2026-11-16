@@ -478,7 +478,7 @@ async function main(): Promise<void> {
         const WIDE = await picture(640, 480, [200, 40, 40]);
         const TALL = await picture(480, 640, [40, 40, 200]);
         const uploadAs = async (token: string, bytes: Buffer): Promise<string> => {
-            const r = await fetch(`${BASE}/mcp/photos`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg' }, body: bytes });
+            const r = await fetch(`${BASE}/mcp/photos`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg' }, body: new Uint8Array(bytes) });
             const body = await r.json().catch(() => ({})) as { photoId?: string };
             if (r.status !== 201 || typeof body.photoId !== 'string') throw new Error(`upload refused: ${r.status} ${JSON.stringify(body)}`);
             return body.photoId;
@@ -495,7 +495,9 @@ async function main(): Promise<void> {
             }
             return out.join(',');
         };
-        const melFinds = async (words: string) => ((await call(mel, 'GET', `/api/knowledge/front?q=${encodeURIComponent(words)}`)).body?.rows ?? []).length;
+        /** The pages a member finds in Learn's search with exactly this title. */
+        const melFinds = async (title: string) =>
+            ((await call(mel, 'GET', `/api/knowledge/front?q=${encodeURIComponent(title)}`)).body?.rows ?? []).filter((row: any) => row.title === title).length;
 
         // A draft with two pictures it uploaded: kept with the draft, used up, shown to nobody but To check.
         const w1 = await uploadAs(A.token, WIDE);
@@ -510,7 +512,7 @@ async function main(): Promise<void> {
         assert((seen9.body?.draft?.photos ?? []).length === 2 && seen9.body.draft.photos.every((p: string) => /^data:image\/(jpeg|webp);base64,/.test(p)),
             `9. To check shows each picture to an owner (${show(seen9).slice(0, 120)})`);
         const melSees = await call(mel, 'GET', `/api/knowledge/drafts/${wp?.draftId}`);
-        assert(melSees.status === 403 && await melFinds('community garden') === 0, `9. a member sees no draft and finds no page before it is approved (${melSees.status})`);
+        assert(melSees.status === 403 && await melFinds('Where the community garden is') === 0, `9. a member sees no draft and finds no page before it is approved (${melSees.status})`);
         const again9 = await a.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'The garden again', photo_ids: [w1] } });
         assert(again9.isError === true && /not a photo this assistant uploaded and has not used yet/.test(errorText(again9)), `9. an id is used once (${errorText(again9)})`);
         const schema9 = (await a.listTools()).tools.find((x) => x.name === 'knowledge_draft');
@@ -586,7 +588,7 @@ async function main(): Promise<void> {
             const post = r.body?.post;
             const shapes = await shapesOf(post);
             assert(before === 0 && r.status === 200 && shapes === expect && pagePics(post?.id) === (expect ? expect.split(',').length : 0)
-                && draftPics(d.id) === 0 && (edited === null || post?.title === edited),
+                && draftPics(d.id) === 0 && (edited === null || post?.title === edited) && await melFinds(edited ?? title) === 1,
                 `9. ${what} -> the page shows [${expect}] (${r.status} [${shapes}] ${r.status === 200 ? '' : r.text.slice(0, 160)})`);
         }
         const refusedAt = await fileWithTwo('Garden seven');

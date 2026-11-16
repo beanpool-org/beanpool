@@ -100,10 +100,10 @@
  * too, so it is stamped with the group's next counter as it is taken, before the roster that follows, and the answer to it
  * carries that counter (takeGuestItem, GuestItemTaken; relay-mail.ts puts it on the item's `received`); their home orders
  * it with the notices by it, so an invitation told again before the yes (a take-over's retellGroup), arriving after the
- * answer, is older and never takes them out. A yes that moves nothing (in already) carries none. A replay of an item whose
- * answer was lost hears `received` with none: its home tries again a minute later at the soonest (nextFanoutTry), past
- * FORWARD_TIMEOUT_MS of any notice on the wire before the yes was taken, so the older word has landed by then (the home
- * then has them `joining`, and an invitation then moves nothing). TELLING HOMES AGAIN (retellGuestHomes): the counters THIS server issued are its own record
+ * answer, is older and never takes them out. A yes that moves nothing (in already) carries none. The same item brought
+ * again (its answer lost on the way back) hears the same counter, kept as long as its id is spent (relay-mail.ts,
+ * relay_mail_answered), never a bare "received" its home could not order. TELLING HOMES AGAIN (retellGuestHomes): the
+ * counters THIS server issued are its own record
  * (group_guest_told, local); a copied counter past it means another server issued notices this one never queued, whose
  * outbox this one can't see (a take-over, or a take-back). Then, at its next flush, it tells each home of that group again
  * where its guests stand now, under new counters: every invitation still waiting, every removal and every line taken down

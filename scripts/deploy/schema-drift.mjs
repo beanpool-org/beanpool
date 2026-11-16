@@ -28,8 +28,8 @@
  *   DRIFT-REPLICATED <table> rows=<n> <kind>: <what differs> copied to standbys or carried by a take-over (or not found in
  *                                                            the manifest), whatever its rows: stop and ask
  * <kind> is the table's entry in engine/replication-manifest.ts TABLES. Compared: the column set, each column's type,
- * NOT NULL, default, collation and generated form, the primary key, CHECKs, UNIQUEs, foreign keys, WITHOUT ROWID and
- * STRICT, and a virtual table's whole definition. Not compared: indexes and triggers (CREATE ... IF NOT EXISTS keeps an old
+ * NOT NULL, default, collation and generated form, the primary key, CHECKs, UNIQUEs, foreign keys, WITHOUT ROWID, STRICT
+ * and AUTOINCREMENT, and a virtual table's whole definition. Not compared: indexes and triggers (CREATE ... IF NOT EXISTS keeps an old
  * one of the same name too), and tables schema.sql doesn't make. A column a boot step in db.ts adds before the schema.sql
  * exec (initSchema's ALTER TABLE ... ADD COLUMN) counts as there: the line names it.
  *
@@ -86,9 +86,9 @@ export function sqlTokens(sql) {
             i = past;
             continue;
         }
-        if (/[A-Za-z_\u0080-￿]/.test(c)) {
+        if (/[A-Za-z_]/.test(c) || c.charCodeAt(0) > 127) {
             let j = i + 1;
-            while (j < n && /[A-Za-z0-9_$\u0080-￿]/.test(sql[j])) j++;
+            while (j < n && (/[A-Za-z0-9_$]/.test(sql[j]) || sql.charCodeAt(j) > 127)) j++;
             out.push({ kind: 'id', text: sql.slice(i, j).toLowerCase() });
             i = j;
             continue;
@@ -103,21 +103,21 @@ export function sqlTokens(sql) {
     return out;
 }
 
+const isOp = (t, text) => t?.kind === 'op' && t.text === text;
+const isWord = (t, text) => t?.kind === 'id' && !t.quoted && t.text === text;
+
 /** Tokens as one canonical line: the same SQL however it is spaced, commented, cased or quoted reads the same. */
 export function canonical(tokens) {
     let out = '';
     let prev = null;
     for (const t of tokens) {
         const text = t.kind === 'str' ? `'${t.text.replace(/'/g, "''")}'` : t.text;
-        const tight = prev === null || prev.text === '(' && prev.kind === 'op' || t.kind === 'op' && (t.text === ')' || t.text === ',');
+        const tight = prev === null || isOp(prev, '(') || (t.kind === 'op' && (t.text === ')' || t.text === ','));
         out += (tight ? '' : ' ') + text;
         prev = t;
     }
     return out;
 }
-
-const isOp = (t, text) => t?.kind === 'op' && t.text === text;
-const isWord = (t, text) => t?.kind === 'id' && !t.quoted && t.text === text;
 
 /** The index of the `)` that closes the `(` at `open`; -1 when none does. */
 function closing(tokens, open) {
@@ -133,7 +133,7 @@ const TABLE_CONSTRAINT = new Set(['constraint', 'primary', 'unique', 'check', 'f
 
 /**
  * What a CREATE TABLE text says that SQLite's pragmas don't: every CHECK, a column's own or the table's (the same rule
- * either way), canonical; and each column's COLLATE.
+ * either way), canonical; each column's COLLATE; and whether its key is AUTOINCREMENT.
  */
 export function createTableParts(sql) {
     const tokens = sqlTokens(sql);
@@ -141,7 +141,8 @@ export function createTableParts(sql) {
     const close = open < 0 ? -1 : closing(tokens, open);
     const checks = [];
     const collate = new Map();
-    if (close < 0) return { checks, collate };
+    const autoincrement = tokens.some((t) => isWord(t, 'autoincrement'));
+    if (close < 0) return { checks, collate, autoincrement };
     const items = [[]];
     let depth = 0;
     for (const t of tokens.slice(open + 1, close)) {
@@ -167,7 +168,7 @@ export function createTableParts(sql) {
             if (isOp(t, ')')) d--;
         }
     }
-    return { checks, collate };
+    return { checks, collate, autoincrement };
 }
 
 // ── Shapes ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -218,6 +219,7 @@ export function tableShape(db, name) {
         columns, pk, checks: parts.checks, uniques, fks,
         withoutRowid: info?.wr ? 'WITHOUT ROWID' : 'a rowid table',
         strict: info?.strict ? 'STRICT' : 'not STRICT',
+        autoincrement: parts.autoincrement ? 'AUTOINCREMENT' : 'no AUTOINCREMENT',
     };
 }
 
@@ -246,7 +248,7 @@ export function shapeDiffs(here, fresh) {
         }
     }
     if (here.pk.join() !== fresh.pk.join()) d.push(`primary key (${here.pk.join(', ')}) here, (${fresh.pk.join(', ')}) in schema.sql`);
-    for (const key of ['withoutRowid', 'strict']) if (here[key] !== fresh[key]) d.push(`${here[key]} here, ${fresh[key]} in schema.sql`);
+    for (const key of ['withoutRowid', 'strict', 'autoincrement']) if (here[key] !== fresh[key]) d.push(`${here[key]} here, ${fresh[key]} in schema.sql`);
     for (const [key, label] of [['checks', 'CHECK'], ['uniques', 'UNIQUE'], ['fks', 'FOREIGN KEY']]) {
         for (const x of bagMinus(here[key], fresh[key])) d.push(`${label} only here: ${x}`);
         for (const x of bagMinus(fresh[key], here[key])) d.push(`${label} only in schema.sql: ${x}`);
@@ -359,6 +361,7 @@ export function checkDrift(Database, db, build) {
             if (diffs.length > 0 && steps.length > 0 && h.type === 'table') {
                 // The table as the new build's boot leaves it before schema.sql: its CREATE text here, in a scratch database
                 // in memory, with the boot's ADD COLUMNs run on it as db.ts runs them (a column that is there refuses one).
+                // A CREATE text that won't run there (a collation or function only the server has) leaves the drift as read.
                 const scratch = new Database(':memory:');
                 try {
                     scratch.exec(db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(h.name).sql);
@@ -369,6 +372,8 @@ export function checkDrift(Database, db, build) {
                         } catch { /* as db.ts: the column is there, or the step doesn't apply */ }
                     }
                     if (added.length > 0) diffs = shapeDiffs(tableShape(scratch, h.name), freshShape);
+                } catch {
+                    added.length = 0;
                 } finally {
                     scratch.close();
                 }

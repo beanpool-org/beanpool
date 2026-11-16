@@ -287,6 +287,7 @@ test('each change IF NOT EXISTS leaves is named', () => {
         ['CREATE TABLE t (a TEXT PRIMARY KEY)', 'CREATE TABLE t (a TEXT PRIMARY KEY) WITHOUT ROWID',
             ['a: NULL allowed here, NOT NULL in schema.sql', 'a rowid table here, WITHOUT ROWID in schema.sql']],
         ['CREATE TABLE t (a TEXT)', 'CREATE TABLE t (a TEXT) STRICT', ['not STRICT here, STRICT in schema.sql']],
+        ['CREATE TABLE t (id INTEGER PRIMARY KEY)', 'CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT)', ['no AUTOINCREMENT here, AUTOINCREMENT in schema.sql']],
         ['CREATE TABLE t (a INTEGER, b INTEGER)', 'CREATE TABLE t (a INTEGER, b INTEGER GENERATED ALWAYS AS (a * 2) STORED)', ['b: generated no here, stored in schema.sql']],
         ['CREATE VIRTUAL TABLE t USING fts5(title)', 'CREATE VIRTUAL TABLE t USING fts5(title, body)', ['virtual table: using fts5 (title) here, using fts5 (title, body) in schema.sql']],
     ];
@@ -315,7 +316,7 @@ test('the same table written another way reads the same: spacing, comments, case
 test('SQL text: strings keep their case and quotes, names and keywords fold, comments go', () => {
     assert.equal(canonical(sqlTokens("Kind IN ('It''s', \"Other\")  -- c\n")), "kind in ('It''s', other)");
     assert.deepEqual(createTableParts('CREATE TABLE t (a TEXT COLLATE NOCASE CHECK (a != \'b\' COLLATE BINARY), CHECK (length(a) > 0))'),
-        { checks: ["a != 'b' collate binary", 'length (a) > 0'], collate: new Map([['a', 'nocase']]) });
+        { checks: ["a != 'b' collate binary", 'length (a) > 0'], collate: new Map([['a', 'nocase']]), autoincrement: false });
 });
 
 test('a table the manifest does not name reads as copied: stop and ask, never a drop candidate', () => {

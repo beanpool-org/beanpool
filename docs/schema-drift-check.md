@@ -17,8 +17,8 @@ already had those tables under the old CHECK, so the new build's writes would ha
   statement it runs can change the file. You act on what it prints.
 - It loads the new build's `schema.sql` into an empty in-memory database. Then it compares each table that is in both
   databases: the column set, each column's type, NOT NULL, default, collation and generated form, the primary key, every
-  CHECK (a column's own or the table's), every UNIQUE, the foreign keys, WITHOUT ROWID and STRICT, and the full
-  definition of a virtual table. Spacing, comments, upper or lower case, quoting and column order don't count as
+  CHECK (a column's own or the table's), every UNIQUE, the foreign keys, WITHOUT ROWID, STRICT and AUTOINCREMENT, and
+  the full definition of a virtual table. Spacing, comments, upper or lower case, quoting and column order don't count as
   differences.
 - It counts a column as present when db.ts's `initSchema` adds it at boot before the `schema.sql` exec (its
   `ALTER TABLE … ADD COLUMN` steps). The line names those columns.

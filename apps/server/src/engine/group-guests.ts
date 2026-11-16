@@ -97,6 +97,7 @@ import { isOwnNodeHome, ownNodeHome } from './node-key.js';
 import { forwardSigned } from './relay-outbox.js';
 import { getImageStore } from '../storage/image-store.js';
 import { attachmentDataOf } from '../storage/image-columns.js';
+import { blankedWithAccount } from './message-tombstone.js';
 import { logger } from '../logger.js';
 
 const DAY_MS = 24 * 60 * 60_000;
@@ -545,9 +546,10 @@ export function fanOutGroupLineChange(groupId: string, messageId: string): void 
  * is told, `by: 'author'`). A line already down before keeps the takedown it had. How many lines it took down.
  */
 export function takeDownLinesOf(author: string): number {
-    const lines = db.prepare(`SELECT id, conversation_id FROM messages WHERE author_pubkey = ? AND type = 'removed'
-                              AND json_extract(metadata, '$.accountDeleted') = 1 AND conversation_id IN (SELECT DISTINCT group_id FROM group_guests)`)
-        .all(author) as Array<{ id: string; conversation_id: string }>;
+    // Read by blankedWithAccount, which never throws: a row's metadata that is no JSON must not fail the account's deletion.
+    const lines = (db.prepare(`SELECT id, conversation_id, metadata FROM messages WHERE author_pubkey = ? AND type = 'removed'
+                               AND conversation_id IN (SELECT DISTINCT group_id FROM group_guests)`)
+        .all(author) as Array<{ id: string; conversation_id: string; metadata: string | null }>).filter((l) => blankedWithAccount(l.metadata));
     let told = false;
     for (const l of lines) told = queueLineChange(l.conversation_id, l.id) || told;
     if (told) flushSoon();

@@ -1180,6 +1180,21 @@ async function main(): Promise<void> {
             `19. ${tk} x ${cs}: no words or photo go (${wordsOut}), none kept here (${kept}), tombstone ${TOMB19[tk][cs]} (got ${gotTomb}${setupOk ? '' : ', setup failed'})`);
     }
     assert(r19 === TK19.length * CS19.length && Object.keys(TOMB19).length === TK19.length, `19z. the table has a row for every takedown and every copy state (${r19} rows)`);
+    // An account deleted with a line already down whose metadata is no JSON: the deletion still goes through, and its other line's takedown goes.
+    const y19 = await row19('Takedown stray');
+    const strayId = crypto.randomUUID();
+    db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, 'x', 'plaintext-v1', 'removed', 'not json', ?)`)
+        .run(strayId, y19.g, y19.m.pk, new Date().toISOString());
+    const realLine = lineIn(y19.m, y19.g, y19.key, 1);
+    await call('POST', y19.m, `/api/groups/${y19.g}/chat/message`, realLine);
+    await settle();
+    const tY = Date.now();
+    let purged: { ok: boolean } | null = null;
+    try { purged = purgeMemberSelf(y19.m.pk); } catch { purged = null; }
+    await settle();
+    const tombY = outs.filter((o) => o.home === 'a.example' && o.at >= tY && o.body?.kind === 'edit' && o.body.data?.id === realLine.clientId && o.body.data.action === 'removed');
+    assert(y19.ok && purged?.ok === true && tombY.length === 1,
+        `19y. an account deleted with a stray line whose metadata is no JSON: deleted (${purged?.ok ?? 'threw'}), and its real line's takedown goes once (${tombY.length})`);
 
     // Edits: the newest words win, wherever the line still waits here.
     const ES19 = ['edit while queued', 'edit twice while queued', 'edit while in a send, behind a row on the wire', 'edit after it went'] as const;

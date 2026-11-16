@@ -897,7 +897,7 @@ const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.j
 /**
  * The `public-address` step's writes to node_config: the web address to install (`pa`) and every address the keys carry,
  * so the promoted server goes by the main server's addresses. Returns the step's line after the web address. Exported for
- * test-address-list's take-over table, which runs it on a real envelope.
+ * test-address-spelling, whose table runs it on a real envelope (the bundle the main server seals) for each address kind.
  *
  * - The app addresses an owner confirmed there (engine/own-addresses.ts) come too, so members' apps that reach the
  *   community at one of them keep working. A bundle sealed before they travelled keeps this standby's own.

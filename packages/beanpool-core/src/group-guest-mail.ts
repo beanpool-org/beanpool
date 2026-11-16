@@ -15,8 +15,9 @@
 import type { RelayEnvelope, RelayEnvelopeFields, RelayItem } from './relay-envelope.js';
 import { relayPayloadHash } from './relay-envelope.js';
 import {
-    applyGuestMail, applyGuestTicks, guestAnswerPayload, guestEpochDue, guestLinePayload, guestSealEpoch, makeGuestEpochFor, takeOwnEpoch,
-    GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, type GuestChat, type GuestChats, type GuestLine, type GuestOwnEpoch,
+    applyGuestMail, applyGuestTicks, guestAnswerPayload, guestEpochDue, guestLeavePayload, guestLinePayload, guestSealEpoch, leaveGuestChatHere,
+    makeGuestEpochFor, takeOwnEpoch, GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, type GuestChat, type GuestChats, type GuestLeave, type GuestLine,
+    type GuestOwnEpoch,
 } from './group-guest-chat.js';
 import { t } from './words.js';
 
@@ -133,6 +134,63 @@ export async function answerGuestInvitation(io: GuestMailIO, id: string, answer:
     await update(io, id, (c) => (c.state === 'invited' && c.inviteId === chat.inviteId ? { ...c, state: answer === 'yes' ? 'joining' : 'declined', updatedAt: io.now() } : null));
 }
 
+/** My server said no for good: a 4xx but the try-later ones. */
+function refusedForGood(e: unknown): boolean {
+    const status = (e as { status?: number })?.status;
+    return typeof status === 'number' && status >= 400 && status < 500 && ![401, 408, 425, 429].includes(status);
+}
+
+/**
+ * I leave a group's chat (the guest's Leave, once they confirm; group-guest-chat.ts's header, "Leaving"). My signed
+ * `group-leave` is made, then the chat closes here with it kept on it (leaveGuestChatHere), then it goes. A request that
+ * fails changes nothing more: the chat stays left and the round posts the kept leave again. Throws only before anything
+ * is written (my server has no name for envelopes yet: GuestMailNoHome). False when there is nothing to leave.
+ */
+export async function leaveGuestChat(io: GuestMailIO, id: string): Promise<boolean> {
+    const chat = (await io.load())[id];
+    if (!chat || (chat.state !== 'in' && chat.state !== 'joining')) return false;
+    const itemId = io.newId();
+    const signed = await item(io, chat, 'group-leave', itemId, guestLeavePayload());
+    const leave: GuestLeave = { itemId, item: JSON.stringify(signed), state: 'sending' };
+    const written = await update(io, id, (c) => leaveGuestChatHere(c, leave, io.me, io.now()));
+    if (written?.leave?.itemId !== itemId) return written?.state === 'left';
+    await sendLeave(io, id).catch(() => false);
+    return true;
+}
+
+/**
+ * My leave, posted (again) while my server hasn't answered it (GuestChat.leave `sending`): the kept item under its own id,
+ * or a new one when one is due (the last failed) or the kept one is too old for my server to take. My server's answer
+ * moves it on (applyGuestTicks). Refused for good by my server (I'm not asked or in there any more): nothing more goes.
+ */
+async function sendLeave(io: GuestMailIO, id: string): Promise<boolean> {
+    const chat = (await io.load())[id];
+    const leave = chat?.leave ?? null;
+    if (!chat || chat.state !== 'left' || !leave || leave.state !== 'sending') return false;
+    let it: RelayItem | null = null;
+    try { it = leave.item ? JSON.parse(leave.item) as RelayItem : null; } catch { it = null; }
+    if (it && (it.envelope?.itemId !== leave.itemId || !(io.now() - it.envelope.at < RESEND_WITHIN_MS))) it = null;
+    if (!it) {
+        const itemId = leave.item ? io.newId() : leave.itemId;
+        const made = await item(io, chat, 'group-leave', itemId, guestLeavePayload());
+        const written = await update(io, id, (c) => (c.state === 'left' && c.leave?.itemId === leave.itemId && c.leave.state === 'sending'
+            ? { ...c, leave: { itemId, item: JSON.stringify(made), state: 'sending' } } : null));
+        if (written?.leave?.itemId !== itemId) return false;
+        it = made;
+    }
+    const itemId = it.envelope.itemId;
+    let answered: Array<{ itemId: string; state: string; refused?: string }>;
+    try {
+        answered = await post(io, [it]);
+    } catch (e) {
+        if (!refusedForGood(e)) throw e;
+        await update(io, id, (c) => (c.leave?.itemId === itemId ? { ...c, leave: null } : null));
+        return true;
+    }
+    await applyAnswers(io, chat, 'group-leave', answered.filter((a) => a.itemId === itemId), io.now());
+    return true;
+}
+
 /** What a line of mine needs before it goes: the words checked. */
 export function guestLineWords(text: string): string | null {
     const words = text.trim();
@@ -203,6 +261,7 @@ async function sendOwnEpoch(io: GuestMailIO, id: string, chat: GuestChat): Promi
 /** Lines of mine that can go now: waiting ones sealed under an epoch the host has, and sending ones my server never answered. */
 async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
     let chat: GuestChat | null = (await io.load())[id] ?? null;
+    if (chat?.state === 'left' && chat.leave?.state === 'sending') return sendLeave(io, id);
     if (!chat || chat.state !== 'in') return false;
     const epoch = await sendOwnEpoch(io, id, chat);
     const changed = epoch.posted;
@@ -257,9 +316,8 @@ async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
     try {
         answered = await post(io, go);
     } catch (e) {
-        const status = (e as { status?: number })?.status;
-        // My server said no for good (a 4xx but try-later ones): those lines will never go as they are.
-        if (typeof status === 'number' && status >= 400 && status < 500 && ![401, 408, 425, 429].includes(status)) {
+        // My server said no for good: those lines will never go as they are.
+        if (refusedForGood(e)) {
             const why = e instanceof Error && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : null;
             const ids = new Set(go.map((g) => g.envelope.itemId));
             await update(io, id, (c) => ({ ...c, lines: c.lines.map((l) => (ids.has(l.id) && l.state === 'sending' ? { ...l, state: 'failed', note: why, item: null } : l)) }));

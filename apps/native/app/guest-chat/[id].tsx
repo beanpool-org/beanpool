@@ -17,7 +17,7 @@ import {
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { outsideErrorWords } from '../../utils/outside-chat-live';
-import { GUEST_CHATS_UPDATED, answerInvitation, loadGuestChats, sendGuestLineNow, syncGuestMailNow } from '../../utils/guest-chat-live';
+import { GUEST_CHATS_UPDATED, answerInvitation, leaveGuestChatNow, loadGuestChats, sendGuestLineNow, syncGuestMailNow } from '../../utils/guest-chat-live';
 import { guestClosedWords, guestLineStateWords } from '../../utils/guest-chat-words';
 import { loadIdentity } from '../../utils/identity';
 
@@ -84,6 +84,28 @@ export default function GuestChatScreen() {
         }
     };
 
+    /** Leave, asked first: the chat closes here at once (core leaveGuestChat), and my leave goes. */
+    const leave = () => {
+        if (!chat || busy) return;
+        Alert.alert(t(W.leaveAsk), t(W.leaveWhat), [
+            { text: t('Cancel'), style: 'cancel' },
+            {
+                text: t(W.leaveYes), style: 'destructive',
+                onPress: async () => {
+                    setBusy(true);
+                    try {
+                        await leaveGuestChatNow(chat.id);
+                    } catch (e) {
+                        Alert.alert(outsideErrorWords(e, false));
+                    } finally {
+                        setBusy(false);
+                        void load();
+                    }
+                },
+            },
+        ]);
+    };
+
     const styles = useStyles(({ colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },
         container: { flex: 1 },
@@ -114,11 +136,15 @@ export default function GuestChatScreen() {
         input: { flex: 1, minHeight: 44, maxHeight: 140, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: colors.text.body, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent.fill },
         note: { padding: 16, fontSize: 14, lineHeight: 20, color: colors.text.secondary, textAlign: 'center' },
+        leaveBtn: { minHeight: 44, minWidth: 44, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+        leaveText: { color: colors.text.body, fontWeight: '700', fontSize: 14 },
     }));
 
     if (chat === undefined) return <SafeAreaView style={styles.safeArea} />;
     const viewer = chat ? guestViewerOf(chat) : null;
     const canWrite = !!chat && chat.state === 'in' && viewer !== null && guestAccess(viewer, 'chat') === 'shown';
+    // Leave while joining or in; once out there is nothing to leave.
+    const canLeave = !!chat && (chat.state === 'in' || chat.state === 'joining');
     const closed = chat ? guestClosedWords(chat) : null;
     const names = chat?.roster && viewer !== null && guestAccess(viewer, 'roster') === 'shown'
         ? [...chat.roster.members.map((m) => m.name), ...chat.roster.guests.map((g) => guestNameLine(g.name, g.home))].join(', ')
@@ -138,6 +164,13 @@ export default function GuestChatScreen() {
                         {/* The names in the chat, as a guest may see them (core guestAccess 'roster'): members, then guests. */}
                         {names && <Text style={styles.from} testID="guest-chat-names">{names}</Text>}
                     </View>
+                    {/* Leave, while joining or in: asked first. Always in view, whatever the chat has scrolled to. */}
+                    {canLeave && (
+                        <Pressable style={[styles.leaveBtn, busy && { opacity: 0.6 }]} disabled={busy} onPress={leave} accessibilityRole="button"
+                            accessibilityLabel={t(W.leave)} testID="guest-chat-leave">
+                            <Text style={styles.leaveText}>{t(W.leaveYes)}</Text>
+                        </Pressable>
+                    )}
                 </View>
                 {!chat ? (
                     <Text style={styles.note}>{t('This chat is not on this phone.')}</Text>

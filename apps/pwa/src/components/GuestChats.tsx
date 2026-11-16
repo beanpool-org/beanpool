@@ -15,9 +15,10 @@ import { outsideErrorWords } from '../lib/outside-mail';
 import { loadIdentity } from '../lib/identity';
 import type { OutsideChat } from '../lib/outside-chat-store';
 import {
-    GUEST_CHATS_EVENT, answerInvitation, fetchGroupGuests, inviteGroupGuest, loadGuestChats, sendGuestLineNow, syncGuestMailNow,
-    type GroupGuest,
+    GUEST_CHATS_EVENT, answerInvitation, fetchGroupGuests, inviteGroupGuest, leaveGuestChatNow, loadGuestChats, removeGroupGuest, sendGuestLineNow,
+    syncGuestMailNow, type GroupGuest,
 } from '../lib/guest-chat-live';
+import { ChatConfirmDialog } from './ChatConfirmDialog';
 
 const W = GUEST_CHAT_WORDS;
 const POLL_MS = 15_000;
@@ -107,6 +108,7 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
+    const [askLeave, setAskLeave] = useState(false);
     const alive = useRef(true);
 
     const load = useCallback(async () => {
@@ -157,9 +159,27 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
         }
     };
 
+    /** Leave, once confirmed: the chat closes here at once (core leaveGuestChat), and my leave goes. */
+    const leave = async () => {
+        setAskLeave(false);
+        if (!chat || busy) return;
+        setBusy(true);
+        setNote(null);
+        try {
+            await leaveGuestChatNow(chat.id);
+        } catch (e) {
+            setNote(outsideErrorWords(e, false));
+        } finally {
+            setBusy(false);
+            void load();
+        }
+    };
+
     if (chat === undefined) return <div data-testid="guest-chat" />;
     const viewer = chat ? guestViewerOf(chat) : null;
     const canWrite = !!chat && chat.state === 'in' && viewer !== null && guestAccess(viewer, 'chat') === 'shown';
+    // Leave while joining or in; once out there is nothing to leave.
+    const canLeave = !!chat && (chat.state === 'in' || chat.state === 'joining');
     // Why it is closed: core's one sentence for each reason the host gives, the same on the phone.
     const closed = chat ? guestClosedWords(chat) : null;
     const names = chat?.roster && viewer !== null && guestAccess(viewer, 'roster') === 'shown'
@@ -252,6 +272,22 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                             </button>
                         </form>
                     )}
+                    {canLeave && (
+                        <button type="button" data-testid="guest-chat-leave" disabled={busy} style={{ ...button, width: '100%', flex: '0 0 auto', opacity: busy ? 0.6 : 1 }}
+                            onClick={() => setAskLeave(true)}>
+                            {t(W.leave)}
+                        </button>
+                    )}
+                    <ChatConfirmDialog
+                        isOpen={askLeave && canLeave}
+                        title={t(W.leaveAsk)}
+                        message={t(W.leaveWhat)}
+                        cancelLabel={t('Cancel')}
+                        confirmLabel={t(W.leaveYes)}
+                        destructive
+                        onCancel={() => setAskLeave(false)}
+                        onConfirm={() => void leave()}
+                    />
                 </>
             )}
         </div>
@@ -278,6 +314,27 @@ export function GroupGuestsPanel({ groupId, isConvenor }: { groupId: string; isC
     }, [groupId]);
     useEffect(() => { void load(); }, [load]);
 
+    /**
+     * Remove, once confirmed (asked as the group's page asks before it removes a member): the host takes them out (an
+     * invitation withdrawn) and tells their community.
+     */
+    const remove = async (g: GroupGuest) => {
+        if (busy) return;
+        const name = guestNameLine(g.name, g.home);
+        if (!window.confirm(`${t(W.removeAsk, { name })}\n\n${g.state === 'invited' ? t(W.removeWhatAsked) : t(W.removeWhatIn)}`)) return;
+        setBusy(true);
+        setNote(null);
+        try {
+            await removeGroupGuest(groupId, g.key);
+            setNote(t(W.removedNote));
+            await load();
+        } catch (e) {
+            setNote(outsideErrorWords(e, false));
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const add = async () => {
         const card = addressCardFromText(pasted);
         if (!card) { setNote(t(W.notACard)); return; }
@@ -301,9 +358,20 @@ export function GroupGuestsPanel({ groupId, isConvenor }: { groupId: string; isC
         <div data-testid="group-guests" style={{ marginTop: '1rem' }}>
             <p style={{ margin: '0 0 0.4rem', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.04em', color: 'var(--text-secondary)' }}>{t(W.guestsTitle)}</p>
             {guests.map((g) => (
-                <div key={g.key} data-testid="group-guest-row" style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--border-primary)' }}>
-                    <span style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', ...wrap }}>{guestNameLine(g.name, g.home)}</span>
-                    <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{g.state === 'in' ? t(W.guestIn) : t(W.guestAsked)}</span>
+                <div key={g.key} data-testid="group-guest-row" style={{
+                    display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0', borderBottom: '1px solid var(--border-primary)',
+                }}>
+                    <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
+                        <span style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', ...wrap }}>{guestNameLine(g.name, g.home)}</span>
+                        <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{g.state === 'in' ? t(W.guestIn) : t(W.guestAsked)}</span>
+                    </div>
+                    {/* A convenor's Remove (the host refuses anyone else), asked first. */}
+                    {isConvenor && (g.state === 'in' || g.state === 'invited') && (
+                        <button type="button" data-testid="group-guest-remove" disabled={busy} aria-label={t(W.removeLabel, { name: guestNameLine(g.name, g.home) })}
+                            style={{ ...button, flex: '0 0 auto', opacity: busy ? 0.6 : 1 }} onClick={() => void remove(g)}>
+                            {t(W.remove)}
+                        </button>
+                    )}
                 </div>
             ))}
             {mayInvite && !adding && (

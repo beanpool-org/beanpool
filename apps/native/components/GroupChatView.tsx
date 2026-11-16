@@ -78,7 +78,7 @@ import {
 import { chatAuthorWords, chatLineWords } from '../utils/chat-line-words';
 import { signedRequestWords } from './signed-request-lines';
 import { NotDeliveredMark } from './chat/NotDeliveredMark';
-import { groupNameShown, normaliseTappedUrl, t, tn } from '@beanpool/core';
+import { groupNameShown, normaliseTappedUrl, t, tn, type GuestNameRows } from '@beanpool/core';
 import { makeChatStyles } from './chat/styles';
 import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
 import { ChatMessageRow } from './chat/ChatMessageRow';
@@ -330,14 +330,16 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const openThreadRef = useRef<(answer: any) => void>(() => { });
     // The guests in the chat (G2), read once a visit beside the thread, never in its way: when they come, what is shown is
     // opened again with their names. Loaded when needed, so the mailbox's modules stay out of the chat's own start.
-    const guestRowsRef = useRef<Array<{ memberPubkey: string; callsign: string }>>([]);
+    // `shown`: in the chat now (a key may go to them); `named`: guests no longer in it this phone kept a name for, which
+    // name their old lines only (core group-guest-names.ts).
+    const guestRowsRef = useRef<GuestNameRows>({ shown: [], named: [] });
     useEffect(() => {
         if (kind !== 'group') return;
         let alive = true;
         import('../utils/guest-chat-live')
             .then((m) => m.guestRosterRows(id))
             .then((rows) => {
-                if (!alive || rows.length === 0) return;
+                if (!alive || (rows.shown.length === 0 && rows.named.length === 0)) return;
                 guestRowsRef.current = rows;
                 if (lastAnswer.current) openThreadRef.current(lastAnswer.current);
             })
@@ -360,9 +362,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     answer = { ...served, encryption: { current: st?.current ?? null, stale: st?.stale ?? true, fromEpoch: st?.fromEpoch ?? null } };
                 }
                 // Who this screen shows is who a key may go to (utils/group-chat-keys.ts rosterShown).
-                if (rosterRef.current.length) ring.noteShownRoster([...rosterRef.current.map(r => r.memberPubkey), ...guestRowsRef.current.map(r => r.memberPubkey)]);
-                // Guests from other communities in the chat (G2) are named by core's guest line, never as members.
-                const opened = await openGroupThread(ring, answer, [...rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: r.formerKeys })), ...guestRowsRef.current]);
+                if (rosterRef.current.length) ring.noteShownRoster([...rosterRef.current.map(r => r.memberPubkey), ...guestRowsRef.current.shown.map(r => r.memberPubkey)]);
+                // Guests from other communities in the chat (G2) are named by core's guest line, never as members; one no
+                // longer in it by the name this phone kept, with "no longer in this group".
+                const guests = guestRowsRef.current;
+                const opened = await openGroupThread(ring, answer, [...rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: r.formerKeys })), ...guests.shown, ...guests.named]);
                 setThread(opened);
                 if (!servedMissing.current) {
                     servedMissing.current = true;

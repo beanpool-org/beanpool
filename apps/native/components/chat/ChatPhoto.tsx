@@ -6,7 +6,8 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Image, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, Pressable, Image, ActivityIndicator } from 'react-native';
+import { LightBarModal } from '../LightBarModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t } from '@beanpool/core';
@@ -73,7 +74,7 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
     if (!uri) return null;
     return (
         // Its own window: the close button takes the status-bar inset itself (a Dynamic Island's 59 pt is more than 50).
-        <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+        <LightBarModal visible transparent animationType="fade" onRequestClose={onClose}>
             <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('Dismiss full-size photo')}
@@ -93,6 +94,6 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                     <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                 </Pressable>
             </Pressable>
-        </Modal>
+        </LightBarModal>
     );
 }

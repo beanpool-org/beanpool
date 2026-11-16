@@ -46,6 +46,7 @@ import { palette } from '../../constants/colors';
 import { Spacing } from '../../constants/responsive';
 import { useTheme, useStyles } from '../ThemeContext';
 import { AppearanceChoice } from '../../components/AppearanceChoice';
+import { ForumLabelRow } from '../../components/forum/ForumLabelRow';
 import { APP_LOCK_NEEDS_SCREEN_LOCK, authenticateUser, getAppLockEnabled, getScreenLock, setAppLockEnabled } from '../../utils/LocalAuth';
 import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../../utils/words-put-away';
@@ -71,7 +72,7 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, FORUM_PUSH_WORDS, askedPushOn, forumNoticesOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, signInsToRefresh, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, FORUM_PUSH_WORDS, askedPushOn, forumNoticesOn, forumPublicOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, signInsToRefresh, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -2334,6 +2335,8 @@ export default function SettingsScreen() {
                             </Pressable>
                         </View>
                     )}
+                    {/* What shows beside the member's name on the worldwide forum (slice F10): only where the forum is public. */}
+                    {forumPublicOn(nodeProfile?.features) && <ForumLabelRow myName={cardCallsign} />}
                     {inviterShown !== null && (
                         <View style={styles.menuBtn} testID="settings-show-inviter">
                             <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌱</Text></View>

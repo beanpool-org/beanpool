@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Linking, StyleSheet } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
 import { router, ErrorBoundary } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
@@ -51,7 +52,7 @@ export default function ConfirmNewPhoneScreen() {
     };
 
     if (step.kind === 'scan' || step.kind === 'checking') {
-        if (!permission) return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator /></View>;
+        if (!permission) return <View style={[styles.center, { backgroundColor: '#000' }]}><StatusBar style="light" /><ActivityIndicator /></View>;
         if (!permission.granted) {
             return (
                 <View style={[styles.center, { backgroundColor: colors.surface.app, paddingTop: insets.top + 16 }]}>
@@ -66,6 +67,8 @@ export default function ConfirmNewPhoneScreen() {
         }
         return (
             <View style={{ flex: 1, backgroundColor: '#000' }}>
+                {/* The camera's black under the status bar in every theme: light icons while it shows (the root layout's bar, by theme, is for the page; status-bar-every-screen.test.ts). */}
+                <StatusBar style="light" />
                 <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                     onBarcodeScanned={step.kind === 'scan' ? onScanned : undefined} />
                 <View style={[styles.instructions, { bottom: insets.bottom + 24 }]}>

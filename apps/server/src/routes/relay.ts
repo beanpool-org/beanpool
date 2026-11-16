@@ -54,7 +54,7 @@ import { noteNewReport } from '../services/alerts.js';
 import { logger } from '../logger.js';
 import { GroupLineReportError } from '../engine/group-chat-report.js';
 import { fileMessageReport } from './message-report.js';
-import { confirmGroupMail, heldGroupMailFor, isGroupItem, isGroupItemId, receiveGroupNotice, sendGroupItems } from '../engine/group-guest-home.js';
+import { confirmGroupMail, groupItemStepsAway, heldGroupMailFor, isGroupItem, isGroupItemId, receiveGroupNotice, sendGroupItems } from '../engine/group-guest-home.js';
 
 /** The verified signer, when they are a member here who reads as one; else the route has answered 403. */
 function memberHere(ctx: any): string | null {
@@ -63,6 +63,24 @@ function memberHere(ctx: any): string | null {
     ctx.status = 403;
     ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
     return null;
+}
+
+/** The direct kinds that carry no words to anyone: a delete of their own line, and a receipt (the local mark-read takes it too). */
+const QUIET_DIRECT_KINDS: ReadonlySet<string> = new Set(['dm-delete', 'receipt']);
+
+/**
+ * A mute stops a member speaking, never stepping away (engine/auto-moderation.ts, "Auto-mute": they can still read, edit their
+ * profile and leave). So a muted member's request made only of items that carry no words to anyone is taken: a group's leave
+ * and a no to its invitation (groupItemStepsAway), a delete of their own line, a receipt. Any other item in it (a line, a photo,
+ * an edit, a reaction, a yes, an epoch) and the whole request is refused 403 `moderation_muted`. A reaction across communities
+ * is sealed: no server can tell one taken back from one added, so it is refused with the lines (test-group-guests-home §3m).
+ */
+function speaksIn(items: unknown): boolean {
+    if (!Array.isArray(items) || items.length === 0) return true;
+    return !items.every((it) => {
+        const kind = (it as { envelope?: { kind?: unknown } } | null)?.envelope?.kind;
+        return (typeof kind === 'string' && QUIET_DIRECT_KINDS.has(kind)) || groupItemStepsAway(it);
+    });
 }
 
 /** The device a member's request names, when it is one; else the route has answered 400. */
@@ -96,8 +114,8 @@ export function createRelayRoutes(): Router {
         const member = memberHere(ctx);
         if (!member) return;
         try {
-            assertNotMuted(member);
             const items = ((ctx.request as any).body as { items?: unknown } | undefined)?.items;
+            if (speaksIn(items)) assertNotMuted(member);
             ctx.body = { items: Array.isArray(items) && items.some(isGroupItem) ? await sendGroupItems(member, items) : await sendRelayItems(member, items) };
         } catch (e) {
             if (e instanceof OutboxError || e instanceof MutedError) {

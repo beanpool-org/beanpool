@@ -14,7 +14,8 @@
  *        waiting post, an archived section's, or a blocked writer's) 400 `no_words`
  *        or `too_long`; 429 `searches_per_day` with Retry-After (100 in any 24 hours). A hit: { topicId, sectionId, title,
  *        postId, number, writer, createdAt, excerpt }
- * An active member, on the main server (a standby 503 `standby`), not muted (403 `moderation_muted`):
+ * An active member, on the main server (a standby 503 `standby`), not muted (403 `moderation_muted`) where they add words; a
+ * close or a removal of their own adds none, so a mute never stops it (engine/forum.ts writable):
  *   POST /api/forum/told                    → { told: true }   (they read that anyone on the web can read this forum)
  *   POST /api/forum/topics                  { sectionId, title, words, place?, lang?, photos? } → 201 { topic, post }
  *        403 `staff_only` (a section only owners and admins start topics in); 409 `tell_first` (a public forum, not told);

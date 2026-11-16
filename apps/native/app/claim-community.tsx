@@ -17,7 +17,8 @@
  * truncated: it is the one thing a phishing server cannot make look right.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Modal, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, BackHandler } from 'react-native';
+import { LightBarModal } from '../components/LightBarModal';
 import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -707,7 +708,7 @@ export default function ClaimCommunityScreen() {
             <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                 {body}
             </KeyboardAwareScrollView>
-            <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
+            <LightBarModal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
                 <View style={styles.scanWrap}>
                     <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScanned} />
                     <Text style={styles.scanHint}>{t("Point the camera at the claim QR on the server's screen.")}</Text>
@@ -715,7 +716,7 @@ export default function ClaimCommunityScreen() {
                         <MaterialCommunityIcons name="close" size={24} color="#fff" />
                     </Pressable>
                 </View>
-            </Modal>
+            </LightBarModal>
         </SafeAreaView>
     );
 }

@@ -22,11 +22,12 @@
  *   kept to that section. The member's own move first (a section picked, a topic opened) drops a door still waiting.
  */
 import { useEffect, useRef, useState } from 'react';
-import { forumSectionName, t, timeAgo, tn, word, wordn } from '@beanpool/core';
+import { forumSectionName, forumWriterLine, t, timeAgo, tn, word, wordn } from '@beanpool/core';
 import { myNodeRoleOnce } from '../lib/api';
 import {
     forgetForumSearch, getForumFront, getForumTopics, keepForumFor, keptFront, keptList, keptSearch, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
 } from '../lib/forum';
+import { renewForumLabelOnce } from '../lib/forum-label';
 import { ForumTopicView, TOPIC_WORDS } from '../components/forum/ForumTopicView';
 import { ForumNewTopic } from '../components/forum/ForumNewTopic';
 import { ForumFirstLooks } from '../components/forum/ForumFirstLooks';
@@ -122,6 +123,8 @@ export function ForumPage({ me, onOpenProfile, topicId = null, door = null, onDo
             setFailed(null);
             if (f.firstTopicWaits) void myFirstLook().then(setMine).catch(() => {});
             else setMine(null);
+            // The worldwide forum: the member's community note renewed in its last week, once a page load (slice F10).
+            if (f.public) void renewForumLabelOnce();
         } catch (e) {
             setFailed((e as Error)?.message || t(FORUM_WORDS.failed));
         }
@@ -260,7 +263,7 @@ function TopicRow({ topic, sectionName, onOpen }: { topic: ForumTopic; sectionNa
                         {topic.pinned && <span aria-hidden="true">📌 </span>}{topic.removed ? t(TOPIC_WORDS.removedTopic) : topic.title}
                     </span>
                     <span className="text-xs" style={{ color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
-                        {[topic.writer.name, sectionName].filter(Boolean).join(' · ')}
+                        {[forumWriterLine(topic.writer, t('A member')), sectionName].filter(Boolean).join(' · ')}
                     </span>
                     <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{replies} · {when}</span>
                 </span>

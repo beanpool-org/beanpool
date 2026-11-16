@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Modal, View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { LightBarModal } from './LightBarModal';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useWords } from './LanguageProvider';
@@ -39,7 +40,7 @@ export default function ScanCodeModal({ hint, deniedText, onRead, onClose }: {
     };
 
     return (
-        <Modal visible animationType="slide" onRequestClose={onClose}>
+        <LightBarModal visible animationType="slide" onRequestClose={onClose}>
             <View style={styles.wrap}>
                 {permission?.granted && (
                     <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={scanned} />
@@ -49,7 +50,7 @@ export default function ScanCodeModal({ hint, deniedText, onRead, onClose }: {
                     <MaterialCommunityIcons name="close" size={24} color="#fff" />
                 </Pressable>
             </View>
-        </Modal>
+        </LightBarModal>
     );
 }
 

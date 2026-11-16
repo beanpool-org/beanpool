@@ -13,7 +13,7 @@ import {
     ADMIN_KNOCKS_COUNT_STORE_KEY, CANONICAL_PROFILE_STORE_KEY, FAV_CATEGORIES_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY,
     KNOCK_KEY_STORE_KEY, KNOCK_ROLE_STORE_KEY, BRING_LISTINGS_STORE_KEY, LISTING_AFTER_JOIN_STORE_KEY, SHOWN_ON_GLOBAL_STORE_KEY, QUESTIONS_OPENED_STORE_KEY, KNOCKS_STORE_KEY, MESSAGE_REQUESTS_STORE_PREFIX, NOTIFICATION_PERMISSION_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PENDING_PROFILE_STORE_PREFIX,
     PUSH_ALERTS_OFF_STORE_KEY, PUSH_LEAVES_OWED_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY,
-    PUSH_REGISTRATIONS_DUE_STORE_KEY, TYPED_PLACE_STORE_KEY, UNREAD_ROUNDS_STORE_KEY,
+    PUSH_REGISTRATIONS_DUE_STORE_KEY, TYPED_PLACE_STORE_KEY, UNREAD_ROUNDS_STORE_KEY, FORUM_LABEL_PICK_STORE_KEY,
 } from './storage-keys';
 import { forgetNoticeCounts } from './notice-counts';
 import { Platform } from 'react-native';
@@ -595,6 +595,8 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
     await storage.removeItem(FAV_CATEGORIES_STORE_KEY);
     // A town typed in "Find your community" says where the member lives (utils/typed-place.ts).
     await storage.removeItem(TYPED_PLACE_STORE_KEY);
+    // The community picked for the worldwide forum's line (utils/forum-label.ts): it names this key.
+    await storage.removeItem(FORUM_LABEL_PICK_STORE_KEY);
 
     const allKeys = await storage.getAllKeys();
     for (const label of allKeys.filter((k: string) => k.startsWith('beanpool:names-trust:'))) {

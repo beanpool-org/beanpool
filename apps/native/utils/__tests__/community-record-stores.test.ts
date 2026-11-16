@@ -79,6 +79,7 @@ const STORES: Record<string, Kind> = {
 
     copiesRuleSeenStoreKey: { kind: 'value', modules: ['utils/copies-rule.ts'] },
     wordsKeptOwedStoreKey: { kind: 'value', modules: ['utils/words-kept.ts'] },
+    FORUM_LABEL_PICK_STORE_KEY: { kind: 'value', modules: ['utils/forum-label.ts'], wipe: ['utils/identity.ts'] },
     PENDING_PROFILE_STORE_PREFIX: { kind: 'value', modules: ['utils/pending-profile-sync.ts'], wipe: ['utils/identity.ts'] },
     PENDING_PROFILE_REFUSAL_STORE_PREFIX: { kind: 'value', modules: ['utils/pending-profile-sync.ts'] },
     PENDING_ARCHETYPE_STORE_PREFIX: { kind: 'value', modules: ['utils/pending-profile-sync.ts'] },

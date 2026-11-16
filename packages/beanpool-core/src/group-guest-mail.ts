@@ -17,8 +17,9 @@
 import type { RelayEnvelope, RelayEnvelopeFields, RelayItem } from './relay-envelope.js';
 import { relayPayloadHash } from './relay-envelope.js';
 import {
-    applyGuestMail, applyGuestTicks, guestAnswerPayload, guestEpochDue, guestLinePayload, guestSealEpoch, makeGuestEpochFor, takeOwnEpoch,
-    GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, type GuestChat, type GuestChats, type GuestLine, type GuestOwnEpoch,
+    applyGuestMail, applyGuestTicks, guestAnswerPayload, guestEpochDue, guestLeavePayload, guestLinePayload, guestSealEpoch, leaveGuestChatHere,
+    makeGuestEpochFor, takeOwnEpoch, GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, type GuestChat, type GuestChats, type GuestLeave, type GuestLine,
+    type GuestOwnEpoch,
 } from './group-guest-chat.js';
 import { t } from './words.js';
 
@@ -151,6 +152,97 @@ export async function answerGuestInvitation(io: GuestMailIO, id: string, answer:
     await update(io, id, (c) => (c.state === 'invited' && c.inviteId === chat.inviteId ? { ...c, state: answer === 'yes' ? 'joining' : 'declined', updatedAt: io.now() } : null));
 }
 
+/** The status and code of my server's answer that a request threw with (both apps' OutsideMailError keep them), or nulls. */
+function answerOfError(e: unknown): { status: number | null; code: string | null } {
+    const o = e as { status?: unknown; code?: unknown } | null;
+    return { status: typeof o?.status === 'number' ? o.status : null, code: typeof o?.code === 'string' ? o.code : null };
+}
+
+/**
+ * A line of mine my server refused, so it fails where the member sees it, with my server's words: a 4xx but 401 (a clock
+ * that is off), 408, 425 or 429 (try later). A muted member, guests switched off, a line too large: the line says why and
+ * goes no more (it could be read long after, out of its place), so they write it again once they may. Any other answer and
+ * it stays `sending`, posted again at the next round. Every answer POST /api/mail/send gives, and which way it goes:
+ * group-guest-mail.test.ts, REFUSALS.
+ */
+function lineRefused(e: unknown): boolean {
+    const { status } = answerOfError(e);
+    return status !== null && status >= 400 && status < 500 && ![401, 408, 425, 429].includes(status);
+}
+
+/**
+ * What my leave does once my server refused it. The member already reads "You left this chat.", so a leave never fails
+ * where they could see it: it goes until the host has it. Only `not_in_group` stops it (`final`, kept `refused`): my server
+ * holds me out of that group (its list says so at the next round) or a leave of mine from another device already waits
+ * there (applyLeaveTick makes mine due again if that one fails). A 400 or 413 is about the item itself (its time too far
+ * from my server's clock, a home since renamed): a `new` one is signed. Every other answer passes (guests switched on again,
+ * a rate window, a standby made main, a clock put right, a signature): the kept one goes `again` at the next round. A mute
+ * never refuses it: a mute stops a member speaking, never stepping away, so my server takes a muted member's leave (the
+ * server's routes/relay.ts speaksIn). Every answer POST /api/mail/send gives, and which way it goes: group-guest-mail.test.ts,
+ * REFUSALS.
+ */
+function leaveRefusal(e: unknown): 'final' | 'new' | 'again' {
+    const { status, code } = answerOfError(e);
+    if (status === 403 && code === 'not_in_group') return 'final';
+    return status === 400 || status === 413 ? 'new' : 'again';
+}
+
+/**
+ * I leave a group's chat (the guest's Leave, once they confirm; group-guest-chat.ts's header, "Leaving"). My signed
+ * `group-leave` is made, then the chat closes here with it kept on it (leaveGuestChatHere), then it goes. A request that
+ * fails changes nothing more: the chat stays left and the round posts the kept leave again. Throws only before anything
+ * is written (my server has no name for envelopes yet: GuestMailNoHome). False when there is nothing to leave.
+ */
+export async function leaveGuestChat(io: GuestMailIO, id: string): Promise<boolean> {
+    const chat = (await io.load())[id];
+    if (!chat || (chat.state !== 'in' && chat.state !== 'joining')) return false;
+    const itemId = io.newId();
+    const signed = await item(io, chat, 'group-leave', itemId, guestLeavePayload());
+    const leave: GuestLeave = { itemId, item: JSON.stringify(signed), state: 'sending' };
+    const written = await update(io, id, (c) => leaveGuestChatHere(c, leave, io.me, io.now()));
+    if (written?.leave?.itemId !== itemId) return written?.state === 'left';
+    await sendLeave(io, id).catch(() => false);
+    return true;
+}
+
+/**
+ * My leave, posted (again) while my server hasn't answered it (GuestChat.leave `sending`): the kept item under its own id,
+ * or a new one when one is due (the last failed) or the kept one is too old for my server to take. My server's answer
+ * moves it on (applyGuestTicks). Refused by my server (leaveRefusal): `not_in_group` (I'm not asked or in there, or a leave
+ * of mine from another device already waits there) keeps it `refused`, so nothing more goes and the chat stays left until
+ * my server lists me no more (or that other leave fails); the item itself refused, a new one is due; anything else, the
+ * same one goes again at the next round.
+ */
+async function sendLeave(io: GuestMailIO, id: string): Promise<boolean> {
+    const chat = (await io.load())[id];
+    const leave = chat?.leave ?? null;
+    if (!chat || chat.state !== 'left' || !leave || leave.state !== 'sending') return false;
+    let it: RelayItem | null;
+    try { it = leave.item ? JSON.parse(leave.item) as RelayItem : null; } catch { it = null; }
+    if (it && (it.envelope?.itemId !== leave.itemId || !(io.now() - it.envelope.at < RESEND_WITHIN_MS))) it = null;
+    if (!it) {
+        const itemId = leave.item ? io.newId() : leave.itemId;
+        const made = await item(io, chat, 'group-leave', itemId, guestLeavePayload());
+        const written = await update(io, id, (c) => (c.state === 'left' && c.leave?.itemId === leave.itemId && c.leave.state === 'sending'
+            ? { ...c, leave: { itemId, item: JSON.stringify(made), state: 'sending' } } : null));
+        if (written?.leave?.itemId !== itemId) return false;
+        it = made;
+    }
+    const itemId = it.envelope.itemId;
+    let answered: Array<{ itemId: string; state: string; refused?: string }>;
+    try {
+        answered = await post(io, [it]);
+    } catch (e) {
+        const next = leaveRefusal(e);
+        if (next === 'again') throw e;
+        await update(io, id, (c) => (c.state === 'left' && c.leave?.itemId === itemId
+            ? { ...c, leave: next === 'final' ? { itemId, item: null, state: 'refused' } : { itemId: io.newId(), item: null, state: 'sending' } } : null));
+        return true;
+    }
+    await applyAnswers(io, chat, 'group-leave', answered.filter((a) => a.itemId === itemId), io.now());
+    return true;
+}
+
 /** What a line of mine needs before it goes: the words checked. */
 export function guestLineWords(text: string): string | null {
     const words = text.trim();
@@ -221,6 +313,7 @@ async function sendOwnEpoch(io: GuestMailIO, id: string, chat: GuestChat): Promi
 /** Lines of mine that can go now: waiting ones sealed under an epoch the host has, and sending ones my server never answered. */
 async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
     let chat: GuestChat | null = (await io.load())[id] ?? null;
+    if (chat?.state === 'left' && chat.leave?.state === 'sending') return sendLeave(io, id);
     if (!chat || chat.state !== 'in') return false;
     const epoch = await sendOwnEpoch(io, id, chat);
     const changed = epoch.posted;
@@ -275,9 +368,8 @@ async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
     try {
         answered = await post(io, go);
     } catch (e) {
-        const status = (e as { status?: number })?.status;
-        // My server said no for good (a 4xx but try-later ones): those lines will never go as they are.
-        if (typeof status === 'number' && status >= 400 && status < 500 && ![401, 408, 425, 429].includes(status)) {
+        // My server said no where the member should see it: those lines will never go as they are.
+        if (lineRefused(e)) {
             const why = e instanceof Error && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : null;
             const ids = new Set(go.map((g) => g.envelope.itemId));
             await update(io, id, (c) => ({ ...c, lines: c.lines.map((l) => (ids.has(l.id) && l.state === 'sending' ? { ...l, state: 'failed', note: why, item: null } : l)) }));

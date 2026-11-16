@@ -124,6 +124,8 @@ vi.mock('../../components/forum/ForumBits', async (orig) => ({
     pickForumPhoto: vi.fn(async () => { picker.asked += 1; return picker.next; }),
 }));
 vi.mock('../forum-search', () => ({ searchForum: vi.fn(async () => node.search) }));
+// The worldwide forum's note renewal (slice F10) asks the member's other community: nothing here to ask.
+vi.mock('../forum-label', () => ({ renewForumLabelOnce: vi.fn(async () => {}) }));
 const worldwide = vi.hoisted(() => ({ joined: false, opened: [] as string[], answer: 'switched' as string }));
 vi.mock('../worldwide-forum', () => ({
     worldwideForumJoined: vi.fn(async () => worldwide.joined),

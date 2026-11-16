@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToOpenOnAComputer, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, FORUM_PUSH_WORDS, forumNoticesOn, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToOpenOnAComputer, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, FORUM_PUSH_WORDS, forumNoticesOn, forumPublicOn, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
 import { copyChatText } from '../lib/copy-chat-text';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
@@ -12,6 +12,7 @@ import { Fragment, useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { letGoOfWebPushAt, stopEveryTellMeAtHome, turnOffWebPush, webPushOrigin } from '../lib/web-push';
 import { WebPushRow } from '../components/WebPushRow';
+import { ForumLabelRow } from '../components/ForumLabelRow';
 import { clearAccountStorage } from '../lib/device-prefs';
 import { forgetThisBrowserAtSignOut } from '../lib/outside-mail';
 import { clearHomeCache } from '../lib/home-cache';
@@ -1313,6 +1314,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         />
                                     </div>
                                 )}
+                                {/* What shows beside the member's name on the worldwide forum (slice F10): only where the forum is public. */}
+                                {forumPublicOn(communityInfo?.features) && <ForumLabelRow myName={identity.callsign} />}
                                 {inviterShown !== null && (
                                     <div className="p-4 flex items-center justify-between gap-3" data-testid="show-inviter">
                                         <span className="min-w-0">

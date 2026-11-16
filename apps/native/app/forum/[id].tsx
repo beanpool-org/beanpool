@@ -30,7 +30,7 @@ import { leaveScreen } from '../../utils/leave-screen';
 import { useAfterDismiss } from '../../utils/screen-presented';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { FORUM_LIMITS, currentLanguage, forumSectionName, t, timeAgo } from '@beanpool/core';
+import { FORUM_LIMITS, currentLanguage, forumSectionName, forumWriterLine, t, timeAgo } from '@beanpool/core';
 import { useStyles, useTheme } from '../ThemeContext';
 import { Alert } from '../../utils/keyboard-alert';
 import { blockUser } from '../../utils/blocklist';
@@ -38,7 +38,7 @@ import { loadIdentity } from '../../utils/identity';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import {
     closeForumTopic, followForumTopic, forgetForumTopic, getForumFront, getForumTopic, keepForumDraft, keptForumDraft, keptForumFront, keptForumTopic, markForumTold, noteForumBack,
-    linkForumTarget, readForumTopic, removeForumPost, replyInForum, reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
+    linkForumTarget, readForumTopic, removeForumPost, replyInForum, reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage, type ForumWriter,
 } from '../../utils/forum';
 import { handNeedSeed, needSeedFrom, takeNeedLinked } from '../../utils/forum-need';
 import { ForumLinkChips, ForumLinkPicker } from '../../components/forum/ForumLinks';
@@ -167,7 +167,7 @@ export default function ForumTopicScreen() {
     const replies = page?.posts.filter((p) => p.number > 1) ?? [];
     const section = front?.sections.find((s) => s.id === topic?.sectionId);
     const open = !!topic && !topic.closed;
-    const name = (p: { writer: { name: string } }) => p.writer.name || t(TOPIC_WORDS.member);
+    const name = (p: { writer: ForumWriter }) => forumWriterLine(p.writer, t(TOPIC_WORDS.member));
 
     // The kept draft goes into the box once, when the box is drawn (an open topic), with its quote if that post is drawn then (a
     // quote of a post gone or blocked since is dropped; the words stay). Once only: never again over what the member types next.

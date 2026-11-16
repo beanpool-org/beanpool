@@ -198,7 +198,8 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
     function selectTab(id: LobbyTab) {
         if (id === 'marketplace') setMarketClickCount((c) => c + 1);
         // Forum chosen in the menu: its topic list, from a topic or from another tab, as a member's Chat in the menu goes back to
-        // its list (ChatTabPage's homeNonce; Marty, 16 Nov). Home's "From the forum" and a door open a topic through navigate.
+        // its list (ChatTabPage's homeNonce; Marty, 16 Nov). Home's "From the forum" (navigate) and a door (linkedForum) still
+        // open their topic: neither comes through here.
         if (id === 'forum') setTopic(null);
         setTab(id);
     }

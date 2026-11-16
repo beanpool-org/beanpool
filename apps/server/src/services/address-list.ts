@@ -31,9 +31,18 @@
  * than once a second run seq ahead of the clock by that many, never more; a restore comes minutes later at least. A clock
  * behind the kept number gives a floor below it, and each bump falls back to kept seq + 1: still above everything this
  * database kept, but after a restore onto a new machine (where no notice can carry the lost server's number) it may not
- * outrank what the lost server signed after the backup until the clock catches up; the boot logs a warning when that
- * happens. A restore on the same machine and a roll-back never depend on the clock: their notice carries the number. A
- * clock far ahead only spends numbers.
+ * outrank what the lost server signed after the backup. So that fall-back is marked (node_config `addressListFloorOwed`,
+ * the seq it fell back to) and the boot logs a warning. The server can't tell a clock set right from a wrong one that
+ * still ticks (PR #3236 review: a mark cleared as a wrong clock passed it left the list below the lost server's for good),
+ * so while the mark holds, the list is numbered from the floor whenever the floor is 10 minutes past the list's number,
+ * content unchanged, looked at every read and every 10 minutes (the watch; listNow). What holds, exactly: once the clock is
+ * set right while the mark holds, within 10 minutes the list outranks every list the lost server signed by a right clock.
+ * The mark holds until the floor is 30 days past the seq it fell back to (OWED_HOLDS_S); by then a clock that was less
+ * than 30 days behind has passed every number the lost server signed (it was lost before the restore), so the last
+ * renumber is above them too. A clock still more than 30 days behind then is past what this covers: the boot's warning
+ * says so. Phones read the list once more an hour each while the mark holds (each proof names a newer number). A restore
+ * on the same machine and a roll-back never depend on the clock: their notice carries the number. A clock far ahead only
+ * spends numbers.
  *
  * **The proof.** `GET /api/node/proof?for=<address>&nonce=<32 hex>`: the server key's signature over core's proof bytes
  * for that address, that nonce and the list's number, only for an address exactly on the current list (400 for a nonce
@@ -121,6 +130,11 @@ export function addressSeqFloor(nowMs: number = clockNow()): number {
     return Number.isSafeInteger(s) && s > 0 ? s : 0;
 }
 
+/** How long the clock-behind mark holds, in the floor's seconds past the seq it fell back to (the module comment, "The clock"). */
+const OWED_HOLDS_S = 30 * 24 * 60 * 60;
+/** While it holds, the list is numbered from the floor once the floor is this far past the list's number: the watch's 10 minutes. */
+const OWED_STEP_S = 10 * 60;
+
 /** The seq a bump gives: one more than the highest kept (null: none, the first list), and never below the floor. */
 function bumpedSeq(highestKept: number | null): number {
     return Math.max(highestKept === null ? 1 : highestKept + 1, addressSeqFloor());
@@ -174,15 +188,18 @@ export function renumberAddressListAfterSwap(notice: { addressList?: unknown } |
         const highest = Math.max(inPlace?.seq ?? 0, going?.seq ?? 0);
         const floor = addressSeqFloor();
         const raised: AddressListFields = { ...base, epoch: Math.max(inPlace?.epoch ?? 0, going?.epoch ?? 0), seq: bumpedSeq(highest) };
-        updateNodeConfig({ addressList: raised });
+        // Only when nothing carried the number signed before the swap (a restore onto a new machine): with it, the list is past
+        // everything signed before whatever the clock says. Marked, so the first look after the clock passes it renumbers.
+        const owed = !going && floor <= highest;
+        updateNodeConfig({ addressList: raised, addressListFloorOwed: owed ? raised.seq : undefined });
         logger.info('SYS', `[Addresses] The database was restored or rolled back: the address list's number goes on at ${raised.epoch}.${raised.seq}, `
             + `past ${inPlace ? `${inPlace.epoch}.${inPlace.seq} in the database now in place` : 'nothing in the database now in place'}`
             + `${going ? ` and ${going.epoch}.${going.seq} signed before the swap` : ''}.`);
-        // Only when nothing carried the number signed before the swap (a restore onto a new machine): with it, the list is past
-        // everything signed before whatever the clock says.
-        if (!going && floor <= highest) {
+        if (owed) {
             logger.warn('SYS', `[Addresses] This server's clock reads ${new Date(clockNow()).toISOString()}, behind the address list's number, so the number `
-                + 'went on by one. If the clock is wrong, set it right: a list the lost server signed after its last backup may outrank this one until then.');
+                + 'went on by one. If the clock is wrong, set it right: until then a list the lost server signed after its last backup may outrank this '
+                + 'one. For the next 30 days of this clock the list is numbered from the clock every 10 minutes, so within 10 minutes of the clock being '
+                + 'set right it outranks them; a clock still more than 30 days behind after that is not covered.');
         }
     } catch (e: any) {
         logger.warn('SYS', `[Addresses] Could not raise the address list's number after the restore: ${e?.message || e}`);
@@ -218,14 +235,24 @@ function listNow(): ListNow {
         return { ok: false, why: 'no-address', message: 'This server knows none of its addresses yet, so it has no list to sign. Its owner confirms one in Settings → Addresses.' };
     }
     const now = { peerId: identity.peerId, communityId, main: content.main, addresses: content.addresses, spares: [] as string[] };
-    const kept = keptAddressList();
+    const config = getNodeConfig();
+    const kept = readAddressListRecord(config.addressList);
     const epoch = listEpoch(kept);
-    const seq = kept && sameAddressListContent(kept, { ...now, epoch, seq: kept.seq }) ? kept.seq : bumpedSeq(kept?.seq ?? null);
+    // A restore with the clock behind fell back to kept seq + 1 (renumberAddressListAfterSwap) and marked it. While the mark
+    // holds the list follows the floor, 10 minutes at a time, content unchanged, so a clock set right is taken up within 10
+    // minutes; the mark goes when the floor is OWED_HOLDS_S past the seq it fell back to (the module comment, "The clock").
+    const owed = config.addressListFloorOwed;
+    const floor = addressSeqFloor();
+    const owedEnds = typeof owed === 'number' && floor >= owed + OWED_HOLDS_S;
+    const followsFloor = typeof owed === 'number' && !!kept && floor >= kept.seq + OWED_STEP_S;
+    const same = !!kept && sameAddressListContent(kept, { ...now, epoch, seq: kept.seq });
+    const seq = kept && same && !followsFloor ? kept.seq : bumpedSeq(kept?.seq ?? null);
     // In the signed order, so the record kept and the one the take-over envelope carries read as the list does.
     const fields: AddressListFields = { peerId: now.peerId, communityId, epoch, seq, main: now.main, addresses: now.addresses, spares: now.spares };
-    if (!kept || kept.seq !== seq || kept.epoch !== epoch) {
-        updateNodeConfig({ addressList: fields });
-        if (kept && kept.seq !== seq) {
+    if (!kept || kept.seq !== seq || kept.epoch !== epoch || owedEnds) {
+        updateNodeConfig({ addressList: fields, ...(owedEnds ? { addressListFloorOwed: undefined } : {}) });
+        if (owedEnds) logger.info('SYS', `[Addresses] 30 days of this clock since the restore: the address list goes on at ${epoch}.${seq} and is numbered as usual from now.`);
+        if (kept && kept.seq !== seq && !(same && followsFloor)) {
             logger.info('SYS', `[Addresses] The address list changed: number ${epoch}.${seq}, main ${fields.main}, ${fields.addresses.length} address${fields.addresses.length === 1 ? '' : 'es'} (${fields.addresses.join(', ')}).`);
         }
     }

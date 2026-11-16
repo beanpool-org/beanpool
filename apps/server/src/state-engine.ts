@@ -64,6 +64,7 @@ import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, ensureChildSafetyFn, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
+import { closeGroupGuests, takeDownLinesOf } from './engine/group-guests.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { dropKnowledgeOf } from './engine/knowledge-drafts.js';
@@ -785,6 +786,13 @@ export interface NodeConfig {
      * and never for none, across restarts. Carried in the take-over envelope, so a promoted server goes on from it.
      */
     addressList?: AddressListFields;
+    /**
+     * Set when a restore onto a new machine numbered the list by one with this server's clock behind it
+     * (services/address-list.ts renumberAddressListAfterSwap): the seq it fell back to. While it is set, the list is numbered
+     * from the clock's floor every 10 minutes of it, content unchanged; it goes when the floor is 30 days past it (listNow).
+     * This server's own: it is about this machine's clock, and a promoted standby signs at a higher take-over count anyway.
+     */
+    addressListFloorOwed?: number;
 }
 
 // Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
@@ -9599,6 +9607,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // "This message was deleted", with the photos they sent gone (data-at-rest report F1, engine/message-tombstone.ts).
         // Not in a try either, for the same reason.
         blankMessagesOf(publicKey);
+        // And each of those lines in a group with guests from other communities is taken down for them too: no copy still
+        // queued for their communities goes, and each is told, as at their own delete (engine/group-guests.ts takeDownLinesOf).
+        takeDownLinesOf(publicKey);
         // And their reply to the case on each vote on removing them, open or closed, which every member reads beside it
         // (decisions-engine.ts eraseRepliesOf). Not in a try either.
         repliesErased.push(...eraseRepliesOf(publicKey, now));
@@ -9929,6 +9940,7 @@ export function getNodeConfig(): NodeConfig {
         ...(Array.isArray(config.registrarNames) ? { registrarNames: config.registrarNames } : {}),
         ...(typeof config.mainAddress === 'string' ? { mainAddress: config.mainAddress } : {}),
         ...(config.addressList && typeof config.addressList === 'object' ? { addressList: config.addressList } : {}),
+        ...(Number.isSafeInteger(config.addressListFloorOwed) && config.addressListFloorOwed >= 0 ? { addressListFloorOwed: config.addressListFloorOwed } : {}),
     };
 
     if (migrated) {
@@ -11653,6 +11665,8 @@ export function closeGroupByVote(groupId: string, decisionId: string): ReturnTyp
     const cancelled = cancelClosedGroupPosts(groupId);
     db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId);
     afterClosingCircle(groupId);
+    // Its guests from other communities are removed and their homes told (engine/group-guests.ts closeGroupGuests).
+    closeGroupGuests(groupId);
     return cancelled;
 }
 

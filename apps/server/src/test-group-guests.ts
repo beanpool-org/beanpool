@@ -39,6 +39,24 @@
  *      at once, writes no copied row, tells nobody; the main server removes and tells (removals only, no roster)
  *  17  close the class: (a home that answers / fails / fails then answers) x (rows queued before / during / after the
  *      failure) x (one flush / many) -> the home gets its rows once each in the order queued, and none waits once it answers
+ *  18  close the class: every item that crosses (a guest's, a member's change, a report) x where the guest stands
+ *  19  close the class, takedowns (#3233 round 2): (author delete, edited then deleted, convenor removal, account deleted,
+ *      group closed) x (queued while the home is in backoff, in a send behind a row on the wire, already sent, queued
+ *      for a guest who left since) -> no copy of the line's words or photo goes or is kept here, and the tombstone goes
+ *      to a guest still in; 19e: (edit while queued, twice, while in a send, after it went) -> only the newest words go;
+ *      19c: the copy rule x (stays main, a standby at the takedown then promoted, promoted a day later)
+ *  19d close the class, take-aways (#3233 round 4): (author delete, convenor removal, account deleted, guest removed by a
+ *      convenor, group closed, a takedown then the group closed, a takedown then the owners' switch off, a takedown while
+ *      the switch is off and on again before the minute's timer) x (home down an
+ *      hour, 25 hours, MAIL_HELD_DAYS - 1, MAIL_HELD_DAYS and 12 hours, MAIL_HELD_DAYS + 1 and a minute) -> the home
+ *      gets every take-away when it comes back while it may still hold what it takes away; the table: each take-away kept
+ *      at least MAIL_HELD_DAYS, each row that adds a day; and every row that adds goes unsent once a day old
+ *  19f close the class, the send rule (#3233 round 5): every row kind (a line, an edit's new words, a takedown, an epoch, a
+ *      roster, an invitation, a removal) x every change after it was queued, written as the server that took over writes it
+ *      (none, line removed, line edited, guest removed, guest re-invited and in, guest re-invited not yet in, guest left,
+ *      group closed, take-over, take-back, home blocked) x its age (fresh, a day, MAIL_HELD_DAYS, MAIL_HELD_DAYS and a day) -> it goes (naming only
+ *      the guests it may still name, a line with its words now) or goes unsent; rows naming two guests go narrowed; the
+ *      guard reads the kinds from the code (the send rule's list, the outbox's CHECK, every queueToHome) against the table
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests node scripts/run-server-suites.mjs
  */
@@ -53,7 +71,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, buildNodeRequestHeaders, dmPublicKeyOf, makeGroupEpochRecord, nodeRequestSignatureVerifies,
+    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, buildNodeRequestHeaders, dmPublicKeyOf, groupMessageKey, makeGroupEpochRecord, nodeRequestSignatureVerifies,
     openMyGroupKey, parseNodeRequestHeader, readNodeKeyDocument, relayPayloadHash, sealGroupLine, signAddressCard, signNodeKeyDocument,
     signRelayEnvelope, type GroupEpochReason, type GroupEpochRecord, type RelayItem, type RelayItemKind,
 } from '@beanpool/core';
@@ -85,7 +103,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
 
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine, seedGenesisMember, createGroup, exportSyncState, removeGroupMemberByVote, purgeMemberSelf, setUserStatusRow, adminPruneUser, COMMUNITY_DECISION_ACTOR } = await import('./state-engine.js');
+    const { initStateEngine, seedGenesisMember, createGroup, exportSyncState, removeGroupMemberByVote, purgeMemberSelf, setUserStatusRow, adminPruneUser, closeGroupByVote, COMMUNITY_DECISION_ACTOR } = await import('./state-engine.js');
     const { issueRekeyCode, cancelRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const { setNodeRole } = await import('./config/node-role.js');
     const { startHttpsServer } = await import('./https-server.js');
@@ -188,9 +206,12 @@ async function main(): Promise<void> {
     }
     let n = 0;
     const newItemId = () => `gst-${String(++n).padStart(4, '0')}-${crypto.randomBytes(6).toString('hex')}`;
-    async function item(from: Id, fromHome: string, to: string, kind: RelayItemKind, payload: string, opts: { signer?: Id; at?: number } = {}): Promise<RelayItem> {
+    /** A guest's item, signed. A line goes under its own id (its payload's clientId), as the host stores it (takeGuestItem). */
+    async function item(from: Id, fromHome: string, to: string, kind: RelayItemKind, payload: string, opts: { signer?: Id; at?: number; itemId?: string } = {}): Promise<RelayItem> {
+        let lineId: unknown;
+        try { lineId = (JSON.parse(payload) as { clientId?: unknown }).clientId; } catch { lineId = undefined; }
         const envelope = await signRelayEnvelope({
-            kind, itemId: newItemId(), senderKey: from.pk, senderHome: fromHome, recipient: to, recipientHome: 'b.example',
+            kind, itemId: opts.itemId ?? (typeof lineId === 'string' ? lineId : newItemId()), senderKey: from.pk, senderHome: fromHome, recipient: to, recipientHome: 'b.example',
             at: opts.at ?? Date.now(), payloadHash: relayPayloadHash(payload),
         }, signerOf((opts.signer ?? from).seed));
         return { envelope, payload };
@@ -863,7 +884,12 @@ async function main(): Promise<void> {
         let open: () => void = () => {};
         gates.set(AH, new Promise<void>((r) => { open = r; }));
         const inv = await call('POST', ana, `/api/groups/${B}/guests`, { card: await cardOf(p, AH) });   // the head row: its send hangs
-        if (inv.status === 201) expected.push(`invite:${p.pk}`);
+        // The send rule (#3233 round 5): an invitation goes only while its guest is still invited here. The head's send is on
+        // the wire as the case's rows are queued; refused (the failure), it is tried again only after P's removal, unless the
+        // home answered again before P was removed (failing-then-ok, rows after). So otherwise it goes unsent, and only the
+        // case's rows go, in order: `sent` must be exactly `expected`, so an invitation that went would fail the check.
+        const inviteGoes = home === 'ok' || (home === 'failing-then-ok' && when === 'after');
+        if (inv.status === 201 && inviteGoes) expected.push(`invite:${p.pk}`);
         flush();
         await sleep(20);
         if (when === 'before') await caseRows();
@@ -896,17 +922,811 @@ async function main(): Promise<void> {
             await guests?.flushGuestOutbox(Date.now() + backoffOver);
         }
         const sent = outs.slice(start).filter((o) => o.home === AH && o.body.group === B).map(labelOf);
-        const inOrder = expected.length === (flushes === 'many' ? 5 : 4) && JSON.stringify(sent) === JSON.stringify(expected);
+        const inOrder = inv.status === 201 && expected.length === (flushes === 'many' ? 5 : 4) - (inviteGoes ? 0 : 1) && JSON.stringify(sent) === JSON.stringify(expected);
         const waitedNone = home === 'failing'
             ? sentBefore.length === 0 && leftAfterTrigger === expected.length && waits.length === 1 && waits[0] > Date.now() && queuedA() === 0
             : leftAfterTrigger === 0 && (when !== 'after' || leftAfterRows === 0);
         // A new row costs a home that is failing at most one try (its three rows: three at most, however many flushes).
         const cheap = home !== 'failing' || when !== 'after' || costAfter <= 3;
         assert(inOrder && waitedNone && cheap,
-            `17. ${label}: a.example gets each row once, in the order queued; ${home === 'failing' ? 'while it fails nothing goes and every row waits one wait' : 'none waits once it answers'} (sent ${JSON.stringify(sent.map((s) => s.split(':')[0]))} of ${expected.length}; in order ${inOrder}; left ${leftAfterRows}/${leftAfterTrigger}; ${costAfter} tries for the rows after)`);
+            `17. ${label}: a.example gets each row once, in the order queued${inviteGoes ? '' : ' (the invitation, its guest removed before it went, goes unsent)'}; ${home === 'failing' ? 'while it fails nothing goes and every row waits one wait' : 'none waits once it answers'} (sent ${JSON.stringify(sent.map((s) => s.split(':')[0]))} of ${expected.length}; in order ${inOrder}; left ${leftAfterRows}/${leftAfterTrigger}; ${costAfter} tries for the rows after)`);
         // The next case starts from an empty queue, whatever this one left.
         refusing.delete(AH);
         await guests?.flushGuestOutbox(Date.now() + backoffOver);
+    }
+
+    // ── 18. Close the class: what crosses x where the guest stands (G1b part 2) ─────────────
+    console.log('\n18. Close the class: every item that crosses (a guest\'s, a member\'s change, a report) x where the guest stands');
+    const { addConnector, removeConnector } = await import('./connector-manager.js');
+    type St18 = 'accepted' | 'blocked host' | 'removed guest' | 'closed group' | 'standby';
+    const STANDINGS18: St18[] = ['accepted', 'blocked host', 'removed guest', 'closed group', 'standby'];
+    const KINDS18 = ['guest line', 'guest leave', 'no once in', 'yes once in', 'member line', 'member edit', 'author delete', 'convenor removal', 'invite', 'report'] as const;
+    type K18 = (typeof KINDS18)[number];
+    /**
+     * What each item comes to: [kind][standing]. On a standby (checked on every standby row too): no guest's item is taken,
+     * no guest row is written, nothing is queued for or sent to another community. A member's own write there (a line, an
+     * edit, a report) is the routes' existing business, unchanged here, so the digest leaves messages and reports out.
+     */
+    const WANT18: Record<K18, Record<St18, string>> = {
+        //                   accepted                         blocked host               removed guest             closed group              standby
+        'guest line':       { accepted: 'stored',              'blocked host': 'dropped', 'removed guest': 'dropped', 'closed group': 'dropped', standby: 'dropped' },
+        'guest leave':      { accepted: 'left',                'blocked host': 'in',      'removed guest': 'removed', 'closed group': 'removed', standby: 'in' },
+        'no once in':       { accepted: 'left',                'blocked host': 'in',      'removed guest': 'removed', 'closed group': 'removed', standby: 'in' },
+        'yes once in':      { accepted: 'in',                  'blocked host': 'in',      'removed guest': 'removed', 'closed group': 'removed', standby: 'in' },
+        'member line':      { accepted: 'line',                'blocked host': 'none',    'removed guest': 'none',    'closed group': 'none',    standby: 'none' },
+        'member edit':      { accepted: 'edit:edited',         'blocked host': 'none',    'removed guest': 'none',    'closed group': 'none',    standby: 'none' },
+        'author delete':    { accepted: 'edit:removed:author', 'blocked host': 'none',    'removed guest': 'none',    'closed group': 'none',    standby: 'none' },
+        'convenor removal': { accepted: 'edit:removed:convenor', 'blocked host': 'none',  'removed guest': 'none',    'closed group': 'none',    standby: 'none' },
+        invite:             { accepted: 'invited, told',       'blocked host': 'refused server_blocked', 'removed guest': 'invited, told', 'closed group': 'refused group_closed', standby: 'refused standby' },
+        report:             { accepted: 'filed here, told',    'blocked host': 'filed here, not told', 'removed guest': 'filed here, told', 'closed group': 'filed here, told', standby: 'filed here, queued' },
+    };
+    const standbyDigest = (g: string) => JSON.stringify([
+        db.prepare('SELECT guest_key, state, state_at FROM group_guests WHERE group_id = ? ORDER BY guest_key').all(g),
+        db.prepare("SELECT id FROM messages WHERE conversation_id = ? AND author_pubkey IN (SELECT guest_key FROM group_guests WHERE group_id = ?) ORDER BY id").all(g, g),
+        db.prepare('SELECT COUNT(*) AS n FROM group_guest_outbox').get(),
+    ]);
+    let r18 = 0;
+    let closedTold = '';
+    let closedKey = '';
+    for (const kind of KINDS18) for (const st of STANDINGS18) {
+        const n18 = ++r18;
+        const H = st === 'blocked host' ? 'c.example' : 'a.example';
+        // The row's own group: Ana convenes, M is a member, X from H says yes and is in; epoch 1 over the three; M and X
+        // each have a line under it.
+        const g = createGroup({ name: `Row ${n18}`, joinPolicy: 'open', createdBy: ana.pk }).id;
+        const m = addLocal(`M18-${n18}`);
+        db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(g, m.pk);
+        const x = newId(`X18-${n18}`);
+        await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(x, H) });
+        await bring([await item(x, H, `group:${g}`, 'group-invite', yes)], H as 'a.example' | 'c.example');
+        const e = epochBy(ana, g, 1, 'start', [ana, m, x]);
+        const stored = await call('POST', ana, `/api/groups/${g}/keys/epoch`, { epoch: e.record });
+        const mLine = lineIn(m, g, e.groupKey, 1);
+        await call('POST', m, `/api/groups/${g}/chat/message`, mLine);
+        const xId = crypto.randomUUID();
+        const xText = `the guest's words, row ${n18}`;
+        await bring([await item(x, H, `group:${g}`, 'group-line', JSON.stringify({ ...sealGroupLine(xText, { myEdPrivHex: x.seedHex, groupKey: e.groupKey, groupId: g, epoch: 1, messageId: xId }), metadata: { epoch: 1 }, clientId: xId }))], H as 'a.example' | 'c.example');
+        await settle();
+        const setupOk = stateOf(g, x) === 'in' && stored.status === 201 && !!db.prepare('SELECT 1 FROM messages WHERE id = ? AND author_pubkey = ?').get(xId, x.pk);
+        // Where X stands.
+        if (st === 'blocked host') addConnector(`${H}:4001`, 'blocked', 'Blocked', `https://${H}`, false);
+        if (st === 'removed guest') await call('DELETE', ana, `/api/groups/${g}/guests/${x.pk}`);
+        if (st === 'closed group') {
+            const t = Date.now();
+            closeGroupByVote(g, `test-close-${n18}`);
+            await settle();
+            if (!closedTold) {
+                closedTold = JSON.stringify(outsOf('removed', t).filter((o) => o.body.group === g).map((o) => [o.home, o.body.guests, o.body.data.why]));
+                closedKey = x.pk;
+            }
+        }
+        await settle();
+        if (st === 'standby') setNodeRole('backup');
+        const before = standbyDigest(g);
+        const t0 = Date.now();
+        const sentBefore = outs.length;
+        // The item.
+        let got = '';
+        const to = `group:${g}`;
+        const home18 = H as 'a.example' | 'c.example';
+        if (kind === 'guest line') {
+            const id = crypto.randomUUID();
+            await bring([await item(x, H, to, 'group-line', JSON.stringify({ ...sealGroupLine('again', { myEdPrivHex: x.seedHex, groupKey: e.groupKey, groupId: g, epoch: 1, messageId: id }), metadata: { epoch: 1 }, clientId: id }))], home18);
+            got = db.prepare('SELECT 1 FROM messages WHERE id = ?').get(id) ? 'stored' : 'dropped';
+        } else if (kind === 'guest leave' || kind === 'no once in' || kind === 'yes once in') {
+            const it = kind === 'guest leave' ? await item(x, H, to, 'group-leave', JSON.stringify({ v: 1 }))
+                : await item(x, H, to, 'group-invite', JSON.stringify({ v: 1, answer: kind === 'no once in' ? 'no' : 'yes' }));
+            await bring([it], home18);
+            got = stateOf(g, x) ?? 'none';
+        } else if (kind === 'invite') {
+            const y = newId(`Y18-${n18}`);
+            const r = await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(y, H) });
+            await settle();
+            const told = outs.slice(sentBefore).some((o) => o.home === H && o.body.kind === 'invite' && o.body.guests.includes(y.pk));
+            got = r.status === 201 && told ? 'invited, told' : r.status === 201 ? 'invited, not told' : `refused ${r.body?.code}`;
+        } else if (kind === 'report') {
+            const mk = Buffer.from(groupMessageKey(e.groupKey, xId)).toString('base64');
+            const r = await call('POST', m, `/api/groups/${g}/chat/report`, { messageId: xId, reason: 'Spam or scam', disclosure: { epoch: 1, mk } });
+            await settle();
+            const row = db.prepare('SELECT target_pubkey, target_home, disclosure FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(m.pk, xId) as { target_pubkey: string; target_home: string | null; disclosure: string } | undefined;
+            const complaint = outs.slice(sentBefore).find((o) => o.path === '/api/relay/complaint');
+            const c = complaint?.body?.complaint;
+            const toldState = row ? (JSON.parse(row.disclosure).told?.state ?? null) : null;
+            const toldOk = !!complaint && complaint.home === H && complaint.signed && c?.member === x.pk && c?.itemId === xId && c?.words === xText && c?.reason === 'spam or scam'
+                && !JSON.stringify(c).includes(m.pk) && toldState === 'sent';
+            got = !row || r.status !== 200 ? 'not filed'
+                : row.target_pubkey !== x.pk || row.target_home !== H ? `filed wrong (${row.target_home})`
+                : toldOk ? 'filed here, told' : !complaint && toldState === 'failed' ? 'filed here, not told' : !complaint && toldState === 'queued' ? 'filed here, queued'
+                : `filed here, told wrongly (${toldState}, ${JSON.stringify(c)})`;
+        } else {
+            if (kind === 'member line') await call('POST', m, `/api/groups/${g}/chat/message`, lineIn(m, g, e.groupKey, 1));
+            if (kind === 'member edit') await call('POST', m, '/api/messages/edit', { messageId: mLine.clientId, ...sealGroupLine('edited', { myEdPrivHex: m.seedHex, groupKey: e.groupKey, groupId: g, epoch: 1, messageId: mLine.clientId }), metadata: { epoch: 1 } });
+            if (kind === 'author delete') await call('POST', m, '/api/messages/delete', { messageId: mLine.clientId });
+            if (kind === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: xId });
+            await settle();
+            const notes = outs.slice(sentBefore).filter((o) => o.body?.group === g && (o.body.kind === 'line' || o.body.kind === 'edit'));
+            const wantId = kind === 'convenor removal' ? xId : mLine.clientId;
+            const okShape = notes.every((o) => o.home === H && o.signed && JSON.stringify(o.body.guests) === JSON.stringify([x.pk])
+                && (o.body.kind === 'line' || (o.body.data.id === wantId && (o.body.data.action === 'removed' ? !('ciphertext' in o.body.data) : typeof o.body.data.ciphertext === 'string'))));
+            got = !notes.length ? 'none' : notes.length > 1 || !okShape ? `wrong ${JSON.stringify(notes.map((o) => [o.home, o.body.kind, o.body.data]))}`
+                : notes[0].body.kind === 'line' ? 'line' : ['edit', notes[0].body.data.action, notes[0].body.data.by].filter(Boolean).join(':');
+        }
+        const standbyOk = st !== 'standby' || (standbyDigest(g) === before && outs.length === sentBefore);
+        if (st === 'standby') setNodeRole('primary');
+        if (st === 'blocked host') removeConnector(`${H}:4001`);
+        const nothingToBlocked = st !== 'blocked host' || outs.slice(sentBefore).every((o) => o.home !== H);
+        assert(setupOk && got === WANT18[kind][st] && standbyOk && nothingToBlocked && t0 > 0,
+            `18. ${kind} x ${st}: ${WANT18[kind][st]} (got ${got}${setupOk ? '' : ', setup failed'}${standbyOk ? '' : ', the standby wrote or sent'}${nothingToBlocked ? '' : ', the blocked home was sent to'})`);
+    }
+    assert(r18 === KINDS18.length * STANDINGS18.length && Object.keys(WANT18).length === KINDS18.length, `18z. the table has a row for every item and every standing (${r18} rows)`);
+    assert(!!closedKey && closedTold === JSON.stringify([['a.example', [closedKey], 'group-closed']]),
+        `18y. a group its members close removes its guests: their home is told once, why group-closed (got ${closedTold})`);
+    // The take-over 'no', by its own path: X's home lost the yes's answer and showed the invitation again; X said no there.
+    const TO = createGroup({ name: 'Take-over', joinPolicy: 'open', createdBy: ana.pk }).id;
+    const tx = newId('Tox'), ty = newId('Toy');
+    for (const [who, h] of [[tx, 'a.example'], [ty, 'c.example']] as const) {
+        await call('POST', ana, `/api/groups/${TO}/guests`, { card: await cardOf(who, h) });
+        await bring([await item(who, h, `group:${TO}`, 'group-invite', yes)], h);
+    }
+    const eTO = epochBy(ana, TO, 1, 'start', [ana, tx, ty]);
+    await call('POST', ana, `/api/groups/${TO}/keys/epoch`, { epoch: eTO.record });
+    await settle();
+    const tTO = Date.now();
+    await bring([await item(tx, 'a.example', `group:${TO}`, 'group-invite', JSON.stringify({ v: 1, answer: 'no' }))]);
+    const rosterTO = outsOf('roster', tTO).filter((o) => o.body.group === TO);
+    const keysTO = await call('GET', ana, `/api/groups/${TO}/keys`);
+    assert(stateOf(TO, tx) === 'left' && rosterTO.length === 1 && rosterTO[0].home === 'c.example' && !rosterTO[0].body.data.guests.some((gg: any) => gg.key === tx.pk)
+        && !keysTO.body?.roster?.includes(tx.pk),
+        `18x. after a take-over, a no from a guest who is in is their leave: left, out of the key roster, and the other home gets the roster without them (got ${stateOf(TO, tx)}, ${rosterTO.map((o) => o.home)})`);
+
+    // An edit has its line's audience: a guest in now, who was not when the line was sealed, hears nothing of it.
+    const AU = createGroup({ name: 'Audience', joinPolicy: 'open', createdBy: ana.pk }).id;
+    const au1 = epochBy(ana, AU, 1, 'start', [ana]);
+    await call('POST', ana, `/api/groups/${AU}/keys/epoch`, { epoch: au1.record });
+    const oldLine = lineIn(ana, AU, au1.groupKey, 1);
+    await call('POST', ana, `/api/groups/${AU}/chat/message`, oldLine);
+    const late = newId('Late');
+    await call('POST', ana, `/api/groups/${AU}/guests`, { card: await cardOf(late, 'a.example') });
+    await bring([await item(late, 'a.example', `group:${AU}`, 'group-invite', yes)]);
+    const au2 = epochBy(ana, AU, 2, 'rotate', [ana, late]);
+    const au2Stored = await call('POST', ana, `/api/groups/${AU}/keys/epoch`, { epoch: au2.record });
+    const newLine = lineIn(ana, AU, au2.groupKey, 2);
+    await call('POST', ana, `/api/groups/${AU}/chat/message`, newLine);
+    await settle();
+    const tAU = Date.now();
+    await call('POST', ana, '/api/messages/edit', { messageId: oldLine.clientId, ...sealGroupLine('old, edited', { myEdPrivHex: ana.seedHex, groupKey: au1.groupKey, groupId: AU, epoch: 1, messageId: oldLine.clientId }), metadata: { epoch: 1 } });
+    await call('POST', ana, '/api/messages/delete', { messageId: oldLine.clientId });
+    await call('POST', ana, '/api/messages/edit', { messageId: newLine.clientId, ...sealGroupLine('new, edited', { myEdPrivHex: ana.seedHex, groupKey: au2.groupKey, groupId: AU, epoch: 2, messageId: newLine.clientId }), metadata: { epoch: 2 } });
+    await settle();
+    const editsAU = outsOf('edit', tAU).filter((o) => o.body.group === AU).map((o) => o.body.data.id);
+    assert(au2Stored.status === 201 && stateOf(AU, late) === 'in' && JSON.stringify(editsAU) === JSON.stringify([newLine.clientId]),
+        `18w. a guest in since epoch 2 hears of the edit of a line under epoch 2 only: not the edit or delete of one from epoch 1, before them (got ${JSON.stringify(editsAU)})`);
+
+    // ── 19. Close the class: a takedown x where a copy of the line is (#3233 round 2) ────────
+    console.log('\n19. Close the class: every takedown x where a copy of the line is -> no words or photo go, none is kept here, the tombstone goes');
+    const TK19 = ['author delete', 'edited, then author delete', 'convenor removal', 'account deleted', 'group closed'] as const;
+    const CS19 = ['queued, home in backoff', 'in a send, behind a row on the wire', 'already sent', 'queued, its guest left since'] as const;
+    type Tk19 = (typeof TK19)[number];
+    type Cs19 = (typeof CS19)[number];
+    const tombFor = (t: string): Record<Cs19, string> => ({
+        'queued, home in backoff': t, 'in a send, behind a row on the wire': t, 'already sent': t, 'queued, its guest left since': 'none',
+    });
+    /** The tombstone the guest's home gets after the takedown: [takedown][copy state]. A guest who left hears nothing more. */
+    const TOMB19: Record<Tk19, Record<Cs19, string>> = {
+        'author delete': tombFor('removed:author'),
+        'edited, then author delete': tombFor('removed:author'),
+        'convenor removal': tombFor('removed:convenor'),
+        'account deleted': tombFor('removed:author'),
+        'group closed': tombFor('group-closed'),
+    };
+    const outbox19 = () => db.prepare('SELECT body FROM group_guest_outbox').pluck().all() as string[];
+    /** One group for a row: Ana convenes, M is a member, X from a.example is in; epoch 1 over the three. */
+    async function row19(label: string): Promise<{ g: string; m: Id; x: Id; key: Uint8Array; ok: boolean }> {
+        const g = createGroup({ name: label, joinPolicy: 'open', createdBy: ana.pk }).id;
+        const m = addLocal(`M-${label}`);
+        db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(g, m.pk);
+        const x = newId(`X-${label}`);
+        await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(x, 'a.example') });
+        await bring([await item(x, 'a.example', `group:${g}`, 'group-invite', yes)]);
+        const e = epochBy(ana, g, 1, 'start', [ana, m, x]);
+        const stored = await call('POST', ana, `/api/groups/${g}/keys/epoch`, { epoch: e.record });
+        await settle();
+        return { g, m, x, key: e.groupKey, ok: stored.status === 201 && stateOf(g, x) === 'in' };
+    }
+    /** a.example stops answering (its rows wait in backoff), or holds the first row of a send on the wire until opened. */
+    let openWire19: () => void = () => {};
+    let wire19: Promise<number> | null = null;
+    async function holdOnTheWire(): Promise<void> {
+        refusing.delete('a.example');
+        gates.set('a.example', new Promise<void>((r) => { openWire19 = r; }));
+        wire19 = guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await sleep(40);
+    }
+    async function answerAgain(): Promise<void> {
+        refusing.delete('a.example');
+        if (wire19) { openWire19(); gates.delete('a.example'); await wire19; wire19 = null; }
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+    }
+    let r19 = 0;
+    for (const tk of TK19) for (const cs of CS19) {
+        const n19 = ++r19;
+        const { g, m, x, key, ok } = await row19(`Takedown ${n19}`);
+        // M's photo line: its words, its sealed photo and the words of an edit, each a mark no other row carries.
+        const id = crypto.randomUUID();
+        const base = { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id };
+        const words = sealGroupLine(`row ${n19}'s caption`, base);
+        const photo = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(2000).toString('base64')}`, { ...base, part: 'attachment' });
+        const edited = sealGroupLine(`row ${n19}'s caption, edited`, base);
+        const photoMark = photo.ciphertext.slice(0, 64);
+        const carries = (s: string) => [words.ciphertext, photoMark, edited.ciphertext].some((k) => s.includes(k));
+        const t0 = Date.now();
+        if (cs !== 'already sent') refusing.add('a.example');
+        if (cs === 'in a send, behind a row on the wire') await call('POST', ana, `/api/groups/${g}/chat/message`, lineIn(ana, g, key, 1));
+        const posted = await call('POST', m, `/api/groups/${g}/chat/message`, {
+            type: 'image', ...words, metadata: { epoch: 1 }, attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }, clientId: id,
+        });
+        await settle();
+        if (cs === 'queued, its guest left since') await bring([await item(x, 'a.example', `group:${g}`, 'group-leave', JSON.stringify({ v: 1 }))]);
+        if (cs === 'in a send, behind a row on the wire') await holdOnTheWire();
+        const queuedCopy = outbox19().find((b) => b.includes(words.ciphertext));
+        const sentCopy = outs.find((o) => o.home === 'a.example' && o.body?.kind === 'line' && o.body.data?.id === id);
+        const setupOk = ok && posted.status === 201 && (cs === 'already sent'
+            ? !queuedCopy && !!sentCopy && JSON.stringify(sentCopy.body).includes(photoMark)
+            : !!queuedCopy && queuedCopy.includes(photoMark) && !sentCopy);
+        // The edit first (once a.example answers, it went: the takedown is the delete after it).
+        if (tk === 'edited, then author delete') {
+            await call('POST', m, '/api/messages/edit', { messageId: id, ...edited, metadata: { epoch: 1 } });
+            if (cs === 'in a send, behind a row on the wire') await sleep(30);
+            else await settle();
+        }
+        // What went after the takedown, by its place in `outs`, not its time (a send settle() waited for can share its millisecond).
+        const nTake = outs.length;
+        if (tk === 'author delete' || tk === 'edited, then author delete') await call('POST', m, '/api/messages/delete', { messageId: id });
+        if (tk === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: id });
+        if (tk === 'account deleted') purgeMemberSelf(m.pk);
+        if (tk === 'group closed') closeGroupByVote(g, `test-close-19-${n19}`);
+        const kept = outbox19().filter(carries).length;
+        await answerAgain();
+        const toA = (from: Out[]) => from.filter((o) => o.home === 'a.example' && o.body?.group === g);
+        const afterTake = toA(outs.slice(nTake));
+        const wordsOut = (cs === 'already sent' ? afterTake : toA(outs).filter((o) => o.at >= t0)).filter((o) => carries(JSON.stringify(o.body))).length;
+        const tomb = afterTake.filter((o) => (o.body.kind === 'edit' && o.body.data?.id === id) || o.body.kind === 'removed');
+        const t = tomb[0]?.body;
+        const gotTomb = !tomb.length ? 'none' : tomb.length > 1 ? `${tomb.length} tombstones`
+            : t.kind === 'removed' ? (t.data.why === 'group-closed' && JSON.stringify(t.guests) === JSON.stringify([x.pk]) ? 'group-closed' : `removed ${t.data.why}`)
+            : t.data.action === 'removed' && !('ciphertext' in t.data) && JSON.stringify(t.guests) === JSON.stringify([x.pk]) ? `removed:${t.data.by}` : `edit ${t.data.action}`;
+        assert(setupOk && wordsOut === 0 && kept === 0 && gotTomb === TOMB19[tk][cs],
+            `19. ${tk} x ${cs}: no words or photo go (${wordsOut}), none kept here (${kept}), tombstone ${TOMB19[tk][cs]} (got ${gotTomb}${setupOk ? '' : ', setup failed'})`);
+    }
+    assert(r19 === TK19.length * CS19.length && Object.keys(TOMB19).length === TK19.length, `19z. the table has a row for every takedown and every copy state (${r19} rows)`);
+    // An account deleted with a line already down whose metadata is no JSON: the deletion still goes through, and its other line's takedown goes.
+    const y19 = await row19('Takedown stray');
+    const strayId = crypto.randomUUID();
+    db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, 'x', 'plaintext-v1', 'removed', 'not json', ?)`)
+        .run(strayId, y19.g, y19.m.pk, new Date().toISOString());
+    const realLine = lineIn(y19.m, y19.g, y19.key, 1);
+    await call('POST', y19.m, `/api/groups/${y19.g}/chat/message`, realLine);
+    await settle();
+    const tY = Date.now();
+    let purged: { ok: boolean } | null = null;
+    try { purged = purgeMemberSelf(y19.m.pk); } catch { purged = null; }
+    await settle();
+    const tombY = outs.filter((o) => o.home === 'a.example' && o.at >= tY && o.body?.kind === 'edit' && o.body.data?.id === realLine.clientId && o.body.data.action === 'removed');
+    assert(y19.ok && purged?.ok === true && tombY.length === 1,
+        `19y. an account deleted with a stray line whose metadata is no JSON: deleted (${purged?.ok ?? 'threw'}), and its real line's takedown goes once (${tombY.length})`);
+
+    // Edits: the newest words win, wherever the line still waits here.
+    const ES19 = ['edit while queued', 'edit twice while queued', 'edit while in a send, behind a row on the wire', 'edit after it went'] as const;
+    /** What a.example gets of the line after it was posted (after the edit, once it went): each copy's words, by which edit. */
+    const WORDS19: Record<(typeof ES19)[number], string> = {
+        'edit while queued': 'line(newest) edit(newest)',
+        'edit twice while queued': 'line(newest) edit(newest)',
+        'edit while in a send, behind a row on the wire': 'line(newest) edit(newest)',
+        'edit after it went': 'edit(newest)',
+    };
+    let e19 = 0;
+    for (const es of ES19) {
+        const n = ++e19;
+        const { g, m, key, ok } = await row19(`Edit ${n}`);
+        const id = crypto.randomUUID();
+        const seal = (text: string) => sealGroupLine(text, { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id });
+        const w = [seal(`edit row ${n}, first words`), seal(`edit row ${n}, second words`), seal(`edit row ${n}, third words`)];
+        const edits = es === 'edit twice while queued' ? [w[1], w[2]] : [w[1]];
+        const newest = edits[edits.length - 1].ciphertext;
+        const which = (c: unknown) => (c === newest ? 'newest' : w.findIndex((s) => s.ciphertext === c) >= 0 ? `words ${w.findIndex((s) => s.ciphertext === c)}` : 'other');
+        if (es !== 'edit after it went') refusing.add('a.example');
+        if (es === 'edit while in a send, behind a row on the wire') await call('POST', ana, `/api/groups/${g}/chat/message`, lineIn(ana, g, key, 1));
+        const posted = await call('POST', m, `/api/groups/${g}/chat/message`, { ...w[0], metadata: { epoch: 1 }, clientId: id });
+        await settle();
+        if (es === 'edit while in a send, behind a row on the wire') await holdOnTheWire();
+        // What went after the edit, by its place in `outs`, not its time: the line settle() waited for can land in the same
+        // millisecond settle() returns, and an `at >= now` window would count it as after.
+        const nEdit = outs.length;
+        let edited = true;
+        for (const s of edits) edited = (await call('POST', m, '/api/messages/edit', { messageId: id, ...s, metadata: { epoch: 1 } })).status === 200 && edited;
+        const waiting = outbox19().filter((b) => b.includes(id)).map((b) => `${JSON.parse(b).kind}(${which(JSON.parse(b).data.ciphertext)})`).join(' ');
+        await answerAgain();
+        const got = outs.filter((o, i) => o.home === 'a.example' && o.body?.group === g && o.body.data?.id === id && i >= (es === 'edit after it went' ? nEdit : 0))
+            .map((o) => `${o.body.kind}(${which(o.body.data.ciphertext)})`).join(' ');
+        const waitingOk = es === 'edit after it went' ? waiting === 'edit(newest)' || waiting === '' : !waiting.includes('words');
+        assert(ok && posted.status === 201 && edited && waitingOk && got === WORDS19[es],
+            `19e. ${es}: only the newest words go: ${WORDS19[es]} (got ${got}; waiting here after the edit: ${waiting})`);
+    }
+
+    // ── 19c. The copy rule (#3233 round 3): a takedown x this server's copy state ────────────
+    // group_guest_outbox is this server's own (`local`): a standby keeps it through every copy, while a takedown runs on the
+    // server that took over and reaches this one only as its copy's rows (the tombstone, the guests' states). A queued copy
+    // of a line goes only if, as its turn comes, the line still stands here and this server is main.
+    console.log('\n19c. Close the class: every takedown x this server\'s copy state -> no words or photo go, none is kept here');
+    const QUEUE_MS = (guests?.GUEST_FANOUT_QUEUE_MS ?? 24 * 60 * 60_000) as number;
+    const COPY19 = ['stays main', 'a standby at the takedown, then promoted', 'a standby at the takedown, promoted a day later'] as const;
+    const rowsOf19 = (g: string) => db.prepare('SELECT * FROM group_guest_outbox WHERE group_id = ?').all(g) as Array<Record<string, any>>;
+    /** This server's own queue as it kept it through the copy (the other server's never comes in one), `age` ms older. */
+    const keptThroughCopy = (g: string, rows: Array<Record<string, any>>, age: number) => {
+        db.prepare('DELETE FROM group_guest_outbox WHERE group_id = ?').run(g);
+        const put = db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)');
+        for (const r of rows) put.run(r.id, r.group_id, r.home, r.kind, r.body, r.created_at - age, r.created_at - age);
+    };
+    /** As this server goes standby and is promoted again: what a standby's flush sent (nothing, ever), then the promoted flush. */
+    async function standbyThenPromoted(): Promise<number> {
+        setNodeRole('backup');
+        let sent = 0;
+        try {
+            refusing.delete('a.example');
+            const before = outs.length;
+            sent = (await guests.flushGuestOutbox(Date.now() + 10 * 60_000)) + outs.length - before;
+        } finally { setNodeRole('primary'); }
+        return sent;
+    }
+    let c19 = 0;
+    for (const tk of TK19) for (const cp of COPY19) {
+        const n = ++c19;
+        const { g, m, key, ok } = await row19(`Copy ${n}`);
+        const id = crypto.randomUUID();
+        const base = { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id };
+        const words = sealGroupLine(`copy row ${n}'s caption`, base);
+        const photo = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(2000).toString('base64')}`, { ...base, part: 'attachment' });
+        const edited = sealGroupLine(`copy row ${n}'s caption, edited`, base);
+        const photoMark = photo.ciphertext.slice(0, 64);
+        const carries = (s: string) => [words.ciphertext, photoMark, edited.ciphertext].some((k) => s.includes(k));
+        const t0 = Date.now();
+        refusing.add('a.example');
+        const posted = await call('POST', m, `/api/groups/${g}/chat/message`, {
+            type: 'image', ...words, metadata: { epoch: 1 }, attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }, clientId: id,
+        });
+        await settle();
+        const queued = rowsOf19(g);
+        const setupOk = ok && posted.status === 201 && queued.some((r) => r.kind === 'line' && String(r.body).includes(photoMark));
+        // The takedown: here, while this server stays main; otherwise on the server that took over, whose rows this server's
+        // copy then carries verbatim, while its own queue keeps what it had (keptThroughCopy).
+        if (tk === 'edited, then author delete') { await call('POST', m, '/api/messages/edit', { messageId: id, ...edited, metadata: { epoch: 1 } }); await settle(); }
+        if (tk === 'author delete' || tk === 'edited, then author delete') await call('POST', m, '/api/messages/delete', { messageId: id });
+        if (tk === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: id });
+        if (tk === 'account deleted') purgeMemberSelf(m.pk);
+        if (tk === 'group closed') closeGroupByVote(g, `test-close-19c-${n}`);
+        await settle();
+        let standbySent = 0;
+        if (cp !== 'stays main') {
+            keptThroughCopy(g, queued, cp.endsWith('a day later') ? QUEUE_MS + 60_000 : 0);
+            standbySent = await standbyThenPromoted();
+        }
+        refusing.delete('a.example');
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+        const wordsOut = outs.filter((o) => o.home === 'a.example' && o.body?.group === g && o.at >= t0 && carries(JSON.stringify(o.body))).length;
+        const kept = rowsOf19(g).filter((r) => carries(String(r.body))).length;
+        assert(setupOk && standbySent === 0 && wordsOut === 0 && kept === 0,
+            `19c. ${tk} x ${cp}: no words or photo go (${wordsOut}${cp === 'stays main' ? '' : `; from the standby ${standbySent}`}), none kept here (${kept})${setupOk ? '' : ', setup failed'}`);
+    }
+    assert(c19 === TK19.length * COPY19.length, `19cz. the table has a row for every takedown and every copy state (${c19} rows)`);
+    // No over-blocking: a line that still stands, queued before a take-over and a take-back, goes once, words and photo.
+    {
+        const { g, m, key, ok } = await row19('Copy standing');
+        const id = crypto.randomUUID();
+        const base = { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id };
+        const words = sealGroupLine('a line that still stands', base);
+        const photo = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(2000).toString('base64')}`, { ...base, part: 'attachment' });
+        const t0 = Date.now();
+        refusing.add('a.example');
+        await call('POST', m, `/api/groups/${g}/chat/message`, {
+            type: 'image', ...words, metadata: { epoch: 1 }, attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }, clientId: id,
+        });
+        await settle();
+        const queued = rowsOf19(g);
+        keptThroughCopy(g, queued, 0);
+        const fromStandby = await standbyThenPromoted();
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+        const went = outs.filter((o) => o.home === 'a.example' && o.body?.group === g && o.at >= t0 && o.body.kind === 'line' && o.body.data?.id === id
+            && o.body.data.ciphertext === words.ciphertext && JSON.stringify(o.body).includes(photo.ciphertext.slice(0, 64))).length;
+        assert(ok && queued.length === 1 && fromStandby === 0 && went === 1,
+            `19c. no over-blocking: a line that still stands, queued before a take-over and a take-back, goes once with its words and photo (${went}; from the standby ${fromStandby})`);
+    }
+    // A row past GUEST_FANOUT_QUEUE_MS goes unsent, a line that still stands included; a takedown that old still goes.
+    {
+        const { g, m, key, ok } = await row19('Copy aged');
+        const line1 = lineIn(m, g, key, 1), line2 = lineIn(m, g, key, 1);
+        const t0 = Date.now();
+        refusing.add('a.example');
+        await call('POST', m, `/api/groups/${g}/chat/message`, line1);
+        await call('POST', m, `/api/groups/${g}/chat/message`, line2);
+        await settle();
+        await call('POST', m, '/api/messages/delete', { messageId: line2.clientId });
+        await settle();
+        const queued = rowsOf19(g);
+        db.prepare('UPDATE group_guest_outbox SET created_at = created_at - ?, next_try_at = ? WHERE group_id = ?').run(QUEUE_MS + 60_000, Date.now(), g);
+        refusing.delete('a.example');
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+        const toA = outs.filter((o) => o.home === 'a.example' && o.body?.group === g && o.at >= t0);
+        const lines = toA.filter((o) => o.body.kind === 'line').length;
+        const tombs = toA.filter((o) => o.body.kind === 'edit' && o.body.data?.id === line2.clientId && o.body.data.action === 'removed').length;
+        assert(ok && queued.length === 2 && lines === 0 && tombs === 1 && rowsOf19(g).length === 0,
+            `19c. a day in the queue: the line that still stands goes unsent (${lines}), the takedown still goes (${tombs}), nothing is left (${rowsOf19(g).length})`);
+    }
+
+    // ── 19d. A take-away outlasts what the home may hold (#3233 round 4) ────────────────────
+    // The guest's home keeps a line it took, words and sealed photo, until each device has it or MAIL_HELD_DAYS pass, and
+    // only a take-away (a line's takedown, the guest's removal) drops it sooner. So a take-away is offered for as long as
+    // the home may still hold what it takes away, through a home down for an hour, a weekend or a month; a row that adds
+    // still goes after a day.
+    console.log('\n19d. Close the class: every take-away x how long its home was down -> the home gets it when it comes back, while it may hold what it takes away');
+    const { MAIL_HELD_DAYS: HELD_DAYS19 } = await import('./engine/relay-mail.js');
+    const DAY19 = 24 * 60 * 60_000;
+    const HELD19 = HELD_DAYS19 * DAY19;
+    const TA19 = ['author delete', 'convenor removal', 'account deleted', 'guest removed by a convenor', 'group closed',
+        'author delete, then group closed', 'author delete, then the owners switch guests off',
+        'author delete while the switch is off, on again before the timer'] as const;
+    type Ta19 = (typeof TA19)[number];
+    /** What the home gets of the take-aways once back: a line's takedown (by whom) or the guest's removal (why), in order. */
+    const AWAY19: Record<Ta19, string> = {
+        'author delete': 'takedown:author',
+        'convenor removal': 'takedown:convenor',
+        'account deleted': 'takedown:author',
+        'guest removed by a convenor': 'removal:removed',
+        'group closed': 'removal:group-closed',
+        'author delete, then group closed': 'takedown:author removal:group-closed',
+        'author delete, then the owners switch guests off': 'takedown:author removal:closed',
+        'author delete while the switch is off, on again before the timer': 'takedown:author',
+    };
+    /**
+     * How long the home was down after the take-away (its rows that old at the try that fails, then the home answers), and
+     * whether the home must still get it: up to MAIL_HELD_DAYS it may hold the line, and a day more is the margin
+     * (guestRowKeptMs: a line on the wire at the takedown, the home's own clock). Past both, the home holds and serves
+     * nothing that old (test-group-guests-home 15d), and the row has gone here.
+     */
+    const DOWN19: Array<[string, number, boolean]> = [
+        ['an hour', 60 * 60_000, true],
+        ['25 hours', 25 * 60 * 60_000, true],
+        [`${HELD_DAYS19 - 1} days`, HELD19 - DAY19, true],
+        [`${HELD_DAYS19} days and 12 hours`, HELD19 + DAY19 / 2, true],
+        [`${HELD_DAYS19 + 1} days and a minute`, HELD19 + DAY19 + 60_000, false],
+    ];
+    const switchTo19 = (on: boolean) => applyShapeChanges({ actor: olive.pk, actorRole: 'owner' }, { changes: { groupGuests: on } });
+    let d19 = 0;
+    for (const ta of TA19) for (const [down, age, reaches] of DOWN19) {
+        const n = ++d19;
+        const { g, m, x, key, ok } = await row19(`Away ${n}`);
+        const id = crypto.randomUUID();
+        const base = { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id };
+        const words = sealGroupLine(`away row ${n}'s caption`, base);
+        const photo = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(2000).toString('base64')}`, { ...base, part: 'attachment' });
+        const posted = await call('POST', m, `/api/groups/${g}/chat/message`, {
+            type: 'image', ...words, metadata: { epoch: 1 }, attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }, clientId: id,
+        });
+        await settle();
+        // The home took the line (it holds it for the guest's devices), then goes down; the take-away's first try fails.
+        const lineWent = outs.filter((o) => o.home === 'a.example' && o.body?.kind === 'line' && o.body.data?.id === id).length;
+        refusing.add('a.example');
+        const nTake = outs.length;
+        let off = false, queued = 0, keptThroughTry = 0;
+        try {
+            if (ta.includes('while the switch is off')) { switchTo19(false); off = true; }
+            if (ta.startsWith('author delete')) await call('POST', m, '/api/messages/delete', { messageId: id });
+            if (ta.includes('on again before the timer')) { await settle(); switchTo19(true); off = false; }
+            if (ta === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: id });
+            if (ta === 'account deleted') purgeMemberSelf(m.pk);
+            if (ta === 'guest removed by a convenor') await call('DELETE', ana, `/api/groups/${g}/guests/${x.pk}`);
+            if (ta.endsWith('group closed')) closeGroupByVote(g, `test-close-19d-${n}`);
+            if (ta.endsWith('switch guests off')) { switchTo19(false); off = true; guests.closeGuestsIfSwitchedOff(); }
+            await settle();
+            queued = rowsOf19(g).length;
+            // Down for `age`: the try then fails (the backoff's sweep runs at it), and then the home answers.
+            db.prepare('UPDATE group_guest_outbox SET created_at = created_at - ?, next_try_at = ? WHERE group_id = ?').run(age, Date.now(), g);
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            keptThroughTry = rowsOf19(g).length;
+            refusing.delete('a.example');
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            await settle();
+        } finally {
+            refusing.delete('a.example');
+            if (off) switchTo19(true);
+        }
+        const onlyX = (o: Out) => JSON.stringify(o.body.guests) === JSON.stringify([x.pk]);
+        const got = outs.filter((o, i) => i >= nTake && o.home === 'a.example' && o.body?.group === g
+            && (o.body.kind === 'removed' || (o.body.kind === 'edit' && o.body.data?.action === 'removed')))
+            .map((o) => o.body.kind === 'removed' ? `removal:${o.body.data?.why}${onlyX(o) ? '' : '(other guests)'}`
+                : `takedown:${o.body.data.by}${o.body.data.id === id && onlyX(o) && !('ciphertext' in o.body.data) ? '' : '(another line)'}`)
+            .join(' ') || 'none';
+        const want = reaches ? AWAY19[ta] : 'none';
+        const left = rowsOf19(g).length;
+        assert(ok && posted.status === 201 && lineWent === 1 && queued >= 1 && got === want && left === 0,
+            `19d. ${ta} x home down ${down}: ${reaches ? `it gets ${want} when it comes back` : 'past what it may hold: none, and the row has gone'} (got ${got}; kept through the failed try ${keptThroughTry} of ${queued}; left here ${left})${ok && lineWent === 1 ? '' : ', setup failed'}`);
+    }
+    assert(d19 === TA19.length * DOWN19.length && Object.keys(AWAY19).length === TA19.length, `19dz. the table has a row for every take-away and every outage (${d19} rows)`);
+
+    // The table: a row takes away exactly when it is a line's takedown or a removal; each take-away is kept at least as long as
+    // a home may hold what it takes away (MAIL_HELD_DAYS), and each row that adds a day, no longer.
+    const KINDS19: Array<[string, Record<string, unknown>]> = [
+        ['invite', { name: 'g' }], ['roster', { name: 'g' }], ['line', { id: 'l' }], ['edit', { id: 'l', action: 'edited' }], ['epoch', { record: {} }],
+        ['edit', { id: 'l', action: 'removed', by: 'author' }], ['removed', { why: 'removed' }], ['removed', { why: 'closed' }], ['removed', { why: 'group-closed' }],
+    ];
+    for (const [kind, data] of KINDS19) {
+        const away = kind === 'removed' || (kind === 'edit' && data.action === 'removed');
+        const label = `${kind}${data.action ? ` ${data.action}` : data.why ? ` (${data.why})` : ''}`;
+        const kept = typeof guests?.guestRowKeptMs === 'function' ? guests.guestRowKeptMs(kind, data) as number : NaN;
+        const says = typeof guests?.takesAway === 'function' ? guests.takesAway(kind, data) as boolean : null;
+        assert(says === away && (away ? kept >= HELD19 : kept === QUEUE_MS),
+            `19d. table: ${label} ${away ? `takes away: kept ${kept / DAY19} days, at least the ${HELD_DAYS19} a home may hold what it takes away` : `adds: kept ${kept / DAY19} day(s), no longer than ${QUEUE_MS / DAY19}`} (takesAway says ${says})`);
+    }
+
+    // No over-retention: each row that adds, queued while its home is down, goes unsent once a day old, and none is left.
+    {
+        const { g, m, key, ok } = await row19('Adds aged');
+        const sent = lineIn(m, g, key, 1);
+        await call('POST', m, `/api/groups/${g}/chat/message`, sent);
+        await settle();
+        refusing.add('a.example');
+        const nAdd = outs.length;
+        let kinds = '';
+        try {
+            await call('POST', m, '/api/messages/edit', { messageId: sent.clientId, ...sealGroupLine('new words', { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: sent.clientId }), metadata: { epoch: 1 } });
+            await call('POST', m, `/api/groups/${g}/chat/message`, lineIn(m, g, key, 1));
+            guests.queueGroupRoster(g);
+            guests.fanOutGroupEpoch(g, 1);
+            await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(newId('Y-adds'), 'a.example') });
+            await settle();
+            kinds = rowsOf19(g).map((r) => r.kind).sort().join(' ');
+            db.prepare('UPDATE group_guest_outbox SET created_at = created_at - ?, next_try_at = ? WHERE group_id = ?').run(25 * 60 * 60_000, Date.now(), g);
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            refusing.delete('a.example');
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            await settle();
+        } finally { refusing.delete('a.example'); }
+        for (const kind of ['edit', 'epoch', 'invite', 'line', 'roster']) {
+            const went = outs.filter((o, i) => i >= nAdd && o.home === 'a.example' && o.body?.group === g && o.body.kind === kind).length;
+            const left = rowsOf19(g).filter((r) => r.kind === kind).length;
+            assert(ok && kinds === 'edit epoch invite line roster' && went === 0 && left === 0,
+                `19d. no over-retention: ${({ edit: 'an edit with new words', epoch: 'an epoch', invite: 'an invitation', line: 'a line', roster: 'a roster' } as Record<string, string>)[kind]} queued while its home is down goes unsent once 25 hours old (${went}), none left (${left})${kinds === 'edit epoch invite line roster' ? '' : `, setup queued ${kinds}`}`);
+        }
+    }
+
+    // ── 19f. The send rule (#3233 round 5): every row x every change after it was queued x its age ──
+    // A row waits here for its home (down, or this server a standby) while what it says changes: on this server, or on the
+    // server that took over, whose writes this server's copy carries. So as each row's turn comes it is checked again against
+    // this server's state AT THE SEND (group-guests.ts SEND_RULES), and goes only while what it says is still true. Each
+    // change below is written straight into the tables, as the server that took over writes it and this server's copy
+    // carries it, while this server is a standby; then it takes back. This server's own hooks at a change (its withdrawals
+    // and new rows) never run, so only the check at the send stands between the row and the wire.
+    console.log('\n19f. Close the class: every row this server queues x every change after it was queued x its age -> it goes, or goes unsent, as this server stands at the send');
+    const { addConnector: block19f, removeConnector: unblock19f } = await import('./connector-manager.js');
+    const ROWS19F = ['line', 'edit (new words)', 'edit (takedown)', 'epoch', 'roster', 'invite', 'removal'] as const;
+    type Row19f = (typeof ROWS19F)[number];
+    const KIND19F: Record<Row19f, string> = {
+        line: 'line', 'edit (new words)': 'edit', 'edit (takedown)': 'edit', epoch: 'epoch', roster: 'roster', invite: 'invite', removal: 'removed',
+    };
+    const CH19F = ['none', 'line removed', 'line edited', 'guest removed', 'guest re-invited and in', 'guest re-invited, not yet in', 'guest left', 'group closed', 'take-over', 'take-back', 'home blocked'] as const;
+    type Ch19f = (typeof CH19F)[number];
+    const AGES19F: Array<[string, number]> = [
+        ['fresh', 0], ['past a day', QUEUE_MS + 60_000], [`past ${HELD_DAYS19} days`, HELD19 + DAY19 / 2], [`past ${HELD_DAYS19} days and a day`, HELD19 + DAY19 + 60_000],
+    ];
+    const GO = 'goes', NEWEST = 'goes, newest words', DROP = 'dropped', WAIT = 'waits';
+    const cols19f = (...v: string[]): Record<Ch19f, string> => Object.fromEntries(CH19F.map((c, i) => [c, v[i]])) as Record<Ch19f, string>;
+    /**
+     * A fresh row, by the change after it was queued. The line changes act on the row's own line (a line, an edit, a
+     * takedown) or, for the others, on a line of the group already sent. A takedown always goes (a line once down stays down);
+     * a removal goes naming only the guests not in here now; nothing waits on a standby but waits; nothing goes to a home the
+     * owners blocked, take-aways included (design §4.2). Invited again but not yet in, a removal still goes: on one server
+     * their new invitation is queued behind it, and their home shows an invitation only once it has them out (it holds
+     * nothing for an invitation to a guest it has in).
+     */
+    const FRESH19F: Record<Row19f, Record<Ch19f, string>> = {
+        //                          none line removed line edited guest removed re-invited, in re-invited, not in guest left group closed take-over take-back home blocked
+        line:               cols19f(GO,  DROP,        NEWEST,     DROP,         GO,            DROP,               DROP,      DROP,        WAIT,     GO,       DROP),
+        'edit (new words)': cols19f(GO,  DROP,        NEWEST,     DROP,         GO,            DROP,               DROP,      DROP,        WAIT,     GO,       DROP),
+        'edit (takedown)':  cols19f(GO,  GO,          GO,         GO,           GO,            GO,                 GO,        GO,          WAIT,     GO,       DROP),
+        epoch:              cols19f(GO,  GO,          GO,         DROP,         GO,            DROP,               DROP,      DROP,        WAIT,     GO,       DROP),
+        roster:             cols19f(GO,  GO,          GO,         DROP,         GO,            DROP,               DROP,      DROP,        WAIT,     GO,       DROP),
+        invite:             cols19f(GO,  GO,          GO,         DROP,         DROP,          GO,                 DROP,      DROP,        WAIT,     GO,       DROP),
+        removal:            cols19f(GO,  GO,          GO,         GO,           DROP,          GO,                 GO,        GO,          WAIT,     GO,       DROP),
+    };
+    /** A row that takes away is kept MAIL_HELD_DAYS and a day, one that adds a day; past it, it goes unsent (a standby keeps it). */
+    const want19f = (r: Row19f, ch: Ch19f, age: number): string => {
+        const fresh = FRESH19F[r][ch];
+        if (fresh === WAIT || fresh === DROP) return fresh;
+        const kept = r === 'edit (takedown)' || r === 'removal' ? HELD19 + QUEUE_MS : QUEUE_MS;
+        return age >= kept ? DROP : fresh;
+    };
+    /** One group for a row: X from a.example in (invited only, for an invitation), the row queued while a.example refuses. */
+    async function setup19f(r: Row19f) {
+        const label = `Send ${r}`;
+        let g: string, m: Id, x: Id, key: Uint8Array, ok: boolean;
+        if (r === 'invite') {
+            g = createGroup({ name: label, joinPolicy: 'open', createdBy: ana.pk }).id;
+            m = addLocal(`M-${label}`);
+            db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(g, m.pk);
+            const e = epochBy(ana, g, 1, 'start', [ana, m]);
+            ok = (await call('POST', ana, `/api/groups/${g}/keys/epoch`, { epoch: e.record })).status === 201;
+            key = e.groupKey;
+            x = newId(`X-${label}`);
+        } else ({ g, m, x, key, ok } = await row19(label));
+        const L = lineIn(m, g, key, 1);
+        const seal = (text: string) => sealGroupLine(text, { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: L.clientId });
+        if (r !== 'line') {
+            refusing.delete('a.example');
+            ok = (await call('POST', m, `/api/groups/${g}/chat/message`, L)).status === 201 && ok;
+            await settle();
+        }
+        refusing.add('a.example');
+        try {
+            if (r === 'line') ok = (await call('POST', m, `/api/groups/${g}/chat/message`, L)).status === 201 && ok;
+            if (r === 'edit (new words)') ok = (await call('POST', m, '/api/messages/edit', { messageId: L.clientId, ...seal('words edited here'), metadata: { epoch: 1 } })).status === 200 && ok;
+            if (r === 'edit (takedown)') ok = (await call('POST', m, '/api/messages/delete', { messageId: L.clientId })).status === 200 && ok;
+            if (r === 'epoch') ok = (await call('POST', ana, `/api/groups/${g}/keys/epoch`, { epoch: epochBy(ana, g, 2, 'rotate', [ana, m, x]).record })).status === 201 && ok;
+            if (r === 'roster') guests.queueGroupRoster(g);
+            if (r === 'invite') ok = (await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(x, 'a.example') })).status < 300 && ok;
+            if (r === 'removal') ok = (await call('DELETE', ana, `/api/groups/${g}/guests/${x.pk}`)).status === 200 && ok;
+            await settle();
+        } finally { refusing.delete('a.example'); }
+        const action = r === 'edit (takedown)' ? 'removed' : r === 'edit (new words)' ? 'edited' : undefined;
+        const row = (db.prepare("SELECT * FROM group_guest_outbox WHERE group_id = ? AND home = 'a.example' AND kind = ? ORDER BY created_at DESC, rowid DESC").all(g, KIND19F[r]) as Array<Record<string, any>>)
+            .find((q) => action === undefined || JSON.parse(q.body).data?.action === action);
+        db.prepare('DELETE FROM group_guest_outbox WHERE group_id = ?').run(g);
+        const guestRows = db.prepare('SELECT * FROM group_guests WHERE group_id = ?').all(g) as Array<Record<string, unknown>>;
+        const lineRow = db.prepare('SELECT type, ciphertext, nonce, metadata, edited_at FROM messages WHERE id = ?').get(L.clientId) as Record<string, unknown> | undefined;
+        const named = row ? JSON.parse(row.body).guests : null;
+        return { g, m, x, L, row, guestRows, lineRow, edited: seal('words written on the server that took over'), ok: ok && !!row && !!lineRow && JSON.stringify(named) === JSON.stringify([x.pk]) };
+    }
+    type Setup19f = Awaited<ReturnType<typeof setup19f>>;
+    /** The group's tables as they were when the row was queued, and the row back in this server's own queue, `age` old. */
+    function restore19f(s: Setup19f, age: number): void {
+        db.prepare('DELETE FROM group_guest_outbox WHERE group_id = ?').run(s.g);
+        db.prepare('DELETE FROM group_closures WHERE group_id = ?').run(s.g);
+        db.prepare('DELETE FROM group_guests WHERE group_id = ?').run(s.g);
+        for (const gr of s.guestRows) {
+            const c = Object.keys(gr);
+            db.prepare(`INSERT INTO group_guests (${c.join(', ')}) VALUES (${c.map(() => '?').join(', ')})`).run(...c.map((k) => gr[k]));
+        }
+        const l = s.lineRow!;
+        db.prepare('UPDATE messages SET type = ?, ciphertext = ?, nonce = ?, metadata = ?, edited_at = ? WHERE id = ?').run(l.type, l.ciphertext, l.nonce, l.metadata, l.edited_at, s.L.clientId);
+        const at = Date.now() - age;
+        db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
+            .run(s.row!.id, s.g, s.row!.home, s.row!.kind, s.row!.body, at, at);
+    }
+    /** The change, as the server that took over writes it and this server's copy carries it (no hook of this server runs). */
+    function change19f(s: Setup19f, ch: Ch19f): void {
+        const setX = (state: string) => db.prepare('UPDATE group_guests SET state = ?, state_at = ? WHERE group_id = ? AND guest_key = ?').run(state, new Date().toISOString(), s.g, s.x.pk);
+        if (ch === 'line removed') db.prepare(`UPDATE messages SET type = 'removed', ciphertext = '', nonce = 'plaintext-v1', metadata = ? WHERE id = ?`).run(JSON.stringify({ epoch: 1, removedBy: s.m.pk }), s.L.clientId);
+        // A line once down stays down: nothing edits a takedown's line.
+        if (ch === 'line edited') db.prepare("UPDATE messages SET ciphertext = ?, nonce = ?, edited_at = ? WHERE id = ? AND type != 'removed'").run(s.edited.ciphertext, s.edited.nonce, new Date().toISOString(), s.L.clientId);
+        if (ch === 'guest removed') setX('removed');
+        if (ch === 'guest re-invited and in') setX('in');
+        if (ch === 'guest re-invited, not yet in') setX('invited');
+        if (ch === 'guest left') setX('left');
+        if (ch === 'group closed') {
+            db.prepare('INSERT INTO group_closures (group_id, decision_id, closed_at) VALUES (?, ?, ?)').run(s.g, 'test-close-19f', new Date().toISOString());
+            db.prepare("UPDATE group_guests SET state = 'removed', state_at = ? WHERE group_id = ? AND state IN ('invited', 'in')").run(new Date().toISOString(), s.g);
+        }
+        if (ch === 'home blocked') block19f('a.example:4001', 'blocked', 'Blocked', 'https://a.example', false);
+    }
+    let f19 = 0;
+    for (const r of ROWS19F) {
+        const s = await setup19f(r);
+        for (const ch of CH19F) for (const [ageLabel, age] of AGES19F) {
+            f19++;
+            if (!s.ok) { assert(false, `19f. ${r} x ${ch} x ${ageLabel}: setup failed`); continue; }
+            restore19f(s, age);
+            const nOut = outs.length;
+            let fromStandby = 0, got = '', left = -1;
+            try {
+                if (ch !== 'none' && ch !== 'take-over' && ch !== 'take-back') change19f(s, ch);
+                if (ch !== 'none') {
+                    setNodeRole('backup');
+                    fromStandby = await guests.flushGuestOutbox(Date.now() + 10 * 60_000) + outs.length - nOut;
+                    if (ch !== 'take-over') setNodeRole('primary');
+                }
+                if (ch !== 'take-over') await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+                left = db.prepare('SELECT COUNT(*) FROM group_guest_outbox WHERE group_id = ?').pluck().get(s.g) as number;
+                db.prepare('DELETE FROM group_guest_outbox WHERE group_id = ?').run(s.g);
+            } finally {
+                setNodeRole('primary');
+                if (ch === 'home blocked') unblock19f('a.example:4001');
+            }
+            const sent = outs.slice(nOut).filter((o) => o.home === 'a.example' && o.body?.group === s.g);
+            const mine = sent.filter((o) => o.body.kind === s.row!.kind);
+            if (sent.length > mine.length) got = `${sent.length - mine.length} other row(s) sent`;
+            else if (!mine.length) got = left === 0 ? DROP : left === 1 ? WAIT : `${left} left`;
+            else if (mine.length > 1) got = `${mine.length} sent`;
+            else {
+                const b = mine[0].body;
+                const words = b.data?.ciphertext === s.edited.ciphertext ? 'newest' : b.data?.ciphertext === JSON.parse(s.row!.body).data?.ciphertext ? 'as queued' : 'other';
+                got = JSON.stringify(b.guests) !== JSON.stringify([s.x.pk]) ? `goes naming ${JSON.stringify(b.guests)?.length ?? 0} chars of others`
+                    : (r === 'line' || r === 'edit (new words)') ? (ch === 'line edited' ? (words === 'newest' ? NEWEST : `goes, ${words} words`) : words === 'as queued' ? GO : `goes, ${words} words`)
+                    : GO;
+                if (left !== 0) got += ` (${left} left)`;
+            }
+            const want = want19f(r, ch, age);
+            assert(got === want && fromStandby === 0,
+                `19f. ${r} x ${ch} x ${ageLabel}: ${want} (got ${got}${fromStandby ? `; the standby sent ${fromStandby}` : ''})`);
+        }
+    }
+
+    // Narrowed, never widened: a row naming two guests at one home goes naming only those it may still name (an epoch with
+    // only their wraps); a removal names only those not in here now.
+    {
+        const NARROW19F: Array<[string, string]> = [['line', 'Y removed'], ['edit (new words)', 'Y left'], ['epoch', 'Y removed'], ['removal', 'Y re-invited and in']];
+        for (const [r, ch] of NARROW19F) {
+            const g = createGroup({ name: `Narrow ${r}`, joinPolicy: 'open', createdBy: ana.pk }).id;
+            const m = addLocal(`M-narrow-${r}`);
+            db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(g, m.pk);
+            const x = newId(`X-narrow-${r}`), y = newId(`Y-narrow-${r}`);
+            for (const who of [x, y]) {
+                await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(who, 'a.example') });
+                await bring([await item(who, 'a.example', `group:${g}`, 'group-invite', yes)]);
+            }
+            const e = epochBy(ana, g, 1, 'start', [ana, m, x, y]);
+            let ok = (await call('POST', ana, `/api/groups/${g}/keys/epoch`, { epoch: e.record })).status === 201 && stateOf(g, x) === 'in' && stateOf(g, y) === 'in';
+            const L = lineIn(m, g, e.groupKey, 1);
+            if (r !== 'line') { ok = (await call('POST', m, `/api/groups/${g}/chat/message`, L)).status === 201 && ok; await settle(); }
+            refusing.add('a.example');
+            try {
+                if (r === 'line') await call('POST', m, `/api/groups/${g}/chat/message`, L);
+                if (r === 'edit (new words)') await call('POST', m, '/api/messages/edit', { messageId: L.clientId, ...sealGroupLine('narrowed words', { myEdPrivHex: m.seedHex, groupKey: e.groupKey, groupId: g, epoch: 1, messageId: L.clientId }), metadata: { epoch: 1 } });
+                if (r === 'epoch') await call('POST', ana, `/api/groups/${g}/keys/epoch`, { epoch: epochBy(ana, g, 2, 'rotate', [ana, m, x, y]).record });
+                if (r === 'removal') guests.closeGroupGuests(g);
+                await settle();
+            } finally { refusing.delete('a.example'); }
+            const kind = KIND19F[r as Row19f];
+            const row = (db.prepare("SELECT * FROM group_guest_outbox WHERE group_id = ? AND home = 'a.example' AND kind = ? ORDER BY created_at DESC").all(g, kind) as Array<Record<string, any>>)[0];
+            const both = JSON.stringify([x.pk, y.pk].sort());
+            ok = ok && !!row && JSON.stringify(JSON.parse(row.body).guests) === both;
+            db.prepare('DELETE FROM group_guest_outbox WHERE group_id = ?').run(g);
+            if (row) db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)').run(row.id, g, row.home, row.kind, row.body, Date.now(), Date.now());
+            db.prepare('UPDATE group_guests SET state = ? WHERE group_id = ? AND guest_key = ?').run(ch === 'Y removed' ? 'removed' : ch === 'Y left' ? 'left' : 'in', g, y.pk);
+            const nOut = outs.length;
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            const went = outs.slice(nOut).filter((o) => o.home === 'a.example' && o.body?.group === g && o.body.kind === kind);
+            const b = went[0]?.body;
+            const wrapsTo = r === 'epoch' ? [...new Set(((b?.data?.wraps ?? []) as Array<{ recipient: string }>).map((w) => w.recipient))].sort() : null;
+            const namesX = went.length === 1 && JSON.stringify(b.guests) === JSON.stringify([x.pk]) && (wrapsTo === null || JSON.stringify(wrapsTo) === JSON.stringify([x.pk]));
+            assert(ok && namesX,
+                `19f. narrowed: ${r} naming X and Y x ${ch}: it goes naming X alone${r === 'epoch' ? ', with only X\'s wraps' : ''} (sent ${went.length}, naming ${b ? (JSON.stringify(b.guests) === JSON.stringify([x.pk]) ? 'X' : JSON.stringify(b.guests) === both ? 'X and Y' : 'others') : 'nobody'}${wrapsTo ? `, wraps to ${wrapsTo.length}` : ''})${ok ? '' : ', setup failed'}`);
+        }
+    }
+
+    // The guard: the row kinds come from the code (the list the send rule is keyed by, the outbox table's CHECK, and every
+    // kind queueToHome is called with), each has its rule in words, and each is in the table above, so a new kind can't
+    // skip it.
+    {
+        const listed = ((guests?.GUEST_NOTICE_KINDS ?? []) as string[]).slice().sort();
+        const outboxSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'group_guest_outbox'").pluck().get() as string;
+        const checked = [...(/kind\s+TEXT NOT NULL CHECK \(kind IN \(([^)]*)\)\)/.exec(outboxSql)?.[1] ?? '').matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
+        const src = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'engine', 'group-guests.ts'), 'utf8')
+            .split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*\*)/.test(l)).join('\n');
+        const queuedKinds = [...new Set([...src.matchAll(/queueToHome\(\s*[\w.]+,\s*[\w.]+,\s*[^,()]+,\s*'([a-z-]+)'/g)].map((x) => x[1]))].sort();
+        const rules = (guests?.GUEST_ROW_RULES ?? {}) as Record<string, unknown>;
+        const noRule = listed.filter((k) => typeof rules[k] !== 'string' || !(rules[k] as string).trim());
+        const inTable = new Set(Object.values(KIND19F));
+        const notInTable = listed.filter((k) => !inTable.has(k));
+        assert(listed.length > 0 && JSON.stringify(listed) === JSON.stringify(checked),
+            `19fz. the send rule's kinds are the outbox table's kinds (code ${listed.join(' ') || 'none'}; table ${checked.join(' ')})`);
+        assert(listed.length > 0 && JSON.stringify(listed) === JSON.stringify(queuedKinds),
+            `19fz. every kind queued for a guest's home is one the send rule is keyed by, and each is queued (queued ${queuedKinds.join(' ')})`);
+        assert(listed.length > 0 && noRule.length === 0 && Object.keys(rules).sort().join(' ') === listed.join(' '),
+            `19fz. every kind has its send rule in words (none for ${noRule.join(' ') || 'no kind'})`);
+        assert(listed.length > 0 && notInTable.length === 0 && f19 === ROWS19F.length * CH19F.length * AGES19F.length,
+            `19fz. the table has rows for every kind (missing ${notInTable.join(' ') || 'none'}) x every change x every age (${f19} rows)`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

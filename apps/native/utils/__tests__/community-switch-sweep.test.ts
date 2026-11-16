@@ -102,42 +102,21 @@ describe('every write or removal of the phone\'s community announces it', () => 
 
     // Writers that move the phone through another module's switch, writing no address themselves: each is listed with the
     // switch it calls, and the switch is one the sweep above finds announcing.
-    it('following the community to where it lives now (address-follow.ts) moves only through reconnect.ts switchPhoneTo', () => {
-        const follow = code(fs.readFileSync(path.join(NATIVE, 'utils/address-follow.ts'), 'utf8'));
+    it('following the community to where it lives now (address-verify.ts, addresses S4) moves only through reconnect.ts switchPhoneTo, carrying nothing', () => {
+        const verify = code(fs.readFileSync(path.join(NATIVE, 'utils/address-verify.ts'), 'utf8'));
         // It writes no community address of its own: the sweep finds no write of it there.
-        expect(writes.filter(w => w.file === 'utils/address-follow.ts')).toEqual([]);
-        expect(follow).not.toMatch(/beanpool_anchor_url/);
-        // Its one move is the switch it is handed, by default switchPhoneTo.
-        expect(follow).toMatch(/switchTo: switchPhoneTo,/);
-        expect([...follow.matchAll(/deps\.switchTo\(/g)]).toHaveLength(1);
-        expect(follow).toMatch(/await deps\.switchTo\(offer\.to, offer\.from\);/);
-        // switchPhoneTo writes the address and announces it (found by the sweep, and in this order). Following, the
-        // community's copy is carried first, inside the gate that keeps every copy closed until the address is written,
-        // and the carry writes the address once the copy is there and before the old one goes (community-copy-carry.ts).
+        expect(writes.filter(w => w.file === 'utils/address-verify.ts')).toEqual([]);
+        expect(verify).not.toMatch(/setItem\(\s*ANCHOR_STORE_KEY|setItem\('beanpool_anchor_url'/);
+        // Its one move is the one it is handed, by default switchPhoneTo with no copy carried (the file is the record's).
+        expect([...verify.matchAll(/deps\.moveTo\(/g)]).toHaveLength(1);
+        expect(verify).toMatch(/await deps\.moveTo\(anchor, to\);/);
+        expect([...verify.matchAll(/switchPhoneTo\(/g)]).toHaveLength(1);
+        expect(verify).toMatch(/await switchPhoneTo\(to\);/);
+        expect(verify).not.toMatch(/carryCommunityCopy|carryFrom/);
+        // switchPhoneTo writes the address and announces it (found by the sweep, and in this order).
         const reconnect = code(fs.readFileSync(path.join(NATIVE, 'utils/reconnect.ts'), 'utf8'));
         expect(reconnect).toMatch(/await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/);
-        expect(reconnect).toMatch(/await whileCopyMoves\(url, \(\) => carryCommunityCopy\(carryFrom, url, \(\) => AsyncStorage\.setItem\('beanpool_anchor_url', url\)\)\);/);
         expect(writes.some(w => w.file === 'utils/reconnect.ts')).toBe(true);
-    });
-
-    // DNS robustness S3 (scratch/fable-design/DESIGN-dns-robustness-fable.md §3.2): the fallback card moves the phone to
-    // another address its community published when its own stops answering, by the follow card's own move.
-    it('falling back to another address (address-fallback.ts) moves only through address-follow.ts moveCommunity, so switchPhoneTo', () => {
-        const fallback = code(fs.readFileSync(path.join(NATIVE, 'utils/address-fallback.ts'), 'utf8'));
-        // It writes no community address of its own, and has no switch of its own.
-        expect(writes.filter(w => w.file === 'utils/address-fallback.ts')).toEqual([]);
-        expect(fallback).not.toMatch(/beanpool_anchor_url/);
-        expect(fallback).not.toMatch(/switchTo\(|switchPhoneTo|setItem\(/);
-        // Its one move is the follow card's, handed the same dependencies (by default switchPhoneTo's, depsWith).
-        expect([...fallback.matchAll(/moveCommunity\(/g)]).toHaveLength(1);
-        expect(fallback).toMatch(/const moved = await moveCommunity\(offer, anchor, deps\);/);
-        expect(fallback).toMatch(/const deps = await depsWith\(injected\);/);
-        // moveCommunity holds address-follow.ts's one switch (pinned above), and the follow card moves through it too.
-        const follow = code(fs.readFileSync(path.join(NATIVE, 'utils/address-follow.ts'), 'utf8'));
-        const move = follow.slice(follow.indexOf('export async function moveCommunity('));
-        expect(move).toMatch(/^export async function moveCommunity\([\s\S]*?await deps\.switchTo\(offer\.to, offer\.from\);/);
-        expect(follow).toMatch(/const moved = await moveCommunity\(offer, anchor, deps\);/);
-        expect(follow).toMatch(/switchTo: switchPhoneTo,/);
     });
 
     it('the exceptions: discovery writes a community only in a development build', () => {

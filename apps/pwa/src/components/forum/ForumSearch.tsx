@@ -15,7 +15,7 @@
  *   nothing. It is kept to the door's section, its later pages too.
  */
 import { useEffect, useRef, useState } from 'react';
-import { forumSectionName, t, timeAgo, word } from '@beanpool/core';
+import { forumSectionName, forumWriterLine, t, timeAgo, word } from '@beanpool/core';
 import { forgetForumSearch, keptSearch, searchForum, type ForumSearchAnswer, type ForumSearchHit, type ForumSection } from '../../lib/forum';
 import { TOPIC_WORDS } from './ForumTopicView';
 
@@ -129,7 +129,7 @@ function HitRow({ hit, sectionName, onOpen }: { hit: ForumSearchHit; sectionName
                     {hit.title || t(TOPIC_WORDS.removedTopic)}
                 </span>
                 <span className="text-xs" style={{ color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
-                    {[hit.writer.name || t('A member'), sectionName, when].filter(Boolean).join(' · ')}
+                    {[forumWriterLine(hit.writer, t('A member')), sectionName, when].filter(Boolean).join(' · ')}
                 </span>
                 {hit.excerpt && <span className="text-sm" style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{hit.excerpt}</span>}
             </button>

@@ -5,7 +5,7 @@
  * removal gives. The writer is told either way by the bell, and never who answered.
  */
 import { useEffect, useState } from 'react';
-import { forumSectionName, t, timeAgo, word } from '@beanpool/core';
+import { forumSectionName, forumWriterLine, t, timeAgo, word } from '@beanpool/core';
 import { FIRST_LOOK_NO_REASONS, listFirstLooks, noFirstLook, okFirstLook, type FirstLookNoReason, type ForumFront, type ForumWaiting } from '../../lib/forum';
 import { ForumPhotos, ForumWords } from './ForumBits';
 
@@ -69,7 +69,7 @@ export function ForumFirstLooks({ front, onBack }: { front: ForumFront | null; o
                 return (
                     <article key={w.id} data-testid="forum-first-look" className="flex flex-col gap-2 p-3 rounded-xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
                         <p className="m-0 text-xs" style={{ color: 'var(--text-muted)' }}>
-                            {[section ? forumSectionName(section) : '', w.writer.name, timeAgo(Math.max(0, Date.now() - Date.parse(w.createdAt)))].filter(Boolean).join(' · ')}
+                            {[section ? forumSectionName(section) : '', forumWriterLine(w.writer, t('A member')), timeAgo(Math.max(0, Date.now() - Date.parse(w.createdAt)))].filter(Boolean).join(' · ')}
                         </p>
                         <h3 className="m-0 text-base font-bold" style={{ color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{w.title}</h3>
                         {w.place && <p className="m-0 text-xs" style={{ color: 'var(--text-muted)' }}>📍 {w.place}</p>}

@@ -18,13 +18,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { forumSectionName, t, timeAgo, tn } from '@beanpool/core';
+import { forumSectionName, forumWriterLine, t, timeAgo, tn } from '@beanpool/core';
 import {
     getForumFront, getForumTopics, keptForumFront, keptForumList, myFirstLook, takeForumBack, withdrawFirstLook,
     type ForumFront, type ForumList, type ForumTopic, type ForumWaiting,
 } from '../../utils/forum';
 import { takeForumAt } from '../../utils/forum-open';
 import { FORUM_WORDS, TOPIC_WORDS } from './forum-words';
+import { renewForumLabelOnce } from '../../utils/forum-label';
 import { useForumStyles } from './forum-style';
 import { ForumSearch } from './ForumSearch';
 import { openWorldwideForum, worldwideForumJoined } from '../../utils/worldwide-forum';
@@ -57,6 +58,8 @@ export function ForumPane() {
             setFailed(null);
             if (f.firstTopicWaits) void myFirstLook().then(setMine).catch(() => {});
             else setMine(null);
+            // The worldwide forum: the member's community note renewed in its last week, once an app run (slice F10).
+            if (f.public) void renewForumLabelOnce();
         } catch (e) {
             setFailed((e as Error)?.message || t(FORUM_WORDS.failed));
         }
@@ -195,7 +198,7 @@ function TopicRow({ topic, sectionName }: { topic: ForumTopic; sectionName: stri
         <Pressable testID="forum-topic-row" accessibilityRole="button" onPress={() => router.push({ pathname: '/forum/[id]', params: { id: topic.id } })} style={styles.row}>
             <View style={styles.rowWords}>
                 <Text style={styles.rowTitle}>{title}</Text>
-                <Text style={styles.muted}>{[topic.writer.name, sectionName].filter(Boolean).join(' · ')}</Text>
+                <Text style={styles.muted}>{[forumWriterLine(topic.writer, t(TOPIC_WORDS.member)), sectionName].filter(Boolean).join(' · ')}</Text>
                 <Text style={styles.muted}>{replies} · {when}</Text>
             </View>
             {topic.unread && <View style={styles.dot} accessibilityLabel={t(FORUM_WORDS.unread)} accessibilityRole="image" />}

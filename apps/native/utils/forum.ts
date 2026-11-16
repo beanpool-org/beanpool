@@ -11,7 +11,7 @@
  *   without waiting (utils/blocklist.ts), so until the node has it, and in every kept copy, the phone leaves out their topics
  *   and posts here; a topic of theirs reads as gone, with the web's line.
  */
-import { FORUM_LIMITS, t, type ForumFollow, type ForumLink, type ForumLinkKind, type ForumSectionStarts } from '@beanpool/core';
+import { FORUM_LIMITS, forumWriterLine, t, type ForumFollow, type ForumLink, type ForumLinkKind, type ForumSectionStarts, type ForumWriterLabel } from '@beanpool/core';
 import { forumKept, signedRequestWithMethod } from './db';
 import { getBlockedUsers } from './blocklist';
 import { TOPIC_WORDS } from '../components/forum/forum-words';
@@ -24,7 +24,8 @@ export interface ForumSection {
     /** The group whose own section this is (slice F8): only its members and the moderators read it. */
     group?: { id: string; name: string } | null;
 }
-export interface ForumWriter { publicKey: string; name: string }
+/** A writer, and the label the worldwide forum proved for them (slice F10; null or absent: the name alone, core forumWriterLine). */
+export interface ForumWriter { publicKey: string; name: string; label?: ForumWriterLabel | null }
 export interface ForumTopic {
     id: string; sectionId: string; title: string; writer: ForumWriter; place: string | null; lang: string | null; replyCount: number;
     lastActivityAt: string; createdAt: string; pinned: boolean; closed: string | null; removed: boolean; hidden: boolean;
@@ -123,7 +124,7 @@ export function topicWithoutBlocked(page: ForumTopicPage, blocked: Set<string>):
 }
 /** The node's "not here for you", for a topic whose writer the member blocked: the topic screen goes back and says so. */
 function blockedTopicGone(page: ForumTopicPage): Error {
-    return Object.assign(new Error(t(TOPIC_WORDS.goneBlocked, { name: page.topic.writer.name || t(TOPIC_WORDS.member) })), { status: 404, code: 'not_found' });
+    return Object.assign(new Error(t(TOPIC_WORDS.goneBlocked, { name: forumWriterLine(page.topic.writer, t(TOPIC_WORDS.member)) })), { status: 404, code: 'not_found' });
 }
 
 export const keptForumFront = () => keptRead<ForumFront>('front');

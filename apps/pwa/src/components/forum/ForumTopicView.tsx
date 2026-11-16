@@ -19,10 +19,10 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FORUM_LIMITS, currentLanguage, forumSectionName, t, timeAgo, word } from '@beanpool/core';
+import { FORUM_LIMITS, currentLanguage, forumSectionName, forumWriterLine, t, timeAgo, word } from '@beanpool/core';
 import {
     closeForumTopic, followForumTopic, forgetForumTopic, getForumTopic, keptTopic, linkForumThing, markForumTold, readForumTopic, removeForumPost, replyInForum,
-    reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
+    reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage, type ForumWriter,
 } from '../../lib/forum';
 import { blockUser } from '../../lib/blocklist';
 import { useCoversScreen } from '../../lib/screen-cover';
@@ -209,7 +209,7 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
     }
 
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
-    const name = (p: { writer: { name: string } }) => p.writer.name || t('A member');
+    const name = (p: { writer: ForumWriter }) => forumWriterLine(p.writer, t('A member'));
 
     // Plain calls, not components: defined in this render, a component would mount afresh at every keystroke in the reply box.
     function postBody(post: ForumPost) {

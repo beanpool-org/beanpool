@@ -152,7 +152,7 @@ describe('forum posts under a request to join, on the phone at 320 px and 1.3× 
         expect(own.textContent).toContain(headline);
         expect(own.textContent).toContain('We started with one shelf.');
         // The title wraps: no line cap on it, at 320 px and 1.3× text (only the words are capped, at 6 lines).
-        expect([...own.querySelectorAll('[data-lines]')].map((el) => el.textContent)).toEqual(['We started with one shelf.']);
+        expect(Array.from(own.querySelectorAll('[data-lines]'), (el) => el.textContent)).toEqual(['We started with one shelf.']);
         expect(buttonOf('k1', MINE.postId)!.getAttribute('aria-label')).toBe(`${headline}. ${FORUM_ASK_CHECK_WORDS.same}`);
         expect(host.textContent).not.toContain(MADE_UP);
     });
@@ -229,7 +229,7 @@ describe("closing the class: a row shows the forum's answer, never what the requ
         const forum = readKnockForum({ at: FORUM, posts: [sent] });
         if (value === 'empty' && (field === 'topicId' || field === 'number')) { expect(forum).toBeNull(); return; }
         root = createRoot(host);
-        await act(async () => { root!.render(createElement(KnockForumPosts, { forum: forum as KnockForum, knockId: 'k1' })); });
+        await act(async () => { root!.render(createElement(KnockForumPosts, { forum: forum as KnockForum, knockId: 'k1' }) as any); });
         expect(row('k1', MINE.postId)!.textContent).toBe(`${FORUM_ASK_WORDS.named}›${FORUM_ASK_WORDS.tapToCheck}`);
 
         await tap('k1', MINE.postId);

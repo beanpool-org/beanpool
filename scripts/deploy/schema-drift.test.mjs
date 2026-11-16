@@ -1,9 +1,10 @@
 /* global process -- a Node script */
 // scripts/deploy/schema-drift.mjs, the read-only pre-deploy check: a fixture database holding each case (an old CHECK on an
 // empty local table, the same with rows, a copied table's drift, a column IF NOT EXISTS misses, a table written another way
-// with a column a boot step adds, an identical one) reads the right line; it opens the database read-only (a write fails)
-// and leaves the file, and a live writer's WAL, byte for byte as they were; its packed copy for `node -` in the container
-// prints the same lines from what it carries; the repo's own schema.sql and replication manifest read whole.
+// with a column a boot step adds, an identical one) reads the right line; a boot step is proved against the rows that are
+// there (a step the rows refuse reads as drift, the same step on an empty table as OK); it opens the database read-only (a
+// write fails) and leaves the file, and a live writer's WAL, byte for byte as they were; its packed copy for `node -` in the
+// container prints the same lines from what it carries; the repo's own schema.sql and replication manifest read whole.
 // Run by test-all.sh (the `schema_drift` check): node --test scripts/deploy/schema-drift.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -89,6 +90,10 @@ export const TABLES: Record<string, TableEntry> = {
     },
     notes: { kind: 'local', reason: 'this server only' },
     settings: plain('key value shown'),
+    // except: a comment between entries names no exception
+    pushes: plain('id token', { rows: MEMBERS_OWN, except: {
+        token: { why: 'sealed by each server' },
+    } }),
     seen: { kind: 'local', reason: 'this server only' },
     brand_new: { kind: 'local', reason: 'new' },
 };
@@ -110,13 +115,13 @@ export function initSchema() {
 }
 `;
 
-/** A temp dir with the fixture's build files and a node database; `old` is its schema and rows. */
-function fixture(old = OLD_SCHEMA) {
+/** A temp dir with the fixture's build files (or `build`'s) and a node database; `old` is its schema and rows. */
+function fixture(old = OLD_SCHEMA, build = {}) {
     const dir = mkdtempSync(join(tmpdir(), 'schema-drift-'));
     const files = { schema: join(dir, 'schema.sql'), manifest: join(dir, 'replication-manifest.ts'), boot: join(dir, 'db.ts'), db: join(dir, 'state.db') };
-    writeFileSync(files.schema, NEW_SCHEMA);
-    writeFileSync(files.manifest, MANIFEST);
-    writeFileSync(files.boot, DB_TS);
+    writeFileSync(files.schema, build.schema ?? NEW_SCHEMA);
+    writeFileSync(files.manifest, build.manifest ?? MANIFEST);
+    writeFileSync(files.boot, build.boot ?? DB_TS);
     const d = new Database(files.db);
     d.exec(old);
     d.close();
@@ -232,6 +237,148 @@ test('the packed copy, run as `node --input-type=module -` from the server folde
     }
 });
 
+// ── A boot step is proved against the rows that are there ────────────────────────────────────────────────────────────
+
+// SQLite checks some ADD COLUMN rules only against the rows a table holds: on a kept node with rows, db.ts's try/catch drops
+// the refused step without a word and the table keeps its old shape. The build: two tables a boot step each adds a column to.
+const ROWS_BUILD = {
+    schema: `
+CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY, b TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS u (id TEXT PRIMARY KEY, c INTEGER DEFAULT 5 CHECK (c < 3));
+`,
+    manifest: `
+export const TABLES: Record<string, TableEntry> = {
+    t: plain('id b'),
+    u: { kind: 'local', reason: 'this server only' },
+};
+`,
+    boot: `
+export function initSchema() {
+    try { db.prepare('ALTER TABLE t ADD COLUMN b TEXT NOT NULL').run(); } catch { }
+    try { db.prepare('ALTER TABLE u ADD COLUMN c INTEGER DEFAULT 5 CHECK (c < 3)').run(); } catch { }
+    db.exec(schemaSql);
+}
+`,
+};
+const ROWS_OLD = 'CREATE TABLE t (id TEXT PRIMARY KEY); CREATE TABLE u (id TEXT PRIMARY KEY);';
+
+test('a boot step the rows refuse (NOT NULL with no default, a CHECK the default fails) reads as drift and exits 1; the file is left as it was', () => {
+    const f = fixture(`${ROWS_OLD} INSERT INTO t VALUES ('t1'); INSERT INTO u VALUES ('u1');`, ROWS_BUILD);
+    try {
+        const before = { sha: sha(f.db), mtime: statSync(f.db).mtimeMs };
+        const r = run(f.args);
+        assert.equal(r.status, 1, r.stdout + r.stderr);
+        assert.deepEqual(tableLines(r.stdout), [
+            'DRIFT-REPLICATED t rows=1 replicated (boot steps in db.ts refused here: b (Cannot add a NOT NULL column with default value NULL)): columns only in schema.sql: b',
+            'DRIFT-HAS-ROWS u rows=1 local (boot steps in db.ts refused here: c (CHECK constraint failed)): columns only in schema.sql: c; CHECK only in schema.sql: c < 3',
+        ]);
+        assert.equal(sha(f.db), before.sha);
+        assert.equal(statSync(f.db).mtimeMs, before.mtime);
+        // What the boot itself does on a copy of that file: both steps refused, as the check said.
+        const copy = join(f.dir, 'boot-copy.db');
+        writeFileSync(copy, readFileSync(f.db));
+        const boot = new Database(copy);
+        for (const step of ['ALTER TABLE t ADD COLUMN b TEXT NOT NULL', 'ALTER TABLE u ADD COLUMN c INTEGER DEFAULT 5 CHECK (c < 3)']) {
+            assert.throws(() => boot.exec(step), /NOT NULL|CHECK/);
+        }
+        boot.close();
+    } finally {
+        rmSync(f.dir, { recursive: true, force: true });
+    }
+});
+
+test('the same steps on empty tables: each takes, every line reads OK and it exits 0', () => {
+    const f = fixture(ROWS_OLD, ROWS_BUILD);
+    try {
+        const r = run(f.args);
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.deepEqual(tableLines(r.stdout), [
+            'OK t replicated (with the columns a boot step in db.ts adds: b)',
+            'OK u local (with the columns a boot step in db.ts adds: c)',
+        ]);
+    } finally {
+        rmSync(f.dir, { recursive: true, force: true });
+    }
+});
+
+/**
+ * Table t's line when the node's t is `columns` (+ `suffix`) holding `rows`, schema.sql's t has `def` as well (or is `fresh`),
+ * and the one boot step adds `def`: checked through the read-only handle, which must still refuse a write afterwards.
+ */
+function lineWithStep({ columns = 'id INTEGER PRIMARY KEY, n INTEGER, x', suffix = '', rows = '', def, fresh = null, kind = 'local', make = null }) {
+    const dir = mkdtempSync(join(tmpdir(), 'schema-drift-'));
+    try {
+        const file = join(dir, 'state.db');
+        const w = new Database(file);
+        if (make) make(w);
+        w.exec(`CREATE TABLE t (${columns})${suffix}; ${rows}`);
+        w.close();
+        const before = sha(file);
+        const db = openReadOnly(Database, file);
+        try {
+            const build = { schemaSql: fresh ?? `CREATE TABLE t (${columns}, ${def})${suffix}`, kinds: { t: kind }, bootSteps: [{ table: 't', def }] };
+            const { results } = checkDrift(Database, db, build);
+            assert.throws(() => db.prepare('DELETE FROM t').run(), /readonly|read-only|query_only|attempt to write/i, 'the live handle still refuses a write');
+            assert.equal(db.pragma('query_only', { simple: true }), 1);
+            return formatResult(results.find((r) => r.table === 't'));
+        } finally {
+            db.close();
+            assert.equal(sha(file), before, 'the node database is left byte for byte');
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+test('every ADD COLUMN rule SQLite checks only against rows: refused on the rows that are there, taken on an empty table', () => {
+    const ROW = 'INSERT INTO t VALUES (1, 2, 7);';
+    const cases = [
+        { def: 'b TEXT NOT NULL', why: 'Cannot add a NOT NULL column with default value NULL' },
+        { def: 'c INTEGER DEFAULT 5 CHECK (c < 3)', why: 'CHECK constraint failed' },
+        // A CHECK one row fails by another column's value: no row count alone could tell (see the rows that pass, below).
+        { def: 'c INTEGER CHECK (c IS NOT NULL OR n < 10)', rows: 'INSERT INTO t VALUES (1, 2, 7), (2, 50, 7);', n: 2, why: 'CHECK constraint failed' },
+        { def: 'd TEXT DEFAULT CURRENT_TIMESTAMP', why: 'Cannot add a column with non-constant default' },
+        { def: 'g INTEGER GENERATED ALWAYS AS (n * 2) STORED', why: 'cannot add a STORED column' },
+        { def: 'v INTEGER AS (NULLIF(n, 2)) NOT NULL', why: 'NOT NULL constraint failed' },
+        // Foreign keys ON in the replay, though the server runs with them OFF: the stricter way, never the other.
+        { def: "p TEXT DEFAULT 'x' REFERENCES parent(id)", why: 'Cannot add a REFERENCES column with non-NULL default value' },
+        { columns: 'id INTEGER PRIMARY KEY, n INTEGER, x ANY', suffix: ' STRICT', def: "c INTEGER DEFAULT 'abc'", why: 'type mismatch on DEFAULT' },
+        // Each value copied with its storage class: an integer past 2^53 stays exact, a real stays real.
+        { def: 'f INTEGER CHECK (f IS NOT NULL OR n != 9007199254740993)', rows: 'INSERT INTO t VALUES (1, 9007199254740993, 7);', why: 'CHECK constraint failed' },
+        { def: "e INTEGER CHECK (e IS NOT NULL OR typeof(x) != 'real')", rows: 'INSERT INTO t VALUES (1, 2, 1.0);', why: 'CHECK constraint failed' },
+    ];
+    for (const c of cases) {
+        const column = sqlTokens(c.def)[0].text;
+        const rows = c.rows ?? ROW;
+        // A refused step leaves the drift as read: the node's table against schema.sql's, the column (and its rules) missing.
+        const columns = c.columns ?? 'id INTEGER PRIMARY KEY, n INTEGER, x';
+        const asRead = diffOf(`CREATE TABLE t (${columns})${c.suffix ?? ''}`, `CREATE TABLE t (${columns}, ${c.def})${c.suffix ?? ''}`);
+        assert.equal(asRead[0], `columns only in schema.sql: ${column}`);
+        assert.equal(lineWithStep({ ...c, rows }),
+            `DRIFT-HAS-ROWS t rows=${c.n ?? 1} local (boot steps in db.ts refused here: ${column} (${c.why})): ${asRead.join('; ')}`, c.def);
+        assert.equal(lineWithStep({ ...c, rows: '' }), `OK t local (with the columns a boot step in db.ts adds: ${column})`, `${c.def} on an empty table`);
+    }
+    // The rows that pass a CHECK by their values: the step takes.
+    assert.equal(lineWithStep({ def: 'c INTEGER CHECK (c IS NOT NULL OR n < 10)', rows: 'INSERT INTO t VALUES (1, 2, 7), (2, 9, 7);' }),
+        'OK t local (with the columns a boot step in db.ts adds: c)');
+    // Every value kept as stored: an integer stays an integer.
+    assert.equal(lineWithStep({ def: "e INTEGER CHECK (e IS NOT NULL OR typeof(x) = 'integer')", rows: ROW }),
+        'OK t local (with the columns a boot step in db.ts adds: e)');
+    // A copied table's line, with rows: drift whatever the kind.
+    assert.equal(lineWithStep({ def: 'b TEXT NOT NULL', rows: ROW, kind: 'replicated' }),
+        'DRIFT-REPLICATED t rows=1 replicated (boot steps in db.ts refused here: b (Cannot add a NOT NULL column with default value NULL)): columns only in schema.sql: b');
+});
+
+test("a table whose boot steps can't be run on a copy of its rows keeps its drift, and the line says why", () => {
+    // Its CREATE text calls a function only the server has: the scratch database can't make the table, so nothing is proved.
+    const line = lineWithStep({
+        columns: 'id INTEGER PRIMARY KEY, n INTEGER CHECK (server_only(n)), x', def: 'b TEXT', rows: 'INSERT INTO t VALUES (1, 2, 7);',
+        fresh: 'CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER, x, b TEXT)', make: (w) => w.function('server_only', (n) => n ?? 1),
+    });
+    assert.match(line, /^DRIFT-HAS-ROWS t rows=1 local \(its boot steps in db\.ts could not be run on a copy of its rows \(no such function: server_only\), so the drift stands as read\): /);
+    assert.match(line, /columns only in schema\.sql: b/);
+});
+
 test('the command line: no --db, an unknown flag, a missing database or an unreadable build exit 2', () => {
     const f = fixture();
     try {
@@ -333,7 +480,8 @@ test('a table the manifest does not name reads as copied: stop and ask, never a 
 
 test('the manifest is read whole: an entry by object or by plain(), only inside TABLES', () => {
     assert.deepEqual(manifestKinds(MANIFEST), {
-        mail_box: 'local', mail_sent: 'local', listings: 'replicated', notes: 'local', settings: 'replicated', seen: 'local', brand_new: 'local',
+        mail_box: 'local', mail_sent: 'local', listings: 'replicated', notes: 'local', settings: 'replicated', pushes: 'replicated-except',
+        seen: 'local', brand_new: 'local',
     });
 });
 

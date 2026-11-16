@@ -7,8 +7,9 @@
  * a kept node. It happened twice on 16 Nov 2026: group_guest_outbox and group_guest_mail (#3233), relay_mail and
  * relay_outbox (#3244), each already on a live node under the old CHECK. docs/schema-drift-check.md is the operators' page.
  *
- * READ-ONLY. The database is opened read-only (and query_only); nothing is written, dropped or copied. The director acts
- * on the lines it prints.
+ * READ-ONLY. The database is opened read-only (and query_only); nothing in it is written or dropped. To prove a boot step
+ * against the rows that are there, a table one changes is copied into a scratch database of SQLite's own (a temporary file,
+ * gone when it closes) and the step runs on the copy. The director acts on the lines it prints.
  *
  *   node scripts/deploy/schema-drift.mjs --db <state.db> [--schema <schema.sql>] [--manifest <replication-manifest.ts>]
  *       [--boot-steps <db.ts>]
@@ -31,9 +32,11 @@
  * NOT NULL, default, collation and generated form, the primary key, CHECKs, UNIQUEs, foreign keys, WITHOUT ROWID, STRICT
  * and AUTOINCREMENT, and a virtual table's whole definition. Not compared: indexes and triggers (CREATE ... IF NOT EXISTS keeps an old
  * one of the same name too), and tables schema.sql doesn't make. A column a boot step in db.ts adds before the schema.sql
- * exec (initSchema's ALTER TABLE ... ADD COLUMN) counts as there: the line names it.
+ * exec (initSchema's ALTER TABLE ... ADD COLUMN) counts as there only when the step, run on a copy of the table with its
+ * rows, takes: the line names it. A step those rows refuse is named with SQLite's reason, and its column reads as missing.
  *
- * Exit 0 only when every table compared is OK; 1 on any drift; 2 when it could not run.
+ * Exit 0 only when every table compared is OK (proved against the rows that are there); 1 on any drift, or a boot step it
+ * could not prove; 2 when it could not run.
  */
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -261,16 +264,20 @@ export function shapeDiffs(here, fresh) {
 /**
  * Each table's kind in engine/replication-manifest.ts TABLES (`local`, `replicated`, `replicated-except`,
  * `takeover-bundle`), by lower-case name, read from its text: every entry starts at four spaces, `<table>: {` with its
- * `kind` first, or `<table>: plain(` (a plain table, copied: `replicated`). A table not found reads as not local.
+ * `kind` first, or `<table>: plain(` (a plain table, copied: `replicated`, or `replicated-except` when the call, up to the
+ * next entry, gives an `except`). A table not found reads as not local.
  */
 export function manifestKinds(manifestTs) {
     const start = manifestTs.indexOf('export const TABLES');
     const end = start < 0 ? -1 : manifestTs.indexOf('\n};', start);
     const kinds = {};
     if (end < 0) return kinds;
-    for (const m of manifestTs.slice(start, end).matchAll(/^ {4}([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:\{\s*kind:\s*'([a-z-]+)'|(plain)\()/gm)) {
-        kinds[m[1].toLowerCase()] = m[2] ?? 'replicated';
-    }
+    const body = manifestTs.slice(start, end);
+    const entries = [...body.matchAll(/^ {4}([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:\{\s*kind:\s*'([a-z-]+)'|(plain)\()/gm)];
+    entries.forEach((m, i) => {
+        const call = m[3] ? body.slice(m.index, entries[i + 1]?.index ?? body.length).replace(/\/\/[^\n]*/g, '') : '';
+        kinds[m[1].toLowerCase()] = m[2] ?? (/\bexcept\s*:/.test(call) ? 'replicated-except' : 'replicated');
+    });
     return kinds;
 }
 
@@ -340,8 +347,61 @@ export function openReadOnly(Database, path) {
 }
 
 /**
+ * Table `name` as the new build's boot leaves it before the schema.sql exec, proved against the rows the node holds: its
+ * CREATE text in a scratch database of SQLite's own (`new Database('')`: a temporary file, gone when it closes), every row
+ * copied in as stored, then the boot's ADD COLUMNs run in db.ts's order, each on its own as initSchema runs them. SQLite
+ * checks some ADD COLUMN rules only against the rows that are there (NOT NULL with no default, a CHECK a row or the default
+ * fails, a non-constant default, a STORED column, a generated NOT NULL, a STRICT type, REFERENCES with a default), so a step
+ * that every fresh install takes can be refused on a kept node: on an empty copy it would read as taken. `db` is only read.
+ *
+ * Returns the scratch table's shape, the columns added and the steps refused (the column already there is no refusal), or
+ * `error` when the copy could not be made (a CREATE text that won't run without the server, a row that won't copy): then
+ * nothing counts as added, and the drift stands as read.
+ */
+export function replayBootSteps(Database, db, name, steps) {
+    const scratch = new Database('');
+    try {
+        const create = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(name)?.sql;
+        if (!create) throw new Error('its CREATE text was not found');
+        // The copy: each row as the node stores it, so no rule may refuse one here (the parents of a foreign key aren't copied;
+        // a CHECK the rows were written under is the node's own). Integers as BigInt and reals as doubles: each value keeps
+        // its storage class, so a rule that reads one (typeof, a value past 2^53) sees what the boot will see.
+        scratch.pragma('foreign_keys = OFF');
+        scratch.pragma('ignore_check_constraints = ON');
+        scratch.exec(create);
+        const columns = db.prepare('SELECT name FROM pragma_table_xinfo(?) WHERE hidden NOT IN (2, 3)').all(name).map((c) => quoteName(c.name));
+        const read = db.prepare(`SELECT ${columns.join(', ')} FROM ${quoteName(name)}`).raw(true).safeIntegers(true);
+        const write = scratch.prepare(`INSERT INTO ${quoteName(name)} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`);
+        let copied = 0;
+        scratch.transaction(() => { for (const row of read.iterate()) { write.run(row); copied++; } })();
+        if (scratch.prepare(`SELECT COUNT(*) AS n FROM ${quoteName(name)}`).get().n !== copied) throw new Error('the copy lost rows');
+        // The steps, as the boot runs them: every CHECK enforced, and foreign keys ON. The server runs with them OFF (db.ts), so
+        // a REFERENCES step with a default reads as refused here where that boot takes it: the stricter way, never the other.
+        scratch.pragma('ignore_check_constraints = OFF');
+        scratch.pragma('foreign_keys = ON');
+        const added = [];
+        const refused = [];
+        for (const s of steps) {
+            const column = sqlTokens(s.def)[0]?.text ?? s.def;
+            try {
+                scratch.exec(`ALTER TABLE ${quoteName(name)} ADD COLUMN ${s.def}`);
+                added.push(column);
+            } catch (e) {
+                // As db.ts: refused in its own try. A column that is there already is every later boot's case, not news.
+                if (!/^duplicate column name/i.test(e.message)) refused.push(`${column} (${e.message})`);
+            }
+        }
+        return { shape: tableShape(scratch, name), added, refused, error: null };
+    } catch (e) {
+        return { added: [], refused: [], error: e.message };
+    } finally {
+        scratch.close();
+    }
+}
+
+/**
  * Compares each table the database `db` holds with the one schema.sql makes. Returns one result per table in both (sorted by
- * name), and counts of the tables in only one. Reads `db` only.
+ * name), and counts of the tables in only one. Reads `db` only (a table a boot step changes is copied to a scratch database).
  */
 export function checkDrift(Database, db, build) {
     const fresh = new Database(':memory:');
@@ -356,27 +416,13 @@ export function checkDrift(Database, db, build) {
             const kind = build.kinds[key] ?? 'not in the manifest';
             const freshShape = tableShape(fresh, f.name);
             let diffs = shapeDiffs(tableShape(db, h.name), freshShape);
-            const added = [];
+            let replay = { added: [], refused: [], error: null };
             const steps = build.bootSteps.filter((s) => s.table === key);
             if (diffs.length > 0 && steps.length > 0 && h.type === 'table') {
-                // The table as the new build's boot leaves it before schema.sql: its CREATE text here, in a scratch database
-                // in memory, with the boot's ADD COLUMNs run on it as db.ts runs them (a column that is there refuses one).
-                // A CREATE text that won't run there (a collation or function only the server has) leaves the drift as read.
-                const scratch = new Database(':memory:');
-                try {
-                    scratch.exec(db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(h.name).sql);
-                    for (const s of steps) {
-                        try {
-                            scratch.exec(`ALTER TABLE ${quoteName(h.name)} ADD COLUMN ${s.def}`);
-                            added.push(sqlTokens(s.def)[0]?.text ?? s.def);
-                        } catch { /* as db.ts: the column is there, or the step doesn't apply */ }
-                    }
-                    if (added.length > 0) diffs = shapeDiffs(tableShape(scratch, h.name), freshShape);
-                } catch {
-                    added.length = 0;
-                } finally {
-                    scratch.close();
-                }
+                // Only ever turns a drift into OK when the boot's steps, run on the table's own rows, give schema.sql's
+                // shape; a step the rows refuse, or a replay that can't be made, leaves the drift as read.
+                replay = replayBootSteps(Database, db, h.name, steps);
+                if (replay.added.length > 0) diffs = shapeDiffs(replay.shape, freshShape);
             }
             let status = 'OK';
             let rows = null;
@@ -384,7 +430,7 @@ export function checkDrift(Database, db, build) {
                 rows = db.prepare(`SELECT COUNT(*) AS n FROM ${quoteName(h.name)}`).get().n;
                 status = kind !== 'local' ? 'DRIFT-REPLICATED' : rows > 0 ? 'DRIFT-HAS-ROWS' : 'DRIFT-EMPTY-LOCAL';
             }
-            results.push({ status, table: h.name, kind, rows, diffs, bootAdds: added });
+            results.push({ status, table: h.name, kind, rows, diffs, bootAdds: replay.added, bootRefused: replay.refused, replayError: replay.error });
         }
         return {
             results,
@@ -399,7 +445,11 @@ export function checkDrift(Database, db, build) {
 
 /** One line per result, as the header of this file says. */
 export function formatResult(r) {
-    const boot = r.bootAdds.length > 0 ? ` (with the columns a boot step in db.ts adds: ${r.bootAdds.join(', ')})` : '';
+    const notes = [];
+    if (r.bootAdds.length > 0) notes.push(`with the columns a boot step in db.ts adds: ${r.bootAdds.join(', ')}`);
+    if (r.bootRefused?.length > 0) notes.push(`boot steps in db.ts refused here: ${r.bootRefused.join(', ')}`);
+    if (r.replayError) notes.push(`its boot steps in db.ts could not be run on a copy of its rows (${r.replayError}), so the drift stands as read`);
+    const boot = notes.length > 0 ? ` (${notes.join('; ')})` : '';
     if (r.status === 'OK') return `OK ${r.table} ${r.kind}${boot}`;
     return `${r.status} ${r.table} rows=${r.rows} ${r.kind}${boot}: ${r.diffs.join('; ')}`;
 }

@@ -96,6 +96,69 @@ export function communityRecordOf(address: string): CommunityRecord | null {
     return byOwn.get(spelling) ?? byProved.get(spelling) ?? null;
 }
 
+/**
+ * The record a link, a QR or a typed address names (addresses S5, §3.6): the one that holds `address` (its id, its `using`
+ * or an address it proved), else the one whose own signed list, under the record's key, names it (an https origin only:
+ * the phone reaches a listed address at `https://<address>`). Null: none of this phone's communities.
+ */
+export function communityRecordNaming(address: string): CommunityRecord | null {
+    const held = communityRecordOf(address);
+    if (held) return held;
+    const spelling = addressSpelling(address);
+    if (!spelling.startsWith('https://')) return null;
+    const host = spelling.slice('https://'.length);
+    for (const record of byId.values()) {
+        const list = record.list?.list;
+        if (record.peerId && list && list.peerId === record.peerId && Array.isArray(list.addresses)
+            && list.addresses.some((a) => typeof a === 'string' && addressSpelling(a) === host)) return record;
+    }
+    return null;
+}
+
+/** Every address a record holds: its id, the address in use and each proved one. */
+export function recordAddresses(record: CommunityRecord): string[] {
+    return [...new Set([record.id, record.using, ...Object.keys(record.proved ?? {})])];
+}
+
+/** The record of the community whose server key is `peerId` (a directory row's key, §3.6), or null. */
+export function communityRecordByKey(peerId: string | null | undefined): CommunityRecord | null {
+    if (!peerId) return null;
+    for (const record of byId.values()) if (record.peerId === peerId) return record;
+    return null;
+}
+
+/**
+ * A directory row whose key is a community the phone has (§3.6): that community, at the address the phone uses for it,
+ * whatever address the row carries. `inFront`: it is the community in front. `askList`: the row's address is not on the
+ * list the phone keeps for it, so the phone asks its own address for the newest list (a round at open) when it opens it.
+ * Null: not one of this phone's communities.
+ */
+export function directoryRowCommunity(row: { key: string; url: string | null }, anchor: string | null): { using: string; inFront: boolean; askList: boolean } | null {
+    const record = communityRecordByKey(row.key);
+    if (!record) return null;
+    const list = record.list?.list;
+    const listed = list && list.peerId === record.peerId && Array.isArray(list.addresses) ? list.addresses : [];
+    const rowHost = row.url ? addressSpelling(row.url).replace(/^https:\/\//, '') : null;
+    return {
+        using: record.using,
+        inFront: !!anchor && recordHolds(record, anchor),
+        askList: !!rowHost && !listed.some((a) => addressSpelling(a) === rowHost),
+    };
+}
+
+/** Where a link to `address` lands on this phone (§3.6): the community in front, another it keeps (at its `using`), or new. */
+export type LinkLanding = { kind: 'in-use' } | { kind: 'kept'; using: string } | { kind: 'new' };
+
+/**
+ * A link or QR for any address of a community the phone has opens that community: no second row, no "switch" to what is
+ * the community in front. `anchor`: the community in front (`beanpool_anchor_url`).
+ */
+export function linkLanding(address: string, anchor: string | null): LinkLanding {
+    const record = communityRecordNaming(address);
+    if (anchor && (record ? recordHolds(record, anchor) : addressSpelling(address) === addressSpelling(anchor))) return { kind: 'in-use' };
+    return record ? { kind: 'kept', using: record.using } : { kind: 'new' };
+}
+
 /** Whether two addresses are one community on this phone: one record holds both (its id, `using` or a proved address). */
 export function sameCommunityRecord(a: unknown, b: unknown): boolean {
     if (typeof a !== 'string' || typeof b !== 'string') return false;

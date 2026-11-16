@@ -53,6 +53,7 @@ import { WantsToJoin } from '../../components/WantsToJoin';
 import { AskAnAdmin, InviteAsksToAnswer } from '../../components/InviteAsks';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
+import { whileCommunityMoves, writeCommunityAddress } from '../../utils/community-move-lock';
 import { lookUpMembers, lookUpSpentKind, nearPath, searchPath } from '../../utils/members-lookup';
 import { readNearbyAreaCopy } from '../../utils/nearby-area';
 import { communityListEmpty, communityListNote, joinedWords, type CommunityListNote } from '../../utils/community-list-note';
@@ -1017,12 +1018,14 @@ export default function PeopleScreen() {
                             const { forgetCommunityPush } = await import('../../utils/account-leaves-phone');
                             await forgetCommunityPush(identity, activeUrl ?? '', async () => {
                                 const { clearDB } = await import('../../utils/db');
-                                await clearDB();
-                                // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
                                 const { forgetSyncCursors } = await import('../../services/pillar-sync');
-                                await forgetSyncCursors();
-
-                                await AsyncStorage.removeItem('beanpool_anchor_url');
+                                // A member move (utils/community-move-lock.ts): the copy cleared and the address taken off, in one move.
+                                await whileCommunityMoves(async (held) => {
+                                    await clearDB();
+                                    // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                                    await forgetSyncCursors();
+                                    await writeCommunityAddress(held, null);
+                                });
                                 // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
                                 communitySwitched();
 

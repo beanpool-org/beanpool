@@ -385,7 +385,10 @@ describe('the app is the model', () => {
         const hook = read('../use-communities.ts');
         // The row's switch is that function, and nothing else in the file writes the phone's community.
         expect(hook).toMatch(/const switchTo = useCallback\(async \(url: string\) => \{\s*if \(url === active \|\| switching \|\| communitySwitchUnderWay\(\)\) return;\s*setSwitching\(true\);\s*try \{\s*await switchCommunity\(url\);/);
-        expect(hook.match(/setItem\('beanpool_anchor_url'/g)).toHaveLength(1);
+        // switchCommunity moves through reconnect.ts switchPhoneTo, the one switch that holds the move lock (addresses S5):
+        // the file writes no community address of its own.
+        expect(hook.match(/setItem\('beanpool_anchor_url'/g)).toBeNull();
+        expect(hook).toMatch(/export async function switchCommunity\(url: string, beforeWelcome\?: \(\) => Promise<void>\): Promise<void> \{\s*moving = true;\s*try \{[\s\S]*?await switchPhoneTo\(url\);/);
         const service = read('../../services/push-notifications.ts');
         expect(service).toMatch(/await openNoticeIn\(community, id, route, \{[^}]*switchUnderWay: communitySwitchUnderWay,\s*switchTo: switchCommunity,\s*recheck: options\.recheck,\s*\}\);/);
         expect(service).toMatch(/joinUnderWay: \(\) => getPendingOnboarding\(\)\.then\(\(p\) => !!p, \(\) => true\),/);

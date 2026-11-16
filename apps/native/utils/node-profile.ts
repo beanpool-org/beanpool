@@ -126,6 +126,11 @@ export interface NodeFeatures {
      */
     outsideMessages?: boolean;
     /**
+     * A group's convenor may invite someone from another community into its chat as a guest (the owners' switch, on only where
+     * `outsideMessages` is too; apps/server engine/group-guests.ts). An older node says nothing: no Add from another community.
+     */
+    groupGuests?: boolean;
+    /**
      * The community tells a member when a neighbour posts a Need in a category they starred (`market.asked`, cold start N3;
      * core askedPushOn). The What are you into? card says so and Settings → Notifications shows its switch only then: a
      * node that doesn't say (the worldwide one, Beans off, a node from before it) sends no such push and takes no switch.
@@ -180,7 +185,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumNotices', 'outsideMessages', 'bills',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumNotices', 'outsideMessages', 'groupGuests', 'bills',
 ];
 
 export interface NodeProfile {
@@ -485,6 +490,11 @@ export function shareOutsideOn(features: NodeFeatures | null | undefined): boole
 /** Whether members here can chat with people in other communities: only where the node says so (absent = off). */
 export function outsideMessagesOn(features: NodeFeatures | null | undefined): boolean {
     return features?.outsideMessages === true;
+}
+
+/** Whether a convenor here may invite someone from another community into a group's chat (absent = off). */
+export function groupGuestsOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.groupGuests === true && features?.outsideMessages === true;
 }
 
 export function onlineEventsOn(features: NodeFeatures | null | undefined): boolean {

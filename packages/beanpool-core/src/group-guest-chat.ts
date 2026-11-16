@@ -492,6 +492,11 @@ export const GUEST_CHAT_WORDS = Object.freeze({
     addGuest: word('Add someone from another community'),
     addGuestHint: word("Paste their address card. They're asked first, and see only this group's chat."),
     guestsTitle: word('Guests from other communities'),
+    guestAsked: word('Asked, not answered yet'),
+    guestIn: word('In the chat'),
+    guestAdded: word('Asked. They join the chat once they accept.'),
+    readCard: word('Read the card'),
+    notACard: word("That isn't an address card, or it was changed after it was made."),
 });
 
 /** A guest's name in the chat, as both apps write it: their card's name, their community, "guest" (name-line.ts). */

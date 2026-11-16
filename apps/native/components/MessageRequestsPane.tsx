@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, Animated } from 'react-native';
-import { requestReportNotSentWords, t, tn } from '@beanpool/core';
+import { GUEST_CHAT_WORDS, requestReportNotSentWords, t, tn, type GuestChat } from '@beanpool/core';
 import { decideMessageRequest, ignoreAllMessageRequests, getMessages, syncSingleConversation } from '../utils/db';
 import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn } from '../utils/request-report';
 import { reportedAlertBody } from '../utils/reportReasons';
@@ -321,9 +321,12 @@ interface MessageRequestsPaneProps {
     /** Requests from people in other communities, kept on this phone (utils/outside-chat-store.ts): each opens its chat. */
     outside?: OutsideChat[];
     onOpenOutside?: (chat: OutsideChat) => void;
+    /** Invitations to a group's chat in another community, kept on this phone (G2): each opens it, to accept or decline. */
+    guestInvites?: GuestChat[];
+    onOpenGuest?: (chat: GuestChat) => void;
 }
 
-export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, onGlobal = 0, onOpenGlobal, outside = [], onOpenOutside }: MessageRequestsPaneProps) {
+export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, onGlobal = 0, onOpenGlobal, outside = [], onOpenOutside, guestInvites = [], onOpenGuest }: MessageRequestsPaneProps) {
     const { theme, colors } = useTheme();
     const [ignoringAll, setIgnoringAll] = useState(false);
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
@@ -447,7 +450,14 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                     <Text style={styles.backText}>{t('Open to accept or decline')}</Text>
                 </Pressable>
             ))}
-            {count === 0 && (onGlobal > 0 || outside.length > 0) ? null : count === 0 ? (
+            {guestInvites.map((c) => (
+                <Pressable key={c.id} accessibilityRole="button" testID="guest-invitation-card" style={styles.emptyCard} onPress={() => onOpenGuest?.(c)}>
+                    <Text style={styles.title}>{t(GUEST_CHAT_WORDS.invitedCard, { group: c.name, community: c.host })}</Text>
+                    <Text style={styles.emptyText}>{t(GUEST_CHAT_WORDS.invitedYou, { name: c.invitedBy?.name || t('Someone'), group: c.name, community: c.host })}</Text>
+                    <Text style={styles.backText}>{t('Open to accept or decline')}</Text>
+                </Pressable>
+            ))}
+            {count === 0 && (onGlobal > 0 || outside.length > 0 || guestInvites.length > 0) ? null : count === 0 ? (
                 <View style={styles.emptyCard}>
                     <Text style={styles.emptyText}>
                         {t("No requests. A first message from someone you haven't added or talked to arrives here.")}

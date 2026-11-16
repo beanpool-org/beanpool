@@ -41,6 +41,8 @@ import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
 import { OUTSIDE_CHATS_UPDATED, outsideContext, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import { chatsShown } from '../../utils/outside-mail';
 import type { OutsideChat } from '../../utils/outside-chat-store';
+import { GUEST_CHATS_UPDATED, loadGuestChats, syncGuestMailNow } from '../../utils/guest-chat-live';
+import type { GuestChat } from '@beanpool/core';
 import { ForumPane } from '../../components/forum/ForumPane';
 import { ContactsInfoSheet } from '../../components/ContactsInfoSheet';
 import { useContactsRecord } from '../../utils/use-contacts';
@@ -146,9 +148,12 @@ export default function ChatsScreen() {
     // Chats with people in other communities, on this phone only; a request among them waits behind the same row.
     const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);
     const outsideRequests = React.useMemo(() => outsideChats.filter((c) => c.state === 'request'), [outsideChats]);
+    // Group chats hosted by other communities, as a guest, on this phone only (G2); an invitation waits behind the same row.
+    const [guestChats, setGuestChats] = useState<GuestChat[]>([]);
+    const guestInvites = React.useMemo(() => guestChats.filter((c) => c.state === 'invited'), [guestChats]);
     const { recheck } = useNodeStatus();
     const otherNotices = useOtherCommunitiesNotices();
-    const requestsHere = requests ?? (onGlobal > 0 || outsideRequests.length > 0 ? { count: 0, conversations: [] } : null);
+    const requestsHere = requests ?? (onGlobal > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
     const [switchingCommunity, setSwitchingCommunity] = useState(false);
     // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
     const [switchNote, setSwitchNote] = useState<string | null>(null);
@@ -174,8 +179,8 @@ export default function ChatsScreen() {
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
-        if (requests === null && onGlobal === 0 && outsideRequests.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
-    }, [requests, onGlobal, outsideRequests.length, messagesFilter]);
+        if (requests === null && onGlobal === 0 && outsideRequests.length === 0 && guestInvites.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
+    }, [requests, onGlobal, outsideRequests.length, guestInvites.length, messagesFilter]);
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
     // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
     // and a leftover view=messages would reach People (mounted inside Talk, reading this route's params).
@@ -373,7 +378,13 @@ export default function ChatsScreen() {
         let list = [...conversations, ...outsideChats.filter((c) => c.state === 'open').map((c) => ({
             id: c.id, outside: true, peer: c.peerName ?? '', peerPubkey: c.peerKey, outsideHome: c.peerHome,
             lastMessage: c.lastText ?? '', rawTimestamp: new Date(c.lastAt ?? c.updatedAt).toISOString(), unread: 0,
-        }))];
+        })), ...guestChats.filter((c) => c.state !== 'invited').map((c) => {
+            const last = c.lines[c.lines.length - 1];
+            return {
+                id: c.id, outside: true, guest: true, peer: c.name, peerPubkey: c.id, outsideHome: c.host,
+                lastMessage: last?.text ?? '', rawTimestamp: new Date(last?.at ?? c.updatedAt).toISOString(), unread: 0,
+            };
+        })];
 
         // 1. Text Search Filter
         if (searchQuery.trim() !== '') {
@@ -438,7 +449,7 @@ export default function ChatsScreen() {
         regular = orderTalkRows(regular, sortBy);
 
         return { actionRequired, regularConversations: regular };
-    }, [conversations, outsideChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
+    }, [conversations, outsideChats, guestChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
 
     const resetFilters = () => {
         setSearchQuery('');
@@ -510,6 +521,10 @@ export default function ChatsScreen() {
                         .then((ctx) => (ctx ? chatsShown(ctx) : []))
                         .then((list) => { if (active) setOutsideChats(prev => keepIfSame(prev, list)); })
                         .catch(() => {});
+                    // Group chats elsewhere as a guest, kept on this phone (utils/guest-chat-live.ts).
+                    loadGuestChats()
+                        .then((all) => { if (active) setGuestChats(prev => keepIfSame(prev, Object.values(all))); })
+                        .catch(() => {});
                 }
             };
 
@@ -521,10 +536,12 @@ export default function ChatsScreen() {
                     loadData();
                 });
                 void syncOutsideMailNow().then(() => { if (active) loadData(); });
+                void syncGuestMailNow().then(() => { if (active) loadData(); });
             }
 
             const sub = DeviceEventEmitter.addListener('sync_data_updated', loadData);
             const outsideSub = DeviceEventEmitter.addListener(OUTSIDE_CHATS_UPDATED, loadData);
+            const guestSub = DeviceEventEmitter.addListener(GUEST_CHATS_UPDATED, loadData);
             const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, loadData);
 
             const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
@@ -539,6 +556,7 @@ export default function ChatsScreen() {
                 active = false;
                 sub.remove();
                 outsideSub.remove();
+                guestSub.remove();
                 blockSub.remove();
                 wsSub.remove();
             };
@@ -592,9 +610,11 @@ export default function ChatsScreen() {
             // Someone in another community: their community always shows (joint design §2.6), the chat is this phone's own. The
             // name is the sender's own choice (up to 60 characters, new with each line), so the community never shares its line:
             // it has its own, under the name, with room to wrap (3 lines hold ~55 characters at 320 dp and 1.3x text).
-            const outsideName = item.peer || t('Someone in another community');
+            // A group's chat elsewhere, as a guest (G2): the group's name, its community under it, the chat this phone's own.
+            const outsideName = item.peer || (item.guest ? t('Group chat') : t('Someone in another community'));
             return (
-                <Pressable accessibilityRole="button" style={styles.chatRow} testID="outside-chat-row" onPress={() => router.push(`/outside-chat/${item.id}`)}>
+                <Pressable accessibilityRole="button" style={styles.chatRow} testID={item.guest ? 'guest-chat-row' : 'outside-chat-row'}
+                    onPress={() => router.push(item.guest ? `/guest-chat/${encodeURIComponent(item.id)}` : `/outside-chat/${item.id}`)}>
                     <View style={styles.avatarWrapper}>
                         <MemberAvatar avatarUrl={null} pubkey={item.peerPubkey || ''} callsign={item.peer} size={44} />
                     </View>
@@ -604,7 +624,7 @@ export default function ChatsScreen() {
                             <Text style={styles.timestamp}>{rowTime(item.rawTimestamp)}</Text>
                         </View>
                         <View style={styles.outsideHomeRow}>
-                            <MaterialCommunityIcons name="earth" size={14} color={colors.text.secondary} />
+                            <MaterialCommunityIcons name={item.guest ? 'account-group-outline' : 'earth'} size={14} color={colors.text.secondary} />
                             {/* Cut at its head here, in whole labels, when it must be: the tail names the real domain. Not by
                                 the platform: Android draws no head ellipsis past a line limit and would cut the tail. So no
                                 line limit either: what homeTail leaves takes up to 3 lines at 320 dp and 1.3x for an everyday
@@ -1073,7 +1093,7 @@ export default function ChatsScreen() {
                 <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
             )}
             {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
-            {requestsHere && requestsHere.count + onGlobal + outsideRequests.length > 0 && messagesFilter !== 'requests' && (
+            {requestsHere && requestsHere.count + onGlobal + outsideRequests.length + guestInvites.length > 0 && messagesFilter !== 'requests' && (
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={t('Message requests')}
@@ -1094,6 +1114,8 @@ export default function ChatsScreen() {
                     onOpenGlobal={() => void openGlobalRequests(identity?.publicKey, recheck)}
                     outside={outsideRequests}
                     onOpenOutside={(c) => router.push(`/outside-chat/${c.id}`)}
+                    guestInvites={guestInvites}
+                    onOpenGuest={(c) => router.push(`/guest-chat/${encodeURIComponent(c.id)}`)}
                     identity={identity}
                     qr={qr}
                     onOpen={(entry) => router.push(`/chat/${entry.id}`)}

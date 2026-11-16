@@ -488,6 +488,15 @@ check "the newest run failing is still red: its fix stage" eval '[ "$CLEAN" = 1 
 decide
 check "a finished run still never overrules the required check: red, its fix stage" eval '[ "$CLEAN" = 1 ] && logged "#42 is red on ccc1"'
 
+scenario "37c. just after gh pr ready, the newest run is the draft's fast run (ci.yml titles it \"Draft check: ...\"): its red is not the full run's"
+head_is aaa1; ci aaa1 none none success; print -l draft-failure in_progress,draft-failure > "$FAKE_STATE/run-aaa1"
+decide
+check "no full run yet is a wait, then the full run's green: no fix stage, one review" [ "$CLEAN:$(fixes):$(reviews):$(reads aaa1)" = 1:0:1:3 ]
+check "the draft's red was never read as red"    not_logged "is red on aaa1"
+: > "$LOG"; head_is bbb1; ci bbb1 none none failure; print -l draft-success in_progress,draft-success failure,draft-success > "$FAKE_STATE/run-bbb1"; print bbb2 > "$FAKE_STATE/pushes"
+decide
+check "nor its green as green: the full run's red gets its fix stage" eval '[ "$CLEAN" = 1 ] && logged "#42 is red on bbb1"'
+
 scenario "38. no run at all on a code PR → no review after the no-run limit"
 head_is aaa1; ci aaa1 none
 decide

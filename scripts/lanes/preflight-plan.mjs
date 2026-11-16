@@ -44,6 +44,7 @@
 //
 //   node scripts/lanes/preflight-plan.mjs [--base <ref>]   prints one step per line: <name> TAB <est s> TAB <why> TAB <command>
 //   node scripts/lanes/preflight-plan.mjs --diff <file>    plans from a saved `git diff -U0` instead of git (tests)
+//   node scripts/lanes/preflight-plan.mjs --draft <part>   a draft PR's fast CI check, one part: types, guards or tests (planDraft)
 //   node scripts/lanes/preflight-plan.mjs --replay <n>     the planner over the last n first-parent merges on the base, against
 //                                                          today's tree: files and estimate per merge, then the distribution
 //
@@ -320,6 +321,77 @@ export function planSteps(touched, repo, { planSecs = PLAN_SECS, maxExtra = MAX_
   return steps;
 }
 
+// ── the draft check: a DRAFT pull request's fast CI check (ci.yml jobs.draft; Marty, 17 Nov 2026) ──
+// A draft's run is three jobs side by side instead of the 19-job full run, each planned here from the PR's diff:
+//   types   turbo build + lint + typecheck of the packages the diff reaches and their dependents (every package when a root
+//           config changed), and a syntax check of changed scripts
+//   guards  CI's "checks" shard minus build, lint and typecheck (the types part runs those narrowed), and words lint + check
+//   tests   the targeted steps above (route and table suites, the vitest files picked within the budget, changed scripts'
+//           tests), plus the server suites the diff itself changes
+// The full run (ready_for_review, then every push) and the merge queue's run decide; this only fails a draft sooner.
+export const DRAFT_PARTS = ['types', 'guards', 'tests'];
+/** Root files whose change reaches every package's build, lint or typecheck: the types part then runs every package. */
+export const ROOT_WIDE = new Set(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'turbo.json',
+  'eslint.config.mjs', '.npmrc']);
+/** The "checks" shard's checks the types part runs narrowed to the diff, and the guards part so leaves out. */
+export const DRAFT_TURBO_CHECKS = ['build', 'lint', 'typecheck'];
+/** The tests part's budget (seconds of estimate): its job is about a minute of setup and this, inside the 5-minute aim. */
+export const DRAFT_PLAN_SECS = Number(process.env.PREFLIGHT_DRAFT_PLAN_SECS || 200);
+const WORKSPACE_DIR = /^(apps|packages|workers)\/[^/]+\//;
+const SERVER_SUITE_FILE = /^apps\/server\/src\/(test-[\w-]+)\.ts$/;
+
+/** The draft check's steps for one part, against `mergeBase` (the commit the PR's diff starts from). */
+export function planDraft(part, touched, repo, { mergeBase, planSecs = DRAFT_PLAN_SECS, maxExtra = MAX_EXTRA } = {}) {
+  if (!DRAFT_PARTS.includes(part)) throw new Error(`--draft takes ${DRAFT_PARTS.join(', ')}, not "${part}"`);
+  const files = [...touched.keys()];
+  const steps = [];
+  if (part === 'types') {
+    if (!/^[0-9a-f]{7,40}$/.test(mergeBase || '')) throw new Error('the types part needs the merge base commit');
+    const wide = files.filter(f => ROOT_WIDE.has(f));
+    const pkgs = [...new Set(files.filter(f => WORKSPACE_DIR.test(f) && repo.exists(f.match(WORKSPACE_DIR)[0] + 'package.json'))
+      .map(f => f.match(WORKSPACE_DIR)[0].slice(0, -1)))].sort();
+    if (wide.length) steps.push({ name: 'turbo', est: 240, why: `every package: ${wide.join(', ')} changed`,
+      cmd: 'pnpm turbo run build lint typecheck --continue' });
+    else if (pkgs.length) steps.push({ name: 'turbo', est: 180,
+      why: `${pkgs.join(', ')} and every package that depends on ${pkgs.length > 1 ? 'them' : 'it'}`,
+      cmd: `pnpm turbo run build lint typecheck --continue --filter=${shq(`...[${mergeBase}]`)}` });
+    const scripts = files.filter(f => !WORKSPACE_DIR.test(f) && !/(^|\/)node_modules\//.test(f) && repo.exists(f)).sort();
+    const js = scripts.filter(f => /\.(m?js|cjs)$/.test(f)), sh = scripts.filter(f => /\.sh$/.test(f));
+    if (js.length || sh.length) steps.push({ name: 'scripts-syntax', est: 5, why: `${js.length + sh.length} changed script(s) parse`,
+      cmd: [...js.map(f => `node --check ${shq(f)}`), ...sh.map(f => `bash -n ${shq(f)}`)].join(' && ') });
+  } else if (part === 'guards') {
+    const checks = readChecksShard(repo.ciYml).split(' ').filter(c => !DRAFT_TURBO_CHECKS.includes(c));
+    steps.push({ name: 'guards', est: 120, why: 'CI\'s "checks" shard but build, lint and typecheck (the types part runs those)',
+      cmd: `TEST_ALL_ONLY=${shq(checks.join(' '))} bash scripts/test-all.sh` });
+    steps.push({ name: 'words', est: EST.words, why: 'words lint + check',
+      cmd: 'node scripts/words/words.mjs lint && node scripts/words/words.mjs check' });
+  } else {
+    // The targeted steps of a preflight, its two whole-tree steps left to the guards part (so out of the budget too).
+    const fixed = EST.checks + EST.words;
+    const targeted = planSteps(touched, repo, { planSecs: planSecs + fixed, maxExtra }).filter(s => s.name !== 'checks' && s.name !== 'words');
+    steps.push(...targeted);
+    // A server suite the diff changes runs itself (a route or table step may have it already). Registered suites only: an
+    // unregistered one is suite_registration's red, in the guards part.
+    const have = new Set(targeted.filter(s => s.name.startsWith('server:')).map(s => s.name.slice(7)));
+    const registered = repo.read('scripts/server-suites.mjs');
+    let durations = {};
+    try { durations = JSON.parse(repo.read('scripts/server-suite-durations.json') || '{}'); } catch { /* no estimates: 60 s each */ }
+    const changed = [...new Set(files.map(f => (SERVER_SUITE_FILE.exec(f) || [])[1]).filter(Boolean))]
+      .filter(n => !have.has(n) && repo.exists(`apps/server/src/${n}.ts`) && registered.includes(`'${n}'`)).sort();
+    if (changed.length) steps.push({ name: 'server:changed', est: Math.ceil(changed.reduce((k, n) => k + (Number(durations[n]) || 60), 10)),
+      why: `the server suites this diff changes: ${changed.join(', ')}`,
+      cmd: `SERVER_SUITES_ONLY=${shq(changed.join(' '))} TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs` });
+    if (!steps.length) steps.push({ name: 'none', est: 0, why: 'no test this diff calls for (the full run runs them all)', cmd: 'true' });
+  }
+  if (!steps.length) steps.push({ name: 'none', est: 0, why: 'nothing in this part for this diff', cmd: 'true' });
+  return steps;
+}
+
+/** The commit the branch's diff against `base` starts from. */
+export function mergeBaseOf(base = 'origin/main', root = REPO_ROOT) {
+  return execFileSync('git', ['merge-base', base, 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+}
+
 /** The real tree, read from git and disk. */
 export function gitRepo(root = REPO_ROOT) {
   const cache = new Map();
@@ -382,8 +454,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       process.stdout.write(`${rows.length} merges. est s: p50 ${q(est, 0.5)}, p90 ${q(est, 0.9)}, max ${est.at(-1)}. vitest files: `
         + `p50 ${q(fl, 0.5)}, p90 ${q(fl, 0.9)}, max ${fl.at(-1)}. Plans that left files to CI: ${rows.filter(r => r.left).length}.\n`);
     } else {
-      const touched = opt('--diff') ? parseDiff(fs.readFileSync(opt('--diff'), 'utf8')) : touchedFromGit(opt('--base') || 'origin/main');
-      for (const s of planSteps(touched, gitRepo())) {
+      const base = opt('--base') || 'origin/main';
+      const touched = opt('--diff') ? parseDiff(fs.readFileSync(opt('--diff'), 'utf8')) : touchedFromGit(base);
+      const part = opt('--draft');
+      const steps = part === undefined ? planSteps(touched, gitRepo())
+        : planDraft(part, touched, gitRepo(), { mergeBase: opt('--merge-base') || mergeBaseOf(base) });
+      for (const s of steps) {
         process.stdout.write(`${s.name}\t${s.est}\t${s.why.replace(/[\t\n]/g, ' ')}\t${s.cmd}\n`);
       }
     }

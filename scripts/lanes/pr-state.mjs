@@ -26,6 +26,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // PR_STATE_ROOT: the checkout whose files a failure names (the tests run mutated copies of this script from a temp dir).
 const ROOT = process.env.PR_STATE_ROOT || join(dirname(fileURLToPath(import.meta.url)), '../..');
 export const REQUIRED_CHECK = process.env.LANE_CI_CHECK || 'Run BeanPool Test-All Pipeline';
+// A DRAFT gets ci.yml's fast check, "Draft check <part>", and the full run waits for ready (Marty, 17 Nov 2026). On a ready PR
+// those rows are the draft's run, which the full run replaces: they are SUPERSEDED, never counted red or pending.
+export const FAST_CHECK = 'Draft check';
+/** On a ready PR, the draft's fast-check rows marked superseded; a draft's rows are left as they are. */
+export function supersedeDraftChecks(checks, isDraft) {
+  return isDraft ? checks : checks.map((c) => (c.name.startsWith(FAST_CHECK) ? { ...c, state: 'superseded' } : c));
+}
 const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']); // a stranger's "CLEAN" comment on a public PR is not a verdict
 const WIDTH = 240;
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g'); // colour codes, or every pattern below misses
@@ -261,15 +268,20 @@ export function touches(file, diff) {
 // ── summary ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** The one-line answer, and its exit code. */
-export function summarize({ review, checks, checksError }) {
+export function summarize({ review, checks, checksError, pr }) {
   const reds = checks.filter((c) => c.state === 'red' && !c.aggregate);
   const aggRed = checks.filter((c) => c.state === 'red' && c.aggregate);
   const pending = checks.filter((c) => c.state === 'pending');
-  const required = checks.some((c) => c.name === REQUIRED_CHECK);
+  // Passed, not only there: a required check GitHub skipped is one a ruleset counts as passing, and it is never green here.
+  const required = checks.some((c) => c.name === REQUIRED_CHECK && c.state === 'success');
+  const draft = Boolean(pr?.isDraft);
+  const fast = checks.some((c) => c.name.startsWith(FAST_CHECK) && c.state === 'success');
   const n = reds.length || aggRed.length;
   const redWord = `${n} red${n === 1 ? '' : 's'}`;
+  const waiting = draft ? `a draft${fast ? ', its fast check green' : ''}: the full run starts when it is marked ready`
+    : 'the required check has not reported';
   const ci = checksError ? 'checks unreadable'
-    : n ? redWord : pending.length ? `${pending.length} pending` : !required ? 'the required check has not reported' : 'green';
+    : n ? redWord : pending.length ? `${pending.length} pending` : !required ? waiting : 'green';
   if (review.none) return { line: `NOT CLEAN (no deciding review on this PR; CI: ${ci})`, code: 4 };
   if (review.verdict !== 'CLEAN') {
     const of = review.named && !review.headMatch ? `, about ${review.named.sha.slice(0, 8)} and not this head,` : '';
@@ -286,7 +298,9 @@ export function summarize({ review, checks, checksError }) {
     return { line: `CLEAN+RED (${redWord}: ${names}${tail}${more})`, code: 3 };
   }
   if (pending.length) return { line: `PENDING (${pending.length} pending: ${pending.map((c) => c.name).join(', ')})`, code: 5 };
-  if (!required) return { line: `PENDING (the required check "${REQUIRED_CHECK}" has not reported on this head)`, code: 5 };
+  if (!required && draft) return { line: `PENDING (${waiting}, and "${REQUIRED_CHECK}" with it)`, code: 5 };
+  const there = checks.find((c) => c.name === REQUIRED_CHECK);
+  if (!required) return { line: `PENDING (the required check "${REQUIRED_CHECK}" ${there ? `is ${there.conclusion} on this head, never a pass` : 'has not reported on this head'})`, code: 5 };
   return { line: 'CLEAN+GREEN', code: 0 };
 }
 
@@ -317,7 +331,7 @@ export function collect(pr, repo, limit) {
   const runs = attempt(() => pages(`${base}/commits/${head}/check-runs?filter=latest&per_page=100`).flatMap((pg) => pg.check_runs || []));
   const status = attempt(() => JSON.parse(readGh(['api', `${base}/commits/${head}/status`])));
   const review = lastVerdict(comments.ok ? comments.value : [], reviews.ok ? reviews.value : [], commits.ok ? commits.value : [], head);
-  const checks = runs.ok ? normaliseChecks(runs.value, status.ok ? status.value : null) : [];
+  const checks = runs.ok ? supersedeDraftChecks(normaliseChecks(runs.value, status.ok ? status.value : null), p.isDraft) : [];
   for (const c of checks) {
     if (c.state !== 'red' || !c.jobId) continue;
     const log = attempt(() => readGh(['api', `${base}/actions/jobs/${c.jobId}/logs`]));
@@ -358,17 +372,20 @@ export function render(s) {
   else {
     const by = (st) => checks.filter((c) => c.state === st);
     row('checks', `${checks.length} on this head: ${by('success').length} success, ${by('red').length} red, ${by('pending').length} pending`
-      + `${by('skipped').length ? `, ${by('skipped').length} skipped` : ''}${by('neutral').length ? `, ${by('neutral').length} neutral` : ''}`);
+      + `${by('skipped').length ? `, ${by('skipped').length} skipped` : ''}${by('neutral').length ? `, ${by('neutral').length} neutral` : ''}`
+      + `${by('superseded').length ? `, ${by('superseded').length} superseded (the draft's fast check; a ready PR is decided by the full run)` : ''}`);
     if (!s.errors.status.ok) row('warning', `commit statuses unreadable (${s.errors.status.error})`);
-    if (!checks.some((c) => c.name === REQUIRED_CHECK)) row('', `the required check "${REQUIRED_CHECK}" has NOT reported on this head`);
+    if (!checks.some((c) => c.name === REQUIRED_CHECK)) {
+      row('', `the required check "${REQUIRED_CHECK}" has NOT reported on this head${p.isDraft ? ' (a draft: the full run starts when it is marked ready)' : ''}`);
+    }
   }
   const order = [...checks.filter((c) => c.state === 'red' && !c.aggregate), ...checks.filter((c) => c.state === 'red' && c.aggregate),
-    ...checks.filter((c) => c.state === 'pending'), ...checks.filter((c) => c.state === 'skipped' || c.state === 'neutral')];
+    ...checks.filter((c) => c.state === 'pending'), ...checks.filter((c) => ['skipped', 'neutral', 'superseded'].includes(c.state))];
   let untouchedTest = false;
   for (const c of order) {
     const tag = c.state === 'red' ? 'RED' : c.state.toUpperCase();
     const aside = c.aggregate && c.state === 'red' ? '  [the SUMMARY check: red because a shard is; the shard lines are the cause]' : '';
-    out.push(`  ${tag.padEnd(8)}${c.name} — ${c.conclusion}${aside}`);
+    out.push(`  ${tag.padEnd(8)}${tag.length >= 8 ? ' ' : ''}${c.name} — ${c.conclusion}${aside}`);
     if (c.state !== 'red') continue;
     if (c.jobId) {
       const shard = (/^Test-All shard (.+)$/.exec(c.name) || [])[1];

@@ -551,8 +551,12 @@ ci_head_state(){ # SHA → the required check on exactly that commit: green | re
     # 2026 had the run cancelled and the required check failure. Red is only a run that finished and failed.
     # The newest run only: a re-run stays one row, but a reopened PR or a workflow_dispatch adds a second run on the
     # commit, and lane_ci_word would read an old failure over the run still going.
-    out=$(gh_try gh run list -R "$LANE_GH_REPO" --commit "$1" --workflow "$LANE_CI_WORKFLOW" --limit 1 --json status,conclusion \
-          --jq 'map(if .status == "completed" then .conclusion else "pending" end) | "runs: " + join(" ")') || { print unknown; return; }
+    # The newest FULL run: a draft's run (ci.yml titles it "Draft check: ...", Marty 17 Nov 2026) has only the fast check and
+    # never the required one, and right after `gh pr ready` it is still the newest run until ready_for_review's run is listed.
+    # Its red or green is not the full run's: skipped here, so that moment reads as no run yet, a wait.
+    out=$(gh_try gh run list -R "$LANE_GH_REPO" --commit "$1" --workflow "$LANE_CI_WORKFLOW" --limit 10 --json status,conclusion,displayTitle \
+          --jq 'map(select((.displayTitle // "") | startswith("Draft check: ") | not)) | .[:1]
+                | map(if .status == "completed" then .conclusion else "pending" end) | "runs: " + join(" ")') || { print unknown; return; }
     r=$(lane_ci_word "$out")
     case "$s:$r" in
       none:green) s=pending;;

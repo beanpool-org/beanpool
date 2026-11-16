@@ -5,6 +5,8 @@
 #   bash scripts/lanes/preflight.sh               plan against origin/main and run every step
 #   bash scripts/lanes/preflight.sh --plan        print the steps and their estimates, and run nothing
 #   bash scripts/lanes/preflight.sh --base <ref>  plan against another base branch
+#   bash scripts/lanes/preflight.sh --draft <part> a draft PR's fast CI check, one part (types, guards, tests): ci.yml jobs.draft
+#                                                 runs it on GitHub, where no lock is held, with PREFLIGHT_HARD_SECS raised
 #
 # The steps come from scripts/lanes/preflight-plan.mjs (which says what each rule is and why): CI's "checks" shard, its
 # list read from .github/workflows/ci.yml, through TEST_ALL_ONLY scripts/test-all.sh; words lint + check; then the targeted
@@ -35,12 +37,14 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)" || exit 2
 cd "$ROOT" || exit 2
 
 PLAN_ONLY=0
+DRAFT=
 BASE=origin/main
 while [ $# -gt 0 ]; do
   case "$1" in
     --plan) PLAN_ONLY=1 ;;
     --base) shift; BASE="${1:-}"; [ -n "$BASE" ] || { echo "preflight: --base needs a ref"; exit 2; } ;;
-    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --draft) shift; DRAFT="${1:-}"; [ -n "$DRAFT" ] || { echo "preflight: --draft needs a part (types, guards, tests)"; exit 2; } ;;
+    -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "preflight: unknown argument $1 (--plan, --base <ref>)"; exit 2 ;;
   esac
   shift
@@ -55,7 +59,7 @@ LOGDIR=$(mktemp -d "${TMPDIR:-/tmp}/preflight.XXXXXX") || exit 2
 PLAN="$LOGDIR/plan.tsv"
 if [ -n "${PREFLIGHT_PLAN_FILE:-}" ]; then
   cp "$PREFLIGHT_PLAN_FILE" "$PLAN" || { echo "preflight: cannot read $PREFLIGHT_PLAN_FILE"; rm -rf "$LOGDIR"; exit 2; }
-elif ! node scripts/lanes/preflight-plan.mjs --base "$BASE" > "$PLAN"; then
+elif ! node scripts/lanes/preflight-plan.mjs --base "$BASE" ${DRAFT:+--draft "$DRAFT"} > "$PLAN"; then
   echo "preflight: no plan (above). Nothing was run."
   rm -rf "$LOGDIR"
   exit 2
@@ -142,6 +146,8 @@ while IFS=$'\t' read -r name est why cmd <&3; do
 done 3< "$PLAN"
 
 WALL=$(( $(date +%s) - START ))
+# The heading scripts/lanes/pr-state.mjs reads a red job's lines under (a draft check's red on GitHub, like test-all's own report).
+[ -z "$RED_LOGS" ] || { echo ""; echo "──── Failure Details ────"; }
 for log in $RED_LOGS; do
   echo ""
   echo "━━━ $(basename "$log" .log) (whole log: $log) ━━━"

@@ -24,7 +24,7 @@
  *      One table over every way the server changes what a phone's members table holds from the list: a rename, a photo, a
  *      role granted and revoked, an admin's re-key (the member under the new key, the old key in neither), a role a
  *      suspension takes and its lift gives back, a member back from a removal and from a retire, and the genesis
- *      member's owner role on a row already there. None of the re-key's to the genesis row's was in a delta (walk of
+ *      member's owner role on a row already there. From the re-key on, none was in a delta (walk of
  *      #3263 on the API 26 phone, 16 Nov 2026): the phone kept the old key's card until its hourly full read, so a DM
  *      with the re-keyed member, and its "{name}'s key changed" line, named them by the conversation's id.
  *
@@ -298,7 +298,7 @@ async function main() {
         const kit = member('Kit'), kitNew = keypair();
         const sue = member('Sue'), ray = member('Ray'), tam = member('Tam'), gen = member('Gen');
         const reason = 'Held aside while the table is read.';
-        type Change = { what: string; who: Id; setup?: () => void; change: () => void; field: string; want: (r: any) => boolean; movesTo?: Id };
+        type Change = { what: string; who: Id; setup?: () => void; change: () => void; field: string; want: (r: any) => boolean; movesTo?: Id; comesBack?: true };
         const changes: Change[] = [
             { what: 'a rename', who: wes, change: () => done(!!se.updateProfile(wes.pubKeyHex, { callsign: 'Wesley' }), 'the rename'),
                 field: 'callsign', want: r => r.callsign === 'Wesley' },
@@ -316,10 +316,10 @@ async function main() {
             { what: 'the role a lifted suspension gives back', who: sue, field: 'nodeRole', want: r => r.nodeRole === 'moderator',
                 change: () => { const r = adminLiftSuspension(sue.pubKeyHex, 'owner:password'); done(r.success, 'the lift', r); } },
             // A removed member back, as a passed reinstate vote brings them (setUserStatusRow, the one writer of a status).
-            { what: 'a removed member back', who: ray, setup: () => se.adminSetUserStatus(ray.pubKeyHex, 'pruned'),
+            { what: 'a removed member back', who: ray, comesBack: true, setup: () => se.adminSetUserStatus(ray.pubKeyHex, 'pruned'),
                 change: () => se.adminSetUserStatus(ray.pubKeyHex, 'active'), field: 'callsign', want: r => r.callsign === 'Ray' },
             // A retired empty duplicate brought back (engine/retire-duplicate.ts, the owners' Bring back).
-            { what: 'a retired duplicate brought back', who: tam, field: 'callsign', want: r => r.callsign === 'Tam',
+            { what: 'a retired duplicate brought back', who: tam, comesBack: true, field: 'callsign', want: r => r.callsign === 'Tam',
                 setup: () => { const r = retireEmptyDuplicate(olive.pubKeyHex, tam.pubKeyHex); done(r === null, 'the retire', r); },
                 change: () => done(bringBackRetired(tam.pubKeyHex), 'Bring back') },
             // The boot's genesis member (ADMIN_PUBKEY) whose row is already here: seedGenesisMember gives it the owner role.
@@ -328,8 +328,8 @@ async function main() {
         ];
         for (const c of changes) {
             c.setup?.();
-            const comesBack = c.what.includes('back') && !c.what.includes('role');
-            if (comesBack) assert(!(await isListed(c.who.pubKeyHex)), `${c.what}: not in the list before it comes back`);
+            // A card that comes back was out of the list first: the setup took it out.
+            if (c.comesBack) assert(!(await isListed(c.who.pubKeyHex)), `${c.what}: not in the list before it comes back`);
             const read = await afterChange(c.what, c.change, c.field, c.want, (c.movesTo ?? c.who).pubKeyHex);
             if (c.movesTo) {
                 const oldKeyIn = (rows: any[]) => rows.some((m: any) => m.publicKey === c.who.pubKeyHex);

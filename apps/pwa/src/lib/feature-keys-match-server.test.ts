@@ -8,10 +8,14 @@
  * apps/server/src/config/node-profile.ts and what `ReaderFeatures` adds in apps/server/src/config/features-for.ts. A read
  * that starts picking keys goes red here for each one it leaves out.
  *
+ * The server's list is read with the TypeScript parser (typeFields), not line by line: a field written over two lines
+ * counts as one, and a member the guard can't read is red, never skipped (#3254 review).
+ *
  * Nothing here contacts a node.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const identity = vi.hoisted(() => ({ current: null as { publicKey: string; privateKey: string } | null }));
@@ -26,19 +30,46 @@ import { readerFeaturesOnce, resetReaderFeaturesOnce } from './features';
 const SERVER_CONFIG = path.resolve(__dirname, '../../../server/src/config');
 const read = (file: string) => fs.readFileSync(path.join(SERVER_CONFIG, file), 'utf8');
 
-/** The node's list: each field of NodeFeatures (one a line), and what ReaderFeatures adds to it. */
-function serverSwitches(): string[] {
-    const src = read('node-profile.ts');
-    const start = src.indexOf('export interface NodeFeatures {');
-    if (start < 0) throw new Error('no NodeFeatures in node-profile.ts');
-    const keys = [...src.slice(start, src.indexOf('\n}', start)).matchAll(/^ {4}(\w+)\??: .+;$/gm)].map((m) => m[1]);
-    const reader = /export type ReaderFeatures = NodeFeatures & \{([^}]*)\}/.exec(read('features-for.ts'));
-    if (!reader) throw new Error('no ReaderFeatures in features-for.ts');
-    for (const part of reader[1].split(';')) {
-        const m = /^\s*(\w+)\??:/.exec(part);
-        if (m) keys.push(m[1]);
+/**
+ * The field names of the type `name` in `src`, read with the TypeScript parser: an interface's members, or the `{ ... }`
+ * parts of a type alias (`NodeFeatures & { contacts: boolean; door: Door }`). A field over several lines is one field.
+ * `besides`: the named types an alias may join to its own parts, which this doesn't read. Anything else it can't read
+ * throws, so nothing is quietly left out.
+ */
+function typeFields(src: string, name: string, besides: readonly string[] = []): string[] {
+    const sf = ts.createSourceFile(`${name}.ts`, src, ts.ScriptTarget.Latest, true);
+    const keys: string[] = [];
+    const take = (members: ts.NodeArray<ts.TypeElement>) => {
+        for (const m of members) {
+            if (!ts.isPropertySignature(m) || !m.type || !(ts.isIdentifier(m.name) || ts.isStringLiteral(m.name))) {
+                throw new Error(`${name} has a member this guard can't read as a field: ${m.getText(sf).slice(0, 80)}`);
+            }
+            keys.push(m.name.text);
+        }
+    };
+    let found = 0;
+    for (const st of sf.statements) {
+        if (ts.isInterfaceDeclaration(st) && st.name.text === name) {
+            if (st.heritageClauses?.length) throw new Error(`${name} extends another type: teach this guard to read it`);
+            take(st.members);
+            found++;
+        } else if (ts.isTypeAliasDeclaration(st) && st.name.text === name) {
+            for (const part of ts.isIntersectionTypeNode(st.type) ? st.type.types : [st.type]) {
+                if (ts.isTypeLiteralNode(part)) take(part.members);
+                else if (!(ts.isTypeReferenceNode(part) && besides.includes(part.typeName.getText(sf)))) {
+                    throw new Error(`${name} joins ${part.getText(sf).slice(0, 60)}, which this guard doesn't read`);
+                }
+            }
+            found++;
+        }
     }
+    if (found !== 1) throw new Error(`${found} declarations of ${name}`);
     return keys;
+}
+
+/** The node's list: each field of NodeFeatures, and what ReaderFeatures adds to it. */
+function serverSwitches(): string[] {
+    return [...typeFields(read('node-profile.ts'), 'NodeFeatures'), ...typeFields(read('features-for.ts'), 'ReaderFeatures', ['NodeFeatures'])];
 }
 
 const SERVER = serverSwitches();
@@ -60,6 +91,33 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("the web app carries every switch the node sends", () => {
+    it('reads a list field by field, however a field is laid out (#3254 review: one field a line missed a two-line one)', () => {
+        const src = [
+            'export interface NodeFeatures {',
+            '    /** one line */',
+            '    beans: boolean;',
+            '    forum?:',
+            '        boolean;',
+            '    nearbyListings?: {',
+            '        radiusKm: number;',
+            '        max: number;',
+            '    };',
+            "    'kebab-key': number; door: Door;",
+            '}',
+            'export type ReaderFeatures = NodeFeatures & {',
+            '    contacts:',
+            '        boolean;',
+            '};',
+        ].join('\n');
+        expect(typeFields(src, 'NodeFeatures')).toEqual(['beans', 'forum', 'nearbyListings', 'kebab-key', 'door']);
+        expect(typeFields(src, 'ReaderFeatures', ['NodeFeatures'])).toEqual(['contacts']);
+        // What it can't read is red, never skipped.
+        expect(() => typeFields(src, 'ReaderFeatures')).toThrow(/joins NodeFeatures/);
+        expect(() => typeFields('export interface NodeFeatures { [key: string]: boolean }', 'NodeFeatures')).toThrow(/can't read/);
+        expect(() => typeFields('export interface NodeFeatures extends Base { a: boolean }', 'NodeFeatures')).toThrow(/extends/);
+        expect(() => typeFields(src, 'Missing')).toThrow(/0 declarations/);
+    });
+
     it("reads the server's list (a parse that finds nothing would pass the rest)", () => {
         expect(SERVER.length).toBeGreaterThan(30);
         for (const key of ['beans', 'forum', 'forumPublic', 'groupGuests', 'contacts', 'door']) expect(SERVER).toContain(key);

@@ -29,6 +29,8 @@ import { claimProbeOrigin } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
 import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, combineKnockTicks, findCommunityState, knockTickOf, t, type AddressResult, type KnockWatchTick, PLACE_CIRCLE_WORDS } from '@beanpool/core';
 import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
+import { useForumAskPicks } from '../utils/forum-ask-picks';
+import { KnockForumPicker } from '../components/KnockForumPicker';
 import { AddressSearch } from '../components/AddressSearch';
 import { SetUpServerRow } from '../components/SetUpServerRow';
 import { NoOwnerCard, type OwnerlessServer } from '../components/NoOwnerCard';
@@ -432,6 +434,8 @@ export default function FindCommunityScreen() {
      * written to the phone only at Send. With an account, the account's key, and nothing is drafted.
      */
     const [heldKey, setHeldKey] = useState<JoinKey | null>(null);
+    // Up to three of the asker's own worldwide forum posts, for a phone that is a member there (forums F11b).
+    const forumPicks = useForumAskPicks(openForm, identity ?? null);
 
     useEffect(() => { if (identity?.callsign && !callsign) setCallsign(identity.callsign.slice(0, KNOCK_CALLSIGN_CHARS)); }, [identity?.callsign]);
 
@@ -470,7 +474,7 @@ export default function FindCommunityScreen() {
         // From the global community only for a member there; otherwise the knock names no community it came from.
         const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
-        const r = await sendKnock(c.url, signer, { callsign, message, avatar }, knockFromNode(anchor, guest));
+        const r = await sendKnock(c.url, signer, { callsign, message, avatar, forum: forumPicks.sendFor(signer.publicKey) }, knockFromNode(anchor, guest));
         setSending(false);
         switch (r.kind) {
             case 'waiting':
@@ -669,6 +673,7 @@ export default function FindCommunityScreen() {
                     accessibilityLabel={t('A few words about yourself')}
                 />
                 <Text style={styles.counter}>{Array.from(message).length}/{KNOCK_MESSAGE_CHARS}</Text>
+                <KnockForumPicker picks={forumPicks} testID={`find-forum-picker-${community.key}`} />
                 {!!formError && <Text style={styles.formError} accessibilityLiveRegion="polite">{findLineWords(formError)}</Text>}
                 <View style={styles.actions}>
                     <Pressable

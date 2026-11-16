@@ -21,6 +21,8 @@ import {
     KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockCardState, type KnockStatusResult,
 } from '../utils/knock';
 import { knockFromNode } from '../utils/knock-address';
+import { useForumAskPicks } from '../utils/forum-ask-picks';
+import { KnockForumPicker } from '../components/KnockForumPicker';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { joinedForListing, keepListingAfterJoin } from '../utils/listing-after-join';
@@ -211,6 +213,8 @@ export default function CommunityCardScreen() {
      * phone only at Send (utils/knock-key.ts). With an account, the account's key, and nothing is drafted.
      */
     const [heldKey, setHeldKey] = useState<JoinKey | null>(null);
+    // Up to three of the asker's own worldwide forum posts, for a phone that is a member there (forums F11b).
+    const forumPicks = useForumAskPicks(formOpen ? 'card' : null, identity ?? null);
     useEffect(() => {
         if (!formOpen || identity) return;
         let alive = true;
@@ -249,7 +253,7 @@ export default function CommunityCardScreen() {
         // community it came from.
         const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
-        const r = await sendKnock(origin, signer, { callsign, message, avatar, peek: peekTicket }, knockFromNode(anchor, guest));
+        const r = await sendKnock(origin, signer, { callsign, message, avatar, peek: peekTicket, forum: forumPicks.sendFor(signer.publicKey) }, knockFromNode(anchor, guest));
         setSending(false);
         if (r.kind === 'waiting' || r.kind === 'invited') {
             await rememberKnock(signer.publicKey, { url: origin, name: c.name });
@@ -328,6 +332,7 @@ export default function CommunityCardScreen() {
                 onChangeText={v => setMessage(Array.from(v).slice(0, KNOCK_MESSAGE_CHARS).join(''))}
                 placeholder={t("Where you live, what you'd like to share or learn")} accessibilityLabel={t('A few words about yourself')} />
             <Text style={styles.counter}>{Array.from(message).length}/{KNOCK_MESSAGE_CHARS}</Text>
+            <KnockForumPicker picks={forumPicks} testID="card-forum-picker" />
             {!!formError && <Text style={styles.formError} accessibilityLiveRegion="polite">{findLineWords(formError)}</Text>}
             <View style={styles.actions}>
                 <Pressable style={[styles.primary, sending && { opacity: 0.6 }]} onPress={() => send(c)} disabled={sending} accessibilityRole="button">

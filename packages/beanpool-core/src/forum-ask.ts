@@ -106,6 +106,56 @@ export function readForumAskPosts(raw: unknown): ForumAskPosts | null {
     return { secret: o.secret, posts };
 }
 
+// ── The asker's picker (F11b): what a request to join sends ─────────────────────────────────────────────────────
+
+/** The path both apps read the asker's own posts from, on the worldwide community, signed with the asker's key. */
+export const FORUM_ASK_POSTS_PATH = '/api/forum/ask-posts';
+
+/** What a request to join carries of the asker's picks (POST /api/join/knock `forumPosts` and `forumSecret`). */
+export interface ForumAskSend {
+    forumPosts: ForumAskNamed[];
+    forumSecret: string;
+}
+
+/**
+ * The picks after a tap on `postId`: a picked post is taken off; another is added, unless {@link FORUM_ASK_POSTS} are
+ * picked already (then nothing changes: the picker says how to pick another).
+ */
+export function toggleForumAskPick(picked: readonly string[], postId: string): string[] {
+    if (picked.includes(postId)) return picked.filter((p) => p !== postId);
+    return picked.length >= FORUM_ASK_POSTS ? [...picked] : [...picked, postId];
+}
+
+/**
+ * What a request to join sends of the asker's picks, or null to send none (the request goes plain). Only posts the worldwide
+ * community offered this asker as their own (`offered`: its answer to {@link FORUM_ASK_POSTS_PATH}, read with the key that
+ * will sign the request) go: a pick that isn't on that list (another writer's post, one gone from it, an id made up) is never
+ * sent. In the order picked, each once, at most {@link FORUM_ASK_POSTS}, and named by post, topic and number only: no title.
+ */
+export function forumAskSend(offered: ForumAskPosts | null, picked: readonly string[]): ForumAskSend | null {
+    if (!offered || !isForumAskHex(offered.secret)) return null;
+    const own = new Map<string, ForumAskNamed>();
+    for (const p of offered.posts) {
+        const named = readForumAskNamed(p);
+        if (named && !own.has(named.postId)) own.set(named.postId, named);
+    }
+    const forumPosts: ForumAskNamed[] = [];
+    for (const id of new Set(picked)) {
+        const named = own.get(id);
+        if (named && forumPosts.length < FORUM_ASK_POSTS) forumPosts.push(named);
+    }
+    return forumPosts.length ? { forumPosts, forumSecret: offered.secret } : null;
+}
+
+/** The picker's words, both apps (on the Ask to join form, under "A few words about yourself"). */
+export const FORUM_ASK_PICKER_WORDS = {
+    heading: word('Add up to three of your worldwide forum posts (optional)'),
+    about: word('The community’s admins can read them and see that you wrote them.'),
+    /** Under a post's topic title: where the post is in that topic (1 is the post that started it). */
+    post: word('Post {number}'),
+    full: word('Three picked. Tap one to take it off.'),
+} as const;
+
 /**
  * A request's `forum` as the apps read it, or null: an https address and one to three rows that read whole. Each row is the
  * post it names and its proof, nothing else: any other field in the answer (a title, words) is dropped here.

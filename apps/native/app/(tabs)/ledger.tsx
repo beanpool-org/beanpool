@@ -488,8 +488,8 @@ export default function LedgerScreen() {
             // (sync_data_updated), and no answer at all means the line couldn't be read.
             getBalance(identity.publicKey).then(latest((answer: any) => {
                 setBalanceState(answer);
-                setBalanceRead(true);
-                if (answer?.lineKnown !== false) { setBalanceUnread(false); return; }
+                // Only real figures count as read: with none on this phone yet, Send's gate would read zeros as "first trade".
+                if (answer?.lineKnown !== false) { setBalanceRead(true); setBalanceUnread(false); return; }
                 refreshBalanceFromServer(key)
                     .then(latest((read: unknown) => setBalanceUnread(read === null)))
                     .catch(() => latest(setBalanceUnread)(true));

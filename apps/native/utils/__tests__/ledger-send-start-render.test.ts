@@ -291,6 +291,25 @@ describe('Send opened by Learn\'s Thank (K8)', () => {
         expect(node.sends).toEqual([[me.identity.publicKey, 'mia-key', 200, 'Ta!']]);
     });
 
+    it('figures not on this phone yet (lineKnown false): no refusal from zeros, the request waits; real figures open the form', async () => {
+        // A member who can send, but whose phone holds none of the node's figures yet: zeros, and the node asked (refresh).
+        node.balance = { balance_c: 0, earnedCredit_c: 0, lineKnown: false, tier: { name: 'Newcomer', emoji: '🌱' } };
+        route.params = { ...THANK };
+        await render();
+        expect(alerts.said).toEqual([]);
+        expect(route.cleared).toEqual([]);
+        expect(byLabel('Memo')).toBeNull();
+        // The node's figures land (the sync reloads the screen): the request is taken now, with the real gate.
+        node.balance = HOLDER;
+        await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(LedgerScreen)) as any); });
+        act(() => root.unmount());
+        root = createRoot(host);
+        await render();
+        expect(route.cleared).toEqual([{ sendTo: '', sendName: '', sendNote: '' }]);
+        expect((byLabel('Memo') as HTMLInputElement | null)?.value).toBe(NOTE);
+        expect(alerts.said).toEqual([]);
+    });
+
     it('with no request, the Ledger opens as before: nothing cleared, no form, no alert', async () => {
         await render();
         expect(route.cleared).toEqual([]);

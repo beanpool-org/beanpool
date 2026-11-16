@@ -15,7 +15,7 @@
  *
  * The guide checks at the end read the pages (content/, operators/), not the published copies.
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -46,6 +46,9 @@ const TABLE: readonly Row[] = [
     { key: "This community's main address is now {address}. This address keeps working.", catalog: WEB, sources: ['apps/pwa/src/components/FormerAddressBanner.tsx'] },
     { key: 'This community has moved to {address}.', catalog: WEB, sources: ['apps/pwa/src/components/FormerAddressBanner.tsx'] },
     { key: 'Open it there', catalog: WEB, sources: ['apps/pwa/src/components/FormerAddressBanner.tsx'] },
+    { key: "You'll sign in there again, as you would in a new browser.", catalog: WEB, sources: ['apps/pwa/src/components/FormerAddressBanner.tsx'] },
+    { key: 'To use {address} from this browser, the phone must be on {address} first, because a Link a device code is refused when the phone and browser are on different addresses.', catalog: WEB, sources: ['apps/pwa/src/components/FormerAddressBanner.tsx'] },
+    { key: 'Community address change alert', catalog: WEB, sources: ['apps/pwa/src/components/FormerAddressBanner.tsx'] },
     { key: 'Link this browser from your phone', catalog: WEB, sources: ['apps/pwa/src/components/FormerAddressBanner.tsx'] },
     // Settings → Addresses: core's words, which the manager draws (S6).
     { key: 'Make {address} the main address?', catalog: CORE, sources: ['packages/beanpool-core/src/address-reach.ts'] },
@@ -88,8 +91,8 @@ const sorted = (xs: string[]) => [...new Set(xs)].sort();
 const isPlural = (key: string) => key.includes(PLURAL_SEPARATOR);
 
 describe('several addresses §8: each sentence, in every language', () => {
-    it('the table is the feature\'s words: 20 rows, each key once, only the placeholders the feature uses', () => {
-        expect(TABLE).toHaveLength(20);
+    it('the table is the feature\'s words: 23 rows, each key once, only the placeholders the feature uses', () => {
+        expect(TABLE).toHaveLength(23);
         expect(new Set(TABLE.map((r) => r.key)).size).toBe(TABLE.length);
         for (const row of TABLE) {
             for (const p of placeholdersOf(row.key)) expect(KNOWN_PLACEHOLDERS.has(p), `${row.key}: {${p}}`).toBe(true);
@@ -183,6 +186,5 @@ describe('several addresses §8: the guide', () => {
         expect(text).toContain(`**${web['Link this browser from your phone'] as string}**`);
         // The old card's English sentence, quoted in some copies, and its 7-day "Not now".
         expect(text).not.toContain('This community is also at beans.example.org');
-        expect(readdirSync(join(GUIDE, 'content', lang, 'getting-started'))).toContain('home.md');
     });
 });

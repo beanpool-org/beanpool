@@ -838,8 +838,8 @@ export function handlePurchaseRequest(input: {
         };
     }
 
-    // ...and the buyer must NOT be. Same shape as the `relay_message` impersonation guard (A2-28): the
-    // connection is trusted, but that authorises the CONNECTION, not the asserted identity.
+    // ...and the buyer must NOT be. A trusted peer connection authorises the CONNECTION, not the
+    // identity it asserts: a peer may never speak for a member of this community (A2-28).
     //
     // This one has teeth beyond a bogus trade. Accepting it reaches `registerVisitor`, which stamps a
     // `home_node_url` onto an existing member row that has none — quietly converting one of OUR members

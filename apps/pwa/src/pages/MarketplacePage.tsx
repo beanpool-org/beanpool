@@ -1433,8 +1433,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // /api/federation/relay-message — a route the server never served (deleted in X7),
                 // so it could only fail. Creating a local conversation instead would be worse:
                 // nothing carries a line from this community's chat to theirs, so the message
-                // would sit here undelivered while looking sent. Say so plainly until this app
-                // sends through the mailbox between communities.
+                // would sit here undelivered while looking sent. Say so plainly until this button
+                // opens an outside chat (lib/outside-mail.ts) with the post's author.
                 setBodyError({ at: 'message', words: t("This post is hosted by another community. Messaging across communities isn't available yet.") });
                 return;
             } else {

@@ -2927,7 +2927,7 @@ export async function sendRemoteTransfer(
 // so the call could only ever fail. The server has deleted that route since (X7), with
 // the libp2p relay the send route used to fire. A line to someone in another community
 // goes through the mailbox (POST /api/mail/send, over signed HTTPS between the two
-// servers), which this app does not send yet.
+// servers): this app sends there from lib/outside-mail.ts (OutsideChats, AddressCardPanel).
 
 /** Check balance on a remote node */
 export async function getRemoteBalance(baseUrl: string, publicKey: string): Promise<BalanceInfo> {

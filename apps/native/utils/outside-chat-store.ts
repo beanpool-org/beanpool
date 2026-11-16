@@ -17,10 +17,15 @@
  * blob, a delete, any other kind from a request is dropped). Declined: dropped. A blocked key: dropped. The member's door
  * closed (they never showed their card here, or closed it in Settings): a stranger's line is dropped.
  */
-import { gateOutsideItem, type OutsideChatState as CoreOutsideChatState, type OutsideGateVerdict } from '@beanpool/core';
+import { gateOutsideItem, type OutsideChange, type OutsideChatState as CoreOutsideChatState, type OutsideGateVerdict } from '@beanpool/core';
 import type { SqliteLike } from './group-chat-store';
 
-/** The tables, in every copy's schema (utils/db.ts). `outside_receipts`: the receipts this phone still owes (outside-mail.ts). */
+/**
+ * The tables, in every copy's schema (utils/db.ts). `outside_receipts`: the receipts this phone still owes (outside-mail.ts).
+ * `outside_changes` (X6): each person's newest edit, reaction and delete of a line, one row each; mine keep their signed item
+ * (`item`) until my server has it. Kept even before their line is here (a change can come first): core outsideLineShown
+ * applies one only to a line of its own chat and, for an edit or a delete, of its own maker.
+ */
 export const OUTSIDE_CHAT_TABLES_SQL = `
         CREATE TABLE IF NOT EXISTS outside_chats (
             id TEXT PRIMARY KEY,
@@ -55,10 +60,22 @@ export const OUTSIDE_CHAT_TABLES_SQL = `
             owed_at INTEGER NOT NULL,
             tried_at INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS outside_changes (
+            chat_id TEXT NOT NULL,
+            line_id TEXT NOT NULL,
+            author TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            at INTEGER NOT NULL,
+            text TEXT,
+            emoji TEXT,
+            item TEXT,
+            PRIMARY KEY (chat_id, line_id, author, kind)
+        );
 `;
 
 /** What clearDB drops when the account leaves the phone. */
-export const OUTSIDE_CHAT_DROP_SQL = ' DROP TABLE IF EXISTS outside_chats; DROP TABLE IF EXISTS outside_lines; DROP TABLE IF EXISTS outside_meta; DROP TABLE IF EXISTS outside_receipts;';
+export const OUTSIDE_CHAT_DROP_SQL = ' DROP TABLE IF EXISTS outside_chats; DROP TABLE IF EXISTS outside_lines; DROP TABLE IF EXISTS outside_meta; DROP TABLE IF EXISTS outside_receipts; DROP TABLE IF EXISTS outside_changes;';
 
 /** A chat's standing: a request waiting for the member, open (either side may write), or declined. */
 export type OutsideChatState = CoreOutsideChatState;
@@ -201,18 +218,58 @@ export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
          * `note`: why a `failed` line will never go (my server's words); kept only on a failed line.
          */
         async setMineState(id: string, state: OutsideLineState, note: string | null = null): Promise<void> {
-            await (await db()).runAsync(
+            const d = await db();
+            await d.runAsync(
                 `UPDATE outside_lines SET state = ?, item = CASE WHEN ? = 'sending' THEN item ELSE NULL END,
                      note = CASE WHEN ? = 'failed' THEN ? ELSE NULL END WHERE id = ? AND state IS NOT NULL`,
                 [state, state, state, note, id],
             );
+            // A change of mine (X6) shows no tick: once my server has answered for it, its signed item goes.
+            if (state !== 'sending') await d.runAsync('UPDATE outside_changes SET item = NULL WHERE item_id = ?', [id]);
         },
-        /** My lines my server has not yet taken, with their signed items, oldest first. */
+        /** My lines, and my changes to lines (X6), that my server has not yet taken, with their signed items, oldest first. */
         async unsent(me: string): Promise<Array<{ id: string; item: string; at: number }>> {
             return (await (await db()).getAllAsync<any>(
-                `SELECT l.id, l.item, l.at FROM outside_lines l JOIN outside_chats c ON c.id = l.chat_id
-                 WHERE c.me = ? AND l.author = ? AND l.state = 'sending' AND l.item IS NOT NULL ORDER BY l.at ASC LIMIT 16`, [me, me],
+                `SELECT id, item, at FROM (
+                     SELECT l.id, l.item, l.at FROM outside_lines l JOIN outside_chats c ON c.id = l.chat_id
+                     WHERE c.me = ? AND l.author = ? AND l.state = 'sending' AND l.item IS NOT NULL
+                     UNION ALL
+                     SELECT x.item_id AS id, x.item, x.at FROM outside_changes x JOIN outside_chats c ON c.id = x.chat_id
+                     WHERE c.me = ? AND x.author = ? AND x.item IS NOT NULL
+                 ) ORDER BY at ASC LIMIT 16`, [me, me, me, me],
             )).map((r) => ({ id: r.id, item: r.item, at: r.at }));
+        },
+        /** Every change to the lines of chat `chatId` this phone keeps (X6). */
+        async changes(chatId: string): Promise<OutsideChange[]> {
+            return (await (await db()).getAllAsync<any>('SELECT * FROM outside_changes WHERE chat_id = ?', [chatId])).map((r) => ({
+                kind: r.kind, itemId: r.item_id, lineId: r.line_id, author: r.author, at: r.at,
+                ...(r.text !== null ? { text: r.text } : {}), ...(r.emoji !== null ? { emoji: r.emoji } : {}),
+            }));
+        },
+        /**
+         * A change kept: its maker's newest of its kind for that line (core outsideChangeIsNewer: the later time, then the
+         * larger id); an older one changes nothing. `item`: my own change's signed item, until my server has it.
+         */
+        async putChange(chatId: string, c: OutsideChange, item: string | null = null): Promise<void> {
+            await (await db()).runAsync(
+                `INSERT INTO outside_changes (chat_id, line_id, author, kind, item_id, at, text, emoji, item) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(chat_id, line_id, author, kind) DO UPDATE SET item_id = excluded.item_id, at = excluded.at, text = excluded.text,
+                     emoji = excluded.emoji, item = excluded.item
+                 WHERE excluded.at > outside_changes.at OR (excluded.at = outside_changes.at AND excluded.item_id > outside_changes.item_id)`,
+                [chatId, c.lineId, c.author, c.kind, c.itemId, c.at, c.text ?? null, c.emoji ?? null, item],
+            );
+        },
+        /** A change of mine my server refused for good: taken back here, as it never went. */
+        async dropChange(itemId: string): Promise<void> {
+            await (await db()).runAsync('DELETE FROM outside_changes WHERE item_id = ? AND item IS NOT NULL', [itemId]);
+        },
+        /** The line `id`, wherever it is on this phone, and whether its writer deleted it for everyone; null when it isn't here. */
+        async lineOf(id: string): Promise<{ chatId: string; author: string; deleted: boolean } | null> {
+            const r = await (await db()).getFirstAsync<{ chat_id: string; author: string; deleted: number }>(
+                `SELECT l.chat_id, l.author, EXISTS (SELECT 1 FROM outside_changes x WHERE x.chat_id = l.chat_id AND x.line_id = l.id
+                     AND x.author = l.author AND x.kind = 'dm-delete') AS deleted FROM outside_lines l WHERE l.id = ?`, [id],
+            );
+            return r ? { chatId: r.chat_id, author: r.author, deleted: !!r.deleted } : null;
         },
         /**
          * A receipt this phone owes for a line of theirs it has written, kept before that line is confirmed (which deletes it

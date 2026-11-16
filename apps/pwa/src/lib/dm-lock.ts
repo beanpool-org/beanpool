@@ -39,12 +39,22 @@ export function dmNotLockedLine(peerName?: string | null): string {
     return `This message couldn't be locked for ${peerName?.trim() || 'the other person'} yet, so it wasn't sent. Try again in a moment.`;
 }
 
+/**
+ * The one other key a two-person DM's listing names, or null when it names none or several (or it isn't a DM). This is the
+ * key every line leaves sealed to, and the key whose code the chat's "Key code" shows (DESIGN-dm-key-signal-model §5).
+ */
+export function dmListedPeer(conv: ChatLike | null | undefined, myPublicKey: string | null | undefined): string | null {
+    if (!conv || conv.type !== 'dm') return null;
+    const others = Array.from(new Set((conv.participants || []).filter((p): p is string => !!p && p !== myPublicKey)));
+    return others.length === 1 ? others[0] : null;
+}
+
 /** The key context of a two-person DM, or null when the other person isn't known yet (or it isn't a DM). */
 export function dmKeyContext(conv: ChatLike | null | undefined, me: Me): DMKeyContext | null {
     if (!conv || conv.type !== 'dm' || !me?.privateKey) return null;
-    const others = Array.from(new Set((conv.participants || []).filter((p): p is string => !!p && p !== me.publicKey)));
-    if (others.length !== 1) return null;
-    return { myEdPrivHex: me.privateKey, peerEdPubHex: others[0], conversationId: conv.id };
+    const peer = dmListedPeer(conv, me.publicKey);
+    if (!peer) return null;
+    return { myEdPrivHex: me.privateKey, peerEdPubHex: peer, conversationId: conv.id };
 }
 
 /**

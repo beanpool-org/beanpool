@@ -389,7 +389,8 @@ describe('an owner or admin', () => {
             fireEvent.click(toggles()[0]);
             expect(photos[0]).toHaveAttribute('data-kept', 'false');
             expect(toggles()[0].textContent).toBe('Keep this photo');
-            expect(toggles()[0]).toHaveAttribute('aria-pressed', 'true');
+            // A plain action button: its words say what a tap does; no aria-pressed to contradict them (#3230 review).
+            expect(toggles()[0]).not.toHaveAttribute('aria-pressed');
             expect(within(photos[0]).getByText('Left out: Approve won’t add it.')).toBeInTheDocument();
             fireEvent.click(toggles()[0]);
             expect(photos[0]).toHaveAttribute('data-kept', 'true');

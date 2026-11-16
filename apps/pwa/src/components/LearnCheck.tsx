@@ -242,7 +242,7 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
                             <figure key={i} data-testid="learn-check-photo" data-kept={out ? 'false' : 'true'} className="m-0 flex flex-col gap-1">
                                 <img src={src} alt={t('Photo {n}', { n: i + 1 })} className={`w-full aspect-[4/3] object-cover rounded-xl ${out ? 'opacity-40' : ''}`} />
                                 {out && <p className={`m-0 text-xs ${MUTED}`}>{t('Left out: Approve won’t add it.')}</p>}
-                                <button type="button" data-testid="learn-check-photo-toggle" aria-pressed={out} disabled={busy} onClick={() => toggle(i)} className={SMALL}>
+                                <button type="button" data-testid="learn-check-photo-toggle" disabled={busy} onClick={() => toggle(i)} className={SMALL}>
                                     {out ? t('Keep this photo') : t('Remove photo')}
                                 </button>
                             </figure>

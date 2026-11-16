@@ -144,7 +144,7 @@ run_one() {
 
   echo "[$(date +%H:%M)] $l starting"
   ( cd $W && caffeinate -i /Users/marty/.local/bin/agy -p="$(cat $brief)" \
-      --model gemini-3.8-flash-high --print-timeout 60m --output-format stream-json )
+      --model gemini-4-hydrogen-high --print-timeout 60m --output-format stream-json )
   echo "[$(date +%H:%M)] $l finished (exit $?)"
 }
 export -f run_one; export R BASE BRIEFS_DIR

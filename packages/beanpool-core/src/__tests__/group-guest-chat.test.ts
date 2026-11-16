@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { makeGroupEpochRecord, openGroupLine, sealGroupLine } from '../group-crypto.js';
+import { makeGroupEpochRecord, openGroupLine, sealGroupLine, sealGroupLineEdit } from '../group-crypto.js';
 import {
     applyGuestMail, applyGuestTicks, gateGuestNotice, guestAccess, guestChatAuthorName, guestChatId, guestChatListed, guestClosedWhyOf, guestClosedWords,
     guestEpochDue, guestLinePayload, guestRosterMark, guestSealEpoch, guestViewerOf, makeGuestEpochFor, readGuestChats, takeOwnEpoch,
@@ -574,11 +574,14 @@ describe('NOTICES (round 4): a line edited or taken down at the host (notice x w
         (n.data as Record<string, unknown>).type = type;
         return n;
     };
-    /** Its edit, as engine/group-guests.ts queueLineChange sends one: sealed again by its author under the line's epoch. */
+    /**
+     * Its edit, as engine/group-guests.ts queueLineChange sends one: sealed again under the line's epoch by sealGroupLineEdit,
+     * as both apps' editSealedGroupLine seal it (part 'edit', after the line's own id; round 5: never a hand-built seal).
+     */
     const edit = (text: string, editedAt: string | null, o: { by?: ReturnType<typeof person>; author?: string; epoch?: number } = {}) => {
         const by = o.by ?? ana;
         const epoch = o.epoch ?? 6;
-        const sealed = sealGroupLine(text, { myEdPrivHex: by.seedHex, groupKey: keyOf(epoch), groupId: GROUP, epoch, messageId: LINE });
+        const sealed = sealGroupLineEdit(text, { myEdPrivHex: by.seedHex, groupKey: keyOf(epoch), groupId: GROUP, epoch, messageId: LINE });
         return notice('edit', { id: LINE, action: 'edited', author: o.author ?? by.pk, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch, sender: by.pk }, editedAt });
     };
     const takedown = (by: 'author' | 'convenor') => notice('edit', { id: LINE, action: 'removed', by });
@@ -728,8 +731,9 @@ describe("GUARD (round 4): every kind, change and why the host's code sends is o
     const e6 = epochNotice(6);
     const keyed = () => applyGuestMail(chatWith('in'), { items: [notice('roster', rosterData({ current: 6, stale: false, record: e6.record, wraps: e6.wraps }))] }, ctx()).chats;
     const withLine = () => applyGuestMail(keyed(), { items: [lineNotice(uuid(80), 'first words', 6, e6.made.groupKey)] }, ctx()).chats;
+    /** Ana's edit as both apps seal it (sealGroupLineEdit; round 5: never a hand-built seal). */
     const editOf = () => {
-        const sealed = sealGroupLine('new words', { myEdPrivHex: ana.seedHex, groupKey: e6.made.groupKey, groupId: GROUP, epoch: 6, messageId: uuid(80) });
+        const sealed = sealGroupLineEdit('new words', { myEdPrivHex: ana.seedHex, groupKey: e6.made.groupKey, groupId: GROUP, epoch: 6, messageId: uuid(80) });
         return notice('edit', { id: uuid(80), action: 'edited', author: ana.pk, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch: 6, sender: ana.pk }, editedAt: '2026-11-16T09:45:00.000Z' });
     };
     type Row = { before: () => GuestChats; n: () => ReturnType<typeof notice>; shows: (c: GuestChats) => unknown; want: unknown };

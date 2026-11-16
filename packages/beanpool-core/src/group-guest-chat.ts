@@ -53,6 +53,13 @@
  *     ({@link applyGuestMail}). A notice dropped by the gate is applied as the gate's rule says (nothing passes there).
  *   - **Whys**: every reason the host gives for a removal has its own words ({@link guestClosedWords}): a convenor's Remove,
  *     the group closed by its members, its community's owners turning guests off; never "You were removed" for the other two.
+ *
+ * One more since round 5:
+ *   - **AAD**: everything sealed that this device opens is opened with exactly the associated data its sender sealed it
+ *     with: the group, the line's own epoch, the signer, the message id, what the line answers, and the part. A line's words
+ *     are part 'body'; an edit's are part 'edit' (core sealGroupLineEdit, which both apps' editSealedGroupLine call), whether
+ *     it comes as an `edit` notice or on a copy of the line fetched after it (`editedAt`). The test seals every kind with
+ *     its sender's own code (group-guest-aad.test.ts).
  */
 import {
     openGroupLine, openMyGroupKey, sealGroupLine, type GroupEpochRecord, type GroupServedWrap,
@@ -322,8 +329,10 @@ function openKey(group: string, record: unknown, wraps: unknown, me: string, myE
 
 /**
  * A held line opened with the key of its epoch (the file's header, "Lines"): the line, named by the key that signed it, or
- * `refused` when it doesn't open as its sender's (its words, a photo's or a voice message's too, are sealed as part 'body'
- * and signed by its sender), or null while its epoch's key isn't here.
+ * `refused` when it doesn't open as its sender's, or null while its epoch's key isn't here. Opened with exactly what its
+ * sender sealed it with (the file's header, "AAD"): its words as part 'body' (a photo's or a voice message's words too), or,
+ * when the copy carries an edit (`editedAt`: the host's copyOfLine, my home's replaceHeldWords), the edit's words as part
+ * 'edit', as members open an edited line (group-line-display, `line.editedAt ? 'edit' : 'body'`).
  */
 function openHeld(chat: GuestChat, h: GuestHeldLine): GuestLine | 'refused' | null {
     // A server's author field naming someone other than the signer: refused, whoever's key opens it.
@@ -332,7 +341,7 @@ function openHeld(chat: GuestChat, h: GuestHeldLine): GuestLine | 'refused' | nu
     if (!key) return null;
     try {
         const opened = openGroupLine({ ciphertext: h.ciphertext, nonce: h.nonce }, {
-            groupId: chat.group, epoch: h.epoch, senderPubHex: h.sender, messageId: h.id, part: 'body', replyToId: h.replyToId,
+            groupId: chat.group, epoch: h.epoch, senderPubHex: h.sender, messageId: h.id, part: h.editedAt ? 'edit' : 'body', replyToId: h.replyToId,
         }, unb64(key));
         const line: GuestLine = {
             id: h.id, author: h.sender, text: h.type === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere), at: h.at, epoch: h.epoch, type: h.type,
@@ -345,11 +354,14 @@ function openHeld(chat: GuestChat, h: GuestHeldLine): GuestLine | 'refused' | nu
     }
 }
 
-/** An edit's words put on a line opened here, when they open as the line's author's under its epoch's key; else the line keeps its own. */
+/**
+ * An edit's words put on a line opened here, when they open as the line's author's edit under its epoch's key (part 'edit',
+ * as every member's app seals an edit: core sealGroupLineEdit); else the line keeps its own.
+ */
 function openEditOnto(line: GuestLine, edit: NonNullable<GuestHeldLine['edit']>, group: string, epoch: number, key: string): void {
     try {
         const opened = openGroupLine({ ciphertext: edit.ciphertext, nonce: edit.nonce }, {
-            groupId: group, epoch, senderPubHex: line.author, messageId: line.id, part: 'body', replyToId: edit.replyToId,
+            groupId: group, epoch, senderPubHex: line.author, messageId: line.id, part: 'edit', replyToId: edit.replyToId,
         }, unb64(key));
         line.text = (line.type ?? 'text') === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere);
         line.editedAt = edit.editedAt;

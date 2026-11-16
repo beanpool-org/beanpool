@@ -27,7 +27,7 @@
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { detectMentions, groupMessageKey, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
-import { toBase64, sealGroupVoice, openGroupVoice, VOICE_MIME, type VoiceInput } from '@beanpool/core';
+import { toBase64, sealGroupVoice, openGroupVoice, sealGroupLineEdit, VOICE_MIME, type VoiceInput } from '@beanpool/core';
 import { groupKeyring, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import {
     groupLineView, isSealedGroupLine, GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT,
@@ -138,7 +138,8 @@ export const GROUP_EDIT_LINE_GONE_TEXT = 'This message is no longer in this chat
 
 /**
  * Edit one of my lines: re-sealed under ITS epoch (part 'edit', after its own id, still answering what it answered), and
- * signed under the keyring's id, as sendSealedGroupLine signs.
+ * signed under the keyring's id, as sendSealedGroupLine signs. Sealed by core's sealGroupLineEdit, the one place an edit's
+ * binding is made, so every reader (members, and a guest's device in core group-guest-chat.ts) opens it with the same.
  */
 export async function editSealedGroupLine(
     nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore,
@@ -151,9 +152,8 @@ export async function editSealedGroupLine(
     if (!key) { await ring.sync().catch(() => null); key = await ring.keyFor(epoch); }
     if (!key) throw new Error(GROUP_EDIT_NO_KEY_TEXT);
     const replyToId = typeof input.metadata?.replyToId === 'string' ? input.metadata.replyToId : null;
-    const sealed = sealLine(input.text, {
-        myEdPrivHex: identity.privateKey, groupKey: key, groupId: ring.groupId, epoch, messageId: input.messageId,
-        part: 'edit', after: input.messageId, replyToId,
+    const sealed = sealGroupLineEdit(input.text, {
+        myEdPrivHex: identity.privateKey, groupKey: key, groupId: ring.groupId, epoch, messageId: input.messageId, replyToId,
     });
     const res = await signedPost(nodeUrl, '/api/messages/edit',
         { messageId: input.messageId, authorPubkey: identity.publicKey, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch } }, identity);

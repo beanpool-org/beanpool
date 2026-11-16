@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { wrapGroupKey } from '@beanpool/core';
+import { applyGuestMail, guestChatId, wrapGroupKey, type GuestChats } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -110,6 +110,36 @@ const roster = async (p: Phone, g: string): Promise<DisplayRosterRow[]> =>
 const ring = (p: Phone, g: string) => groupKeyring(URL_BASE, p.identity, g, p.store);
 const say = (p: Phone, g: string, text: string, extra: Record<string, unknown> = {}) =>
     sendSealedGroupLine(URL_BASE, p.identity, p.store, { groupId: g, text, clientId: randomUUID(), ...extra });
+
+/** A line's row as this node stored it (the host's `messages` row a guest's copy is made from). */
+type StoredLine = { id: string; author_pubkey: string; ciphertext: string; nonce: string; type: string; metadata: string; timestamp: string; edited_at: string | null };
+const storedLine = async (id: string): Promise<StoredLine> =>
+    (await control<StoredLine[]>('sql', { sql: 'SELECT id, author_pubkey, ciphertext, nonce, type, metadata, timestamp, edited_at FROM messages WHERE id = ?', params: [id], all: true }))[0];
+
+/**
+ * What a guest's device in another community shows of line `id` (core group-guest-chat.ts; #3246 round 5, the AAD rule),
+ * from rows as this node stored them, served as the host serves them (the server's engine/group-guests.ts): a `line` notice
+ * (fanOutGroupLine; a copy of an edited line carries its newest words and their time, copyOfLine) or an `edit` notice
+ * (queueLineChange). The device holds the line's epoch key, as the host's roster or epoch notice opens it there.
+ */
+function guestShows(g: string, epoch: number, key: Uint8Array, notices: Array<{ kind: 'line' | 'edit'; row: StoredLine }>, id: string): string | undefined {
+    const HOST = 'riverside.example';
+    const chatId = guestChatId(HOST, g);
+    const guest = phone('Guest');
+    let chats: GuestChats = { [chatId]: {
+        id: chatId, host: HOST, group: g, name: 'Group', invitedBy: null, state: 'in', roster: null, keys: { [String(epoch)]: Buffer.from(key).toString('base64') },
+        epochSent: null, lines: [], held: [], why: null, updatedAt: 0,
+    } };
+    notices.forEach(({ kind, row }, i) => {
+        const base = { id: row.id, author: row.author_pubkey, ciphertext: row.ciphertext, nonce: row.nonce, metadata: JSON.parse(row.metadata) };
+        const data = kind === 'line'
+            ? { ...base, type: row.type, timestamp: row.timestamp, ...(row.edited_at ? { editedAt: row.edited_at } : {}) }
+            : { ...base, action: 'edited', editedAt: row.edited_at };
+        const items = [{ id: `notice-${i}`, host: HOST, group: g, kind, data, receivedAt: 0 }];
+        chats = applyGuestMail(chats, { items }, { me: guest.identity.publicKey, myEdPrivHex: guest.identity.privateKey, blocked: () => false, now: 0 }).chats;
+    });
+    return chats[chatId].lines.find((l) => l.id === id)?.text;
+}
 
 /** What a phone shows of a group's chat: each sealed line as the display rule names it, in order. */
 async function shown(p: Phone, g: string, rosterOverride?: DisplayRosterRow[], nodeNameOf?: (pk: string) => string | null) {
@@ -327,6 +357,7 @@ describe('group chats on the phone, end to end against a real node', () => {
         await say(dov, G, 'meet at 9');
         const [row] = await control<any[]>('sql', { sql: "SELECT id, metadata FROM messages WHERE conversation_id = ? AND author_pubkey = ? AND type = 'text' ORDER BY timestamp DESC LIMIT 1", params: [G, dov.identity.publicKey], all: true });
         const epoch = JSON.parse(row.metadata).epoch;
+        const before = await storedLine(row.id);
         await joinGroupWithEpoch(URL_BASE, ben.identity, ben.store, { id: G, joinPolicy: 'open' });
         await editSealedGroupLine(URL_BASE, dov.identity, dov.store, { groupId: G, messageId: row.id, metadata: JSON.parse(row.metadata), text: 'meet at 10' });
         const [after] = await control<any[]>('sql', { sql: 'SELECT metadata, edited_at FROM messages WHERE id = ?', params: [row.id], all: true });
@@ -336,6 +367,13 @@ describe('group chats on the phone, end to end against a real node', () => {
         expect(forAna.visible.find((l) => l.id === row.id)!.text).toBe('meet at 10');
         const forBen = await shown(ben, G);
         expect(forBen.lines.find((l) => l.id === row.id)).toBeUndefined();
+        // On a guest's device in another community (#3246 round 5, the AAD rule): this phone's own edit, as this node stored
+        // it (groupChatEdit), opens there, as an `edit` notice to the line shown and on a copy of the line fetched after it.
+        const edited = await storedLine(row.id);
+        const key = (await ring(dov, G).keyFor(epoch))!;
+        expect(guestShows(G, epoch, key, [{ kind: 'line', row: before }], row.id)).toBe('meet at 9');
+        expect(guestShows(G, epoch, key, [{ kind: 'line', row: before }, { kind: 'edit', row: edited }], row.id)).toBe('meet at 10');
+        expect(guestShows(G, epoch, key, [{ kind: 'line', row: edited }], row.id)).toBe('meet at 10');
     }, 60_000);
 
     it('a node that rolls the epoch back is refused: nothing is sent, and the sentence says why', async () => {

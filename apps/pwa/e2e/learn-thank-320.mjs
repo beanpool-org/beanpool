@@ -67,7 +67,12 @@ function answer(method, pathname, search, st) {
         return { ...FIGURES[st.reader ?? 'can-send'], floor_c: -15300, usableFloor_c: -15300, commonsBalance_c: 0, callsign: 'You', tier: { name: 'Newcomer' }, activated: true, frozen: false };
     }
     if (pathname === '/api/ledger/transactions') return [];
-    if (pathname === '/api/members') return { members: [], nextCursor: null };
+    if (pathname === '/api/members') {
+        // A read by key: the Ledger names Thank's recipient from the node's member list, by key (review of #3243).
+        const keys = new URLSearchParams(search).get('keys');
+        if (keys !== null) return keys.split(',').filter((k) => k === ADA).map(() => ({ publicKey: ADA, callsign: 'Ada', joinedAt: at(300) }));
+        return { members: [], nextCursor: null };
+    }
     if (pathname === '/api/community/me') return { mute: { muted: false, until: null }, features: null };
     if (pathname === '/api/credit/gift') return { offered: false };
     if (pathname === '/api/commons/repayment') return { repayment: null };
@@ -169,7 +174,7 @@ try {
             if (writes.length) problems.push(`${scheme} ${st.name}: a write without the member sending: ${writes.join(', ')}`);
             if (st.tap) {
                 const thanks = await tab.evaluate(() => window.__thanks);
-                if (JSON.stringify(thanks) !== JSON.stringify([{ to: ADA, name: 'Ada', note: NOTE }])) {
+                if (JSON.stringify(thanks) !== JSON.stringify([{ to: ADA, note: NOTE }])) {
                     problems.push(`${scheme} ${st.name}: Thank handed over ${JSON.stringify(thanks)}`);
                 }
             }

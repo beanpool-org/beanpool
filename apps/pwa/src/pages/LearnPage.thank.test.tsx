@@ -2,10 +2,11 @@
  * Learn on the web, recognition (slice K8; DESIGN-local-knowledge-fable.md §2.10, §3.7): the opener's half of Thank, and the
  * badge on the writer's line. The real page with the node stubbed at lib/api. One table over each reader of a page (a member, the
  * page's writer, an owner, a visitor, a page gathered with the assistant, a community where Beans aren't live, the preview where
- * Learn is off) -> "🫘 Thank {name}" offered or not, and what a tap hands the Ledger: the writer's key and name and the note
- * 'Thanks for "{title}"'. Nothing else: no request leaves the page for it (the Ledger's Send form does the sending, under
- * today's rules: LedgerPage.send-start.test.tsx holds that half, can send / first trade / positive balance).
- * The badge: "🗺️ Local guide" beside the writer's name only where the node's read by id says `writerLocalGuide: true`.
+ * Learn is off) -> "🫘 Thank {name}" offered or not, and what a tap hands the Ledger: the writer's key and the note
+ * 'Thanks for "{title}"', no name (the Ledger names them from the member list). Nothing else: no request leaves the page for it
+ * (the Ledger's Send form does the sending, under today's rules: LedgerPage.send-start.test.tsx holds that half).
+ * The badge: "🗺️ Local guide" beside the writer's name only where the node's read by id says `writerLocalGuide: true`, and
+ * kept when an action's answer redraws the page (that answer never says).
  */
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -45,6 +46,12 @@ beforeEach(() => {
     vi.spyOn(api, 'myNodeRoleOnce').mockImplementation(async () => node.role);
     request = vi.spyOn(api, 'request').mockImplementation((async (_method: string, path: string) => {
         if (path.startsWith('/api/marketplace/posts?')) return [node.post];
+        // An action's answer (lib/learn.ts: Still right, Mark as out of date, Clear the mark): the post as readKnowledgePost
+        // writes it, which never says whether the writer is a Local guide.
+        if (/^\/api\/knowledge\/posts\/[^/]+\/(checked|outdated|outdated\/clear)$/.test(path)) {
+            const { writerLocalGuide: _never, ...knowledge } = node.post.knowledge;
+            return { post: { ...node.post, knowledge: { ...knowledge, outdatedAt: path.endsWith('/outdated') ? '2026-11-16T00:00:00.000Z' : null } } };
+        }
         if (path === '/api/knowledge/front') return { total: 0, pinned: [], topics: [] };
         if (path === '/api/knowledge/drafts/mine') return { waiting: [], answered: [] };
         if (path.startsWith('/api/knowledge/drafts?')) return { drafts: [], total: 0, limit: 50, offset: 0, unchecked: { total: 0, rows: [] } };
@@ -98,8 +105,9 @@ describe('the table: who is offered "🫘 Thank {name}", and what it hands the L
         const before = request.mock.calls.length;
         fireEvent.click(button!);
         await wait();
-        // The writer chosen and the note filled, for the Ledger's Send form: nothing is sent from here.
-        expect(onThank.mock.calls).toEqual([[{ to: 'ada-pk', name: 'Ada', note: 'Thanks for "How recycling works at the tip"' }]]);
+        // The writer's key and the note, for the Ledger's Send form: no name (the Ledger reads it from the member list, by
+        // key: review of #3243), and nothing is sent from here.
+        expect(onThank.mock.calls).toEqual([[{ to: 'ada-pk', note: 'Thanks for "How recycling works at the tip"' }]]);
         expect(request.mock.calls.slice(before)).toEqual([]);
     });
 });
@@ -115,6 +123,26 @@ describe('the badge on the writer\'s line', () => {
             // Beside the writer's name, inside the writer's own button (a tap still opens the profile).
             expect(screen.getByTestId('learn-post-writer').contains(badge)).toBe(true);
         }
+    });
+
+    // Review of #3243 (minor): an action's answer redraws the page without the badge's field; the page keeps what the read by id said.
+    it.each([
+        ['Still right', ['learn-post-still-right']],
+        ['Mark as out of date', ['learn-post-mark', 'learn-post-mark-send']],
+    ] as const)('an owner taps "%s" on a Local guide\'s page: the badge is still drawn after the node\'s answer', async (_, taps) => {
+        node.role = 'owner';
+        node.post = page({}, { writerLocalGuide: true });
+        await openPage({ onThank: vi.fn() });
+        expect(screen.getByTestId('learn-post-writer-guide').textContent).toBe('🗺️ Local guide');
+        const before = request.mock.calls.length;
+        for (const id of taps) {
+            fireEvent.click(screen.getByTestId(id));
+            await wait();
+        }
+        // The node answered (the page redrew from it) and the badge is still beside the writer's name.
+        expect(request.mock.calls.slice(before).map((c) => c[1])).toEqual([taps.length === 1 ? '/api/knowledge/posts/tip/checked' : '/api/knowledge/posts/tip/outdated']);
+        if (taps.length === 2) expect(screen.queryByTestId('learn-post-clear')).not.toBeNull();
+        expect(screen.getByTestId('learn-post-writer-guide').textContent).toBe('🗺️ Local guide');
     });
 
     it('a page gathered with the assistant names no writer, so no badge either, whatever the node says', async () => {

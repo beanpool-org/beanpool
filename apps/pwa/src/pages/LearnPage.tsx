@@ -81,8 +81,11 @@ interface Props {
     onThank?: (send: LearnThank) => void;
 }
 
-/** What "Thank" hands the Ledger: the writer's key and name, and the note, each changeable there. */
-export interface LearnThank { to: string; name: string; note: string }
+/**
+ * What "Thank" hands the Ledger, in App's state (never the address): the writer's key and the note, each changeable there. No
+ * name: the Ledger names the recipient from this community's member list, by key (review of #3243).
+ */
+export interface LearnThank { to: string; note: string }
 
 interface View { topic: string | null; words: string; pageId: string | null; screen: Screen }
 
@@ -571,12 +574,17 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
 
     const header = <Header title={upperCase(t(KNOWLEDGE_NAMES.kind))} label onBack={onBack} />;
     /**
-     * The node's answer to an action redraws the page. Its answer never says whether this member tapped "This helped" (only a
-     * read of the page by id does), so the page keeps what it knew rather than reading a pressed tap as taken back.
+     * The node's answer to an action redraws the page. Its answer never says whether this member tapped "This helped", nor
+     * whether the writer is a Local guide (only a read of the page by id does), so the page keeps what it knew rather than
+     * reading a pressed tap as taken back or dropping the writer's badge.
      */
     const showAnswer = (next: LearnPost) => setState((prev) => {
-        const mine = prev && prev !== 'failed' ? prev.post?.knowledge.helpedByMe : undefined;
-        return { id, post: next.knowledge.helpedByMe === undefined && mine !== undefined ? { ...next, knowledge: { ...next.knowledge, helpedByMe: mine } } : next };
+        const was = prev && prev !== 'failed' ? prev.post?.knowledge : undefined;
+        const kept = {
+            ...(next.knowledge.helpedByMe === undefined && was?.helpedByMe !== undefined ? { helpedByMe: was.helpedByMe } : {}),
+            ...(next.knowledge.writerLocalGuide === undefined && was?.writerLocalGuide !== undefined ? { writerLocalGuide: was.writerLocalGuide } : {}),
+        };
+        return { id, post: Object.keys(kept).length ? { ...next, knowledge: { ...next.knowledge, ...kept } } : next };
     });
     /** One action: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
     const act = async (go: () => Promise<unknown>, after?: () => void) => {
@@ -728,7 +736,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                 )}
                 {thank && onThank && (
                     <button type="button" data-testid="learn-post-thank" className={`${TOOL} self-start`}
-                        onClick={() => onThank({ to: post.authorPublicKey, name: post.authorCallsign, note: knowledgeThankNote(post.title) })}>
+                        onClick={() => onThank({ to: post.authorPublicKey, note: knowledgeThankNote(post.title) })}>
                         {t(KNOWLEDGE_THANK.button, { name: post.authorCallsign })}
                     </button>
                 )}

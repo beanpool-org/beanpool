@@ -3,9 +3,11 @@
 /**
  * Learn's recognition on the phone (DESIGN-local-knowledge-fable.md §2.10, §3.7; slice K8), at the floor (320dp wide, the
  * phone's text at 1.3×), in Light, Classic and Dark: the app's own KnowledgeDetail with the real AuthorCard, and its own Ledger
- * (app/(tabs)/ledger.tsx) opened by "🫘 Thank Ada" (the route's sendTo / sendName / sendNote), through react-native-web in
- * headless Chromium, the node's answers given here. The same states as the web's apps/pwa/e2e/learn-thank-320.mjs:
- *   a member on Ada's page ("🗺️ Local guide" on her card, "🫘 Thank Ada", whose tap pushes the Ledger with Ada and the note);
+ * (app/(tabs)/ledger.tsx) opened by "🫘 Thank Ada" (Ada's key and the note handed over in memory, utils/send-handoff.ts; never
+ * the route, which a link from outside the app can fill: review of #3243), through react-native-web in headless Chromium, the
+ * node's answers given here. The same states as the web's apps/pwa/e2e/learn-thank-320.mjs:
+ *   a member on Ada's page ("🗺️ Local guide" on her card, "🫘 Thank Ada", whose tap hands over Ada and the note and opens the
+ *   Ledger, plain);
  *   the Ledger for a member who can send (the Beans form, Ada chosen, the note filled, no amount); for one whose first trade is
  *   still to come and one with no Beans to send (today's alert, word for word, and no form).
  *
@@ -79,8 +81,8 @@ const STUBS = {
             knowledge: { sources: [{ url: 'https://www.council.example/waste/tip', label: 'Council tip page' }], place: 'The tip on Manse Road', lang: null,
                 checkedAt: at(20), outdatedAt: null, outdatedNote: null, helped: 4, gathered: false },
         };
-        // The route's params the Ledger is opened with (KnowledgeDetail's push), one object for the screen's life.
-        export const OPENER = C.screen === 'ledger' ? { sendTo: '${ADA}', sendName: 'Ada', sendNote: ${JSON.stringify(NOTE)} } : {};
+        // A link's route params, as beanpool://ledger?… would fill them: neither screen may read them.
+        export const LINK = { sendTo: 'e'.repeat(64), sendName: 'Ada', sendNote: 'from a link' };
         globalThis.__pushed = []; globalThis.__setParams = []; globalThis.__alerts = []; globalThis.__writes = [];
     `,
     db: `
@@ -100,20 +102,21 @@ const STUBS = {
         export const getBalance = async () => BALANCE;
         export const getTransactions = async () => [];
         export const getMemberProfile = async () => ({ avatar_url: null });
-        export const getAllCommunityMembers = async () => [{ publicKey: 'mia-key', callsign: 'Mia' }];
+        // The member list this phone holds: the Ledger names Thank's recipient from it, by key.
+        export const getAllCommunityMembers = async () => [{ publicKey: 'mia-key', callsign: 'Mia' }, { publicKey: '${ADA}', callsign: 'Ada' }];
         export const getPledgeHistory = async () => [];
         export const getEscrowTotal = async () => 0;
         export const refreshBalanceFromServer = async () => null;
     `,
     'expo-router': `
         import { useEffect } from 'react';
-        import { OPENER } from 'case';
+        import { LINK } from 'case';
         export const router = {
             push(to) { globalThis.__pushed.push(to); }, back() {}, replace() {}, navigate() {}, canGoBack: () => true,
             setParams(p) { globalThis.__setParams.push(p); },
         };
         export const useRouter = () => router;
-        export const useLocalSearchParams = () => OPENER;
+        export const useLocalSearchParams = () => LINK;
         export const useFocusEffect = (fn) => { useEffect(() => fn(), [fn]); };
         export const useNavigation = () => ({ addListener: () => () => {}, isFocused: () => true });
     `,
@@ -149,6 +152,8 @@ const STUBS = {
     storage: `export default { getItem: async (k) => (k === 'beanpool_anchor_url' ? 'https://riverside.example' : null), setItem: async () => {}, removeItem: async () => {} };`,
     haptics: `export const hapticSuccess = () => {}; export const hapticWarning = () => {};`,
     blocklist: `export const getBlockedUsers = async () => []; export const BLOCKLIST_UPDATED_EVENT = 'blocklist_updated';`,
+    // A card read by key, for a recipient the phone doesn't hold: Ada is held here, so it is never asked.
+    lookup: `export const fetchCardByKey = async () => 'none';`,
     avatar: `
         import React from 'react';
         import { View } from 'react-native';
@@ -183,6 +188,7 @@ const ROUTES = [
     [/^@react-native-async-storage\/async-storage$/, 'storage'],
     [/(^|\/)haptics$/, 'haptics'],
     [/(^|\/)blocklist$/, 'blocklist'],
+    [/(^|\/)members-lookup$/, 'lookup'],
     [/(^|\/)MemberAvatar$/, 'avatar'],
     [/(^|\/)posts-view$/, 'postsView'],
     [/(^|\/)(CreditBar|RepaymentCard|CommonsInfoModal|TrustBadge|LocalCommunityMark|PhotoCarousel|ReportReasonBox|reportReasons)$|chat\/ChatPhoto$/, 'none'],
@@ -197,9 +203,12 @@ import { View } from 'react-native';
 import { COLOUR_SETS } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { KnowledgeDetail } from ${JSON.stringify(path.join(NATIVE, 'components/learn/KnowledgeDetail'))};
 import LedgerScreen from ${JSON.stringify(path.join(NATIVE, 'app/(tabs)/ledger'))};
+import { handOverSend } from ${JSON.stringify(path.join(NATIVE, 'utils/send-handoff'))};
 import { C, PAGE } from 'case';
 
 const colors = COLOUR_SETS[C.set];
+// The Ledger as Thank opens it: Ada's key and the note handed over just before (KnowledgeDetail's tap does the same).
+if (C.screen === 'ledger') handOverSend({ to: '${ADA}', note: ${JSON.stringify(NOTE)} });
 createRoot(document.getElementById('root')).render(
     <View testID="case-root" style={{ backgroundColor: colors.surface.app, minHeight: ${HEIGHT}, width: ${WIDTH} }}>
         {C.screen === 'ledger' ? <LedgerScreen /> : <KnowledgeDetail page={PAGE} beansLive />}
@@ -320,11 +329,12 @@ try {
                 if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `phone-learn-thank-320-${look}-${st.name}.png`), fullPage: true });
                 await page.getByTestId('knowledge-thank').click();
                 const pushed = await page.evaluate(() => globalThis.__pushed);
-                const want = [{ pathname: '/(tabs)/ledger', params: { sendTo: ADA, sendName: 'Ada', sendNote: NOTE } }];
-                check(JSON.stringify(pushed) === JSON.stringify(want), `${label}: the tap pushed ${JSON.stringify(pushed)}`);
+                // The Ledger, plain: nothing in the route (Ada and the note went by the in-memory hand-over).
+                check(JSON.stringify(pushed) === JSON.stringify(['/(tabs)/ledger']), `${label}: the tap pushed ${JSON.stringify(pushed)}`);
             } else {
-                // Taken once: the route's params cleared as they are read.
-                check(JSON.stringify(m.setParams) === JSON.stringify([{ sendTo: '', sendName: '', sendNote: '' }]), `${label}: the request was cleared ${JSON.stringify(m.setParams)}`);
+                // The route is not looked at (its params are a link's, naming a stranger "Ada"), let alone cleared.
+                check(JSON.stringify(m.setParams) === '[]', `${label}: the route's params were touched ${JSON.stringify(m.setParams)}`);
+                check(!m.text.includes('from a link'), `${label}: a link's words are drawn`);
                 if (st.reader === 'can-send') {
                     check(m.form && !m.locked, `${label}: the Beans form is open (form ${m.form}, locked ${m.locked})`);
                     check(m.memo === NOTE, `${label}: the note holds ${JSON.stringify(m.memo)}`);

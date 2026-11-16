@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { forumWriterLine, t, timeAgo, word } from '@beanpool/core';
@@ -15,6 +15,8 @@ import { searchForum, type ForumSearchHit } from '../../utils/forum-search';
  * - **Asked on Search** (the keyboard's search key, or 🔍), never as they type: each search is one of the member's 100 a day.
  * - **A hit** is a small card: a tap anywhere opens its topic at the post found. Its topic's title, who wrote the post, its
  *   section, when, and its words around the find. ✕ clears the search and gives the list back.
+ * - **An answer the box let go of is dropped** (#3264 review): a search still out when ✕ clears it, or when a section's door
+ *   draws a new box in this one's place (ForumPane's key), never shows its hits or hides the list when it answers.
  * - The search row is the chat list's own shape (app/(tabs)/chats.tsx): 44 dp, the subtle surface, colours from the theme.
  */
 export const FORUM_SEARCH_WORDS = {
@@ -53,24 +55,31 @@ export function ForumSearch({ onOpen, onShowing, sectionName }: {
     const [answer, setAnswer] = useState<{ q: string; hits: ForumSearchHit[]; next: number | null } | null>(null);
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState<string | null>(null);
+    // Moved on by ✕ and when this box goes (a section's door draws a new one): a search asked before answers to nobody.
+    const asks = useRef(0);
+    useEffect(() => () => { asks.current += 1; }, []);
 
     async function ask(offset = 0) {
         const q = offset ? answer?.q ?? '' : typed.trim();
         if (!q || busy) return;
+        const mine = asks.current;
         setBusy(true);
         setFailed(null);
         try {
             const page = await searchForum(q, offset);
+            if (mine !== asks.current) return;
             const before = offset && answer ? answer.hits.filter((h) => !page.hits.some((x) => x.postId === h.postId)) : [];
             setAnswer({ q, hits: [...before, ...page.hits], next: page.next });
             onShowing?.(true);
         } catch (e) {
+            if (mine !== asks.current) return;
             setFailed((e as Error)?.message || t(FORUM_SEARCH_WORDS.failed));
         } finally {
             setBusy(false);
         }
     }
     function clear() {
+        asks.current += 1;
         setTyped('');
         setAnswer(null);
         setFailed(null);

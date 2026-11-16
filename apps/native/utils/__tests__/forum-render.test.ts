@@ -454,6 +454,45 @@ describe.each(LOOKS)('the forum list\'s search in %s (%s)', (_name, set) => {
         expect(byId(host, 'forum-search-clear')).toBeNull();
         expect(vi.mocked(searchForum)).toHaveBeenCalledTimes(1);
     });
+
+    // #3264 review: a search still out when the door fires answers to the box the door replaced. Its answer is dropped, so it
+    // never hides the section's topics again; ✕ while a search is out drops its answer the same way, and the box asks again.
+    it('a search still out when a group\'s "Topics ›" door fires, or when ✕ clears it, is dropped when it answers: the topics stay', async () => {
+        const { searchForum } = await import('../forum-search');
+        const { openForumAt } = await import('../forum-open');
+        const refocus = async () => { await act(async () => { focus.forEach((again) => again()); }); await act(async () => {}); };
+        const found = { hits: [{ topicId: 't2', sectionId: 'skills', title: 'Seed swap ideas', postId: 'p7', number: 7, writer: writer(ANA, 'Asha'), createdAt: at(2), excerpt: '…swap seeds in spring…' }], next: null };
+        const held = () => {
+            let answer: (page: typeof found) => void = () => {};
+            vi.mocked(searchForum).mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+            return (page: typeof found) => act(async () => { answer(page); await Promise.resolve(); });
+        };
+        const host = await render(set, ForumPane);
+
+        const lateForDoor = held();
+        await typeIn(byId(host, 'forum-search-box'), 'swap seeds');
+        await press(byId(host, 'forum-search-go'));
+        openForumAt('skills');
+        await refocus();
+        expect(allById(host, 'forum-topic-row')).toHaveLength(3);
+        await lateForDoor(found);
+        await act(async () => {});
+        expect({ hits: allById(host, 'forum-search-hit').length, topics: allById(host, 'forum-topic-row').length }).toEqual({ hits: 0, topics: 3 });
+
+        const lateForClear = held();
+        await typeIn(byId(host, 'forum-search-box'), 'swap seeds');
+        await press(byId(host, 'forum-search-go'));
+        await press(byId(host, 'forum-search-clear'));
+        await lateForClear(found);
+        await act(async () => {});
+        expect({ hits: allById(host, 'forum-search-hit').length, topics: allById(host, 'forum-topic-row').length }).toEqual({ hits: 0, topics: 3 });
+        // The box is free again: the member's next search asks and shows.
+        node.search = found;
+        await typeIn(byId(host, 'forum-search-box'), 'swap seeds');
+        await press(byId(host, 'forum-search-go'));
+        expect({ hits: allById(host, 'forum-search-hit').length, topics: allById(host, 'forum-topic-row').length }).toEqual({ hits: 1, topics: 0 });
+        expect(vi.mocked(searchForum)).toHaveBeenCalledTimes(3);
+    });
 });
 
 describe('the composer stand-in', () => {

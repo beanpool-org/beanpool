@@ -74,8 +74,15 @@ export const keptFront = (): ForumFront | null => kept.front;
 export const keptList = (sectionId: string | null) => kept.lists.get(listKey(sectionId)) ?? null;
 export const keptTopic = (id: string): ForumTopicPage | null => kept.topics.get(id) ?? null;
 export const keptSearch = (): ForumSearchAnswer | null => kept.search;
-/** The member cleared the search: the list shows again, and nothing of it is kept. */
+/**
+ * How many times the kept search was let go of (✕, a section's door, another account in this tab). A search asked before the
+ * last of them is neither kept nor drawn when it answers (#3264 review): the box compares this before and after it asks.
+ */
+let searchLetGo = 0;
+export const forumSearchLetGo = (): number => searchLetGo;
+/** The member cleared the search: the list shows again, and nothing of it is kept, not even a search still out. */
 export function forgetForumSearch(): void {
+    searchLetGo += 1;
     kept.search = null;
 }
 /** Whose copies these are: another account in this tab starts with none (keepForumFor). */
@@ -98,7 +105,7 @@ export function forgetForum(): void {
     kept.front = null;
     kept.lists.clear();
     kept.topics.clear();
-    kept.search = null;
+    forgetForumSearch();
     for (const url of photoUrls.values()) void url.then((u) => { if (u) URL.revokeObjectURL(u); });
     photoUrls.clear();
 }
@@ -138,11 +145,14 @@ export async function getForumTopic(id: string, after = 0): Promise<ForumTopicPa
  * asks only when they press Search, never as they type.
  */
 export async function searchForum(q: string, offset = 0, section: string | null = null): Promise<ForumSearchAnswer> {
+    const asked = searchLetGo;
     const page = await request<{ hits: ForumSearchHit[]; next: number | null }>('GET',
         `/api/forum/search?q=${encodeURIComponent(q)}${offset ? `&offset=${offset}` : ''}${section ? `&section=${encodeURIComponent(section)}` : ''}`);
     const before = offset && kept.search?.q === q && kept.search.section === section ? kept.search.hits : [];
-    kept.search = { q, section, hits: [...before.filter((h) => !page.hits.some((x) => x.postId === h.postId)), ...page.hits], next: page.next };
-    return kept.search;
+    const answer = { q, section, hits: [...before.filter((h) => !page.hits.some((x) => x.postId === h.postId)), ...page.hits], next: page.next };
+    // Let go of while it was out (forumSearchLetGo): answered, never kept.
+    if (asked === searchLetGo) kept.search = answer;
+    return answer;
 }
 
 const photoUrls = new Map<string, Promise<string | null>>();

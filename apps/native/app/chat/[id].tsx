@@ -21,7 +21,7 @@ import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
 import { ChatImage, dmKeyContextOf } from '../../components/chat/DmChatImage';
-import { dmKeyBannerMaxHeight, DM_KEY_CODE_MENU_LABEL } from '../../utils/dm-key-change';
+import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
@@ -1536,7 +1536,7 @@ function ChatScreen({ id }: { id: string }) {
         {
             // The person's key code, where the member checks it and marks them verified (§3). DMs only.
             icon: 'shield-key-outline',
-            label: t(DM_KEY_CODE_MENU_LABEL),
+            label: t('Key code'),
             hidden: !isEncrypted,
             onPress: () => { setMenuOpen(false); openKeyCode(); },
         },

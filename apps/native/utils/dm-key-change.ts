@@ -138,9 +138,6 @@ export function dmKeyChangedNoticeText(peerName?: string | null): string {
         : t("This chat's key changed. This usually means the other person got back into their account on a new phone. Tap to see their key code.");
 }
 
-/** The chat's ⋯ menu item that opens the key code screen (§3). */
-export const DM_KEY_CODE_MENU_LABEL = word('Key code');
-
 /** What the key code screen is showing (§3): exactly one of these under the code. */
 export type DmKeyCodeState = 'not-verified' | 'verified' | 'paused' | 'none';
 

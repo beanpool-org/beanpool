@@ -43,7 +43,7 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 import { lightColors, darkColors } from '../../constants/colors';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
-import { dmKeyChangedNoticeText, dmKeyCodeCopy, DM_KEY_CODE_MENU_LABEL } from '../dm-key-change';
+import { dmKeyChangedNoticeText, dmKeyCodeCopy } from '../dm-key-change';
 import { CHAT_MEMORY_RESET_WORDS } from '../dm-guard-list';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD, DM_RESET_LEAD, dmKeyBannerMaxHeight, dmThreadFloor, DM_KEY_BANNER_FLOOR } from '../dm-key-change';
@@ -501,7 +501,6 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
         expect(nobody.removeConfirmBody).toBe('This phone will stop asking before it sends to a new key for this person.');
         expect(dmKeyCodeCopy(null, true).removeConfirmBody).toBe("This chat will carry on with the other person's new key, without the check.");
         expect(JSON.stringify(dmKeyCodeCopy('Ben'))).not.toMatch(/safety number/i);
-        expect(DM_KEY_CODE_MENU_LABEL).toBe('Key code');
         expect(CHAT_MEMORY_RESET_WORDS.verifiedGo).toBe('People you marked as verified in this community go back to not verified.');
     });
 
@@ -509,7 +508,7 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
         const { readFileSync } = await import('node:fs');
         const { join } = await import('node:path');
         const chatSrc = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
-        expect(chatSrc).toMatch(/label: t\(DM_KEY_CODE_MENU_LABEL\),\s*hidden: !isEncrypted,/);
+        expect(chatSrc).toMatch(/label: t\('Key code'\),\s*hidden: !isEncrypted,/);
         expect(chatSrc).toMatch(/const renderMessage = \(item: any\) => \{\s*\/\/[^\n]*\n\s*if \(item\.keyChangedNotice\) return <DmKeyChangedNotice peerName=\{peerName\} onPress=\{openKeyCode\} \/>;/);
         expect(chatSrc).toMatch(/router\.push\(\{ pathname: '\/chat\/key-code', params: \{ id: String\(id\) \} \}\)/);
         const screen = readFileSync(join(process.cwd(), 'app', 'chat', 'key-code.tsx'), 'utf8');

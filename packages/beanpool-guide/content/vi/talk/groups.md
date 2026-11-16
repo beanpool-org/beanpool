@@ -78,7 +78,7 @@ Cuộc trò chuyện của nhóm hoạt động giống hệt như cuộc trò c
 - **Bày tỏ cảm xúc** mở bảy biểu tượng cảm xúc. Mỗi người một biểu cảm; nhấn lại vào biểu cảm để rút lại. Các phản hồi hiển thị dưới dạng huy hiệu bên dưới tin nhắn.
 - **Chỉnh sửa**, trên các tin nhắn của chính bạn, trong vòng 15 phút. Tin nhắn sau đó sẽ hiển thị **đã sửa**. Không thể chỉnh sửa ảnh.
 - **Xóa**, trên các tin nhắn của chính bạn, bất cứ lúc nào. Ứng dụng sẽ hỏi **Xóa cho mọi người?** một lần, và tin nhắn sau đó sẽ hiển thị **Tin nhắn này đã bị xóa** đối với mọi người trong nhóm.
-- **Gỡ**, dành cho điều hành viên, trên tin nhắn của bất kỳ ai khác. Ứng dụng sẽ hỏi một lần, và tin nhắn sau đó sẽ hiển thị **Đã bị người điều hành gỡ**. Tin nhắn của chính bạn là **Xóa**, không phải là **Gỡ**.
+- **Xóa** (dành cho điều hành viên), trên tin nhắn của bất kỳ ai khác. Ứng dụng sẽ hỏi một lần, và tin nhắn sau đó sẽ hiển thị **Đã bị người điều hành gỡ**. Với tin nhắn của chính bạn, **Xóa** là thao tác xóa thông thường, không phải thao tác của điều hành viên.
 - **Báo cáo** (một lá cờ), trên tin nhắn của bất kỳ ai khác. Chọn một lý do, thêm vài lời nếu muốn, rồi nhấn **Gửi báo cáo**. Người kiểm duyệt của cộng đồng bạn chỉ nhận được đúng tin nhắn đó, kèm ảnh nếu có, và người đã gửi nó, ngoài ra không có gì khác trong cuộc trò chuyện. Xem "Báo cáo vấn đề".
 
 Hai hoặc nhiều tin nhắn liên tiếp bị tác giả xóa sẽ hiển thị thành một dòng, chẳng hạn như **3 tin nhắn đã bị xóa**. Hai hoặc nhiều tin nhắn bị điều hành viên gỡ sẽ hiển thị thành **3 tin nhắn đã bị điều phối viên xóa**.

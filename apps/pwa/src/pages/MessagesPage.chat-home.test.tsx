@@ -13,7 +13,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
-import { forgetDraftsForTests } from '../lib/chat-drafts';
+import { draftKey, forgetDraftsForTests, keepDraft, keptDraft } from '../lib/chat-drafts';
+import { consumeChatPrefill } from '../lib/archetypes';
+import { postEventChatMessage } from '../lib/api';
+import { sendRouteOf } from '../lib/group-hold';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Conversation, ApiMessage } from '../lib/api';
 
@@ -22,6 +25,11 @@ if (typeof window !== 'undefined' && window.HTMLElement) {
 }
 
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
+// How a line may go (lib/group-hold.ts): as typed, unless a row below holds the answer back or refuses it.
+vi.mock('../lib/group-hold', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/group-hold')>()),
+    sendRouteOf: vi.fn(async () => 'as-typed'),
+}));
 vi.mock('../lib/blocklist', () => ({
     isUserBlocked: vi.fn(() => false),
     blockUser: vi.fn(),
@@ -111,6 +119,7 @@ vi.mock('../lib/api', () => ({
         notice: "Visible to the host, everyone going, and this node's operator.",
     })),
     sendMessageApi: vi.fn(),
+    postEventChatMessage: vi.fn(),
     editMessageApi: vi.fn(),
     toggleMessageReactionApi: vi.fn(),
     getMessageAttachmentApi: vi.fn(),
@@ -280,5 +289,82 @@ describe('the back arrow', () => {
         expect(back).toHaveAccessibleName('Back to chats');
         expect(back.className).toMatch(/min-w-\[44px\]/);
         expect(back.className).toMatch(/min-h-\[48px\]/);
+    });
+});
+
+/**
+ * The event chat's box (review of #3223 at 4c7916a5, measured there: "See you there" came back after Back mid-send). Send,
+ * then before the node answers: stay, the back arrow, Chat in the menu, or another chat opened by a way in. Then the answer:
+ *
+ *   taken    -> the event chat opened again has an empty box (its words are its line now; a second Send would duplicate)
+ *   refused  -> the words are still in its box (the line never went)
+ *   failed   -> the words are still in its box
+ *
+ * and the other chat's box is never touched: its own kept words stay.
+ */
+describe('the event chat: a send that lands after the member left', () => {
+    beforeEach(() => { nonce = 0; });
+    const SENT = 'See you there';
+    for (const outcome of ['taken', 'refused', 'failed'] as const) {
+        for (const leave of ['stay', 'back arrow', 'Chat in the menu', 'another chat opened'] as const) {
+            it(`${outcome}, ${leave} before the answer`, async () => {
+                keepDraft(draftKey(ME.publicKey, 'chat', 'dm-kofi')!, 'for Kofi');
+                let land: () => void = () => {};
+                if (outcome === 'refused') {
+                    // The answer that holds the line back (a group seen locked here) comes late.
+                    vi.mocked(sendRouteOf).mockImplementationOnce(() => new Promise((r) => { land = () => r('group'); }));
+                } else {
+                    vi.mocked(postEventChatMessage).mockImplementationOnce(() => new Promise((resolve, reject) => {
+                        land = () => (outcome === 'taken' ? resolve({} as never) : reject(new Error('offline')));
+                    }));
+                }
+                await show({ open: EVENT_ID, home: nonce });
+                await type(SENT);
+                fireEvent.click(within(screen.getByTestId('event-chat')).getByRole('button', { name: 'Send' }));
+                // The send is under way (its answer held) before the member does anything else.
+                if (outcome === 'refused') await waitFor(() => expect(sendRouteOf).toHaveBeenCalled());
+                else await waitFor(() => expect(postEventChatMessage).toHaveBeenCalled());
+                if (leave === 'back arrow') fireEvent.click(await screen.findByTestId('chat-back'));
+                if (leave === 'Chat in the menu') await chooseChatInTheMenu();
+                if (leave === 'another chat opened') await show({ open: 'dm-kofi', home: nonce });
+                await act(async () => { land(); await new Promise((r) => setTimeout(r, 20)); });
+                const words = outcome === 'taken' ? '' : SENT;
+                if (leave === 'stay') expect((await waitFor(box)).value, 'its box, still open').toBe(words);
+                if (leave === 'another chat opened') {
+                    expect((await waitFor(box)).value, "the other chat's box is never touched").toBe('for Kofi');
+                }
+                await show({ open: null, home: nonce });
+                if (leave === 'stay' || leave === 'another chat opened') {
+                    fireEvent.click(await screen.findByTestId('chat-back'));
+                    await onTheList(leave);
+                }
+                await show({ open: EVENT_ID, home: nonce });
+                expect((await waitFor(box)).value, 'the event chat opened again').toBe(words);
+                expect(keptDraft(draftKey(ME.publicKey, 'chat', 'dm-kofi')!)).toBe('for Kofi');
+                expect(vi.mocked(postEventChatMessage).mock.calls.length).toBe(outcome === 'refused' ? 0 : 1);
+            });
+        }
+    }
+});
+
+describe('a way in that brings words for a chat', () => {
+    it('its words win over the words kept for that chat, and are the chat\'s draft from then on', async () => {
+        keepDraft(draftKey(ME.publicKey, 'chat', 'dm-kofi')!, 'older words');
+        vi.mocked(consumeChatPrefill).mockReturnValueOnce('Is the bike still free?');
+        await show({ open: null, home: 0 });
+        await show({ open: 'dm-kofi', home: 0 });
+        expect((await waitFor(box)).value).toBe('Is the bike still free?');
+        fireEvent.click(await screen.findByTestId('chat-back'));
+        await onTheList('back');
+        await show({ open: null, home: 0 });
+        await show({ open: 'dm-kofi', home: 0 });
+        expect((await waitFor(box)).value).toBe('Is the bike still free?');
+    });
+
+    it('with no words brought, the kept words come back', async () => {
+        keepDraft(draftKey(ME.publicKey, 'chat', 'dm-kofi')!, 'older words');
+        await show({ open: null, home: 0 });
+        await show({ open: 'dm-kofi', home: 0 });
+        expect((await waitFor(box)).value).toBe('older words');
     });
 });

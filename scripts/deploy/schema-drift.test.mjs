@@ -4,7 +4,9 @@
 // with a column a boot step adds, an identical one) reads the right line; a boot step is proved against the rows that are
 // there (a step the rows refuse reads as drift, the same step on an empty table as OK, a refused step is never OK); the steps
 // replay in the boot's order (a fixture's initSchema run for real on a copy leaves what the replay found, and this checkout's
-// db.ts, booted through tsx on a kept 1.4.0 file with a statement trace, runs the replay's statements in the replay's order);
+// db.ts, booted through tsx on a kept 1.4.0 file with a statement trace, runs the replay's statements in the replay's order); a
+// step is read only in a shape that runs on its own (one table of shapes x what the table holds, each against a real boot
+// of the shape's own code: the read shapes read OK, every other ALTER reads can't prove and exits 1, whatever the table holds);
 // it opens the database read-only (a write fails) and leaves the file, and a live writer's WAL, byte for byte as they were;
 // its packed copy for `node -` in the container prints the same lines from what it carries; the repo's own schema.sql and
 // replication manifest read whole.
@@ -106,7 +108,7 @@ export const OTHER: Record<string, string> = {
 };
 `;
 
-// db.ts as far as the check reads it: initSchema's boot steps before the schema.sql exec on a line of its own.
+// db.ts as far as the check reads it: initSchema's boot steps before its top-level schema.sql exec.
 const DB_TS = `
 export function initSchema() {
     const gate = readSchemaGate(db);
@@ -532,7 +534,7 @@ test("the steps replay in the boot's order: each case reads as a real boot of a 
     }
 });
 
-test("an ALTER TABLE the check can't place in the boot's order: its table (every table, where it names none) can't be proved and keeps its drift; a step in a comment is no step", () => {
+test("an ALTER TABLE the check doesn't read as a step: its table (every table, where it names none) can't be proved and keeps its drift; a step in a comment is no step", () => {
     const bootWith = (extra) => `
 export function initSchema() {
     // try { db.prepare('ALTER TABLE t ADD COLUMN x TEXT').run(); } catch { }
@@ -829,7 +831,7 @@ test("this checkout: every table schema.sql makes has its kind in the manifest, 
             AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'`).all().map((r) => r.name.toLowerCase());
         const unnamed = tables.filter((t) => !(t in build.kinds));
         assert.deepEqual(unnamed, [], 'a table the manifest reader did not find: a new form of entry in engine/replication-manifest.ts TABLES? Teach manifestKinds it');
-        assert.ok(build.bootUnread >= 0, "db.ts's initSchema or its schema.sql exec on a line of its own was not found: teach bootSteps where it moved");
+        assert.ok(build.bootUnread >= 0, "db.ts's initSchema or its top-level db.exec(schemaSql) was not found, or the parser found a syntax error: teach bootSteps where it moved");
         const { results, ok } = checkDrift(Database, db, build);
         assert.equal(results.length, tables.length);
         assert.ok(ok, results.filter((r) => r.status !== 'OK').map(formatResult).join('\n'));

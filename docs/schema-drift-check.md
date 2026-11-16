@@ -30,11 +30,22 @@ already had those tables under the old CHECK, so the new build's writes would ha
   reads as missing.
 - It runs those steps in the order the boot runs them: by where each one sits in `initSchema`, with a loop's steps in
   the loop's order at the loop's place. The order matters. A step can name a column that a later step adds (the boot
-  refuses it), or add a column that an earlier step already added (the first one stands). It reads the steps in
-  db.ts's three forms: a literal statement, a loop over one table's columns, and a loop over `[table, column]` pairs. A
-  step inside a comment is not a step. Any other `ALTER TABLE` before the `schema.sql` exec, or a loop whose list holds
-  anything but quoted text, can't be placed in that order. So the table it names (every table, if it names none) can't
-  be proved by its steps and keeps its drift.
+  refuses it), or add a column that an earlier step already added (the first one stands).
+- It reads a step only in a shape it can prove runs on its own, on every boot, where it is written. It parses db.ts
+  with TypeScript's parser (the repo's `typescript` package). A step must be a statement of `initSchema`'s own, at its
+  top level and before its `db.exec(schemaSql);`, written exactly as
+  `try { db.prepare('ALTER TABLE <table> ADD COLUMN …').run(); } catch { }`: one string, nothing else in the `try`,
+  nothing in the `catch` (a comment is fine), and no `finally`. Two loop forms also count, when that `try` is the only
+  thing in the loop's body: `for (const column of ['…', …])` with `` `ALTER TABLE <table> ADD COLUMN ${column}` ``, and
+  `for (const [table, column] of [['<table>', '…'], …])` with `` `ALTER TABLE ${table} ADD COLUMN ${column}` ``.
+  A step inside a comment is not a step.
+- Any other `ALTER` in db.ts makes the table it names "can't prove". That includes two steps sharing one `try`, a step
+  behind an `if`, an `else`, a `? :` or `&&`, a `catch` with something in it, a step inside a function or a callback, a
+  template with `${…}`, `db.exec`, the statement held in a variable, and a loop of any other shape or whose list holds
+  anything but quoted text. If the ALTER names no table, every table is "can't prove". So does a `return` before the
+  exec, or a `db` that `initSchema` declares itself, for every table a step names. A "can't prove" table is never `OK`,
+  even when it already has `schema.sql`'s shape, and no steps are run for it, because what the boot does to it isn't
+  known. An `ALTER` in `initSchema` after the exec, outside a function, runs after `schema.sql` and is not a step.
 - It reads each table's kind from `apps/server/src/engine/replication-manifest.ts`.
 
 It does not compare indexes or triggers. `CREATE INDEX IF NOT EXISTS` and `CREATE TRIGGER IF NOT EXISTS` also keep an
@@ -89,15 +100,16 @@ mistake in db.ts or `schema.sql`, not in the node: stop and ask, and don't deplo
 a refused step is never `OK`, even when `schema.sql` doesn't name that step's column; after the colon it then says
 `nothing else differs`. If the steps couldn't be run on a copy of the rows (for example, the table's definition calls
 a function only the server has), the bracket says so and the line stays a drift line, because nothing was proved. The
-same goes for `can't prove its boot: …`, which means db.ts runs an `ALTER TABLE` on the table that the check couldn't
-place in the boot's order. Teach the check that form (`bootSteps` in the script) before you trust the line.
+same goes for `can't prove its boot: …`, which means db.ts has an `ALTER` on the table that isn't written as a step
+the check reads. That line is never `OK`, even when nothing else differs. Rewrite the step in db.ts in one of the read
+shapes above before you deploy. Don't widen the check to read the other shape.
 
 The first line names the database and the first 12 characters of the `schema.sql` sha256 it compared against. The last
 line counts the tables it compared, how many drift, how many the deploy will create, and how many it skipped because
 `schema.sql` doesn't make them.
 
 Exit codes: `0` when every table it compared is OK, proved against the rows that are there; `1` on any drift,
-including any boot step refused (whatever its column) or one it couldn't prove; `2` when it couldn't run (a bad
+including any boot step refused (whatever its column) or a table it couldn't prove; `2` when it couldn't run (a bad
 argument, a database it couldn't open read-only, or a build it couldn't read).
 
 ## Dropping an empty local table

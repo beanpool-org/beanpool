@@ -502,6 +502,31 @@ export function chooseAddressList(offered: unknown, held: AddressListHeld): Addr
     return { action: 'keep', why: sameAddressListContent(signed.list, held.kept.list) ? 'same' : 'conflict' };
 }
 
+/** What a spare said this round: its proof, and the list it served (as {@link chooseAddressList} took it), or null for none. */
+export interface SpareAnswer {
+    /** `proved`: it signed the phone's question with the community's key, naming this list number. */
+    proof: { kind: 'proved'; epoch: number; seq: number } | { kind: 'other-key' | 'silent' };
+    /** The list the spare served when the community's key signed it and it is newer than the one kept; else null. */
+    list: { epoch: number; seq: number; addresses: readonly string[] } | null;
+}
+
+/**
+ * Whether a phone goes to `spare`, one of the kept list's `spares` (design several-addresses §6, slice S8): a standby's own
+ * address, nothing until needed. `listedAnswers`: some listed address answers as the community this round, or there is
+ * somewhere listed to go: then no spare is ever taken. `epoch`: the highest take-over count the phone holds, this round's
+ * included. The invariant: never an address that has not proved with the community's key at a count above `epoch`, and
+ * never one the newer list doesn't name, in the one spelling ({@link addressOf}) the kept list wrote the spare in, port
+ * included: a server that took over lists its own spare exactly as the owner named it (the server's take-over step).
+ * Here, so the phone and the server's tests run the one decision.
+ */
+export function takeSpare(s: { listedAnswers: boolean; epoch: number; spare: string; answer: SpareAnswer }): boolean {
+    if (s.listedAnswers) return false;
+    const p = s.answer.proof;
+    if (p.kind !== 'proved' || p.epoch <= s.epoch) return false;
+    const l = s.answer.list;
+    return !!l && l.epoch > s.epoch && compareAddressNumbers(l, p) >= 0 && l.addresses.includes(s.spare);
+}
+
 // ─── The proof ──────────────────────────────────────────────────────────────────────────────
 
 /** What a proof signs: the address asked for, the asker's nonce, the newest list's number, and the time in seconds. */

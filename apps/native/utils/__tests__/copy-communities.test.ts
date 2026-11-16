@@ -44,7 +44,8 @@ import { resetCommunityRecordsForTests } from '../community-record';
 import { enrolSsoKeeper } from '../keeper-enrolment';
 import { vaultTicket } from '../vault';
 import {
-    communitiesForCopy, communitiesOnPhoneForCopy, copyListsCommunities, saveCommunitiesFromCopy, setCopyListsCommunities,
+    communitiesForCopy, communitiesOnPhoneForCopy, copyListsCommunities, RESTORE_PROVE_AT_ONCE, RESTORE_PROVE_CAP_MS, saveCommunitiesFromCopy,
+    setCopyListsCommunities,
 } from '../copy-communities';
 import { getSavedNodes } from '../nodes';
 import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -268,5 +269,47 @@ describe('several addresses S8: the copy carries the key and addresses; a restor
         expect(await saveCommunitiesFromCopy([fromCopy], async () => {}, prove)).toBe(0);
         expect(prove).not.toHaveBeenCalled();
         expect((await getSavedNodes()).map((n) => [n.url, n.alias])).toEqual([[`https://${SECOND}`, 'Mine']]);
+    });
+
+    // Round 2 of #3260 (the deciding review's non-blocking finding): the restore waits for this step, so it proves the
+    // communities at the same time, a few at once, each asking its addresses at once, and the whole step is capped.
+    describe('the restore proves at the same time, within the cap', () => {
+        /** A dead address: no answer until the phone's own 8-second wait gives up (address-verify.ts ASK_TIMEOUT_MS). */
+        const DEAD_MS = 8_000;
+        const dead = () => new Promise<{ kind: 'silent' }>((resolve) => setTimeout(() => resolve({ kind: 'silent' }), DEAD_MS));
+        const dying = (n: number) => Array.from({ length: n }, (_, i) => ({
+            name: `Dead ${i}`, url: `https://dead-${i}.example`, peerId: KEY.peerId, addresses: [`dead-${i}.example`, `dead-${i}b.example`, `dead-${i}c.example`],
+        }));
+        afterEach(() => { vi.useRealTimers(); });
+
+        it('20 dead communities with 3 addresses each: done within the cap (one at a time it was 8 minutes), each saved at the copy\'s address', async () => {
+            vi.useFakeTimers();
+            const prove = vi.fn((_a: string, _p: string) => dead());
+            const started = Date.now();
+            let doneAt: number | null = null;
+            const run = saveCommunitiesFromCopy(dying(20), async () => {}, prove).then((n) => { doneAt = Date.now(); return n; });
+            await vi.advanceTimersByTimeAsync(RESTORE_PROVE_CAP_MS);
+            expect(doneAt).not.toBeNull();
+            expect(doneAt! - started).toBeLessThanOrEqual(RESTORE_PROVE_CAP_MS);
+            expect(await run).toBe(20);
+            expect((await getSavedNodes()).map((n) => n.url)).toEqual(dying(20).map((c) => c.url));
+            // A few communities at once, each with its three addresses at once: never 60 asks in flight, never one at a time.
+            expect(prove.mock.calls.length).toBeGreaterThanOrEqual(RESTORE_PROVE_AT_ONCE * 3);
+            expect(prove.mock.calls.length).toBeLessThan(60);
+        });
+
+        it('a community that answers is saved where it answers, though the dead ones around it run into the cap', async () => {
+            vi.useFakeTimers();
+            const live = { name: 'Riverside', url: `https://${FIRST}`, peerId: KEY.peerId, addresses: [FIRST, SECOND] };
+            const real = proverWith({ [SECOND]: KEY });
+            const prove = (a: string, p: string) => (a === FIRST || a.startsWith('dead-') ? dead() : real(a, p));
+            const run = saveCommunitiesFromCopy([...dying(3), live, ...dying(20).slice(3)], async () => {}, prove);
+            await vi.advanceTimersByTimeAsync(RESTORE_PROVE_CAP_MS);
+            expect(await run).toBe(21);
+            const urls = (await getSavedNodes()).map((n) => n.url);
+            expect(urls).toContain(`https://${SECOND}`);
+            expect(urls).not.toContain(`https://${FIRST}`);
+            expect(urls.indexOf(`https://${SECOND}`)).toBe(3);
+        });
     });
 });

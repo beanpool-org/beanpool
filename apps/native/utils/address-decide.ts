@@ -34,8 +34,6 @@ Per address, this round:
  * take over an hour later).
  */
 
-import { compareAddressNumbers } from '@beanpool/core';
-
 /**
  * How long a proof stays fresh: the wait before an address that proved is asked again (utils/address-verify.ts). Past it,
  * the address is asked again before the phone goes there (PR #3236 review: an old proof sent the phone back to a main that
@@ -130,23 +128,8 @@ export function decideAddress(s: AddressSituation): AddressDecision {
     return keep();
 }
 
-/** What a spare said this round: its proof, and the list it served (as core chooseAddressList took it), or null for none. */
-export interface SpareAnswer {
-    proof: AddressAnswer;
-    /** The list the spare served when the community's key signed it and it is newer than the one kept; else null. */
-    list: { epoch: number; seq: number; addresses: readonly string[] } | null;
-}
-
 /**
- * Whether the phone goes to `spare` (the file's comment, "Spares"). `listedAnswers`: some listed address answers as the
- * community this round, or there is somewhere listed to go: then no spare is ever taken. `epoch`: the highest take-over
- * count the phone holds, this round's included. The invariant: never an address that has not proved with the community's
- * key at a count above `epoch`, and never one the newer list doesn't name.
+ * What a spare said this round, and whether the phone goes there: core's one decision (@beanpool/core address-list.ts
+ * takeSpare), so the server's take-over table runs exactly what the phone runs (the file's comment, "Spares").
  */
-export function takeSpare(s: { listedAnswers: boolean; epoch: number; spare: string; answer: SpareAnswer }): boolean {
-    if (s.listedAnswers) return false;
-    const p = s.answer.proof;
-    if (p.kind !== 'proved' || p.epoch <= s.epoch) return false;
-    const l = s.answer.list;
-    return !!l && l.epoch > s.epoch && compareAddressNumbers(l, p) >= 0 && l.addresses.includes(s.spare);
-}
+export { takeSpare, type SpareAnswer } from '@beanpool/core';

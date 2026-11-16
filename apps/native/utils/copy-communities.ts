@@ -72,20 +72,57 @@ function keyAndAddressesOf(url: string): Pick<CopyCommunity, 'peerId' | 'address
 /**
  * Where a restore saves a community from the copy (S8): with its key and addresses, the first address that proves now with
  * that key (the copy's address first, then the others in order); with none answering, or none carried, the copy's address
- * as before. Never throws.
+ * as before. Its addresses are asked at the same time (round 2 of #3260): one that doesn't answer costs its own wait, not
+ * the others' too, and a later one answering first still waits for the earlier ones' word. Never throws.
  */
 export async function answeringAddressOf(
     c: CopyCommunity, prove: (address: string, peerId: string) => Promise<AddressAnswer>,
 ): Promise<string | null> {
     const url = copyCommunityUrl(c?.url);
     if (!url || !c.peerId || !c.addresses?.length || !url.startsWith('https://')) return url;
+    const peerId = c.peerId;
     const first = addressOf(url);
     const tried = [...(first ? [first] : []), ...c.addresses.filter((a) => a !== first)];
-    for (const a of tried) {
-        const answer = await prove(a, c.peerId).catch((): AddressAnswer => ({ kind: 'silent' }));
-        if (answer.kind === 'proved') return `https://${a}`;
+    const answers = tried.map((a) => prove(a, peerId).catch((): AddressAnswer => ({ kind: 'silent' })));
+    for (let i = 0; i < tried.length; i++) {
+        if ((await answers[i]).kind === 'proved') return `https://${tried[i]}`;
     }
     return url;
+}
+
+/**
+ * The longest a restore waits for the copy's communities to prove (round 2 of #3260): the restore waits for this step before
+ * it says the account is back, on old phones and slow networks. A community not proved by then is saved at the copy's
+ * address, by its key as before, and the phone's next verify round proves it and follows its list (utils/address-verify.ts).
+ */
+export const RESTORE_PROVE_CAP_MS = 15_000;
+/** How many of the copy's communities a restore proves at once (each asks its up to three addresses at once). */
+export const RESTORE_PROVE_AT_ONCE = 6;
+
+/**
+ * Where each of `list` is saved (answeringAddressOf), RESTORE_PROVE_AT_ONCE communities at a time, all within `capMs`: a
+ * community still being proved at the cap, or not yet asked, gets the copy's address. In the list's order. Never throws.
+ */
+async function whereToSave(
+    list: readonly CopyCommunity[], prove: (address: string, peerId: string) => Promise<AddressAnswer>, capMs: number,
+): Promise<(string | null)[]> {
+    const where = list.map((c) => copyCommunityUrl(c?.url));
+    let next = 0;
+    let open = true;
+    const worker = async () => {
+        while (open && next < list.length) {
+            const i = next++;
+            const url = await answeringAddressOf(list[i], prove).catch(() => where[i]);
+            if (open) where[i] = url;
+        }
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cap = new Promise<void>((resolve) => { timer = setTimeout(resolve, capMs); });
+    const all = Promise.all(Array.from({ length: Math.min(RESTORE_PROVE_AT_ONCE, list.length) }, worker));
+    await Promise.race([all, cap]);
+    open = false;
+    clearTimeout(timer);
+    return [...where];
 }
 
 /**
@@ -126,19 +163,24 @@ export async function saveCommunitiesFromCopy(
     list: readonly CopyCommunity[] | null | undefined,
     registerPush: () => Promise<unknown> = async () => (await import('../services/push-notifications')).retryPushRegistrations(),
     prove: (address: string, peerId: string) => Promise<AddressAnswer> = async (address, peerId) => (await import('./address-verify')).proofAt(address, peerId),
+    capMs: number = RESTORE_PROVE_CAP_MS,
 ): Promise<number> {
     if (!list?.length) return 0;
     let added = 0;
     try {
         const saved = new Set((await getSavedNodes()).map((n) => n.url.toLowerCase()));
-        for (const c of list) {
-            // A community already saved at any of its addresses keeps its row (S8: the copy carries up to three).
-            const known = [c?.url, ...(c?.addresses ?? []).map((a) => `https://${a}`)].some((u) => typeof u === 'string' && saved.has(u.toLowerCase()));
-            if (known) continue;
-            // A community's address and nothing more (core copyCommunityUrl: no path, no user part), and plain for the phone:
-            // the first of its addresses that proves with its key now, else the copy's address (answeringAddressOf).
-            const url = await answeringAddressOf(c, prove);
-            if (!url || !isPlainNodeAddress(url) || saved.has(url.toLowerCase())) continue;
+        // A community already saved at any of its addresses keeps its row (S8: the copy carries up to three).
+        const known = (c: CopyCommunity) => [c?.url, ...(c?.addresses ?? []).map((a) => `https://${a}`)]
+            .some((u) => typeof u === 'string' && saved.has(u.toLowerCase()));
+        const fresh = list.filter((c) => !known(c));
+        // A community's address and nothing more (core copyCommunityUrl: no path, no user part), and plain for the phone:
+        // the first of its addresses that proves with its key now, else the copy's address (answeringAddressOf), proved a
+        // few communities at a time within the cap (whereToSave), then saved in the copy's order.
+        const where = await whereToSave(fresh, prove, capMs);
+        for (let i = 0; i < fresh.length; i++) {
+            const c = fresh[i];
+            const url = where[i];
+            if (known(c) || !url || !isPlainNodeAddress(url) || saved.has(url.toLowerCase())) continue;
             try {
                 await addSavedNode(url, c.name?.trim() || undefined);
                 saved.add(url.toLowerCase());

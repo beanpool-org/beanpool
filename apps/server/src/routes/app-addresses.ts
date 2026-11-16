@@ -29,7 +29,10 @@
  *                                                 address the check round has reached, `reach`: what answered there, what
  *                                                 it pointed at and the one next step (services/address-check.ts);
  *                                                 `stopped` on a name the project blocked or paused, from the record of
- *                                                 names, checked or not. Reading this asks nothing of the network.
+ *                                                 names, checked or not; `mainRefusal` on each address but the main that
+ *                                                 Make main would refuse, in the words /main answers with; and `list`, what
+ *                                                 the signed address list says now (main and addresses, or null).
+ *                                                 Reading this asks nothing of the network.
  *   POST /api/local/admin/app-addresses/check    Check now: a round, at most one every 30 seconds, and the report, with
  *                                                 `checking: true` when it hasn't finished within 20 seconds.
  *   POST /api/local/admin/app-addresses/confirm  { address, code? }: "Yes, that's its address." Adds it to the owner-confirmed
@@ -57,8 +60,8 @@
 import Router from '@koa/router';
 import { getNodeConfig, isOwnPublicAddress, updateNodeConfig } from '../state-engine.js';
 import {
-    configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress, ownerConfirmedAddresses,
-    primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
+    addressListContent, configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress,
+    ownerConfirmedAddresses, primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
 } from '../engine/own-addresses.js';
 import { tellMembersOfNewMain } from '../services/address-notice.js';
 import { getNodeRole } from '../config/node-role.js';
@@ -96,11 +99,15 @@ export function appAddressesReport(pageHost?: unknown) {
     const standings = nameStandings();
     const reaches = addressReaches();
     const stopped = namesStoppedByProject();
+    const primary = primaryAddress();
     const addresses = configuredAddresses().map((a) => {
         const u = count('own', a.address);
         const tried = a.lost ? count('lost', a.address) : undefined;
         const standing = standings.get(a.address);
         const reach = reaches.get(a.address);
+        // Why Make main would be refused, in the words /main answers with (several-addresses S6): Settings offers Make main
+        // only where this is absent, so a press that can only be refused is never offered. None for the main itself.
+        const mainRefusal = a.address === primary ? null : mainAddressRefusal(a.address);
         return {
             address: a.address, source: a.source, ...(a.former ? { former: true } : {}), today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0,
             ...(a.lost ? { lost: true, tried: { today: tried?.today ?? 0, busiestDay: tried?.busiestDay ?? 0 } } : {}),
@@ -108,6 +115,7 @@ export function appAddressesReport(pageHost?: unknown) {
             ...(stopped.has(a.address) ? { stopped: true } : {}),
             ...(a.hardCoded ? { hardCoded: true } : {}),
             ...(reach ? { reach } : {}),
+            ...(mainRefusal ? { mainRefusal } : {}),
         };
     });
     // Hosts apps signed for while this node knew none of its names (accepted until the switch). Any the owner has since
@@ -131,7 +139,9 @@ export function appAddressesReport(pageHost?: unknown) {
         place({ address: page, today: 0, busiestDay: 0, ownerOrAdmin: staff.has(page) });
     }
     return {
-        primaryAddress: primaryAddress(),
+        primaryAddress: primary,
+        // What the signed list (/api/node/addresses) says now: the addresses members' phones follow and the main one.
+        list: addressListContent(),
         formerApps: ownAddressesUsage(addresses.filter((a) => a.former).map((a) => a.address)),
         addresses,
         named: knowsItsNames(),

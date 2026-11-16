@@ -34,7 +34,8 @@
  *     told once per real change. Then the table: owner (phone, and computer with no fresh proof), admin, member, visitor
  *     and standby × add an address, Make main, remove → allowed, or refused in words with nothing changed. Make main
  *     refuses what can't be main (not listed, a number beside a name, a home-network address beside an internet one), and
- *     removing the main address clears the choice.
+ *     removing the main address clears the choice. Settings' report says of each row why Make main would be refused, in
+ *     /main's words (several-addresses S6), and carries the signed list's main and addresses.
  * 10. Changing the main changes WHICH address is named, never WHICH addresses work (round 2 of #3222): every reader of the
  *     main (primaryAddress, invites through /api/community/info, the directory push, the search canonical, the card, the
  *     assistant's welcome and origin, the home other servers know it by, the OAuth issuer and resource) × no main chosen,
@@ -1003,9 +1004,19 @@ async function main(): Promise<void> {
         const notListed = await post(MAIN, phone(), { address: 'elsewhere.example.org' });
         assert(notListed.status === 409 && /not one of this community's addresses/.test(notListed.json?.error ?? '') && onlyAt(NAMED),
             `(9) an address not on the list can't be main (${notListed.status} ${show(notListed.json)})`);
-        await post(ADD, phone(), { address: IP });
+        const withIp = await post(ADD, phone(), { address: IP });
+        // What Settings reads (several-addresses S6): each row but the main says why Make main would be refused, in /main's own
+        // words, so a press that can only be refused is never offered; an address that can be main says nothing. And the
+        // signed list's main and addresses, for the line saying what members' phones follow.
+        const rowOf = (h: string) => (withIp.json?.addresses ?? []).find((a: any) => a.address === h);
+        assert(withIp.status === 200 && /number/.test(rowOf(IP)?.mainRefusal ?? '') && rowOf(DOMAIN) && !('mainRefusal' in rowOf(DOMAIN))
+            && rowOf(NAMED) && !('mainRefusal' in rowOf(NAMED)),
+            `(9) the report says why a number beside a name can't be main, and nothing of the domain or the main (${show(withIp.json?.addresses)})`);
+        assert(withIp.json?.list?.main === NAMED && [NAMED, DOMAIN, IP].every((h) => withIp.json.list.addresses.includes(h)),
+            `(9) the report carries the signed list's main and addresses (${show(withIp.json?.list)})`);
         const number = await post(MAIN, phone(), { address: IP });
         assert(number.status === 409 && /number/.test(number.json?.error ?? '') && onlyAt(NAMED), `(9) a number beside a name can't be main (${number.status} ${show(number.json)})`);
+        assert(number.json?.error === rowOf(IP)?.mainRefusal, `(9) the report's reason is the one /main answers with (${show(rowOf(IP)?.mainRefusal)} vs ${show(number.json?.error)})`);
         await post(REMOVE, phone(), { address: IP });
         // The main answers from outside (design §2.1; review 4580901278): a home-network address, listed beside a live name,
         // is refused in words, spends no code, and moves nothing.

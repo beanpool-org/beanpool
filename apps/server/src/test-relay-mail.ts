@@ -802,28 +802,29 @@ async function main(): Promise<void> {
     const seen20 = seenCount();
     const held20 = heldCount();
     const longLine = await item(ana, 'a.example', dot.key, 'b.example', { payload: 'E'.repeat(mail.RELAY_LINE_MAX_CHARS + 1) });
-    const r20e = await bring([longLine]);
-    assert(r20e.status === 413 && typeof r20e.body?.error === 'string' && r20e.body.error.length > 0 && heldCount() === held20 && seenCount() === seen20,
-        `20e. FED-09: a line over ${mail.RELAY_LINE_MAX_CHARS} characters is refused with words, nothing held and nothing spent (got ${r20e.status} ${JSON.stringify(r20e.body)?.slice(0, 120)})`);
+    const r20d = await bring([longLine]);
+    assert(r20d.status === 413 && typeof r20d.body?.error === 'string' && r20d.body.error.length > 0 && heldCount() === held20 && seenCount() === seen20,
+        `20d. FED-09: a line over ${mail.RELAY_LINE_MAX_CHARS} characters is refused with words, nothing held and nothing spent (got ${r20d.status} ${JSON.stringify(r20d.body)?.slice(0, 120)})`);
 
     // N2: a refusal inside the other server's 202 reaches the sender's server's log with its reason, never the line's text.
     const logged20: string[] = [];
     const log20 = console.log;
     otherNames.delete('a.example');
     const refusedOut = await item(ben, 'b.example', ana.key, 'a.example', { payload: `secret-${crypto.randomBytes(12).toString('hex')}` });
-    let s20d: Answer;
+    let s20e: Answer;
     console.log = (...args: unknown[]) => { logged20.push(args.map(String).join(' ')); };
     try {
-        s20d = await asMember(ben, 'POST', '/api/mail/send', { items: [refusedOut] });
+        s20e = await asMember(ben, 'POST', '/api/mail/send', { items: [refusedOut] });
     } finally {
         console.log = log20;
         otherNames.add('a.example');
     }
     const heard20 = logged20.find((l) => l.includes('refused') && l.includes('not-for-here'));
-    assert(s20d.body?.items?.[0]?.state === 'failed' && !!heard20 && !logged20.some((l) => l.includes(refusedOut.payload)),
-        `20d. N2: a.example refuses Ben's line inside its 202: failed (Not delivered), logged with the reason, never the line (got ${s20d.body?.items?.[0]?.state}; ${JSON.stringify(heard20)?.slice(0, 160)})`);
+    assert(s20e.body?.items?.[0]?.state === 'failed' && !!heard20 && !logged20.some((l) => l.includes(refusedOut.payload)),
+        `20e. N2: a.example refuses Ben's line inside its 202: failed (Not delivered), logged with the reason, never the line (got ${s20e.body?.items?.[0]?.state}; ${JSON.stringify(heard20)?.slice(0, 160)})`);
 
-    // The removed web relay answers as any route that does not exist does, to a member's server and to anyone.
+    // The removed web relay answers as any route that does not exist does: unsigned, signed by a.example's server, and signed
+    // by a member here (the one of the three the door lets through to the router, so with peer connectors on it is a 404).
     const oldBody = JSON.stringify({ senderPublicKey: ana.key, senderCallsign: 'Ana', senderNodeUrl: 'https://a.example', recipientPublicKey: dot.key, ciphertext: 'c2VhbGVk', nonce: 'bm9uY2U=' });
     const answerOf = (a: Answer) => JSON.stringify({ status: a.status, body: a.body });
     const linesBefore20 = (db.prepare('SELECT COUNT(*) AS n FROM messages').get() as { n: number }).n;
@@ -832,11 +833,15 @@ async function main(): Promise<void> {
     const madeUpUnsigned = await send('POST', '/api/federation/no-such-route-x7', {}, oldBody);
     const oldSigned = await asServer('/api/federation/relay-message');
     const madeUpSigned = await asServer('/api/federation/no-such-route-x7');
+    // Dot's body names no one but her (the door refuses a body naming another key before any route reads it).
+    const dotBody = { senderPublicKey: dot.key, ciphertext: 'c2VhbGVk', nonce: 'bm9uY2U=' };
+    const oldByMember = await asMember(dot, 'POST', '/api/federation/relay-message', dotBody);
+    const madeUpByMember = await asMember(dot, 'POST', '/api/federation/no-such-route-x7', dotBody);
     const peersOn = process.env.ENABLE_PEER_CONNECTORS === 'true';
     const linesAfter20 = (db.prepare('SELECT COUNT(*) AS n FROM messages').get() as { n: number }).n;
-    assert(answerOf(oldUnsigned) === answerOf(madeUpUnsigned) && answerOf(oldSigned) === answerOf(madeUpSigned)
-        && (!peersOn || madeUpUnsigned.status === 404) && linesAfter20 === linesBefore20 && rowsFor(`SELECT COUNT(*) AS n FROM members WHERE public_key IN (${inList})`) === 0,
-        `20f. POST /api/federation/relay-message, unsigned and signed by a.example's server, is answered exactly as a made-up route beside it (${answerOf(oldUnsigned).slice(0, 120)} vs ${answerOf(madeUpUnsigned).slice(0, 120)}; peer connectors ${peersOn ? 'on, so the router answers' : 'off'}), and nothing is stored`);
+    assert(answerOf(oldUnsigned) === answerOf(madeUpUnsigned) && answerOf(oldSigned) === answerOf(madeUpSigned) && answerOf(oldByMember) === answerOf(madeUpByMember)
+        && (!peersOn || madeUpByMember.status === 404) && linesAfter20 === linesBefore20 && rowsFor(`SELECT COUNT(*) AS n FROM members WHERE public_key IN (${inList})`) === 0,
+        `20f. POST /api/federation/relay-message, unsigned, signed by a.example's server and signed by Dot, is answered exactly as a made-up route beside it (${[oldUnsigned, oldSigned, oldByMember].map((a) => a.status).join(', ')} vs ${[madeUpUnsigned, madeUpSigned, madeUpByMember].map((a) => a.status).join(', ')}; Dot's ${answerOf(oldByMember).slice(0, 100)}; peer connectors ${peersOn ? 'on, so the router answers her' : 'off'}), and nothing is stored`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

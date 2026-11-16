@@ -2923,18 +2923,11 @@ export async function sendRemoteTransfer(
 }
 
 // REMOVED (#109): sendFederationMessage() posted to /api/federation/relay-message on
-// both the peer and this node. Both routes are commented out in the server
-// (federation-api.ts) because they are unauthenticated HTTP stubs that would allow
-// remote message spoofing, so the call could only ever fail.
-//
-// It is deliberately NOT re-pointed at the working relay. That relay lives in
-// routes/messaging.ts and fires on the ordinary signed POST /api/messages/send, but
-// only when the DM's other participant is a local member carrying a home_node_url.
-// createConversation registers unknown participants WITHOUT one
-// (engine/messaging.ts), so for a cross-browsed remote author the relay can never
-// resolve their node — the message would be stored locally and silently never
-// delivered. Threading the home node URL through visitor registration is federation
-// messaging work, not a client-side rename.
+// both the peer and this node, an unauthenticated stub the server kept commented out,
+// so the call could only ever fail. The server has deleted that route since (X7), with
+// the libp2p relay the send route used to fire. A line to someone in another community
+// goes through the mailbox (POST /api/mail/send, over signed HTTPS between the two
+// servers), which this app does not send yet.
 
 /** Check balance on a remote node */
 export async function getRemoteBalance(baseUrl: string, publicKey: string): Promise<BalanceInfo> {

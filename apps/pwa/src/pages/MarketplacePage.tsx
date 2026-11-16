@@ -1430,12 +1430,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             const remoteNode = (selectedPost as any)._remoteNode;
             if (remoteNode) {
                 // #109: this used to call sendFederationMessage(), which posted to
-                // /api/federation/relay-message — a route the server keeps commented out, so
-                // it could only fail. Creating a local conversation instead would be worse:
-                // the remote author is registered as a visitor without a home_node_url, so
-                // the server-side relay can't resolve their node and the message would sit
-                // here undelivered while looking sent. Say so plainly until cross-community
-                // messaging is real.
+                // /api/federation/relay-message — a route the server never served (deleted in X7),
+                // so it could only fail. Creating a local conversation instead would be worse:
+                // nothing carries a line from this community's chat to theirs, so the message
+                // would sit here undelivered while looking sent. Say so plainly until this app
+                // sends through the mailbox between communities.
                 setBodyError({ at: 'message', words: t("This post is hosted by another community. Messaging across communities isn't available yet.") });
                 return;
             } else {

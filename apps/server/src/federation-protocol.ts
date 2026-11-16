@@ -1,24 +1,20 @@
 /**
  * BeanPool Federation Protocol — /beanpool/federation/1.0.0
  *
- * Secure RPC protocol for cross-node operations (messaging and member verification).
+ * Secure RPC protocol for cross-node operations (member verification, the listing pull and settlement).
  * Runs over Libp2p multiplexed Noise streams, so interactions are inherently
  * authenticated by the sender's static Libp2p PeerID.
  */
 
 import type { Libp2p } from 'libp2p';
 import { isPeerTrusted, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
-import { peerHomeUrl, isLocalMemberKey } from './federation-origin.js';
-import { assertDmLineFits, WriterLimitError } from './engine/writer-bounds.js';
 import { listingsForPeer } from './federation-listings.js';
 import { logger } from './logger.js';
 import { alreadyClosedBytes } from './p2p-stream-end.js';
-import { getMember, createConversation, sendMessage, registerVisitor } from './state-engine.js';
+import { getMember } from './state-engine.js';
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from './config/node-profile.js';
 import { getNodeRole } from './state-engine.js';
-import { isMemberKeySpelling, BAD_KEY_ERROR } from './engine/member-key.js';
-import { MessagingError, relayedMessageId } from './engine/messaging.js';
 import {
     handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus, runOutboundSettlement,
     PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, type OutboundOutcome,
@@ -29,10 +25,8 @@ import type { ReceiptStatus } from './federation-settlement-state.js';
 const PROTOCOL = '/beanpool/federation/1.0.0';
 
 /** FED-06: what a node with ENABLE_PEER_CONNECTORS off refuses (the settlement ones too, as FEDERATION_SETTLEMENT does). */
-const PEER_ONLY_ACTIONS = new Set(['verify_member', 'relay_message', 'list_listings', 'settle_purchase']);
+const PEER_ONLY_ACTIONS = new Set(['verify_member', 'list_listings', 'settle_purchase']);
 export const PEERS_OFF_ERROR = 'Peer connectors are switched off on this node';
-/** FED-02: a peer whose connector record here has no public URL cannot be named as anyone's home. */
-export const NO_PEER_HOME_ERROR = 'This node holds no public address for your node, so it cannot name a sender\'s home';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
@@ -268,12 +262,14 @@ export function registerFederationHandler(node: Libp2p): void {
                 return;
             }
 
-            // 3. Route Action
+            // 3. Route Action. A line between communities never comes this way: it goes through the mailbox, over
+            // signed HTTPS (engine/relay-mail.ts, POST /api/relay/mail). The old `relay_message` action is deleted (X7)
+            // and is answered as any unknown action is.
             let response: any = { error: 'Unknown action' };
 
             // FED-06: ENABLE_PEER_CONNECTORS off means peer connectors do not function at all
             // (docs/federation-connector.md), inbound as well as outbound. Before this the flag stopped only our own
-            // dialling: a configured connector's member lookups, relays and listing pulls were still answered.
+            // dialling: a configured connector's member lookups and listing pulls were still answered.
             // settle_receipt and settle_receipt_status stay open, as under FEDERATION_SETTLEMENT (settlementGateRefusal):
             // they finish trades already in flight, and refusing them would strand Beans mid-trade.
             if (!ENABLE_PEER_CONNECTORS && PEER_ONLY_ACTIONS.has(request.action)) {
@@ -295,89 +291,6 @@ export function registerFederationHandler(node: Libp2p): void {
                     };
                 }
             } 
-            else if (request.action === 'relay_message') {
-                // No `senderNodeUrl`: the payload's word for the sender's home is ignored (FED-02, below).
-                const { id, senderPublicKey, senderCallsign, recipientPublicKey, ciphertext, nonce, metadata } = request;
-
-                if (!senderPublicKey || !recipientPublicKey || !ciphertext || !nonce) {
-                    response = { error: 'Missing required payload fields' };
-                } else if (!isMemberKeySpelling(senderPublicKey) || !isMemberKeySpelling(recipientPublicKey)) {
-                    // One key, one spelling (engine/member-key.ts), before any lookup: a local member's key in capitals
-                    // is no remote sender (it passed the impersonation guard below, and got a visitor's row of its own).
-                    response = { error: BAD_KEY_ERROR };
-                } else {
-                    // FED-02: a new sender's home is THIS peer's, from our connector record for the authenticated
-                    // connection, never the payload's `senderNodeUrl`. A sender whose row already names a home keeps it
-                    // (federation-origin.ts): a member of two communities, or a peer whose URL the operator corrected.
-                    const peerHome = peerHomeUrl(remotePeerId);
-                    // Verify recipient exists locally (O(1) indexed lookup)
-                    const recipient = getMember(recipientPublicKey);
-                    if (!recipient) {
-                        response = { error: 'Recipient not found on this node' };
-                    } else if (isLocalMemberKey(senderPublicKey)) {
-                        // A2-28: the connection is trusted (a `peer` connector), but that
-                        // authorizes the CONNECTION, not the asserted sender authorship —
-                        // a compromised/malicious federation peer can set senderPublicKey
-                        // to anyone. A genuine federation relay is from a REMOTE member
-                        // (one with a homeNodeUrl on another node). Refuse a relay that
-                        // claims to be from one of OUR LOCAL members (no homeNodeUrl), so a
-                        // peer cannot forge messages "from" a local identity into an inbox.
-                        // (Full origin authenticity needs per-message sender signatures —
-                        // a protocol change; tracked. The relay path is gated by
-                        // ENABLE_PEER_CONNECTORS, off by default — at the top of this
-                        // handler since FED-06; before that the comment was not true.)
-                        console.warn(`[Federation] Rejected relay impersonating local member ${senderPublicKey.slice(0, 8)} from peer ${remotePeerId.slice(-8)}`);
-                        response = { error: 'Sender impersonates a local member' };
-                    } else if (!peerHome) {
-                        response = { error: NO_PEER_HOME_ERROR };
-                    } else {
-                        // Origin is asserted by the relaying node (a trusted peer connector),
-                        // NOT cryptographically verified per-message — treat as
-                        // remote/unverified-origin. registerVisitor tags it with the
-                        // sender's home node so it is never confused with a local member.
-                        registerVisitor(senderPublicKey, senderCallsign, peerHome);
-                        
-                        // A limit on new requests refuses here (engine/request-limits.ts): answered, as the line's own refusals are below.
-                        let conversation: ReturnType<typeof createConversation> = null;
-                        let refused: string | null = null;
-                        try {
-                            conversation = createConversation('dm', [senderPublicKey, recipientPublicKey], senderPublicKey);
-                        } catch (e: any) {
-                            if (!(e instanceof MessagingError) && !(e instanceof WriterLimitError)) throw e;
-                            refused = e.message;
-                        }
-                        if (refused) {
-                            response = { error: refused };
-                        } else if (conversation) {
-                            // A DM is stored encrypted or not at all (engine/messaging.ts): a peer relaying a readable
-                            // line is answered with the refusal, not left to time out.
-                            let message: ReturnType<typeof sendMessage> = null;
-                            let refusal: string | null = null;
-                            try {
-                                // Under the sender's own id: the line is sealed to it (relayedMessageId).
-                                // FED-09: the member send route's 64 KB line limit, as the line would be stored. A
-                                // peer relayed 1 MB lines before; a refusal is answered, not rethrown, so the peer
-                                // hears why instead of waiting out its read.
-                                message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata, relayedMessageId(id),
-                                    (stored) => assertDmLineFits(stored.ciphertext, stored.metadata));
-                            } catch (e: any) {
-                                if (!(e instanceof MessagingError) && !(e instanceof WriterLimitError)) throw e;
-                                refusal = e.message;
-                            }
-                            if (refusal) {
-                                response = { error: refusal };
-                            } else if (message) {
-                                console.log(`📨 Federation libp2p relay: ${senderCallsign || senderPublicKey.substring(0, 8)} → ${recipient.callsign}`);
-                                response = { success: true, conversationId: conversation.id, messageId: message.id };
-                            } else {
-                                response = { error: 'Failed to store message' };
-                            }
-                        } else {
-                            response = { error: 'Failed to create conversation' };
-                        }
-                    }
-                }
-            }
             // ── The listing pull (#143 step 4) ───────────────────────────────────────────────────
             // What THIS peer's members may discover here, decided by our own posters' reach settings. Read
             // only; it moves nothing and writes nothing on this side.
@@ -589,56 +502,4 @@ export async function settleCrossNodePurchase(
         ourPeerId,
         privateKey,
     );
-}
-
-/**
- * Initiator (Sender) side: Relay a message over Libp2p
- */
-/**
- * Relay a member's line to its recipient's community (routes/messaging.ts sends without waiting) and log the outcome
- * when it is not a stored line. A peer that refuses ANSWERS `{ error }` rather than throwing: peers off (FED-06), no
- * address for us (FED-02), the 64 KB line limit (FED-09), a recipient it does not know. The route caught only a throw,
- * so each refusal reached the sender as a line sent, with nothing in either node's log (#2039 review B1, N2). The log
- * names the line, the peer and the peer's reason, never the line's text.
- */
-export async function relayLineToPeer(
-    node: Libp2p,
-    targetPeerId: any,
-    peerName: string | null,
-    payload: Parameters<typeof federatedRelayMessage>[2],
-): Promise<void> {
-    const peer = peerName || String(targetPeerId).slice(-8);
-    try {
-        const answer = await federatedRelayMessage(node, targetPeerId, payload);
-        if (answer && typeof answer === 'object' && 'error' in answer) {
-            console.warn(`[Federation] ${peer} refused relayed line ${payload.id ?? '(no id)'}: ${JSON.stringify(String(answer.error).slice(0, 200))}`);
-        }
-    } catch (e: any) {
-        console.warn(`[Federation] Failed to relay line ${payload.id ?? '(no id)'} to ${peer}:`, e?.message || e);
-    }
-}
-
-export async function federatedRelayMessage(
-    node: Libp2p, 
-    targetPeerId: any, 
-    payload: { id?: string; senderPublicKey: string; senderCallsign?: string; senderNodeUrl?: string; recipientPublicKey: string; ciphertext: string; nonce: string; metadata?: string; }
-): Promise<any> {
-    let stream: any = null;
-    try {
-        stream = await node.dialProtocol(targetPeerId, PROTOCOL);
-        const request = JSON.stringify({ action: 'relay_message', ...payload });
-        
-        const readPromise = readFromStream(stream);
-        readPromise.catch(() => {}); // Prevent unhandled rejection if writeToStream throws or exits early
-        await writeToStream(stream, request);
-        
-        const raw = await readPromise;
-        return JSON.parse(raw);
-    } finally {
-        if (stream) {
-            try {
-                await stream.close();
-            } catch {}
-        }
-    }
 }

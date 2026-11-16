@@ -245,15 +245,6 @@ function refuseUnencryptedAbout(metadata: string | undefined): void {
     refuseUnencryptedDm(about?.ciphertext, about?.nonce);
 }
 
-/**
- * The id a line relayed from another node is stored under: the sender's own, verbatim, when it is a UUID v4 (lowered, as
- * the send route lowers it). A DM line is sealed and signed to its message id (core dm-crypto.ts, format 4), so a line
- * stored under a new id would be one its recipient can't verify. Anything else gets an id of this node's, as before.
- */
-export function relayedMessageId(id: unknown): string | undefined {
-    return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id.toLowerCase() : undefined;
-}
-
 /** One DM per pair, never keyed to a post (chat consolidation): the pair's conversation row, if they have one. */
 function findDirectConversationRow(a: string, b: string): any {
     return db.prepare(`
@@ -268,8 +259,7 @@ function findDirectConversationRow(a: string, b: string): any {
  * Who may open a conversation over the route: a visitor's row (isLiveVisitor) opens none, nor does a member whose
  * account is paused ('disabled', assertMemberActive). Either may ask again for a direct conversation it is already in
  * (an app asks before it writes). A visitor is refused a new one in the words a key with no row is refused in, so it
- * makes no row for anyone; a paused member is told why. Federation's relay opens one for a member of another community,
- * and the node one for a deal, by calling createConversation itself.
+ * makes no row for anyone; a paused member is told why. The node opens one for a deal by calling createConversation itself.
  *
  * A paused member is in one they opened with someone who had blocked them, kept for them alone (engine/withheld-lines.ts):
  * their list shows it as any DM, and asked for again it answers as a real one does, with the same one, still withheld.

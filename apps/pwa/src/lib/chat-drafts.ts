@@ -66,7 +66,11 @@ export function useKeptDraft(key: string | null, keepable: string, setDraft: Dis
         latest.current = kept;
         setDraft(kept);
         // A send of this chat's that lands while this box shows it (draftSent) takes its words out, if they are still here.
-        const takeOut = (went: string) => setDraft((now) => (now.trim() === went ? '' : now));
+        // What the box would keep is let go at once too: a leave in the moment before the box draws again keeps nothing of them.
+        const takeOut = (went: string) => {
+            if (latest.current.trim() === went) latest.current = '';
+            setDraft((now) => (now.trim() === went ? '' : now));
+        };
         showing.set(key, takeOut);
         return () => {
             keepDraft(key, latest.current);

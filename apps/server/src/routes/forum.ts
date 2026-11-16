@@ -9,8 +9,9 @@
  *        ETag, so an unchanged list answers 304)
  *   GET  /api/forum/topics/:id?after=<n>    → { topic, posts: [post], next }   (30 posts after number n) | 404 `not_found`
  *   GET  /api/forum/posts/:id/photos/:n     → the photo's bytes | 404
- *   GET  /api/forum/search?q&offset         → { hits: [hit], next }   (slice F6, engine/forum-search.ts: every word found, newest
- *        first, 20 a page; never a removed, hidden or waiting post, an archived section's, or a blocked writer's) 400 `no_words`
+ *   GET  /api/forum/search?q&offset&section → { hits: [hit], next }   (slice F6, engine/forum-search.ts: every word found, newest
+ *        first, 20 a page, in one section where `section` names it (slice F9, a door's search); never a removed, hidden or
+ *        waiting post, an archived section's, or a blocked writer's) 400 `no_words`
  *        or `too_long`; 429 `searches_per_day` with Retry-After (100 in any 24 hours). A hit: { topicId, sectionId, title,
  *        postId, number, writer, createdAt, excerpt }
  * An active member, on the main server (a standby 503 `standby`), not muted (403 `moderation_muted`):
@@ -245,8 +246,11 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     // A member's search (slice F6): counted against their day's searches once the words are good, so a refusal costs none.
     router.get('/api/forum/search', (ctx) => {
         const offset = whole(ctx.query.offset, 0, FORUM_SEARCH_OFFSET_MAX);
-        if (offset === null || Array.isArray(ctx.query.q)) return answer(ctx, 400, 'q is one text; offset a whole number.', 'bad_request');
-        read(ctx, (key) => searchForum(key, ctx.query.q ?? '', offset));
+        const section = ctx.query.section;
+        if (offset === null || Array.isArray(ctx.query.q) || (section !== undefined && (typeof section !== 'string' || section.length > 128))) {
+            return answer(ctx, 400, 'q is one text; offset a whole number; section one id.', 'bad_request');
+        }
+        read(ctx, (key) => searchForum(key, ctx.query.q ?? '', offset, Date.now(), section || null));
     });
 
     router.get('/api/forum/posts/:id/photos/:n', (ctx) => {

@@ -10,11 +10,17 @@
  *   words around the find. A tap anywhere on a hit opens the topic at that post (the small-cards rule). ✕ clears the search
  *   and the list is back.
  * - **Kept for the page's life** (lib/forum.ts keptSearch): back from a hit, the same hits show without asking again.
+ * - **A door's search** (slice F9, `searchFor`) is asked once: the box tells the page it took it (`onSearchTaken`), and the page
+ *   lets go of it, so coming back to the list draws the kept hits (or the member's own later search, or their ✕) and asks
+ *   nothing. It is kept to the door's section, its later pages too.
  */
 import { useEffect, useRef, useState } from 'react';
 import { forumSectionName, t, timeAgo, word } from '@beanpool/core';
 import { forgetForumSearch, keptSearch, searchForum, type ForumSearchAnswer, type ForumSearchHit, type ForumSection } from '../../lib/forum';
 import { TOPIC_WORDS } from './ForumTopicView';
+
+/** A door's search (slice F9): its words, in its one section. */
+export interface ForumSearchDoor { q: string; section: string }
 
 export const SEARCH_WORDS = {
     box: word('Search the forum'),
@@ -27,11 +33,12 @@ export const SEARCH_WORDS = {
 
 /**
  * `onOpen`: a hit was tapped; open topic `topicId` at post `number`. `onShowing`: whether hits (or "nothing found") replace
- * the topic list now. `searchFor`: words a door asked for (slice F9, "See who is talking about starting one ›"), searched
- * once when it comes: the member's own tap, so one of their searches.
+ * the topic list now. `searchFor`: words a door asked for in one section (slice F9, "See who is talking about starting one ›"),
+ * searched once when it comes: the member's own tap, so one of their searches. `onSearchTaken`: it was taken; the page clears it.
  */
-export function ForumSearch({ sections, searchFor = null, onOpen, onShowing }: {
-    sections: ForumSection[]; searchFor?: { q: string } | null; onOpen: (topicId: string, number: number) => void; onShowing: (showing: boolean) => void;
+export function ForumSearch({ sections, searchFor = null, onSearchTaken, onOpen, onShowing }: {
+    sections: ForumSection[]; searchFor?: ForumSearchDoor | null; onSearchTaken?: () => void;
+    onOpen: (topicId: string, number: number) => void; onShowing: (showing: boolean) => void;
 }) {
     const [answer, setAnswer] = useState<ForumSearchAnswer | null>(() => keptSearch());
     const [typed, setTyped] = useState(() => keptSearch()?.q ?? '');
@@ -40,20 +47,23 @@ export function ForumSearch({ sections, searchFor = null, onOpen, onShowing }: {
     const box = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        // Already this page's search (back from one of its hits, the door's object still held): drawn from the kept copy.
-        if (!searchFor || keptSearch()?.q === searchFor.q) return;
+        if (!searchFor) return;
+        // Taken before it is asked: the page lets go of it now, so no later mount of this box asks it again.
+        onSearchTaken?.();
         setTyped(searchFor.q);
-        void ask(0, searchFor.q);
+        void ask(0, searchFor);
     }, [searchFor]);
 
-    async function ask(offset = 0, words?: string) {
-        const q = offset ? answer?.q ?? '' : (words ?? typed).trim();
+    async function ask(offset = 0, door?: ForumSearchDoor) {
+        const q = door ? door.q.trim() : offset ? answer?.q ?? '' : typed.trim();
+        // A later page stays where its first page was asked; the member's own search is the whole forum's (slice F6).
+        const section = door ? door.section : offset ? answer?.section ?? null : null;
         if (!q && !offset) box.current?.focus();
         if (!q || busy) return;
         setBusy(true);
         setFailed(null);
         try {
-            const out = await searchForum(q, offset);
+            const out = await searchForum(q, offset, section);
             setAnswer(out);
             onShowing(true);
         } catch (e) {

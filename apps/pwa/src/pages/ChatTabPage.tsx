@@ -62,7 +62,7 @@ export function ChatFrameSwitch({ sides, side, onChange }: {
     );
 }
 
-export function ChatTabPage({ navNonce, openForum, openForumTopic = null, openForumDoor = null, onComposer, onForumOpened, homeNonce, ...props }: ComponentProps<typeof MessagesPage> & {
+export function ChatTabPage({ navNonce, openForum, openForumTopic = null, openForumDoor = null, onForumDoorTaken, onComposer, onForumOpened, homeNonce, ...props }: ComponentProps<typeof MessagesPage> & {
     /** Changes at every arrival at the tab from elsewhere (App's navigateToTab), with a conversation or without one. */
     navNonce?: number;
     /** The arrival was for the Forum (a forum notice, slice F5): the Forum side, once; {@link onForumOpened} then clears it. */
@@ -71,6 +71,8 @@ export function ChatTabPage({ navNonce, openForum, openForumTopic = null, openFo
     openForumTopic?: string | null;
     /** A door from elsewhere in the app (slice F9): a topic, or a section searched for words. */
     openForumDoor?: ForumDoor | null;
+    /** The Forum took {@link openForumDoor} or {@link openForumTopic}: the opener lets go of both, so neither opens twice. */
+    onForumDoorTaken?: () => void;
     /** Make this a Need (slice F9): the Market's form, filled from the topic. */
     onComposer?: (draft: ComposerDraft) => void;
     onForumOpened?: () => void;
@@ -99,7 +101,7 @@ export function ChatTabPage({ navNonce, openForum, openForumTopic = null, openFo
                 // MessagesPage's list padding and width, so the switch stays where it was.
                 <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
                     {frame}
-                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} topicId={openForumTopic} door={openForumDoor} homeNonce={homeNonce}
+                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} topicId={openForumTopic} door={openForumDoor} onDoorTaken={onForumDoorTaken} homeNonce={homeNonce}
                         onNavigate={props.onNavigate} onMakeNeed={onComposer} />
                 </div>
             )}

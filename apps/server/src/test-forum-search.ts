@@ -106,9 +106,9 @@ const front = (id: Id) => call(id, 'GET', '/api/forum');
 const start = (id: Id, body: Record<string, unknown>) => call(id, 'POST', '/api/forum/topics', body);
 const reply = (id: Id, t: string, body: Record<string, unknown>) => call(id, 'POST', `/api/forum/topics/${t}/replies`, body);
 /** A search, never stopped by the day's count (section 5 tests the count itself). */
-async function search(id: Id, q: string, offset = 0): Promise<Res> {
+async function search(id: Id, q: string, offset = 0, section?: string): Promise<Res> {
     resetForumSearchBudget();
-    return call(id, 'GET', `/api/forum/search?q=${encodeURIComponent(q)}${offset ? `&offset=${offset}` : ''}`);
+    return call(id, 'GET', `/api/forum/search?q=${encodeURIComponent(q)}${offset ? `&offset=${offset}` : ''}${section ? `&section=${encodeURIComponent(section)}` : ''}`);
 }
 const hitIds = (r: Res) => ((r.body?.hits ?? []) as any[]).map((h) => h.postId as string);
 const found = async (id: Id, q: string, postId: string) => hitIds(await search(id, q)).includes(postId);
@@ -169,6 +169,25 @@ async function main(): Promise<void> {
     const p2 = await search(mel, many, p1.body?.next ?? 0);
     assert(p1.body?.hits?.length === FORUM_SEARCH_PAGE && p1.body.next === FORUM_SEARCH_PAGE && p2.body?.hits?.length === 5 && p2.body.next === null
         && new Set([...hitIds(p1), ...hitIds(p2)]).size === FORUM_SEARCH_PAGE + 5, `1. 20 a page, then the rest (${p1.body?.hits?.length}, ${p2.body?.hits?.length})`);
+    // Slice F9: a door's search in one section ("Start a community near you" searched for a town): that section's posts alone,
+    // its pages too; the same words without a section find both.
+    const both = mark();
+    const inGeneral = await start(mel, { sectionId: general, title: `${both} in General`, words: 'Here.' });
+    const inIdeas = await start(sue, { sectionId: ideas, title: `${both} in Ideas`, words: 'There.' });
+    require_(inGeneral.status === 201 && inIdeas.status === 201, `a topic with the same word in General and in Ideas (${show(inGeneral)} ${show(inIdeas)})`);
+    const wholeForum = hitIds(await search(bob, both));
+    const ideasOnly = await search(bob, both, 0, ideas);
+    assert(wholeForum.length === 2 && hitIds(ideasOnly).join() === inIdeas.body.post.id && ideasOnly.body.hits[0].sectionId === ideas && ideasOnly.body.next === null,
+        `1. section: only that section's posts (${wholeForum.length}, ${show(ideasOnly)})`);
+    assert(hitIds(await search(bob, both, 0, 'no-such-section')).length === 0, '1. section: an id no section has finds nothing');
+    const twoSections = await call(bob, 'GET', `/api/forum/search?q=${both}&section=${ideas}&section=${general}`);
+    assert(twoSections.status === 400 && twoSections.body?.code === 'bad_request', `1. section: one id, never a list (${show(twoSections)})`);
+    const sectionPlan = (() => {
+        const { sql, params } = forumSearchQuery(forumSearchWords('tomato'), { reader: mel.pk, offset: 0, section: ideas });
+        return (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(params) as { detail: string }[]).map((r) => r.detail);
+    })();
+    assert(sectionPlan.filter((d) => /^(SCAN|SEARCH) (p|forum_posts)\b/.test(d)).every((d) => d === 'SEARCH p USING INTEGER PRIMARY KEY (rowid=?)'),
+        `1. section: the posts are still reached by rowid from the index (${sectionPlan.join(' | ')})`);
     const bad = [await search(mel, ''), await search(mel, '" "'), await search(mel, '…  -'), await search(mel, 'x'.repeat(201))];
     assert(bad.map((r) => `${r.status} ${r.body?.code}`).join() === '400 no_words,400 no_words,400 no_words,400 too_long',
         `1. nothing to look for, or past 200 characters: 400 (${bad.map((r) => `${r.status} ${r.body?.code}`).join()})`);

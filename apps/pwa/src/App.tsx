@@ -318,7 +318,8 @@ export function App() {
     // And the topic it opens on: a door to one topic (`/app?forumTopic=<id>`, or the one a visitor kept at Join to reply; slice F7).
     const [openForumTopic, setOpenForumTopic] = useState<string | null>(null);
     // A door into the forum from elsewhere in the app (slice F9): a topic a listing, a group or a Learn page names, or the
-    // "Start a community near you" section searched for a town. A new object each time, so the same door opens twice.
+    // "Start a community near you" section searched for a town. A new object each time, so the same door opens twice; the
+    // Forum lets go of it (and of openForumTopic) once it took it (onForumDoorTaken), so the Chats side and back opens neither again.
     const [forumDoor, setForumDoor] = useState<ForumDoor | null>(null);
     useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); setForumDoor(null); } }, [activeTab]);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
@@ -677,7 +678,7 @@ export function App() {
             setActiveTab('messages');
             setChatNavNonce(n => n + 1);
             setOpenChatForum(true);
-            setForumDoor(tab === 'forum-topic' ? { topic: contextId ?? null } : tab === 'forum-section' ? { section: contextId ?? '', q: '' } : { starter: 'start-community', q: contextId ?? '' });
+            setForumDoor(tab === 'forum-topic' ? { topic: contextId ?? null } : tab === 'forum-section' ? { section: contextId ?? '' } : { starter: 'start-community', q: contextId ?? '' });
             return;
         }
         // A forum notice (components/NeedsYouIcons.tsx goToNoticeTarget): the Chat tab on its Forum side.
@@ -1614,6 +1615,7 @@ export function App() {
                                     openForumDoor={forumDoor}
                                     onComposer={openComposerFromTool}
                                     onForumOpened={() => setOpenChatForum(false)}
+                                    onForumDoorTaken={() => { setForumDoor(null); setOpenForumTopic(null); }}
                                     onConversationOpened={() => setOpenConversationId(null)}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}

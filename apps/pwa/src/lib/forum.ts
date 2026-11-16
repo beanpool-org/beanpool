@@ -51,7 +51,8 @@ export interface ForumTopicPage { topic: ForumTopic; posts: ForumPost[]; next: n
 export interface ForumSearchHit {
     topicId: string; sectionId: string; title: string; postId: string; number: number; writer: ForumWriter; createdAt: string; excerpt: string;
 }
-export interface ForumSearchAnswer { q: string; hits: ForumSearchHit[]; next: number | null }
+/** `section`: the one section a door's search was kept to (slice F9, the town door), its later pages too; null for the whole forum. */
+export interface ForumSearchAnswer { q: string; section: string | null; hits: ForumSearchHit[]; next: number | null }
 
 /** The five reasons a moderator's No gives, as the node takes them (engine/moderation-notices.ts normaliseRemovalReason). */
 export const FIRST_LOOK_NO_REASONS = ['spam', 'offensive', 'misleading', 'unsafe', 'rules'] as const;
@@ -132,13 +133,14 @@ export async function getForumTopic(id: string, after = 0): Promise<ForumTopicPa
 
 /**
  * A search of the forum (slice F6): every word typed, newest first, 20 a page; `offset` 0 replaces the kept search, a later
- * page adds its hits. Each call is one of the member's 100 searches a day (the node refuses past them with 429), so the page
+ * page adds its hits. `section`: only that section's posts (a door's search, slice F9); the member's own searches leave it out. Each call is one of the member's 100 searches a day (the node refuses past them with 429), so the page
  * asks only when they press Search, never as they type.
  */
-export async function searchForum(q: string, offset = 0): Promise<ForumSearchAnswer> {
-    const page = await request<{ hits: ForumSearchHit[]; next: number | null }>('GET', `/api/forum/search?q=${encodeURIComponent(q)}${offset ? `&offset=${offset}` : ''}`);
-    const before = offset && kept.search?.q === q ? kept.search.hits : [];
-    kept.search = { q, hits: [...before.filter((h) => !page.hits.some((x) => x.postId === h.postId)), ...page.hits], next: page.next };
+export async function searchForum(q: string, offset = 0, section: string | null = null): Promise<ForumSearchAnswer> {
+    const page = await request<{ hits: ForumSearchHit[]; next: number | null }>('GET',
+        `/api/forum/search?q=${encodeURIComponent(q)}${offset ? `&offset=${offset}` : ''}${section ? `&section=${encodeURIComponent(section)}` : ''}`);
+    const before = offset && kept.search?.q === q && kept.search.section === section ? kept.search.hits : [];
+    kept.search = { q, section, hits: [...before.filter((h) => !page.hits.some((x) => x.postId === h.postId)), ...page.hits], next: page.next };
     return kept.search;
 }
 

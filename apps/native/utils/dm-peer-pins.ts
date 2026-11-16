@@ -1010,10 +1010,20 @@ export function isVerifiedPin(pin: DmPeerPin | null | undefined): boolean {
     return !!pin && !!pin.verified && pin.verified.peer === pin.peer;
 }
 
-/** `changedAt` with `now` first, at most {@link CHANGED_AT_MAX}, as the phone's clock writes it. */
+/** Two key changes this close together are one notice in the thread (two moves in one sync pass: after the member's reset, the re-seed and the listing). */
+const NOTICE_MERGE_MS = 60_000;
+
+/**
+ * `changedAt` with `now` first, at most {@link CHANGED_AT_MAX}, as the phone's clock writes it. A change within
+ * {@link NOTICE_MERGE_MS} after the newest one takes its place, so one pass that moves a pin twice shows one notice,
+ * whatever the clock did between the two moves.
+ */
 function changedWith(changedAt: string[] | undefined, now: string): string[] {
     const at = rekeyDateOf(now) ?? new Date().toISOString();
-    return [...new Set([at, ...(changedAt ?? [])])].slice(0, CHANGED_AT_MAX);
+    const kept = changedAt ?? [];
+    const since = kept.length ? Date.parse(at) - Date.parse(kept[0]) : Infinity;
+    const rest = since >= 0 && since < NOTICE_MERGE_MS ? kept.slice(1) : kept;
+    return [...new Set([at, ...rest])].slice(0, CHANGED_AT_MAX);
 }
 
 /**

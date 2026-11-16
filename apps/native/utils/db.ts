@@ -6205,7 +6205,18 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
             listed = entry.offered ? entry.offered.peer : entry.peer;
             heard = entry.heard;
         }
-        const verdict = await judgeThread(conversationId, identity.privateKey, me, listed, heard, judging.held, database);
+        let verdict = await judgeThread(conversationId, identity.privateKey, me, listed, heard, judging.held, database);
+        // Every listing of the chat this phone holds must name that one key (DESIGN-dm-key-signal-model §2.1): a twin the
+        // node listed in other capitals whose rows name another key is a listing that disagrees. Where the thread's lines
+        // already place the key this spelling lists (rules 1-2) it stands, as before; where first sight would take it
+        // against the lines (rules 3-5), there is no single key: a keyless pause on the key the lines placed (rules 3-4),
+        // or the rule-5 record. So no twin can carry the chat to its key by itself, and nothing is sent until one key is listed.
+        const twinSays = listed ? (await otherSpellingsHeld(database, conversationId)).some((o) => o.participants.some((pk) => {
+            const k = pinKeyOf(pk);
+            return !!k && k !== me.toLowerCase() && k !== listed;
+        })) : false;
+        if (twinSays && (verdict.rule === 3 || verdict.rule === 4)) verdict = { rule: 3, pin: verdict.pin, offer: true };
+        if (twinSays && verdict.rule !== 1 && verdict.rule !== 2) listed = null;
         const judged = entry;
         const now = new Date().toISOString();
         // Through the pins' queue, and only over what was kept when the lines were read: another writer's change stands,
@@ -6248,6 +6259,26 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
         myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered, offered: pin.offered,
         offeredPeer: pin.offered?.peer ?? null, myPubHex: me, verified: isVerifiedPin(pin), changedAt: pin.changedAt ?? [],
     };
+}
+
+/**
+ * The participant rows this phone holds for every OTHER spelling of a conversation's id (a twin the node listed in other
+ * capitals), each as a listing: `{ id, type, participants }`. Under Signal's model a pin follows the one key every listing
+ * of the chat names (DESIGN-dm-key-signal-model §2.3), so a path that hears one spelling (the screen's check, a push's
+ * refresh) counts the others the phone already holds, as the sync pass that lists them together does. Unreadable: none.
+ */
+async function otherSpellingsHeld(database: SQLite.SQLiteDatabase, conversationId: string): Promise<Array<{ id: string; type: string; participants: string[] }>> {
+    const rows = await database.getAllAsync<any>(
+        'SELECT c.id AS id, c.type AS type, cp.public_key AS pk FROM conversations c JOIN conversation_participants cp ON cp.conversation_id = c.id WHERE lower(c.id) = lower(?) AND c.id != ?',
+        [conversationId, conversationId],
+    ).catch(() => [] as any[]);
+    const byId = new Map<string, { id: string; type: string; participants: string[] }>();
+    for (const r of rows) {
+        if (typeof r?.id !== 'string' || typeof r?.pk !== 'string' || !r.pk) continue;
+        if (!byId.has(r.id)) byId.set(r.id, { id: r.id, type: typeof r.type === 'string' ? r.type : 'dm', participants: [] });
+        byId.get(r.id)!.participants.push(r.pk);
+    }
+    return [...byId.values()];
 }
 
 /**
@@ -6456,7 +6487,10 @@ async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: 
     // The gate (§3.4 amendment 5): with the pins unread, nothing of the node's is written into a DM here. Any other
     // chat's row is still written (#1872 ultrareview, U6): a group opened from a push routes as the group it is.
     if (me && !before && await isDmHere(database, conv.id, conv.type)) return;
-    const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, [conv]).catch(() => []) : [];
+    // The node answers for this one spelling; the phone's rows for any other spelling of the id count as listings too, so a
+    // twin that disagrees leaves no single key (DESIGN-dm-key-signal-model §2.1), as in the sync pass that lists both.
+    const heardWith = me && before ? [conv, ...await otherSpellingsHeld(database, conv.id)] : [conv];
+    const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, heardWith).catch(() => []) : [];
     // Its request as a read asked for when `asOf` decisions had been taken here leaves it (requestAfterReadHere), worked out
     // just before each write: a decision landing between them is never written over (PR #2540 review 4395706539).
     const read = 'request' in conv;
@@ -6478,7 +6512,7 @@ async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: 
         }
     }
     // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
-    if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, [conv])].some(Boolean)).catch(() => {});
+    if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, heardWith)].some(Boolean)).catch(() => {});
 }
 
 /**

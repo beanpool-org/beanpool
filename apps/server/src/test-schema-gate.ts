@@ -4,9 +4,10 @@
  *
  *  1. A fresh data dir boots and is stamped: user_version 5 and this release in node_config.schema_release.
  *  2. A second boot of it is a boot: still stamped, the release written again.
- *  3. A database a kept node last started on 1.4.0 (__fixtures__/schema-v1.4.0.sql, stamped as 1.4.0 stamped it, with rows;
+ *  3. A database a kept node last started on 1.4.1 (__fixtures__/schema-v1.4.1.sql, stamped as 1.4.1 stamped it, with rows;
  *     kept-node-test-fixture.ts) boots, is stamped with this release, keeps its rows, and has exactly the tables, columns,
- *     indexes and triggers a fresh install has.
+ *     indexes and triggers a fresh install has. (A file 1.4.0 last started is not held to that any more: per-item prices'
+ *     boot steps, log rows PERITEM-S1 to S4, went once every kept node had started 1.4.1.)
  *  3b. A database a node last started on 1.2.36 (__fixtures__/schema-v1.2.36.sql, user_version 4, with rows), which 1.4.0
  *     opened and stamped (log row CUT1, removed), is refused in §1's words, and the file is byte for byte as it was.
  *  4. A database last started on 1.2.18 (__fixtures__/schema-v1.2.18.sql) is refused in §1's words, and the file is byte
@@ -61,7 +62,7 @@ function oldDatabase(name: string, schemaSql: string, userVersion: number, rows?
     return dir;
 }
 
-/** A data dir holding a database a kept node last started on 1.4.0 (kept-node-test-fixture.ts), in WAL, closed. */
+/** A data dir holding a database a kept node last started on 1.4.1 (kept-node-test-fixture.ts), in WAL, closed. */
 function keptNodeDatabase(name: string, rows?: (d: Database.Database) => void): string {
     const dir = tmp(name);
     const d = new Database(stateDb(dir));
@@ -131,31 +132,31 @@ runSchemaSuite("the database's stamp and the gate at open", '⭐️ Schema gate 
     const againStamp = stampOf(freshDir);
     assert(againStamp.userVersion === SCHEMA_STAMP && againStamp.release === RELEASE, 'still stamped, with this release');
 
-    // ── 3. A 1.4.0 database opens, is stamped, and has a fresh install's shape ────────────────────────────────────
-    console.log('\n--- 3. A database a kept node last started on 1.4.0 ---');
+    // ── 3. A 1.4.1 database opens, is stamped, and has a fresh install's shape ────────────────────────────────────
+    console.log(`\n--- 3. A database a kept node last started on ${KEPT_NODE_RELEASE} ---`);
     const memberKey = 'a'.repeat(64);
-    const dir140 = keptNodeDatabase('gate-1.4.0', (d) => {
+    const dir141 = keptNodeDatabase('gate-1.4.1', (d) => {
         d.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, 'Castle')`).run(memberKey);
         d.prepare(`INSERT INTO accounts (public_key, balance_c) VALUES (?, 1250)`).run(memberKey);
         d.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey) VALUES ('p1', 'offer', 'food', 'Eggs', 'A dozen', 400, ?)`).run(memberKey);
         d.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo) VALUES ('t1', 'SYSTEM', ?, 1250, 'gift')`).run(memberKey);
     });
     {
-        const before = stampOf(dir140);
+        const before = stampOf(dir141);
         assert(before.userVersion === SCHEMA_STAMP && before.release === KEPT_NODE_RELEASE,
-            `setup: the file is stamped as 1.4.0 stamped it (user_version ${before.userVersion}, schema_release ${before.release})`);
+            `setup: the file is stamped as ${KEPT_NODE_RELEASE} stamped it (user_version ${before.userVersion}, schema_release ${before.release})`);
     }
-    const boot140 = bootInto(dir140);
-    assert(boot140.ok, `the 1.4.0 database boots${boot140.ok ? '' : `: ${boot140.output.slice(-600)}`}`);
-    const stamp140 = stampOf(dir140);
-    assert(stamp140.userVersion === SCHEMA_STAMP, `it is stamped user_version ${SCHEMA_STAMP} (got ${stamp140.userVersion})`);
-    assert(stamp140.release === RELEASE, `and names this release (got ${stamp140.release})`);
-    const shape140 = shapeOf(dir140);
-    const missingTables = [...freshShape.tables.keys()].filter((t) => !shape140.tables.has(t));
+    const boot141 = bootInto(dir141);
+    assert(boot141.ok, `the ${KEPT_NODE_RELEASE} database boots${boot141.ok ? '' : `: ${boot141.output.slice(-600)}`}`);
+    const stamp141 = stampOf(dir141);
+    assert(stamp141.userVersion === SCHEMA_STAMP, `it is stamped user_version ${SCHEMA_STAMP} (got ${stamp141.userVersion})`);
+    assert(stamp141.release === RELEASE, `and names this release (got ${stamp141.release})`);
+    const shape141 = shapeOf(dir141);
+    const missingTables = [...freshShape.tables.keys()].filter((t) => !shape141.tables.has(t));
     assert(missingTables.length === 0, `it has every table a fresh install has${missingTables.length ? ` (missing: ${missingTables.join(', ')})` : ''}`);
     const columnDiffs: string[] = [];
     for (const [table, cols] of freshShape.tables) {
-        const got = shape140.tables.get(table);
+        const got = shape141.tables.get(table);
         if (!got) continue;
         const missing = cols.filter((c) => !got.includes(c));
         const extra = got.filter((c) => !cols.includes(c));
@@ -164,30 +165,30 @@ runSchemaSuite("the database's stamp and the gate at open", '⭐️ Schema gate 
     assert(columnDiffs.length === 0, `every table has exactly a fresh install's columns${columnDiffs.length ? `:\n    ${columnDiffs.join('\n    ')}` : ''}`);
     const objectDiffs: string[] = [];
     for (const [name, sql] of freshShape.objects) {
-        const got = shape140.objects.get(name);
+        const got = shape141.objects.get(name);
         if (got === undefined) objectDiffs.push(`${name}: missing`);
         else if (got !== sql) objectDiffs.push(`${name}: another shape\n      fresh:    ${sql.slice(0, 160)}\n      upgraded: ${got.slice(0, 160)}`);
     }
     assert(objectDiffs.length === 0, `every index and trigger is a fresh install's, in its shape${objectDiffs.length ? `:\n    ${objectDiffs.join('\n    ')}` : ''}`);
-    const extraTables = [...shape140.tables.keys()].filter((t) => !freshShape.tables.has(t));
-    const extraObjects = [...shape140.objects.keys()].filter((o) => !freshShape.objects.has(o));
+    const extraTables = [...shape141.tables.keys()].filter((t) => !freshShape.tables.has(t));
+    const extraObjects = [...shape141.objects.keys()].filter((o) => !freshShape.objects.has(o));
     assert(extraTables.length === 0 && extraObjects.length === 0,
         `nothing a fresh install lacks is left behind${extraTables.length || extraObjects.length ? ` (tables: ${extraTables.join(', ')}; objects: ${extraObjects.join(', ')})` : ''}`);
     {
-        const d = new Database(stateDb(dir140), { readonly: true });
+        const d = new Database(stateDb(dir141), { readonly: true });
         const member = d.prepare('SELECT callsign, inviter_shown FROM members WHERE public_key = ?').get(memberKey) as { callsign: string; inviter_shown: number } | undefined;
         assert(member?.callsign === 'Castle' && member.inviter_shown === 1, 'its member row is kept, as it was');
         const balance = d.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(memberKey) as { balance_c: number } | undefined;
         assert(balance?.balance_c === 1250, `its balance is kept, to the hundredth: no step drops money any more (got ${balance?.balance_c})`);
         const post = d.prepare(`SELECT title, price_c, units_left FROM posts WHERE id = 'p1'`).get() as { title: string; price_c: number; units_left: number | null } | undefined;
         assert(post?.title === 'Eggs' && post.price_c === 400 && post.units_left === null,
-            `its listing is kept with its price, the column born since 1.4.0 empty (${JSON.stringify(post)})`);
+            `its listing is kept with its price, its per-item count empty (${JSON.stringify(post)})`);
         const ledger = d.prepare(`SELECT amount_c FROM transactions WHERE id = 't1'`).get() as { amount_c: number } | undefined;
         assert(ledger?.amount_c === 1250, 'and its ledger row is kept as it was');
         d.close();
     }
-    const twice = bootInto(dir140);
-    assert(twice.ok && stampOf(dir140).userVersion === SCHEMA_STAMP, 'booted again, it opens as a stamped database');
+    const twice = bootInto(dir141);
+    assert(twice.ok && stampOf(dir141).userVersion === SCHEMA_STAMP, 'booted again, it opens as a stamped database');
 
     // ── 3b. A 1.2.36 database, which 1.4.0 opened, is refused, untouched ─────────────────────────────────────────
     // 1.4.0 alone opened an unstamped file a kept node last started on 1.2.36 or 1.2.37, knowing it by its one 1.2.36
@@ -264,5 +265,5 @@ runSchemaSuite("the database's stamp and the gate at open", '⭐️ Schema gate 
     assert(other.ok, "a database another release stamped boots");
     assert(stampOf(otherDir).release === RELEASE, `its stamp then names this release (${RELEASE})`);
 
-    for (const dir of [freshDir, dir140, dir1236, dir1218, dir1235, newerDir, halfDir, otherDir]) fs.rmSync(dir, { recursive: true, force: true });
+    for (const dir of [freshDir, dir141, dir1236, dir1218, dir1235, newerDir, halfDir, otherDir]) fs.rmSync(dir, { recursive: true, force: true });
 });

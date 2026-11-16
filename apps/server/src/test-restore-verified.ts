@@ -558,8 +558,8 @@ async function main(): Promise<void> {
         d.close();
         return f;
     };
-    // A database a kept node last started on 1.4.0 (kept-node-test-fixture.ts: v1.4.0's schema.sql, stamped as 1.4.0 stamped
-    // it; the oldest the gate opens), its founder and one member. A node that started on v1.2.15 … v1.2.18 still carries that
+    // A database a kept node last started on 1.4.1 (kept-node-test-fixture.ts: v1.4.1's schema.sql, stamped as 1.4.1 stamped
+    // it; the file every kept node holds), its founder and one member. A node that started on v1.2.15 … v1.2.18 still carries that
     // release's recovery_requests and its touch trigger: no boot ever removed them. `extra` is run on it after.
     const OLD_RECOVERY_REQUESTS = [
         OLD_SCHEMA.match(/CREATE TABLE IF NOT EXISTS recovery_requests \([\s\S]*?\n\);/)?.[0] ?? '',

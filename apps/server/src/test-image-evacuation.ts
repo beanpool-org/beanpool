@@ -1,12 +1,12 @@
 /**
  * Test Suite: moving a node's images out of state.db, and everything that must not change when it happens.
  *
- * This suite starts from a state.db a kept node last started on 1.4.0 (v1.4.0's schema, stamped: the oldest file the gate
- * opens, kept-node-test-fixture.ts), with every image still inline, which is what the evacuation job meets. Everything
+ * This suite starts from a state.db a kept node last started on 1.4.1 (v1.4.1's schema, stamped: the file every kept node
+ * holds, kept-node-test-fixture.ts), with every image still inline, which is what the evacuation job meets. Everything
  * after that is the same node, one version later.
  *
  * Verifies:
- *   1. The boot keeps post_photos and message_attachments as 1.4.0 left them, the inline column optional, without losing
+ *   1. The boot keeps post_photos and message_attachments as 1.4.1 left them, the inline column optional, without losing
  *      a row or a byte.
  *   2. A NEW photo is written straight to the store: storage_key set, photo_data null, sha256 correct.
  *   3. Serving is byte-identical before and after evacuation, with the same content type and the same
@@ -98,8 +98,8 @@ const FIXTURE_PHOTOS = 32;
 const FIXTURE_ATTACHMENTS = 10;
 
 /**
- * Build a state.db a kept node last started on 1.4.0 (kept-node-test-fixture.ts: __fixtures__/schema-v1.4.0.sql, stamped
- * as 1.4.0 stamped it, the oldest file the gate opens: db/schema-gate.ts), its photos and chat pictures still inline,
+ * Build a state.db a kept node last started on 1.4.1 (kept-node-test-fixture.ts: __fixtures__/schema-v1.4.1.sql, stamped
+ * as 1.4.1 stamped it, the file every kept node holds), its photos and chat pictures still inline,
  * before anything imports db.ts. (The rebuild that made the inline columns optional on a file from before 1.2.26 went with
  * the 1.4.0 gate.)
  */
@@ -178,7 +178,7 @@ async function main(): Promise<void> {
     `);
     for (const p of fixture.photos) insertPost.run(p.postId, `Legacy ${p.postId}`, authorKey);
 
-    // ── 1. the photo tables as the boot leaves a 1.4.0 file's ────────────────────────────────────
+    // ── 1. the photo tables as the boot leaves a 1.4.1 file's ────────────────────────────────────
     const photoDdl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string;
     assert(!/photo_data\s+TEXT\s+NOT\s+NULL/i.test(photoDdl), 'post_photos.photo_data is optional after the boot');
     assert(/storage_key/.test(photoDdl) && /sha256/.test(photoDdl) && /\bbytes\b/.test(photoDdl) && /\bmime\b/.test(photoDdl),

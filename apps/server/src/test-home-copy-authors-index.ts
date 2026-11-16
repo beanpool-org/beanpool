@@ -5,7 +5,7 @@
  * version. idx_posts_copy_authors (a plain partial index, no function in it, so an older release still opens the file)
  * makes it one seek.
  *
- *  1. A state.db a kept node last started on 1.4.0 (kept-node-test-fixture.ts: __fixtures__/schema-v1.4.0.sql, stamped,
+ *  1. A state.db a kept node last started on 1.4.1 (kept-node-test-fixture.ts: __fixtures__/schema-v1.4.1.sql, stamped,
  *     with posts in it; the index came in 1.2.36), booted by initSchema: the index is kept, partial on origin_node, every
  *     post kept; booted again, nothing changes. (A file from before the index is one the gate refuses: db/schema-gate.ts.)
  *  2. The question's plan uses the index, and no EXISTS in it scans the posts table.
@@ -70,11 +70,11 @@ async function main(): Promise<void> {
     assert(!!dataDir, 'BEANPOOL_DATA_DIR is set');
     fs.mkdirSync(dataDir!, { recursive: true });
 
-    // ── 1. A database of v1.4.0, with posts in it ──
-    console.log('\n── 1. A state.db a kept node last started on 1.4.0, booted ──');
+    // ── 1. A database of v1.4.1, with posts in it ──
+    console.log('\n── 1. A state.db a kept node last started on 1.4.1, booted ──');
     const old = new Database(path.join(dataDir!, 'state.db'));
     makeKeptNodeDatabase(old);
-    assert(!!old.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`).get(INDEX), '1. the 1.4.0 file has the index, as 1.4.0 made it');
+    assert(!!old.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`).get(INDEX), '1. the 1.4.1 file has the index, as 1.4.1 made it');
     const at = new Date().toISOString();
     old.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'Genesis', ?)`).run(GENESIS, at);
     for (const [pk, name] of [[LOCAL, 'Local'], [COPY, 'Copy'], [BOTH, 'Both'], [TARGET, 'Target'], [ASSIGNED, 'Assigned'], [NOBODY, 'Nobody'], [FILLER, 'Filler']]) {

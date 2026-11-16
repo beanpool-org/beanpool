@@ -1,8 +1,8 @@
--- apps/server/src/db/schema.sql as released in v1.4.0 (`git show v1.4.0:apps/server/src/db/schema.sql`, tag commit 7bc18565), unchanged
--- below this header: the oldest shape the gate opens since the cutover's steps went (db/schema-gate.ts; log rows CUT1, CUT2,
--- B10, B11). A file made from it and stamped as 1.4.0 stamps a fresh install (kept-node-test-fixture.ts: user_version 5,
--- node_config schema_release '1.4.0') is a database a kept node last started on 1.4.0 (test-schema-gate.ts and the
--- upgrade suites).
+-- apps/server/src/db/schema.sql as released in v1.4.1 (`git show v1.4.1:apps/server/src/db/schema.sql`, tag commit e9541f27), unchanged
+-- below this header: the shape every kept node's file has once per-item prices' boot steps went (log rows PERITEM-S1 to
+-- S4; the cutover's, CUT1, CUT2, B10 and B11, went before them). A file made from it and stamped as 1.4.1 stamps a fresh
+-- install (kept-node-test-fixture.ts: user_version 5, node_config schema_release '1.4.1') is a database a kept node last
+-- started on 1.4.1 (test-schema-gate.ts and the upgrade suites).
 -- 1. Members and Profiles
 CREATE TABLE IF NOT EXISTS members (
     public_key TEXT PRIMARY KEY,
@@ -393,6 +393,27 @@ CREATE TABLE IF NOT EXISTS posts (
     shown_price TEXT,
     -- 1 while the member takes questions about this Offer or Need (engine/event-copy.ts). Anything else: nobody is named.
     shown_takes_questions INTEGER,
+    -- Local knowledge (type 'knowledge'; scratch/fable-design/DESIGN-local-knowledge-fable.md §4.1; apps/server
+    -- engine/knowledge.ts, the only writer): its sources (a JSON list of at most 5 {url, label}), its place in words (≤ 80;
+    -- a knowledge post has no lat/lng ever), its writer's app language, when an owner or admin last confirmed it, when it
+    -- was marked "may be out of date" and why (≤ 140), and how many members it helped. Empty on every other row, and
+    -- `knowledge_helped` 0. No trigger, index or default here calls a connection function, so an older image boots on this file.
+    knowledge_sources TEXT,
+    knowledge_place TEXT,
+    knowledge_lang TEXT,
+    knowledge_checked_at TEXT,
+    knowledge_outdated_at TEXT,
+    knowledge_outdated_note TEXT,
+    knowledge_helped INTEGER NOT NULL DEFAULT 0,
+    -- An Offer priced for each one (price_type 'each'; scratch/fable-design/DESIGN-per-item-price-fable.md §3; @beanpool/core
+    -- per-item.ts): how many can be taken up now (what the seller has, less what open deals hold), and a price for all of
+    -- them, whole hundredths, for exactly `lot_units` of them. NULL on every other row. The engine holds the rest on every
+    -- create and edit (apps/server engine/per-item.ts): set on 'each' only, the two lot columns together, the price for all
+    -- less than that many one by one. No trigger, index or default here calls a connection function, so an older image
+    -- boots on this file; db.ts adds the three to a file made before them (PERITEM-S1..S3), with these same CHECKs.
+    units_left INTEGER CHECK (units_left IS NULL OR (units_left >= 0 AND units_left <= 9999)),
+    lot_price_c INTEGER CHECK (lot_price_c IS NULL OR lot_price_c > 0),
+    lot_units INTEGER CHECK (lot_units IS NULL OR lot_units >= 2),
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).
@@ -590,7 +611,11 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     -- A period of a standing deal (standing_deals below; DESIGN-standing-deals-fable.md §2.1): which one, and its number
     -- from 1. NULL on a one-off deal.
     standing_id TEXT REFERENCES standing_deals(id),
-    period_no INTEGER
+    period_no INTEGER,
+    -- A deal on an Offer priced for each one (DESIGN-per-item-price-fable.md §3): 'each', a number of them (`hours` holds how
+    -- many, a whole number), or 'lot', all of them for the price for all. NULL on every other deal. db.ts adds it to a file
+    -- made before it (PERITEM-S4), with this same CHECK.
+    item_option TEXT CHECK (item_option IS NULL OR item_option IN ('each', 'lot'))
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
@@ -653,6 +678,70 @@ CREATE INDEX IF NOT EXISTS idx_standing_deals_payer ON standing_deals(payer_pubk
 CREATE INDEX IF NOT EXISTS idx_standing_deals_payee ON standing_deals(payee_pubkey, phase);
 CREATE INDEX IF NOT EXISTS idx_standing_deals_post ON standing_deals(post_id, phase);
 CREATE INDEX IF NOT EXISTS idx_standing_deals_updated_at ON standing_deals(updated_at);
+
+-- 5c. A short week (DESIGN-getting-paid-fable.md §3, §5; Marty's decisions, 11 Nov 2026): one period of a standing deal
+-- lowered, from 0 up to just under the price the payer signed. The payee lowers it alone (side 'payee', agreed at once), or
+-- the payer asks (side 'payer', 'asked') and the payee says yes (agreed) or no (declined); the payer may take an ask back
+-- (withdrawn); an ask unanswered when its period is paid, its grace runs out or the standing deal stops lapses. What a
+-- period costs is the smallest agreed change for it, else the price (@beanpool/core standingPeriodAmount), so a period
+-- lowered can be lowered again and never raised back; engine/standing-deals.ts pays it. A new table: no column of another
+-- is added, no row of another is rewritten, nothing at boot reads one.
+CREATE TABLE IF NOT EXISTS standing_period_changes (
+    -- The app's UUID: a retry of the same change is the same change.
+    id TEXT PRIMARY KEY,
+    standing_id TEXT NOT NULL REFERENCES standing_deals(id),
+    period_no INTEGER NOT NULL CHECK (period_no >= 1),
+    -- What the period would cost, whole hundredths of a Bean.
+    beans_c INTEGER NOT NULL CHECK (beans_c >= 0),
+    -- Who made it: the payer's ask, or the payee's own lowering.
+    side TEXT NOT NULL CHECK (side IN ('payer', 'payee')),
+    -- The key that signed it: the member, or a keeper of the enterprise on that side.
+    asked_by TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('asked', 'agreed', 'declined', 'withdrawn', 'lapsed')),
+    answered_by TEXT,
+    answered_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- One open ask a period.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_standing_period_changes_open ON standing_period_changes(standing_id, period_no) WHERE state = 'asked';
+CREATE INDEX IF NOT EXISTS idx_standing_period_changes_period ON standing_period_changes(standing_id, period_no, state);
+CREATE INDEX IF NOT EXISTS idx_standing_period_changes_updated_at ON standing_period_changes(updated_at);
+
+-- 5d. Bills (DESIGN-getting-paid-fable.md §4, §5; engine/bills.ts): a request to pay, never a payment. From a member, or an
+-- enterprise a keeper sent it for (sent_by signed it), to one member, who pays it, declines it or leaves it. A bill is no
+-- deal and holds nothing: paying it is one ledger row (ledger_tx_id) written with the flip sent → paid. Nothing here is
+-- read from any other table's old rows: a new table, empty on every node until a bill is sent.
+CREATE TABLE IF NOT EXISTS bills (
+    -- The sender's app's UUID: a retry of the send is the same bill.
+    id TEXT PRIMARY KEY,
+    biller_pubkey TEXT NOT NULL,
+    sent_by TEXT NOT NULL,
+    -- NULL only while it waits on an invite (slice B3).
+    payer_pubkey TEXT,
+    invite_code TEXT,
+    amount_c INTEGER NOT NULL CHECK (amount_c > 0 AND amount_c <= 200000),
+    what_for TEXT NOT NULL,
+    post_id TEXT,
+    standing_id TEXT,
+    state TEXT NOT NULL CHECK (state IN ('sent', 'paid', 'declined', 'withdrawn', 'expired')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- When it reached its payer (its send; for a bill on an invite, the redeem), and when it expires: 30 days on.
+    delivered_at TEXT,
+    expires_at TEXT,
+    answered_at TEXT,
+    ledger_tx_id TEXT,
+    -- The report its payer filed on it (abuse_reports.id): three members' within 7 days hold the sender's bills.
+    report_id TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bills_invite ON bills(invite_code) WHERE invite_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bills_payer ON bills(payer_pubkey, state);
+CREATE INDEX IF NOT EXISTS idx_bills_biller ON bills(biller_pubkey, created_at);
+CREATE INDEX IF NOT EXISTS idx_bills_due ON bills(state, expires_at);
+CREATE INDEX IF NOT EXISTS idx_bills_updated_at ON bills(updated_at);
+-- The bills reports were filed on: all a hold (engine/bills.ts reportersHolding) and the reports queue (getReports) read.
+CREATE INDEX IF NOT EXISTS idx_bills_reported ON bills(report_id) WHERE report_id IS NOT NULL;
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (
@@ -1636,6 +1725,22 @@ BEGIN
     UPDATE standing_deals SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
+CREATE TRIGGER IF NOT EXISTS standing_period_changes_touch_updated_at
+AFTER UPDATE ON standing_period_changes
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE standing_period_changes SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS bills_touch_updated_at
+AFTER UPDATE ON bills
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE bills SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
 CREATE TRIGGER IF NOT EXISTS projects_touch_updated_at
 AFTER UPDATE ON projects
 FOR EACH ROW
@@ -1955,6 +2060,30 @@ CREATE TABLE IF NOT EXISTS names_copies (
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- A member's locked contacts list (scratch/fable-design/DESIGN-private-contacts-fable.md §4.4, slice C1): made on their
+-- device under a key only their account's secret makes (@beanpool/core contacts-crypto.ts), padded to 16 KiB steps, and
+-- signed by them. One row per member, written only by that member (routes/contacts.ts PUT /api/contacts/copy) and read
+-- only by them. This server never opens or changes one: it keeps the header's numbers and the rest as sent. Deleted with a
+-- tombstone when the member removes it, stops being a member here (removed, account deleted, replaced by a re-key), or
+-- the owners switch the community's copies off (engine/contact-copies.ts). Born empty: no existing row is read or moved.
+CREATE TABLE IF NOT EXISTS contact_copies (
+    owner_pubkey  TEXT PRIMARY KEY,
+    seq           INTEGER NOT NULL CHECK (seq >= 1),
+    -- The padded list's size: a whole number of 16 KiB steps, at most 512 KiB (what a server learns of its size).
+    padded_size   INTEGER NOT NULL CHECK (padded_size >= 16384 AND padded_size <= 524288 AND padded_size % 16384 = 0),
+    -- The device's clock, as signed: shown to the member, never compared.
+    saved_at      TEXT NOT NULL,
+    -- base64: the 24-byte nonce, and the locked bytes (the padded list and its tag).
+    nonce         TEXT NOT NULL,
+    sealed        TEXT NOT NULL,
+    digest        TEXT NOT NULL,
+    header        TEXT NOT NULL,
+    signature     TEXT NOT NULL,
+    created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- A holder of a key who stopped being an owner or admin (engine/names-list.ts reconcileHolders): marked once, logged
 -- once, and no longer counted as holding it. While a holder of the current key is marked, nothing is written until an
 -- admin who holds it makes a new generation (the write freeze, 409 `new_key_first`).
@@ -2109,8 +2238,20 @@ CREATE TABLE IF NOT EXISTS known_floor_exceptions (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
--- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3): every owner and admin
--- reads it. `member_pubkey` is null for a community-wide setting.
+-- A tier badge (engine/badges.ts; Marty, 12 Nov 2026: "tiers badge only"): one an owner or admin gave a member, or a genesis
+-- invite gave its joiner. Recognition only: it gives no credit and no floor reads it; the tier a member shows is the higher
+-- of it and what they did (@beanpool/engine trust.ts). No row: no badge. Each change is a line in known_floor_log ('badge').
+CREATE TABLE IF NOT EXISTS member_badges (
+    member_pubkey  TEXT PRIMARY KEY,
+    tier           TEXT NOT NULL CHECK (tier IN ('Resident', 'Steward', 'Elder')),
+    set_by         TEXT NOT NULL,
+    set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3), and to a member's badge
+-- (action 'badge'): every owner and admin reads it. `member_pubkey` is null for a community-wide setting.
 CREATE TABLE IF NOT EXISTS known_floor_log (
     id             TEXT PRIMARY KEY,
     actor_pubkey   TEXT NOT NULL,
@@ -2121,6 +2262,27 @@ CREATE TABLE IF NOT EXISTS known_floor_log (
     at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+-- Every look a giver took at one member's credit (DESIGN-credit-list-amend-fable.md §5.2; engine/credit-looks.ts): who
+-- looked, whose credit, on which surface (`list`: a page of the People list with Show credit on; `card`: the opened card or
+-- sheet), what the looker was then (`owner`, `admin`, `voucher`), the UTC day, and the first look's exact time. One line per
+-- looker, person, surface and day: the key itself, so a repeat that day writes nothing. No balance, no figure. `surface`
+-- and `sight` are plain text with no CHECK list: a fixed list would make the next value conversion code. Every owner and
+-- admin reads it; each server drops a line 12 months old (the manifest's age rule, with no tombstone). No default calls a
+-- connection function, so an older image boots on this file.
+CREATE TABLE IF NOT EXISTS credit_look_log (
+    actor_pubkey   TEXT NOT NULL,
+    subject_pubkey TEXT NOT NULL,
+    surface        TEXT NOT NULL,
+    day            TEXT NOT NULL,
+    sight          TEXT NOT NULL,
+    at             TEXT NOT NULL,
+    -- The replication watermark (a plain table): db.ts stamps every write.
+    updated_at     TEXT,
+    PRIMARY KEY (actor_pubkey, subject_pubkey, surface, day)
+);
+CREATE INDEX IF NOT EXISTS idx_credit_look_log_subject ON credit_look_log (subject_pubkey, day);
+CREATE INDEX IF NOT EXISTS idx_credit_look_log_at ON credit_look_log (at);
 
 -- Vouchers (DESIGN-invites-and-names-list-amend2-fable.md §2, §3; engine/vouchers.ts): who vouches now, since when and by
 -- whose hand. A member is one by role (an owner or admin, `source` 'role') or because an owner or credit-committee admin
@@ -2865,6 +3027,25 @@ BEGIN
     WHERE group_id = NEW.group_id AND member_pubkey = NEW.member_pubkey;
 END;
 
+-- An invitation to a group that the person invited declined. Declining deletes their group_members row (engine
+-- removeGroupMember), so without this the member who made the invitation could not tell a no from no answer yet
+-- ("Invitations should show whether they have been used", Rob, 11 Nov 2026). One row per person per group, written in the
+-- same transaction as the delete, and read ONLY by the member who made the invitation (`invited_by`): never by the group,
+-- its convenors or the person who declined (engine/group-invitations.ts). Kept for DECLINE_KEPT_DAYS from `declined_at`,
+-- dropped when the group next records a decline, gone at once when the person is invited again, joins or leaves.
+-- Not replicated: a standby that takes over starts with none, which costs the sender a "Declined" line and nothing else
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS group_invite_declines (
+    group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    invitee_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    invited_by TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    -- When the invitation was made (the group_members.joined_at it held), and when it was declined.
+    invited_at DATETIME,
+    declined_at DATETIME NOT NULL,
+    PRIMARY KEY (group_id, invitee_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_group_invite_declines_sender ON group_invite_declines(group_id, invited_by);
+
 CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
 AFTER DELETE ON groups
 FOR EACH ROW
@@ -2887,6 +3068,68 @@ CREATE TABLE IF NOT EXISTS invite_asks (
     updated_at   DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_invite_asks_asker ON invite_asks (asker_pubkey);
+
+-- Local knowledge's waiting list (DESIGN-local-knowledge-fable.md §2.2, §4.1; slice K3, engine/knowledge-drafts.ts): what
+-- waits for an owner's or admin's approval is never a post. A member's suggestion, an assistant's draft (K6) and a fix to a
+-- page showing (K5) wait here; only approval makes or changes the `posts` row (engine/knowledge.ts publishKnowledge). New
+-- tables, empty on every node until a member suggests a page: nothing here is read from or written to an older row. All
+-- three are plain tables (engine/replication-manifest.ts), so a waiting suggestion survives a take-over; every delete goes
+-- with a tombstone.
+-- One suggestion. `via`: 'app', or 'assistant:<grant id>' for an owner's or admin's assistant (whose `member_pubkey` is
+-- the owner or admin it acts for). A taken-back one keeps no words, only that it was sent (the day's limit counts it). An
+-- answered or taken-back one is deleted 30 days later; a waiting one stays (its member holds at most 3).
+CREATE TABLE IF NOT EXISTS knowledge_drafts (
+    id             TEXT PRIMARY KEY,
+    kind           TEXT NOT NULL CHECK (kind IN ('new', 'fix')),
+    -- A fix's page (K5); NULL for a new one.
+    post_id        TEXT,
+    member_pubkey  TEXT NOT NULL,
+    via            TEXT NOT NULL,
+    assistant_name TEXT,
+    title          TEXT NOT NULL,
+    body           TEXT NOT NULL,
+    topic          TEXT NOT NULL,
+    place          TEXT,
+    -- JSON list of { url, label }, at most 5, as a page's knowledge_sources.
+    sources        TEXT,
+    lang           TEXT,
+    about          TEXT,
+    note           TEXT,
+    state          TEXT NOT NULL CHECK (state IN ('waiting', 'approved', 'declined', 'withdrawn')),
+    answered_at    TEXT,
+    -- Who answered: never sent to the member.
+    answered_by    TEXT,
+    reason         TEXT,
+    reason_words   TEXT,
+    result_post_id TEXT,
+    created_at     TEXT NOT NULL,
+    -- The replication watermark (a plain table): db.ts stamps every write.
+    updated_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_member ON knowledge_drafts (member_pubkey, created_at);
+CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_state ON knowledge_drafts (state, created_at);
+-- A suggestion's photos, the sender's own, at most 3: kept in the row as a data URL with its metadata stripped, never in the
+-- image store and never under posts/, so the copy a standby holds carries them whole. Charged to the sender's photo budget
+-- when sent; deleted when it is answered or taken back. Approval stores them as the page's own (posts' photos), not charged
+-- again.
+CREATE TABLE IF NOT EXISTS knowledge_draft_photos (
+    draft_id   TEXT NOT NULL,
+    order_num  INTEGER NOT NULL,
+    photo_data TEXT NOT NULL,
+    bytes      INTEGER NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (draft_id, order_num)
+);
+-- "This helped" (slice K5): one row per member per page; `counted` is stamped at the tap and never worked out again.
+CREATE TABLE IF NOT EXISTS knowledge_helped (
+    post_id       TEXT NOT NULL,
+    member_pubkey TEXT NOT NULL,
+    counted       INTEGER NOT NULL CHECK (counted IN (0, 1)),
+    at            TEXT NOT NULL,
+    updated_at    TEXT,
+    PRIMARY KEY (post_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_helped_member ON knowledge_helped (member_pubkey);
 
 -- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
 -- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its

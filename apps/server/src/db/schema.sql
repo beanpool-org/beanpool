@@ -405,7 +405,7 @@ CREATE TABLE IF NOT EXISTS posts (
     -- them, whole hundredths, for exactly `lot_units` of them. NULL on every other row. The engine holds the rest on every
     -- create and edit (apps/server engine/per-item.ts): set on 'each' only, the two lot columns together, the price for all
     -- less than that many one by one. No trigger, index or default here calls a connection function, so an older image
-    -- boots on this file; db.ts adds the three to a file made before them (PERITEM-S1..S3), with these same CHECKs.
+    -- boots on this file. Born in 1.4.1; the boot steps that added them to an older file (PERITEM-S1..S3) are gone.
     units_left INTEGER CHECK (units_left IS NULL OR (units_left >= 0 AND units_left <= 9999)),
     lot_price_c INTEGER CHECK (lot_price_c IS NULL OR lot_price_c > 0),
     lot_units INTEGER CHECK (lot_units IS NULL OR lot_units >= 2),
@@ -608,8 +608,8 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     standing_id TEXT REFERENCES standing_deals(id),
     period_no INTEGER,
     -- A deal on an Offer priced for each one (DESIGN-per-item-price-fable.md §3): 'each', a number of them (`hours` holds how
-    -- many, a whole number), or 'lot', all of them for the price for all. NULL on every other deal. db.ts adds it to a file
-    -- made before it (PERITEM-S4), with this same CHECK.
+    -- many, a whole number), or 'lot', all of them for the price for all. NULL on every other deal. Born in 1.4.1; the boot
+    -- step that added it to an older file (PERITEM-S4) is gone.
     item_option TEXT CHECK (item_option IS NULL OR item_option IN ('each', 'lot'))
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);

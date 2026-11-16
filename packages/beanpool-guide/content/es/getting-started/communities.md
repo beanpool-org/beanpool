@@ -67,14 +67,12 @@ Tus otras comunidades funcionan como antes.
 
 También puedes cambiar en **Ajustes**, bajo **Sistema**, luego **Comunidades guardadas**. Tus comunidades están listadas allí. La que estás usando está marcada como activa. Toca **Cambiar a esta comunidad** en otra para pasar a ella.
 
-## Cuando tu comunidad se muda a una nueva dirección
+## Si tu comunidad cambia de dirección
 
-Una comunidad puede mudarse a una nueva dirección: por ejemplo, del número de su servidor (como 203.0.113.5) a un nombre. En el teléfono, Inicio muestra entonces una tarjeta en la parte superior: **Esta comunidad también está en beans.example.org. ¿Usar esa dirección a partir de ahora?** Se muestra solo después de que tu teléfono haya comprobado con el servidor de la comunidad que la nueva dirección es la misma comunidad.
+Una comunidad puede responder en más de una dirección, y sus propietarios eligen cuál es su dirección principal.
 
-- Toca **Usar la nueva dirección**. Tu teléfono se traslada allí con lo que conserva para esa comunidad, incluidos tus mensajes, y abre la comunidad nuevamente, como cuando cambias.
-- Toca **Ahora no**, y la tarjeta vuelve a preguntar en 7 días. Tu teléfono nunca se muda por sí solo.
-- Si la nueva dirección responde como una comunidad diferente, la app dice **Este teléfono se queda donde está** y conserva la dirección que tiene. Si no se puede realizar la comprobación, dice **Nada ha cambiado. Inténtalo de nuevo en un momento.**
-- Si la dirección anterior dejó de responder antes de que tu teléfono supiera de la nueva, nada puede decirle a tu teléfono a dónde fue la comunidad. Pide a sus propietarios la nueva dirección, luego toca el frijol, luego **Añadir una comunidad** y escríbela allí.
+- **En el teléfono, no tienes que hacer nada.** Tu teléfono comprueba por sí solo las direcciones de tu comunidad y pasa a la principal en cuanto esta responde con la propia clave de tu comunidad. Si la dirección que usa tu teléfono deja de responder, usa otra dirección de tu comunidad por ahora y vuelve en cuanto responde la principal. Inicio lo indica en una línea, una sola vez. Nada más cambia: tus mensajes y todo lo que tu teléfono guarda de la comunidad siguen donde están.
+- **En la app web,** tu inicio de sesión pertenece a la dirección que abriste, así que la app web se queda allí y sigue funcionando. Una línea discreta arriba indica la dirección principal. Toca **Ábrela allí** para ir a ella y, después, inicia sesión allí con **Vincula este navegador desde tu teléfono**, o con tu inicio de sesión o tus 12 palabras.
 
 ## Olvidar una comunidad en este teléfono
 

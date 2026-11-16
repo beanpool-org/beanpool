@@ -67,14 +67,12 @@ Jumuiya zako nyingine hufanya kazi kama hapo awali.
 
 Unaweza pia kubadili katika **Mipangilio**, chini ya **Mfumo**, kisha **Jumuiya zilizohifadhiwa**. Jumuiya zako zimeorodheshwa huko. Ile unayoitumia imewekwa alama kama amilifu. Gusa **Badilisha hadi jumuiya hii** kwenye nyingine ili kuhamia huko.
 
-## Jumuiya yako inapohamia anwani mpya
+## Jumuiya yako ikibadilisha anwani yake
 
-Jumuiya inaweza kuhamia anwani mpya: kwa mfano, kutoka kwa nambari ya seva yake (kama vile 203.0.113.5) hadi kwa jina. Kwenye simu, Nyumbani basi huonyesha kadi juu: **Jumuiya hii pia ipo kwenye beans.example.org. Je, utumie anwani hiyo kuanzia sasa?** Inaonyesha tu baada ya simu yako kukagua na seva ya jumuiya kuwa anwani mpya ni jumuiya ileile.
+Jumuiya inaweza kujibu kwenye anwani zaidi ya moja, na wamiliki wake huchagua ipi ni anwani yake kuu.
 
-- Gusa **Tumia anwani mpya**. Simu yako huhamia huko ikiwa na kile inachoweka kwa ajili ya jumuiya hiyo, ujumbe wako ukiwemo, na kuifungua jumuiya tena, kama vile unapobadili.
-- Gusa **Si sasa**, na kadi huuliza tena baada ya siku 7. Simu yako haihami kamwe yenyewe.
-- Ikiwa anwani mpya inajibu kama jumuiya tofauti, programu inasema **Simu hii inabaki pale ilipo**, na huweka anwani iliyo nayo. Ikiwa ukaguzi hauwezi kufanywa, inasema **Hakuna kilichobadilika. Jaribu tena baada ya muda mfupi.**
-- Ikiwa anwani ya zamani iliacha kujibu kabla simu yako haijasikia kuhusu mpya, hakuna kinachoweza kuiambia simu yako jumuiya ilienda wapi. Waombe wamiliki wake anwani mpya, kisha uguse haragwe, kisha **Ongeza jumuiya**, na uiandike hapo.
+- **Kwenye simu, hakuna unachohitaji kufanya.** Simu yako hukagua anwani za jumuiya yako yenyewe na huhamia anwani kuu mara inapojibu kwa ufunguo wa jumuiya yako yenyewe. Anwani ambayo simu yako inatumia ikiacha kujibu, simu hutumia anwani nyingine ya jumuiya yako kwa sasa na hurudi mara anwani kuu inapojibu. Nyumbani husema hivyo kwa mstari mmoja, mara moja. Hakuna kingine kinachobadilika: ujumbe wako na kila kitu ambacho simu yako huhifadhi kwa ajili ya jumuiya hubaki pale pale.
+- **Kwenye programu ya wavuti,** njia yako ya kuingia ni ya anwani uliyofungua, kwa hiyo programu ya wavuti hubaki hapo na huendelea kufanya kazi. Mstari mtulivu juu hutaja anwani kuu. Gusa **Ifungue huko** ili uende huko, kisha uingie huko kwa **Unganisha kivinjari hiki kutoka kwenye simu yako**, au kwa njia yako ya kuingia au maneno yako 12.
 
 ## Kusahau jumuiya kwenye simu hii
 

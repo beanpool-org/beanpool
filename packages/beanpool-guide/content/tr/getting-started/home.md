@@ -71,7 +71,7 @@ Ana Sayfa yalnızca size söyleyecek bir şeyi olan kartları, kendi sıranızda
 - **Topluluğunu büyüt:** davetlerin açık olduğu yerlerde ilk Teklifinizden sonra yeni üyeler davet etmenizi sağlar. Küresel toplulukta yoktur. Telefonda, yalnızca yöneticilerin davet ettiği yerlerde, yalnızca bir sahip veya yönetici için gösterilir. Web uygulamasında orada hiç gösterilmez.
 - **Topluluğun:** topluluğunuzun adıyla başlıklandırılmış son kart (küresel toplulukta **Dünya çapındaki topluluk**). Bu ayki üye sayısını ve takasları gösterir; küresel toplulukta ise üyeleri ve kaç topluluğun listelendiğini gösterir. **Kart ekle** ve **Ana Sayfayı düzenle** seçeneklerine sahiptir. Bu kart en altta kalır ve taşınamaz veya kaldırılamaz.
 
-Telefonda, topluluğunuz yeni bir adrese taşındığında, tüm bunların üzerindeki bir kart onun kullanılıp kullanılmayacağını sorar: "Birden fazla topluluk" içindeki "Topluluğunuz yeni bir adrese taşındığında" bölümüne bakın.
+Telefonda, telefonunuz kendiliğinden topluluğunuzun başka bir adresine geçtiğinde, tüm bunların üzerindeki bir satır bunu bir kez söyler: "Birden fazla topluluk" içindeki "Topluluğunuz adresini değiştirirse" bölümüne bakın.
 
 ## "…" menüsü
 

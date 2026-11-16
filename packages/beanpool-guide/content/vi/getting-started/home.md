@@ -71,7 +71,7 @@ Trang chủ chỉ hiển thị những thẻ có điều cần thông báo cho b
 - **Phát triển cộng đồng:** cho phép bạn mời các thành viên mới sau Lời đề nghị đầu tiên của bạn, ở nơi bật tính năng mời. Không có trên cộng đồng toàn cầu. Trên điện thoại, ở nơi chỉ quản trị viên mới được mời, thẻ chỉ hiển thị cho chủ sở hữu hoặc quản trị viên. Trong ứng dụng web, thẻ không hiển thị ở đó.
 - **Cộng đồng của bạn:** thẻ cuối cùng, có tiêu đề là tên cộng đồng của bạn (**Cộng đồng toàn cầu** trên cộng đồng toàn cầu). Thẻ hiển thị số lượng thành viên và số giao dịch trong tháng này; trên cộng đồng toàn cầu là số thành viên và số lượng cộng đồng được liệt kê. Thẻ có **Thêm thẻ** và **Chỉnh sửa trang chủ**. Thẻ này luôn ở dưới cùng và không thể di chuyển hoặc xóa.
 
-Trên điện thoại, khi cộng đồng của bạn đã chuyển sang một địa chỉ mới, một thẻ phía trên tất cả các thẻ này sẽ hỏi xem có sử dụng địa chỉ đó không: xem "Khi cộng đồng của bạn chuyển sang địa chỉ mới" trong "Nhiều hơn một cộng đồng".
+Trên điện thoại, khi điện thoại của bạn đã tự chuyển sang một địa chỉ khác của cộng đồng, một dòng phía trên tất cả các thẻ này cho biết điều đó, một lần: xem "Nếu cộng đồng của bạn đổi địa chỉ" trong "Nhiều hơn một cộng đồng".
 
 ## Menu "…"
 

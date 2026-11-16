@@ -67,14 +67,12 @@ Komunitasmu yang lain berfungsi seperti sebelumnya.
 
 Kamu juga dapat berpindah di **Pengaturan**, di bawah **Sistem**, lalu **Komunitas tersimpan**. Komunitasmu dicantumkan di sana. Komunitas yang sedang kamu gunakan ditandai sebagai aktif. Ketuk **Beralih ke komunitas ini** pada komunitas lain untuk berpindah ke sana.
 
-## Ketika komunitasmu berpindah ke alamat baru
+## Jika komunitasmu mengganti alamatnya
 
-Suatu komunitas dapat berpindah ke alamat baru: misalnya, dari nomor servernya (seperti 203.0.113.5) ke sebuah nama. Di ponsel, Beranda kemudian menampilkan kartu di bagian atas: **Komunitas ini juga berada di beans.example.org. Gunakan alamat itu mulai sekarang?** Kartu ini hanya muncul setelah ponselmu memeriksa dengan server komunitas bahwa alamat baru tersebut adalah komunitas yang sama.
+Sebuah komunitas bisa menjawab di lebih dari satu alamat, dan pemiliknya memilih mana yang menjadi alamat utamanya.
 
-- Ketuk **Gunakan alamat baru**. Ponselmu berpindah ke sana bersama apa yang disimpannya untuk komunitas tersebut, termasuk pesan-pesanmu, dan membuka komunitas itu kembali, seperti saat kamu beralih komunitas.
-- Ketuk **Jangan sekarang**, dan kartu akan menanyakannya lagi dalam 7 hari. Ponselmu tidak pernah berpindah sendiri tanpa izin.
-- Jika alamat baru merespons sebagai komunitas yang berbeda, aplikasi bertuliskan **Ponsel ini tetap di posisinya**, dan mempertahankan alamat yang dimilikinya. Jika pemeriksaan tidak dapat dilakukan, aplikasi bertuliskan **Tidak ada yang berubah. Coba lagi sebentar lagi.**
-- Jika alamat lama berhenti merespons sebelum ponselmu mengetahui alamat yang baru, tidak ada yang dapat memberi tahu ponselmu ke mana komunitas itu berpindah. Tanyakan kepada pemiliknya untuk mendapatkan alamat baru, lalu ketuk ikon kacang, lalu **Tambah komunitas**, dan ketikkan alamatnya di sana.
+- **Di ponsel, kamu tidak perlu melakukan apa pun.** Ponselmu memeriksa alamat-alamat komunitasmu sendiri dan pindah ke alamat utama begitu alamat itu menjawab dengan kunci milik komunitasmu sendiri. Jika alamat yang dipakai ponselmu berhenti menjawab, ponselmu memakai alamat lain komunitasmu untuk sementara dan kembali begitu alamat utama menjawab. Beranda memberitahukannya dalam satu baris, sekali saja. Tidak ada yang lain berubah: pesan-pesanmu dan semua yang disimpan ponselmu untuk komunitas tetap di tempatnya.
+- **Di aplikasi web,** akun masukmu milik alamat yang kamu buka, jadi aplikasi web tetap di sana dan terus berfungsi. Sebuah baris tenang di bagian atas menyebutkan alamat utama. Ketuk **Buka di sana** untuk menuju ke sana, lalu masuk di sana dengan **Tautkan peramban ini dari ponsel Anda**, atau dengan akun masukmu atau 12 katamu.
 
 ## Melupakan komunitas di ponsel ini
 

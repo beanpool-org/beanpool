@@ -71,7 +71,7 @@ Nyumbani huonyesha tu kadi zenye kitu cha kukuambia, kwa mpangilio wako mwenyewe
 - **Kuza jumuiya yako:** inakuruhusu kualika wanachama wapya baada ya Ofa yako ya kwanza, mahali ambapo mialiko imewashwa. Si kwenye jumuiya ya kimataifa. Kwenye simu, mahali ambapo wasimamizi pekee ndio wanaoalika, huonekana tu kwa mmiliki au msimamizi. Kwenye programu ya wavuti haionekani huko kabisa.
 - **Jumuiya yako:** kadi ya mwisho, ikiwa na jina la jumuiya yako kama kichwa (**Jumuiya ya kimataifa** kwenye jumuiya ya kimataifa). Inaonyesha idadi ya wanachama na biashara mwezi huu; kwenye jumuiya ya kimataifa, wanachama na idadi ya jumuiya zilizoorodheshwa. Ina **Ongeza kadi** na **Hariri nyumbani**. Kadi hii inabaki chini kabisa na haiwezi kuhamishwa au kuondolewa.
 
-Kwenye simu, wakati jumuiya yako imehamia anwani mpya, kadi iliyo juu ya hizi zote huuliza ikiwa itumike: tazama "Jumuiya yako inapohamia anwani mpya" katika "Zaidi ya jumuiya moja".
+Kwenye simu, simu yako ikiwa imehamia yenyewe kwenye anwani nyingine ya jumuiya yako, mstari mmoja juu ya hizi zote husema hivyo, mara moja: tazama "Jumuiya yako ikibadilisha anwani yake" katika "Zaidi ya jumuiya moja".
 
 ## Menyu ya "…"
 

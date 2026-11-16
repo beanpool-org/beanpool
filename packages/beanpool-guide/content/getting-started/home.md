@@ -79,7 +79,7 @@ Home shows only the cards that have something to tell you, in your own order. A 
 - **Your tools:** a card you fill with the tools you use, each showing its icon, name and latest state, and opening that tool.
 - **Your community:** the last card, titled with your community's name (**The global community** on the global community). It runs across the full width. On wide screens in the web app, it shows a figure tile for each number your community shares: members, who joined this week, trades this month, Commons pot, listings and upcoming events (with Beans off, no trades or Commons pot; on the global community: members, communities listed and listings); on narrower screens, three lines. Where your community has Learn turned on and has a page in it, a line such as "6 things worth knowing" opens Learn. It has **Add a card** and **Arrange**. This card stays at the bottom and cannot be moved or removed.
 
-On the phone, when your community has moved to a new address, a card above all of these asks whether to use it: see "When your community moves to a new address" in "More than one community".
+On the phone, when your phone has moved to another address of your community by itself, one line above all of these says so, once: see "If your community changes its address" in "More than one community".
 
 ## The "…" menu
 

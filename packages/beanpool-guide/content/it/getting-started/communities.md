@@ -67,14 +67,12 @@ Le altre tue comunità funzionano come prima.
 
 Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Comunità salvate**. Le tue comunità sono elencate lì. Quella che stai usando è contrassegnata come attiva. Tocca **Passa a questa comunità** su un'altra per spostarti su di essa.
 
-## Quando la tua comunità si sposta a un nuovo indirizzo
+## Se la tua comunità cambia indirizzo
 
-Una comunità può trasferirsi a un nuovo indirizzo: ad esempio, dall'indirizzo IP del suo server (come 203.0.113.5) a un nome di dominio. Sul telefono, la Home mostra allora una scheda in alto: **Questa comunità si trova anche su beans.example.org. Vuoi usare questo indirizzo d'ora in poi?** Compare solo dopo che il telefono ha verificato con il server della comunità che il nuovo indirizzo appartiene alla stessa comunità.
+Una comunità può rispondere a più di un indirizzo, e i suoi proprietari scelgono quale sia il suo indirizzo principale.
 
-- Tocca **Usa il nuovo indirizzo**. Il telefono si sposta lì con tutto ciò che conserva per quella comunità, inclusi i tuoi messaggi, e riapre la comunità, esattamente come quando cambi comunità.
-- Tocca **Non ora**, e la scheda lo riproporrà dopo 7 giorni. Il telefono non si sposta mai di propria iniziativa.
-- Se il nuovo indirizzo risponde come una comunità diversa, l'app dice **Questo telefono rimane dove si trova**, e mantiene l'indirizzo attuale. Se il controllo non può essere effettuato, dice **Non è cambiato nulla. Riprova tra poco.**
-- Se il vecchio indirizzo ha smesso di rispondere prima che il telefono venisse a conoscenza di quello nuovo, nulla può comunicare al telefono dove si è trasferita la comunità. Chiedi ai suoi proprietari il nuovo indirizzo, poi tocca il fagiolo, seleziona **Aggiungi una comunità** e digitalo lì.
+- **Sul telefono non devi fare nulla.** Il tuo telefono controlla da solo gli indirizzi della tua comunità e passa a quello principale appena ha risposto con la chiave della tua comunità. Se l'indirizzo che usa il tuo telefono smette di rispondere, per ora ne usa un altro della tua comunità e torna indietro appena il principale risponde. La Home lo dice in una riga, una volta sola. Nient'altro cambia: i tuoi messaggi e tutto ciò che il telefono conserva per la comunità restano dove sono.
+- **Nell'app web,** il tuo accesso appartiene all'indirizzo che hai aperto, quindi l'app web resta lì e continua a funzionare. Una riga discreta in alto indica l'indirizzo principale. Tocca **Aprila lì** per andarci, poi accedi lì con **Collega questo browser dal tuo telefono**, oppure con il tuo accesso o le tue 12 parole.
 
 ## Dimenticare una comunità su questo telefono
 

@@ -98,7 +98,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { announceVaultTicketKeysAtBoot } from './services/vault-ticket-keys.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
-import { startAddressListWatch } from './services/address-list.js';
+import { renumberAddressListAfterSwap, startAddressListWatch } from './services/address-list.js';
 import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
 import { startAddressCheck } from './services/address-check.js';
 import { removeDailyPulse } from './engine/daily-pulse-cleanup.js';
@@ -188,6 +188,9 @@ async function main() {
         log: message => logger.security('ADMIN', message),
         // Lights-out reads it later: this record came from a backup, made then (services/lights-out.ts, §2.1 item 3, §3.5).
         remember: noteRestoredCopy,
+        // The signed address list's number goes past every one signed before the swap, an address changed or not
+        // (services/address-list.ts, #3232 round 2). Before anything is signed: the list's watch starts at step 7.35.
+        renumber: renumberAddressListAfterSwap,
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
     // (it asks whether there is an owner). Never throws: without a code, `beanpool recover` on the server still adds an owner.

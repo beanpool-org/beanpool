@@ -113,7 +113,7 @@ import { deletePreviousDatabase, previousDatabaseThere } from '../db/swap-at-boo
 import { copyCheckForPreview } from './standby-copy-record.js';
 import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
-import { readAddressListRecord } from './address-list.js';
+import { addressListAfterTakeover, readAddressListRecord } from './address-list.js';
 import { BEANPOOL_ZONE, isLoopbackHost } from '../engine/own-addresses.js';
 import {
     getReplacedInfo, forgetSyncEpochHeaderValue, newerTakeoverAnswering, type NewerTakeover, type ReplacedInfo,
@@ -977,9 +977,11 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             const names = Array.isArray(bundle.registrarNames) ? parseRegistrarNames(bundle.registrarNames) : null;
             // The owner's main address and the number of the last address list signed (several addresses S2, design §6): the
             // promoted server names the same main while it leads here (chosenMainAddress checks its own list), and numbers its
-            // first list after the carried one, at the epoch the `role` step writes. Each only when the keys carry it.
+            // first list after the carried one, one take-over past both its epoch and the keys' (addressListAfterTakeover:
+            // never a tie with the server it replaces, #3232 round 2). Each only when the keys carry it.
             const main = 'mainAddress' in bundle ? (typeof bundle.mainAddress === 'string' ? bundle.mainAddress : null) : undefined;
-            const list = 'addressList' in bundle ? readAddressListRecord(bundle.addressList) : null;
+            const carried = 'addressList' in bundle ? readAddressListRecord(bundle.addressList) : null;
+            const list = carried ? addressListAfterTakeover(carried, bundleEpoch(bundle)) : null;
             updateNodeConfig({
                 publicAddress: pa ?? null, ...(owned ? { ownerAddresses: owned } : {}), ...(names ? { registrarNames: names } : {}),
                 ...(main !== undefined ? { mainAddress: main } : {}), ...(list ? { addressList: list } : {}),
@@ -988,7 +990,7 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             j.result.tunnel = plan.tunnel;
             const extra = (owned && owned.length ? `; confirmed app address(es) ${owned.join(', ')}` : '')
                 + (names && names.length ? `; registrar name(s) ${names.map((n) => n.role === 'former' ? `${n.address} (former)` : n.address).join(', ')}` : '')
-                + (main ? `; main address ${main}` : '') + (list ? `; address list number ${list.epoch}.${list.seq}` : '');
+                + (main ? `; main address ${main}` : '') + (carried && list ? `; address list number ${carried.epoch}.${carried.seq}, going on at epoch ${list.epoch}` : '');
             return (pa ? `${pa.hostname || pa.name}; ${plan.tunnel.message}` : 'no web address from the registrar') + extra;
         }
         case 'profile': {

@@ -1877,6 +1877,26 @@ async function main(): Promise<void> {
     assert(failures18.length === 0 && ran18.has(reviewer18) && rows18 >= 400 && histsWithRows18.size >= 41,
         `18. every row: the state the host's newest word names, at the home and on the device (${hists18.length} histories, ${histsWithRows18.size} the guest can make; `
         + `${orders18n} arrival orders, ${rows18} rows run, ${notMade18} not ones the guest can make: the home refused an item; ${failures18.length} wrong; #3266's row among them: ${ran18.has(reviewer18)})`);
+    // 18b. The notices' half of the rule, which no row above reaches (there, every roster finds their yes queued or their
+    // link answered, and no invitation is refused): a roster naming them that applies nothing here (no link they answered,
+    // no yes of theirs queued: a home whose own take-over lost its queue) records nothing, so an invitation older than it,
+    // arriving after it, is still taken; so is one after an invitation refused (from someone they blocked).
+    {
+        clear16();
+        db.prepare('DELETE FROM group_guest_sent WHERE sender_key = ?').run(gus.pk);
+        const g = `g18b-${crypto.randomBytes(4).toString('hex')}`, g2 = `${g}-2`;
+        const roster = home.receiveGroupNotice('b.example', { v: 1, kind: 'roster', group: g, host: 'b.example', guests: [gus.pk], seq: 5, data: { ...(DATA.roster as object), name: 'R' } });
+        const invite = home.receiveGroupNotice('b.example', { v: 1, kind: 'invite', group: g, host: 'b.example', guests: [gus.pk], seq: 1, data: DATA.invite });
+        const blocks: any = await import('./engine/member-blocks.js');
+        blocks.addBlocks(gus.pk, [hal.pk]);
+        const refused = home.receiveGroupNotice('b.example', { v: 1, kind: 'invite', group: g2, host: 'b.example', guests: [gus.pk], seq: 5, data: { name: 'Seed Library', invitedBy: { key: hal.pk, name: 'Hal' } } });
+        blocks.removeBlock(gus.pk, hal.pk);
+        home.receiveGroupNotice('b.example', { v: 1, kind: 'invite', group: g2, host: 'b.example', guests: [gus.pk], seq: 1, data: DATA.invite });
+        const order = (gr: string) => db.prepare("SELECT seq FROM group_guest_order WHERE member = ? AND host = 'b.example' AND group_id = ?").pluck().get(gus.pk, gr) as number | undefined;
+        assert(roster.status === 202 && invite.status === 202 && refused.status === 202 && linkOf(gus, 'b.example', g)?.state === 'invited' && order(g) === 1
+            && linkOf(gus, 'b.example', g2)?.state === 'invited' && order(g2) === 1,
+            `18b. a roster that applies nothing, and an invitation refused, record nothing: the older invitation after each is taken (got ${linkOf(gus, 'b.example', g)?.state ?? 'none'} at ${order(g)}; ${linkOf(gus, 'b.example', g2)?.state ?? 'none'} at ${order(g2)})`);
+    }
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -80,7 +80,7 @@ export { MAX_OWNER_ADDRESSES };
 const ADD_OWNER_ONLY = 'Only an owner of this community can add an address';
 const MAIN_OWNER_ONLY = 'Only an owner of this community can change its main address';
 /** A standby is not where the community lives until it takes over: its main address is its main server's. */
-const MAIN_ON_STANDBY = 'This server is a standby. The main address is chosen on the community\'s main server, and a take-over keeps it.';
+const MAIN_ON_STANDBY = 'This server is a standby. The main address is chosen on the community\'s main server.';
 
 /**
  * `pageHost` is the host Settings is open at (`?host=`): the only host offered with one tap (engine/address-offers.ts),

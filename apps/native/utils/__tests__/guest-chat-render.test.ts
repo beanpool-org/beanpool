@@ -37,8 +37,11 @@ vi.mock('react-native', async () => {
         if (tag === 'textarea') { attrs.value = value ?? ''; attrs.onChange = (e: any) => onChangeText?.(e.target.value); return h(tag, attrs); }
         return h(tag, attrs, children);
     };
-    const FlatList = (props: any) => h('div', { 'data-testid': 'list' },
-        props.ListHeaderComponent, ...(props.data ?? []).map((item: any, index: number) => h('div', { key: props.keyExtractor(item) }, props.renderItem({ item, index }))));
+    // Drawn in the order a member sees it: an inverted list's footer at the top, then its data from the last item up.
+    const FlatList = (props: any) => {
+        const cells = (props.data ?? []).map((item: any, index: number) => h('div', { key: props.keyExtractor(item) }, props.renderItem({ item, index })));
+        return h('div', { 'data-testid': 'list' }, props.inverted ? props.ListFooterComponent : props.ListHeaderComponent, ...(props.inverted ? cells.reverse() : cells));
+    };
     return {
         Platform: { OS: 'android' },
         View: el('div'), Text: el('span'), Pressable: el('button'), TextInput: el('textarea'), FlatList,
@@ -85,6 +88,8 @@ vi.mock('../guest-chat-live', () => ({
     sendGuestLineNow: vi.fn(async () => null),
     fetchGroupGuests: async () => ({ guests: live.guests, on: live.on }),
     inviteGroupGuest: vi.fn(async () => ({})),
+    leaveGuestChatNow: vi.fn(async () => true),
+    removeGroupGuest: vi.fn(async () => ({})),
 }));
 
 import GuestChatScreen from '../../app/guest-chat/[id]';
@@ -221,7 +226,8 @@ describe("the group's guests, under its members", () => {
     it("guests named by the guest line; a convenor's Add opens the card box with 48 dp targets", async () => {
         await openGuests(true);
         expect(Array.from(host.querySelectorAll('[data-testid="group-guest-row"]')).map((r) => r.textContent)).toEqual([
-            'Dax · eastside.example · guestIn the chat', 'Me · hillside.example · guestAsked, not answered yet',
+            // Part 2: a convenor's Remove on each row.
+            'Dax · eastside.example · guestIn the chatRemove', 'Me · hillside.example · guestAsked, not answered yetRemove',
         ]);
         expect(box(q('group-guest-add')).minHeight).toBeGreaterThanOrEqual(48);
         act(() => (q('group-guest-add') as HTMLButtonElement).click());
@@ -265,5 +271,67 @@ describe("round 4 (#3246): each reason the host's code gives for a removal -> it
         await openChat(chats[ID]);
         expect((host.textContent ?? '')).not.toContain('Hello from Eastside');
         expect((host.textContent ?? '')).toContain('Welcome to the tools chat');
+    });
+});
+
+describe("part 2: the guest's Leave and a convenor's Remove, each asked first", () => {
+    type Button = { text: string; style?: string; onPress?: () => unknown };
+    const mocks = async () => ({
+        live: await import('../guest-chat-live') as unknown as { leaveGuestChatNow: ReturnType<typeof vi.fn>; removeGroupGuest: ReturnType<typeof vi.fn> },
+        alert: (await import('../keyboard-alert')).Alert.alert as unknown as ReturnType<typeof vi.fn>,
+    });
+    afterEach(async () => { const m = await mocks(); m.live.leaveGuestChatNow.mockClear(); m.live.removeGroupGuest.mockClear(); m.alert.mockClear(); });
+    /** The last dialog asked: its title, its words, and its buttons by their words. */
+    async function lastAsked() {
+        const call = (await mocks()).alert.mock.calls.at(-1) as [string, string, Button[]];
+        return { title: call[0], words: call[1], press: async (text: string) => { await act(async () => { await call[2].find((b) => b.text === text)!.onPress?.(); }); await settle(); }, buttons: call[2] };
+    }
+
+    it.each([['in', true], ['joining', true], ['invited', false], ['left', false], ['removed', false], ['declined', false]] as Array<[GuestChat['state'], boolean]>)(
+        'Leave when %s: %s', async (state, drawn) => {
+            await openChat(chat(state));
+            expect(!!q('guest-chat-leave')).toBe(drawn);
+        });
+
+    it('Leave asks first: Cancel leaves nothing; Leave (destructive) leaves this chat; a 44 dp target in the header', async () => {
+        const { live } = await mocks();
+        await openChat(chat('in'));
+        expect(box(q('guest-chat-leave')).minHeight).toBeGreaterThanOrEqual(44);
+        expect(q('guest-chat-leave')?.getAttribute('aria-label')).toBe('Leave this chat');
+        act(() => (q('guest-chat-leave') as HTMLButtonElement).click());
+        const asked = await lastAsked();
+        expect([asked.title, asked.words]).toEqual(['Leave this chat?', 'Nothing more reaches you from it. The messages already here stay on this device.']);
+        expect(asked.buttons.map((b) => [b.text, b.style])).toEqual([['Cancel', 'cancel'], ['Leave', 'destructive']]);
+        expect(live.leaveGuestChatNow).not.toHaveBeenCalled();
+        await asked.press('Leave');
+        expect(live.leaveGuestChatNow).toHaveBeenCalledWith(ID);
+    });
+
+    it("Remove: a convenor's only, on each guest asked or in (48 dp row, 44 dp button); a member sees none", async () => {
+        await openGuests(false);
+        expect(host.querySelectorAll('[data-testid="group-guest-remove"]')).toHaveLength(0);
+        // A fresh list, as opening the group's page again is.
+        act(() => root.render(createElement('div') as unknown as Parameters<Root['render']>[0]));
+        await openGuests(true);
+        const buttons = Array.from(host.querySelectorAll('[data-testid="group-guest-remove"]'));
+        expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+            'Remove Dax · eastside.example · guest from this chat', 'Remove Me · hillside.example · guest from this chat',
+        ]);
+        for (const b of buttons) expect(box(b).minHeight).toBeGreaterThanOrEqual(44);
+    });
+
+    it('Remove asks first: one in -> what they lose; one asked -> their invitation withdrawn; yes -> removed, and says their community is told', async () => {
+        const { live } = await mocks();
+        await openGuests(true);
+        act(() => (host.querySelectorAll('[data-testid="group-guest-remove"]')[0] as HTMLButtonElement).click());
+        let asked = await lastAsked();
+        expect([asked.title, asked.words]).toEqual(['Remove Dax · eastside.example · guest?', 'Nothing more of this chat reaches them. What they already have stays with them.']);
+        expect(live.removeGroupGuest).not.toHaveBeenCalled();
+        act(() => (host.querySelectorAll('[data-testid="group-guest-remove"]')[1] as HTMLButtonElement).click());
+        asked = await lastAsked();
+        expect([asked.title, asked.words]).toEqual(['Remove Me · hillside.example · guest?', 'Their invitation is withdrawn.']);
+        await asked.press('Remove');
+        expect(live.removeGroupGuest).toHaveBeenCalledWith('grp-tools', ME);
+        expect(q('group-guest-note')?.textContent).toBe('Removed. Their community is told.');
     });
 });

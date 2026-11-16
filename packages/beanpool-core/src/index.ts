@@ -113,6 +113,7 @@ export * from './outside-chat.js';
 export * from './group-guest-steps.js';
 export * from './group-guest-chat.js';
 export * from './group-guest-mail.js';
+export * from './group-guest-names.js';
 export * from './outside-devices.js';
 // Finding someone in another community by their exact name, when they said yes (N1).
 export * from './find-by-name.js';

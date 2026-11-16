@@ -27,6 +27,8 @@ vi.mock('../lib/guest-chat-live', () => ({
     sendGuestLineNow: vi.fn(async () => null),
     fetchGroupGuests: async () => ({ guests: live.guests, on: live.on }),
     inviteGroupGuest: vi.fn(async () => ({})),
+    leaveGuestChatNow: vi.fn(async () => true),
+    removeGroupGuest: vi.fn(async () => ({})),
 }));
 vi.mock('../lib/identity', () => ({ loadIdentity: async () => ({ publicKey: ME, callsign: 'Me' }) }));
 vi.mock('../lib/outside-mail', () => ({ outsideErrorWords: () => 'That did not go through.' }));
@@ -161,7 +163,8 @@ describe("the group's guests, under its members", () => {
     it("guests named by the guest line; a convenor's Add opens the card box, 44 px targets", async () => {
         await openGuests(true);
         expect(Array.from(document.querySelectorAll('[data-testid="group-guest-row"]')).map((r) => r.textContent)).toEqual([
-            'Dax · eastside.example · guestIn the chat', 'Me · hillside.example · guestAsked, not answered yet',
+            // Part 2: a convenor's Remove on each row.
+            'Dax · eastside.example · guestIn the chatRemove', 'Me · hillside.example · guestAsked, not answered yetRemove',
         ]);
         expect(q('group-guest-add')!.style.minHeight).toBe('44px');
         fireEvent.click(screen.getByTestId('group-guest-add'));
@@ -209,5 +212,63 @@ describe("round 4 (#3246): each reason the host's code gives for a removal -> it
         await openChat(chats[ID]);
         expect((document.body.textContent ?? '')).not.toContain('Hello from Eastside');
         expect((document.body.textContent ?? '')).toContain('Welcome to the tools chat');
+    });
+});
+
+describe("part 2: the guest's Leave and a convenor's Remove, each asked first", () => {
+    const calls = async () => vi.mocked((await import('../lib/guest-chat-live')));
+    afterEach(async () => { vi.mocked((await calls()).leaveGuestChatNow).mockClear(); vi.mocked((await calls()).removeGroupGuest).mockClear(); vi.restoreAllMocks(); });
+
+    // The chat's state -> whether Leave is drawn: while joining or in; once out (or still an invitation) there is nothing to leave.
+    it.each([['in', true], ['joining', true], ['invited', false], ['left', false], ['removed', false], ['declined', false]] as Array<[GuestChat['state'], boolean]>)(
+        'Leave when %s: %s', async (state, drawn) => {
+            await openChat(chat(state));
+            expect(!!q('guest-chat-leave')).toBe(drawn);
+        });
+
+    it('Leave asks first: Cancel leaves nothing; Leave leaves this chat (a 44 px target, nothing cut at 320 px)', async () => {
+        const live = await calls();
+        await openChat(chat('in'));
+        expect(q('guest-chat-leave')!.style.minHeight).toBe('44px');
+        expect(q('guest-chat-leave')!.textContent).toBe('Leave this chat');
+        fireEvent.click(screen.getByTestId('guest-chat-leave'));
+        expect(screen.getByRole('dialog').textContent).toContain('Leave this chat?');
+        expect(screen.getByRole('dialog').textContent).toContain('Nothing more reaches you from it. The messages already here stay on this device.');
+        fireEvent.click(screen.getByText('Cancel'));
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(live.leaveGuestChatNow).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByTestId('guest-chat-leave'));
+        fireEvent.click(screen.getByText('Leave'));
+        await waitFor(() => expect(live.leaveGuestChatNow).toHaveBeenCalledWith(ID));
+    });
+
+    it("Remove: a convenor's only, on each guest asked or in; a member sees none", async () => {
+        await openGuests(false);
+        expect(document.querySelectorAll('[data-testid="group-guest-remove"]')).toHaveLength(0);
+        await openGuests(true);
+        const buttons = Array.from(document.querySelectorAll('[data-testid="group-guest-remove"]')) as HTMLElement[];
+        expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+            'Remove Dax · eastside.example · guest from this chat', 'Remove Me · hillside.example · guest from this chat',
+        ]);
+        for (const b of buttons) expect(b.style.minHeight).toBe('44px');
+    });
+
+    it('Remove asks first, under the row (inside the group page): one in -> what they lose; one asked -> their invitation withdrawn; Cancel -> nothing; Remove -> removed, their community told', async () => {
+        const live = await calls();
+        await openGuests(true);
+        fireEvent.click(document.querySelectorAll('[data-testid="group-guest-remove"]')[0]);
+        expect(q('group-guest-remove-ask')?.textContent).toContain('Remove Dax · eastside.example · guest?');
+        expect(q('group-guest-remove-ask')?.textContent).toContain('Nothing more of this chat reaches them. What they already have stays with them.');
+        for (const id of ['group-guest-remove-cancel', 'group-guest-remove-yes']) expect(q(id)!.style.minHeight).toBe('44px');
+        fireEvent.click(screen.getByTestId('group-guest-remove-cancel'));
+        expect(q('group-guest-remove-ask')).toBeNull();
+        expect(live.removeGroupGuest).not.toHaveBeenCalled();
+        fireEvent.click(document.querySelectorAll('[data-testid="group-guest-remove"]')[1]);
+        expect(q('group-guest-remove-ask')?.textContent).toContain('Remove Me · hillside.example · guest?');
+        expect(q('group-guest-remove-ask')?.textContent).toContain('Their invitation is withdrawn.');
+        fireEvent.click(screen.getByTestId('group-guest-remove-yes'));
+        await waitFor(() => expect(live.removeGroupGuest).toHaveBeenCalledWith('grp-tools', ME));
+        expect(live.removeGroupGuest).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(q('group-guest-note')?.textContent).toBe('Removed. Their community is told.'));
     });
 });

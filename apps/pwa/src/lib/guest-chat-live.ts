@@ -8,8 +8,8 @@
  * someone from another community by their card (apps/server routes/groups.ts, `/api/groups/:id/guests`).
  */
 import {
-    answerGuestInvitation, guestNameLine, newDmMessageId, readGuestChats, sendGuestLine, syncGuestMail, type AddressCard, type GuestChats,
-    type GuestLine, type GuestMailIO,
+    answerGuestInvitation, guestNameRows, leaveGuestChat, newDmMessageId, readGuestChats, sendGuestLine, syncGuestMail, GUEST_NAMES_META,
+    type AddressCard, type GuestChats, type GuestLine, type GuestMailIO, type GuestNameRows,
 } from '@beanpool/core';
 import { signedMailFetch, signRelayEnvelopeFor } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
@@ -48,11 +48,17 @@ export function guestIO(ctx: OutsideMailContext): GuestMailIO {
     };
 }
 
+/** Whether this community lets groups have guests (its info's `features.groupGuests`, on only with `outsideMessages`); null when its info didn't read. */
+async function groupGuestsKnownHere(): Promise<boolean | null> {
+    const info = await communityInfoOnce().catch(() => null);
+    if (!info) return null;
+    const f = (info.features ?? {}) as { groupGuests?: unknown; outsideMessages?: unknown };
+    return f.groupGuests === true && f.outsideMessages === true;
+}
+
 /** Whether this community lets groups have guests (its info's `features.groupGuests`, on only with `outsideMessages`). */
 export async function groupGuestsHere(): Promise<boolean> {
-    const info = await communityInfoOnce().catch(() => null);
-    const f = (info?.features ?? {}) as { groupGuests?: unknown; outsideMessages?: unknown };
-    return f.groupGuests === true && f.outsideMessages === true;
+    return (await groupGuestsKnownHere()) === true;
 }
 
 function ring(): void {
@@ -110,6 +116,20 @@ export async function sendGuestLineNow(id: string, text: string): Promise<GuestL
     }
 }
 
+/**
+ * I leave a guest chat, once I confirmed (core leaveGuestChat): it closes here at once and my leave goes, again at each
+ * round until the host has it. Throws only when nothing changed (my server has no name for envelopes yet).
+ */
+export async function leaveGuestChatNow(id: string): Promise<boolean> {
+    const ctx = await outsideContext();
+    if (!ctx) return false;
+    try {
+        return await leaveGuestChat(guestIO(ctx), id);
+    } finally {
+        ring();
+    }
+}
+
 // ── The convenor's side: a group here ───────────────────────────────────────────────────────
 
 export interface GroupGuest { key: string; home: string; name: string; state: 'invited' | 'in' | 'left' | 'removed' }
@@ -130,31 +150,63 @@ export async function inviteGroupGuest(groupId: string, card: AddressCard): Prom
     return body.guest as GroupGuest;
 }
 
-const guestRowsMemo = new Map<string, { at: number; rows: Promise<Array<{ memberPubkey: string; callsign: string }>> }>();
+/**
+ * A convenor removes a guest from the group's chat (one asked: their invitation withdrawn), once they confirmed. The host
+ * tells the guest's community, and the chat closes on their device. Throws OutsideMailError with the server's words.
+ */
+export async function removeGroupGuest(groupId: string, key: string): Promise<GroupGuest> {
+    const ctx = await outsideContext();
+    if (!ctx) throw new OutsideMailError(0, '');
+    const path = `/api/groups/${encodeURIComponent(groupId)}/guests/${encodeURIComponent(key)}`;
+    const body = await answerOf(await signedMailFetch('DELETE', ctx.nodeUrl, path, undefined, ctx.identity as BeanPoolIdentity));
+    // The chat's names are read again at its next opening: the one removed is named, never given a key.
+    guestRowsMemo.delete(groupId);
+    return body.guest as GroupGuest;
+}
+
+const guestRowsMemo = new Map<string, { at: number; rows: Promise<GuestNameRows> }>();
+const NO_ROWS: GuestNameRows = { shown: [], named: [] };
 
 /**
- * The guests in a group's chat as rows a member's chat names lines by: each by core's guest line ("Dax · hillside.example ·
- * guest"), never the card's name alone. Read at most once a minute.
+ * The guests a group's chat names lines by (core group-guest-names.ts): `shown`, those in the chat by the host's list read
+ * now, each by core's guest line ("Dax · hillside.example · guest"), never the card's name alone; `named`, every other guest
+ * this browser kept a row for (they left, were removed, or the group's guests closed), named on their old lines with "no
+ * longer in this group". Only `shown` may be given a key. Read at most once a minute; where guests are off here, nobody is in;
+ * where that or the host's list didn't read, each guest keeps the row kept here and nobody is given a key.
  */
-export function guestRosterRows(groupId: string, now = Date.now()): Promise<Array<{ memberPubkey: string; callsign: string }>> {
+export function guestRosterRows(groupId: string, now = Date.now()): Promise<GuestNameRows> {
     const kept = guestRowsMemo.get(groupId);
     if (kept && now - kept.at < 60_000) return kept.rows;
-    const rows = fetchGroupGuests(groupId)
-        .then(({ guests }) => guests.filter((g) => g.state === 'in').map((g) => ({ memberPubkey: g.key, callsign: guestNameLine(g.name, g.home) })))
-        .catch(() => []);
+    const rows = (async (): Promise<GuestNameRows> => {
+        const ctx = await outsideContext().catch(() => null);
+        if (!ctx) return NO_ROWS;
+        const me = ctx.identity.publicKey;
+        const metaKey = `${GUEST_NAMES_META}:${groupId}`;
+        const before = await ctx.store.getMeta(me, metaKey).catch(() => null);
+        const on = await groupGuestsKnownHere();
+        const listed = on === null ? null : on ? await fetchGroupGuests(groupId).then((g) => g.guests, () => null) : [];
+        const out = guestNameRows(before, listed, Date.now());
+        if (out.json !== null) await ctx.store.setMeta(me, metaKey, out.json).catch(() => {});
+        return { shown: out.shown, named: out.named };
+    })().catch(() => NO_ROWS);
     guestRowsMemo.set(groupId, { at: now, rows });
     return rows;
 }
 
-const knownRows = new Map<string, Array<{ memberPubkey: string; callsign: string }>>();
+const knownRows = new Map<string, GuestNameRows>();
+const sameRows = (a: GuestNameRows, b: GuestNameRows) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * The guest rows already read for a group, at once (none the first time), and a read started beside the chat, never in its
- * way, where guests are on here: the chat's next opening names its guests' lines.
+ * The guest rows already read for a group, at once (none the first time in this page), and a read started beside the chat,
+ * never in its way. When that read brings rows other than the ones handed out now, `onNew` is called once, so the open chat
+ * is read again and names its guests' lines on its first opening too (WALK 3: "<key> · no longer in this group" until the
+ * second). The same rows as before call nothing, so a chat read again for them never reads itself again.
  */
-export function guestRowsKnown(groupId: string): Array<{ memberPubkey: string; callsign: string }> {
-    void groupGuestsHere()
-        .then((on) => (on ? guestRosterRows(groupId) : []))
-        .then((rows) => { knownRows.set(groupId, rows); }, () => {});
-    return knownRows.get(groupId) ?? [];
+export function guestRowsKnown(groupId: string, onNew?: () => void): GuestNameRows {
+    const handed = knownRows.get(groupId) ?? NO_ROWS;
+    void guestRosterRows(groupId).then((rows) => {
+        knownRows.set(groupId, rows);
+        if (onNew && !sameRows(handed, rows)) onNew();
+    }, () => {});
+    return handed;
 }

@@ -66,6 +66,13 @@
  *     are part 'body'; an edit's are part 'edit' (core sealGroupLineEdit, which both apps' editSealedGroupLine call), whether
  *     it comes as an `edit` notice or on a copy of the line fetched after it (`editedAt`). The test seals every kind with
  *     its sender's own code (group-guest-aad.test.ts).
+ *
+ * One more since part 2:
+ *   - **Leaving**: my Leave closes the chat here at once ({@link leaveGuestChatHere}: `left`, its keys gone, a line of
+ *     mine not yet sent never goes) with my signed `group-leave` kept on it ({@link GuestLeave}), then it goes. Until my
+ *     server says the host took it, the round posts it again, and my server still listing me in never opens the chat again.
+ *     A refusal that passes (a mute, guests switched off a while) never stops it: only `not_in_group` does (group-guest-mail.ts
+ *     leaveRefusal). A removal listed after I left keeps the chat left, in my own words.
  */
 import {
     openGroupLine, openMyGroupKey, sealGroupLine, type GroupEpochRecord, type GroupServedWrap,
@@ -171,8 +178,21 @@ export interface GuestChat {
     why: GuestClosedWhy | null;
     /** The notice that brought this invitation: the same one fetched again (its confirm lost) never opens it again. */
     inviteId?: string;
+    /** My leave on its way ({@link GuestLeave}), while the chat is `left` here and the host hasn't taken it yet; absent or null when none is. */
+    leave?: GuestLeave | null;
     updatedAt: number;
 }
+
+/**
+ * My leave (`group-leave`), from the moment I leave until my server says the host took it, or lists me no more (the file's
+ * header, "Leaving"): `sending` (posted with no answer yet, its signed item kept and posted again under the same id; `item`
+ * null when a new one is due under `itemId`: the last one failed, or my server refused the item itself), `queued` (my
+ * server has it, the host not reached yet), or `refused` (my server answered `not_in_group`: I'm not asked or in there, or
+ * a leave of mine from another device already waits there; nothing more goes from here unless that other one fails). Any
+ * other refusal passes, and it goes again (group-guest-mail.ts leaveRefusal). While it is kept, my server listing me in
+ * never opens the chat again, and a removal listed never turns my leave into one.
+ */
+export interface GuestLeave { itemId: string; item: string | null; state: 'sending' | 'queued' | 'refused' }
 
 /**
  * An epoch made on this device, on its way to the host. Its key seals nothing until the host takes it: `sending` (posted,
@@ -594,6 +614,13 @@ function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailConte
             chat = chats[id] = newChat(l.host, l.group, ctx.now);
             changed = true;
         }
+        // My leave on its way (GuestChat.leave): my server lists me as before until the host takes it, and the chat stays
+        // left here (the file's header, "Leaving"). A removal listed, then or at any round after, ends the leave (nothing more
+        // of mine goes to that group) and the chat stays left in my own words: I chose to leave.
+        if (chat.state === 'left' && (chat.leave || state === 'removed')) {
+            if (state === 'removed' && chat.leave) { chat.leave = null; changed = true; }
+            continue;
+        }
         // My no (or leave) stands while my server still lists the invitation: the host hasn't taken it yet, and it never
         // comes back as one. A new invitation comes as its own notice.
         if ((chat.state === 'declined' || chat.state === 'left') && (state === 'invited' || state === 'joining')) continue;
@@ -622,6 +649,10 @@ function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailConte
         } else if (chat.state === 'in') {
             Object.assign(chat, { state: 'left', keys: {}, held: [], ownEpoch: null, updatedAt: ctx.now });
             changed = true;
+        } else if (chat.state === 'left' && chat.leave) {
+            // No longer listed: the host took my leave.
+            chat.leave = null;
+            changed = true;
         }
     }
     return changed;
@@ -647,10 +678,16 @@ export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number,
             changed = applyOwnEpochTick(chat, tk, now) || changed;
             continue;
         }
+        if (tk.kind === 'group-leave') {
+            changed = applyLeaveTick(chat, tk, now, newId) || changed;
+            continue;
+        }
         if (tk.kind !== 'group-line') continue;
         const line = chat.lines.find((l) => l.id === tk.itemId && l.state);
         if (!line) continue;
-        const next: GuestLineState | null = tk.refused === 'epoch-stale' ? 'waiting'
+        // Refused for its epoch in a chat that is closed since (I left, or was removed): it never goes again, so it never waits.
+        const open = chat.state === 'in' || chat.state === 'joining';
+        const next: GuestLineState | null = tk.refused === 'epoch-stale' && open ? 'waiting'
             : tk.refused || tk.state === 'refused' ? 'failed'
             : tk.state === 'queued' ? 'queued' : tk.state === 'sent' ? 'sent' : tk.state === 'failed' ? 'failed' : null;
         if (!next || next === line.state) continue;
@@ -699,6 +736,42 @@ function applyOwnEpochTick(chat: GuestChat, tk: GuestSentTick, now: number): boo
         return true;
     }
     return false;
+}
+
+/**
+ * One tick for my leave (applyGuestTicks); whether it changed anything. The host took it (`sent`), or refused it (I'm not
+ * asked or in there): nothing more to send. My server has it (`queued`): it waits there. It failed (a day with no answer
+ * from the host): a new one is due under a new id (my server and the host each count an id once). A tick for another
+ * leave of mine is old news, but one: mine kept `refused` (a leave of mine from another device waited at my server) and
+ * that other one failed or was refused, so mine is due again under a new id (no other waits now; were I out of the group,
+ * my server's list would have ended it). Its taking needs nothing here: my server lists me no more.
+ */
+function applyLeaveTick(chat: GuestChat, tk: GuestSentTick, now: number, newId: () => string): boolean {
+    const leave = chat.leave ?? null;
+    if (!leave || chat.state !== 'left') return false;
+    if (leave.itemId !== tk.itemId) {
+        if (leave.state !== 'refused' || tk.kind !== 'group-leave' || (tk.state !== 'failed' && tk.state !== 'refused')) return false;
+        chat.leave = { itemId: newId(), item: null, state: 'sending' };
+        chat.updatedAt = now;
+        return true;
+    }
+    if (tk.state === 'sent' || tk.refused || tk.state === 'refused') chat.leave = null;
+    else if (tk.state === 'failed') chat.leave = { itemId: newId(), item: null, state: 'sending' };
+    else if (tk.state === 'queued' && leave.state !== 'queued') chat.leave = { ...leave, state: 'queued', item: null };
+    else return false;
+    chat.updatedAt = now;
+    return true;
+}
+
+/**
+ * The chat closed by my leave (the file's header, "Leaving"), or null when there is nothing to leave (not joining or in):
+ * `left`, its keys and held lines gone, my epoch on its way dropped, and a line of mine not yet with my server `failed` (it
+ * never goes; a tick may still say my server had it). Lines already shown stay. `leave` is my signed leave, kept to post.
+ */
+export function leaveGuestChatHere(c: GuestChat, leave: GuestLeave, me: string, now: number): GuestChat | null {
+    if (c.state !== 'in' && c.state !== 'joining') return null;
+    const lines = c.lines.map((l) => (l.author === me && (l.state === 'waiting' || l.state === 'sending') ? { ...l, state: 'failed' as const, note: null, item: null } : l));
+    return { ...c, state: 'left', why: null, keys: {}, held: [], ownEpoch: null, epochSent: null, leave, lines, updatedAt: now };
 }
 
 /** The epoch a line of mine was sealed under, read from its item as it was posted; null when it has none. */
@@ -843,6 +916,17 @@ export const GUEST_CHAT_WORDS = Object.freeze({
     guestAdded: word('Asked. They join the chat once they accept.'),
     readCard: word('Read the card'),
     notACard: word("That isn't an address card, or it was changed after it was made."),
+    // Part 2: the guest's Leave and the convenor's Remove, each asked first.
+    leave: word('Leave this chat'),
+    leaveAsk: word('Leave this chat?'),
+    leaveWhat: word('Nothing more reaches you from it. The messages already here stay on this device.'),
+    leaveYes: word('Leave', 'button: leave a group chat'),
+    remove: word('Remove', 'button: remove a guest from a group chat'),
+    removeLabel: word('Remove {name} from this chat'),
+    removeAsk: word('Remove {name}?'),
+    removeWhatIn: word('Nothing more of this chat reaches them. What they already have stays with them.'),
+    removeWhatAsked: word('Their invitation is withdrawn.'),
+    removedNote: word('Removed. Their community is told.'),
 });
 
 /** Why a guest's chat closed, as this device keeps it: a convenor's Remove, the group closed by its members, or its owners turned guests off. */

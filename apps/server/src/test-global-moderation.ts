@@ -989,6 +989,38 @@ async function main(): Promise<void> {
         pulse: one('SELECT COUNT(*) AS c FROM pulse_items WHERE owner_pubkey = ?', max.pk) + one('SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?', max.pk),
     };
     assert(Object.values(stored).every(v => v === 0), `and none of it is stored (${JSON.stringify(stored)})`);
+    // A mute stops a member speaking, never stepping away (#3273 round 3; across communities: test-group-guests-home §3m).
+    // Taking back his own reaction says nothing to anyone; adding or changing one is words on everyone's screen.
+    const reactionsOn = (id: string) => (JSON.parse(zedLineMeta() ?? '{}')?.reactions ?? []).filter((x: any) => x?.author === id);
+    const metaKept = (() => { try { return JSON.parse(zedLineMeta() ?? '{}') ?? {}; } catch { return {}; } })();
+    db.prepare('UPDATE messages SET metadata = ? WHERE id = ?').run(JSON.stringify({ ...metaKept, reactions: [{ author: max.pk, emoji: '👍' }] }), zedLine);
+    const changes = await call('POST', max, '/api/messages/react', { messageId: zedLine, emoji: '❤️' });
+    assert(refused(changes) && reactionsOn(max.pk).map((x: any) => x.emoji).join() === '👍',
+        `muted: changing his reaction from before the mute → 403 moderation_muted, and it stays (got ${changes.status} ${changes.body?.code})`);
+    const takesBack = await call('POST', max, '/api/messages/react', { messageId: zedLine, emoji: '👍' });
+    assert(takesBack.status === 200 && reactionsOn(max.pk).length === 0,
+        `muted: taking his own reaction back goes through, and it is gone (got ${takesBack.status} ${takesBack.body?.code ?? takesBack.body?.error ?? ''}; left ${JSON.stringify(reactionsOn(max.pk))})`);
+    // His Pulse channel: turning its reach off says nothing to anyone, as deleting it never was refused; anything else he
+    // changes there is words or reach on everyone's Pulse, and stays refused.
+    const maxChannel = crypto.randomUUID();
+    db.prepare(`INSERT INTO creator_channels (id, owner_pubkey, platform, url, handle, category, autopublish, syndicate_to_node)
+                VALUES (?, ?, 'youtube', 'https://www.youtube.com/@maxcooks', '@maxcooks', 'food', 1, 1)`).run(maxChannel, max.pk);
+    const channelRow = () => db.prepare('SELECT category, autopublish, syndicate_to_node AS syndicated FROM creator_channels WHERE id = ?').get(maxChannel) as any;
+    const channelTries: [string, Record<string, unknown>, boolean][] = [
+        ['turning it on again in the Pulse', { syndicateToNode: true }, true],
+        ['a new category with its reach off', { category: 'music', syndicateToNode: false }, true],
+        ['making it his primary video channel', { isPrimaryVideo: true }, true],
+        ['taking it out of the Pulse', { syndicateToNode: false }, false],
+        ['stopping it posting by itself', { autopublish: false }, false],
+    ];
+    for (const [what, patch, isRefused] of channelTries) {
+        const before = JSON.stringify(channelRow());
+        const r = await call('POST', max, `/api/member/channels/${maxChannel}`, patch);
+        assert(isRefused ? refused(r) && JSON.stringify(channelRow()) === before : r.status === 200,
+            `muted: his channel, ${what} → ${isRefused ? '403 moderation_muted, unchanged' : 'goes through'} (got ${r.status} ${r.body?.code ?? r.body?.error ?? ''})`);
+    }
+    assert(JSON.stringify(channelRow()) === JSON.stringify({ category: 'food', autopublish: 0, syndicated: 0 }),
+        `and his channel is out of the Pulse and posts nothing by itself, its category as it was (${JSON.stringify(channelRow())})`);
     const unnoted = await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount_c: hc(1) });
     assert(unnoted.body?.code !== 'moderation_muted', `a send without a note is not refused for the mute (${unnoted.status} ${unnoted.body?.error})`);
     // A note that is a number is words too (a phone number), on all three routes. Bob has Beans and a finished trade,

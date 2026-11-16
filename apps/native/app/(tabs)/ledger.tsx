@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Alert } from '../../utils/keyboard-alert';
 import { keyboardAwareList } from '../../components/keyboardAwareList';
-import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -57,6 +57,8 @@ import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } fr
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { getCreditGiftOffer, giveCreditLine, type CreditGiftOffer } from '../../utils/credit-gift';
 import { CreditSeenByGivers } from '../../components/CreditSeenByGivers';
+import { fetchCardByKey } from '../../utils/members-lookup';
+import { sendPrefill, takeSendRequest, type SendPrefill, type SendRequest } from '../../utils/send-handoff';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -242,10 +244,9 @@ export default function LedgerScreen() {
     }, [sendSuccess]);
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
-    // A recipient chosen by the page that opened Send (Learn's "Thank {name}", K8): their name, for a recipient this phone's
-    // member list doesn't hold. Any pick from the list replaces it.
-    const [sendToName, setSendToName] = useState<{ publicKey: string; callsign: string } | null>(null);
-    const opener = useLocalSearchParams<{ sendTo?: string; sendName?: string; sendNote?: string }>();
+    // Send asked for by another page of this app (Learn's "Thank {name}", K8): handed over in memory (utils/send-handoff.ts),
+    // never read from the route, which a link from outside the app can fill. Taken at focus; opened once the figures are read.
+    const [sendAsk, setSendAsk] = useState<SendRequest | null>(null);
     // Whether the member's own figures have been read (getBalance answered), so Send's gate reads them, not the empty start.
     const [balanceRead, setBalanceRead] = useState(false);
     // The Credit line tab beside Beans on Send (slice G1, utils/credit-gift.ts): the node's answer at each load, never a
@@ -552,6 +553,8 @@ export default function LedgerScreen() {
     useFocusEffect(
         React.useCallback(() => {
             loadData(); loadMembers();
+            const asked = takeSendRequest();
+            if (asked) setSendAsk(asked);
             const s1 = DeviceEventEmitter.addListener('transaction_completed', loadData);
             const s2 = DeviceEventEmitter.addListener('sync_data_updated', loadData);
             const s3 = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => setBlocked(new Set(Array.isArray(list) ? list : [])));
@@ -650,14 +653,15 @@ export default function LedgerScreen() {
     };
 
     /**
-     * Send opened by another page with a recipient and a note (Learn's "🫘 Thank {name}", K8; DESIGN-local-knowledge-fable.md
-     * §3.7): the Beans form with both filled in, each changeable, once the member's figures are read. A member who can't send Beans
-     * yet reads today's words and no form. Taken once: the request is cleared as it is read. Nothing else about sending changes.
+     * Send asked for by another page of this app with a recipient and a note (Learn's "🫘 Thank {name}", K8;
+     * DESIGN-local-knowledge-fable.md §3.7): the Beans form with both filled in, each changeable, once the member's figures are
+     * read. The recipient is named only as this community's member list names them, by key (the phone's copy, else their card
+     * read from the node by key): a key the list doesn't hold opens no form. A member who can't send Beans yet reads today's
+     * words and no form. Nothing else about sending changes.
      */
-    const openSendFor = (to: string, name: string, note: string) => {
+    const openSendFor = ({ to, note }: SendPrefill) => {
         if (!canSend) { sayCantSendYet(); return; }
         setSendTo(to);
-        setSendToName(name ? { publicKey: to, callsign: name } : null);
         setSendMemo(note);
         setSendAmount('');
         loadMembers();
@@ -667,14 +671,26 @@ export default function LedgerScreen() {
         setShowSend(true);
         getCreditGiftOffer().then(setGiftOffer).catch(() => {});
     };
-    const openerTo = typeof opener.sendTo === 'string' ? opener.sendTo : '';
+    /** The request as the member list names its recipient (and that list, for the form's name); null when it holds no such member. */
+    const fromMemberList = async (ask: SendRequest): Promise<SendPrefill | null> => {
+        const me = identity?.publicKey;
+        let held = await getAllCommunityMembers().catch(() => [] as { publicKey: string; callsign: string }[]);
+        let prefill = sendPrefill(ask, held, me);
+        if (!prefill && ask.to !== me && (await fetchCardByKey(ask.to)) === 'fetched') {
+            held = await getAllCommunityMembers().catch(() => []);
+            prefill = sendPrefill(ask, held, me);
+        }
+        if (prefill) setMembers(held.filter(m => m.publicKey !== me));
+        return prefill;
+    };
     React.useEffect(() => {
-        if (!openerTo || beansMode === undefined || (!preview && !balanceRead)) return;
-        router.setParams({ sendTo: '', sendName: '', sendNote: '' } as any);
+        if (!sendAsk || beansMode === undefined || (!preview && !balanceRead)) return;
+        const ask = sendAsk;
+        setSendAsk(null);
         if (preview) { setSheetOpen(true); return; }
-        if (openerTo === identity?.publicKey) return;
-        openSendFor(openerTo, typeof opener.sendName === 'string' ? opener.sendName : '', typeof opener.sendNote === 'string' ? opener.sendNote : '');
-    }, [openerTo, beansMode, preview, balanceRead]);
+        if (!identity?.publicKey || ask.to === identity.publicKey) return;
+        fromMemberList(ask).then((prefill) => { if (prefill) openSendFor(prefill); }).catch(() => {});
+    }, [sendAsk, beansMode, preview, balanceRead]);
 
     // Trust calculations (value-based)
     const earned = balanceState.earnedCredit_c || 0;   // from the saturating value curve (hundredths)
@@ -728,7 +744,7 @@ export default function LedgerScreen() {
 
     // ⚡ Bolt: Pre-compute Map to convert O(M) member lookups on render cycles into O(1) constant-time retrievals
     const membersMap = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
-    const selectedMember = sendTo ? (membersMap.get(sendTo) ?? (sendToName?.publicKey === sendTo ? sendToName : undefined)) : undefined;
+    const selectedMember = sendTo ? membersMap.get(sendTo) : undefined;
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
 
     // Credit position is now the reusable <CreditBar> component (zero-centred, anchored scale).

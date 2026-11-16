@@ -9,8 +9,9 @@ import { createRoot, type Root } from 'react-dom/client';
 // Learn on the phone, recognition (slice K8; DESIGN-local-knowledge-fable.md §2.10, §3.7): the opener's half of Thank, and the
 // badge on the writer's line. One table over each reader of a page (a member, an owner or admin, the page's writer, a visitor, a
 // page gathered with the assistant, Beans not live here, Learn off, the worldwide preview) -> "🫘 Thank {name}" offered or not,
-// and what a tap opens: the Ledger tab with the writer's key and name and the note 'Thanks for "{title}"'. Nothing is sent from
-// the page. The Ledger's half (can send / first trade / positive balance) is ledger-send-start-render.test.ts. The web's twin
+// and what a tap opens: the Ledger tab, plain (no route params: a link from outside the app can fill those), with the writer's
+// key and the note 'Thanks for "{title}"' handed over in memory (utils/send-handoff.ts; no name: the Ledger reads it from the
+// member list). Nothing is sent from the page. The Ledger's half (can send / first trade / positive balance) is ledger-send-start-render.test.ts. The web's twin
 // is apps/pwa/src/pages/LearnPage.thank.test.tsx. The node, the router, the role and the copy are faked at their edges.
 
 const ME = 'me'.padEnd(64, '0');
@@ -85,6 +86,7 @@ vi.mock('../../components/signed-request-lines', () => ({ signedRequestWords: (m
 vi.mock('expo-modules-core', () => ({ requireNativeModule: vi.fn(() => ({})), requireOptionalNativeModule: vi.fn(() => null), EventEmitter: vi.fn(() => ({})), NativeModulesProxy: {} }));
 
 import { KnowledgeDetail } from '../../components/learn/KnowledgeDetail';
+import { takeSendRequest } from '../send-handoff';
 
 const page = (extra: Record<string, unknown> = {}, k: Record<string, unknown> = {}) => ({
     id: 'tip', title: 'How recycling works at the tip', description: 'Sort it first.', category: 'local-services', photos: [],
@@ -99,6 +101,7 @@ beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
+    takeSendRequest();   // nothing handed over from the case before
     Object.assign(h, { mode: 'live', checks: false, identity: { publicKey: ME, privateKey: 'p' }, byId: null, sent: [], reads: [] });
     vi.clearAllMocks();
 });
@@ -145,11 +148,14 @@ describe('the table: who is offered "🫘 Thank {name}", and what it opens (§2.
             expect(button!.textContent).toBe('🫘 Thank Ada');
             await act(async () => { button!.click(); });
             await settle();
-            // The Ledger tab with the writer chosen and the note filled in: the ordinary Send form does the rest.
-            expect(router.push.mock.calls).toEqual([[{ pathname: '/(tabs)/ledger', params: { sendTo: ADA, sendName: 'Ada', sendNote: 'Thanks for "How recycling works at the tip"' } }]]);
+            // The Ledger tab, with nothing in the route: the writer's key and the note are handed over in memory, taken once.
+            expect(router.push.mock.calls).toEqual([['/(tabs)/ledger']]);
+            expect(takeSendRequest()).toEqual({ to: ADA, note: 'Thanks for "How recycling works at the tip"' });
+            expect(takeSendRequest()).toBeNull();
         }
-        // Nothing is sent from the page for it: no tap, no Beans.
+        // Nothing is sent from the page for it: no tap, no Beans; and nothing is handed over where no button was tapped.
         expect(h.sent).toEqual([]);
+        if (!offered) expect(takeSendRequest()).toBeNull();
     });
 });
 

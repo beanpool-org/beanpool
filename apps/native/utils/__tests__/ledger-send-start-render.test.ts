@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 /**
  * The Ledger's half of Learn's "🫘 Thank {name}" (slice K8; DESIGN-local-knowledge-fable.md §3.7): app/(tabs)/ledger.tsx
- * rendered for real, opened by the Learn page with a recipient and a note (route params sendTo, sendName, sendNote). One table
- * over the reader (can send, first trade required, positive balance required, the recipient being themselves) -> the Beans form
- * with the writer chosen and the note filled / today's words in today's alert and no form / nothing. Then the form honours both
- * and changes nothing else: each is changeable, what is sent is what the form shows, the request is taken once, and Send opened
- * by its own button is as before (ledger-credit-gift.test.ts and ledger-words-render.test.ts stay as they are). The stand-ins are
- * ledger-credit-gift.test.ts's, copied, with the route's params and setParams added.
+ * rendered for real, opened by the Learn page with a recipient and a note handed over in memory (utils/send-handoff.ts), never
+ * in the route: route params also arrive from a beanpool:// link from outside the app (app/+native-intent.ts; review of #3243).
+ * First a table over where a request comes from (the in-app hand-over; a deep link's route params, sendTo/sendName/sendNote or
+ * to/amount/name) and whom it names (a member the phone holds; one whose card the node reads by key; a key nobody holds) ->
+ * the Beans form naming the member as the member list names them / no form. Then one over the reader (can send, first trade
+ * required, positive balance required, the recipient being themselves) -> the form / today's words in today's alert and no
+ * form / nothing. Then the form honours both and changes nothing else: each is changeable, what is sent is what the form
+ * shows, the request is taken once, and Send opened by its own button is as before (ledger-credit-gift.test.ts and
+ * ledger-words-render.test.ts stay as they are). The stand-ins are ledger-credit-gift.test.ts's, copied, with the route's
+ * params (what a link would put there), the card read by key, and the sync's event added.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
@@ -18,6 +22,7 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
+const events = vi.hoisted(() => ({ on: [] as Array<[string, () => void]> }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
@@ -41,6 +46,8 @@ vi.mock('react-native', () => {
         return createElement(tag, attrs, children);
     };
     const listener = () => ({ remove() {} });
+    // The sync's events reach the screen (a request waits for the node's figures, which land with sync_data_updated).
+    const addListener = (name: string, fn: () => void) => { events.on.push([name, fn]); return { remove() { events.on = events.on.filter(([, f]) => f !== fn); } }; };
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
         Image: el('img'),
@@ -62,7 +69,7 @@ vi.mock('react-native', () => {
                 for (const b of buttons ?? []) { if (b.text) alerts.said.push(b.text); alerts.buttons.push(b); }
             },
         },
-        DeviceEventEmitter: { addListener: listener, emit() {} },
+        DeviceEventEmitter: { addListener, emit() {} },
         AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
         Keyboard: { addListener: listener, dismiss() {} },
         LayoutAnimation: { configureNext() {}, create: () => ({}), Presets: { easeInEaseOut: {} } },
@@ -71,7 +78,7 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
-// The route's params as the Learn page pushed them; setParams clears them as the Ledger takes the request, as expo-router does.
+// The route's params, as a link from outside the app would fill them (beanpool://ledger?sendTo=…): the Ledger must read none.
 const route = vi.hoisted(() => ({ params: {} as Record<string, string>, cleared: [] as Array<Record<string, string>>, rerender: null as null | (() => void) }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect, useState } = await import('react');
@@ -103,6 +110,17 @@ vi.mock('expo-linear-gradient', () => ({ LinearGradient: ({ children }: { childr
 vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: 'file:///cache/', EncodingType: { UTF8: 'utf8' }, writeAsStringAsync: async () => {} }));
 vi.mock('expo-sharing', () => ({ shareAsync: async () => {} }));
 vi.mock('../haptics', () => ({ hapticSuccess() {}, hapticWarning() {} }));
+// A card the node holds for a key the phone doesn't (utils/members-lookup.ts fetchCardByKey writes it into the phone's copy).
+const cards = vi.hoisted(() => ({ node: new Map<string, string>(), asked: [] as string[], held: [] as Array<{ publicKey: string; callsign: string }> }));
+vi.mock('../members-lookup', () => ({
+    fetchCardByKey: async (key: string) => {
+        cards.asked.push(key);
+        const callsign = cards.node.get(key);
+        if (callsign === undefined) return 'none';
+        cards.held.push({ publicKey: key, callsign });
+        return 'fetched';
+    },
+}));
 const blocked = vi.hoisted(() => ({ keys: [] as string[] }));
 vi.mock('../blocklist', () => ({ getBlockedUsers: async () => blocked.keys, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 vi.mock('../../app/ThemeContext', async () => {
@@ -138,6 +156,7 @@ vi.mock('../../components/TrustBadge', () => ({ TrustBadge: ({ level }: { level:
 import { setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import LedgerScreen from '../../app/(tabs)/ledger';
+import { handOverSend, takeSendRequest } from '../send-handoff';
 
 const NODE = 'https://riverside.example';
 /** A member who can send Beans: 120 held, a first trade made. Whole hundredths of a Bean, as getBalance answers (db.ts). */
@@ -146,8 +165,11 @@ const HOLDER = {
     tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit_c: 300, earnedCredit_c: 300, qualifiedValue_c: 1000, avgRating: 5, reviewCount: 0, commons_c: 1250,
     trustStats: { uniquePartners: 1 },
 };
-// Ada, whom the page thanks, is not in the list this phone holds: her name comes with the request.
-const MEMBERS = [{ publicKey: 'mia-key', callsign: 'Mia' }];
+const ADA = 'ada'.padEnd(64, '0');
+const BEA = 'bea'.padEnd(64, '0');
+const STRANGER = 'eee'.padEnd(64, '0');
+// The member list this phone holds (getAllCommunityMembers): Ada, whom the page thanks, among them unless a case says.
+const MEMBERS = [{ publicKey: 'mia-key', callsign: 'Mia' }, { publicKey: ADA, callsign: 'Ada' }];
 const node = vi.hoisted(() => ({
     balance: null as any,
     offer: null as any,
@@ -175,6 +197,11 @@ beforeEach(() => {
     node.sends = [];
     route.params = {};
     route.cleared = [];
+    events.on = [];
+    cards.held = MEMBERS.map((m) => ({ ...m }));
+    cards.node.clear();
+    cards.asked = [];
+    takeSendRequest();   // nothing handed over from the case before
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: { beans: true, showcase: false }, checkedAt: new Date().toISOString() } }));
@@ -182,7 +209,7 @@ beforeEach(() => {
         if (name === 'getBalance') return Promise.resolve(node.balance);
         if (name === 'getTransactions') return Promise.resolve([]);
         if (name === 'getMemberProfile') return Promise.resolve({ avatar_url: null });
-        if (name === 'getAllCommunityMembers') return Promise.resolve(MEMBERS);
+        if (name === 'getAllCommunityMembers') return Promise.resolve(cards.held.map((m) => ({ ...m })));
         if (name === 'getEscrowTotal') return Promise.resolve(0);
         if (name === 'getPledgeHistory') return Promise.resolve([]);
         if (name === 'refreshBalanceFromServer') return Promise.resolve(null);
@@ -224,17 +251,77 @@ const byTestId = (id: string) => host.querySelector(`[data-testid="${id}"]`);
 const byLabel = (label: string) => host.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`);
 const buttonSaying = (words: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === words) ?? null;
 const text = () => host.textContent ?? '';
-const ADA = 'ada'.padEnd(64, '0');
 const NOTE = 'Thanks for "How recycling works at the tip"';
-const THANK = { sendTo: ADA, sendName: 'Ada', sendNote: NOTE };
+const THANK = { to: ADA, note: NOTE };
 const FIGURES = {
     'can send': { balance_c: 12000, earnedCredit_c: 300 },
     'first trade required': { balance_c: 12000, earnedCredit_c: 0 },
     'positive balance required': { balance_c: 0, earnedCredit_c: 300 },
 } as const;
 type Reader = keyof typeof FIGURES;
-const recipient = () => Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Ada') || (b.textContent ?? '').includes('Select recipient...')) ?? null;
+const recipient = () => Array.from(host.querySelectorAll('button')).find((b) => /\b(Ada|Bea)\b|Select recipient\.\.\./.test(b.textContent ?? '')) ?? null;
 const confirm = () => buttonSaying('Confirm Transfer') ?? Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Confirm')) ?? null;
+const formOpen = () => byLabel('Amount to send') !== null;
+
+describe('where a prefilled Send can come from (review of #3243: never a route param a link can fill)', () => {
+    // (money screen: the Ledger's Send) x (where the request comes from) x (whom it names) -> the form, named from the member
+    // list / nothing. A deep link's route params are what beanpool://ledger?… puts there; the in-app hand-over is the Thank tap's.
+    type Source = 'in-app hand-over' | 'deep link (sendTo, sendName, sendNote)' | 'deep link (to, amount, name)';
+    type Whom = 'a member this phone holds' | 'a member whose card the node reads by key' | 'a key nobody holds';
+    const TABLE: Array<[Source, Whom, 'form' | 'none']> = [
+        ['in-app hand-over', 'a member this phone holds', 'form'],
+        ['in-app hand-over', 'a member whose card the node reads by key', 'form'],
+        ['in-app hand-over', 'a key nobody holds', 'none'],
+        ['deep link (sendTo, sendName, sendNote)', 'a member this phone holds', 'none'],
+        ['deep link (sendTo, sendName, sendNote)', 'a member whose card the node reads by key', 'none'],
+        ['deep link (sendTo, sendName, sendNote)', 'a key nobody holds', 'none'],
+        ['deep link (to, amount, name)', 'a member this phone holds', 'none'],
+        ['deep link (to, amount, name)', 'a key nobody holds', 'none'],
+    ];
+    it.each(TABLE)('%s naming %s -> %s (red when a link opens a form, or a form names anyone but the member list\'s name)', async (source, whom, outcome) => {
+        const key = whom === 'a key nobody holds' ? STRANGER : whom === 'a member whose card the node reads by key' ? BEA : ADA;
+        if (whom === 'a member whose card the node reads by key') cards.node.set(BEA, 'Bea');
+        if (source === 'in-app hand-over') handOverSend({ to: key, note: NOTE });
+        if (source === 'deep link (sendTo, sendName, sendNote)') route.params = { sendTo: key, sendName: 'Ada', sendNote: NOTE };
+        if (source === 'deep link (to, amount, name)') route.params = { to: key, amount: '50', name: 'Ada', note: NOTE };
+        await render();
+        expect(formOpen(), `${source} / ${whom}: form open`).toBe(outcome === 'form');
+        if (outcome === 'form') {
+            // Named only as the member list names them: the phone's copy, or the card the node read for that key.
+            expect(recipient()?.textContent).toContain(whom === 'a member this phone holds' ? 'Ada' : 'Bea');
+            expect((byLabel('Memo') as HTMLInputElement | null)?.value).toBe(NOTE);
+            expect((byLabel('Amount to send') as HTMLInputElement | null)?.value).toBe('');
+        } else {
+            expect(byLabel('Memo')).toBeNull();
+            // Nothing a link supplied is drawn anywhere on the screen.
+            expect(text()).not.toContain(NOTE);
+        }
+        // Nobody is told anything, and nothing is sent.
+        expect(alerts.said).toEqual([]);
+        expect(node.sends).toEqual([]);
+        // A link's params are not even cleared: the screen doesn't look at the route.
+        expect(route.cleared).toEqual([]);
+    });
+
+    it('the shown name is always the member list\'s: a hand-over to Bea\'s key while a link names a stranger "Ada" shows Bea', async () => {
+        cards.held.push({ publicKey: BEA, callsign: 'Bea' });
+        route.params = { sendTo: STRANGER, sendName: 'Ada', sendNote: 'from a link' };
+        handOverSend({ to: BEA, note: NOTE });
+        await render();
+        expect(recipient()?.textContent).toContain('Bea');
+        expect(text()).not.toContain('from a link');
+        await type(byLabel('Amount to send'), '1');
+        await click(confirm(), 'Confirm');
+        expect(node.sends).toEqual([[me.identity.publicKey, BEA, 100, NOTE]]);
+    });
+
+    it('a key nobody holds is asked of the node once, by key, and opens nothing when the node has no such member', async () => {
+        handOverSend({ to: STRANGER, note: NOTE });
+        await render();
+        expect(cards.asked).toEqual([STRANGER]);
+        expect(formOpen()).toBe(false);
+    });
+});
 
 describe('Send opened by Learn\'s Thank (K8)', () => {
     const TABLE: Array<[Reader, 'form' | 'first-trade' | 'positive-balance']> = [
@@ -244,10 +331,10 @@ describe('Send opened by Learn\'s Thank (K8)', () => {
     ];
     it.each(TABLE)('%s -> %s (red when the request is dropped, the gate is skipped, or new words replace today\'s)', async (reader, outcome) => {
         node.balance = { ...HOLDER, ...FIGURES[reader] };
-        route.params = { ...THANK };
+        handOverSend(THANK);
         await render();
-        // Taken once, as the member's figures were read: the route's request is cleared.
-        expect(route.cleared).toEqual([{ sendTo: '', sendName: '', sendNote: '' }]);
+        // Taken once: nothing is left to hand over.
+        expect(takeSendRequest()).toBeNull();
         if (outcome === 'form') {
             expect(recipient()?.textContent).toContain('Ada');
             expect((byLabel('Memo') as HTMLInputElement | null)?.value).toBe(NOTE);
@@ -265,15 +352,15 @@ describe('Send opened by Learn\'s Thank (K8)', () => {
     });
 
     it('the recipient being the member themselves: no form and no alert (Learn shows no button for one\'s own page; this is the guard behind it)', async () => {
-        route.params = { ...THANK, sendTo: me.identity.publicKey, sendName: 'Ana' };
+        handOverSend({ ...THANK, to: me.identity.publicKey });
         await render();
-        expect(route.cleared.length).toBe(1);
+        expect(takeSendRequest()).toBeNull();
         expect(byLabel('Memo')).toBeNull();
         expect(alerts.said).toEqual([]);
     });
 
     it('sends what the form shows: the writer and the note as filled in, the typed amount, through the ordinary send', async () => {
-        route.params = { ...THANK };
+        handOverSend(THANK);
         await render();
         await type(byLabel('Amount to send'), '5');
         await click(confirm(), 'Confirm');
@@ -281,7 +368,7 @@ describe('Send opened by Learn\'s Thank (K8)', () => {
     });
 
     it('both are changeable: another note, another recipient from the picker, and that is what is sent', async () => {
-        route.params = { ...THANK };
+        handOverSend(THANK);
         await render();
         await type(byLabel('Memo'), 'Ta!');
         await click(recipient(), 'the recipient row');
@@ -294,19 +381,23 @@ describe('Send opened by Learn\'s Thank (K8)', () => {
     it('figures not on this phone yet (lineKnown false): no refusal from zeros, the request waits; real figures open the form', async () => {
         // A member who can send, but whose phone holds none of the node's figures yet: zeros, and the node asked (refresh).
         node.balance = { balance_c: 0, earnedCredit_c: 0, lineKnown: false, tier: { name: 'Newcomer', emoji: '🌱' } };
-        route.params = { ...THANK };
+        handOverSend(THANK);
         await render();
         expect(alerts.said).toEqual([]);
-        expect(route.cleared).toEqual([]);
         expect(byLabel('Memo')).toBeNull();
-        // The node's figures land (the sync reloads the screen): the request is taken now, with the real gate.
+        // The node's figures land and the sync says so: the request the screen kept opens now, with the real gate.
         node.balance = HOLDER;
-        await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(LedgerScreen)) as any); });
-        act(() => root.unmount());
-        root = createRoot(host);
-        await render();
-        expect(route.cleared).toEqual([{ sendTo: '', sendName: '', sendNote: '' }]);
+        await act(async () => { for (const [name, fn] of events.on.slice()) if (name === 'sync_data_updated') fn(); });
+        await settle();
         expect((byLabel('Memo') as HTMLInputElement | null)?.value).toBe(NOTE);
+        expect(recipient()?.textContent).toContain('Ada');
+        expect(alerts.said).toEqual([]);
+    });
+
+    it('a hand-over left more than a minute is dropped: a later visit opens the Ledger as before', async () => {
+        handOverSend(THANK, Date.now() - 61_000);
+        await render();
+        expect(formOpen()).toBe(false);
         expect(alerts.said).toEqual([]);
     });
 

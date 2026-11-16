@@ -22,6 +22,7 @@ import {
 } from '@beanpool/core';
 import { useStyles, useTheme } from '../../app/ThemeContext';
 import { useIdentity } from '../../app/IdentityContext';
+import { handOverSend } from '../../utils/send-handoff';
 import { AuthorCard, useMemberRating } from '../AuthorCard';
 import { PhotoCarousel } from '../PhotoCarousel';
 import { PostTagChips } from '../PostTagChips';
@@ -287,7 +288,11 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                 ) : null}
                 {thank ? (
                     <Pressable testID="knowledge-thank" accessibilityRole="button" style={[styles.tool, styles.thank]}
-                        onPress={() => router.push({ pathname: '/(tabs)/ledger', params: { sendTo: page.authorPublicKey, sendName: page.authorCallsign ?? '', sendNote: knowledgeThankNote(page.title ?? '') } } as any)}>
+                        onPress={() => {
+                            // Handed over in memory, never in the route (utils/send-handoff.ts): the Ledger names the writer from the member list.
+                            handOverSend({ to: page.authorPublicKey ?? '', note: knowledgeThankNote(page.title ?? '') });
+                            router.push('/(tabs)/ledger');
+                        }}>
                         <Text style={styles.toolText}>{t(KNOWLEDGE_THANK.button, { name: page.authorCallsign ?? '' })}</Text>
                     </Pressable>
                 ) : null}

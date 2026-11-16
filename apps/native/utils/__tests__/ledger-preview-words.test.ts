@@ -66,8 +66,6 @@ vi.mock('expo-router', async () => {
         // A tab in view: the callback runs once it changes, as expo-router's does while the screen has focus.
         useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]),
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
-        // The Ledger reads its route params (Learn's Thank, K8): none here.
-        useLocalSearchParams: () => ({}),
     };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));

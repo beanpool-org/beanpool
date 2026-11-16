@@ -5,7 +5,9 @@
  *
  * **The round** ({@link syncGuestMail}): `GET /api/mail/group?device=` (what waits that this device hasn't confirmed, where I
  * stand with each group, and my items' ticks after the cursor), the gate and the chats (applyGuestMail, applyGuestTicks),
- * WRITTEN, then confirmed (`POST /api/mail/group/confirm`): a notice whose write failed is fetched again, never lost. Then
+ * WRITTEN, then confirmed (`POST /api/mail/group/confirm`): a notice whose write failed is fetched again, never lost. A page
+ * read before the newest one this device applied (another tab's, TWO TABS: group-guest-chat.ts "State") moves nothing,
+ * confirms nothing and moves no cursor (GUEST_LINKS_META). Then
  * what is due for each chat: my join epoch (or the next one before a waiting line can go), the lines waiting for a key, the
  * lines my server never answered.
  *
@@ -46,6 +48,11 @@ export interface GuestMailIO {
 
 /** The ticks' cursor, `<at>:<itemId>`, kept beside the chats. */
 export const GUEST_CURSOR_META = 'guest-sent-cursor';
+/**
+ * The `linksAt` of the newest page this device applied, kept beside the chats (group-guest-chat.ts's header, "State": TWO
+ * TABS). Read after the chats and written before them, so a tab that reads another tab's chats reads its mark too.
+ */
+export const GUEST_LINKS_META = 'guest-links-at';
 /** Pages one round reads at most. */
 const PAGES_MAX = 10;
 /** A line my server never answered is posted again while this fresh (my server refuses an item older than 7 days). */
@@ -77,23 +84,34 @@ async function post(io: GuestMailIO, items: RelayItem[]): Promise<Array<{ itemId
 /** Each account's writes on this device, one after another (a round and a send share the one document). */
 const writing = new Map<string, Promise<unknown>>();
 
+/** `job` run with no other write of this account's on this device running (each account's writes go one after another). */
+function inTurn<T>(io: GuestMailIO, job: () => Promise<T>): Promise<T> {
+    const before = writing.get(io.me) ?? Promise.resolve();
+    const run = before.catch(() => undefined).then(job);
+    const held = run.catch(() => undefined);
+    writing.set(io.me, held);
+    void held.then(() => { if (writing.get(io.me) === held) writing.delete(io.me); });
+    return run;
+}
+
 /**
  * The chats read, changed by `change` and written (unless it returns null), with no other write of this account's between
  * the read and the write: a round's page and a send's line never overwrite each other. Resolves to the chats as written.
  */
 function withChats(io: GuestMailIO, change: (chats: GuestChats) => GuestChats | null): Promise<GuestChats> {
-    const before = writing.get(io.me) ?? Promise.resolve();
-    const run = before.catch(() => undefined).then(async () => {
+    return inTurn(io, async () => {
         const chats = await io.load();
         const next = change(chats);
         if (!next) return chats;
         await io.save(next);
         return next;
     });
-    const held = run.catch(() => undefined);
-    writing.set(io.me, held);
-    void held.then(() => { if (writing.get(io.me) === held) writing.delete(io.me); });
-    return run;
+}
+
+/** The newest page's `linksAt` this device applied (GUEST_LINKS_META), or null. */
+async function linksSeen(io: GuestMailIO): Promise<number | null> {
+    const v = Number(await io.getMeta(GUEST_LINKS_META));
+    return Number.isSafeInteger(v) && v > 0 ? v : null;
 }
 
 /** One chat changed and written: the chats as they are now, with `id` replaced by `next(chat)`. */
@@ -284,7 +302,7 @@ export async function syncGuestMail(io: GuestMailIO): Promise<GuestRoundOutcome>
     for (let page = 0; page < PAGES_MAX; page++) {
         const [since, ...rest] = cursor.split(':');
         const q = `device=${encodeURIComponent(device)}${cursor ? `&since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(rest.join(':'))}` : ''}`;
-        const got = await io.get(`/api/mail/group?${q}`) as { items?: unknown[]; more?: boolean; groups?: unknown; sent?: Array<{ itemId: string; at: number }>; sentMore?: boolean } | null;
+        const got = await io.get(`/api/mail/group?${q}`) as { items?: unknown[]; more?: boolean; groups?: unknown; linksAt?: unknown; sent?: Array<{ itemId: string; at: number }>; sentMore?: boolean } | null;
         if (!got) break;
         // The gate asks about blocks by key; each inviter is asked once, before the page is read.
         const inviters = new Set<string>();
@@ -296,13 +314,27 @@ export async function syncGuestMail(io: GuestMailIO): Promise<GuestRoundOutcome>
         for (const k of inviters) if (await io.isBlocked(k)) blocked.add(k);
         const now = io.now();
         let confirm: string[] = [];
-        await withChats(io, (chats) => {
-            const applied = applyGuestMail(chats, { items: got.items, groups: got.groups }, { me: io.me, myEdPrivHex: io.myEdPrivHex, blocked: (k) => blocked.has(k), now });
+        // TWO TABS (group-guest-chat.ts's header, "State"): the chats read, then the newest page applied here, so a tab
+        // that reads another's chats reads its mark too; a page read before that one is stale and moves nothing. A page
+        // applied is the newest from now on: its mark written before the chats, for the same reason.
+        const stale = await inTurn(io, async () => {
+            const chats = await io.load();
+            const seen = await linksSeen(io);
+            const applied = applyGuestMail(chats, { items: got.items, groups: got.groups, linksAt: got.linksAt },
+                { me: io.me, myEdPrivHex: io.myEdPrivHex, blocked: (k) => blocked.has(k), now, linksSeen: seen });
+            if (applied.stale) return true;
             const ticked = applyGuestTicks(applied.chats, got.sent, now, () => io.newId());
             confirm = applied.confirm;
             changed ||= applied.changed || ticked.changed;
-            return applied.changed || ticked.changed ? ticked.chats : null;
+            if (typeof got.linksAt === 'number' && Number.isSafeInteger(got.linksAt) && got.linksAt > 0 && got.linksAt !== seen) await io.setMeta(GUEST_LINKS_META, String(got.linksAt));
+            if (applied.changed || ticked.changed) await io.save(ticked.chats);
+            return false;
         });
+        // Stale: nothing of it applied, so nothing confirmed and the ticks' cursor stays (the next page is newer).
+        if (stale) {
+            if (!got.sentMore && !got.more) break;
+            continue;
+        }
         const sent = Array.isArray(got.sent) ? got.sent : [];
         const last = sent[sent.length - 1];
         if (last && Number.isSafeInteger(last.at) && typeof last.itemId === 'string') {

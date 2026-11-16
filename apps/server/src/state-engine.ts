@@ -1633,6 +1633,7 @@ import type { RegistrarName } from './engine/registrar-names.js';
 import { preferredAddress, reachableFromInternet } from './engine/host-kinds.js';
 // Read only inside functions (getDirectoryInfo), never at load: own-addresses reads this module too.
 import { mainPublicUrl } from './engine/own-addresses.js';
+import { memberBadges } from './engine/local-guide.js';
 import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
@@ -2731,6 +2732,11 @@ export interface ViewerTrustProfile {
     inviterShown?: boolean;
     risk: TradeRiskAssessment;
     /**
+     * The member's badges (slice K8): `['local-guide']` for a Local guide (engine/local-guide.ts), else `[]`. Worked out as it
+     * is read; a badge gates nothing.
+     */
+    badges: string[];
+    /**
      * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
      * and replaces itself with the enterprise page on it (MemberProfile.isTreasury, slice E0). A member's has no such key,
      * nor has the node's own BeanPool account (nodeOwnAccountKeys).
@@ -2949,6 +2955,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         priorTradesWithViewer,
         vouchedInBy,
         risk,
+        badges: memberBadges(targetPubkey),
         ...(broughtIn !== undefined ? { broughtIn } : {}),
         ...(voucherButton ? { voucherButton } : {}),
         ...(isSelf ? { inviterShown: inviterShownOf(targetPubkey) } : {}),

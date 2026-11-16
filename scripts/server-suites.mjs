@@ -633,6 +633,9 @@ export const SUITES = [
     // Learn's tags, the node: free tags only, every path that writes a page or a draft x every kind of tags in one table, every
     // rewrite keeps them in search, a fix of only the tags, search as the Market's, never offered as a listing's, a standby's copy.
     'test-knowledge-tags',
+    // The Local guide badge (slice K8): 3 used pages of one's own, every way a page stops counting x the profile and the writer's
+    // line, by id alone on the wire, nothing paid or stored.
+    'test-knowledge-local-guide',
     'test-forum',
     // The forum's moderation (slice F2): reports, auto-hide, restore, removal, the mute, first looks, new accounts, bursts.
     'test-forum-moderation',

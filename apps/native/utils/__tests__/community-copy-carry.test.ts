@@ -265,6 +265,9 @@ async function rowsHeld(app: App = firstApp): Promise<Record<string, unknown[]>>
 async function phoneAtTheNumber(app: App = firstApp): Promise<{ before: Record<string, unknown[]>; keys: Record<string, string | null> }> {
     await app.db.syncMessages(me.publicKey);
     expect(pinOf(FROM_FILE)?.peer, 'precondition: the real sync pinned the DM').toBe(peer.publicKey);
+    // Signal's model (DESIGN-dm-key-signal-model §6 port rule): only a person the member marked verified holds a changed
+    // listing back as an offer, so the member marks them here; the mark travels with the pin (pinsWithCarried keeps it).
+    expect(await app.db.markDmPeerVerified(dm.id, peer.publicKey), 'precondition: the member marked the person verified').toBe(true);
     expect(stored(dmConversationsSeenStoreKey(me.publicKey, FROM_FILE)), 'precondition: the DM guard list holds it').toContain(dm.id);
     await app.db.groupKeyStore(FROM).raiseHighest('g-beans', 7);
     await app.db.groupKeyStore(FROM).putEpochs('g-locked', [epochOne({ w: 'mine' })]);
@@ -422,7 +425,8 @@ describe('a copy already at the new address takes what guards the chats, add-onl
         await phoneWasAtTheName();
         await phoneAtTheNumber();
         const theirs = person();
-        const pinnedAtTheName = { peer: theirs.publicKey, since: '2026-09-01T00:00:00.000Z', by: 'first-seen', checked: true };
+        // Marked verified at the name (Signal's model: only a verified person's changed listing waits for the member).
+        const pinnedAtTheName = { peer: theirs.publicKey, since: '2026-09-01T00:00:00.000Z', by: 'first-seen', checked: true, verified: { peer: theirs.publicKey, at: '2026-09-02T00:00:00.000Z' } };
         h.store.set(dmPeerPinsStoreKey(me.publicKey, TO_FILE), JSON.stringify({ pins: { [dm.id.toLowerCase()]: pinnedAtTheName } }));
         const atTheNumber = stored(dmPeerPinsStoreKey(me.publicKey, FROM_FILE));
         const warn = quiet();
@@ -514,7 +518,10 @@ describe('a chat-memory reset still waiting at either address never makes the ca
         expect(pinOf(FROM_FILE)?.peer, 'the number\'s re-seed ran over its own rows').toBe(peer.publicKey);
         expect(pinOf(TO_FILE)?.peer, 'and its pin is in the name\'s pin book').toBe(peer.publicKey);
         expect(JSON.parse(stored(dmConversationsSeenStoreKey(me.publicKey, TO_FILE))!), 'and the DM in the name\'s guard list').toContain(dm.id);
+        // The reset took the mark with the pins (its warning says so: DESIGN-dm-key-signal-model §4); the member marks again.
+        expect(pinOf(TO_FILE)?.verified, 'the reset took the verified mark').toBeUndefined();
         const app = await afterAFreshStart();
+        expect(await app.db.markDmPeerVerified(dm.id, peer.publicKey), 'the member marks the person verified again at the name').toBe(true);
         await heldBackAtTheName(app, peer.publicKey);
         await app.db.closeDB();
     });

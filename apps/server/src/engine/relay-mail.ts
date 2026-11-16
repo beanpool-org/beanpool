@@ -43,9 +43,10 @@
  * or leave that moved where they stand is answered `received` with the group's counter it was stamped with (the order rule,
  * engine/group-guests.ts), kept as long as its id too (relay_mail_answered), so a replay hears the same counter.
  *
- * **Never copied.** The mailbox's tables are `local` (engine/replication-manifest.ts; the list is relay-mail-tables.ts
- * RELAY_MAIL_TABLES), and every snapshot and backup file is
- * made without them (forgetRelayMailInCopy, from services/address-retention.ts). The files are never in the image store.
+ * **Never copied.** This file's tables, `relay_mail`, `relay_mail_seen`, `relay_mail_refused`, `relay_mail_answered`,
+ * `relay_mail_devices` and `relay_mail_got`, are `local` (engine/replication-manifest.ts), as are the outbox's and the group
+ * guests' mail beside them, and every snapshot and backup file is made with all of them emptied (RELAY_MAIL_TABLES,
+ * engine/relay-mail-tables.ts: forgetRelayMailInCopy, from services/address-retention.ts). The files are never in the image store.
  */
 import fs from 'node:fs';
 import path from 'node:path';

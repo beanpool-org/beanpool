@@ -7,10 +7,12 @@
  * there, outside SQLite, where no writer of the conversation rows reaches: a wipe-and-fetch, a prune and a sync that
  * lists nothing all leave it alone. A line is sealed to the pinned key or to nobody.
  *
- * A pin is written only at first sight (the first clean two-party DM the phone meets under that id: the node's word, as
- * starting a DM from a post is today), by the member (slice 2's "Continue with the new key"), or by a handover the old
- * key signed (slice 4). Never by a sync, a push, a route or the prune. When the node lists the DM without the pinned key,
- * the other key is only `offered`: sends stop until the member decides, and a listing with the pinned key again clears it.
+ * Signal's model (DESIGN-dm-key-signal-model, Marty 16 Nov): a line leaves sealed to the one key the community lists for
+ * the other person; for a person the member marked verified, to the verified key or to nobody. A pin is written at first
+ * sight, by the listing for a person not marked verified (the old key kept in `former`, one notice in the thread), by
+ * the member ("Continue with the new key" on a verified person's card), or by a handover the old key signed (slice 4).
+ * Never by a push, a route or the prune. For a verified person a changed listing is only `offered`: sends stop until the
+ * member decides, and a listing with the pinned key again clears it. No single key listed: nothing is sent, either way.
  *
  * One value per account and community file (§3.4 amendment 6), `beanpool_dm_peer_pins:<my key>:<file>` → { pins:
  * { conversation id lower-cased → pin } }; its presence is the record that the update's seed of that file ran (amendment
@@ -66,7 +68,8 @@ export interface DmPeerPin {
     peer: string;
     /** When it was pinned (ISO). */
     since: string;
-    by: 'first-seen' | 'member' | 'handover';
+    /** 'listing': the pin followed the community's listing by itself, the person not being marked verified (Signal's model, §2.3). */
+    by: 'first-seen' | 'listing' | 'member' | 'handover';
     /** Keys pinned here before, newest first: old lines still open under them (pick 3). */
     former?: string[];
     offered?: DmPeerOffer;
@@ -78,6 +81,14 @@ export interface DmPeerPin {
     checked?: boolean;
     /** What the node's listing says about the key it lists now: see {@link DmHeard}. */
     heard?: DmHeard;
+    /**
+     * The member's "Mark as verified" (DESIGN-dm-key-signal-model §2.2): it names its key, so the person is verified exactly
+     * while `verified.peer === peer` ({@link isVerifiedPin}). Only a verified pin waits for the member when the listing
+     * changes; any other follows the listing and the phone writes a notice in the thread.
+     */
+    verified?: { peer: string; at: string };
+    /** When this phone saw the key change (its own clock, ISO), newest first, at most {@link CHANGED_AT_MAX}: one thread notice each. */
+    changedAt?: string[];
 }
 
 /**
@@ -160,6 +171,9 @@ export const DM_PINS_MAX_BYTES = 1024 * 1024;
 /** Keys kept in a pin's `former`, newest first (§3.4 amendment 6 §1): the oldest goes at the member's Continue. */
 export const FORMER_MAX = 4;
 
+/** Key-change dates kept on a pin, newest first (DESIGN-dm-key-signal-model §2.2): one thread notice each. */
+export const CHANGED_AT_MAX = 4;
+
 /**
  * The phone couldn't read who one community's chats are with: nothing is sealed (fail closed), and the member is told so,
  * and where the way out is (§3.4 amendment 6 §3: the member's reset, never the phone's on its own).
@@ -239,7 +253,7 @@ function pinOf(raw: unknown): DmPinEntry | null {
     }
     const peer = pinKeyOf(r.peer);
     if (!peer) return null;
-    const by = r.by === 'member' || r.by === 'handover' ? r.by : 'first-seen';
+    const by = r.by === 'member' || r.by === 'handover' || r.by === 'listing' ? r.by : 'first-seen';
     const pin: DmPeerPin = { peer, since: typeof r.since === 'string' ? r.since : '', by };
     if (Array.isArray(r.former)) {
         const former = r.former.map(pinKeyOf).filter((k): k is string => !!k && k !== peer);
@@ -259,6 +273,13 @@ function pinOf(raw: unknown): DmPinEntry | null {
     if (r.checked === true) pin.checked = true;
     const heard = heardOf(r.heard);
     if (heard) pin.heard = heard;
+    // A mark that names another key than the pinned one is not a mark (§2.2): the pin moved by some path since.
+    const v = r.verified as Record<string, unknown> | undefined;
+    if (v && typeof v === 'object' && pinKeyOf(v.peer) === peer) pin.verified = { peer, at: rekeyDateOf(v.at) ?? '' };
+    if (Array.isArray(r.changedAt)) {
+        const dates = [...new Set(r.changedAt.map(rekeyDateOf).filter((d): d is string => !!d))].slice(0, CHANGED_AT_MAX);
+        if (dates.length) pin.changedAt = dates;
+    }
     return pin;
 }
 
@@ -382,7 +403,7 @@ export function pinsWithCarried(here: string | null, carried: string, now: strin
 const PIN_FORMAT_NAMES = new Set([
     'pins', 'offered', 'heard', 'nodeSays',
     'peer', 'since', 'by', 'former', 'checked', 'at', 'firstSight', 'afterReset', 'keyless', 'rekeyedAt', 'tryKeys',
-    'unplaced', 'listed', 'stale', 'heldLost', 'reset',
+    'unplaced', 'listed', 'stale', 'heldLost', 'reset', 'verified', 'changedAt',
 ]);
 
 /** A member's key: 64 hex digits. Never a DM's id (the server names a DM with a UUID, messaging.ts), so never salvaged. */
@@ -823,7 +844,8 @@ export function applySightVerdict(pins: DmPeerPins, conversationId: string, verd
     const id = dmPinId(conversationId);
     if (!isPinnableId(id)) return false;
     // A judgement replaces, so it always applies; rule 1's first-sight pin is a new entry and keeps to the cap (pinAtFirstSight).
-    return resized(pins, id, () => judged(pins, id, verdict, listed, heard, now));
+    const changed = resized(pins, id, () => judged(pins, id, verdict, listed, heard, now));
+    return restDmEntry(pins, id, now) || changed;
 }
 
 function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: string | null, heard: DmHeard | undefined, now: string): boolean {
@@ -831,12 +853,26 @@ function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: str
     const lost = isHeldLostSight(ownPin(pins, id));
     const held = lost ? undefined : ownPin(pins, id);
     if (held && !isUnplacedSight(held) && (held.checked || held.by !== 'first-seen')) return false;
+    const key = pinKeyOf(listed);
     if (verdict.rule === 1) {
-        if (held || lost || !listed) return false;
-        const key = pinKeyOf(listed);
-        const pin: DmPeerPin | null = key ? { peer: key, since: now, by: 'first-seen', ...(heard ? { heard } : {}) } : null;
-        return !!pin && roomFor(pins, id, pin) && setPin(pins, id, pin);
+        if (held || lost || !key) return false;
+        const pin: DmPeerPin = { peer: key, since: now, by: 'first-seen', ...(heard ? { heard } : {}) };
+        return roomFor(pins, id, pin) && setPin(pins, id, pin);
     }
+    // Signal's model (DESIGN-dm-key-signal-model §2.4): a phone with nothing kept for a chat has no mark for it, so first
+    // sight is the not-verified case, and one listed key is the key. Rules 3 and 4 keep the key the lines opened under as
+    // former (every line reads) and write one notice; rule 5 writes none, since it can't say a key changed, only that some
+    // lines didn't open (they keep their own mark).
+    if (key) {
+        const placed = verdict.rule === 3 || verdict.rule === 4 ? verdict.pin : null;
+        const pin: DmPeerPin = { peer: key, since: now, by: verdict.rule === 2 ? 'first-seen' : 'listing', checked: true };
+        if (placed && placed !== key) {
+            pin.former = [placed];
+            pin.changedAt = [now];
+        }
+        return setPin(pins, id, pin);
+    }
+    // No single key listed: nobody to seal to, as before.
     if (verdict.rule === 5) {
         if (isUnplacedSight(held) && !held.stale) return false;
         const sight: DmUnplacedSight = { unplaced: true, since: isUnplacedSight(held) ? held.since : now, listed };
@@ -849,11 +885,7 @@ function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: str
         return true;
     }
     const pin: DmPeerPin = { peer: verdict.pin, since: now, by: 'first-seen', checked: true };
-    if (verdict.offer && listed !== verdict.pin) {
-        pin.offered = { peer: listed, at: now, firstSight: true };
-        if (listed === null) pin.offered.keyless = true;
-        if (heard?.rekeyedAt) pin.offered.nodeSays = { rekeyedAt: heard.rekeyedAt };
-    }
+    if (verdict.offer) pin.offered = { peer: null, at: now, firstSight: true, keyless: true };
     return setPin(pins, id, pin);
 }
 
@@ -899,17 +931,19 @@ export function settleFirstSight(pins: DmPeerPins, conversationId: string): bool
 
 /**
  * What the node's listings of one DM in this pass say about its pin. `listings` holds, for each listing of the id in any
- * capitals, the other keys it names (mine left out). With a pin: any listing without the pinned key offers its other key
- * (sends stop); every listing naming the pinned key clears an offer (a node that was briefly wrong). Without a pin: every
- * listing naming the same one other key pins it at first sight; listings that disagree, or name several, pin nothing.
- * The pinned key itself never moves here. True when the pins changed.
+ * capitals, the other keys it names (mine left out). With a pin: see applyDmListingsTo (DESIGN-dm-key-signal-model §2.3):
+ * a pin not marked verified follows one listed key, a verified one has it offered (sends stop); every listing naming the
+ * pinned key clears an offer. A rule-5 record or heldLost mark with one listed key becomes a pin on it. Without a pin:
+ * every listing naming the same one other key pins it at first sight; listings that disagree, or name several, pin
+ * nothing. The resting rule runs last. True when the pins changed.
  */
 export function applyDmListings(pins: DmPeerPins, conversationId: string, listings: ReadonlyArray<ReadonlyArray<string>>, now: string, heard?: DmHeard): boolean {
     const id = dmPinId(conversationId);
     if (!isPinnableId(id)) return false;
     const entry = ownPin(pins, id);
     // A new entry keeps to the cap (pinAtFirstSight); a change to a kept one always applies.
-    return entry ? resized(pins, id, () => heardBy(pins, id, entry, listings, now, heard)) : heardBy(pins, id, entry, listings, now, heard);
+    const changed = entry ? resized(pins, id, () => heardBy(pins, id, entry, listings, now, heard)) : heardBy(pins, id, entry, listings, now, heard);
+    return restDmEntry(pins, id, now) || changed;
 }
 
 function heardBy(pins: DmPeerPins, id: string, entry: DmPinEntry | undefined, listings: ReadonlyArray<ReadonlyArray<string>>, now: string, heard?: DmHeard): boolean {
@@ -920,7 +954,10 @@ function heardBy(pins: DmPeerPins, id: string, entry: DmPinEntry | undefined, li
         return pinAtFirstSight(pins, id, one, now, heard);
     }
     if (isUnplacedSight(entry)) {
-        // Rule 5 stands: the listing is only heard, for the next judgement (never a pin from it).
+        // A rule-5 record or a heldLost mark with one listed key becomes a pin on it (DESIGN-dm-key-signal-model §2.3 row 5):
+        // no former, no notice (no key was ever placed, so the phone can't say one changed).
+        if (one) return setPin(pins, id, { peer: one, since: now, by: 'listing', checked: true });
+        // No single key: rule 5 stands, and the listing is only heard, for the next judgement.
         if (entry.listed === one && sameHeard(entry.heard, heard)) return false;
         entry.listed = one;
         if (heard) entry.heard = heard; else delete entry.heard;
@@ -931,10 +968,10 @@ function heardBy(pins: DmPeerPins, id: string, entry: DmPinEntry | undefined, li
     if (!pin.checked && pin.by === 'first-seen' && one && !sameHeard(pin.heard, heard)) {
         // An unchecked pin keeps what the listing says about the key it lists, for its judgement.
         if (heard) pin.heard = heard; else delete pin.heard;
-        applyDmListingsTo(pin, named, now, heard);
+        applyDmListingsTo(pin, named, one, now, heard);
         return true;
     }
-    return applyDmListingsTo(pin, named, now, heard);
+    return applyDmListingsTo(pin, named, one, now, heard);
 }
 
 function sameHeard(a: DmHeard | undefined, b: DmHeard | undefined): boolean {
@@ -942,32 +979,136 @@ function sameHeard(a: DmHeard | undefined, b: DmHeard | undefined): boolean {
 }
 
 /**
- * A first-sight pause (history placed the pin and the listing disagreed, rules 3-4) is the member's to end (design §3.4
- * amendment 2, option H): no listing lifts it, not one naming the pinned key, and not one offering a third key in between
- * (`firstSight` belongs to the pause, so PUPPET → Q → PUPPET keeps it). An existing phone's offer (no `firstSight`) clears
- * when every listing names the pin again: the pin never moved, so that is harmless. So does a first-sight pause
- * born with no key to offer ({@link DmPeerOffer.keyless}) when every listing names the pinned key alone (N1).
+ * What one pass's listings do to a pin (DESIGN-dm-key-signal-model §2.3; `one`: the single other key every listing names,
+ * else null). Every listing naming the pinned key (extras or not): no move, any offer cleared, sealed to it. Some listing
+ * without it: a pin the member hasn't marked verified follows `one` by itself ({@link movedToListing}: the old key kept in
+ * `former`, one thread notice); a verified pin only has it offered, and sends wait for the member; with no single key
+ * listed (several, none, or listings that disagree) either pin offers nobody (`peer: null`), and nothing is sent.
  */
-function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard?: DmHeard): boolean {
+function applyDmListingsTo(pin: DmPeerPin, named: string[][], one: string | null, now: string, heard?: DmHeard): boolean {
     const without = named.find((o) => o.length > 0 && !o.includes(pin.peer));
     if (!without) {
-        if (pin.offered?.keyless && named.length > 0 && named.every((o) => o.length === 1 && o[0] === pin.peer)) {
-            delete pin.offered;
-            return true;
-        }
-        if (!pin.offered || pin.offered.firstSight || named.some((o) => !o.includes(pin.peer))) return false;
+        if (!pin.offered || named.length === 0 || !named.every((o) => o.includes(pin.peer))) return false;
         delete pin.offered;
         return true;
     }
-    const peer = without.length === 1 ? without[0] : null;
-    const rekeyedAt = peer && named.length === 1 ? rekeyDateOf(heard?.rekeyedAt) : undefined;
-    if (pin.offered && pin.offered.peer === peer && pin.offered.nodeSays?.rekeyedAt === rekeyedAt) return false;
+    if (one && !isVerifiedPin(pin)) return movedToListing(pin, one, now);
+    const rekeyedAt = one && named.length === 1 ? rekeyDateOf(heard?.rekeyedAt) : undefined;
+    if (pin.offered && pin.offered.peer === one && pin.offered.nodeSays?.rekeyedAt === rekeyedAt) return false;
     const pause = pin.offered;
-    pin.offered = { peer, at: pause?.peer === peer ? pause.at : now };
+    pin.offered = { peer: one, at: pause?.peer === one ? pause.at : now };
     if (rekeyedAt) pin.offered.nodeSays = { rekeyedAt };
-    if (pause?.firstSight) pin.offered.firstSight = true;
-    if (pause?.afterReset) pin.offered.afterReset = true;
-    if (pause?.keyless && peer === null) pin.offered.keyless = true;
+    // A first-sight pause offering nobody keeps its flags; an offer naming a key never carries them (§2.6).
+    if (one === null && pause?.firstSight) pin.offered.firstSight = true;
+    if (one === null && pause?.afterReset) pin.offered.afterReset = true;
+    if (one === null && pause?.keyless) pin.offered.keyless = true;
+    return true;
+}
+
+/** True when the member marked this pin's key verified (§2.2): the mark names the key the pin holds now. */
+export function isVerifiedPin(pin: DmPeerPin | null | undefined): boolean {
+    return !!pin && !!pin.verified && pin.verified.peer === pin.peer;
+}
+
+/** Two key changes this close together are one notice in the thread (two moves in one sync pass: after the member's reset, the re-seed and the listing). */
+const NOTICE_MERGE_MS = 60_000;
+
+/**
+ * `changedAt` with `now` first, at most {@link CHANGED_AT_MAX}, as the phone's clock writes it. A change within
+ * {@link NOTICE_MERGE_MS} after the newest one takes its place, so one pass that moves a pin twice shows one notice,
+ * whatever the clock did between the two moves.
+ */
+function changedWith(changedAt: string[] | undefined, now: string): string[] {
+    const at = rekeyDateOf(now) ?? new Date().toISOString();
+    const kept = changedAt ?? [];
+    const since = kept.length ? Date.parse(at) - Date.parse(kept[0]) : Infinity;
+    const rest = since >= 0 && since < NOTICE_MERGE_MS ? kept.slice(1) : kept;
+    return [...new Set([at, ...rest])].slice(0, CHANGED_AT_MAX);
+}
+
+/**
+ * The pin follows the listing (§2.3 row 2): `peer` becomes `key`, the key before it goes first in `former` (at most
+ * {@link FORMER_MAX}, no repeats) so old lines, photos and voice still open, `by: 'listing'`, checked, the offer gone, and
+ * one more notice date. Any mark goes with the old key: it named that key. In place; true.
+ */
+function movedToListing(pin: DmPeerPin, key: string, now: string): boolean {
+    const former = [...new Set([pin.peer, ...(pin.former ?? [])])].filter((k) => k !== key).slice(0, FORMER_MAX);
+    pin.peer = key;
+    pin.since = now;
+    pin.by = 'listing';
+    pin.checked = true;
+    pin.changedAt = changedWith(pin.changedAt, now);
+    if (former.length) pin.former = former; else delete pin.former;
+    delete pin.offered;
+    delete pin.heard;
+    delete pin.verified;
+    return true;
+}
+
+/**
+ * The one resting rule (DESIGN-dm-key-signal-model §2.5), a pure function: a pin the member hasn't marked verified never
+ * rests on an offer naming one key (it moves to that key, as §2.3 row 2), and a rule-5 record (or a heldLost mark) never
+ * rests on a listing naming one key (it becomes the pin, as row 5). Called at the end of every path that changes what a
+ * pin heard, and before a send or the screen's check answers, so a send never depends on which path ran last. True when
+ * the pins changed.
+ */
+export function restDmEntry(pins: DmPeerPins, conversationId: string, now: string): boolean {
+    const id = dmPinId(conversationId);
+    const entry = ownPin(pins, id);
+    if (!entry || !dmEntryRestless(entry)) return false;
+    return resized(pins, id, () => {
+        if (isUnplacedSight(entry)) return setPin(pins, id, { peer: pinKeyOf(entry.listed)!, since: now, by: 'listing', checked: true });
+        return movedToListing(entry, entry.offered!.peer!, now);
+    });
+}
+
+/** True when {@link restDmEntry} would change this entry (a read can ask without writing). */
+export function dmEntryRestless(entry: DmPinEntry | null | undefined): boolean {
+    if (!entry) return false;
+    if (isUnplacedSight(entry)) return !!pinKeyOf(entry.listed);
+    return !!entry.offered?.peer && !isVerifiedPin(entry);
+}
+
+/**
+ * True while this DM waits for the member (the Inbox's "key changed" tag, §4): a verified pin with another key offered, any
+ * pin offering nobody, or a rule-5 record with no single key listed. Read as the resting rule would leave it, so an
+ * ordinary change never shows a tag.
+ */
+export function dmEntryWaitsForMember(entry: DmPinEntry | null | undefined): boolean {
+    if (!entry || dmEntryRestless(entry)) return false;
+    return isUnplacedSight(entry) || !!entry.offered;
+}
+
+/**
+ * The member's "Mark as verified" on the key code screen (§2.5): only for a pin holding no offer whose key is still
+ * `expectedPeer`, the key whose code the screen showed; a sync that moved the pin between the screen and the tap writes
+ * nothing here. Sets the mark on that key and `checked`. True when it changed.
+ */
+export function markVerified(pins: DmPeerPins, conversationId: string, expectedPeer: string, now: string): boolean {
+    const id = dmPinId(conversationId);
+    const pin = dmPinFor(pins, id);
+    const key = pinKeyOf(expectedPeer);
+    if (!pin || !key || pin.offered || pin.peer !== key || isVerifiedPin(pin)) return false;
+    return resized(pins, id, () => {
+        pin.verified = { peer: key, at: rekeyDateOf(now) ?? new Date().toISOString() };
+        pin.checked = true;
+        return true;
+    });
+}
+
+/**
+ * The member's "Remove verification" (§2.5): the mark goes, and the resting rule runs in the same change, so a pause for
+ * one offered key ends with the pin moved to it (and its notice). True when it changed.
+ */
+export function removeVerified(pins: DmPeerPins, conversationId: string, now: string): boolean {
+    const id = dmPinId(conversationId);
+    const pin = dmPinFor(pins, id);
+    if (!pin?.verified) return false;
+    resized(pins, id, () => {
+        delete pin.verified;
+        return true;
+    });
+    restDmEntry(pins, id, now);
     return true;
 }
 
@@ -992,7 +1133,11 @@ export function acceptOffer(pins: DmPeerPins, conversationId: string, peer: stri
     if (!key || !pin?.offered || pin.offered.peer !== key) return false;
     // Newest first, the oldest dropped past FORMER_MAX (§3.4 amendment 6): its lines then read "couldn't be verified".
     const former = [...new Set([pin.peer, ...(pin.former ?? [])])].filter((k) => k !== key).slice(0, FORMER_MAX);
-    return resized(pins, id, () => setPin(pins, id, { peer: key, since: now, by: 'member', ...(former.length ? { former } : {}) }));
+    const moved: DmPeerPin = { peer: key, since: now, by: 'member', ...(former.length ? { former } : {}), changedAt: changedWith(pin.changedAt, now) };
+    // The card's tick says the code matches, as Mark as verified does: a verified person stays verified, on the new key
+    // (DESIGN-dm-key-signal-model §2.5, question 1, Fable's pick).
+    if (isVerifiedPin(pin)) moved.verified = { peer: key, at: rekeyDateOf(now) ?? new Date().toISOString() };
+    return resized(pins, id, () => setPin(pins, id, moved));
 }
 
 /** The keys a thread's old lines may open under: the pinned one, then the ones before it. */

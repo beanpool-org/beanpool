@@ -560,7 +560,7 @@ async function main(): Promise<void> {
     await asMember(ben, 'POST', '/api/mail/send', { items: [keepOut] });
     aAnswers = 202;
     assert(heldCount() === 2 && outRow(ben.key, keepOut.envelope.itemId)?.state === 'queued', '15a. two items held, one queued');
-    for (const t of ['relay_mail', 'relay_mail_seen', 'relay_mail_devices', 'relay_mail_got', 'relay_outbox']) {
+    for (const t of ['relay_mail', 'relay_mail_seen', 'relay_mail_refused', 'relay_mail_devices', 'relay_mail_got', 'relay_outbox']) {
         assert((REPLICATION_TABLES as Record<string, { kind: string }>)[t]?.kind === 'local', `15b. ${t} is local in the replication manifest`);
     }
     const { startP2P } = await import('./p2p.js');
@@ -580,7 +580,7 @@ async function main(): Promise<void> {
     writeDbSnapshot(snap);
     const s15 = new Database(snap, { readonly: true });
     const devicesLive = (db.prepare('SELECT COUNT(*) AS n FROM relay_mail_devices').get() as { n: number }).n;
-    const inSnap = ['relay_mail', 'relay_mail_seen', 'relay_mail_devices', 'relay_mail_got', 'relay_outbox'].map((t) => (s15.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n);
+    const inSnap = ['relay_mail', 'relay_mail_seen', 'relay_mail_refused', 'relay_mail_devices', 'relay_mail_got', 'relay_outbox'].map((t) => (s15.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n);
     s15.close();
     const raw = fs.readFileSync(snap);
     assert(inSnap.every((c) => c === 0) && !raw.includes(Buffer.from(keep1.payload)) && !raw.includes(Buffer.from(keep1.envelope.itemId)),
@@ -590,6 +590,14 @@ async function main(): Promise<void> {
     assert(heldCount() === 2, '15e. the live mailbox is untouched by the copy');
     const imageFiles = fs.existsSync(imagesDir()) ? fs.readdirSync(imagesDir(), { recursive: true }).map(String) : [];
     assert(!imageFiles.some((f) => f.includes(keepBlob.envelope.itemId)), '15f. the blob is not in the image store, so no backup\'s objects carry it');
+    // The header names the tables it says no copy holds (#3253 review: it said "The five tables" while the mailbox kept more
+    // and the copy's list, RELAY_MAIL_TABLES, empties more): each of this file's relay_mail tables by name, and the list.
+    const mailHeader = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'engine/relay-mail.ts'), 'utf8').split('*/')[0];
+    const neverCopied = mailHeader.split('**Never copied.**')[1] ?? '';
+    const mailTables = Object.keys(REPLICATION_TABLES).filter((t) => /^relay_mail(_|$)/.test(t));
+    const unnamed = mailTables.filter((t) => !new RegExp(`\\b${t}\\b`).test(neverCopied));
+    assert(mailTables.length >= 5 && unnamed.length === 0 && /RELAY_MAIL_TABLES/.test(neverCopied),
+        `15g. the header's "Never copied" names each of the ${mailTables.length} relay_mail tables and RELAY_MAIL_TABLES (unnamed: ${unnamed.join(', ') || 'none'})`);
     await p2p.stop();
 
     // ── 16. The door ──────────────────────────────────────────────────────────────────────

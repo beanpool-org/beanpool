@@ -41,6 +41,8 @@ export function ForumPane() {
     const [back, setBack] = useState<ReturnType<typeof takeForumBack>>(null);
     // A search's hits show in the topic list's place; the box keeps them while a hit's topic is open on top of this list.
     const [searching, setSearching] = useState(false);
+    // A section door starts the box afresh (its key), as the web's does (#3252 review 4): hits left showing would hide the section.
+    const [searchKey, setSearchKey] = useState(0);
     const [worldwide, setWorldwide] = useState(false);
     const [moving, setMoving] = useState(false);
     const { recheck } = useNodeStatus();
@@ -73,9 +75,10 @@ export function ForumPane() {
     useFocusEffect(useCallback(() => {
         void worldwideForumJoined().then(setWorldwide);
         setBack(takeForumBack());
-        // A group's "Topics ›" row asked for its section (utils/forum-open.ts, slice F9).
+        // A group's "Topics ›" row asked for its section (utils/forum-open.ts, slice F9): it lands there, under no search left from
+        // before. Coming back for any other reason keeps the box as the member left it, and asks nothing again.
         const at = takeForumAt();
-        if (at) { setList(null); setSection(at); }
+        if (at) { setList(null); setSection(at); setSearching(false); setSearchKey((k) => k + 1); }
         void keptForumFront().then((f) => { if (f) setFront((now) => now ?? f); });
         void loadFront();
     }, [loadFront]));
@@ -128,7 +131,7 @@ export function ForumPane() {
 
             {/* The search row is the chat list's shape, edge to edge: it carries its own 16 dp sides. */}
             <View style={{ marginHorizontal: -12 }}>
-                <ForumSearch sectionName={nameOf} onShowing={setSearching}
+                <ForumSearch key={searchKey} sectionName={nameOf} onShowing={setSearching}
                     onOpen={(id, number) => router.push({ pathname: '/forum/[id]', params: { id, at: String(number) } })} />
             </View>
 

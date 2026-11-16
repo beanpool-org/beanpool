@@ -5,7 +5,7 @@
  * styles live in utils/dm-key-change.ts, where the small-screen and contrast rules are tested.
  */
 import React, { useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { t } from '@beanpool/core';
 import { useStyles } from '../../app/ThemeContext';
 import { dmKeyChangeCopy, dmKeyChangeStyleSpec } from '../../utils/dm-key-change';
@@ -21,11 +21,11 @@ export interface DmKeyChangedBannerProps {
 }
 
 export function DmKeyChangedBanner({ peerName, change, onContinue, onNotNow }: DmKeyChangedBannerProps) {
-    const styles = useStyles(({ colors }) => dmKeyChangeStyleSpec(colors));
+    const styles = useStyles(({ colors }) => StyleSheet.create(dmKeyChangeStyleSpec(colors)));
     const [checked, setChecked] = useState(false);
     const [busy, setBusy] = useState(false);
     const code = keyCodeOf(change.offeredPeer);
-    const copy = dmKeyChangeCopy({ peerName, code, firstSight: change.firstSight, afterReset: change.afterReset, rekeyedAt: change.rekeyedAt, unplaced: !!change.unplaced });
+    const copy = dmKeyChangeCopy({ peerName, code, firstSight: change.firstSight, afterReset: change.afterReset, rekeyedAt: change.rekeyedAt, unplaced: !!change.unplaced, verified: !!change.verified });
     const canContinue = !!code && checked && !busy;
 
     const handleContinue = async () => {

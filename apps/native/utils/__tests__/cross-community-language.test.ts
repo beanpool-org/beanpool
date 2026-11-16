@@ -14,9 +14,11 @@
  * 2. **The helpers that sign for another community themselves** (node-post.ts signedGet, signedPost, signedDelete; the
  *    worldwide forum's note request, utils/forum-label.ts) reach it through the wrapper with it.
  * 3. **The way around.** A request misses it only by going around the wrapper's header: a Headers object or a Request it
- *    can't add to, XMLHttpRequest, a file download or upload, a socket, or the fetch the wrapper kept from before it. Every
- *    such call in the phone's code is listed in AROUND_THE_WRAPPER, by file, with why it needs no language; a new one fails
- *    here until it is listed (or goes through fetch). And the wrapper is installed at load (app/_layout.tsx).
+ *    can't add to, XMLHttpRequest, a file download or upload, a socket, the fetch the wrapper kept from before it, or a
+ *    request marked to go without it (utils/request-language.ts). Every such call in the phone's code is listed in
+ *    AROUND_THE_WRAPPER, by file, with why it needs no language; a new one fails here until it is listed (or goes through
+ *    fetch). The one marked on purpose: a copy on the worldwide community names nobody (#2731), so it carries the signature's
+ *    headers alone, as the web's does. And the wrapper is installed at load (app/_layout.tsx).
  *
  * Nothing here contacts a node.
  */
@@ -131,6 +133,14 @@ describe('2. the helpers that sign for another community themselves', () => {
         expect((sent()[0][1]?.headers as Record<string, string>)['X-Signature']).toBeTruthy();
     });
 
+    it('one asked to go without it (a copy on the worldwide community, #2731) carries none, and is signed as before', async () => {
+        await signedPost(WORLDWIDE, '/api/marketplace/posts', {}, IDENTITY, undefined, { language: false });
+        await signedGet(WORLDWIDE, '/api/marketplace/posts?id=x', IDENTITY, undefined, undefined, { language: false });
+        await signedDelete(WORLDWIDE, '/api/events/x/skip', IDENTITY, undefined, { language: false });
+        expect([languageOf(0), languageOf(1), languageOf(2)]).toEqual([undefined, undefined, undefined]);
+        expect((sent()[0][1]?.headers as Record<string, string>)['X-Signature']).toBeTruthy();
+    });
+
     it('the worldwide forum\'s note request to the member\'s community carries it (the finding)', async () => {
         await setForumLabel({ show: 'community', address: OTHER });
         const note = sent().findIndex(([input]) => String(input) === `${OTHER}/api/membership/note`);
@@ -146,13 +156,15 @@ const DIRS = ['app', 'components', 'utils', 'hooks', 'services', 'tools', 'conte
 const SKIP = /(^|\/)(__tests__|__mocks__|node_modules)(\/|$)|\.test\.tsx?$|\.d\.ts$/;
 
 /** A request sent where the wrapper can't put a header on: none of these goes through fetch with a plain headers object. */
-const AROUND = /\bnew Headers\s*\(|\bnew Request\s*\(|\bXMLHttpRequest\b|\.(?:downloadAsync|uploadAsync|createDownloadResumable)\s*\(|\bnew WebSocket\s*\(|\bnew EventSource\s*\(|\boriginalFetch\s*\(/g;
+const AROUND = /\bnew Headers\s*\(|\bnew Request\s*\(|\bXMLHttpRequest\b|\.(?:downloadAsync|uploadAsync|createDownloadResumable)\s*\(|\bnew WebSocket\s*\(|\bnew EventSource\s*\(|\boriginalFetch\s*\(|\bwithoutLanguage\s*\(|\blanguage:\s*false\b/g;
 
 /** Every such call, by file: how many, and why it needs no language. A new one is listed here with its reason, or goes through fetch. */
 const AROUND_THE_WRAPPER: Record<string, { count: number; why: string }> = {
     'utils/node-request-signing.ts': { count: 1, why: 'the wrapper\'s own send, once its headers (the language among them) are on' },
     'utils/beans-sign.ts': { count: 1, why: 'the community\'s logo picture for a printed sign: a file, no words' },
     'services/ws-client.ts': { count: 1, why: 'the sync socket to the member\'s own community: change doorbells (a type and ids), no sentence a member reads' },
+    'utils/node-post.ts': { count: 1, why: 'marks a signed request only when its caller asks (SignedSendOptions language: false), each caller listed here' },
+    'utils/show-on-global.ts': { count: 1, why: 'a copy on the worldwide community names nobody (#2731): the signature\'s headers alone, as the web\'s (apps/server copy-cors.ts allows nothing else); its refusals stay English, as they were' },
 };
 
 function sources(dir: string, out: string[] = []): string[] {
@@ -189,6 +201,12 @@ describe('3. a request can only miss it by going around the wrapper, and every s
         const listed = Object.fromEntries(Object.entries(AROUND_THE_WRAPPER).map(([f, v]) => [f, v.count]));
         expect(found, 'a request sent around the fetch wrapper: send it through fetch with a plain headers object, or list it in AROUND_THE_WRAPPER with why it needs no language').toEqual(listed);
         for (const [file, { why }] of Object.entries(AROUND_THE_WRAPPER)) expect(why.length, file).toBeGreaterThan(20);
+    });
+
+    it('the copy keeper sends every one of its requests that way, and nothing else on the phone asks for it', () => {
+        const copies = codeOf(readFileSync(join(NATIVE, 'utils', 'show-on-global.ts'), 'utf8'));
+        expect(copies.match(/\bsigned(?:Get|Post|Delete)\([^)]*\bA_COPY\)/g)?.length).toBe(3);
+        expect(copies.match(/\bsigned(?:Get|Post|Delete)\(/g)?.length).toBe(3);
     });
 
     it('the wrapper is installed as the app loads, before any screen sends anything', () => {

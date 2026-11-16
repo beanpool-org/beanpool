@@ -10,7 +10,7 @@ import { SHOWN_ON_GLOBAL_STORE_KEY } from './storage-keys';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { fetchNodeProfile, getCachedNodeProfile } from './node-profile';
 import { plainOriginOf } from './node-url';
-import { signedDelete, signedGet, signedPost } from './node-post';
+import { signedDelete, signedGet, signedPost, type SignedSendOptions } from './node-post';
 import { memberSigner } from './crypto';
 import { isEventEnded } from './events';
 import type { BeanPoolIdentity } from './identity';
@@ -30,11 +30,17 @@ export async function homeHostOf(home: string): Promise<string | null> {
     return profile?.primaryAddress ?? audienceOf(home);
 }
 
+/**
+ * A copy names nobody (#2731): its requests carry the signature's headers and nothing of the member, the web's as the phone's,
+ * so not the member's language either (utils/request-language.ts). Global's refusals here stay in English, as they were.
+ */
+const A_COPY: SignedSendOptions = { language: false };
+
 const liveDeps: CopyDeps = {
     global: GLOBAL_NODE_URL,
-    get: (...args) => signedGet(...args),
-    post: (...args) => signedPost(...args),
-    del: (...args) => signedDelete(...args),
+    get: (url, path, identity, signal) => signedGet(url, path, identity, signal, undefined, A_COPY),
+    post: (url, path, body, identity, signal) => signedPost(url, path, body, identity, signal, A_COPY),
+    del: (url, path, identity, signal) => signedDelete(url, path, identity, signal, A_COPY),
     fetchPhoto: async (url) => (await import('./post-photo')).fetchedPostPhoto(url),
     hostOf: homeHostOf,
 };

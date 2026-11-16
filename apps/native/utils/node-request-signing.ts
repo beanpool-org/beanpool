@@ -30,6 +30,7 @@ import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeN
 import { getSavedNodes } from './nodes';
 import { APP_TOO_OLD_CODE, APP_VERSION_HEADER, noteAppRefused } from './force-update';
 import { languageForNode } from './language-choice';
+import { isWithoutLanguage } from './request-language';
 import { isHealthRead, learnNodeVersion, noteHealthAnswer, refuseIfNodeTooOld, tooOldVersionOf } from './node-version-gate';
 
 let installed = false;
@@ -146,8 +147,11 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
             if (url) {
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                 toAnchor = !!anchorUrl && isAnchorRequest(url, anchorUrl);
+                // Read before a header is added below, which hands on a new init: a request sent without the language on
+                // purpose (utils/request-language.ts: a copy on the worldwide community names nobody).
+                const withoutTheLanguage = isWithoutLanguage(init);
                 if (toAnchor && appVersionHeader) init = withHeader(input, init, APP_VERSION_HEADER, appVersionHeader);
-                if (toAnchor || isCommunityApiRequest(url)) init = withHeader(input, init, LANGUAGE_HEADER, languageForNode());
+                if (!withoutTheLanguage && (toAnchor || isCommunityApiRequest(url))) init = withHeader(input, init, LANGUAGE_HEADER, languageForNode());
                 // Only sign requests to our own node, and never double-sign.
                 if (method === 'GET' && toAnchor && !hasHeader(init?.headers, 'X-Signature')) {
                     const identity = await loadIdentity();

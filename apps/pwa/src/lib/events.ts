@@ -338,8 +338,6 @@ export function eventEditBlockedReason(post: MarketplacePost, now = Date.now()):
     return null;
 }
 
-/** The label on the chat button. No number: the going count next to "chat" read as unread messages. */
-export const EVENT_CHAT_ENTRY_LABEL = 'Open event chat';
 
 /** ISO UTC → a `<input type="datetime-local">` value in the viewer's local time ("2026-09-27T09:00"). */
 export function isoToLocalInput(iso: string | null | undefined): string {
@@ -541,6 +539,14 @@ export const hostLetsInLabel = (): string => t('Only people I let in see the not
 export const hostLetsInHint = (): string => t('Tick this if the note is your home address or a gate code.');
 /** What the chat entry says, disabled, while the host hasn't let this member in. */
 export const eventChatWaitingText = (): string => t('Chat opens when the host lets you in.');
+/**
+ * The chat button's words (Marty, 16 Nov 2026: "it just doesn't seem to communicate the idea that you click there to chat"):
+ * a verb first, and who reads it, the host and the people going (the chat's own notice), as the phone's utils/events.ts has
+ * it. No going count: a number beside "chat" read as unread lines (events round 2, B3); unread lines are eventChatNewLines.
+ */
+export const eventChatEntryLabel = (): string => t('Chat with people going');
+/** The chat button's count of lines the member hasn't read, from their chat list's unread count. */
+export const eventChatNewLines = (n: number): string => tn(n, '{n} new', '{n} new');
 
 /**
  * An edit from ticked to unticked opens the note and every chat line so far to everyone Going: the form says so before

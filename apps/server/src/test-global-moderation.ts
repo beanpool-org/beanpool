@@ -314,6 +314,8 @@ async function main(): Promise<void> {
     await call('POST', viewer, `/api/marketplace/posts/${ev}/rsvp`, { status: 'going' });
     // On global the host lets each Going person in to the note and the chat (#1953); this suite is about moderation, so the host does.
     await call('POST', ava, `/api/marketplace/posts/${ev}/let-in`, { memberPublicKey: viewer.pk });
+    // An event's chat is in the lists only once someone has posted in it (test-event-chat-listing; Marty, 16 Nov 2026).
+    await call('POST', ava, `/api/marketplace/posts/${ev}/chat/message`, { text: 'Doors at six' });
     const vicChatBefore = await call('GET', viewer, `/api/marketplace/posts/${ev}/chat`);
     const vicListBefore = (await call('GET', viewer, `/api/messages/conversations/${viewer.pk}`)).body?.conversations ?? [];
     const vicYoursBefore = (await call('GET', viewer, '/api/your-groups')).body?.items ?? [];
@@ -399,9 +401,11 @@ async function main(): Promise<void> {
     const vicYours = (await call('GET', viewer, '/api/your-groups')).body?.items ?? [];
     assert(!vicList.some((c: any) => c.id === ev) && !vicYours.some((c: any) => c.id === ev), 'and it is gone from both their chat lists');
     const avaChat = await call('GET', ava, `/api/marketplace/posts/${ev}/chat`);
+    // The one line Ava posted before it was hidden (above): the refused line adds none.
+    const evLinesBefore = (db.prepare('SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ?').get(ev) as any).c;
     const avaLine = await call('POST', ava, `/api/marketplace/posts/${ev}/chat/message`, { text: 'Bring cash' });
     const evLines = (db.prepare('SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ?').get(ev) as any).c;
-    assert(avaChat.status === 200 && avaChat.body?.title === 'Hidden gathering' && avaLine.status === 409 && evLines === 0,
+    assert(avaChat.status === 200 && avaChat.body?.title === 'Hidden gathering' && avaLine.status === 409 && evLinesBefore === 1 && evLines === evLinesBefore,
         `its author still reads it, but can't post into it while it is hidden, and nothing is stored (${avaChat.status}, ${avaLine.status} ${avaLine.body?.error})`);
     const ownVote = await call('POST', ava, `/api/marketplace/posts/${poll}/vote`, { optionId: 'b' });
     assert(ownVote.status === 200 && ownVote.body?.post?.id === poll, `its author can still vote in it (${ownVote.status})`);

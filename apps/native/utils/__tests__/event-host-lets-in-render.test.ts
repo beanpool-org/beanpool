@@ -86,27 +86,27 @@ describe('a member, where the host lets people in (drawn)', () => {
         await draw({ ...base, eventHostLetsIn: true, myRsvp: null, myLetIn: null });
         expect(host.textContent).toContain('The host lets people in. Tap Going, and the note and the chat open once they do.');
         expect(host.textContent).not.toContain(NOTE);
-        expect(button('Open event chat')).toBeUndefined();
+        expect(button('Chat with people going')).toBeUndefined();
     });
     it('Going and waiting: the waiting words, and the chat entry disabled with its own words', async () => {
         await draw({ ...base, eventHostLetsIn: true, myRsvp: 'going', myLetIn: false });
         expect(host.textContent).toContain("You're going. The host hasn't let you in yet: the note and the chat open when they do.");
         const entry = button('Chat opens when the host lets you in.');
         expect(entry?.getAttribute('aria-disabled')).toBe('true');
-        expect(button('Open event chat')).toBeUndefined();
+        expect(button('Chat with people going')).toBeUndefined();
         expect(host.textContent).not.toContain('Only the host and people going');
         expect(host.textContent).not.toContain(NOTE);
     });
     it('let in: the note and the chat, no waiting words', async () => {
         await draw({ ...base, eventHostLetsIn: true, myRsvp: 'going', myLetIn: true, eventPrivateNote: NOTE });
         expect(host.textContent).toContain(NOTE);
-        expect(button('Open event chat')).toBeTruthy();
+        expect(button('Chat with people going')).toBeTruthy();
         expect(host.textContent).not.toContain("hasn't let you in");
     });
     it('where the host does not let people in, Going opens it as before', async () => {
         await draw({ ...base, myRsvp: 'going', eventPrivateNote: NOTE });
         expect(host.textContent).toContain(NOTE);
-        expect(button('Open event chat')).toBeTruthy();
+        expect(button('Chat with people going')).toBeTruthy();
         expect(host.textContent).not.toContain('The host lets people in');
     });
 });

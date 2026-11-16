@@ -14,7 +14,7 @@ The people who look after a chat group are its **convenors**; one of them is the
 
 ## Your groups
 
-Tap **Chat**, then **Groups**. Every group you are in is listed there, newest message first, with the projects you lead or work on (🎯), the enterprises you keep (🥖) and the events you host or are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read. In an encrypted chat the row shows who wrote last and **🔒 Message**, not the words.
+Tap **Chat**, then **Groups**. Every group you are in is listed there, newest message first, with the projects you lead or work on (🎯), the enterprises you keep (🥖) and the events you host or are going to (📅), once someone has written in the event's chat. An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read. In an encrypted chat the row shows who wrote last and **🔒 Message**, not the words.
 
 - The number on **Groups** at the top adds up your unread messages, except in chats you have muted.
 - Tap a group to open its chat. That marks it read.

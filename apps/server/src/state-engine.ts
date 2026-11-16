@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView, ItemTakeUpIn } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView, ItemTakeUpIn, AddressListFields } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, FORUM_PUSH_PREF, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
@@ -497,7 +497,7 @@ import {
     getEventThread as getEventThreadEngine,
     postEventThreadMessage as postEventThreadMessageEngine,
     removeEventThreadMessage as removeEventThreadMessageEngine,
-    chatHiddenFrom,
+    chatListedFor,
     type EventThreadMessage,
     type EventThreadView
 } from './engine/event-thread.js';
@@ -779,6 +779,12 @@ export interface NodeConfig {
      * one that is no longer an address) leaves the main worked out as before an owner chose.
      */
     mainAddress?: string | null;
+    /**
+     * The address list this server last signed (services/address-list.ts, design scratch/fable-design/
+     * DESIGN-several-addresses-fable.md §2.2): its content and its number, so `seq` goes up by one for each change of content
+     * and never for none, across restarts. Carried in the take-over envelope, so a promoted server goes on from it.
+     */
+    addressList?: AddressListFields;
 }
 
 // Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
@@ -7508,9 +7514,10 @@ export function getUnreadCounts(pubkey: string): Record<string, number> {
 }
 
 /**
- * A member's unread counts over the chats their conversation list shows: an event's chat is left out while the event
- * is hidden from them by reports (G3, chatHiddenFrom). GET /api/messages/conversations and the badge every push
- * carries both read this, so the number on the app icon is always one the member can open and clear.
+ * A member's unread counts over the chats their conversation list shows (engine/event-thread.ts chatListedFor): an event's
+ * chat is left out while the event is hidden from them by reports (G3), while nobody has posted in it, and when they are
+ * not one of its readers (Marty, 16 Nov 2026). GET /api/messages/conversations and the badge every push carries both read
+ * this, so the number on the app icon is always one the member can open and clear.
  */
 export function getListedUnreadCounts(pubkey: string): Record<string, number> {
     return Object.fromEntries(listedUnreadChats(pubkey).map(c => [c.id, c.unread]));
@@ -7525,7 +7532,7 @@ function listedUnreadChats(pubkey: string): { id: string; type: string; unread: 
     for (const [id, unread] of Object.entries(getUnreadCounts(pubkey))) {
         if (held.has(id)) continue;
         const type = (typeOf.get(id) as { type: string } | undefined)?.type ?? '';
-        if (!chatHiddenFrom({ id, type }, pubkey)) chats.push({ id, type, unread });
+        if (chatListedFor({ id, type }, pubkey)) chats.push({ id, type, unread });
     }
     return chats;
 }
@@ -9921,6 +9928,7 @@ export function getNodeConfig(): NodeConfig {
         ...(Array.isArray(config.ownerAddresses) ? { ownerAddresses: config.ownerAddresses.filter((a: unknown) => typeof a === 'string') } : {}),
         ...(Array.isArray(config.registrarNames) ? { registrarNames: config.registrarNames } : {}),
         ...(typeof config.mainAddress === 'string' ? { mainAddress: config.mainAddress } : {}),
+        ...(config.addressList && typeof config.addressList === 'object' ? { addressList: config.addressList } : {}),
     };
 
     if (migrated) {
@@ -9957,6 +9965,8 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     if ('publicAddress' in update) noteTakeoverInputsChanged('public address changed');
     if ('ownerAddresses' in update) noteTakeoverInputsChanged('confirmed app addresses changed');
     if ('registrarNames' in update) noteTakeoverInputsChanged('registrar names changed');
+    if ('mainAddress' in update) noteTakeoverInputsChanged('main address changed');
+    if ('addressList' in update) noteTakeoverInputsChanged('address list changed');
     return next;
 }
 

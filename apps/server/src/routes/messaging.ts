@@ -13,7 +13,7 @@ import {
     getMember, isNodeMember, isLiveVisitor, getNodeRole, passesReadGate, weighRequestReports,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
-import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
+import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatListedFor, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, groupLineForReader, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { fromEpochOf } from '../engine/group-keys.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone, enterpriseThreadReadRefusal } from '../engine/enterprise-thread.js';
@@ -473,7 +473,8 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     // The member's own withheld conversations and lines (engine/withheld-lines.ts) are in their own list, read signed
     // by them, ordered as if nothing had been withheld; nobody else's list ever names one.
     const viewer: string = publicKey; // the verified signer, held above
-    const convs = listWithOwnWithheld(viewer, getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey)));
+    // An event's chat only once someone has posted in it, and only for its readers (chatListedFor; Marty, 16 Nov 2026).
+    const convs = listWithOwnWithheld(viewer, getConversationsByMember(publicKey).filter(c => chatListedFor(c, publicKey)));
     // Where requests are on (engine/dm-requests.ts): each direct conversation says whether it is a message request, the
     // ones waiting for the viewer are listed apart in `requests`, and one they ignored, or from someone they blocked, in
     // neither. Their unread lines are in neither the list's count nor the badge (getListedUnreadCounts). Where requests are

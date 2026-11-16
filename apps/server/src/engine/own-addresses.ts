@@ -61,6 +61,7 @@
  */
 
 import { domainToASCII } from 'node:url';
+import { ADDRESS_LIST_MAX, addressOf, isListableAddress } from '@beanpool/core';
 import { getNodeConfig, resolvePublicNodeUrl, updateNodeConfig, PUBLIC_URL_RULES } from '../state-engine.js';
 import { HOLDING_STATUSES, registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress, reachableFromInternet } from './host-kinds.js';
@@ -303,6 +304,10 @@ export function mainPublicUrl(): string | null {
     const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community);
     const main = chosenMainAddress();
     if (!main) return url;
+    // A home-network main (allowed only while the community lists nothing the Internet can reach) names nothing a reader
+    // outside could open: the directory, search engines and a stranger's card get none, as they did before it was chosen
+    // (several-addresses S2, from #3222's round-2 review). The signed list still names it main (addressListContent).
+    if (!reachableFromInternet(main)) return null;
     const host = url ? normalizeAddress(url.replace(/^https?:\/\//, '').replace(/\/+$/, '')) : null;
     return host === main ? url : `https://${main}`;
 }
@@ -314,12 +319,54 @@ export function mainPublicUrl(): string | null {
  * URL keeps its port for its host, and mainPublicUrl's for the main; every other address is https://<host>.
  */
 export function listedUrls(): string[] {
+    const ported = portedUrls();
+    return publishedAddresses().map((a) => ported.get(a) ?? `https://${a}`);
+}
+
+/** The URL of each host whose port is known (the main's, mainPublicUrl, and the resolver's), by host; https://<host> for the rest. */
+function portedUrls(): Map<string, string> {
     const ported = new Map<string, string>();
     for (const url of [mainPublicUrl(), resolvePublicNodeUrl(PUBLIC_URL_RULES.community)]) {
         const host = url ? normalizeAddress(url.replace(/^https?:\/\//, '').replace(/\/+$/, '')) : null;
         if (url && host && !ported.has(host)) ported.set(host, url.replace(/\/+$/, ''));
     }
-    return publishedAddresses().map((a) => ported.get(a) ?? `https://${a}`);
+    return ported;
+}
+
+const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+let warnedListFull = '';
+
+/**
+ * What the signed address list says (services/address-list.ts; design scratch/fable-design/DESIGN-several-addresses-fable.md
+ * §2.2): every published address with a route (reachableAddresses: never a former, lost or loopback name, nor a name still
+ * waiting for approval), each in core's one spelling of an address (addressOf: `host`, or `host:port` where the main's or
+ * the resolver's URL names a port other than 443, so a port survives), none loopback or unspecified (isListableAddress), at
+ * most ADDRESS_LIST_MAX of them with the main always among them, in code-unit order; and the main (primaryAddress) in the
+ * same spelling. A home-network main stays main here: the list is what a phone on that network follows. Null when there is
+ * nothing to list (a node that knows none of its names, or whose names all wait for a route).
+ */
+export function addressListContent(): { main: string; addresses: string[] } | null {
+    const ported = portedUrls();
+    const spell = (host: string): string | null => {
+        const a = addressOf(ported.get(host) ?? `https://${host}`);
+        return a && isListableAddress(a) ? a : null;
+    };
+    const hosts = reachableAddresses().filter((h) => spell(h) !== null);
+    if (!hosts.length) return null;
+    const primary = primaryAddress();
+    const main = primary && hosts.includes(primary) ? primary : preferredAddress(hosts)!;
+    const listed: string[] = [];
+    for (const h of [main, ...hosts.filter((x) => x !== main)]) {
+        const a = spell(h)!;
+        if (!listed.includes(a)) listed.push(a);
+        if (listed.length === ADDRESS_LIST_MAX) break;
+    }
+    if (hosts.length > ADDRESS_LIST_MAX && warnedListFull !== hosts.join(',')) {
+        warnedListFull = hosts.join(',');
+        logger.warn('SYS', `[Addresses] This community has ${hosts.length} addresses; its signed list names the main one and `
+            + `${ADDRESS_LIST_MAX - 1} others, so members' phones follow only those. Remove the addresses no longer used.`);
+    }
+    return { main: spell(main)!, addresses: listed.sort(byCodeUnit) };
 }
 
 /**

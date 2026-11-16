@@ -129,7 +129,7 @@ describe('an event in the pseudo-locale', () => {
         // The "Remind me" row's choice line is lib/event-extras.ts's, held to its words by EventExtras.words.test.tsx.
         expect(bypassing(document.body, { others: [...OTHERS, '1 day before (your default)'] })).toEqual([]);
         expect(screen.getByText(xx('Note for people who are going'))).toBeInTheDocument();
-        expect(screen.getByTestId('event-open-chat')).toHaveTextContent(xx('Open event chat'));
+        expect(screen.getByTestId('event-open-chat')).toHaveTextContent(xx('Chat with people going'));
     });
 
     it("the host's page: who's going, the host's buttons, and the question before cancelling", async () => {

@@ -18,8 +18,8 @@
  *  6. Pushes: every other member by default, never the author, never someone removed; a mute (8h / 1w / always)
  *     silences one chat; an @mention gets through a mute; an expired mute is no mute. No text in a push.
  *  7. Convenor removal of a message; nobody else; system lines cannot be removed.
- *  8. "Your groups": groups, kept enterprises (🥖), projects (🎯) and events hosted or Going (📅), latest message, unread count
- *     per member; nothing the member is not in.
+ *  8. "Your groups": groups, kept enterprises (🥖), projects (🎯) and events hosted or Going (📅) once someone has posted
+ *     in the event's chat, latest message, unread count per member; nothing the member is not in.
  *  9. The old chat group is gone: the create route answers 410; existing ones are deleted with tombstones.
  * 10. Renaming a group renames its chat.
  */
@@ -37,6 +37,7 @@ import {
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { rsvpEvent } from './engine/posts.js';
+import { postEventThreadMessage } from './engine/event-thread.js';
 import {
     postGroupThreadMessage, removeGroupThreadMessage, getGroupThread, detectMentions,
     GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType,
@@ -443,6 +444,15 @@ async function main(): Promise<void> {
     const quiz = createPost('event', 'community', 'Quiz night', '', 0, 'fixed', erin, -28.5, 153.5, [], false, undefined, false,
         { eventStartAt: inHours(40), eventPlaceName: 'The pub' })!;
     rsvpEvent(() => { }, quiz.id, bob, 'interested');
+    // An event's chat is listed only once someone has posted a line in it, and only for its readers, the host and Going
+    // (Marty, 16 Nov 2026; test-event-chat-listing holds the whole table). Nobody has written in either yet: in no list.
+    const quietBob = (await get('/api/your-groups', bob)).body.items as any[];
+    assert(!quietBob.some(i => i.id === walk.id), 'the event he is Going to is not listed while nobody has written in its chat');
+    const quietErin = (await get('/api/your-groups', erin)).body.items as any[];
+    assert(!quietErin.some(i => i.id === walk.id), 'nor for its host');
+    // The host writes in both, so the 📅 badge, the roles and the Interested row below are each checked on a listed chat.
+    postEventThreadMessage(cb, walk.id, erin, 'Meet at the gate');
+    postEventThreadMessage(cb, quiz.id, erin, 'Teams of four');
     markConversationRead(bob, garden.id);
     await new Promise(r => setTimeout(r, 5));
     const latest = lockedGroupLine(db, garden.id);
@@ -462,8 +472,9 @@ async function main(): Promise<void> {
     assert(!!r && r.kind === 'enterprise' && r.badge === '🎯' && r.lifecycle === 'bounded' && r.role === 'keeper',
         `the project he helps opens the same chat, with 🎯 and lifecycle 'bounded', so the app names it a project (got ${r?.badge} ${r?.lifecycle})`);
     const w = items.find(i => i.id === walk.id);
-    assert(!!w && w.kind === 'event' && w.badge === '📅' && w.role === 'going', 'the event he is Going to is listed with 📅');
-    assert(!items.some(i => i.id === quiz.id), 'an event he is only interested in is not');
+    assert(!!w && w.kind === 'event' && w.badge === '📅' && w.role === 'going', 'once the host has written in it, the event he is Going to is listed with 📅');
+    assert(w?.unreadCount === 1, `with the host's line unread for him (got ${w?.unreadCount})`);
+    assert(!items.some(i => i.id === quiz.id), 'an event he is only interested in is not, though its host has written in it too');
     assert(!items.some(i => i.id === secret.id), 'an invite-only group he is not in is not');
     assert(items.every((it, i) => i === 0 || items[i - 1].lastActivityAt >= it.lastActivityAt), 'the list is ordered by latest activity');
     assert(items.findIndex(i => i.id === garden.id) < items.findIndex(i => i.id === bakery),
@@ -475,7 +486,7 @@ async function main(): Promise<void> {
     assert(!ginaList.some(i => i.id === garden.id), 'nor does someone who left');
     const erinList = (await get('/api/your-groups', erin)).body.items as any[];
     assert(!erinList.some(i => i.kind === 'group'), 'an outsider sees none of these groups');
-    assert(erinList.some(i => i.id === walk.id && i.role === 'host'), 'the host of an event sees it as host');
+    assert(erinList.some(i => i.id === walk.id && i.role === 'host' && i.badge === '📅'), 'the host of an event sees it as host');
     assert((await get('/api/your-groups', undefined)).status === 401, 'unsigned: 401');
     await mpost('/api/messages/mark-read', bob, { conversationId: garden.id });
     assert((listYourChats(bob).items.find(i => i.id === garden.id)?.unreadCount ?? -1) === 0, 'marking the chat read clears the count');

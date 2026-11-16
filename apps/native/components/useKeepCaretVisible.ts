@@ -2,9 +2,13 @@
  * Keeps what a member is typing in view inside a form sheet's ScrollView, from the first keystroke, with no scroll
  * needed (Rob on an iPhone, 3 Nov: "the entry was hidden down below the keyboard", fine only after he scrolled).
  *
- * The sheets (New Post, New Event, New Poll) lift themselves above the keyboard with a react-native-keyboard-controller
- * KeyboardAvoidingView, which shrinks the ScrollView to what is left above it. Nothing then scrolled the focused field
- * into that smaller viewport, and a multiline field that grows as you type pushed its caret past the bottom of it.
+ * The sheets (New Post, New Event, New Poll, a listing's page) lift themselves above the keyboard with a
+ * react-native-keyboard-controller KeyboardAvoidingView, which shrinks the ScrollView to what is left above it. Nothing then
+ * scrolled the focused field into that smaller viewport, and a multiline field that grows as you type pushed its caret past
+ * the bottom of it. The viewport is only "above the keyboard" when that lift is full: on an iPhone page sheet the
+ * KeyboardAvoidingView needs useScreenKeyboardOffset's offset, or the viewport reaches under the keyboard by the sheet's top
+ * (utils/__tests__/composer-above-keyboard.test.ts checks every caret-follow ScrollView sits in a keyboard view that takes
+ * it, or in one that always starts at the window's top).
  *
  * Why not the library's KeyboardAwareScrollView: it works in window coordinates it captures when the keyboard starts
  * moving, which is before this KeyboardAvoidingView has lifted the sheet, so inside one it scrolls a second time for

@@ -16,7 +16,7 @@ vi.mock('react-native', () => {
         createElement(tag, { 'data-testid': testID, 'aria-label': accessibilityLabel, onClick: onPress, disabled }, children);
     return {
         View: el('div'), Text: el('span'), Pressable: el('button'), ActivityIndicator: () => null, ScrollView: el('div'), Modal: ({ visible, children }: any) => (visible ? createElement('div', null, children) : null),
-        KeyboardAvoidingView: el('div'), Platform: { OS: 'android' },
+        KeyboardAvoidingView: el('div'), Platform: { OS: 'android' }, useWindowDimensions: () => ({ width: 390, height: 844, scale: 2, fontScale: 1 }),
         TextInput: ({ testID, value, maxLength, onChangeText, placeholder }: any) => createElement('input', { 'data-testid': testID, value: value ?? '', maxLength, placeholder, onChange: (e: any) => onChangeText?.(e.target.value) }),
         Alert: { alert: vi.fn() }, StyleSheet: { create: <T,>(s: T) => s },
     };

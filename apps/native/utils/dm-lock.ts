@@ -71,7 +71,8 @@ export function dmKeyChangedLine(peerName?: string | null): string {
  * amendment): no key is pinned, nothing is offered, so there is no Continue. It names no key. It never says the chat
  * reads as theirs: on a restored phone whose node served PUPPET's lines first (P23b, twin-first T2) the only lines that
  * read are the listed key's, and the person's own history is the part that "couldn't be verified" (#1872 handover 4).
- * What to do is on the banner above it (15 Oct words design, D1/D2): the listed key's code and Continue, or Not now only.
+ * The banner above it offers Not now only (15 Oct words design, D2): no key's code and no Continue, since a record whose
+ * listing names one key never waits here; it becomes a pin on that key (restDmEntry, DESIGN-dm-key-signal-model §2.3 row 5).
  * It never says "start a new chat": the server answers a new chat with the same person with this same chat.
  */
 export const DM_UNPLACED_LINE = word("This phone can't match this chat to one key, so sending is off. What you can read here may not be from them.");

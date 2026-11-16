@@ -91,7 +91,7 @@ You can also switch in **Settings**, under **System**, then **Saved communities*
 
 A community can answer at more than one address, and its owners choose which one is its main address.
 
-- **On the phone, there is nothing to do.** Your phone checks your community's addresses by itself and moves to the main one once it has answered with your community's own key. If the address your phone uses stops answering, it uses another of your community's addresses for now and goes back once the main one answers. Home says so in one line, once. Nothing else changes: your messages and everything your phone keeps for the community stay where they are.
+- **On the phone, there is nothing to do.** Your phone checks your community's addresses by itself and moves to the main one once it has answered with your community's own key. If the address your phone uses stops answering, or no longer answers as your community, it uses another that has answered with that key, and goes back once the main one answers. Home says so in one line, once. If none has, it stays. Nothing else changes, your messages included.
 - **In the web app,** your sign-in belongs to the address you opened, so the web app stays there and keeps working. A quiet line at the top names the main address. Tap **Open it there** to go to it, then sign in there with **Link this browser from your phone**, or with your sign-in or your 12 words.
 
 ## Forgetting a community on this phone

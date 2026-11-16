@@ -24,7 +24,7 @@ Di aplikasi web ini adalah tab **Obrolan**. Tab ini mencantumkan semua obrolanmu
 ## Memulai obrolan
 
 - Dari profil: buka profil mereka dan ketuk **Kirim Pesan**. Di sana kamu juga bisa menambahkan mereka sebagai teman.
-- Dari **Obrolan**: ketuk tombol pensil, lalu temukan orang tersebut berdasarkan nama. Pada komunitas seluruh dunia, Pesan Baru mencantumkan orang-orang yang pernah bertransaksi denganmu dan teman-temanmu. Untuk menemukan orang lain, ketik setidaknya 2 huruf dari nama mereka.
+- Dari **Obrolan**: ketuk tombol pensil, lalu temukan orang tersebut berdasarkan nama. Pada komunitas seluruh dunia, Pesan Baru mencantumkan orang-orang yang pernah bertransaksi denganmu dan teman-temanmu. Untuk menemukan orang lain, ketik setidaknya 2 huruf dari nama mereka. Untuk menulis kepada seseorang yang menjadi anggota komunitas lain, lihat "Orang dari komunitas lain".
 - Dari daftar anggota: **Obrolan**, lalu **Orang**, dan ketuk 💬 di samping nama anggota di **Komunitas** atau **Teman**.
 - Dari sebuah postingan: ketuk **Pesan** dan nama orang tersebut.
 

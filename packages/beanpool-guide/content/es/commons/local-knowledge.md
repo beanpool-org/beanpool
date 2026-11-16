@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Conocimiento local
 summary: Aprender, el estante de tu comunidad con lo que vale la pena saber: encontrar una página, sugerir una, mantenerla al día y cómo la revisa un propietario o administrador.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## Qué es
@@ -45,6 +45,14 @@ Cada página termina con la misma línea: "El conocimiento local lo escriben los
 ## Me ayudó
 
 Si una página te ayudó, toca **👍 Me ayudó**. Tócalo otra vez para quitarlo. La página muestra a cuántos miembros ayudó, como **Ayudó a 12**, y nunca a quiénes. No puedes tocarlo en tu propia página.
+
+## Guía local
+
+Un miembro que escribió 3 páginas que están ahora en Aprender, y cada una de ellas ayudó al menos a 3 miembros, muestra **🗺️ Guía local**: en la línea **Escrito por** de sus páginas y en su perfil. Las páginas armadas con un asistente de IA no cuentan. Se quita si sus páginas se quitan, o si se desactiva Aprender. Es solo un agradecimiento: no da frijoles y no permite a nadie hacer nada más.
+
+## Agradecer a quien escribió
+
+Debajo de una página que escribió otra persona, toca el botón con su nombre, como **🫘 Agradecer a Ada**. Se abre el formulario habitual del Registro para enviar frijoles, con esa persona ya elegida y una nota como **Gracias por «Autobús al pueblo»** ya escrita. Cambia la cantidad o la nota, y luego envíalo como cualquier regalo de tus propios frijoles. Nadie más paga nada. El botón solo aparece donde tu comunidad usa frijoles, y no en una página armada con un asistente de IA. Consulta «Enviar un regalo».
 
 ## Sugerir una página
 

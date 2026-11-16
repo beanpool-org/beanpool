@@ -71,7 +71,7 @@ Du kannst auch in den **Einstellungen** unter **System**, dann **Gespeicherte Co
 
 Eine Community kann unter mehr als einer Adresse antworten, und ihre Eigentümer legen fest, welche ihre Hauptadresse ist.
 
-- **Auf dem Telefon musst du nichts tun.** Dein Telefon prüft die Adressen deiner Community von selbst und wechselt zur Hauptadresse, sobald diese mit dem eigenen Schlüssel deiner Community geantwortet hat. Antwortet die Adresse, die dein Telefon nutzt, nicht mehr, nutzt es vorerst eine andere Adresse deiner Community und kehrt zurück, sobald die Hauptadresse wieder antwortet. Die Startseite sagt das einmal in einer Zeile. Sonst ändert sich nichts: Deine Nachrichten und alles, was dein Telefon für die Community aufbewahrt, bleiben, wo sie sind.
+- **Auf dem Telefon musst du nichts tun.** Dein Telefon prüft die Adressen deiner Community von selbst und wechselt zur Hauptadresse, sobald diese mit dem eigenen Schlüssel deiner Community geantwortet hat. Antwortet die Adresse, die dein Telefon nutzt, nicht mehr oder nicht mehr als deine Community, nutzt es eine andere Adresse, die mit diesem Schlüssel geantwortet hat, und kehrt zurück, sobald die Hauptadresse wieder antwortet. Die Startseite sagt das einmal in einer Zeile. Hat keine so geantwortet, bleibt es, wo es ist. Sonst ändert sich nichts, auch nicht an deinen Nachrichten.
 - **In der Web-App** gehört deine Anmeldung zu der Adresse, die du geöffnet hast. Darum bleibt die Web-App dort und funktioniert weiter. Eine unauffällige Zeile oben nennt die Hauptadresse. Tippe auf **Dort öffnen**, um dorthin zu gehen, und melde dich dort mit **Diesen Browser vom Telefon aus verknüpfen** an, oder mit deiner Anmeldung oder deinen 12 Wörtern.
 
 ## Eine Community auf diesem Telefon vergessen

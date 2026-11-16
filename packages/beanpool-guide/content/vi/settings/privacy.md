@@ -2,7 +2,7 @@
 slug: privacy
 title: Quyền riêng tư
 summary: Những gì người khác có thể thấy về bạn và các cài đặt để kiểm soát điều đó.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Những gì thành viên khác có thể thấy về bạn và các nút bật tắt để kiểm soát.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Các chủ sở hữu và quản trị viên vận hành máy chủ cộng đồ
 - **Khu vực của bạn** (trên cộng đồng toàn cầu): trong Cài đặt, dưới mục **Khu vực của bạn**, xem khu vực bạn đã cung cấp, khoảng 10 km xung quanh một thị trấn hoặc hai con số, hoặc **Chưa đặt**. **Xóa** sẽ gỡ bỏ khu vực đó. Bên dưới, **Bạn đang ở khoảng đâu?** thiết lập một khu vực mới bằng **Dùng vị trí của tôi** hoặc **Nhập tên thị trấn hoặc khu phố**, và **Hủy** (trong trình duyệt là **← Quay lại Cài đặt**) giữ nguyên như hiện tại. Chỉ khu vực đã làm tròn mới được gửi đi. Các thành viên khác thấy bạn ở cách bao xa, và một cuộc khảo sát bạn tạo sẽ được hiển thị tại khu vực của bạn. Nếu không có khu vực, bạn sẽ thấy các tin đăng mới nhất trên toàn thế giới, và các thành viên ở gần sẽ không thấy cuộc khảo sát bạn tạo trong danh sách của họ, mặc dù họ vẫn có thể tìm thấy cuộc khảo sát bằng cách tìm kiếm. Xem "Khu vực bạn".
 - **Khóa ứng dụng:** yêu cầu khóa màn hình của điện thoại (mã PIN, hình mở khóa, mật khẩu, vân tay hoặc khuôn mặt) khi mở ứng dụng, và khi bạn quay lại ứng dụng sau 15 giây trở lên rời đi. Khóa này bao quát các màn hình và cửa sổ bật lên của ứng dụng. Trên iPhone, tính năng này cũng đóng trang web mà ứng dụng đã mở, chẳng hạn như Cài đặt cộng đồng từ **Quản lý …**. Khóa không thể bao quát trang web mà ứng dụng đã mở trên điện thoại Android (trang web mở bên ngoài ứng dụng), hoặc bảng chia sẻ nội dung trên cả hai loại điện thoại: hãy đóng chúng trước khi bạn đặt điện thoại xuống. Cài đặt cộng đồng của bạn, được mở từ **Quản lý …**, sẽ đăng xuất bạn sau 15 phút không sử dụng. Trong khi Khóa ứng dụng đang bật, ứng dụng sẽ chuyển sang màn hình trống khi bạn rời đi và hiển thị lại khi bạn quay lại. Tính năng này cần có khóa màn hình trên điện thoại: nếu không có, ứng dụng sẽ không có gì để yêu cầu.
 - **Kênh:** bất kỳ nội dung nào bạn chia sẻ lên Nhịp đập đều được hiển thị cùng tên của bạn, cho tất cả mọi người trong cộng đồng của bạn. Xem "Chia sẻ các kênh của bạn".
+- **Người ở cộng đồng khác:** không ai ở cộng đồng khác có thể tìm thấy bạn qua tên của bạn trừ khi bạn bật **Người ở cộng đồng khác có thể tìm tôi theo tên**, dưới thẻ địa chỉ của bạn. Công tắc này tắt cho đến khi bạn bật. Ngay cả khi đó, họ phải gõ đúng tên của bạn: không ai thấy danh sách. Thẻ và công tắc chỉ có ở nơi cộng đồng của bạn nhận tin nhắn từ các cộng đồng khác. Xem "Người ở cộng đồng khác".
 
 ## Ai khác có thể thấy mọi thứ
 

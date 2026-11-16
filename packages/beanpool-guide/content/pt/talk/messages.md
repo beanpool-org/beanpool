@@ -24,7 +24,7 @@ No app web, essa é a aba **Bate-papo**. Ela lista todas as suas conversas, de g
 ## Iniciando uma conversa
 
 - A partir de um perfil: abra o perfil da pessoa e toque em **Mensagem**. Você também pode adicioná-la aos amigos ali.
-- A partir de **Bate-papo**: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela.
+- A partir de **Bate-papo**: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela. Para escrever para alguém que pertence a outra comunidade, veja "Pessoas de outras comunidades".
 - A partir da lista de membros: **Bate-papo**, depois **Pessoas**, e toque em 💬 ao lado do nome de um membro em **Comunidade** ou **Amigos**.
 - A partir de uma publicação: toque em **Mensagem** e no nome da pessoa.
 

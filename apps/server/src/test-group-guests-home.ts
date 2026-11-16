@@ -41,6 +41,12 @@
  *      and it tells this server): (a line the host took, still queued, refused by the host, failed, another member's id,
  *      a direct line's id) x (signed by the group's host, by another server) -> filed once here as "from another
  *      community" (never naming who reported it), or the one 422 every drop gets; a repeat is the same 202
+ *  15  close the class, takedowns (#3233 round 2): (author delete, edited then deleted, convenor removal, account deleted,
+ *      group closed) x (held with no device having it, one device having it, every device having it) -> no copy of the
+ *      line's words or photo is served or kept, and each device is served the tombstone; 15e: (edit while held, twice,
+ *      after one device has it, after every device has it) -> each device is served only the newest words; 15w: out of
+ *      the group (leave taken, removed, the switch, group closed) -> nothing of it held is served; 15v: a host blocked
+ *      since: its takedown still drops what it brought
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests-home node scripts/run-server-suites.mjs
  */
@@ -93,7 +99,7 @@ async function main(): Promise<void> {
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { __useNodeKeyFetchForTests, NODE_SIGNED_PATHS } = await import('./engine/node-signature.js');
     const { __useRelayTransportForTests } = await import('./engine/relay-outbox.js');
-    const { addConnector } = await import('./connector-manager.js');
+    const { addConnector, removeConnector } = await import('./connector-manager.js');
     const { noteMailDevice } = await import('./engine/relay-mail.js');
     const { TABLES } = await import('./engine/replication-manifest.js');
     const { RELAY_MAIL_TABLES } = await import('./engine/relay-mail-tables.js');
@@ -1100,6 +1106,110 @@ async function main(): Promise<void> {
     const again14 = await complain('b.example', { member: gus.pk, itemId: taken.envelope.itemId });
     assert(again14.status === 202 && filedFrom('b.example', taken.envelope.itemId).length === 1, `14y. the same complaint again: 202, still one report (got ${again14.status})`);
     failing.delete('b.example');
+
+    // ── 15. A takedown reaches every copy held here ─────────────────────────────────────────
+    console.log('\n15. Close the class: every takedown x where the held copy is -> no words or photo served or kept, the tombstone served');
+    const TK15 = ['author delete', 'edited, then author delete', 'convenor removal', 'account deleted', 'group closed'] as const;
+    const CS15 = ['held, no device has it', 'one device has it, another not', 'every device has it'] as const;
+    type Tk15 = (typeof TK15)[number];
+    /** The tombstone each device is served after the takedown, whatever the copy state. */
+    const TOMB15: Record<Tk15, string> = {
+        'author delete': 'removed:author', 'edited, then author delete': 'removed:author', 'convenor removal': 'removed:convenor',
+        'account deleted': 'removed:author', 'group closed': 'group-closed',
+    };
+    /** A member here in a group at b.example, two devices listed, and a photo line of Ana's held for them. */
+    async function held15(label: string) {
+        const who = addLocal(label);
+        const g = `g15-${label}`;
+        setLink(who, 'b.example', g, 'in');
+        const phone = device(), tablet = device();
+        await fetchGroup(who, phone);
+        await fetchGroup(who, tablet);
+        const id = crypto.randomUUID();
+        const mark = (k: string) => `${k}-${label}-${crypto.randomBytes(6).toString('hex')}`;
+        const marks = { words: mark('words'), photo: mark('photo'), edited: mark('edited'), edited2: mark('edited2') };
+        const line = { id, author: ana.pk, ciphertext: marks.words, nonce: 'group-xc20p-v1:n', type: 'image', metadata: { epoch: 1 }, timestamp: new Date().toISOString(),
+            attachment: { data: `${marks.photo}${'x'.repeat(2000)}`, nonce: 'n', mime: 'image/jpeg' } };
+        const r = await notice('b.example', { v: 1, kind: 'line', group: g, host: 'b.example', guests: [who.pk], data: line });
+        const tell = (kind: string, data: Record<string, unknown>) => notice('b.example', { v: 1, kind, group: g, host: 'b.example', guests: [who.pk], data });
+        const editOf = (ciphertext: string) => ({ id, action: 'edited', author: ana.pk, ciphertext, nonce: 'group-xc20p-v1:e', metadata: { epoch: 1, sender: ana.pk }, editedAt: new Date().toISOString() });
+        const itemsOn = async (dev: string) => ((await fetchGroup(who, dev)).body?.items ?? []).filter((i: any) => i.group === g);
+        const confirm = async (dev: string) => call('POST', who, '/api/mail/group/confirm', { ids: (await itemsOn(dev)).map((i: any) => i.id), device: dev });
+        const bodies = () => db.prepare('SELECT body FROM group_guest_mail WHERE member = ?').pluck().all(who.pk) as string[];
+        return { who, g, id, phone, tablet, marks, ok: r.status === 202 && heldCount(who, 'b.example', g) === 1, tell, editOf, itemsOn, confirm, bodies };
+    }
+    let r15 = 0;
+    for (const tk of TK15) for (const cs of CS15) {
+        const n15 = ++r15;
+        const h = await held15(`t15-${n15}`);
+        if (cs !== 'held, no device has it') await h.confirm(h.phone);
+        if (cs === 'every device has it') await h.confirm(h.tablet);
+        const heldBefore = heldCount(h.who, 'b.example', h.g);
+        // The takedown as the host sends it (engine/group-guests.ts: queueLineChange; takeDownLinesOf, by the author; closeGroupGuests).
+        if (tk === 'edited, then author delete') await h.tell('edit', h.editOf(h.marks.edited));
+        if (tk === 'group closed') await h.tell('removed', { why: 'group-closed' });
+        else await h.tell('edit', { id: h.id, action: 'removed', by: tk === 'convenor removal' ? 'convenor' : 'author' });
+        const carries = (s: string) => [h.marks.words, h.marks.photo, h.marks.edited].some((k) => s.includes(k));
+        const kept = h.bodies().filter(carries).length;
+        const onPhone = await h.itemsOn(h.phone), onTablet = await h.itemsOn(h.tablet);
+        const served = [...onPhone, ...onTablet].filter((i: any) => carries(JSON.stringify(i.data))).length;
+        const tombOf = (items: any[]) => {
+            const t = items.filter((i) => (i.kind === 'edit' && i.data?.id === h.id) || i.kind === 'removed');
+            return !t.length ? 'none' : t.length > 1 ? `${t.length} items` : t[0].kind === 'removed' ? (t[0].data.why === 'group-closed' ? 'group-closed' : `removed ${t[0].data.why}`)
+                : t[0].data.action === 'removed' ? `removed:${t[0].data.by}` : `edit ${t[0].data.action}`;
+        };
+        const gotTomb = tombOf(onPhone) === tombOf(onTablet) ? tombOf(onPhone) : `phone ${tombOf(onPhone)}, tablet ${tombOf(onTablet)}`;
+        const setupOk = h.ok && heldBefore === (cs === 'every device has it' ? 0 : 1);
+        assert(setupOk && kept === 0 && served === 0 && gotTomb === TOMB15[tk],
+            `15. ${tk} x ${cs}: no words or photo served (${served}) or kept (${kept}), each device served the tombstone ${TOMB15[tk]} (got ${gotTomb}${setupOk ? '' : ', setup failed'})`);
+    }
+    assert(r15 === TK15.length * CS15.length && Object.keys(TOMB15).length === TK15.length, `15z. the table has a row for every takedown and every copy state (${r15} rows)`);
+
+    // Edits: each device is served only the newest words.
+    const ES15 = ['edit while held', 'edit twice while held', 'edit after one device has it', 'edit after every device has it'] as const;
+    const WORDS15: Record<(typeof ES15)[number], string> = {
+        'edit while held': 'phone: line(newest) edit(newest); tablet: line(newest) edit(newest)',
+        'edit twice while held': 'phone: line(newest) edit(newest); tablet: line(newest) edit(newest)',
+        'edit after one device has it': 'phone: edit(newest); tablet: line(newest) edit(newest)',
+        'edit after every device has it': 'phone: edit(newest); tablet: edit(newest)',
+    };
+    let e15 = 0;
+    for (const es of ES15) {
+        const h = await held15(`e15-${++e15}`);
+        if (es === 'edit after one device has it' || es === 'edit after every device has it') await h.confirm(h.phone);
+        if (es === 'edit after every device has it') await h.confirm(h.tablet);
+        const edits = es === 'edit twice while held' ? [h.marks.edited, h.marks.edited2] : [h.marks.edited];
+        for (const c of edits) await h.tell('edit', h.editOf(c));
+        const newest = edits[edits.length - 1];
+        const which = (c: unknown) => (c === newest ? 'newest' : c === h.marks.words ? 'first words' : c === h.marks.edited ? 'older edit' : 'other');
+        const words = (items: any[]) => items.map((i) => `${i.kind}(${which(i.data?.ciphertext)})`).join(' ');
+        const got = `phone: ${words(await h.itemsOn(h.phone))}; tablet: ${words(await h.itemsOn(h.tablet))}`;
+        const keptOld = h.bodies().filter((b) => b.includes(h.marks.words) || (newest !== h.marks.edited && b.includes(h.marks.edited))).length;
+        assert(h.ok && keptOld === 0 && got === WORDS15[es], `15e. ${es}: each device is served only the newest words: ${WORDS15[es]} (got ${got}; older words kept ${keptOld})`);
+    }
+
+    // Out of the group: nothing of it held is served after, so a takedown later has no copy here to miss.
+    const OUT15 = ['their leave taken', 'removed by a convenor', "removed by the owners' switch", 'group closed'] as const;
+    for (const out of OUT15) {
+        const h = await held15(`o15-${OUT15.indexOf(out) + 1}`);
+        if (out === 'their leave taken') await send(h.who, [await item(h.who, 'group-leave', h.g, JSON.stringify({ v: 1 }))]);
+        else await h.tell('removed', { why: out === 'removed by a convenor' ? 'removed' : out === 'group closed' ? 'group-closed' : 'closed' });
+        const carries = (s: string) => s.includes(h.marks.words) || s.includes(h.marks.photo);
+        const served = (await h.itemsOn(h.tablet)).filter((i: any) => carries(JSON.stringify(i.data))).length;
+        const state = linkOf(h.who, 'b.example', h.g)?.state;
+        assert(h.ok && state === (out === 'their leave taken' ? 'left' : 'removed') && served === 0 && h.bodies().filter(carries).length === 0,
+            `15w. ${out}: the link ${state}, and no line of the group held for them is served (${served}) or kept`);
+    }
+
+    // A host the owners blocked since: its takedown still drops what it brought, and nothing new is held from it.
+    const hb = await held15('b15');
+    addConnector('b.example:4001', 'blocked', 'Blocked', 'https://b.example', false);
+    await hb.tell('edit', { id: hb.id, action: 'removed', by: 'convenor' });
+    const blockedKept = hb.bodies().filter((b) => b.includes(hb.marks.words) || b.includes(hb.marks.photo)).length;
+    const blockedHeld = heldCount(hb.who, 'b.example', hb.g);
+    removeConnector('b.example:4001');
+    assert(hb.ok && blockedKept === 0 && blockedHeld === 0,
+        `15v. a host blocked since its line was held: its takedown drops the line, and holds nothing (kept ${blockedKept}, held ${blockedHeld})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -32,6 +32,14 @@
  *         or a roster: nothing reaches a device that isn't that guest's. Each device (the mailbox's list of them,
  *         relay_mail_devices) fetches what it has not confirmed (`GET /api/mail/group?device=`) and confirms it
  *         (`POST /api/mail/group/confirm`); a notice goes once every device listed has it, or after MAIL_HELD_DAYS.
+ *         TAKEDOWNS (applyToHeldCopies, #3233 round 2): what the host says of a line reaches every copy of it held here
+ *         before anything else, whatever the member stands now, whatever the switch, from a host the owners blocked since
+ *         too (it only takes away what that host brought): a line taken down (`edit`, `action: 'removed'`) drops the held
+ *         line and its edits, words and sealed photo or voice, so no device fetching later is handed them, and the removal
+ *         is held as any notice is, for the devices that already took the line; an edit replaces the held line's words and
+ *         drops an older edit, so a device is served only the newest words. A guest out of the group (`removed`, any
+ *         reason, a group closed included; their leave taken: moveLinkOn) has every line of it held for them dropped, as a
+ *         member who leaves a chat is served none of it after; so a takedown later has no copy here to miss.
  *   kept  the latest roster from each host for each group, per member (group_guest_links.roster), is step 1 of #3197's four:
  *         a phone that heard `epoch-stale` waits for the roster (step 2), then core's guestEpochStep makes the next epoch
  *         (stale or none: step 3) or opens the key and sends the line again (not stale: step 4). The fetch serves it beside
@@ -177,7 +185,18 @@ export function receiveGroupNotice(origin: string, raw: unknown, now = Date.now(
     const n = readGroupNotice(raw);
     if (!n) return { status: 400, body: { error: 'A group notice is { v: 1, kind, group, host, guests, data }.', code: 'bad_notice' } };
     if (n.host !== origin) return { status: 400, body: { error: "A group notice comes from its group's host, which signs it.", code: 'wrong_host' } };
-    if (!groupGuestsOn() || isServerBlocked(origin) || getNodeRole() === 'backup') return RECEIVED;
+    if (getNodeRole() === 'backup') return RECEIVED;
+    // A takedown first, for every guest named: it only takes away what this host brought, so it applies whatever the switch,
+    // from a host the owners blocked too (the file's header, "held"). An edit's new words are taken only as the notice is.
+    const taking = groupGuestsOn() && !isServerBlocked(origin);
+    for (const member of n.guests) {
+        try {
+            db.transaction(() => applyToHeldCopies(member, n, taking))();
+        } catch (e) {
+            logger.warn('SYS', `Group guests: a host's takedown could not reach what is held (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
+        }
+    }
+    if (!taking) return RECEIVED;
     // The server's own room, as the mailbox's: counted on the notice, whoever it is for, so the answer says nothing of them.
     const incoming = JSON.stringify(n.data).length;
     let roomy = sum('SELECT COALESCE(SUM(bytes), 0) AS n FROM relay_mail') + sum('SELECT COALESCE(SUM(bytes), 0) AS n FROM group_guest_mail') + incoming <= MAIL_SERVER_BYTES;
@@ -196,6 +215,39 @@ export function receiveGroupNotice(origin: string, raw: unknown, now = Date.now(
         }
     }
     return RECEIVED;
+}
+
+/**
+ * What a notice says of the copies held here for `member` (the file's header, "held"), before anything is held: a line
+ * taken down drops its held line and edits; a removal (any reason) drops every line of that group held for them; an edit,
+ * when the notice is taken (`taking`), replaces the held line's words and drops an older edit. Only that host's own
+ * notices for that group are touched.
+ */
+function applyToHeldCopies(member: string, n: Notice, taking: boolean): void {
+    if (n.kind === 'removed') { dropHeldLines(member, n.host, n.group); return; }
+    const id = n.data.id;
+    if (n.kind !== 'edit' || typeof id !== 'string') return;
+    if (n.data.action === 'removed') dropHeldLines(member, n.host, n.group, id);
+    else if (n.data.action === 'edited' && taking) replaceHeldWords(member, n.host, n.group, id, n.data);
+}
+
+/** `member`'s held copies of `host`'s lines in that group (each line and its edits, or line `id`'s only): dropped. How many. */
+function dropHeldLines(member: string, host: string, groupId: string, id?: string): number {
+    const ids = db.prepare(`SELECT id FROM group_guest_mail WHERE member = ? AND host = ? AND group_id = ? AND kind IN ('line', 'edit')
+                            ${id === undefined ? '' : "AND json_extract(body, '$.id') = ?"}`).pluck().all(member, host, groupId, ...(id === undefined ? [] : [id])) as string[];
+    return dropNotices(member, ids);
+}
+
+/** An edit of line `id`: the held line takes its words (and the edit's time), and an older edit held for it goes. */
+function replaceHeldWords(member: string, host: string, groupId: string, id: string, edit: Record<string, unknown>): void {
+    if (typeof edit.ciphertext !== 'string' || typeof edit.nonce !== 'string') return;
+    const of = `FROM group_guest_mail WHERE member = ? AND host = ? AND group_id = ? AND json_extract(body, '$.id') = ?`;
+    dropNotices(member, db.prepare(`SELECT id ${of} AND kind = 'edit' AND json_extract(body, '$.action') = 'edited'`).pluck().all(member, host, groupId, id) as string[]);
+    const rewrite = db.prepare('UPDATE group_guest_mail SET body = ?, bytes = ? WHERE id = ?');
+    for (const r of db.prepare(`SELECT id, body ${of} AND kind = 'line'`).all(member, host, groupId, id) as Array<{ id: string; body: string }>) {
+        const body = JSON.stringify({ ...JSON.parse(r.body), ciphertext: edit.ciphertext, nonce: edit.nonce, metadata: edit.metadata ?? null, editedAt: edit.editedAt ?? null });
+        rewrite.run(body, body.length, r.id);
+    }
 }
 
 /** One named guest: the notice held for them, or dropped (the file's header says when). True when held. */
@@ -423,7 +475,8 @@ function moveLinkOn(member: string, kind: string, host: string, groupId: string,
         db.prepare(`UPDATE group_guest_links SET roster = NULL, roster_at = NULL WHERE member = ? AND host = ? AND group_id = ? AND state = 'invited'
                     AND roster IS NOT NULL`).run(member, host, groupId);
     } else if (answer === 'no' && taken) move(['invited'], 'declined');
-    else if (kind === 'group-leave' && taken) move(['invited', 'in'], 'left');
+    // Out of the group: no line of it held for them is served after (the file's header, "held").
+    else if (kind === 'group-leave' && taken && move(['invited', 'in'], 'left').changes) dropHeldLines(member, host, groupId);
 }
 
 /**

@@ -39,6 +39,11 @@
  *      at once, writes no copied row, tells nobody; the main server removes and tells (removals only, no roster)
  *  17  close the class: (a home that answers / fails / fails then answers) x (rows queued before / during / after the
  *      failure) x (one flush / many) -> the home gets its rows once each in the order queued, and none waits once it answers
+ *  18  close the class: every item that crosses (a guest's, a member's change, a report) x where the guest stands
+ *  19  close the class, takedowns (#3233 round 2): (author delete, edited then deleted, convenor removal, account deleted,
+ *      group closed) x (queued while the home is in backoff, in a send behind a row on the wire, already sent, queued
+ *      for a guest who left since) -> no copy of the line's words or photo goes or is kept here, and the tombstone goes
+ *      to a guest still in; 19e: (edit while queued, twice, while in a send, after it went) -> only the newest words go
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests node scripts/run-server-suites.mjs
  */
@@ -1078,6 +1083,139 @@ async function main(): Promise<void> {
     const editsAU = outsOf('edit', tAU).filter((o) => o.body.group === AU).map((o) => o.body.data.id);
     assert(au2Stored.status === 201 && stateOf(AU, late) === 'in' && JSON.stringify(editsAU) === JSON.stringify([newLine.clientId]),
         `18w. a guest in since epoch 2 hears of the edit of a line under epoch 2 only: not the edit or delete of one from epoch 1, before them (got ${JSON.stringify(editsAU)})`);
+
+    // ── 19. Close the class: a takedown x where a copy of the line is (#3233 round 2) ────────
+    console.log('\n19. Close the class: every takedown x where a copy of the line is -> no words or photo go, none is kept here, the tombstone goes');
+    const TK19 = ['author delete', 'edited, then author delete', 'convenor removal', 'account deleted', 'group closed'] as const;
+    const CS19 = ['queued, home in backoff', 'in a send, behind a row on the wire', 'already sent', 'queued, its guest left since'] as const;
+    type Tk19 = (typeof TK19)[number];
+    type Cs19 = (typeof CS19)[number];
+    const tombFor = (t: string): Record<Cs19, string> => ({
+        'queued, home in backoff': t, 'in a send, behind a row on the wire': t, 'already sent': t, 'queued, its guest left since': 'none',
+    });
+    /** The tombstone the guest's home gets after the takedown: [takedown][copy state]. A guest who left hears nothing more. */
+    const TOMB19: Record<Tk19, Record<Cs19, string>> = {
+        'author delete': tombFor('removed:author'),
+        'edited, then author delete': tombFor('removed:author'),
+        'convenor removal': tombFor('removed:convenor'),
+        'account deleted': tombFor('removed:author'),
+        'group closed': tombFor('group-closed'),
+    };
+    const outbox19 = () => db.prepare('SELECT body FROM group_guest_outbox').pluck().all() as string[];
+    /** One group for a row: Ana convenes, M is a member, X from a.example is in; epoch 1 over the three. */
+    async function row19(label: string): Promise<{ g: string; m: Id; x: Id; key: Uint8Array; ok: boolean }> {
+        const g = createGroup({ name: label, joinPolicy: 'open', createdBy: ana.pk }).id;
+        const m = addLocal(`M-${label}`);
+        db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(g, m.pk);
+        const x = newId(`X-${label}`);
+        await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(x, 'a.example') });
+        await bring([await item(x, 'a.example', `group:${g}`, 'group-invite', yes)]);
+        const e = epochBy(ana, g, 1, 'start', [ana, m, x]);
+        const stored = await call('POST', ana, `/api/groups/${g}/keys/epoch`, { epoch: e.record });
+        await settle();
+        return { g, m, x, key: e.groupKey, ok: stored.status === 201 && stateOf(g, x) === 'in' };
+    }
+    /** a.example stops answering (its rows wait in backoff), or holds the first row of a send on the wire until opened. */
+    let openWire19: () => void = () => {};
+    let wire19: Promise<number> | null = null;
+    async function holdOnTheWire(): Promise<void> {
+        refusing.delete('a.example');
+        gates.set('a.example', new Promise<void>((r) => { openWire19 = r; }));
+        wire19 = guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await sleep(40);
+    }
+    async function answerAgain(): Promise<void> {
+        refusing.delete('a.example');
+        if (wire19) { openWire19(); gates.delete('a.example'); await wire19; wire19 = null; }
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+    }
+    let r19 = 0;
+    for (const tk of TK19) for (const cs of CS19) {
+        const n19 = ++r19;
+        const { g, m, x, key, ok } = await row19(`Takedown ${n19}`);
+        // M's photo line: its words, its sealed photo and the words of an edit, each a mark no other row carries.
+        const id = crypto.randomUUID();
+        const base = { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id };
+        const words = sealGroupLine(`row ${n19}'s caption`, base);
+        const photo = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(2000).toString('base64')}`, { ...base, part: 'attachment' });
+        const edited = sealGroupLine(`row ${n19}'s caption, edited`, base);
+        const photoMark = photo.ciphertext.slice(0, 64);
+        const carries = (s: string) => [words.ciphertext, photoMark, edited.ciphertext].some((k) => s.includes(k));
+        const t0 = Date.now();
+        if (cs !== 'already sent') refusing.add('a.example');
+        if (cs === 'in a send, behind a row on the wire') await call('POST', ana, `/api/groups/${g}/chat/message`, lineIn(ana, g, key, 1));
+        const posted = await call('POST', m, `/api/groups/${g}/chat/message`, {
+            type: 'image', ...words, metadata: { epoch: 1 }, attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }, clientId: id,
+        });
+        await settle();
+        if (cs === 'queued, its guest left since') await bring([await item(x, 'a.example', `group:${g}`, 'group-leave', JSON.stringify({ v: 1 }))]);
+        if (cs === 'in a send, behind a row on the wire') await holdOnTheWire();
+        const queuedCopy = outbox19().find((b) => b.includes(words.ciphertext));
+        const sentCopy = outs.find((o) => o.home === 'a.example' && o.body?.kind === 'line' && o.body.data?.id === id);
+        const setupOk = ok && posted.status === 201 && (cs === 'already sent'
+            ? !queuedCopy && !!sentCopy && JSON.stringify(sentCopy.body).includes(photoMark)
+            : !!queuedCopy && queuedCopy.includes(photoMark) && !sentCopy);
+        // The edit first (once a.example answers, it went: the takedown is the delete after it).
+        if (tk === 'edited, then author delete') {
+            await call('POST', m, '/api/messages/edit', { messageId: id, ...edited, metadata: { epoch: 1 } });
+            if (cs === 'in a send, behind a row on the wire') await sleep(30);
+            else await settle();
+        }
+        const tTake = Date.now();
+        if (tk === 'author delete' || tk === 'edited, then author delete') await call('POST', m, '/api/messages/delete', { messageId: id });
+        if (tk === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: id });
+        if (tk === 'account deleted') purgeMemberSelf(m.pk);
+        if (tk === 'group closed') closeGroupByVote(g, `test-close-19-${n19}`);
+        const kept = outbox19().filter(carries).length;
+        await answerAgain();
+        const toA = outs.filter((o) => o.home === 'a.example' && o.body?.group === g);
+        const wordsOut = toA.filter((o) => o.at >= (cs === 'already sent' ? tTake : t0) && carries(JSON.stringify(o.body))).length;
+        const tomb = toA.filter((o) => o.at >= tTake && ((o.body.kind === 'edit' && o.body.data?.id === id) || o.body.kind === 'removed'));
+        const t = tomb[0]?.body;
+        const gotTomb = !tomb.length ? 'none' : tomb.length > 1 ? `${tomb.length} tombstones`
+            : t.kind === 'removed' ? (t.data.why === 'group-closed' && JSON.stringify(t.guests) === JSON.stringify([x.pk]) ? 'group-closed' : `removed ${t.data.why}`)
+            : t.data.action === 'removed' && !('ciphertext' in t.data) && JSON.stringify(t.guests) === JSON.stringify([x.pk]) ? `removed:${t.data.by}` : `edit ${t.data.action}`;
+        assert(setupOk && wordsOut === 0 && kept === 0 && gotTomb === TOMB19[tk][cs],
+            `19. ${tk} x ${cs}: no words or photo go (${wordsOut}), none kept here (${kept}), tombstone ${TOMB19[tk][cs]} (got ${gotTomb}${setupOk ? '' : ', setup failed'})`);
+    }
+    assert(r19 === TK19.length * CS19.length && Object.keys(TOMB19).length === TK19.length, `19z. the table has a row for every takedown and every copy state (${r19} rows)`);
+
+    // Edits: the newest words win, wherever the line still waits here.
+    const ES19 = ['edit while queued', 'edit twice while queued', 'edit while in a send, behind a row on the wire', 'edit after it went'] as const;
+    /** What a.example gets of the line after it was posted (after the edit, once it went): each copy's words, by which edit. */
+    const WORDS19: Record<(typeof ES19)[number], string> = {
+        'edit while queued': 'line(newest) edit(newest)',
+        'edit twice while queued': 'line(newest) edit(newest)',
+        'edit while in a send, behind a row on the wire': 'line(newest) edit(newest)',
+        'edit after it went': 'edit(newest)',
+    };
+    let e19 = 0;
+    for (const es of ES19) {
+        const n = ++e19;
+        const { g, m, key, ok } = await row19(`Edit ${n}`);
+        const id = crypto.randomUUID();
+        const seal = (text: string) => sealGroupLine(text, { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id });
+        const w = [seal(`edit row ${n}, first words`), seal(`edit row ${n}, second words`), seal(`edit row ${n}, third words`)];
+        const edits = es === 'edit twice while queued' ? [w[1], w[2]] : [w[1]];
+        const newest = edits[edits.length - 1].ciphertext;
+        const which = (c: unknown) => (c === newest ? 'newest' : w.findIndex((s) => s.ciphertext === c) >= 0 ? `words ${w.findIndex((s) => s.ciphertext === c)}` : 'other');
+        if (es !== 'edit after it went') refusing.add('a.example');
+        if (es === 'edit while in a send, behind a row on the wire') await call('POST', ana, `/api/groups/${g}/chat/message`, lineIn(ana, g, key, 1));
+        const posted = await call('POST', m, `/api/groups/${g}/chat/message`, { ...w[0], metadata: { epoch: 1 }, clientId: id });
+        await settle();
+        if (es === 'edit while in a send, behind a row on the wire') await holdOnTheWire();
+        const tEdit = Date.now();
+        let edited = true;
+        for (const s of edits) edited = (await call('POST', m, '/api/messages/edit', { messageId: id, ...s, metadata: { epoch: 1 } })).status === 200 && edited;
+        const waiting = outbox19().filter((b) => b.includes(id)).map((b) => `${JSON.parse(b).kind}(${which(JSON.parse(b).data.ciphertext)})`).join(' ');
+        await answerAgain();
+        const got = outs.filter((o) => o.home === 'a.example' && o.body?.group === g && o.body.data?.id === id && o.at >= (es === 'edit after it went' ? tEdit : 0))
+            .map((o) => `${o.body.kind}(${which(o.body.data.ciphertext)})`).join(' ');
+        const waitingOk = es === 'edit after it went' ? waiting === 'edit(newest)' || waiting === '' : !waiting.includes('words');
+        assert(ok && posted.status === 201 && edited && waitingOk && got === WORDS19[es],
+            `19e. ${es}: only the newest words go: ${WORDS19[es]} (got ${got}; waiting here after the edit: ${waiting})`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -969,6 +969,13 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
             + 'envelope so a promoted server numbers its first list after it',
         differsByDesign: "a take-over raises the list's epoch: the promoted server's first list is signed at the bundle's epoch + 1",
     },
+    addressSpares: {
+        kind: 'takeover-bundle',
+        reason: "the owner's spares (Settings → Addresses → Spares, engine/own-addresses.ts addressSpares): standbys' addresses published in "
+            + 'the signed list apart from its addresses; carried in the take-over envelope (several-addresses S8, DESIGN-several-addresses-fable.md §6)',
+        differsByDesign: "a take-over moves the promoted standby's own spare from the spares to its confirmed addresses (services/takeover.ts "
+            + 'public-address step), so phones that find nothing listed answering prove it there',
+    },
     addressListFloorOwed: {
         kind: 'per-server',
         reason: "the mark a restore onto a new machine leaves when this server's own clock was behind the list's number (services/address-list.ts "

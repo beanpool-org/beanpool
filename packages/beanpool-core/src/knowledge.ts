@@ -181,6 +181,11 @@ export const LOCAL_GUIDE_HELPED = 3;
 /** Local guide: this many pages showing now, written by the member (never gathered with the assistant), each one used. */
 export const LOCAL_GUIDE_PAGES = 3;
 
+/** The badge as both apps draw it, on the writer's line of a page and under a name on a profile. One sentence, one key. */
+export const LOCAL_GUIDE_WORDS = Object.freeze({
+    line: word('🗺️ Local guide'),
+});
+
 /** Whether a trust profile's `badges` hold Local guide. Anything else (a node from before K8 sends none): no. */
 export function isLocalGuide(badges: unknown): boolean {
     return Array.isArray(badges) && badges.includes(LOCAL_GUIDE_BADGE);

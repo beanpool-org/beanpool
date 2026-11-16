@@ -29,7 +29,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { KNOWLEDGE_NAMES, LOCAL_COMMUNITY_LINES, LOCAL_GUIDE_EMOJI, formatDate, formatHundredths, formatNumber, freePriceWords, isHundredths, isLocalGuide, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_GUIDE_WORDS, formatDate, formatHundredths, formatNumber, freePriceWords, isHundredths, isLocalGuide, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
@@ -1101,7 +1101,7 @@ export default function PublicProfileScreen() {
                     )}
                     {/* The Local guide badge (Learn K8): the trust profile's `badges`, this key's own answer only. Gates nothing. */}
                     {isLocalGuide(isSelf ? selfInvite?.badges : trustFor === pubKeyStr ? trust?.badges : undefined) && (
-                        <Text style={styles.guideText} testID="profile-local-guide">{`${LOCAL_GUIDE_EMOJI} ${t(KNOWLEDGE_NAMES.badge)}`}</Text>
+                        <Text style={styles.guideText} testID="profile-local-guide">{t(LOCAL_GUIDE_WORDS.line)}</Text>
                     )}
                     {/* Visual Reciprocity Health Ring / Badge (#4). The deal completion rate: Beans, gated like the trust
                         panel below. Where nobody makes a deal (the worldwide community) it read 100% for everyone. */}

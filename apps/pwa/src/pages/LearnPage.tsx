@@ -27,7 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, LOCAL_GUIDE_EMOJI, formatCount, isKnowledgeTopic,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, LOCAL_GUIDE_WORDS, formatCount, isKnowledgeTopic,
     knowledgeThankNote, knowledgeThankOffered, pinLive, t, tn, upperCase, type KnowledgeFront,
     type KnowledgeRow, type KnowledgeTopicPage,
 } from '@beanpool/core';
@@ -720,7 +720,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                             <span className="min-w-0 flex flex-col">
                                 <span className="font-bold text-base text-nature-950 dark:text-white break-words">{post.authorCallsign}</span>
                                 {k.writerLocalGuide === true && (
-                                    <span data-testid="learn-post-writer-guide" className="text-sm font-bold text-nature-800 dark:text-nature-100">{`${LOCAL_GUIDE_EMOJI} ${t(KNOWLEDGE_NAMES.badge)}`}</span>
+                                    <span data-testid="learn-post-writer-guide" className="text-sm font-bold text-nature-800 dark:text-nature-100">{t(LOCAL_GUIDE_WORDS.line)}</span>
                                 )}
                             </span>
                         </button>

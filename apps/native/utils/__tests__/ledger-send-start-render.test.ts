@@ -139,7 +139,7 @@ import { setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import LedgerScreen from '../../app/(tabs)/ledger';
 
-const NODE = 'https://mullum.example';
+const NODE = 'https://riverside.example';
 /** A member who can send Beans: 120 held, a first trade made. Whole hundredths of a Bean, as getBalance answers (db.ts). */
 const HOLDER = {
     balance_c: 12000, floor_c: -15000, usableFloor_c: -15000, liveOffers: 1, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant_c: 0,

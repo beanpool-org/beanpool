@@ -17,7 +17,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Te
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LOCAL_GUIDE_EMOJI, currentLanguage, formatCount, formatDate, inCapitalsOf,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LOCAL_GUIDE_WORDS, currentLanguage, formatCount, formatDate, inCapitalsOf,
     knowledgeThankNote, knowledgeThankOffered, pinLive, t,
 } from '@beanpool/core';
 import { useStyles, useTheme } from '../../app/ThemeContext';
@@ -281,7 +281,7 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                         pubkey={page.authorPublicKey}
                         callsign={page.authorCallsign ?? ''}
                         rating={rating}
-                        badge={writerGuide ? `${LOCAL_GUIDE_EMOJI} ${t(KNOWLEDGE_NAMES.badge)}` : null}
+                        badge={writerGuide ? t(LOCAL_GUIDE_WORDS.line) : null}
                         onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: page.authorPublicKey, callsign: page.authorCallsign ?? '' } })}
                     />
                 ) : null}

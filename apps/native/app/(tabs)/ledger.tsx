@@ -674,7 +674,6 @@ export default function LedgerScreen() {
         if (preview) { setSheetOpen(true); return; }
         if (openerTo === identity?.publicKey) return;
         openSendFor(openerTo, typeof opener.sendName === 'string' ? opener.sendName : '', typeof opener.sendNote === 'string' ? opener.sendNote : '');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openerTo, beansMode, preview, balanceRead]);
 
     // Trust calculations (value-based)

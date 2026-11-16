@@ -470,7 +470,6 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         setSendKind('beans');
         setGiftNote(null);
         setShowSend(true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sendStart, ownBalanceInfo, preview, viewerIsMember]);
 
     /** Opens Send: on Beans when they can go, else on the Credit line tab; the node's offer read again as it opens. */

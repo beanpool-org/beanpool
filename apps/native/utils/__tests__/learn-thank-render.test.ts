@@ -110,7 +110,7 @@ afterEach(() => {
 const settle = async () => { await act(async () => { await new Promise((r) => setImmediate(r)); }); };
 const q = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 async function showPage(p: Record<string, unknown>, beansLive: boolean) {
-    act(() => root.render(createElement(KnowledgeDetail, { page: p as any, beansLive })));
+    act(() => root.render(createElement(KnowledgeDetail, { page: p as any, beansLive }) as any));
     await settle();
 }
 

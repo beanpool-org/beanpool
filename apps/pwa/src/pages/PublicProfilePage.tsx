@@ -21,7 +21,7 @@ import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { marked, readsOwn, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
-import { KNOWLEDGE_NAMES, LOCAL_COMMUNITY_LINES, LOCAL_GUIDE_EMOJI, freePriceWords, isLocalGuide } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_GUIDE_WORDS, freePriceWords, isLocalGuide } from '@beanpool/core';
 import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
 import { InvitedByCard } from '../components/InvitedByCard';
@@ -403,7 +403,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     {/* The Local guide badge (Learn K8): the trust profile's `badges`, this key's own answer only. Gates nothing. */}
                     {invite?.for === pubkey && isLocalGuide(invite.badges) && (
                         <div data-testid="profile-local-guide" className="text-sm text-nature-800 dark:text-nature-100 font-bold mt-2">
-                            {`${LOCAL_GUIDE_EMOJI} ${t(KNOWLEDGE_NAMES.badge)}`}
+                            {t(LOCAL_GUIDE_WORDS.line)}
                         </div>
                     )}
 

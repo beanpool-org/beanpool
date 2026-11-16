@@ -108,7 +108,7 @@ vi.mock('../crypto', async (orig) => ({
 import { dmLineSigOf, dmLineSigVerifies } from '@beanpool/core';
 // Old chat's photos and cards: the frozen 1.2.36 lines (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
 import { DM_OLD_LINES, DM_OLD_LINE_TIMES, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '@beanpool/core/dm-line-vectors';
-import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer } from '../db';
+import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer, markDmPeerVerified, removeDmPeerVerification } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE, DM_UNPLACED_LINE } from '../dm-lock';
 import { dmKeyChangeCopy } from '../dm-key-change';
@@ -272,6 +272,22 @@ const dmSeenKey = (who: Person, file = FILE_A) => dmConversationsSeenStoreKey(wh
 
 /** One account's stored pins in one community file, { conversation id → pin } (the stored value is { pins }: §3.4 amendment 6). */
 const storedPins = (who: Person, file = FILE_A): Record<string, any> => JSON.parse(h.store.get(dmPeerPinsStoreKey(who.publicKey, file)) ?? '{"pins":{}}').pins;
+
+/**
+ * Signal's model (DESIGN-dm-key-signal-model §6, the port rule): the phone's member marks the key a DM is pinned to as
+ * verified, through the key code screen's own call. A test where an EXISTING phone pauses for a changed listing calls this
+ * before the listing changes, and its old assertions then hold as the verified half of the model. Fails the test if the
+ * mark was refused (no pin, an offer held, or the pin holds another key).
+ */
+async function markedVerified(conv: { id: string } | string, key: { publicKey: string }): Promise<void> {
+    expect(await markDmPeerVerified(typeof conv === 'string' ? conv : conv.id, key.publicKey)).toBe(true);
+}
+
+/** The DM screen's key-changed notices (getMessages with notices): one per date this phone saw the key change. */
+async function keyNotices(conv: { id: string } | string): Promise<string[]> {
+    return (await getMessages(typeof conv === 'string' ? conv : conv.id, { notices: true })).filter((m: any) => m.keyChangedNotice).map((m: any) => String(m.id));
+}
+void removeDmPeerVerification;
 /** Change one account's stored pins in one file behind the app's back (what slice 2's Continue writes, a pin lost). */
 function editStoredPins(who: Person, change: (pins: Record<string, any>) => void, file = FILE_A): void {
     const value = JSON.parse(h.store.get(dmPeerPinsStoreKey(who.publicKey, file))!);

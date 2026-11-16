@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "Was deine Nachbarn teilen, die Lern-Videos und das Hinzufügen eigener Kanäle.",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "Was deine Nachbarn teilen, die Videos „So funktioniert's“ und das Hinzufügen eigener Kanäle.",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "Entscheidungen und Abstimmungen, die gemeinsamen Bohnen, Gruppen, Betriebe und Verwalter. Umfragen und Veranstaltungen findest du im Markt.",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "Entscheidungen und Abstimmungen, die gemeinsamen Bohnen, deine Gruppen, Betriebe und Verwalter, und Ortswissen in Lernen. Umfragen und Veranstaltungen sind auch hier; du findest sie im Markt.",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "Die Lernspur",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "So funktioniert's: Videos",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "Kurze Videos über BeanPool und die passenden Seiten aus dem Guide.",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "Jemanden bitten, dir für etwas Bohnen zu zahlen. Eine Rechnung bezahlt sich nie von selbst: Die andere Person entscheidet, ob sie zahlt. Vorerst kann eine Rechnung zu einer Einladung gehören.",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "Ortswissen",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "Lernen, das Regal deiner Community mit Wissenswertem: eine Seite finden, eine vorschlagen, sie aktuell halten und wie ein Eigentümer oder Admin jede einzelne prüft.",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

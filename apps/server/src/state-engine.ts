@@ -122,6 +122,9 @@ import {
     forgetTakedownsOf, hasOpenChildSafetyReport, hasPendingDeal, markTakedownFinal, putBackTakedowns as putBackTakedownsEngine, setTakedownRemoval, takeDownPosts as takeDownPostsEngine,
     type PutBackResult, type PutBackScope, type TakeDownInput, type TakeDownResult,
 } from './engine/agent-takedowns.js';
+import {
+    putBackForumTakedowns, setForumTakedownRemoval, takeDownForumPost as takeDownForumPostEngine, type ForumTakeDownInput, type ForumTakeDownResult,
+} from './engine/forum-takedowns.js';
 import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
@@ -808,6 +811,7 @@ export function initStateEngine(): void {
     // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
     // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
     setTakedownRemoval(makeTakedownFinal);
+    setForumTakedownRemoval(makeForumTakedownFinal);
     pollWordsGoWithThePoll();
     // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
     // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
@@ -1641,6 +1645,7 @@ import type { RegistrarName } from './engine/registrar-names.js';
 import { preferredAddress, reachableFromInternet } from './engine/host-kinds.js';
 // Read only inside functions (getDirectoryInfo), never at load: own-addresses reads this module too.
 import { mainPublicUrl } from './engine/own-addresses.js';
+import { memberBadges } from './engine/local-guide.js';
 import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
@@ -2739,6 +2744,11 @@ export interface ViewerTrustProfile {
     inviterShown?: boolean;
     risk: TradeRiskAssessment;
     /**
+     * The member's badges (slice K8): `['local-guide']` for a Local guide (engine/local-guide.ts), else `[]`. Worked out as it
+     * is read; a badge gates nothing.
+     */
+    badges: string[];
+    /**
      * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
      * and replaces itself with the enterprise page on it (MemberProfile.isTreasury, slice E0). A member's has no such key,
      * nor has the node's own BeanPool account (nodeOwnAccountKeys).
@@ -2957,6 +2967,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         priorTradesWithViewer,
         vouchedInBy,
         risk,
+        badges: memberBadges(targetPubkey),
         ...(broughtIn !== undefined ? { broughtIn } : {}),
         ...(voucherButton ? { voucherButton } : {}),
         ...(isSelf ? { inviterShown: inviterShownOf(targetPubkey) } : {}),
@@ -7944,6 +7955,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         const outside = r.disclosure_kind === 'outside-line';
         const complaint = typeof r.reporter_pubkey === 'string' && r.reporter_pubkey.startsWith(COMPLAINT_REPORTER)
             ? { from: r.reporter_pubkey.slice(COMPLAINT_REPORTER.length) } : null;
+        const forumPost = r.target_forum_post_id ? reportedForumPost(r.target_forum_post_id) : null;
         return {
         // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
         // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
@@ -7978,8 +7990,10 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
         // Hidden by reports, waiting for a moderator (G3): restore it or remove it.
         postHiddenByReports: r.post_row_id ? !!r.post_hidden_at : null,
-        // A takedown on hold: "kept" is no longer on offer, whatever a dismissal does.
-        postOnHold: r.post_row_id ? onHold({ active: r.post_active, status: r.post_status, hidden_by_reports_at: r.post_hidden_at, removed_by_moderator_at: r.post_removed_by_moderator_at }) : null,
+        // A takedown on hold: "kept" is no longer on offer, whatever a dismissal does. A forum post's too (slice F2b), so a card and the
+        // moderators' list read it the same way.
+        postOnHold: r.post_row_id ? onHold({ active: r.post_active, status: r.post_status, hidden_by_reports_at: r.post_hidden_at, removed_by_moderator_at: r.post_removed_by_moderator_at })
+            : forumPost ? forumPost.onHold : null,
         // Made by an owner's AI assistant (agent/owner-posts.ts): moderators see it; members never do.
         postMadeByAssistant: r.post_row_id ? (typeof r.post_created_via === 'string' && r.post_created_via.startsWith('assistant:')) : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
@@ -8002,7 +8016,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         fromAnotherCommunity: complaint,
         // A forum post's report (slice F2): the post with its topic's title, for Settings' list beside reported listings.
         ...(r.target_forum_post_id ? { targetForumPostId: r.target_forum_post_id as string } : {}),
-        forumPost: r.target_forum_post_id ? reportedForumPost(r.target_forum_post_id) : null,
+        forumPost,
         groupMessage: r.target_message_id && !r.disclosure_kind && !complaint
             ? {
                 groupId: r.gm_group_id ?? null,
@@ -8137,9 +8151,19 @@ export function takeDownPosts(input: TakeDownInput): TakeDownResult {
     return takeDownPostsEngine(moderationNoticeCb, input);
 }
 
-/** A person puts an assistant's takedowns back (engine/agent-takedowns.ts). */
+/** An owner's or an admin's AI assistant takes one forum post down (engine/forum-takedowns.ts, slice F2b). */
+export function takeDownForumPost(input: ForumTakeDownInput): ForumTakeDownResult {
+    return takeDownForumPostEngine(moderationNoticeCb, input);
+}
+
+/**
+ * A person puts an assistant's takedowns back (engine/agent-takedowns.ts), the forum's with them (engine/forum-takedowns.ts): a post
+ * id is a listing's or a forum post's, a call's id either kind's, and "since a time" both, so a stolen token's day is one tap.
+ */
 export function putBackTakedowns(scope: PutBackScope): PutBackResult {
-    return putBackTakedownsEngine(moderationNoticeCb, scope);
+    const listings = putBackTakedownsEngine(moderationNoticeCb, scope);
+    const forum = putBackForumTakedowns(moderationNoticeCb, scope);
+    return { back: [...listings.back, ...forum.back], stillHidden: [...listings.stillHidden, ...forum.stillHidden], gone: listings.gone + forum.gone };
 }
 
 /**
@@ -8326,6 +8350,10 @@ export function actionReport(
                 const reporters = closeOpenReportsOnForumPost(report.target_forum_post_id);
                 if (wasOpen) reporters.push(report.reporter_pubkey);
                 forumTakedown = { removal, reporters };
+            } else if (removal && !removal.wasUp && wasOpen) {
+                // Removed already (its writer did, or a moderator before): this report's reporter hears it was removed, as a listing's
+                // does on the same call (removePostByAdmin), and nobody else is told anything (slice F2b round 2).
+                forumTakedown = { removal, reporters: [report.reporter_pubkey] };
             }
         }
 
@@ -9157,6 +9185,26 @@ function makeTakedownFinal(postId: string): boolean {
     const ended = !!end && Date.parse(end) <= Date.now();
     if (!before || !adminDeletePostEngine(broadcast, postId, undefined, undefined, ended ? undefined : dispatchPushNotification)) return false;
     notifyPostTakedown(moderationNoticeCb, { ...before, wasLive: false }, closeOpenReportsOnPost(postId));
+    return true;
+}
+
+/**
+ * What makes an assistant's forum takedown final (engine/forum-takedowns.ts sweepForumTakedowns): a moderator's removal, its words
+ * and photos gone. Its writer heard at the takedown, so nothing more; a report filed while it was hidden closes, and its reporter
+ * hears it was removed. It counts towards the mute now, the hold being over (G3's rule, as a moderator's removal counts).
+ */
+function makeForumTakedownFinal(postId: string): boolean {
+    const removal = forumRemovalOf(postId);
+    if (!removal) return false;
+    let reporters: string[] = [];
+    const done = db.transaction(() => {
+        if (!removeForumPostAsModerator(postId)) return false;
+        reporters = closeOpenReportsOnForumPost(postId);
+        return true;
+    })();
+    if (!done) return false;
+    tellForumRemoval(moderationNoticeCb, { ...removal, wasUp: false }, reporters, null);
+    evaluateAutoMute(moderationNoticeCb, removal.row.writer_pubkey);
     return true;
 }
 

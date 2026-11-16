@@ -63,6 +63,7 @@ export * from './knowledge-write-words.js';
 export * from './pulse-knowledge-words.js';
 export * from './forum.js';
 export * from './forum-visitors.js';
+export * from './forum-ask.js';
 export * from './name-line.js';
 export * from './membership-note.js';
 export * from './chat-frame.js';
@@ -110,6 +111,8 @@ export * from './outside-chat.js';
 // A guest in a group hosted by another community: the step their phone takes from the host's roster (G1b).
 export * from './group-guest-steps.js';
 export * from './outside-devices.js';
+// Finding someone in another community by their exact name, when they said yes (N1).
+export * from './find-by-name.js';
 export * from './cleartext-address.js';
 export * from './public-ipv4.js';
 export * from './claim-proof.js';

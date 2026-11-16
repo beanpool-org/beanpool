@@ -13,6 +13,7 @@
 #   $FAKE_STATE/run-<sha>  that commit's workflow run, one line per read, the last one sticks: queued in_progress success failure cancelled. No file: no run.
 #                          Several runs on the commit: comma-separated, newest first, as gh lists them up to --limit (its default is 20).
 #   $FAKE_STATE/files      the PR's changed files, one per line (no file: src/a.ts)
+#   $FAKE_STATE/mergeable  what `gh pr view --json mergeable` says: MERGEABLE CONFLICTING UNKNOWN (no file: MERGEABLE)
 # --jq filters run through real jq over GitHub's JSON shape (gh's own is gojq), so the library's filters are what gets tested.
 S=${FAKE_STATE:?}
 print -r -- "gh $*" >> "$S/gh.calls"
@@ -56,7 +57,7 @@ case "$1 $2" in
   "pr view")  case "$*" in
                 *headRefOid*) cat "$S/head" 2>/dev/null || print fakehead;;
                 *isDraft*) print false;; *state*) print OPEN;; *headRefName*) print feat/x;;
-                *mergeable*) print MERGEABLE;; *title*) print "Fake title";;
+                *mergeable*) cat "$S/mergeable" 2>/dev/null || print MERGEABLE;; *title*) print "Fake title";;
               esac;;
   "pr ready") ;;
   "pr edit")  [ "$FAKE_GH_LABEL_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }

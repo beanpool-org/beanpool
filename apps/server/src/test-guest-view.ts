@@ -1376,10 +1376,13 @@ async function main(): Promise<void> {
             // A poll in a topic and the Decision chip (slice F8).
             'POST /api/forum/topics/:id/poll', 'POST /api/forum/topics/:id/decision',
             // Links (slice F9): a topic's writer links a group, a listing, an event or a Learn page; the topics that link one thing.
-            'POST /api/forum/topics/:id/links', 'GET /api/forum/linked',
+            'POST /api/forum/topics/:id/links', 'GET /api/forum/linked', 'POST /api/forum/posts/:id/learn-ask',
             // The community label (slice F10, routes/membership-note.ts): a member's note from their own community, and what they
             // show on a public forum; all signed, the member the signer.
             'GET /api/membership/note', 'GET /api/forum/label', 'POST /api/forum/label',
+            // Forum posts on an Ask to join (slice F11, routes/forum-ask-posts.ts): a member's own public posts and their secret,
+            // signed, the member the signer; 404 wherever the forum is not public.
+            'GET /api/forum/ask-posts',
             // The worldwide forum for anyone on the web (slice F7, routes/forum-public.ts): its public JSON, a public post's photo,
             // the plain pages, the sitemap and robots.txt; 404 wherever the forum is not public.
             'GET /api/forum/public', 'GET /api/forum/public/sections/:id', 'GET /api/forum/public/topics/:id', 'GET /api/forum/photos/:postId/:n',
@@ -1518,6 +1521,8 @@ async function main(): Promise<void> {
             'POST /api/mail/device/forget', 'POST /api/mail/report', 'POST /api/relay/complaint',
             // Group guests at the guest's own community (engine/group-guest-home.ts, G1b): the host's signed notice, a member's own.
             'POST /api/relay/group', 'GET /api/mail/group', 'POST /api/mail/group/confirm',
+            // Finding someone in another community by name (routes/find-by-name.ts, N1): a member's own, and another server's signed look-up.
+            'GET /api/find/me', 'POST /api/find/me', 'POST /api/find/name', 'POST /api/relay/find',
             'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'POST /api/node/owner/lights-out', 'GET /api/local/admin/lights-out', 'POST /api/local/admin/lights-out',

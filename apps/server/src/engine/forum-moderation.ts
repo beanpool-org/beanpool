@@ -28,7 +28,7 @@ import { probationRuleSet, probationState } from './probation.js';
 import { forumHideTally } from './auto-moderation.js';
 import { sectionAccess, sectionGroupOf } from './forum-sections.js';
 import {
-    REMOVAL_REASON_LABELS, REPORT_OUTCOME_TITLE, reportedPostGoneBody, reportedPostKeptBody, reportedPostRemovedBody, tell,
+    REMOVAL_REASON_LABELS, reopenClosedReports, REPORT_OUTCOME_TITLE, reportedPostGoneBody, reportedPostKeptBody, reportedPostRemovedBody, tell,
     type ModerationNoticeCallbacks,
 } from './moderation-notices.js';
 
@@ -86,12 +86,17 @@ export function knownWriters(writers: Iterable<string>, now: number = Date.now()
 interface ModRow {
     id: string; topic_id: string; number: number; writer_pubkey: string; removed_by: string | null; removed_at: string | null;
     hidden_by_reports_at: string | null; title: string; closed_by: string | null;
+    /** An assistant's takedown (slice F2b, engine/forum-takedowns.ts): with a hide and no removal, on hold. */
+    taken_down_at: string | null;
 }
 
 function modRow(postId: string): ModRow | undefined {
-    return db.prepare(`SELECT p.id, p.topic_id, p.number, p.writer_pubkey, p.removed_by, p.removed_at, p.hidden_by_reports_at, t.title, t.closed_by
+    return db.prepare(`SELECT p.id, p.topic_id, p.number, p.writer_pubkey, p.removed_by, p.removed_at, p.hidden_by_reports_at, p.taken_down_at, t.title, t.closed_by
                          FROM forum_posts p JOIN forum_topics t ON t.id = p.topic_id WHERE p.id = ?`).get(postId) as ModRow | undefined;
 }
+
+/** An assistant's takedown on hold, read from the row, so it holds on a standby that took over too (engine/forum-takedowns.ts). */
+const onHold = (row: ModRow) => !!row.taken_down_at && !!row.hidden_by_reports_at && !row.removed_by;
 
 /**
  * The writer of a forum post `reporter` may report (POST /api/reports with `targetForumPostId`), or null when there is none
@@ -119,19 +124,22 @@ export function reportableForumPostWriter(reporter: string, postId: unknown): st
 export interface ReportedForumPost {
     id: string; topicId: string; topicTitle: string; number: number; words: string; writerName: string | null;
     hidden: boolean; removed: boolean;
+    /** An assistant's takedown on hold (slice F2b): hidden and going at 7 days, so a dismissal keeps nothing. */
+    onHold: boolean;
 }
 
 export function reportedForumPost(postId: string | null | undefined): ReportedForumPost | null {
     if (!postId) return null;
-    const row = db.prepare(`SELECT p.id, p.topic_id, p.number, substr(p.words, 1, 500) AS words, p.removed_by, p.hidden_by_reports_at,
+    const row = db.prepare(`SELECT p.id, p.topic_id, p.number, substr(p.words, 1, 500) AS words, p.removed_by, p.hidden_by_reports_at, p.taken_down_at,
                                    t.title, t.closed_by, m.callsign
                               FROM forum_posts p JOIN forum_topics t ON t.id = p.topic_id LEFT JOIN members m ON m.public_key = p.writer_pubkey
                              WHERE p.id = ?`).get(postId) as
-        { id: string; topic_id: string; number: number; words: string; removed_by: string | null; hidden_by_reports_at: string | null; title: string; closed_by: string | null; callsign: string | null } | undefined;
+        { id: string; topic_id: string; number: number; words: string; removed_by: string | null; hidden_by_reports_at: string | null; taken_down_at: string | null; title: string; closed_by: string | null; callsign: string | null } | undefined;
     if (!row) return null;
     return {
         id: row.id, topicId: row.topic_id, topicTitle: row.title, number: row.number, words: row.removed_by ? '' : row.words,
         writerName: row.callsign, hidden: !!row.hidden_by_reports_at, removed: !!row.removed_by || row.closed_by === 'removed',
+        onHold: !!row.taken_down_at && !!row.hidden_by_reports_at && !row.removed_by,
     };
 }
 
@@ -247,7 +255,8 @@ function unhide(cb: ModerationNoticeCallbacks, row: ModRow, now: number): boolea
  */
 export function recheckHiddenForumPost(cb: ModerationNoticeCallbacks, postId: string, now: number = Date.now()): boolean {
     const row = modRow(postId);
-    if (!row?.hidden_by_reports_at || hiddenByBurst(postId, row.hidden_by_reports_at)) return false;
+    // Reports did not hide an assistant's takedown, so a report dismissed later can't bring it back (slice F2b).
+    if (!row?.hidden_by_reports_at || onHold(row) || hiddenByBurst(postId, row.hidden_by_reports_at)) return false;
     const tally = forumHideTally(postId, now);
     if (tally.circles.length >= tally.circlesNeeded) return false;
     return unhide(cb, row, now);
@@ -266,12 +275,24 @@ export function restoreHiddenForumPost(cb: ModerationNoticeCallbacks, postId: st
     if (!row) return 'not_found';
     if (!row.hidden_by_reports_at) return 'not_hidden';
     let reporters: string[] = [];
+    // An assistant's takedown on hold comes back whole, as by Settings' Put back (engine/forum-takedowns.ts): its record is put back
+    // and the reports it closed go back to the queue. Unlike Put back this is a person looking at this one post, so it shows it.
+    const held = onHold(row);
     const restored = db.transaction(() => {
         if (!unhideRow(row, iso(now))) return false;
+        const closedByTakedown = held
+            ? db.prepare('SELECT reports_closed FROM agent_forum_takedowns WHERE forum_post_id = ? AND put_back_at IS NULL AND final_at IS NULL').pluck().all(postId) as string[]
+            : [];
+        if (held) {
+            db.prepare('UPDATE forum_posts SET taken_down_at = NULL WHERE id = ?').run(postId);
+            db.prepare('UPDATE agent_forum_takedowns SET put_back_at = ? WHERE forum_post_id = ? AND put_back_at IS NULL AND final_at IS NULL').run(iso(now), postId);
+        }
         reporters = db.prepare(`SELECT DISTINCT reporter_pubkey FROM abuse_reports WHERE target_forum_post_id = ? AND (status = 'pending' OR status IS NULL)`)
             .pluck().all(postId) as string[];
         db.prepare(`UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
                      WHERE target_forum_post_id = ? AND (status = 'pending' OR status IS NULL)`).run(postId);
+        // After the dismissal above, which is for the reports this person could see: these left the queue before anyone read them.
+        for (const r of closedByTakedown) reopenClosedReports(JSON.parse(r) as string[]);
         return true;
     })();
     if (!restored) return 'not_hidden';
@@ -281,11 +302,25 @@ export function restoreHiddenForumPost(cb: ModerationNoticeCallbacks, postId: st
     return 'restored';
 }
 
-/** After a dismissal of one report on a forum post: its reporter hears it was kept, or only that it is no longer up. */
+/**
+ * After an assistant's takedown is put back (engine/forum-takedowns.ts): its writer hears it is back, or, when a hide from before or
+ * the reports still hold it, that it is hidden while the moderators look, which ends what the takedown's notice said.
+ */
+export function tellForumPutBack(cb: ModerationNoticeCallbacks, row: Pick<ModRow, 'id' | 'topic_id' | 'writer_pubkey' | 'title' | 'removed_by'>, up: boolean): void {
+    if (row.removed_by) return;
+    if (up) tell(cb, [row.writer_pubkey], FORUM_MOD_WORDS.backTitle, backBody(row.title), forumData(row, 'forum_post_restored', { screen: 'forum_topic' }));
+    else tell(cb, [row.writer_pubkey], FORUM_MOD_WORDS.hiddenTitle, hiddenBody(row.title), forumData(row, 'forum_post_hidden', { reason: 'reports', screen: 'forum_topic' }));
+}
+
+/**
+ * After a dismissal of one report on a forum post: its reporter hears it was kept, or only that it is no longer up. A takedown on hold
+ * is not kept: the dismissal doesn't bring it back (recheckHiddenForumPost) and the sweep removes it at 7 days (slice F2b), as a
+ * listing's reporter hears (state-engine.ts dismissReport, `!onHold(post)`).
+ */
 export function tellForumReportDismissed(cb: ModerationNoticeCallbacks, reporter: string, postId: string): void {
     const row = modRow(postId);
     if (!row) return;
-    tellReporterOutcome(cb, [reporter], row, row.removed_by || row.closed_by === 'removed' ? 'gone' : 'kept');
+    tellReporterOutcome(cb, [reporter], row, row.removed_by || row.closed_by === 'removed' || onHold(row) ? 'gone' : 'kept');
 }
 
 /** The writer of a forum post, for a moderator's actions on it (whose post it is never comes from a report's own field). */

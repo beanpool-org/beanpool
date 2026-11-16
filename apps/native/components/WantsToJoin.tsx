@@ -9,6 +9,7 @@ import {
 } from '../utils/knock-inbox';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from './VouchPresetChoice';
+import { KnockForumPosts } from './KnockForumPosts';
 import { PEEK_WORDS, t, tn, word } from '@beanpool/core';
 
 /**
@@ -185,6 +186,8 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true, fromN
                             {t(PEEK_WORDS.askedAfter, { title: req.via.title, sharer: req.via.sharer })}
                         </Text>
                     )}
+                    {/* Their posts on the worldwide forum (forums F11): a tap reads each and checks who wrote it. */}
+                    {req.forum && <KnockForumPosts forum={req.forum} knockId={req.id} />}
                     {myVouching?.voucher && (
                         <View style={{ marginTop: 8 }}>
                             <VouchPresetChoice

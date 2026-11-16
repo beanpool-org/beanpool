@@ -322,6 +322,33 @@ describe("the sheet's money line and Pay read the node's balance; a read that fa
         }
     });
 
+    it('a Pay the node refuses for money reads the balance again: the new line, Pay off; a lost answer reads nothing', async () => {
+        api.getBalance.mockResolvedValueOnce({ balance_c: 10000, usableFloor_c: 0, floor_c: 0, liveOffers: 0 })
+            .mockResolvedValue({ balance_c: 0, usableFloor_c: 0, floor_c: 0, liveOffers: 0 });
+        api.getBills.mockResolvedValue({ toPay: [bill('to-pay')], sent: [] });
+        render(<BillsPanel me={KIM} />);
+        await settle();
+        await click(screen.getByTestId('bill-row-bill-0001'));
+        expect(screen.getByTestId('bill-money').textContent).toBe('You have 100 Beans. After this: 40.');
+        // A lost answer first: nothing is read again (the same press finds out).
+        api.payBill.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        await click(pay());
+        await click(screen.getByTestId('bill-confirm-pay'));
+        expect(api.getBalance).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('bill-money').textContent).toBe('You have 100 Beans. After this: 40.');
+        // The node refuses for money (the payer spent elsewhere meanwhile): the sheet reads the node's figures again.
+        api.payBill.mockRejectedValueOnce(Object.assign(new Error('You need 60 Beans to pay this.'), { status: 409, code: 'bill_nothing' }));
+        await click(pay());
+        await click(screen.getByTestId('bill-confirm-pay'));
+        await settle();
+        expect(api.getBalance).toHaveBeenCalledTimes(2);
+        expect(api.getBalance).toHaveBeenLastCalledWith(KIM);
+        expect(screen.getByTestId('bill-refusal').textContent).toBe('You need 60 Beans to pay this.');
+        expect(screen.getByTestId('bill-money').textContent).toContain('You need 60 Beans to pay this.');
+        expect(screen.getByTestId('bill-money').textContent).not.toContain('After this');
+        expect(pay().disabled).toBe(true);
+    });
+
     it("a list that couldn't be read says so with Try again, which reads it again", async () => {
         api.getBills.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue({ toPay: [bill('to-pay')], sent: [] });
         render(<BillsPanel me={KIM} />);

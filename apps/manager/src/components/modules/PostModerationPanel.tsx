@@ -5,14 +5,17 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
 import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
-import { isHundredths } from '@beanpool/core';
+import { KNOWLEDGE_TYPE, isHundredths, knowledgeTopic } from '@beanpool/core';
+import { t } from '../../lib/fresh-proof';
 import { beansFigure } from '../../lib/beans';
 
 /**
  * The posts screen in Settings → Moderation (scratch/fable-design/DESIGN-mcp-moderation-fable.md §3.13, slice S4).
  *
- * - Type Filter: Offers, Needs, Events, Polls, and "Shown from another community" (a copy on a global community: its row is
- *   `shownCopy: true`, whatever it is a copy of). The server's list is every type, so events, polls and copies were always here.
+ * - Type Filter: Offers, Needs, Events, Polls, Local knowledge, and "Shown from another community" (a copy on a global community:
+ *   its row is `shownCopy: true`, whatever it is a copy of). The server's list is every type, so events, polls and copies were
+ *   always here; a page of Local knowledge is in it too (routes/admin.ts reads it `withKnowledge`), which is how an owner or
+ *   admin takes one down (DESIGN-local-knowledge-fable.md §8, K9). Its chip is Learn's teal, its category chip the topic's name.
  * - Each row's chip is coloured from the central brand colours (brand-colours.ts, `bg-bp-…`), one per type; before, anything that
  *   was not an Offer was drawn in the Need colour.
  * - "Taken down by <assistant>": a post an owner's assistant took down is hidden at once and removed for good after 7 days. The
@@ -53,7 +56,7 @@ export interface PostModerationPanelProps {
     viewer?: RolesViewer;
 }
 
-export type PostTypeFilter = 'all' | 'offer' | 'need' | 'event' | 'poll' | 'copy';
+export type PostTypeFilter = 'all' | 'offer' | 'need' | 'event' | 'poll' | typeof KNOWLEDGE_TYPE | 'copy';
 
 const TYPE_FILTERS: Array<{ value: PostTypeFilter; label: string }> = [
     { value: 'all', label: 'All Types' },
@@ -61,6 +64,7 @@ const TYPE_FILTERS: Array<{ value: PostTypeFilter; label: string }> = [
     { value: 'need', label: 'Needs' },
     { value: 'event', label: 'Events' },
     { value: 'poll', label: 'Polls' },
+    { value: KNOWLEDGE_TYPE, label: 'Local knowledge' },
     { value: 'copy', label: 'Shown from another community' },
 ];
 
@@ -78,9 +82,18 @@ const TYPE_CHIPS: Record<string, string> = {
     need: `bg-bp-chip-need-tint text-bp-chip-need-ink ${CHIP_FRAME}`,
     event: `bg-bp-tile-event-tint text-bp-tile-event-ink ${CHIP_FRAME}`,
     poll: SAGE_CHIP,
+    [KNOWLEDGE_TYPE]: `bg-bp-chip-learn-tint text-bp-chip-learn-ink ${CHIP_FRAME}`,
 };
 const COPY_CHIP = `bg-bp-chip-warn-tint text-bp-chip-warn-ink ${CHIP_FRAME}`;
 export const chipClassFor = (type: unknown) => TYPE_CHIPS[typeof type === 'string' ? type.toLowerCase() : ''] ?? SAGE_CHIP;
+
+/** A row's category chip: a page of Local knowledge names its topic ("🚰 Local services"), not its stored id; any other post its category. */
+export function categoryLabelFor(type: unknown, category: unknown): string {
+    if (typeof category !== 'string') return '';
+    const topic = type === KNOWLEDGE_TYPE ? knowledgeTopic(category) : undefined;
+    // One key with its placeholders, the phone's own for a topic's glyph and name (apps/native components/learn/learn-lines.ts).
+    return topic ? t('{emoji} {topic}', { emoji: topic.emoji, topic: t(topic.label) }) : category;
+}
 
 const TAKEDOWNS = '/api/local/admin/agent/takedowns';
 
@@ -443,7 +456,9 @@ export function PostModerationPanel({
                         const createdStr = post.createdAt || post.created_at
                             ? new Date(post.createdAt || post.created_at || '').toLocaleDateString()
                             : '';
-                        const categoryStr = typeof post.category === 'string' ? post.category : '';
+                        const categoryStr = categoryLabelFor(post.type, post.category);
+                        // A page of Local knowledge: the kind's name on its chip, its topic as written (no capitals added), and no price.
+                        const isPage = post.type === KNOWLEDGE_TYPE;
 
                         return (
                             <div
@@ -456,7 +471,7 @@ export function PostModerationPanel({
                                             data-testid="post-type-chip"
                                             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${chipClassFor(post.type)}`}
                                         >
-                                            {post.type || 'post'}
+                                            {isPage ? t('Local knowledge') : (post.type || 'post')}
                                         </span>
                                         {isCopy(post) && (
                                             <span
@@ -467,7 +482,7 @@ export function PostModerationPanel({
                                             </span>
                                         )}
                                         {categoryStr && (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-nature-800 text-nature-300 border border-nature-700 capitalize">
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold bg-nature-800 text-nature-300 border border-nature-700${isPage ? '' : ' capitalize'}`}>
                                                 {categoryStr}
                                             </span>
                                         )}
@@ -480,7 +495,7 @@ export function PostModerationPanel({
                                     </p>
                                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-nature-400 font-mono">
                                         <span>By: {author}</span>
-                                        {isHundredths(post.price_c) && <span>{beansFigure(post.price_c)} 🫘</span>}
+                                        {!isPage && isHundredths(post.price_c) && <span>{beansFigure(post.price_c)} 🫘</span>}
                                         {createdStr && <span>{createdStr}</span>}
                                     </div>
                                     {takenDown && (

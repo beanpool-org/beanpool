@@ -6,8 +6,13 @@
  *  - "Check now": asks every address from outside, and says only what the rows show (a round still running, or the last
  *    round's results inside the server's 30-second gap, is never reported as a new check);
  *  - "Check from your phone": opens /check to verify outside reach on mobile data;
- *  - "Add an address": the three forms folded together (a free BeanPool name, this server's number, your own domain);
- *  - "Make main": heals / promotes an address, where the server can make it the community's address;
+ *  - "Add an address": the three forms folded together (a free BeanPool name, this server's number, your own domain), each
+ *    asked first: every listed address is one members' phones trust and people sign in at (several-addresses §7);
+ *  - "Make main": on every row the server can make main, of any kind (a BeanPool name, an own domain, a hand-set name, a
+ *    number while the community has no name), after the question of design several-addresses §8 and with the owner's fresh
+ *    proof, through the one route that moves the main (several-addresses S6, §2.1). Adding an address never moves it;
+ *  - one line saying what members' phones follow (the server's signed list), and under an own-domain main the BeanPool name
+ *    kept as the way back;
  *  - Recovery code reminder on the BeanPool name request: never a hard gate, protects against server loss.
  *
  * It replaces the top halves of the three panels below it, which stay for everything else an owner has: PublicAddressPanel
@@ -22,7 +27,7 @@ import { ADDRESS_SCREEN_WORDS, addressReachSentence, type AddressReach } from '@
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import {
-    buildAdminHeaders, checkAppAddresses, getAppAddresses, getTlsStatus,
+    buildAdminHeaders, checkAppAddresses, getAppAddresses, getTlsStatus, makeMainAddress,
     removeAppAddress, resolveNodeApiUrl, setOwnAddress,
     type AppAddress, type AppAddressesReport,
 } from '../../lib/node-client';
@@ -144,25 +149,24 @@ export function reachSentence(reach: AddressReach, besideStanding: boolean): str
 }
 
 /**
- * Whether the server can make `host` the community's address (services/public-address-agent.ts asCommunityAddress): a name
- * always, as a claim; an own address never over a BeanPool name, and a number never over a domain. A press that can only be
- * refused is not offered.
+ * Whether a row offers Make main (several-addresses S6, design §2.1): any address the server can make main, whatever its
+ * kind: a BeanPool name, an own domain, a hand-set name (BEANPOOL_ADDRESSES, CF_RECORD_NAME), a number while the community
+ * has no name. The server says of each row why it would refuse (`mainRefusal`: a name with no route yet, paused or stopped,
+ * a number beside a name, a home-network address beside one the Internet reaches), so a press that can only be refused is
+ * not offered. Never the main itself, nor a former or lost name: neither is on the list members' phones follow.
  */
-export function canBecomeMain(host: string, primary: string | null | undefined): boolean {
-    if (isBeanPoolName(host) || !primary) return true;
-    if (isBeanPoolName(primary)) return false;
-    return !(isIpAddress(host) && !isIpAddress(primary));
+export function offersMakeMain(a: AppAddress, primary: string | null | undefined): boolean {
+    return a.address !== primary && !a.former && !a.lost && !a.mainRefusal;
 }
 
 /**
- * Whether a row offers Make main. A hard-coded address is set by hand and no claim of it is held (design §6), and a name the
- * project stopped is only refused, or, paused, stored and left dark. The record says so whatever the check found: `stopped`
- * covers a former name and a stale check, which the step doesn't; the step covers a server before the record's flag. A name
- * another key holds is refused too, once a code is spent, and Add an address still reaches it if that reading is out of date.
- * A pause that isn't the project's stays: there Make main is the heal. So does a released name: there it is the take-back.
+ * Under an own-domain main, the BeanPool name the community still lists and could make main again: the way back if the
+ * domain ever lapses (design several-addresses §5, §8). Only a name that works is a way back, so never a former or lost name
+ * nor one the server says can't be main (no route yet: waiting, paused, stopped). Null under a BeanPool name or a number.
  */
-export function offersMakeMain(a: AppAddress, primary: string | null | undefined): boolean {
-    return a.source !== 'env' && !a.hardCoded && !a.stopped && a.reach?.step !== 'stopped' && a.standing?.registrarSays !== 'other' && canBecomeMain(a.address, primary);
+export function wayBackName(addresses: AppAddress[] | undefined, primary: string | null | undefined): string | null {
+    if (!primary || isBeanPoolName(primary) || isIpAddress(primary)) return null;
+    return (addresses ?? []).find((a) => isBeanPoolName(a.address) && a.address !== primary && !a.former && !a.lost && !a.mainRefusal)?.address ?? null;
 }
 
 /** A name as typed or pasted (a whole host, capitals, spaces): the label the claim takes. */
@@ -280,63 +284,28 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
         }
     };
 
-    // Handle "Make main"
+    // Make main: the design's question first, then the one route that moves the main (several-addresses §2.1), with the
+    // owner's fresh proof. A stale Manage hand-off opens the box ("press Manage again"); a computer's session is sent to the
+    // phone; any other refusal says the server's words, never success.
     const handleMakeMain = async (a: AppAddress, code?: string) => {
         setActionMessage(null);
+        if (code === undefined) {
+            const yes = await ask({
+                title: t(W.makeMainTitle, { address: a.address }), body: t(W.makeMainQuestion),
+                confirmLabel: t(W.makeMain), cancelLabel: t(W.cancel),
+            });
+            if (!yes) return;
+        }
         setBusy(`make-main:${a.address}`);
         try {
-            let got: { communityAddress?: boolean } | undefined;
-            if (isBeanPoolName(a.address)) {
-                const name = extractSubdomain(a.address);
-                setClaiming(true);
-                // No contact or community name: the claim keeps what this server holds (routes/public-address.ts).
-                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim'), {
-                    method: 'POST',
-                    headers: buildAdminHeaders(cred),
-                    body: JSON.stringify({
-                        
-                        name,
-                        mode: 'tunnel',
-                        ...proofField(code),
-                    }),
-                });
-                if (await proof.check(res, (c) => handleMakeMain(a, c), code)) return;
-                const body = await res.json().catch(() => ({}));
-                if (!res.ok) {
-                    throw new Error(body?.error || `HTTP ${res.status}`);
-                }
-                // Only a live answer moves the community, but the claim stores any answer it gets: the panel below moves to a
-                // paused name (a heal refused, or a pause this row couldn't know of) while members stay where they are.
-                if (body?.status !== 'live') {
-                    proof.close();
-                    const current = report?.primaryAddress;
-                    const said = { address: a.address, status: String(body?.status ?? 'nothing') };
-                    setActionMessage({
-                        text: body?.status === 'pending' && body?.reason !== 'provisioning'
-                            ? t('Requested {address}, awaiting approval by the BeanPool project.', { address: a.address })
-                            : current ? t(W.notMainYetMembersAt, { ...said, current }) : t(W.notMainYet, said),
-                        type: 'warning',
-                    });
-                    await afterChange();
-                    return;
-                }
-            } else if (isIpAddress(a.address)) {
-                got = await setOwnAddress(activeNode.url, { ip: a.address }, cred, code);
-            } else {
-                got = await setOwnAddress(activeNode.url, { domain: a.address }, cred, code);
-            }
+            await makeMainAddress(activeNode.url, a.address, cred, code);
             proof.close();
-            if (got && !got.communityAddress) {
-                setActionMessage({ text: t('{address} added, but could not replace the active address.', { address: a.address }), type: 'warning' });
-            } else {
-                setActionMessage({ text: t('{address} is now the main address.', { address: a.address }), type: 'success' });
-            }
+            setActionMessage({ text: t(W.makeMainDone, { address: a.address }), type: 'success' });
             await afterChange();
         } catch (e: unknown) {
             if (proof.checkError(e, (c) => handleMakeMain(a, c), code)) return;
             setActionMessage({ text: e instanceof Error ? e.message : t('Could not make main'), type: 'error' });
         } finally {
-            setClaiming(false);
             setBusy(null);
         }
     };
@@ -452,6 +421,15 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
             setFormError(t('Invalid name (3–32 chars: a–z, 0–9, hyphen, no leading/trailing hyphen)'));
             return;
         }
+        // Asked first (design several-addresses §7, §8): members' phones trust every listed address, and people sign in there.
+        const adding = addKind === 'beanpool' ? `${name}.beanpool.org` : addKind === 'ip' ? ipInput.trim() : domainOf(domainInput);
+        if (code === undefined) {
+            const yes = await ask({
+                title: t(W.addAddress), body: t(W.addQuestion, { address: adding }),
+                confirmLabel: t(W.addConfirm), cancelLabel: t(W.cancel),
+            });
+            if (!yes) return;
+        }
         setSubmittingAdd(true);
         try {
             if (addKind === 'beanpool') {
@@ -500,6 +478,8 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
 
     // Sort addresses: main first, then active configured, then former and lost
     const primary = report?.primaryAddress;
+    const wayBack = wayBackName(report?.addresses, primary);
+    const followed = report?.list;
     const lastCheckedAt = latestCheck(report?.addresses);
     const sortedAddresses: AppAddress[] = (report?.addresses ? [...report.addresses] : []).sort((x, y) => {
         const xIsMain = x.address === primary || (!primary && x.source === 'public-address');
@@ -554,6 +534,12 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
                         )}
                     </div>
                 </div>
+
+                {followed && (
+                    <p className="m-0 text-xs text-nature-300 [overflow-wrap:anywhere]" data-testid="addresses-follow-line">
+                        {tn(followed.addresses.length, W.followLine.one, W.followLine.other, { address: followed.main })}
+                    </p>
+                )}
 
                 {lastCheckedAt && (
                     <div className="text-[11px] text-nature-400 flex items-center gap-2" data-testid="addresses-last-checked">
@@ -996,7 +982,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
                                         )}
 
                                         {/* Make main (§5.2) */}
-                                        {!isMain && !a.lost && isOwner && offersMakeMain(a, primary) && (
+                                        {!isMain && isOwner && offersMakeMain(a, primary) && (
                                             <button
                                                 type="button"
                                                 disabled={busy !== null}
@@ -1046,6 +1032,18 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
                         </div>
                     );
                 })}
+
+                {wayBack && (
+                    <div
+                        data-testid="addresses-way-back"
+                        className="p-3 rounded-xl bg-nature-950/60 border border-nature-800 text-xs text-nature-300 flex items-start gap-2.5"
+                    >
+                        <span className="text-base select-none" aria-hidden="true">↩️</span>
+                        <p className="m-0 leading-relaxed font-medium [overflow-wrap:anywhere]">
+                            {t(W.wayBack, { address: wayBack })}
+                        </p>
+                    </div>
+                )}
 
                 {isOwner && sortedAddresses.length > 0 && sortedAddresses.every((a) => isBeanPoolName(a.address)) && (
                     <div

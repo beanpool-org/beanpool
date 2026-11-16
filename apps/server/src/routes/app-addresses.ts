@@ -29,7 +29,10 @@
  *                                                 address the check round has reached, `reach`: what answered there, what
  *                                                 it pointed at and the one next step (services/address-check.ts);
  *                                                 `stopped` on a name the project blocked or paused, from the record of
- *                                                 names, checked or not. Reading this asks nothing of the network.
+ *                                                 names, checked or not; `mainRefusal` on each address but the main that
+ *                                                 Make main would refuse, in the words /main answers with; and `list`, what
+ *                                                 the signed address list says now (main and addresses, or null).
+ *                                                 Reading this asks nothing of the network.
  *   POST /api/local/admin/app-addresses/check    Check now: a round, at most one every 30 seconds, and the report, with
  *                                                 `checking: true` when it hasn't finished within 20 seconds.
  *   POST /api/local/admin/app-addresses/confirm  { address, code? }: "Yes, that's its address." Adds it to the owner-confirmed
@@ -57,10 +60,11 @@
 import Router from '@koa/router';
 import { getNodeConfig, isOwnPublicAddress, updateNodeConfig } from '../state-engine.js';
 import {
-    configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress, ownerConfirmedAddresses,
-    primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
+    configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress,
+    ownerConfirmedAddresses, primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
 } from '../engine/own-addresses.js';
 import { tellMembersOfNewMain } from '../services/address-notice.js';
+import { currentAddressList } from '../services/address-list.js';
 import { getNodeRole } from '../config/node-role.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { nameStandings } from '../services/registrar-name-watch.js';
@@ -96,11 +100,17 @@ export function appAddressesReport(pageHost?: unknown) {
     const standings = nameStandings();
     const reaches = addressReaches();
     const stopped = namesStoppedByProject();
+    const primary = primaryAddress();
+    const standby = getNodeRole() === 'backup';
     const addresses = configuredAddresses().map((a) => {
         const u = count('own', a.address);
         const tried = a.lost ? count('lost', a.address) : undefined;
         const standing = standings.get(a.address);
         const reach = reaches.get(a.address);
+        // Why Make main would be refused, in the words /main answers with (several-addresses S6): Settings offers Make main
+        // only where this is absent, so a press that can only be refused is never offered. None for the main itself.
+        // A standby refuses every Make main (its main is its main server's), so it says that of every row.
+        const mainRefusal = a.address === primary ? null : standby ? MAIN_ON_STANDBY : mainAddressRefusal(a.address, standings);
         return {
             address: a.address, source: a.source, ...(a.former ? { former: true } : {}), today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0,
             ...(a.lost ? { lost: true, tried: { today: tried?.today ?? 0, busiestDay: tried?.busiestDay ?? 0 } } : {}),
@@ -108,6 +118,7 @@ export function appAddressesReport(pageHost?: unknown) {
             ...(stopped.has(a.address) ? { stopped: true } : {}),
             ...(a.hardCoded ? { hardCoded: true } : {}),
             ...(reach ? { reach } : {}),
+            ...(mainRefusal ? { mainRefusal } : {}),
         };
     });
     // Hosts apps signed for while this node knew none of its names (accepted until the switch). Any the owner has since
@@ -130,8 +141,13 @@ export function appAddressesReport(pageHost?: unknown) {
     if (page && ![...unconfirmed, ...heldBack].some((u) => u.address === page)) {
         place({ address: page, today: 0, busiestDay: 0, ownerOrAdmin: staff.has(page) });
     }
+    // The list /api/node/addresses serves now, numbered as it is (currentAddressList): the addresses members' phones follow
+    // and the main one. None when it serves none (a replaced server, one with no node key or community yet), so Settings
+    // never says phones follow a list nobody serves.
+    const served = currentAddressList();
     return {
-        primaryAddress: primaryAddress(),
+        primaryAddress: primary,
+        list: served.ok ? { main: served.fields.main, addresses: served.fields.addresses } : null,
         formerApps: ownAddressesUsage(addresses.filter((a) => a.former).map((a) => a.address)),
         addresses,
         named: knowsItsNames(),
@@ -234,7 +250,8 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
     });
 
     // Make main: where new members, invites, the directory and search engines are sent (design several-addresses §2.1). Any
-    // published address with a route, of any kind; a bare number only while the community has no name. An owner's, with
+    // published address with a route, of any kind; a bare number only while the community has no name; never a beanpool.org
+    // name the address service says another community, or no community, holds (mainAddressRefusal). An owner's, with
     // the owner's fresh proof; asked after the address is found, so a refused one spends no code. Every other address keeps
     // working. The members are told once, when the main address really moved.
     router.post('/api/local/admin/app-addresses/main', async (ctx) => {
@@ -252,7 +269,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Send { "address": "community.example.org" }: one of this community\'s addresses, with no path.' };
             return;
         }
-        const refused = mainAddressRefusal(address);
+        const refused = mainAddressRefusal(address, nameStandings());
         if (refused) {
             ctx.status = 409;
             ctx.body = { code: 'not_main_able', error: refused };

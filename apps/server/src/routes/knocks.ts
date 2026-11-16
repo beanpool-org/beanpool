@@ -4,7 +4,15 @@
  *
  * The applicant, signed with their own key (the same key on every node), not a member here (a key a re-key replaced
  * gets 403 `key_invalidated` from both):
- *   POST /api/join/knock          { message, callsign, avatar?, fromNode?, toNode?, peek? }  → 201 { knock: { status: 'pending' } }
+ *   POST /api/join/knock          { message, callsign, avatar?, fromNode?, toNode?, peek?, forumPosts?, forumSecret? }
+ *                                   → 201 { knock: { status: 'pending' } }
+ *                                   (`forumPosts`: up to three of the applicant's posts on the worldwide forum, each
+ *                                   { postId, topicId, number }, anything else sent with one dropped, with `forumSecret`,
+ *                                   their secret there (forums F11, engine/forum-ask-posts.ts): 400 `too_many_forum_posts`
+ *                                   for a fourth, 400 `bad_forum_posts`
+ *                                   for one that doesn't read or comes without a secret. The proof of each is made here with
+ *                                   the signing key; the secret is kept nowhere; no other server is asked anything, so the
+ *                                   request is taken whatever the worldwide community does)
  *                                   (400 `wrong_community` for a knock whose `toNode` names another community; see below.
  *                                   `peek`: the ticket of the link shared outside that the stranger read, engine/knocks.ts
  *                                   "Where it came from": kept as its post and sharer when it opens its post now, and
@@ -14,8 +22,10 @@
  *                                   may ask again after KNOCK_RULES.cancelBlockHours, 409 `knock_cancelled` before)
  * Any member (tiers gate nothing), signed; where only admins invite (the door, config/door.ts), only an owner or admin,
  * and anyone else is answered 403 `admins_only`:
- *   GET  /api/join/knocks?limit&offset          → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt, via }], total, limit, offset }
- *                                               (`via`: { title, sharer } of the listing shared outside it came after, or null)
+ *   GET  /api/join/knocks?limit&offset          → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt, via, forum }], total, limit, offset }
+ *                                               (`via`: { title, sharer } of the listing shared outside it came after, or null;
+ *                                               `forum`: { at, posts: [{ postId, topicId, number, proof }] }, the
+ *                                               applicant's forum posts on the worldwide community at `at`, or null)
  *   POST /api/join/knocks/:id/approve           { vouchAmount?, namesEntry?, namesEntryId? }
  *                                               → { knock: { id, status: 'approved' }, invite: { code, expiresAt, vouchAmount? } }
  *                                               (a vouch from the answerer's own budget, engine/vouchers.ts: its refusals)
@@ -82,6 +92,7 @@ import {
 } from '../engine/knocks.js';
 import { openJoinKeyInvalidated } from '../engine/open-join.js';
 import { noteAskedFrom, peekProvenance } from '../engine/peek-tickets.js';
+import { knockForumPosts } from '../engine/forum-ask-posts.js';
 import { mayInviteHere, ADMINS_ONLY, ADMINS_ONLY_ANSWER_MESSAGE } from '../config/door.js';
 import { NamesListError } from '../engine/names-list.js';
 import { VoucherError } from '../engine/vouchers.js';
@@ -297,6 +308,9 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         if (!avatar.ok) return answer(ctx, 400, avatar.error, 'bad_request');
         const fromNode = parseFromNode(body.fromNode);
         if (!fromNode.ok) return answer(ctx, 400, fromNode.error, 'bad_request');
+        // Up to three forum posts, each kept with the proof the signing key and the secret make (never the secret itself).
+        const forum = knockForumPosts(body.forumPosts, body.forumSecret, applicant);
+        if (!forum.ok) return answer(ctx, 400, forum.error, forum.code);
 
         const incomingBytes = incomingPhotoBytes(avatar.value);
         if (incomingBytes > 0) {
@@ -323,6 +337,7 @@ export function createKnockRoutes(deps: RouteDeps): Router {
                 fromNode: fromNode.value,
                 address: clientLimiterKey(ctx),
                 via: via ? { postId: via.postId, sharer: via.sharer } : null,
+                forumPosts: forum.kept,
             });
         } catch (e) {
             if (respondProfileRefusal(ctx, e)) return;

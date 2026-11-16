@@ -26,7 +26,9 @@
  *
  * The request gate is core's (outside-chat.ts gateOutsideItem), the phone's too.
  */
-import type { OutsideChatState } from '@beanpool/core';
+import {
+    outsideChangeOutcome, outsideChangesKept, outsideLineWords, type KeptOutsideChange, type OutsideChange, type OutsideChatState,
+} from '@beanpool/core';
 
 const DB_NAME = 'beanpool-outside-chats';
 const STORE = 'docs';
@@ -59,12 +61,53 @@ export interface OutsideLine {
     state: OutsideLineState | null;
     /** A line of mine my server hasn't taken: its signed item, to send again. */
     item: string | null;
+    /**
+     * A line of theirs as it came (its sender's signed envelope and the sealed line inside, `{ envelope, payload }` as JSON):
+     * what a report hands over (lib/outside-mail.ts reportOutsideLine), as the phone keeps it. Null on a line of mine.
+     */
+    sealed: string | null;
     /** Why a line of mine failed, in my server's words; null otherwise. */
     note: string | null;
 }
 
 interface Receipt { id: string; key: string; home: string; owedAt: number; triedAt: number }
 type Chats = Record<string, OutsideChat>;
+/**
+ * A chat's changes to its lines (X6), by their item ids, as core outsideChangesKept keeps them (the phone's outside_changes):
+ * each person's newest settled one of a kind for a line (theirs, applied; mine, at their community), and mine still on their
+ * way that are newer (`sending`, kept with the signed `item`, or `queued`). One of mine that fails is taken out, so the line
+ * falls back to the newest left. Kept even before their line is here: core outsideLineShown applies one only to a line of its
+ * own chat and, for an edit or a delete, of its own maker.
+ */
+type Kept = KeptOutsideChange & { item: string | null };
+type Changes = Record<string, Kept>;
+const bare = ({ item: _item, state: _state, ...c }: Kept): OutsideChange => c;
+const sameSlot = (a: Kept, b: Pick<Kept, 'lineId' | 'author' | 'kind'>) => a.lineId === b.lineId && a.author === b.author && a.kind === b.kind;
+/** `changes` with the slot (line, maker, kind) of `c` pruned to what core outsideChangesKept keeps. */
+function keptChanges(changes: Changes, c: Pick<Kept, 'lineId' | 'author' | 'kind'>): Changes {
+    const slot = Object.values(changes).filter((x) => sameSlot(x, c));
+    const kept = new Set(outsideChangesKept(slot).map((x) => x.itemId));
+    return Object.fromEntries(Object.entries(changes).filter(([, x]) => !sameSlot(x, c) || kept.has(x.itemId)));
+}
+/**
+ * What became of a change of mine, my server's answer or a tick (the phone's answerChange): failed, taken out; taken, its
+ * signed item goes; at their community, it never goes back. Undefined: not a change of mine here, or nothing to do.
+ */
+function answered(changes: Changes | undefined, id: string, state: string): Changes | undefined {
+    const was = changes?.[id];
+    const outcome = outsideChangeOutcome(state);
+    if (!changes || !was || was.state === null || !outcome || was.state === 'sent') return undefined;
+    const next = { ...changes };
+    if (outcome === 'failed') delete next[id];
+    else next[id] = { ...was, state: outcome, item: null };
+    return keptChanges(next, was);
+}
+/** A chat's row with its newest line as the chat shows it (core outsideLineWords, the bubble's rule): deleted, or its newest edit. */
+function shownLast(chat: OutsideChat, lines: OutsideLine[] | undefined, changes: Changes | undefined, me: string): OutsideChat {
+    const last = lines?.length ? lines[lines.length - 1] : null;
+    if (!last) return chat;
+    return { ...chat, lastText: outsideLineWords(last, Object.values(changes ?? {}).map(bare), me), lastAt: last.at };
+}
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -183,23 +226,37 @@ export function outsideChatStore(community: string, holds: () => boolean = () =>
     const linesKey = (me: string, chatId: string) => `${at}${me}/lines/${chatId}`;
     const metaKey = (me: string) => `${at}${me}/meta`;
     const receiptsKey = (me: string) => `${at}${me}/receipts`;
+    const changesKey = (me: string, chatId: string) => `${at}${me}/changes/${chatId}`;
     const read = (keys: string[]) => readDocs(keys, holds);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- each caller names its documents' types as a tuple
     const change = (keys: string[], next: (values: any) => unknown[]) => changeDocs(keys, next, holds);
     return {
         /** The community this store is for, as its documents name it. */
         community: outsideCommunityOf(community),
+        /** The chats, each with its newest line as the chat shows it (a deleted line reads as deleted, an edited one as its edit). */
         async chats(me: string, state?: OutsideChatState): Promise<OutsideChat[]> {
             const [chats] = await read([chatsKey(me)]) as [Chats | undefined];
-            return Object.values(chats ?? {}).filter((c) => !state || c.state === state).sort((a, b) => b.updatedAt - a.updatedAt);
+            const list = Object.values(chats ?? {}).filter((c) => !state || c.state === state).sort((a, b) => b.updatedAt - a.updatedAt);
+            if (!list.length) return [];
+            const docs = await read(list.flatMap((c) => [linesKey(me, c.id), changesKey(me, c.id)]));
+            return list.map((c, i) => shownLast(c, docs[2 * i] as OutsideLine[] | undefined, docs[2 * i + 1] as Changes | undefined, me));
         },
         async chat(me: string, id: string): Promise<OutsideChat | null> {
-            const [chats] = await read([chatsKey(me)]) as [Chats | undefined];
-            return chats?.[id] ?? null;
+            const [chats, lines, changes] = await read([chatsKey(me), linesKey(me, id), changesKey(me, id)]) as [Chats | undefined, OutsideLine[] | undefined, Changes | undefined];
+            const chat = chats?.[id];
+            return chat ? shownLast(chat, lines, changes, me) : null;
         },
         async lines(me: string, chatId: string): Promise<OutsideLine[]> {
             const [lines] = await read([linesKey(me, chatId)]) as [OutsideLine[] | undefined];
             return lines ?? [];
+        },
+        /**
+         * A line of theirs in chat `chatId` as it came (its sender's signed envelope and sealed line), its first words and its
+         * writer: what a report hands over, with the words it shows (outside-mail.ts reportOutsideLine). The phone's kept.
+         */
+        async kept(me: string, chatId: string, id: string): Promise<{ sealed: string; text: string; author: string } | null> {
+            const line = (await this.lines(me, chatId)).find((l) => l.id === id);
+            return line?.sealed ? { sealed: line.sealed, text: line.text, author: line.author } : null;
         },
         async hasLine(me: string, chatId: string, id: string): Promise<boolean> {
             return (await this.lines(me, chatId)).some((l) => l.id === id);
@@ -238,7 +295,7 @@ export function outsideChatStore(community: string, holds: () => boolean = () =>
             return changed;
         },
         /** A line from the peer, past the gate: written with its chat (made a request, or moved on), in one transaction. Idempotent by id. */
-        async writeTheirs(me: string, line: { id: string; chatId: string; author: string; text: string; replyTo: string | null; at: number },
+        async writeTheirs(me: string, line: { id: string; chatId: string; author: string; text: string; replyTo: string | null; at: number; sealed: string },
             peer: { home: string; name: string | null }, verdict: 'line' | 'request', now = Date.now()): Promise<void> {
             await change([chatsKey(me), linesKey(me, line.chatId)], ([chats, lines]: [Chats | undefined, OutsideLine[] | undefined]) => {
                 const row: OutsideLine = { ...line, state: null, item: null, note: null };
@@ -255,26 +312,95 @@ export function outsideChatStore(community: string, holds: () => boolean = () =>
             await change([chatsKey(me), linesKey(me, line.chatId)], ([chats, lines]: [Chats | undefined, OutsideLine[] | undefined]) => {
                 const chat = chats?.[line.chatId];
                 if (!chat) throw new Error('No such chat in this browser.');
-                const row: OutsideLine = { ...line, state: 'sending', note: null };
+                const row: OutsideLine = { ...line, state: 'sending', note: null, sealed: null };
                 if ((lines ?? []).some((l) => l.id === line.id)) return [undefined, undefined];
                 return [{ ...chats, [line.chatId]: withLast(chat, row, now) }, [...(lines ?? []), row].sort(byTime)];
             });
         },
-        /** My line's state as my server tells it: its signed item goes once the server has it; `note` kept on a failed line only. */
+        /**
+         * My line's state as my server tells it: its signed item goes once the server has it; `note` kept on a failed line only.
+         * A change of mine (X6), the same answer, in the same transaction (answerChange's rule).
+         */
         async setMineState(me: string, chatId: string, id: string, state: OutsideLineState, note: string | null = null): Promise<void> {
-            await change([linesKey(me, chatId)], ([lines]: [OutsideLine[] | undefined]) => {
-                if (!lines?.some((l) => l.id === id && l.state !== null)) return [undefined];
+            await change([linesKey(me, chatId), changesKey(me, chatId)], ([lines, changes]: [OutsideLine[] | undefined, Changes | undefined]) => {
+                const nextChanges = answered(changes, id, state);
+                if (!lines?.some((l) => l.id === id && l.state !== null)) return [undefined, nextChanges];
                 return [lines.map((l) => (l.id === id && l.state !== null
-                    ? { ...l, state, item: state === 'sending' ? l.item : null, note: state === 'failed' ? note : null } : l))];
+                    ? { ...l, state, item: state === 'sending' ? l.item : null, note: state === 'failed' ? note : null } : l)), nextChanges];
             });
         },
-        /** My lines my server has not yet taken, with their signed items, oldest first, 16 at most. */
+        /** My lines, and my changes to lines (X6), that my server has not yet taken, with their signed items, oldest first, 16 at most. */
         async unsent(me: string): Promise<Array<{ id: string; chatId: string; item: string; at: number }>> {
             const ids = Object.keys((await read([chatsKey(me)]) as [Chats | undefined])[0] ?? {});
             if (!ids.length) return [];
             const all = (await read(ids.map((id) => linesKey(me, id)))) as Array<OutsideLine[] | undefined>;
-            return all.flatMap((lines) => lines ?? []).filter((l) => l.author === me && l.state === 'sending' && l.item)
-                .sort(byTime).slice(0, 16).map((l) => ({ id: l.id, chatId: l.chatId, item: l.item as string, at: l.at }));
+            const changes = (await read(ids.map((id) => changesKey(me, id)))) as Array<Changes | undefined>;
+            const lines = all.flatMap((ls) => ls ?? []).filter((l) => l.author === me && l.state === 'sending' && l.item)
+                .map((l) => ({ id: l.id, chatId: l.chatId, item: l.item as string, at: l.at }));
+            const mine = changes.flatMap((cs, i) => Object.values(cs ?? {}).filter((c) => c.author === me && c.state === 'sending' && c.item)
+                .map((c) => ({ id: c.itemId, chatId: ids[i], item: c.item as string, at: c.at })));
+            return [...lines, ...mine].sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).slice(0, 16);
+        },
+        /** Every change to the lines of chat `chatId` this browser keeps (X6): settled, and mine still on their way. */
+        async changes(me: string, chatId: string): Promise<OutsideChange[]> {
+            const [changes] = await read([changesKey(me, chatId)]) as [Changes | undefined];
+            return Object.values(changes ?? {}).map(bare);
+        },
+        /**
+         * A change kept, then its maker's changes of its kind to that line pruned to what core outsideChangesKept keeps (an
+         * older one of theirs changes nothing). `item`: a change of mine, kept `sending` with its signed item until my server
+         * answers; without it, theirs, applied.
+         */
+        async putChange(me: string, chatId: string, c: OutsideChange, item: string | null = null): Promise<void> {
+            await change([changesKey(me, chatId)], ([changes]: [Changes | undefined]) => {
+                if (changes?.[c.itemId]) return [undefined];
+                return [keptChanges({ ...changes, [c.itemId]: { ...c, state: item === null ? null : 'sending', item } }, c)];
+            });
+        },
+        /**
+         * What became of a change of mine (X6), my server's answer or a tick, whichever way it came (a first send, a resend, a
+         * refusal, ageing out, the switch read off, its outbox): failed, it is taken out, and the line falls back to the newest
+         * change left; taken, its signed item goes. True when this browser has it as mine. The phone's answerChange.
+         */
+        async answerChange(me: string, chatId: string, id: string, state: string): Promise<boolean> {
+            let mine = false;
+            await change([changesKey(me, chatId)], ([changes]: [Changes | undefined]) => {
+                mine = !!changes?.[id] && changes[id].state !== null;
+                return [answered(changes, id, state)];
+            });
+            return mine;
+        },
+        /**
+         * A delete of line `lineId` (X6), mine or its writer's, stops whatever of mine for that line has not left this browser:
+         * the line itself, mine and still `sending`, never goes (failed, its item gone, so its words never reach them; my delete
+         * goes after it, in case my server took it unanswered), nor my edits and reactions to it still `sending`. The phone's
+         * stopUnsentOf.
+         */
+        async stopUnsentOf(me: string, chatId: string, lineId: string): Promise<void> {
+            await change([linesKey(me, chatId), changesKey(me, chatId)], ([lines, changes]: [OutsideLine[] | undefined, Changes | undefined]) => {
+                const stop = (l: OutsideLine) => l.id === lineId && l.author === me && l.state === 'sending';
+                const goes = (c: Kept) => c.lineId === lineId && c.author === me && c.kind !== 'dm-delete' && c.state === 'sending';
+                return [
+                    lines?.some(stop) ? lines.map((l) => (stop(l) ? { ...l, state: 'failed' as const, item: null, note: null } : l)) : undefined,
+                    Object.values(changes ?? {}).some(goes) ? Object.fromEntries(Object.entries(changes ?? {}).filter(([, c]) => !goes(c))) : undefined,
+                ];
+            });
+        },
+        /**
+         * The line `id`, in chat `chatId` or any other here, and whether its writer deleted it for everyone (their delete applied,
+         * or mine at their community: one of mine still on its way may yet fail); null when it isn't here.
+         */
+        async lineOf(me: string, chatId: string, id: string): Promise<{ chatId: string; author: string; deleted: boolean } | null> {
+            const ids = [chatId, ...Object.keys((await read([chatsKey(me)]) as [Chats | undefined])[0] ?? {}).filter((c) => c !== chatId)];
+            for (const c of ids) {
+                const [lines, changes] = await read([linesKey(me, c), changesKey(me, c)]) as [OutsideLine[] | undefined, Changes | undefined];
+                const line = lines?.find((l) => l.id === id);
+                if (!line) continue;
+                const deleted = Object.values(changes ?? {}).some((x) => x.lineId === id && x.author === line.author && x.kind === 'dm-delete'
+                    && (x.state === null || x.state === 'sent'));
+                return { chatId: c, author: line.author, deleted };
+            }
+            return null;
         },
         /** A receipt owed for a line of theirs written here, kept before that line is confirmed. Once per line. */
         async oweReceipt(me: string, r: { id: string; key: string; home: string }, now = Date.now()): Promise<void> {

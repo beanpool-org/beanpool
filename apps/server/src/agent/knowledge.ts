@@ -12,7 +12,15 @@
  *   approver's and marked `created_via` 'assistant-draft:<grant id>', which the assistant's own post tools (my_posts,
  *   update_post, remove_post, remove_all_i_made) and Settings' "Remove its posts" never match: they match 'assistant:<grant id>'.
  *   It can't edit or remove approved knowledge.
- * - **No picture from the web** (copyright): a photo field is refused in words; the checking admin adds their own.
+ * - **Pictures through the upload door only** (Damo's ask; Marty, 16 Nov 2026: "Yes, through the upload link only, the checker
+ *   approves it"; this changes the design's K6 row "a photo field is refused"): `photo_ids`, at most 3, each a photo this grant
+ *   uploaded through the door listings use (photo_upload_link or POST /mcp/photos, agent/owner-photos.ts: made 800 px with no
+ *   metadata, at most 5 MB, a JPEG, WebP or PNG, counted in the grant's photos for the day), so only an owner's assistant
+ *   ticked "May post for me" brings one. Never an address: `photo_urls`, a picture written into the call, or an address in
+ *   photo_ids is refused in words, and this server fetches no picture for a draft. The pictures wait with the draft
+ *   (engine/knowledge-drafts.ts), seen by nobody but the owners and admins in To check, who keep or remove each before
+ *   Approve; an upload is used up only by a draft that was filed. The tool tells the assistant: only pictures the member took
+ *   or owns, never one found on the web.
  * - **Its own tags** (Learn's tags, 16 Nov 2026): `free_tags`, the words a member types in the apps' Tags field, under the
  *   Market's rule for them (engine/knowledge.ts cleanKnowledgeInput, the same door as a member's). Never the library's ids:
  *   `tags` is refused in words, as the node refuses it, so the assistant never believes a library tag is on a page.
@@ -41,6 +49,8 @@ import {
 } from '../engine/knowledge-drafts.js';
 import { fence, MEMBER_TEXT_NOTICE } from './fence.js';
 import { AGENT_LIST_MAX } from './limits.js';
+import { claimUploadedPhotos, PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_KEEP_MS } from './owner-photos.js';
+import { grantMayStillPost } from './owner-posts.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -50,7 +60,17 @@ export const knowledgeOn = (): boolean => getProfileSwitches().knowledge === tru
 
 /** A call by name while Learn is off (a tools list read before an owner switched it off). */
 export const KNOWLEDGE_OFF_WORDS = 'Local knowledge is switched off on this community: there is no Learn here.';
-const NO_PICTURE = 'A draft carries no picture from the web: the admin adds their own when they check it.';
+/** The one door for a draft's pictures, in the words every picture refusal ends with. */
+const PICTURE_DOOR = "upload the member's own photo with photo_upload_link (or POST /mcp/photos) and give the photoId it answers in photo_ids.";
+/** A picture by its address, written into the call, or under any other name than photo_ids. */
+export const NO_WEB_PICTURE = `A draft takes no picture from the web and none written into the call: ${PICTURE_DOOR}`;
+/** A grant that can't use the upload door (an admin's, or an owner's without the tick): the door's own rule. */
+const NO_PICTURE_DOOR = 'Only an owner\'s assistant connected with "May post for me" can upload pictures, so this one can\'t add any: file the draft '
+    + 'without photo_ids, and the owner or admin who checks it can add their own.';
+const TOO_MANY_PICTURES = `At most ${KNOWLEDGE_LIMITS.photos} pictures a draft, as a page holds.`;
+/** What the tool says about pictures, in its description and photo_ids' (Marty, 16 Nov 2026). */
+const PICTURE_RULE = 'Only pictures the member took or owns, never one found on the web; the checker sees each and keeps or removes it before '
+    + 'anything shows';
 const NO_FIX_YET = 'A fix to a page showing comes with a later version of this server: tell the admin what changed, with the source that says so, '
     + 'and they edit the page in the app (Learn, the page, Edit).';
 /** Library ids on a draft: Local knowledge takes its own tags only, as the node refuses them (engine/knowledge.ts). */
@@ -94,8 +114,31 @@ function truthy(v: unknown): boolean {
     return v === true || v === 'true';
 }
 
-/** Any field that would carry a picture: refused whatever its name (§2.5, §6). */
+/** Any field that would carry a picture, but photo_ids: refused whatever its name (§2.5, §6). */
 const PICTURE_FIELD = /photo|image|picture|thumbnail/i;
+/** An address, never fetched: a scheme, a leading //, or www. */
+const ADDRESS = /^(?:[a-z][a-z0-9+.-]*:\/\/|\/\/|www\.)/i;
+
+type Pictures = { ok: true; photos: string[]; settle: (used: boolean) => void } | { ok: false; error: string };
+
+/**
+ * The pictures a draft brings: its photo_ids, each one this grant uploaded through the door and has not used, claimed for this
+ * draft until `settle` (agent/owner-photos.ts claimUploadedPhotos). Refused in words before anything is claimed: a grant the
+ * door is closed to, more than a page holds, an address or a picture written in. Nothing here fetches anything.
+ */
+function picturesOf(grant: AgentGrant, raw: unknown): Pictures {
+    if (raw === undefined || raw === null) return { ok: true, photos: [], settle: () => undefined };
+    if (!Array.isArray(raw)) return { ok: false, error: 'photo_ids is a list of the photoIds uploads answered.' };
+    if (raw.length === 0) return { ok: true, photos: [], settle: () => undefined };
+    if (raw.length > KNOWLEDGE_LIMITS.photos) return { ok: false, error: TOO_MANY_PICTURES };
+    for (let i = 0; i < raw.length; i++) {
+        const v = typeof raw[i] === 'string' ? (raw[i] as string).trim() : '';
+        if (ADDRESS.test(v)) return { ok: false, error: `photo_ids #${i + 1} is an address: this server never fetches a picture for a draft. Instead, ${PICTURE_DOOR}` };
+        if (/^data:/i.test(v)) return { ok: false, error: `photo_ids #${i + 1} is a picture written into the call: ${PICTURE_DOOR}` };
+    }
+    if (!grantMayStillPost(grant)) return { ok: false, error: NO_PICTURE_DOOR };
+    return claimUploadedPhotos(grant.id, raw);
+}
 
 const OBJ = (properties: Record<string, unknown>, required: string[] = Object.keys(properties)) => ({ type: 'object', properties, required });
 const STR = { type: 'string' };
@@ -220,11 +263,12 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
         name: 'knowledge_draft',
         title: 'Draft Local knowledge',
         reads: 'nothing: it files a draft of Local knowledge (title, body, topic, what it is about, 1 to 5 sources, and if you like the '
-            + `place, its language and up to ${FREE_TAGS_MAX} tags of its own) that waits for an owner or admin to check in the app (Learn, To check) beside its sources; nothing `
-            + `shows to members until a person approves it. At most ${ASSISTANT_KNOWLEDGE_LIMITS.waiting} waiting and `
+            + `place, its language, up to ${FREE_TAGS_MAX} tags of its own and up to ${KNOWLEDGE_LIMITS.photos} pictures uploaded first through photo_upload_link) that waits `
+            + `for an owner or admin to check in the app (Learn, To check) beside its sources; nothing shows to members until a person approves it. ${PICTURE_RULE}. `
+            + `At most ${ASSISTANT_KNOWLEDGE_LIMITS.waiting} waiting and `
             + `${ASSISTANT_KNOWLEDGE_LIMITS.perDay} in 24 hours for this connection, ${ASSISTANT_KNOWLEDGE_LIMITS.allWaiting} waiting from all `
             + 'assistants together. It answers the draft\'s id and the words to pass on',
-        never: 'a published page: the assistant cannot publish Local knowledge, edit or remove a page, or add a picture',
+        never: 'a published page, or a picture from the web: the assistant cannot publish Local knowledge, edit or remove a page, or give a picture by its address',
         knowledge: true,
         write: true,
         refusedTo: () => (knowledgeOn() ? null : KNOWLEDGE_OFF_WORDS),
@@ -252,14 +296,22 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
                         + `each ${FREE_TAG_MIN_CHARS} to ${FREE_TAG_MAX_CHARS} characters and at most ${FREE_TAG_MAX_WORDS} words, never an email, a phone number, a web address `
                         + 'or an @handle. Public with the page, never translated, found only by their own letters. Never ids from tags_search: Local knowledge takes none',
                 },
+                photo_ids: {
+                    type: 'array', maxItems: KNOWLEDGE_LIMITS.photos,
+                    items: { type: 'string', pattern: '^ph_[0-9a-f]{32}$', description: 'a photoId an upload answered' },
+                    description: `optional: up to ${KNOWLEDGE_LIMITS.photos} pictures for the page, each uploaded first: get an address with photo_upload_link and send `
+                        + `each image to it (a JPEG, WebP or PNG, at most ${PHOTO_SOURCE_MAX_BYTES / (1024 * 1024)} MB; the server makes it 800 px with nothing hidden in it), `
+                        + `then give the photoId it answers here, once, within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours. Only an owner's assistant connected with `
+                        + `"May post for me" can upload. ${PICTURE_RULE}. Never an address: this server fetches no picture for a draft`,
+                },
             },
             required: ['title', 'body', 'topic', 'about', 'sources'],
             additionalProperties: false,
         },
-        outputSchema: OBJ({ draftId: STR, state: STR, published: BOOL, waitingFor: STR, waiting: NUM, today: NUM, perDay: NUM }),
+        outputSchema: OBJ({ draftId: STR, state: STR, published: BOOL, waitingFor: STR, waiting: NUM, today: NUM, perDay: NUM, photos: NUM }),
         run: (grant, args) => {
             if (!knowledgeOn()) return { ok: false, error: KNOWLEDGE_OFF_WORDS };
-            if (Object.keys(args).some((key) => PICTURE_FIELD.test(key))) return { ok: false, error: NO_PICTURE };
+            if (Object.keys(args).some((key) => key !== 'photo_ids' && PICTURE_FIELD.test(key))) return { ok: false, error: NO_WEB_PICTURE };
             if (args.fix_of !== undefined || args.note !== undefined) return { ok: false, error: NO_FIX_YET };
             if (args.tags !== undefined && args.tags !== null && !(Array.isArray(args.tags) && args.tags.length === 0)) return { ok: false, error: NO_LIBRARY_TAGS };
             if (args.freeTags !== undefined) return { ok: false, error: FREE_TAGS_NAME };
@@ -269,21 +321,30 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
                     return { url: o.url, label: o.title ?? o.label };
                 })
                 : args.sources;
+            const pictures = picturesOf(grant, args.photo_ids);
+            if (!pictures.ok) return { ok: false, error: pictures.error };
+            let filed: ReturnType<typeof fileAssistantKnowledgeDraft> | null = null;
             try {
-                const filed = fileAssistantKnowledgeDraft(
+                filed = fileAssistantKnowledgeDraft(
                     { id: grant.id, member: grant.member, name: grant.name },
-                    { title: args.title, body: args.body, topic: args.topic, place: args.place, sources, lang: args.language, about: args.about, freeTags: args.free_tags },
-                );
-                return {
-                    ok: true, rows: 1,
-                    result: {
-                        draftId: filed.id, state: 'waiting', published: false, waitingFor: KNOWLEDGE_DRAFT_WAITING,
-                        waiting: filed.waiting, today: filed.today, perDay: ASSISTANT_KNOWLEDGE_LIMITS.perDay,
+                    {
+                        title: args.title, body: args.body, topic: args.topic, place: args.place, sources, lang: args.language, about: args.about, freeTags: args.free_tags,
+                        photos: pictures.photos,
                     },
-                };
+                );
             } catch (e) {
                 return refused(e);
+            } finally {
+                // An upload is used up only by a draft that was filed: refused, it can be sent again.
+                pictures.settle(filed !== null);
             }
+            return {
+                ok: true, rows: 1,
+                result: {
+                    draftId: filed.id, state: 'waiting', published: false, waitingFor: KNOWLEDGE_DRAFT_WAITING,
+                    waiting: filed.waiting, today: filed.today, perDay: ASSISTANT_KNOWLEDGE_LIMITS.perDay, photos: filed.photos,
+                },
+            };
         },
     },
     {

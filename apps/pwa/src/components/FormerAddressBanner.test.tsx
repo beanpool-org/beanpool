@@ -34,6 +34,14 @@ const renamedFleet = (over: Partial<CommunityInfo> = {}): CommunityInfo => ({
     ...over,
 });
 
+/** A community at two names, the first its main (made-up names: several addresses S6's tests). */
+const twoNames = (over: Partial<CommunityInfo> = {}): CommunityInfo => ({
+    ...base,
+    addresses: ['hill.beanpool.org', 'riverside.beanpool.org'],
+    primaryAddress: 'hill.beanpool.org',
+    ...over,
+});
+
 /** The host the web app reaches its community at: bp_node_url when set (lib/api.ts getNodeApiUrl), else the page's. */
 const openedAt = (host: string | null) => {
     if (host) localStorage.setItem('bp_node_url', `https://${host}`);
@@ -168,8 +176,8 @@ describe('FormerAddressBanner', () => {
         const former = await renderBanner(moved());
         expect(former.container.innerHTML).toBe('');
         former.unmount();
-        openedAt('mullum.beanpool.org');
-        const other = await renderBanner(renamedFleet());
+        openedAt('riverside.beanpool.org');
+        const other = await renderBanner(twoNames());
         expect(other.container.innerHTML).toBe('');
     });
 
@@ -182,16 +190,16 @@ describe('FormerAddressBanner', () => {
     });
 
     it('the proof is asked for this page\'s own address, of this server\'s list where the page reaches it', async () => {
-        openedAt('mullum.beanpool.org');
-        await renderBanner(renamedFleet());
+        openedAt('riverside.beanpool.org');
+        await renderBanner(twoNames());
         await screen.findByTestId('main-address-banner');
-        expect(provedMainAddress).toHaveBeenCalledWith('mullum.beanpool.org', 'https://mullum.beanpool.org/api/node/addresses');
+        expect(provedMainAddress).toHaveBeenCalledWith('riverside.beanpool.org', 'https://riverside.beanpool.org/api/node/addresses');
     });
 
     it('at a non-main address the signed list does not name: no line, whatever the info says', async () => {
-        openedAt('mullum.beanpool.org');
-        proof = { ok: true, main: 'byron.beanpool.org', here: 'mullum.beanpool.org', onList: false };
-        const { container } = await renderBanner(renamedFleet());
+        openedAt('riverside.beanpool.org');
+        proof = { ok: true, main: 'hill.beanpool.org', here: 'riverside.beanpool.org', onList: false };
+        const { container } = await renderBanner(twoNames());
         expect(container.innerHTML).toBe('');
     });
 

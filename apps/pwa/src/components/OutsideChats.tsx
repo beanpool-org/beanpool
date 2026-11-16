@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineShown, t, type OutsideChange, type OutsideChangeKind } from '@beanpool/core';
 import { blockUser } from '../lib/blocklist';
+import { ChatConfirmDialog } from './ChatConfirmDialog';
 import { draftKey, draftSent, useKeptDraft } from '../lib/chat-drafts';
 import {
     OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, OutsideMailError, outsideContext, outsideErrorWords, ring, sendFromBox, sendOutsideChange, syncOutsideMailNow,
@@ -123,6 +124,7 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     const [changes, setChanges] = useState<OutsideChange[]>([]);
     const [picked, setPicked] = useState<string | null>(null);
     const [editing, setEditing] = useState<OutsideLine | null>(null);
+    const [deleting, setDeleting] = useState<OutsideLine | null>(null);
     const alive = useRef(true);
     const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -167,10 +169,6 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
         }
     };
 
-    const removeForEveryone = (line: OutsideLine) => {
-        if (!window.confirm(`${t('Delete for everyone?')}\n\n${t('It will read "This message was deleted" for both of you.')}`)) return;
-        void change({ kind: 'dm-delete', lineId: line.id });
-    };
 
     const stopEditing = () => { setEditing(null); setText(''); };
 
@@ -294,10 +292,10 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                                     {shown.reactions.length > 0 && (
                                         <div data-testid="outside-line-reactions" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
                                             {shown.reactions.map((r) => (
-                                                <span key={r.emoji} aria-label={`${r.emoji} ${r.count}`} style={{
-                                                    padding: '0.1rem 0.5rem', borderRadius: '12px', fontSize: '0.85rem', background: r.mine ? 'var(--bg-hover)' : 'var(--bg-card)',
-                                                    border: '1px solid var(--border-primary)', color: 'var(--text-primary)',
-                                                }}>{r.emoji}{r.count > 1 ? ` ${r.count}` : ''}</span>
+                                                <span key={r.emoji} style={{
+                                                    display: 'inline-flex', gap: '0.25rem', padding: '0.1rem 0.5rem', borderRadius: '12px', fontSize: '0.85rem',
+                                                    background: r.mine ? 'var(--bg-hover)' : 'var(--bg-card)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)',
+                                                }}><span>{r.emoji}</span>{r.count > 1 && <span>{r.count}</span>}</span>
                                             ))}
                                         </div>
                                     )}
@@ -314,7 +312,7 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                                                 <>
                                                     <button type="button" data-testid="outside-line-edit" style={{ ...button, flex: '0 0 auto' }}
                                                         onClick={() => { setEditing(l); setText(shown.text); setPicked(null); }}>{t('Edit message')}</button>
-                                                    <button type="button" data-testid="outside-line-delete" style={{ ...danger, flex: '0 0 auto' }} onClick={() => removeForEveryone(l)}>{t('Delete message')}</button>
+                                                    <button type="button" data-testid="outside-line-delete" style={{ ...danger, flex: '0 0 auto' }} onClick={() => { setDeleting(l); setPicked(null); }}>{t('Delete message')}</button>
                                                 </>
                                             )}
                                         </div>
@@ -324,6 +322,16 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                         })}
                         <div ref={endRef} />
                     </div>
+                    <ChatConfirmDialog
+                        isOpen={!!deleting}
+                        title={t('Delete for everyone?')}
+                        message={t('It will read "This message was deleted" for both of you.')}
+                        cancelLabel={t('Cancel')}
+                        confirmLabel={t('Delete')}
+                        destructive
+                        onCancel={() => setDeleting(null)}
+                        onConfirm={() => { const l = deleting; setDeleting(null); if (l) void change({ kind: 'dm-delete', lineId: l.id }); }}
+                    />
                     {note && <p role="alert" style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>{note}</p>}
                     {chat.state === 'request' ? (
                         <div data-testid="outside-request" style={{ padding: '0.85rem', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>

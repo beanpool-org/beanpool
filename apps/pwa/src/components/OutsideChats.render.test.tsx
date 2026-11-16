@@ -154,7 +154,7 @@ describe('changes to lines (X6)', () => {
         expect(screen.getByTestId('outside-line-edited').textContent).toBe('edited');
         expect(screen.getByTestId('outside-line-deleted').textContent).toBe('This message was deleted');
         expect(screen.queryByText('Oops')).toBeNull();
-        expect(screen.getByTestId('outside-line-reactions').textContent).toBe('👍 2');
+        expect(screen.getByTestId('outside-line-reactions').textContent).toBe('👍2');
     });
 
     it('a tap on their line: the chat\'s seven reactions, no Edit or Delete; a reaction is sent, and tapped again it is taken back', async () => {
@@ -186,14 +186,16 @@ describe('changes to lines (X6)', () => {
         fireEvent.click(screen.getByTestId('outside-chat-send'));
         await waitFor(() => expect(sendOutsideChange).toHaveBeenCalledWith(here.ctx, chatId, { kind: 'dm-edit', lineId: mine, text: 'See you at 4' }));
         await waitFor(() => expect(screen.getByTestId('outside-chat-send').textContent).toBe('Send'));
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
         fireEvent.click(await screen.findByText('See you there'));
         fireEvent.click(await screen.findByTestId('outside-line-delete'));
-        expect(confirm).toHaveBeenCalledWith('Delete for everyone?\n\nIt will read "This message was deleted" for both of you.');
+        expect(await screen.findByText('Delete for everyone?')).toBeTruthy();
+        expect(screen.getByText('It will read "This message was deleted" for both of you.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(sendOutsideChange).toHaveBeenCalledTimes(1);
-        fireEvent.click(screen.getByTestId('outside-line-delete'));
+        fireEvent.click(await screen.findByText('See you there'));
+        fireEvent.click(await screen.findByTestId('outside-line-delete'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
         await waitFor(() => expect(sendOutsideChange).toHaveBeenLastCalledWith(here.ctx, chatId, { kind: 'dm-delete', lineId: mine }));
-        confirm.mockRestore();
     });
 
     it('a request\'s line, and a deleted one, offer nothing to tap', async () => {

@@ -301,7 +301,7 @@ export default function OutsideChatScreen() {
                             const reactions = shown.reactions.length > 0 && (
                                 <View style={[styles.reactions, mine && { alignSelf: 'flex-end' }]} testID="outside-line-reactions">
                                     {shown.reactions.map((r) => (
-                                        <View key={r.emoji} style={[styles.reactionChip, r.mine && styles.emojiMine]} accessibilityLabel={`${r.emoji} ${r.count}`}>
+                                        <View key={r.emoji} style={[styles.reactionChip, r.mine && styles.emojiMine]}>
                                             <Text>{r.emoji}</Text>
                                             {r.count > 1 && <Text style={styles.reactionCount}>{r.count}</Text>}
                                         </View>

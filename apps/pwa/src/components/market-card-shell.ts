@@ -474,10 +474,20 @@ export const PAGE_BUTTON = {
     eventFill: `${PAGE_BUTTON_FRAME} ${EVENT_ANSWER.chosen} focus-visible:ring-bp-ink-event`,
     /** An event's other buttons: Let in, Let everyone in, Copy to a new date. */
     eventOutline: `${PAGE_BUTTON_FRAME} ${EVENT_ANSWER.open} focus-visible:ring-bp-ink-event`,
-    /** The quiet row (the chat, Share, Add to calendar) and Remind me's Change: the neutral outline, the page's own words. */
+    /** The quiet row's Share and Add to calendar, and Remind me's Change: the neutral outline, the page's own words. */
     quiet: `${PAGE_BUTTON_FRAME} ${GROUND} border-nature-300 dark:border-nature-700 text-nature-900 dark:text-white `
         + 'hover:bg-nature-50 dark:hover:bg-nature-800 focus-visible:ring-nature-600 dark:focus-visible:ring-nature-300',
+    /**
+     * The quiet row's first button, the event's chat (Marty, 16 Nov 2026: "a slightly more obvious colour"): the brand ink's
+     * outline and words on the card ground, as the phone's EventDetail chatBtn has it (core's ink.brand, every look).
+     */
+    chat: `${PAGE_BUTTON_FRAME} ${GROUND} border-bp-ink-brand text-bp-ink-brand hover:bg-bp-chip-ok-tint focus-visible:ring-bp-ink-brand`,
 } as const;
+
+/** The chat button's words, a step up from the page button's 15 (Marty, 16 Nov 2026: "or increase the font size?"). */
+export const PAGE_CHAT_LABEL = 'text-base font-bold leading-snug';
+/** Its count of unread lines: the brand fill's pill, its own words (core's commit role, every look). */
+export const PAGE_CHAT_NEW = 'shrink-0 rounded-full px-2 py-0.5 text-xs font-extrabold leading-tight bg-bp-commit-fill text-bp-commit-on';
 
 /** Going / Interested on the page: the page button's type. The map's preview card keeps the card's own. */
 export const PAGE_ANSWER_TYPE = PAGE_BUTTON_TYPE;

@@ -200,7 +200,7 @@ describe('EventDetail chat entry (docs/events-on-the-map.md §3)', () => {
         const onOpenChat = vi.fn();
         render(<EventDetail post={baseEvent} identity={identity} onOpenChat={onOpenChat} />);
         const btn = screen.getByTestId('event-open-chat');
-        expect(btn.textContent).toBe('💬 Open event chat');
+        expect(btn.textContent).toBe('💬Chat with people going'); // the icon and the words in elements of their own, a gap between
         expect(btn.textContent).not.toMatch(/\d/);
         fireEvent.click(btn);
         expect(onOpenChat).toHaveBeenCalledWith(baseEvent);

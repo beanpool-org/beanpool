@@ -66,6 +66,7 @@ export * from './forum-visitors.js';
 export * from './forum-ask.js';
 export * from './name-line.js';
 export * from './membership-note.js';
+export * from './forum-label.js';
 export * from './chat-frame.js';
 export * from './invite-ask.js';
 export * from './invite-and-share.js';
@@ -112,6 +113,7 @@ export * from './outside-chat.js';
 export * from './group-guest-steps.js';
 export * from './group-guest-chat.js';
 export * from './group-guest-mail.js';
+export * from './group-guest-names.js';
 export * from './outside-devices.js';
 // Finding someone in another community by their exact name, when they said yes (N1).
 export * from './find-by-name.js';

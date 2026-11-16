@@ -30,7 +30,7 @@ import { leaveScreen } from '../../utils/leave-screen';
 import { useAfterDismiss } from '../../utils/screen-presented';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { FORUM_LIMITS, currentLanguage, forumSectionName, t, timeAgo } from '@beanpool/core';
+import { FORUM_LIMITS, currentLanguage, forumSectionName, forumWriterLine, t, timeAgo } from '@beanpool/core';
 import { useStyles, useTheme } from '../ThemeContext';
 import { Alert } from '../../utils/keyboard-alert';
 import { blockUser } from '../../utils/blocklist';
@@ -38,7 +38,7 @@ import { loadIdentity } from '../../utils/identity';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import {
     closeForumTopic, followForumTopic, forgetForumTopic, getForumFront, getForumTopic, keepForumDraft, keptForumDraft, keptForumFront, keptForumTopic, markForumTold, noteForumBack,
-    linkForumTarget, readForumTopic, removeForumPost, replyInForum, reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
+    linkForumTarget, readForumTopic, removeForumPost, replyInForum, reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage, type ForumWriter,
 } from '../../utils/forum';
 import { handNeedSeed, needSeedFrom, takeNeedLinked } from '../../utils/forum-need';
 import { ForumLinkChips, ForumLinkPicker } from '../../components/forum/ForumLinks';
@@ -49,6 +49,7 @@ import { ForumAttached, ForumMenu, ForumPhotos, ForumWords, askForumTold, pickFo
 import type { ForumDraft } from '../../utils/forum-kept';
 import { useForumStyles } from '../../components/forum/forum-style';
 import { LINK_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
+import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 
 type Menu = { kind: 'post'; post: ForumPost; confirm?: 'block' | 'remove' } | { kind: 'topic' } | null;
 
@@ -65,6 +66,8 @@ export default function ForumTopicScreen() {
     const styles = useForumStyles();
     const chatStyles = useStyles(makeChatStyles);
     const { colors } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const insets = useSafeAreaInsets();
     const [me, setMe] = useState<string | null>(null);
     const [front, setFront] = useState<ForumFront | null>(null);
@@ -167,7 +170,7 @@ export default function ForumTopicScreen() {
     const replies = page?.posts.filter((p) => p.number > 1) ?? [];
     const section = front?.sections.find((s) => s.id === topic?.sectionId);
     const open = !!topic && !topic.closed;
-    const name = (p: { writer: { name: string } }) => p.writer.name || t(TOPIC_WORDS.member);
+    const name = (p: { writer: ForumWriter }) => forumWriterLine(p.writer, t(TOPIC_WORDS.member));
 
     // The kept draft goes into the box once, when the box is drawn (an open topic), with its quote if that post is drawn then (a
     // quote of a post gone or blocked since is dropped; the words stay). Once only: never again over what the member types next.
@@ -331,8 +334,8 @@ export default function ForumTopicScreen() {
     const following = topic?.follow === 'following';
     const topicTitle = topic ? (topic.pinned ? '📌 ' : '') + (topic.removed ? t(TOPIC_WORDS.removedTopic) : topic.title) : '';
     return (
-        <SafeAreaView style={styles.page} edges={['top']} testID="forum-topic">
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <SafeAreaView style={styles.page} edges={['top']} testID="forum-topic" onLayout={screenKeyboard.onScreenLayout}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}>
                 <View style={styles.head}>
                     <Pressable accessibilityRole="button" accessibilityLabel={t(TOPIC_WORDS.back)} testID="forum-back" onPress={() => leaveScreen(router, 'forum/[id]')} style={styles.iconBtn}>
                         <MaterialCommunityIcons name="chevron-left" size={28} color={colors.text.body} />

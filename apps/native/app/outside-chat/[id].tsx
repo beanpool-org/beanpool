@@ -26,6 +26,7 @@ import { reportedAlertBody } from '../../utils/reportReasons';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
 import { OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../../utils/outside-chat-store';
+import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 
 /** Core's sentence, the web's too (@beanpool/core outside-devices.ts). */
 const LINES = { writesStayThere: OUTSIDE_WRITES_STAY_THERE };
@@ -48,6 +49,8 @@ function outsideLineStateWords(state: OutsideLineState | null): string | null {
 export default function OutsideChatScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { colors } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const [me, setMe] = useState<string | null>(null);
     const [chat, setChat] = useState<OutsideChat | null | undefined>(undefined);
     const [lines, setLines] = useState<OutsideLine[]>([]);
@@ -228,8 +231,8 @@ export default function OutsideChatScreen() {
     const name = chat?.peerName ?? t('Someone in another community');
 
     return (
-        <SafeAreaView style={styles.safeArea} testID="outside-chat">
-            <KeyboardAvoidingView style={styles.container} behavior="padding">
+        <SafeAreaView style={styles.safeArea} testID="outside-chat" onLayout={screenKeyboard.onScreenLayout}>
+            <KeyboardAvoidingView style={styles.container} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}>
                 <View style={styles.header}>
                     <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Go back')}>
                         <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.body} />

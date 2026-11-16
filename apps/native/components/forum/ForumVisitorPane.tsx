@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import {
-    FORUM_VISITOR_WORDS, forumSectionName, publicWriterLine, t, timeAgo, tn, type ForumPublicList, type ForumPublicSection,
+    FORUM_VISITOR_WORDS, forumSectionName, forumWriterLine, t, timeAgo, tn, type ForumPublicList, type ForumPublicSection,
 } from '@beanpool/core';
 import { getPublicForum, getPublicSection, openVisitorDoor } from '../../utils/forum-public';
 import { FORUM_WORDS, TOPIC_WORDS } from './forum-words';
@@ -88,7 +88,7 @@ export function ForumVisitorPane() {
                                 onPress={() => router.push({ pathname: '/forum-public/[id]', params: { id: topic.id } })}>
                                 <View style={styles.rowWords}>
                                     <Text style={styles.rowTitle}>{title}</Text>
-                                    <Text style={styles.muted}>{[publicWriterLine(topic.writer, t(TOPIC_WORDS.member)), section ? '' : nameOf(topic.sectionId)].filter(Boolean).join(' · ')}</Text>
+                                    <Text style={styles.muted}>{[forumWriterLine(topic.writer, t(TOPIC_WORDS.member)), section ? '' : nameOf(topic.sectionId)].filter(Boolean).join(' · ')}</Text>
                                     <Text style={styles.muted}>{[replies, timeAgo(Math.max(0, Date.now() - Date.parse(topic.lastActivityAt)))].join(' · ')}</Text>
                                 </View>
                             </Pressable>

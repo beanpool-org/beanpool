@@ -65,6 +65,8 @@ vi.mock('expo-router', () => {
     return { Tabs, ErrorBoundary: () => null, usePathname: () => '/', router: { navigate: vi.fn(), push: vi.fn() } };
 });
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+// The tabs' bar, which reads the root stack's state (status-bar-every-screen.test.ts holds it).
+vi.mock('../../components/ScreenStatusBar', () => ({ ScreenStatusBar: () => null }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => 'true'), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },

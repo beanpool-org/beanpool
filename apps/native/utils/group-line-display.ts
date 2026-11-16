@@ -41,6 +41,8 @@ export interface DisplayRosterRow {
     memberPubkey: string;
     callsign?: string | null;
     formerKeys?: FormerKey[] | null;
+    /** A guest no longer in the chat whose name this phone kept (core group-guest-names.ts): named, with "no longer in this group". */
+    gone?: boolean;
 }
 
 /** A group line as the node served it (GET …/chat), the fields this rule reads. */
@@ -115,8 +117,9 @@ function unverifiedView(epoch: number | null): GroupLineView {
 /** Who a signer is, by the rule (§4 2a–2c). */
 export function nameSigner(signer: string, line: Pick<ServedGroupLine, 'authorPubkey' | 'authorCallsign'>, ctx: Pick<GroupLineDisplayContext, 'roster' | 'nodeNameOf' | 'successions' | 'walk'>):
     { name: string; nameHint: string | null; details: string | null } {
-    const row = ctx.roster.find((r) => r.memberPubkey === signer);
-    if (row) return { name: row.callsign || signer.slice(0, 8), nameHint: null, details: null };
+    // In today's roster first; a guest no longer in the chat only by the row this phone kept for them.
+    const row = ctx.roster.find((r) => r.memberPubkey === signer && !r.gone) ?? ctx.roster.find((r) => r.memberPubkey === signer);
+    if (row) return { name: row.callsign || signer.slice(0, 8), nameHint: row.gone ? GROUP_LINE_NOT_IN_GROUP : null, details: null };
     // A claim is only the claimant's word: when two rows' chains both reach the signer, neither is named, whatever order
     // the node lists them in (review of #1826, NB3; §6's words for a key this phone can't place).
     const claims = ctx.roster.flatMap((r) => {

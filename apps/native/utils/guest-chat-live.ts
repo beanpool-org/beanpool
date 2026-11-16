@@ -9,12 +9,12 @@
  */
 import { DeviceEventEmitter } from 'react-native';
 import {
-    answerGuestInvitation, guestNameLine, newDmMessageId, readGuestChats, sendGuestLine, syncGuestMail, type AddressCard, type GuestChats,
-    type GuestLine, type GuestMailIO,
+    answerGuestInvitation, guestNameRows, leaveGuestChat, newDmMessageId, readGuestChats, sendGuestLine, syncGuestMail, GUEST_NAMES_META,
+    type AddressCard, type GuestChats, type GuestLine, type GuestMailIO, type GuestNameRows,
 } from '@beanpool/core';
 import { outsideContext } from './outside-chat-live';
 import { OutsideMailError, answerOf, mailDevice, myHome, type OutsideMailContext } from './outside-mail';
-import { signedGet, signedPost } from './node-post';
+import { signedDelete, signedGet, signedPost } from './node-post';
 import { signRelayEnvelopeStatement } from './member-statements';
 import { fetchNodeProfile, getCachedNodeProfile, groupGuestsOn } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
@@ -103,6 +103,20 @@ export async function sendGuestLineNow(id: string, text: string): Promise<GuestL
     }
 }
 
+/**
+ * I leave a guest chat, once I confirmed (core leaveGuestChat): it closes here at once and my leave goes, again at each
+ * round until the host has it. Throws only when nothing changed (my server has no name for envelopes yet).
+ */
+export async function leaveGuestChatNow(id: string): Promise<boolean> {
+    const ctx = await outsideContext();
+    if (!ctx) return false;
+    try {
+        return await leaveGuestChat(guestIO(ctx), id);
+    } finally {
+        DeviceEventEmitter.emit(GUEST_CHATS_UPDATED);
+    }
+}
+
 // ── The convenor's side: a group here ───────────────────────────────────────────────────────
 
 export interface GroupGuest { key: string; home: string; name: string; state: 'invited' | 'in' | 'left' | 'removed' }
@@ -123,18 +137,42 @@ export async function inviteGroupGuest(groupId: string, card: AddressCard): Prom
     return body.guest as GroupGuest;
 }
 
-const guestRowsMemo = new Map<string, { at: number; rows: Promise<Array<{ memberPubkey: string; callsign: string }>> }>();
+/**
+ * A convenor removes a guest from the group's chat (one asked: their invitation withdrawn), once they confirmed. The host
+ * tells the guest's community, and the chat closes on their phone. Throws OutsideMailError with the server's words.
+ */
+export async function removeGroupGuest(groupId: string, key: string): Promise<GroupGuest> {
+    const ctx = await outsideContext();
+    if (!ctx) throw new OutsideMailError(0, '');
+    const path = `/api/groups/${encodeURIComponent(groupId)}/guests/${encodeURIComponent(key)}`;
+    const body = await answerOf(await signedDelete(ctx.nodeUrl, path, ctx.identity as BeanPoolIdentity));
+    // The chat's names are read again at its next opening: the one removed is named, never given a key.
+    guestRowsMemo.delete(groupId);
+    return body.guest as GroupGuest;
+}
+
+const guestRowsMemo = new Map<string, { at: number; rows: Promise<GuestNameRows> }>();
+const NO_ROWS: GuestNameRows = { shown: [], named: [] };
 
 /**
- * The guests in a group's chat as rows a member's chat names lines by (utils/group-line-display.ts nameSigner): each by core's
- * guest line, so a guest's line reads "Dax · hillside.example · guest", never the card's name alone. Read at most once a minute.
+ * The guests a group's chat names lines by (core group-guest-names.ts; utils/group-line-display.ts nameSigner): `shown`, those
+ * in the chat by the host's list read now, each by core's guest line ("Dax · hillside.example · guest"), never the card's
+ * name alone; `named`, every other guest this phone kept a row for (they left, were removed, or the group's guests closed),
+ * named on their old lines with "no longer in this group". Only `shown` may be given a key. Read at most once a minute.
  */
-export function guestRosterRows(groupId: string, now = Date.now()): Promise<Array<{ memberPubkey: string; callsign: string }>> {
+export function guestRosterRows(groupId: string, now = Date.now()): Promise<GuestNameRows> {
     const kept = guestRowsMemo.get(groupId);
     if (kept && now - kept.at < 60_000) return kept.rows;
-    const rows = fetchGroupGuests(groupId)
-        .then(({ guests }) => guests.filter((g) => g.state === 'in').map((g) => ({ memberPubkey: g.key, callsign: guestNameLine(g.name, g.home) })))
-        .catch(() => []);
+    const rows = (async (): Promise<GuestNameRows> => {
+        const ctx = await outsideContext().catch(() => null);
+        if (!ctx) return NO_ROWS;
+        const metaKey = `${GUEST_NAMES_META}:${groupId}:${ctx.identity.publicKey}`;
+        const before = await ctx.store.getMeta(metaKey).catch(() => null);
+        const listed = await fetchGroupGuests(groupId).then((g) => g.guests, () => null);
+        const out = guestNameRows(before, listed, Date.now());
+        if (out.json !== null) await ctx.store.setMeta(metaKey, out.json).catch(() => {});
+        return { shown: out.shown, named: out.named };
+    })().catch(() => NO_ROWS);
     guestRowsMemo.set(groupId, { at: now, rows });
     return rows;
 }

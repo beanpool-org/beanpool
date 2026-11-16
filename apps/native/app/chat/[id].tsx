@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { askPhotoSource } from '../../utils/post-photo';
-import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Linking, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
+import { LightBarModal } from '../../components/LightBarModal';
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
@@ -18,7 +19,7 @@ import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
-import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
+import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
 import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
 import { ChatImage, dmKeyContextOf } from '../../components/chat/DmChatImage';
 import { dmKeyBannerMaxHeight, dmKeyCodeShowsVerified } from '../../utils/dm-key-change';
@@ -64,6 +65,7 @@ import { signedRequestWords } from '../../components/signed-request-lines';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn, wordsOfLine } from '../../utils/request-report';
+import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
 // the composer all moved to utils/chat-actions, components/chat/* and core's chat-links (chat parity,
@@ -187,12 +189,12 @@ function ChatScreen({ id }: { id: string }) {
     // "Verified ✓" beside "🔒 End-to-end encrypted" (DESIGN-dm-key-signal-model §7 S2): while the member's mark holds and no
     // new key waits, exactly when the key code screen shows it.
     const [peerVerified, setPeerVerified] = useState(false);
-    // The banner's height comes from the column under the header as measured (utils/dm-key-change dmKeyBannerMaxHeight):
-    // the paused box is never cut, edge-to-edge too, and the thread keeps one message at the text size on a 320 × 533
-    // phone at 1.3× (#1873 review, findings 3 and 7). It scrolls inside that.
-    const { height: windowHeight, fontScale } = useWindowDimensions();
-    const [column, setColumn] = useState({ column: 0, composer: 0, deals: 0 });
-    const measured = (part: 'composer' | 'deals') => (e: { nativeEvent: { layout: { height: number } } }) => {
+    // The key card's page (the card, then the bars down to the thread) has the column under the header as measured, less
+    // the box and a keyboard still up (utils/dm-key-change dmKeyBannerMaxHeight): the paused box is never cut, edge-to-edge
+    // too, and the thread gives way while nothing can be sent (walk of 17 Nov at 320 dp and 1.3× text).
+    const { height: windowHeight } = useWindowDimensions();
+    const [column, setColumn] = useState({ column: 0, composer: 0 });
+    const measured = (part: 'composer') => (e: { nativeEvent: { layout: { height: number } } }) => {
         const h = Math.round(e.nativeEvent.layout.height);
         setColumn((c) => (c[part] === h ? c : { ...c, [part]: h }));
     };
@@ -201,6 +203,9 @@ function ChatScreen({ id }: { id: string }) {
     // (y + height − the keyboard's top), so a wrapper starting under the header made the padding short by the header and
     // the keyboard covered the composer in every DM (1.2.61; utils/__tests__/chat-keyboard-tree.test.ts).
     const columnEdges = useRef({ header: 0, bottom: 0 });
+    // The screen's top in the window, for the KeyboardAvoidingView: a DM opened from a listing is an iPhone sheet that
+    // starts ~50 pt down, and without it the keyboard covered the message box (Rob, 17 Nov; utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const measuredEdge = (edge: 'header' | 'bottom') => (e: { nativeEvent: { layout: { y: number; height: number } } }) => {
         columnEdges.current[edge] = Math.round(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
         const { header, bottom } = columnEdges.current;
@@ -1554,7 +1559,7 @@ function ChatScreen({ id }: { id: string }) {
     ];
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top']} onLayout={screenKeyboard.onScreenLayout}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             
             {/* Header */}
@@ -1599,31 +1604,26 @@ function ChatScreen({ id }: { id: string }) {
                 </Pressable>
             </View>
 
-            {/* The key behind this DM changed (utils/dm-peer-pins.ts): what changed, the new key's code, and the member's choice.
-                Keyed on the offered key, so a tick given for one code never carries over to another. Its height is the
-                measured column's room once the composer, the deals bar, an open keyboard and a floor for the thread are
-                taken out: at most 55% of the column, at least 120 dp while the room has it (dmKeyBannerMaxHeight). It
-                scrolls inside, so the thread and the paused box keep the rest at 320 dp and 1.3× text. Named from the
-                key's member row, never the conversation id. */}
-            {keyChange && (
-                <ScrollView
-                    style={{ flexGrow: 0, flexShrink: 1, maxHeight: dmKeyBannerMaxHeight({ ...column, deals: visibleDeals.length ? column.deals : 0, fontScale, windowHeight, keyboard: keyboardHeight }) }}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <DmKeyChangedBanner
-                        key={keyChange.offeredPeer ?? 'none'}
-                        peerName={keyChange.name}
-                        change={keyChange}
-                        onContinue={handleContinueWithNewKey}
-                        onNotNow={() => leaveScreen(router, 'chat/[id]')}
-                    />
-                </ScrollView>
-            )}
+            {/* Everything between the header and the thread: the deals strip, the listing's header and the release bar. While
+                the key behind this DM has changed (utils/dm-peer-pins.ts), the card (what changed, the new key's code, and the
+                member's choice) sits above them and they scroll with it as one page, in the room above the paused box once the
+                box (the composer with any banner over it) and a keyboard still up are taken out (dmKeyBannerMaxHeight): nothing
+                can be sent meanwhile, so the thread gives way. A page taller than that scrolls with its scroll bar shown, and a
+                keyboard up when the pause starts is put away, once (DmKeyChangedPane; walk of 17 Nov at 320 dp and 1.3× text;
+                deciding review of 6775428c). The column holds nothing else, so nothing new goes between this and the keyboard
+                view: it goes in here. Keyed on the offered key, so a tick given for one code never carries over to another.
+                Named from the key's member row, never the conversation id. */}
+            <DmKeyChangedPane
+                key={keyChange?.offeredPeer ?? 'none'}
+                card={keyChange ? { peerName: keyChange.name, change: keyChange, onContinue: handleContinueWithNewKey, onNotNow: () => leaveScreen(router, 'chat/[id]') } : null}
+                maxHeight={dmKeyBannerMaxHeight({ ...column, windowHeight, keyboard: keyboardHeight })}
+            >
 
             {/* Pinned active-deals strip — per-deal actions live here (one card per live deal),
-                always visible so a Release/Review is never buried in the conversation scroll. */}
+                always visible so a Release/Review is never buried in the conversation scroll. While the key card is up it
+                sits under the card in the page they scroll as, never in the thread (DmKeyChangedPane). */}
             {visibleDeals.length > 0 && (
-                <View style={styles.dealStrip} onLayout={measured('deals')}>
+                <View style={styles.dealStrip}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}>
                         {visibleDeals.map(d => (
                             <Pressable
@@ -1744,10 +1744,12 @@ function ChatScreen({ id }: { id: string }) {
                     </View>
                 </View>
             )}
+            </DmKeyChangedPane>
 
             <KeyboardAvoidingView
                 style={styles.keyboardView}
                 behavior="padding"
+                keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}
                 onLayout={measuredEdge('bottom')}
             >
                 {/* The thread. Inverted, day-separated and keyboard-following — the shared list every chat uses. */}
@@ -1794,6 +1796,8 @@ function ChatScreen({ id }: { id: string }) {
                     </VoicePlaybackProvider>
                 )}
 
+                {/* The box: everything under the thread, measured whole for the key card's room (dmKeyBannerMaxHeight). */}
+                <View onLayout={measured('composer')}>
                 {editingMessage && (
                     <ChatEditBanner
                         styles={chat}
@@ -1810,7 +1814,6 @@ function ChatScreen({ id }: { id: string }) {
                     return <ChatReplyBanner styles={chat} author={q.author} text={q.text} note={q.note} onCancel={() => setReplyToMessage(null)} />;
                 })()}
 
-                <View onLayout={measured('composer')}>
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
                         <Text style={styles.blockedNoticeText}>
@@ -1978,14 +1981,14 @@ function ChatScreen({ id }: { id: string }) {
                 The Modal is its own full-screen window, outside this screen's SafeAreaView, so the close
                 button takes the status-bar inset itself: a fixed 50 is less than the 59pt inset on Dynamic Island iPhones. */}
             {viewerUri && (
-                <Modal visible transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
+                <LightBarModal visible transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
                     <Pressable accessibilityRole="button" accessibilityLabel={t('Dismiss full-size photo')} style={styles.imageViewerOverlay} onPress={() => setViewerUri(null)}>
                         <Image source={{ uri: viewerUri }} style={styles.imageViewerImage} resizeMode="contain" accessibilityLabel={t('Full-size photo')} />
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Close photo')} style={[styles.imageViewerClose, { top: Math.max(50, insets.top + 8) }]} onPress={() => setViewerUri(null)}>
                             <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                         </Pressable>
                     </Pressable>
-                </Modal>
+                </LightBarModal>
             )}
         </SafeAreaView>
     );

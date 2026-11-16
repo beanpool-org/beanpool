@@ -112,6 +112,7 @@ vi.mock('react-native', () => {
         ActivityIndicator: el('span'), Linking: { openSettings: async () => { mem.settings++; } },
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         StyleSheet: { create: (s: unknown) => s },
+        useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
         DeviceEventEmitter: {
             addListener: (name: string, fn: () => void) => {
                 const set = mem.events.get(name) ?? new Set<() => void>();

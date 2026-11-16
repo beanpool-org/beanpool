@@ -1131,15 +1131,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (nodeSaysLocked) await ring.noteLocked();
         const seenLocked = await ring.seenLocked();
         let roster: DisplayRosterRow[] = [];
+        // Guests no longer in the chat that this browser kept a name for: they name their old lines, nothing else.
+        let formerGuests: DisplayRosterRow[] = [];
         if (answer) {
             try {
                 const active = (await getGroupMembers(convId)).filter((r) => r.status === 'active');
                 roster = active.map((r) => ({ memberPubkey: r.memberPubkey, callsign: r.callsign ?? null, formerKeys: (r as { formerKeys?: DisplayRosterRow['formerKeys'] }).formerKeys ?? null }));
                 // Guests from other communities in the chat (G2), named by core's guest line, never as members; shown to every
-                // member under the members, so a key may go to them (lib/group-chat-keys.ts).
-                const guests = guestRowsKnown(convId);
-                roster = [...roster, ...guests];
-                ring.noteShownRoster([...active.map((r) => r.memberPubkey), ...guests.map((g) => g.memberPubkey)]);
+                // member under the members, so a key may go to them (lib/group-chat-keys.ts). Their rows come beside the chat:
+                // when they do, this chat is read again once, so its first opening names them too (WALK 3).
+                const guests = guestRowsKnown(convId, () => { if (activeConvIdRef.current === convId) void loadMessages(convId); });
+                roster = [...roster, ...guests.shown];
+                formerGuests = guests.named;
+                ring.noteShownRoster([...active.map((r) => r.memberPubkey), ...guests.shown.map((g) => g.memberPubkey)]);
             } catch { /* names fall back to the node's; nothing is wrapped until the list reads */ }
         }
         let thread: OpenedGroupThread | null = null;
@@ -1151,7 +1155,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 enc = st ? { current: st.current, stale: st.stale, fromEpoch: st.fromEpoch } : null;
             }
             if (enc) {
-                thread = await openGroupThread(ring, { messages: answer.messages as never, encryption: enc }, roster,
+                thread = await openGroupThread(ring, { messages: answer.messages as never, encryption: enc }, [...roster, ...formerGuests],
                     (pk) => membersByPublicKeyRef.current.get(pk)?.callsign ?? null).catch(() => null);
             }
         }

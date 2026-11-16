@@ -11,7 +11,7 @@
  * - Every write is signed by the member's key (lib/api.ts request); the node decides who may do what, and its refusal comes
  *   back in the member's language with its `code`.
  */
-import { FORUM_LIMITS, type ForumFollow, type ForumLink, type ForumLinkKind, type ForumSectionStarts } from '@beanpool/core';
+import { FORUM_LIMITS, type ForumFollow, type ForumLink, type ForumLinkKind, type ForumSectionStarts, type ForumWriterLabel } from '@beanpool/core';
 import { request, signedFetch } from './api';
 
 export interface ForumSection {
@@ -19,7 +19,8 @@ export interface ForumSection {
     /** The group whose own section it is (slice F8); only its members and the moderators get it at all. */
     group?: { id: string; name: string } | null;
 }
-export interface ForumWriter { publicKey: string; name: string }
+/** A writer, and the label the worldwide forum proved for them (slice F10; null or absent: the name alone, core forumWriterLine). */
+export interface ForumWriter { publicKey: string; name: string; label?: ForumWriterLabel | null }
 export interface ForumTopic {
     id: string; sectionId: string; title: string; writer: ForumWriter; place: string | null; lang: string | null; replyCount: number;
     lastActivityAt: string; createdAt: string; pinned: boolean; closed: string | null; removed: boolean; hidden: boolean;

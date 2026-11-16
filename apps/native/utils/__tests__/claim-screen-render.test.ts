@@ -42,6 +42,8 @@ vi.mock('react-native', () => {
         View: el('div'), Text: el('span'), Pressable: el('button'), TextInput: el('input'),
         ActivityIndicator: () => createElement('span', null, '…'),
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
+        // React Native's status-bar stack, which components/LightBarModal.tsx (the scanner) pushes on.
+        StatusBar: { pushStackEntry: () => ({}), popStackEntry: () => {} },
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFillObject: {} },
         Alert: { alert: vi.fn() },
         // Android's back button: the test presses it through the listener the screen registers.

@@ -55,7 +55,8 @@ describe('Settings → My key code (web)', () => {
         const digits = within(card).getByTestId('my-key-code-digits');
         expect(digits.textContent).toBe(phone.keyCodeOf(KEY));
         expect(digits.textContent).toBe('1479 0507 0978 3849 9965');
-        expect(digits).toHaveAttribute('aria-label', `My key code: ${phone.keyCodeSpoken(phone.keyCodeOf(KEY)!)}`);
+        expect(digits).toHaveAttribute('aria-hidden', 'true');
+        expect(within(card).getByText(`My key code: ${phone.keyCodeSpoken(phone.keyCodeOf(KEY)!)}`)).toHaveClass('sr-only');
         expect(within(card).getByText(BODY)).toBeInTheDocument();
         expect(card.textContent).not.toMatch(/verif/i);
 

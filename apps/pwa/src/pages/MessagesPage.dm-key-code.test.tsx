@@ -144,7 +144,9 @@ describe('web DM: ⋮ → Key code (read only)', () => {
         const digits = within(dialog).getByTestId('dm-key-code-digits');
         expect(digits.textContent).toBe(phone.keyCodeOf(KOFI));
         expect(digits.textContent).toBe('1479 0507 0978 3849 9965');
-        expect(digits).toHaveAttribute('aria-label', `Key code: ${phone.keyCodeSpoken(phone.keyCodeOf(KOFI)!)}`);
+        // Spoken digit by digit (hidden text beside the aria-hidden groups: a paragraph can't carry an aria-label).
+        expect(digits).toHaveAttribute('aria-hidden', 'true');
+        expect(within(dialog).getByText(`Key code: ${phone.keyCodeSpoken(phone.keyCodeOf(KOFI)!)}`)).toHaveClass('sr-only');
         const line = "This browser doesn't remember key codes. The phone app can mark Kofi as verified and ask you if the code changes.";
         expect(within(dialog).getByText(line)).toBeInTheDocument();
         expectNoVerifiedState(dialog, line);

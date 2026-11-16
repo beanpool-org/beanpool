@@ -591,7 +591,8 @@ export function guestEpochDue(chat: GuestChat, me: string): Extract<ReturnType<t
     if (step.send !== 'group-epoch' || chat.epochSent === step.epoch) return null;
     if (step.epoch <= (chat.refusedEpoch ?? 0)) return null;
     if (chat.epochWait && chat.epochWait === guestRosterMark(chat.roster)) return null;
-    const needed = Object.keys(chat.keys).length === 0 || chat.lines.some((l) => l.state === 'waiting');
+    // A waiting line needs one only when it can't be sealed now (a key newer than the roster's may be here already).
+    const needed = Object.keys(chat.keys).length === 0 || (chat.lines.some((l) => l.state === 'waiting') && !guestSealEpoch(chat));
     return needed ? step : null;
 }
 

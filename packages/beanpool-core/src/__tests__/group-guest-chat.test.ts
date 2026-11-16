@@ -430,6 +430,67 @@ describe('EPOCH: a line is sealed only under an epoch the host has taken (my epo
     });
 });
 
+describe('WRITES (round 3): my epoch goes onto the chat as it is at the write (what changed meanwhile x takeOwnEpoch -> taken / not)', () => {
+    const MINE = uuid(55);
+    const base = (): GuestChat => {
+        let chats = chatWith('in');
+        ({ chats } = applyGuestMail(chats, { groups: [{ host: HOST, group: GROUP, state: 'in', roster: rosterData({ current: 3, stale: true }), rosterAt: NOW }] }, ctx()));
+        chats[ID].lines.push({ id: uuid(56), author: gus.pk, text: 'waits', at: NOW, state: 'waiting' });
+        return chats[ID];
+    };
+    const made = () => { const c = base(); return makeGuestEpochFor(c, guestEpochDue(c, gus.pk)!, gus.pk, gus.seedHex, NOW, MINE).ownEpoch; };
+    it.each([
+        ['nothing', (_c: GuestChat) => undefined, true],
+        ["a line of Ana's held", (c: GuestChat) => { c.held.push({ id: uuid(57), author: ana.pk, sender: ana.pk, epoch: 3, ciphertext: 'x', nonce: 'y', replyToId: null, type: 'text', at: NOW }); }, true],
+        ['a new line of mine', (c: GuestChat) => { c.lines.push({ id: uuid(58), author: gus.pk, text: 'second', at: NOW, state: 'waiting' }); }, true],
+        ['an epoch of mine put on its way by another send', (c: GuestChat) => { c.ownEpoch = { ...made(), itemId: uuid(59) }; }, false],
+        ['a new roster (someone joined)', (c: GuestChat) => { c.roster = rosterData({ current: 3, stale: true }, [gus, stray]) as GuestChat['roster']; }, false],
+        ['a key newer than the roster, my line sealable now', (c: GuestChat) => { c.keys = { 4: 'AAAA' }; }, false],
+        ['a refusal under epoch 4', (c: GuestChat) => { c.refusedEpoch = 4; }, false],
+    ])('meanwhile: %s -> taken %s', (_name, meanwhile, taken) => {
+        const own = made();
+        const c = base();
+        meanwhile(c);
+        const before = JSON.parse(JSON.stringify(c)) as GuestChat;
+        const out = takeOwnEpoch(c, own, gus.pk, NOW);
+        if (!taken) return expect(out).toBeNull();
+        // Only my epoch changes: everything written meanwhile stays as it was.
+        expect(out).toEqual({ ...before, ownEpoch: own, epochSent: 4, updatedAt: NOW });
+    });
+});
+
+describe('REFUSALS (round 3): a line refused under epoch 4 is written down (what came after x seal / epoch due)', () => {
+    const KEY4 = new Uint8Array(32).fill(4);
+    const refused = (): GuestChat => {
+        const chats = chatWith('in');
+        // My own epoch 4, taken while the host's roster still says 3 is stale; my line under it refused epoch-stale.
+        chats[ID].roster = rosterData({ current: 3, stale: true }) as GuestChat['roster'];
+        chats[ID].keys = { 4: Buffer.from(KEY4).toString('base64') };
+        chats[ID].epochSent = 4;
+        const payload = guestLinePayload('w', { group: GROUP, epoch: 4, key: KEY4, messageId: uuid(60), myEdPrivHex: gus.seedHex });
+        chats[ID].lines.push({ id: uuid(60), author: gus.pk, text: 'w', at: NOW, state: 'sending', item: JSON.stringify({ envelope: { itemId: uuid(60) }, payload }) });
+        return applyGuestTicks(chats, [{ itemId: uuid(60), kind: 'group-line', host: HOST, group: GROUP, state: 'refused', refused: 'epoch-stale', at: NOW }], NOW, freshId).chats[ID];
+    };
+    it.each([
+        ['nothing (the roster not come)', (_c: GuestChat) => undefined, null, null],
+        ['the same refusal again under an older epoch', (c: GuestChat) => { c.refusedEpoch = Math.max(c.refusedEpoch ?? 0, 3); }, null, null],
+        ['a roster: epoch 4 is stale', (c: GuestChat) => { c.roster = rosterData({ current: 4, stale: true }) as GuestChat['roster']; }, null, 5],
+        ['a roster: epoch 3 still stale, someone new in it', (c: GuestChat) => { c.roster = rosterData({ current: 3, stale: true }, [gus, stray]) as GuestChat['roster']; }, null, null],
+        ['a key newer than 4 (an epoch notice)', (c: GuestChat) => { c.keys = { ...c.keys, 5: 'BBBB' }; }, 5, null],
+    ])('then %s -> sealed under %s, epoch due %s', (_name, after, sealed, due) => {
+        const c = refused();
+        expect(c.refusedEpoch).toBe(4);
+        expect(c.lines[0]).toMatchObject({ state: 'waiting', item: null });
+        after(c);
+        expect(guestSealEpoch(c)?.epoch ?? null).toBe(sealed);
+        expect(guestEpochDue(c, gus.pk)?.epoch ?? null).toBe(due);
+    });
+    it('my own epoch refused: none from the roster it was made from; the mark tells rosters apart', () => {
+        expect(guestRosterMark(rosterData({ current: 3, stale: true }) as GuestChat['roster'])).toBe(guestRosterMark(rosterData({ current: 3, stale: true }) as GuestChat['roster']));
+        expect(guestRosterMark(rosterData({ current: 3, stale: true }) as GuestChat['roster'])).not.toBe(guestRosterMark(rosterData({ current: 3, stale: true }, [gus, stray]) as GuestChat['roster']));
+    });
+});
+
 describe('STATE: what this device shows follows what my server lists now (server link x what is held here -> shown / cleared)', () => {
     const page = (state: string) => ({
         groups: state === 'declined' || state === 'left' ? [] : [{ host: HOST, group: GROUP, state, roster: state === 'in' ? rosterData(null) : null, rosterAt: NOW }],

@@ -298,3 +298,209 @@ describe('round 2 (#3246): the round against a home that counts each item id onc
         expect(f.confirmed).toContain('n-line-1');
     });
 });
+
+// ── Round 3 (#3246): writes made from the chats as they are; a refused epoch written down ──────────────
+
+const bea = person('Bea');
+const b64 = (u: Uint8Array) => Buffer.from(u).toString('base64');
+const kindOf = (f: ReturnType<typeof fake>, k: string) => f.posted.filter((p) => p.envelope.kind === k);
+
+/** Gus in the chat with no key and no epoch made yet: a round moves him in while his server knows no name for itself. */
+async function inNoEpoch() {
+    const f = await guestIn();
+    const realHome = f.io.home;
+    f.io.home = async () => null;
+    await syncGuestMail(f.io);
+    f.io.home = realHome;
+    expect(f.chats[ID]).toMatchObject({ state: 'in', keys: {}, ownEpoch: null });
+    return f;
+}
+
+/** Runs `during` once, while the send is inside its await (signing an item of `kind`, or posting one), then lets it go on. */
+function pauseAt(f: ReturnType<typeof fake>, at: 'sign' | 'post', kind: string, during: () => Promise<unknown>) {
+    let done = false;
+    if (at === 'sign') {
+        const real = f.io.sign;
+        f.io.sign = async (fields) => {
+            if (!done && fields.kind === kind) { done = true; await during(); }
+            return real(fields);
+        };
+    } else {
+        const real = f.io.post;
+        f.io.post = async (path, body: any) => {
+            if (!done && path === '/api/mail/send' && body.items.some((i: RelayItem) => i.envelope.kind === kind)) { done = true; await during(); }
+            return real(path, body);
+        };
+    }
+}
+
+/** A line of Ana's under `epoch`, sealed with `key`, as a notice. */
+function anaLine(f: ReturnType<typeof fake>, noticeId: string, lineId: string, epoch: number, key: Uint8Array) {
+    const sealed = sealGroupLine('from Ana', { myEdPrivHex: ana.seedHex, groupKey: key, groupId: GROUP, epoch, messageId: lineId });
+    f.held.push({ id: noticeId, host: HOST, group: GROUP, kind: 'line', receivedAt: 3, data: {
+        id: lineId, author: ana.pk, ciphertext: sealed.ciphertext, nonce: sealed.nonce, type: 'text', metadata: { epoch, sender: ana.pk }, timestamp: '2026-11-16T09:59:00.000Z',
+    } });
+}
+
+describe('round 3 (#3246): every write is made from the chats as they are at that write', () => {
+    it("PROBE A (finding A): a send making my epoch, a round landing Ana's line meanwhile and confirming it: her line is never lost", async () => {
+        const f = await inNoEpoch();
+        const a1 = anasEpoch(1);
+        const ANA = '00000000-0000-4000-8000-0000000000a1';
+        pauseAt(f, 'sign', 'group-epoch', async () => {
+            anaLine(f, 'n-ana-1', ANA, 1, a1.key);
+            await syncGuestMail(f.io);
+            expect(f.chats[ID].held.map((h) => h.id)).toEqual([ANA]);
+        });
+        await sendGuestLine(f.io, ID, 'hi');
+        expect(f.confirmed).toContain('n-ana-1');
+        expect(f.chats[ID].held.map((h) => h.id)).toEqual([ANA]);
+        // The notice was confirmed, so it is never served again: the copy here is the only one, and it stays.
+        await syncGuestMail(f.io);
+        expect(f.chats[ID].held.map((h) => h.id)).toEqual([ANA]);
+        expect(kindOf(f, 'group-epoch')).toHaveLength(1);
+        expect(f.chats[ID].lines.map((l) => [l.text, l.state])).toEqual([['hi', 'sent']]);
+    });
+
+    // (write path: a send inside its await) x (a write landing then) -> both survive.
+    const a1 = anasEpoch(1), a2 = anasEpoch(2);
+    const ANA = '00000000-0000-4000-8000-0000000000a2';
+    const paths: Record<string, { setup: () => Promise<ReturnType<typeof fake>>; at: 'sign' | 'post'; kind: string }> = {
+        'my join epoch, being signed': { setup: inNoEpoch, at: 'sign', kind: 'group-epoch' },
+        'my line, being sealed': { setup: async () => { const f = await guestIn(a1.roster); await syncGuestMail(f.io); return f; }, at: 'sign', kind: 'group-line' },
+        'my line, being posted': { setup: async () => { const f = await guestIn(a1.roster); await syncGuestMail(f.io); return f; }, at: 'post', kind: 'group-line' },
+    };
+    const landing: Record<string, { land: (f: ReturnType<typeof fake>) => Promise<unknown>; survived: (f: ReturnType<typeof fake>) => void }> = {
+        "a round's page: Ana's line, its notice confirmed": {
+            land: async (f) => { anaLine(f, 'n-ana-2', ANA, 1, a1.key); await syncGuestMail(f.io); },
+            survived: (f) => {
+                expect(f.confirmed).toContain('n-ana-2');
+                expect([...f.chats[ID].lines.map((l) => l.id), ...f.chats[ID].held.map((h) => h.id)]).toContain(ANA);
+            },
+        },
+        'my new line': {
+            land: (f) => sendGuestLine(f.io, ID, 'second'),
+            survived: (f) => expect(f.chats[ID].lines.map((l) => l.text)).toContain('second'),
+        },
+        'a roster (the group renamed)': {
+            land: async (f) => {
+                const g = f.groups[0] as { roster: ReturnType<typeof rosterOf> };
+                f.groups[0] = { ...g, roster: { ...g.roster, name: 'Tools and seeds' } };
+                await syncGuestMail(f.io);
+            },
+            survived: (f) => expect([f.chats[ID].name, f.chats[ID].roster?.name]).toEqual(['Tools and seeds', 'Tools and seeds']),
+        },
+        "a round's page: Ana's epoch 2, its notice confirmed": {
+            land: async (f) => {
+                f.held.push({ id: 'n-epoch-2', host: HOST, group: GROUP, kind: 'epoch', receivedAt: 3, data: { record: a2.roster.record, wraps: a2.roster.wraps } });
+                await syncGuestMail(f.io);
+            },
+            survived: (f) => {
+                expect(f.confirmed).toContain('n-epoch-2');
+                expect(f.chats[ID].keys['2']).toBe(b64(a2.key));
+            },
+        },
+    };
+    const rows = Object.keys(paths).flatMap((p) => Object.keys(landing).map((l) => [p, l] as [string, string]));
+    it.each(rows)('%s, while %s lands -> both survive', async (p, l) => {
+        const path = paths[p];
+        const f = await path.setup();
+        pauseAt(f, path.at, path.kind, () => landing[l].land(f));
+        await sendGuestLine(f.io, ID, 'mine');
+        landing[l].survived(f);
+        await syncGuestMail(f.io);
+        landing[l].survived(f);
+        // The send's own write survives too: my line is here and went once; never a second epoch of mine.
+        const mine = f.chats[ID].lines.filter((x) => x.author === gus.pk && x.text === 'mine');
+        expect(mine.map((x) => x.state)).toEqual(['sent']);
+        expect(kindOf(f, 'group-line').filter((i) => i.envelope.itemId === mine[0].id)).toHaveLength(1);
+        expect(kindOf(f, 'group-epoch').length).toBeLessThanOrEqual(1);
+    });
+
+    it('my yes to an invitation withdrawn and sent again while the yes was posted answers only the old one: the new one still waits', async () => {
+        const f = fake();
+        f.held.push(inviteNotice('n-invite-w1'));
+        await syncGuestMail(f.io);
+        pauseAt(f, 'post', 'group-invite', async () => {
+            f.held.push({ id: 'n-removed-w', host: HOST, group: GROUP, kind: 'removed', data: { why: 'removed' }, receivedAt: 2 });
+            f.held.push(inviteNotice('n-invite-w2'));
+            await syncGuestMail(f.io);
+            expect(f.chats[ID]).toMatchObject({ state: 'invited', inviteId: 'n-invite-w2' });
+        });
+        await answerGuestInvitation(f.io, ID, 'yes');
+        expect(f.chats[ID]).toMatchObject({ state: 'invited', inviteId: 'n-invite-w2' });
+    });
+});
+
+describe('round 3 (#3246): a refused epoch is written on the chat; nothing goes again under it until the host sends something newer', () => {
+    /** Gus's line refused under epoch 2 (his own join epoch, taken while the roster still says 1 is stale). */
+    async function lineRefused() {
+        const f = await guestIn();
+        await syncGuestMail(f.io);
+        expect(Object.keys(f.chats[ID].keys)).toEqual(['2']);
+        f.answerWith(() => ({ state: 'refused', refused: 'epoch-stale' }));
+        await sendGuestLine(f.io, ID, 'w');
+        expect(f.chats[ID].refusedEpoch).toBe(2);
+        return f;
+    }
+    /** Gus's own join epoch 2 refused (one made at the same time won), his line written after it. */
+    async function ownRefused() {
+        const f = await guestIn();
+        f.answerWith(() => ({ state: 'refused', refused: 'epoch-stale' }));
+        await syncGuestMail(f.io);
+        expect(f.chats[ID]).toMatchObject({ keys: {}, ownEpoch: null });
+        await sendGuestLine(f.io, ID, 'w');
+        return f;
+    }
+
+    it('PROBE B (finding B): a line refused epoch-stale, the roster not come: rounds send nothing more, the line waits', async () => {
+        const f = await lineRefused();
+        for (let i = 0; i < 4; i++) await syncGuestMail(f.io);
+        expect(kindOf(f, 'group-line')).toHaveLength(1);
+        expect(kindOf(f, 'group-epoch')).toHaveLength(1);
+        expect(f.chats[ID].lines.map((l) => l.state)).toEqual(['waiting']);
+    });
+
+    const rosters: Record<string, (f: ReturnType<typeof fake>) => void> = {
+        "doesn't come": () => undefined,
+        'comes: the epoch it was refused under is stale': (f) => { f.groups[0] = { host: HOST, group: GROUP, state: 'in', rosterAt: 3, roster: rosterOf({ current: 2, stale: true }) }; },
+        "comes: Ana's epoch 2 is current, with my wrap": (f) => { f.groups[0] = { host: HOST, group: GROUP, state: 'in', rosterAt: 3, roster: rosterOf(anasEpoch(2).roster) }; },
+        "comes: Ana's epoch 3 is current, with my wrap": (f) => { f.groups[0] = { host: HOST, group: GROUP, state: 'in', rosterAt: 3, roster: rosterOf(anasEpoch(3).roster) }; },
+        'comes: epoch 1 still stale, with Bea in now': (f) => {
+            f.groups[0] = { host: HOST, group: GROUP, state: 'in', rosterAt: 3, roster: { ...rosterOf({ current: 1, stale: true }), members: [{ key: ana.pk, name: 'Ana' }, { key: bea.pk, name: 'Bea' }] } };
+        },
+    };
+    // (what was refused) x (the roster after it) -> the line sealed once under this epoch, or 'waits'; my epochs posted in all.
+    const table: Array<[string, string, number | 'waits', number]> = [
+        ['my line, under epoch 2', "doesn't come", 'waits', 1],
+        ['my line, under epoch 2', 'comes: the epoch it was refused under is stale', 3, 2],
+        ['my line, under epoch 2', "comes: Ana's epoch 3 is current, with my wrap", 3, 1],
+        ['my line, under epoch 2', 'comes: epoch 1 still stale, with Bea in now', 'waits', 1],
+        ['my own epoch 2', "doesn't come", 'waits', 1],
+        ['my own epoch 2', "comes: Ana's epoch 2 is current, with my wrap", 2, 1],
+        ['my own epoch 2', 'comes: the epoch it was refused under is stale', 3, 2],
+        ['my own epoch 2', 'comes: epoch 1 still stale, with Bea in now', 2, 2],
+    ];
+    it.each(table)('refused: %s; the roster %s -> the line %s (%s epochs of mine posted)', async (what, roster, want, epochs) => {
+        const f = what === 'my own epoch 2' ? await ownRefused() : await lineRefused();
+        const linesBefore = kindOf(f, 'group-line').length, epochsBefore = kindOf(f, 'group-epoch').length;
+        // Meanwhile the host still refuses for the epoch: four rounds with the roster as it was send nothing new.
+        for (let i = 0; i < 4; i++) await syncGuestMail(f.io);
+        expect([kindOf(f, 'group-line').length, kindOf(f, 'group-epoch').length]).toEqual([linesBefore, epochsBefore]);
+        expect(f.chats[ID].lines.map((l) => l.state)).toEqual(['waiting']);
+        // Then the roster after the refusal (or none), and the host takes what comes under it.
+        rosters[roster](f);
+        f.answerWith(() => ({ state: 'sent' }));
+        for (let i = 0; i < 3; i++) await syncGuestMail(f.io);
+        expect(kindOf(f, 'group-epoch')).toHaveLength(epochs);
+        const after = kindOf(f, 'group-line').slice(linesBefore);
+        if (want === 'waits') {
+            expect(after).toHaveLength(0);
+            expect(f.chats[ID].lines.map((l) => l.state)).toEqual(['waiting']);
+            return;
+        }
+        expect(after).toHaveLength(1);
+        expect(JSON.parse(after[0].payload).metadata.epoch).toBe(want);
+        expect(f.chats[ID].lines.map((l) => [l.id, l.state])).toEqual([[after[0].envelope.itemId, 'sent']]);
+    });
+});

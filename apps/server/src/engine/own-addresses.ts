@@ -61,7 +61,7 @@
  */
 
 import { domainToASCII } from 'node:url';
-import { ADDRESS_LIST_MAX, addressOf, isListableAddress } from '@beanpool/core';
+import { ADDRESS_LIST_MAX, ADDRESS_SPARES_MAX, addressOf, isListableAddress } from '@beanpool/core';
 import { getNodeConfig, resolvePublicNodeUrl, updateNodeConfig, PUBLIC_URL_RULES } from '../state-engine.js';
 import { HOLDING_STATUSES, registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress, reachableFromInternet } from './host-kinds.js';
@@ -127,7 +127,7 @@ export function checkEnvAddresses(): void {
 /** More than any real community needs; a bound on what one Settings session, or `beanpool claim`, can write to (3). */
 export const MAX_OWNER_ADDRESSES = 20;
 
-/** The owner-confirmed addresses as stored in node_config (3). */
+/** The owner-confirmed addresses as stored in node_config (3): the host of each, the form a signature names. */
 export function ownerConfirmedAddresses(): string[] {
     const stored = (getNodeConfig() as any).ownerAddresses;
     if (!Array.isArray(stored)) return [];
@@ -137,6 +137,51 @@ export function ownerConfirmedAddresses(): string[] {
         if (host && !out.includes(host)) out.push(host);
     }
     return out;
+}
+
+/**
+ * `entry` in core's one spelling (addressOf) when it names a port other than 443 (`host:port`), else null: the one place
+ * here that tells a port apart from its host, through core's spelling (normalizeAddress, core's audienceOf, is the host).
+ */
+function portedSpelling(entry: unknown): string | null {
+    if (typeof entry !== 'string') return null;
+    const spelled = addressOf(entry.trim());
+    const host = normalizeAddress(entry);
+    return spelled && host && spelled !== addressOf(host) ? spelled : null;
+}
+
+/**
+ * The owner-confirmed list (3) as stored, one entry per host: the host, or core's one spelling `host:port` where the entry
+ * names a port (a standby's own spare that a take-over made an address, services/takeover.ts). Every writer of
+ * `ownerAddresses` starts from this, never from the hosts alone, so a port is never lost when another address is added or
+ * removed, and the signed list spells that address with its port (portedUrls).
+ */
+export function ownerAddressEntries(): string[] {
+    const stored = (getNodeConfig() as any).ownerAddresses;
+    if (!Array.isArray(stored)) return [];
+    const out: string[] = [];
+    const hosts = new Set<string>();
+    for (const a of stored) {
+        const host = normalizeAddress(a);
+        if (!host || hosts.has(host)) continue;
+        hosts.add(host);
+        out.push(portedSpelling(a) ?? host);
+    }
+    return out;
+}
+
+/**
+ * `entries` (ownerAddressEntries) with each of `spellings` (addresses in core's one spelling) in: an entry for the same host
+ * gives way, so the address is kept exactly as given, port included.
+ */
+export function withOwnerAddresses(entries: readonly string[], spellings: readonly string[]): string[] {
+    const hosts = new Set(spellings.map((a) => normalizeAddress(a)));
+    return [...entries.filter((e) => !hosts.has(normalizeAddress(e))), ...spellings];
+}
+
+/** `entries` (ownerAddressEntries) without the one for `host`, whatever its port. */
+export function withoutOwnerAddress(entries: readonly string[], host: string): string[] {
+    return entries.filter((e) => normalizeAddress(e) !== host);
 }
 
 let cache: { at: number; version: number; list: OwnAddress[] } | null = null;
@@ -329,7 +374,9 @@ export function mainPublicUrl(): string | null {
     // (several-addresses S2, from #3222's round-2 review). The signed list still names it main (addressListContent).
     if (!reachableFromInternet(main)) return null;
     const host = url ? normalizeAddress(url.replace(/^https?:\/\//, '').replace(/\/+$/, '')) : null;
-    return host === main ? url : `https://${main}`;
+    // Another main at its own port when one is known (portedUrls), as the signed list spells it: the directory and the web
+    // link open where the list says.
+    return host === main ? url : (portedUrls().get(main) ?? `https://${main}`);
 }
 
 /**
@@ -343,12 +390,27 @@ export function listedUrls(): string[] {
     return publishedAddresses().map((a) => ported.get(a) ?? `https://${a}`);
 }
 
-/** The URL of each host whose port is known (the main's, mainPublicUrl, and the resolver's), by host; https://<host> for the rest. */
+/**
+ * The URL of each host whose port is known, by host; https://<host> for the rest. Every source that can name a port does,
+ * in core's one spelling (addressOf): the resolver's URL (the registrar's web address, else CF_RECORD_NAME), CF_RECORD_NAME
+ * beside another web address, BEANPOOL_ADDRESSES, and the owner-confirmed list (ownerAddressEntries: a standby's ported
+ * spare that a take-over made an address). The first to name a host's port wins, in that order. Several addresses S8
+ * round 2 (#3260): no address loses its port between the server, the take-over envelope, the signed list and the phone.
+ */
 function portedUrls(): Map<string, string> {
     const ported = new Map<string, string>();
-    for (const url of [mainPublicUrl(), resolvePublicNodeUrl(PUBLIC_URL_RULES.community)]) {
-        const host = url ? normalizeAddress(url.replace(/^https?:\/\//, '').replace(/\/+$/, '')) : null;
-        if (url && host && !ported.has(host)) ported.set(host, url.replace(/\/+$/, ''));
+    const config = getNodeConfig();
+    const fromUrls = [resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config), resolvePublicNodeUrl(PUBLIC_URL_RULES.community, { ...config, publicAddress: null })];
+    const entries = [
+        ...fromUrls.filter((u): u is string => !!u),
+        ...String(process.env.BEANPOOL_ADDRESSES || '').split(','),
+        ...ownerAddressEntries(),
+    ];
+    for (const entry of entries) {
+        // By the host as the names above read it from the same entry (normalizeAddress), so spell() finds it.
+        const spelled = portedSpelling(entry);
+        const host = spelled ? normalizeAddress(entry) : null;
+        if (spelled && host && !ported.has(host)) ported.set(host, `https://${spelled}`);
     }
     return ported;
 }
@@ -365,7 +427,7 @@ let warnedListFull = '';
  * same spelling. A home-network main stays main here: the list is what a phone on that network follows. Null when there is
  * nothing to list (a node that knows none of its names, or whose names all wait for a route).
  */
-export function addressListContent(): { main: string; addresses: string[] } | null {
+export function addressListContent(): { main: string; addresses: string[]; spares: string[] } | null {
     const ported = portedUrls();
     const spell = (host: string): string | null => {
         const a = addressOf(ported.get(host) ?? `https://${host}`);
@@ -386,7 +448,44 @@ export function addressListContent(): { main: string; addresses: string[] } | nu
         logger.warn('SYS', `[Addresses] This community has ${hosts.length} addresses; its signed list names the main one and `
             + `${ADDRESS_LIST_MAX - 1} others, so members' phones follow only those. Remove the addresses no longer used.`);
     }
-    return { main: spell(main)!, addresses: listed.sort(byCodeUnit) };
+    // The owner's spares (addressSpares), apart from the addresses: one that is also an address now (a standby that took
+    // over lists its own) is an address, not a spare.
+    const spares = addressSpares().filter((s) => !listed.includes(s));
+    return { main: spell(main)!, addresses: listed.sort(byCodeUnit), spares };
+}
+
+/**
+ * Each published address (publishedAddresses) in core's one spelling, port included, as the signed list spells it
+ * (addressListContent), whether or not it has a route yet: what this server goes by. The take-over step reads it before it
+ * changes anything, to know which carried spare is this server's own, spelling for spelling (services/takeover.ts).
+ */
+export function ownAddressSpellings(): string[] {
+    const ported = portedUrls();
+    const out: string[] = [];
+    for (const h of publishedAddresses()) {
+        const a = addressOf(ported.get(h) ?? `https://${h}`);
+        if (a && !out.includes(a)) out.push(a);
+    }
+    return out;
+}
+
+/**
+ * The owner's spares (node_config `addressSpares`, Settings → Addresses → Spares; design scratch/fable-design/
+ * DESIGN-several-addresses-fable.md §6): where the community would go if this server were lost, a standby's own address,
+ * each in core's one spelling (`host`, or `host:port`), none loopback, none twice, at most ADDRESS_SPARES_MAX, in code-unit
+ * order. Published in the signed list apart from its addresses. Never one of this community's names: a phone asks a
+ * spare only when no listed address answers, and takes it only at a higher take-over count (a standby that took over).
+ */
+export function addressSpares(): string[] {
+    const stored = getNodeConfig().addressSpares;
+    if (!Array.isArray(stored)) return [];
+    const out: string[] = [];
+    for (const s of stored) {
+        const a = typeof s === 'string' ? addressOf(s) : null;
+        if (a && isListableAddress(a) && !out.includes(a)) out.push(a);
+        if (out.length === ADDRESS_SPARES_MAX) break;
+    }
+    return out.sort(byCodeUnit);
 }
 
 /**
@@ -430,9 +529,8 @@ function defaultMainAddress(): string | null {
 export function keepReplacedAddress(claimed: string): string | null {
     const replaced = defaultMainAddress();
     if (!replaced || replaced === claimed) return null;
-    const owned = ownerConfirmedAddresses();
-    if (!owned.includes(replaced)) {
-        updateNodeConfig({ ownerAddresses: [...owned, replaced] });
+    if (!ownerConfirmedAddresses().includes(replaced)) {
+        updateNodeConfig({ ownerAddresses: [...ownerAddressEntries(), replaced] });
         forgetOwnAddresses();
     }
     return replaced;
@@ -444,9 +542,8 @@ export function keepReplacedAddress(claimed: string): string | null {
  * record of names (4), as any former name is.
  */
 export function dropReleasedAddress(host: string | null): void {
-    const owned = ownerConfirmedAddresses();
-    if (!host || !owned.includes(host)) return;
-    updateNodeConfig({ ownerAddresses: owned.filter((a) => a !== host) });
+    if (!host || !ownerConfirmedAddresses().includes(host)) return;
+    updateNodeConfig({ ownerAddresses: withoutOwnerAddress(ownerAddressEntries(), host) });
     forgetOwnAddresses();
 }
 

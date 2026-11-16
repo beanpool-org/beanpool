@@ -371,6 +371,7 @@ export const SUITES = [
     'test-public-url-callers',
     'test-rename-main-name',
     'test-address-list',
+    'test-address-spelling',
     'test-own-address',
     'test-read-auth-default',
     'test-privacy-defaults',

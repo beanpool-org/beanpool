@@ -57,6 +57,7 @@ export const ADDRESS_CHANGE_PATHS: readonly string[] = [
     '/api/local/admin/public-address/claim', '/api/local/admin/public-address/offline', '/api/local/admin/public-address/own',
     '/api/local/admin/public-address/release-name', '/api/local/admin/public-address/rotate', '/api/local/admin/public-address/update',
     '/api/local/admin/app-addresses/confirm', '/api/local/admin/app-addresses/remove', '/api/local/admin/app-addresses/main',
+    '/api/local/admin/app-addresses/spares',
 ];
 
 function dataDir(): string {

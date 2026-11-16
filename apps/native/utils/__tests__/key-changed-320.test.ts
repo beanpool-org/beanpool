@@ -167,7 +167,11 @@ describe('rule 5\'s line under the DM box at 320dp with 1.3× text, light and da
         expect(width).toBe(296);
         expect(widthOf(longestWord(DM_UNPLACED_LINE), font)).toBeLessThanOrEqual(width / 3);
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/chat/[id].tsx'), 'utf-8');
-        expect(src).toMatch(/<View onLayout=\{measured\('composer'\)\}>\s*\{isPeerBlocked \? \(/);
+        // The View measured as the box has no style (it holds the banners over the composer too, then the composer).
+        expect(src).toMatch(/<View onLayout=\{measured\('composer'\)\}>\s*\{editingMessage && \(/);
+        const box = src.indexOf("<View onLayout={measured('composer')}>");
+        expect(src.indexOf('{isPeerBlocked ? (', box)).toBeGreaterThan(box);
+        expect(src.indexOf('</KeyboardAvoidingView>', box)).toBeGreaterThan(src.indexOf('{isPeerBlocked ? (', box));
         // Word by word at the generous glyph width: every word on a line, no line wider than the screen gives it.
         const lines: string[] = [];
         for (const word of DM_UNPLACED_LINE.split(' ')) {

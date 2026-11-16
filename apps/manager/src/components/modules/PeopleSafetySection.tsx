@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { KNOWLEDGE_TYPE } from '@beanpool/core';
 import { HelpLink } from '../manual/Manual';
 import { SubTabStrip } from '../layout/SubTabStrip';
 import { useSectionSubTab } from '../../lib/sections';
@@ -204,7 +205,7 @@ export function PeopleSafetySection({
         setBulkDeleteResult(null);
         const cutoffMs = Date.now() - bulkDeleteDays * 24 * 60 * 60 * 1000;
         // The posts held are the pages read so far: while the node holds more, every page is read first (capacity fix 3).
-        let posts = (nodeData?.posts || []) as Array<{ id: string; createdAt?: string | number }>;
+        let posts = (nodeData?.posts || []) as Array<{ id: string; type?: string; createdAt?: string | number }>;
         if (nodeData?.postsNext) {
             setBulkDeleting(true);
             try {
@@ -216,8 +217,10 @@ export function PeopleSafetySection({
                 setBulkDeleting(false);
             }
         }
+        // A page of Local knowledge is never stale: Learn sorts it by topic and keeps it until someone takes it down. The list
+        // holds the pages (routes/admin.ts reads it withKnowledge, Learn K9) only so one can be taken down by itself.
         const stalePostIds = posts
-            .filter((p) => p.createdAt && new Date(p.createdAt).getTime() < cutoffMs)
+            .filter((p) => p.type !== KNOWLEDGE_TYPE && p.createdAt && new Date(p.createdAt).getTime() < cutoffMs)
             .map((p) => p.id);
         if (stalePostIds.length === 0) {
             setBulkDeleteResult(`No posts older than ${bulkDeleteDays} days found.`);
@@ -756,7 +759,7 @@ export function PeopleSafetySection({
                                 <span>Bulk Content Cleanup</span>
                             </h3>
                             <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                Prune stale expired offers, needs, and marketplace posts from the local database
+                                Prune stale expired offers, needs, and marketplace posts from the local database. Pages of Local knowledge are kept.
                             </p>
                         </div>
 

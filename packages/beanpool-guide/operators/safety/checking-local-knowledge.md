@@ -42,7 +42,7 @@ On any page, owners and admins have **Edit** (it changes at once), **Still right
 
 ## Taking a page down
 
-In Settings, open **People & Safety → Triage & Moderation**. In the posts list, choose **Local knowledge** in the **Type Filter**: each page shows its topic. **Delete** takes it down for everyone, as for any post.
+In Settings, open **People & Safety → Triage & Moderation**. In the posts list, choose **Local knowledge** in the **Type Filter**: each page shows its topic. **Delete** takes it down for everyone, as for any post. **Prune Stale Posts** on the same screen never takes a page, however old: you take pages down one at a time.
 
 Members report a page from the page itself, and the report lands with the others. A moderator can remove a page while a report on it is open, as for any post (see Reports and takedowns).
 

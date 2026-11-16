@@ -71,7 +71,7 @@ Bạn cũng có thể chuyển đổi trong **Cài đặt**, dưới mục **H�
 
 Một cộng đồng có thể trả lời ở nhiều hơn một địa chỉ, và chủ sở hữu chọn địa chỉ nào là địa chỉ chính.
 
-- **Trên điện thoại, bạn không cần làm gì cả.** Điện thoại tự kiểm tra các địa chỉ của cộng đồng và chuyển sang địa chỉ chính ngay khi địa chỉ đó trả lời bằng chính khóa của cộng đồng bạn. Nếu địa chỉ điện thoại đang dùng ngừng trả lời, điện thoại tạm dùng một địa chỉ khác của cộng đồng và quay lại ngay khi địa chỉ chính trả lời. Trang chủ cho biết điều đó trong một dòng, một lần. Không có gì khác thay đổi: tin nhắn của bạn và mọi thứ điện thoại lưu cho cộng đồng vẫn ở nguyên chỗ.
+- **Trên điện thoại, bạn không cần làm gì cả.** Điện thoại tự kiểm tra các địa chỉ của cộng đồng và chuyển sang địa chỉ chính ngay khi địa chỉ đó trả lời bằng chính khóa của cộng đồng bạn. Nếu địa chỉ điện thoại đang dùng ngừng trả lời, hoặc không còn trả lời với tư cách cộng đồng của bạn, điện thoại dùng một địa chỉ khác đã trả lời bằng khóa đó và quay lại ngay khi địa chỉ chính trả lời. Trang chủ cho biết điều đó trong một dòng, một lần. Nếu không có địa chỉ nào trả lời như vậy, điện thoại ở nguyên chỗ. Không có gì khác thay đổi, kể cả tin nhắn của bạn.
 - **Trong ứng dụng web,** đăng nhập của bạn thuộc về địa chỉ bạn đã mở, nên ứng dụng web ở lại đó và vẫn hoạt động. Một dòng nhỏ ở trên cùng cho biết địa chỉ chính. Nhấn **Mở ở đó** để đến đó, rồi đăng nhập tại đó bằng **Liên kết trình duyệt này từ điện thoại của bạn**, hoặc bằng đăng nhập của bạn hay 12 từ của bạn.
 
 ## Quên một cộng đồng trên điện thoại này

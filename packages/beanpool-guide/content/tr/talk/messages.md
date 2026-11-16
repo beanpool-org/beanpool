@@ -24,7 +24,7 @@ Web uygulamasında bu, **Sohbet** sekmesidir. Üst kısımda **Tümü**, **İşl
 ## Sohbet başlatma
 
 - Bir profilden: profilini açın ve **Mesaj**'a dokunun. Orada onu arkadaş olarak da ekleyebilirsiniz.
-- **Sohbet** içinden: kalem düğmesine dokunun, ardından kişiyi adına göre bulun. Dünya çapındaki toplulukta Yeni Mesaj, anlaşma yaptığınız kişileri ve arkadaşlarınızı listeler. Başka birini bulmak için adının en az 2 harfini yazın.
+- **Sohbet** içinden: kalem düğmesine dokunun, ardından kişiyi adına göre bulun. Dünya çapındaki toplulukta Yeni Mesaj, anlaşma yaptığınız kişileri ve arkadaşlarınızı listeler. Başka birini bulmak için adının en az 2 harfini yazın. Başka bir topluluğa ait birine yazmak için "Diğer topluluklardaki kişiler" bölümüne bakın.
 - Üye listesinden: **Sohbet**, ardından **Kişiler**'e gidin ve **Topluluk** ya da **Arkadaşlar** içinde bir üyenin adının yanındaki 💬 simgesine dokunun.
 - Bir ilandan: **Mesaj** seçeneğine ve kişinin adına dokunun.
 

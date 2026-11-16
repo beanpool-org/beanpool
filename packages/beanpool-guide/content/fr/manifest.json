@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Messages, messages vocaux, le forum, groupes et leurs discussions, contacts et amis, vos contacts privés, échanges d'événements, mise en sourdine, mentions et changement de clé.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Messages, messages vocaux, le forum, groupes et leurs discussions, contacts et amis, vos contacts privés, personnes d'autres communautés, échanges d'événements, mise en sourdine, mentions et changement de clé.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -430,8 +430,8 @@
         "sourceHash": "79c7dc48aa148094"
       },
       "summary": {
-        "text": "Pourquoi les messages cessent d'arriver, comment vérifier le code de clé avec la personne et quand reprendre.",
-        "sourceHash": "c7a3e58ca019f963"
+        "text": "Ce que signifie la ligne grise sur une clé modifiée, comment vérifier un code de clé avec la personne et à quoi sert Marquer comme vérifié.",
+        "sourceHash": "d59b33d9c938fae5"
       }
     },
     "the-pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "Vos contacts privés. Vous seul·e ouvrez la liste. Importez depuis votre téléphone ou un fichier de contacts, ajoutez quelqu'un à la main ou invitez-le.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Personnes d'autres communautés",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Écrire à quelqu'un qui appartient à une autre communauté. Votre carte d'adresse, les interrupteurs qui permettent de vous joindre, trouver quelqu'un par son nom exact, et ce que garde chaque communauté.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Montrez votre carte d'adresse, ou trouvez quelqu'un par son nom exact s'il a dit oui. Son premier message est une demande : à vous de l'accepter ou non.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

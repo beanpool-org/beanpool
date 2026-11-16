@@ -2,7 +2,7 @@
 slug: privacy
 title: La tua privacy
 summary: Cosa possono vedere gli altri su di te e le impostazioni per controllarlo.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Cosa possono vedere gli altri membri su di te e gli interruttori per gestirlo.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ I proprietari e gli amministratori che gestiscono il server della tua comunità 
 - **La tua zona** (nella comunità globale): nelle Impostazioni, sotto **La tua zona**, visualizzi la zona che hai indicato, circa 10 km attorno a un comune o due coordinate numeriche, oppure **Non impostata**. **Cancella** la rimuove. Sotto, **Più o meno dove sei?** ne imposta una nuova con **Usa la mia posizione** o **Scrivi una città o un quartiere**, e **Annulla** (in un browser, **← Torna alle Impostazioni**) la lascia invariata. Viene inviata sempre e solo la zona arrotondata. Gli altri membri vedono quanto sei distante, e un sondaggio creato da te viene mostrato nella tua zona. Senza averla impostata, vedrai gli annunci più recenti a livello globale, e i membri vicini non vedranno un tuo sondaggio nel loro elenco, anche se potranno comunque trovarlo cercandolo. Vedi "La tua zona".
 - **Blocco app:** richiede il blocco schermo del telefono (PIN, sequenza, password, impronta digitale o volto) all'apertura dell'app e al ritorno dopo 15 secondi o più di assenza. Il blocco protegge le schermate dell'app e i popup. Su un iPhone chiude anche le pagine web aperte dall'app, come le Impostazioni della comunità aperte da **Gestisci**. Non può coprire le pagine web aperte dall'app su un telefono Android, che si aprono all'esterno dell'app, né il pannello di condivisione su entrambi i telefoni: chiudili prima di posare il telefono. Le Impostazioni della tua comunità, aperte da **Gestisci**, ti disconnettono dopo 15 minuti di inattività. Quando Blocco app è attivo, la schermata dell'app diventa vuota non appena la lasci e torna visibile al tuo ritorno. Richiede un blocco schermo sul telefono: senza di esso non c'è nulla da richiedere.
 - **Canali:** tutto ciò che condividi nel Pulse viene mostrato con il tuo nome a tutti i membri della tua comunità. Vedi "Condividere i tuoi canali".
+- **Persone di altre comunità:** nessuno di un'altra comunità può trovarti per nome, a meno che tu non attivi **Le persone di altre comunità possono trovarmi per nome**, sotto la tua scheda indirizzo. È spento finché non lo attivi. Anche allora, deve digitare il tuo nome esatto: nessuno vede un elenco. La scheda e l'interruttore ci sono solo dove la tua comunità riceve messaggi da altre comunità. Vedi "Persone di altre comunità".
 
 ## Chi altro può vedere le informazioni
 

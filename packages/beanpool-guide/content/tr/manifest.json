@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mesajlar, sesli mesajlar, forum, gruplar ve sohbetleri, kişiler ve arkadaşlar, özel kişi listeniz, etkinlik sohbetleri, sessize alma, bahsetmeler ve değişen anahtarlar.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Mesajlar, sesli mesajlar, forum, gruplar ve sohbetleri, kişiler ve arkadaşlar, özel kişi listeniz, diğer topluluklardaki kişiler, etkinlik sohbetleri, sessize alma, bahsetmeler ve değişen anahtarlar.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -430,8 +430,8 @@
         "sourceHash": "79c7dc48aa148094"
       },
       "summary": {
-        "text": "Sohbetin neden mesaj göndermeyi durdurduğu, anahtar kodunun kişiyle nasıl doğrulanacağı ve ne zaman devam edileceği.",
-        "sourceHash": "c7a3e58ca019f963"
+        "text": "Değişen bir anahtarla ilgili gri satırın ne anlama geldiği, anahtar kodunun kişiyle nasıl kontrol edileceği ve Doğrulanmış olarak işaretle seçeneğinin ne yaptığı.",
+        "sourceHash": "d59b33d9c938fae5"
       }
     },
     "the-pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "Özel kişi listeniz. Listeyi yalnızca siz açabilirsiniz. İnsanları telefonunuzdan veya bir kişi dosyasından getirin, birini elle ekleyin ya da davet edin.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Diğer topluluklardaki kişiler",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Başka bir topluluğa ait birine mesaj gönderin. Adres kartınız, insanların size ulaşmasını sağlayan anahtarlar, birini tam adıyla bulmak ve her topluluğun neleri sakladığı.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Adres kartınızı gösterin ya da buna izin verdiyse birini tam adıyla bulun. Size gelen ilk mesaj bir istektir: kabul edip etmeyeceğinizi siz seçersiniz.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

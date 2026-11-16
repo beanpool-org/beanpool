@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Pesan, pesan suara, forum, grup dan obrolannya, orang dan teman, kontak pribadimu, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Pesan, pesan suara, forum, grup dan obrolannya, orang dan teman, kontak pribadimu, orang dari komunitas lain, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -430,8 +430,8 @@
         "sourceHash": "79c7dc48aa148094"
       },
       "summary": {
-        "text": "Mengapa obrolan berhenti mengirim pesan, cara memeriksa kode kunci dengan orang tersebut, dan kapan harus melanjutkan.",
-        "sourceHash": "c7a3e58ca019f963"
+        "text": "Arti baris abu-abu tentang kunci yang berubah, cara memeriksa kode kunci dengan orang tersebut, dan apa fungsi Tandai terverifikasi.",
+        "sourceHash": "d59b33d9c938fae5"
       }
     },
     "the-pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "Kontak pribadimu. Hanya kamu yang bisa membuka daftarnya. Bawa orang dari ponsel atau file kontak, tambahkan seseorang secara manual, atau undang mereka.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Orang dari komunitas lain",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Kirim pesan ke seseorang yang menjadi anggota komunitas lain. Kartu alamatmu, sakelar yang membuat orang bisa menghubungimu, menemukan seseorang lewat nama persisnya, dan apa yang disimpan tiap komunitas.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Tunjukkan kartu alamatmu, atau cari orang lewat nama persisnya jika mereka setuju. Pesan pertamanya berupa permintaan: kamu memilih menerimanya atau tidak.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

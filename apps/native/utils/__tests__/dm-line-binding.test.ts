@@ -1836,7 +1836,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         // The pinned key's own row comes first.
         sql.prepare('INSERT INTO members (public_key, callsign) VALUES (?, ?)').run(ben.publicKey, 'Benjamin (old)');
         expect((await getDmKeyChange(dm.id))?.name).toBe('Benjamin (old)');
-        const title = dmKeyChangeCopy({ peerName: (await getDmKeyChange(dm.id))!.name, code: '1111 2222 3333 4444 5555', firstSight: false }).title;
+        const title = dmKeyChangeCopy({ peerName: (await getDmKeyChange(dm.id))!.name, code: '1111 2222 3333 4444 5555' }).title;
         expect(title).toBe('The key behind "Benjamin (old)" changed.');
         expect(title).not.toContain(dm.id.slice(0, 8));
     });
@@ -4895,7 +4895,7 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
     }, 300_000);
 
     for (const resetFirst of [false, true]) {
-        it(`R2 on the banner (slice 2): ${resetFirst ? 'after the member\'s reset, the screen\'s check reports the pause as the reset\'s and the banner opens with the reset\'s sentence' : 'control, no reset: the restored-phone sentence'} — Signal's model (16 Nov): no card, carries on with the listed key`, async () => {
+        it(`R2 on the banner (slice 2): ${resetFirst ? 'after the member\'s reset' : 'control, no reset'} — Signal's model (16 Nov): no card, carries on with the listed key; no card says the phone is checking from the start (S2)`, async () => {
             const e = await firstMetWithBensLines();
             if (resetFirst) {
                 expect(await resetB()).toBe('set-aside');
@@ -4905,11 +4905,11 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
             expect(await dbPort.getDmKeyChange(e.id)).toBeNull();
             movedFromBen(e.id);
             expect(await keyNotices(e)).toHaveLength(1);
-            // The card's first-sight words stay for a first-sight pause with no single key listed (§2.4), word for word.
-            const body = dmKeyChangeCopy({ peerName: 'Ben', code: 'x', firstSight: true, afterReset: resetFirst }).body;
-            expect(body.startsWith(resetFirst
-                ? "This community's chat memory was reset, so this phone is checking this chat from the start."
-                : 'This phone is checking this chat from the start, as it does after you restore it or update the app.')).toBe(true);
+            // S2: the first-sight and reset openings are gone. First sight takes a single listed key itself, and with no single
+            // key its card is the "no single key" one, so no card, with a code or without, says the phone is checking from the start.
+            for (const code of ['1111 2222 3333 4444 5555', null]) for (const verified of [false, true]) {
+                expect(JSON.stringify(dmKeyChangeCopy({ peerName: 'Ben', code, verified }))).not.toContain('checking this chat from the start');
+            }
             expect(await sendTo(e.id, 'The code is 4821')).toEqual(carriesOn);
         });
     }

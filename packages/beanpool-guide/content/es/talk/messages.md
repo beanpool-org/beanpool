@@ -24,7 +24,7 @@ En la aplicación web esta es la pestaña **Chat**. Enumera todos tus chats, inc
 ## Iniciar un chat
 
 - Desde un perfil: abre su perfil y toca **Mensaje**. Ahí también puedes agregarlo como amigo.
-- Desde **Chat**: toca el botón del lápiz, luego busca a la persona por su nombre. En la comunidad mundial, Mensaje nuevo enumera a las personas con las que has comerciado y a tus amigos. Para encontrar a cualquier otra persona, escribe al menos 2 letras de su nombre.
+- Desde **Chat**: toca el botón del lápiz, luego busca a la persona por su nombre. En la comunidad mundial, Mensaje nuevo enumera a las personas con las que has comerciado y a tus amigos. Para encontrar a cualquier otra persona, escribe al menos 2 letras de su nombre. Para escribir a alguien que pertenece a otra comunidad, consulta «Personas de otras comunidades».
 - Desde la lista de miembros: **Chat**, luego **Personas**, y toca 💬 junto al nombre de un miembro en **Comunidad** o **Amigos**.
 - Desde una publicación: toca **Mensaje** y el nombre de la persona.
 

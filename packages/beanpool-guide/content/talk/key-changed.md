@@ -1,83 +1,99 @@
 ---
 slug: key-changed
 title: If a chat says the key behind a name changed
-summary: Why a chat stops sending, how to check the key code with the person, and when to continue.
+summary: What the grey line about a changed key means, how to check a key code with the person, and what Mark as verified does.
 related: messages, your-12-words, people
 ---
 
 ## What it means
 
-Every message between two people is locked so that only the other person's phone can open it. It is locked to their **key**, not to their name. Your phone remembers which key it has been locking your chat to.
+Every message between two people is locked so that only the other person's phone can open it. It is locked to their **key**, not to their name. Your community lists which key belongs to the person, and your phone remembers which key it has been locking your chat to.
 
-If your community now names a different key for the person, your phone stops and tells you, instead of quietly sending to the new key. At the top of the chat you see **The key behind "Ben" changed.** The message box is greyed out and says sending is paused.
+When your community lists a new key for the person, what your phone does depends on one thing: whether you marked them as verified on this phone.
 
-Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, messages from the new key read **Sent from the new key. Shown after you continue.** until you decide.
+## Someone you haven't marked as verified
 
-This is on the phone app. The web app doesn't remember keys yet.
+The chat carries on with the new key. Your phone writes one grey line in the chat, for example: **Ben's key changed. This usually means they got back into their account on a new phone. Tap to see their key code.**
 
-## Why it can happen
+Nothing is paused, the chat gets no tag in **Chat**, and your earlier messages still read. The line is there to tell you, not to warn you. Tap it to see their key code.
 
-- **They got a new phone and re-keyed.** This is the usual reason. Their old key is gone, so they have a new one.
+## Why a key can change
+
+- **They got back into their account on a new phone.** This is the usual reason. An admin moved their account to the new phone, so they have a new key.
 - **Something is wrong.** A community's server lists who is in each chat. A server that wanted to read your messages could put someone else's key behind your friend's name. The name looks right, but the key doesn't.
 
 Your phone can't tell these apart by itself. You can, with the key code.
 
-## Check the key code with the person
+## Check someone's key code
 
-- The banner shows a code: 20 digits in five groups of four.
-- Ask the person to open **Settings**, then **Account Protection**, and read you **My key code**.
-- **My key code** is on the phone app only. If the person uses only the web app, they can't read it to you yet: tap **Not now** until they can open the phone app.
+- In the chat, tap **⋯** at the top, then **Key code**. Tapping the grey line opens it too.
+- You see their key code: 20 digits in five groups of four.
+- Ask the person to read you **My key code**. In the phone app it is in **Settings**, under **Account Protection**. In the web app it is in **Settings**, under **Account & Identity**.
 - Check it **in person, or on a phone or video call** where you know it's them. Don't check it by a message in BeanPool: if the key is wrong, so is whoever answers.
-- If every digit matches, tick **I checked with Ben: the key code in their Settings matches this one**, then tap **Continue with the new key**.
-
-From then on your messages go to the new key. The banner and the **key changed** tag on the chat in **Chat** go away, and your earlier messages still read.
+- If every digit matches, this chat is really with them. You can then tap **Mark as verified**.
 
 The code isn't secret. It's safe to read out.
 
-## If the code doesn't match, or you can't check
+## Mark as verified
 
-Tap **Not now**. Nothing is sent and nothing changes. You can come back to the chat later.
+**Mark as verified** makes your phone ask you before it sends to a new key for this person. The key code screen then shows **Verified ✓**, and so does the top of the chat, beside **🔒 End-to-end encrypted** under their name.
 
-A paused chat may stay paused until you continue. There is no other way to keep talking in it: your community keeps one chat for the two of you, so starting a new chat with the same person opens this same chat.
+The mark is kept on this phone only, for this chat in this community. The web app doesn't have it, and resetting the community's chat memory (below) removes it.
+
+To take it back, open **Key code** again, tap **Remove verification**, and confirm with **Remove verification**.
+
+## If the key of someone you marked as verified changes
+
+Your phone stops and asks you, instead of sending to the new key. At the top of the chat you see **The key behind "Ben" changed.** It starts **You marked Ben as verified, so this phone is asking before it sends to a new key.** and shows the new key code.
+
+The message box is greyed out, and above it is **The key behind Ben changed, so sending is paused.** A message from the new key reads **Sent from the new key. Shown after you continue.** until you decide. The chat shows a **key changed** tag in **Chat**.
+
+Check the new code with the person, as above. If every digit matches, tick **I checked with Ben: the key code in their Settings matches this one.**, then tap **Continue with the new key**. From then on your messages go to the new key, Ben stays **Verified ✓**, the banner and the tag go away, and your earlier messages still read.
+
+If the code doesn't match, or you can't check, tap **Not now**. Nothing is sent and nothing changes. The chat stays paused until you continue: your community keeps one chat for the two of you, so starting a new chat with the same person opens this same chat.
 
 If the code doesn't match, don't continue. Tell the person and your community's admins: someone may be trying to read your messages.
 
-## If the banner offers no key to continue with
-
-Sometimes the community doesn't list a single key for the person in a chat between two people: it lists several, or none. There is then no key to continue with, so the banner says so and offers only **Not now**. Nothing is sent. Talk to the person in person or on a call. Your phone checks the chat again by itself when the community's list changes, and a new chat with the same person is this same chat.
-
-## If the banner says your phone is checking the chat from the start
-
-After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with **This phone is checking this chat from the start, as it does after you restore it or update the app.** Check the code with the person as above. After you reset the community's chat memory it starts with **This community's chat memory was reset, so this phone is checking this chat from the start.** instead.
-
-## Chat memory
-
-Your phone keeps a small memory for each community: which key each of your chats is with, and which chats are private. It is kept on the phone, and the community's server can't move a chat to another key by itself: only you can, on the banner. It stays on the phone when you sign out, so signing out and back in doesn't clear it. The phone never resets it on its own.
-
-You can reset it for one community: open **Settings**, tap **Chat memory** under **Account & identity**, tap **Reset** next to the community, read the warning, and tap **Reset** again. The app points you here only when it says it couldn't read that memory and trying again didn't help.
-
-After a reset, your phone checks every chat in that community again from the start, from the messages it holds. A chat whose messages came from a different key than the one the community now gives shows the banner again, starting with **This community's chat memory was reset, so this phone is checking this chat from the start.** Check the code with the person as above.
-
-Two things can change after a reset, and the warning says so before you confirm: a chat that was paused because its key changed may open with the new key, and a private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.
-
-A reset doesn't help with a chat your phone can't match to one key: it is checked again and stops again. Check the code with the person instead (above).
-
-This is on the phone app. The web app has no chat memory.
-
-## If the banner says your phone can't match the chat to one key
-
-Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. Above the message box it says **This phone can't match this chat to one key, so sending is off.** and the banner shows the code of the key your community now lists for the person.
-
-Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that read **This message couldn't be verified, so it isn't shown.** Those stay that way, even after you continue.
-
-Check the code with the person as above, in person or on a call. If it matches, tick the box and tap **Continue with the new key**: from then on your messages go to that key. If it doesn't match, or you can't check, tap **Not now**. A new chat with the same person is this same chat, so there is nothing else to try. If the community lists no single key for them, the banner offers only **Not now**, and your phone checks the chat again by itself when the community's list changes.
-
-## What your phone can check, and what it can't
-
-Your phone checks a chat against the messages it already holds. A restored phone, or an existing phone at the update, is steered only by a server that holds back or surrounds the oldest part of the chat in what it sends. A phone that already held that oldest part is steered by nothing the server sends after the update.
-
-So a phone you have just restored, or just updated, can be misled about a chat's key. A banner can't rule that out. **Confirm a changed key in person**, or on a call where you know it's them.
+On the key code screen, **Remove verification** ends the pause too: the chat carries on with the new key, without the check.
 
 ## If the community gives a date
 
 When your community can show that the account was re-keyed, the banner says so, for example: **This community says the account was re-keyed on 3 Oct 2026.** That helps you understand what happened, but it doesn't replace checking the code: a server could say it too.
+
+## If there is no key to continue with
+
+Sometimes the community doesn't list a single key for the person in a chat between two people: it lists several, or none. Then there is nobody to lock your messages to, whether you marked them as verified or not. The banner says so and offers only **Not now**, nothing is sent, and the chat shows a **key changed** tag in **Chat**. The key code screen says **This community doesn't list a single key for Ben in this chat, so sending waits.**
+
+Talk to the person in person or on a call. Your phone checks the chat again by itself when the community's list changes, and a new chat with the same person is this same chat.
+
+If your phone also couldn't match the earlier messages to one key, above the message box is **This phone can't match this chat to one key, so sending is off. What you can read here may not be from them.**, and the key code screen has no code to show.
+
+## After you restore or set up your phone again
+
+Your phone checks each chat against the earlier messages it holds. If those messages came from an older key than the one your community now lists, the chat carries on with the listed key, the earlier messages still read, and the grey line shows once.
+
+If your phone can't match some of them to any key, the chat still carries on with the key your community lists, with no line. A message it couldn't open reads **This message couldn't be verified, so it isn't shown.** It stays that way.
+
+## Chat memory
+
+Your phone keeps a small memory for each community: which key each of your chats is with, who you marked as verified, and which chats are private. It is kept on the phone. It stays on the phone when you sign out, so signing out and back in doesn't clear it. The phone never resets it on its own.
+
+You can reset it for one community: open **Settings**, tap **Chat memory** under **Account & identity**, tap **Reset** next to the community, read the warning, and tap **Reset** again. The app points you here only when it says it couldn't read that memory and trying again didn't help.
+
+After a reset, your phone checks every chat in that community again from the start, from the messages it holds, as it does after a restore.
+
+The warning says what can change before you confirm. A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. People you marked as verified in this community go back to not verified. Check the key code, or who's in a chat, before you send.
+
+This is on the phone app. The web app has no chat memory.
+
+## In the web app
+
+The web app doesn't remember keys. Each time you send, it locks your message to the one key your community lists for the person, and if it lists several or none, your message isn't sent. So it shows no grey line and no banner, and it has no **Mark as verified**: someone you marked as verified on your phone gets no pause in the web app.
+
+You can still read key codes there. **My key code** is in **Settings**, under **Account & Identity**. In a chat between two people, the **⋮** menu has **Key code**: it shows the person's code, and says that the browser doesn't remember key codes.
+
+## What your phone can check, and what it can't
+
+For someone you haven't marked as verified, your community's list decides the key each time it changes, and your phone tells you with the grey line. On a phone that already held the chat, a changed key always leaves the line. A phone you have just restored can be misled: a server that holds back the older messages leaves no line.
+
+The line can't tell a new phone from a swapped key. Only the key code can, and only **Mark as verified** makes your phone stop the next time. If a chat matters to you, check the code in person, or on a call where you know it's them, and mark them as verified.

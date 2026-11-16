@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mensajes, mensajes de voz, el foro, grupos y sus chats, personas y amistades, tus contactos privados, chats de eventos, silenciar, menciones y un cambio de clave.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Mensajes, mensajes de voz, el foro, grupos y sus chats, personas y amistades, tus contactos privados, personas de otras comunidades, chats de eventos, silenciar, menciones y un cambio de clave.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -430,8 +430,8 @@
         "sourceHash": "79c7dc48aa148094"
       },
       "summary": {
-        "text": "Por qué un chat deja de enviar, cómo verificar el código de clave con la persona y cuándo continuar.",
-        "sourceHash": "c7a3e58ca019f963"
+        "text": "Qué significa la línea gris sobre un cambio de clave, cómo comprobar un código de clave con la persona y qué hace Marcar como verificado.",
+        "sourceHash": "d59b33d9c938fae5"
       }
     },
     "the-pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "Tus contactos privados. Solo tú puedes abrir la lista. Trae personas desde tu teléfono o desde un archivo de contactos, agrega a alguien a mano o invítalo.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Personas de otras comunidades",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Escribe a alguien que pertenece a otra comunidad. Tu tarjeta de dirección, los interruptores que permiten que te escriban, encontrar a alguien por su nombre exacto y lo que guarda cada comunidad.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Muestra tu tarjeta de dirección, o encuentra a alguien por su nombre exacto si dijo que sí. Su primer mensaje es una solicitud: tú eliges si aceptarla.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

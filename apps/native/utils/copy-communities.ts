@@ -9,9 +9,16 @@
  * copy offers those communities to open the account in, and saves them on the new phone.
  *
  * Off, the copy is exactly what it was before lists. A copy made before lists restores exactly as before.
+ *
+ * Several addresses S8 (scratch/fable-design/DESIGN-several-addresses-fable.md §9 S8): each community also carries its key and
+ * up to three of its addresses when the phone knows them (its record: the address in use, the main, the rest of its list),
+ * so a restore proves each with the key and saves the community at whichever still answers.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { copyCommunityUrl, type CopyCommunity } from '@beanpool/core';
+import { addressOf, copyCommunityUrl, MAX_COPY_COMMUNITY_ADDRESSES, type CopyCommunity } from '@beanpool/core';
+import type { AddressAnswer } from './address-decide';
+import { communityRecordOf } from './community-index';
+import { communityRecordsReady } from './community-record';
 import { addSavedNode, getSavedNodes } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { copyListsCommunitiesStoreKey } from './storage-keys';
@@ -43,6 +50,45 @@ function hostOf(url: string): string {
 }
 
 /**
+ * The community's key and up to three of its addresses, from its record (S8): the address in use first, then the main, then
+ * the rest of its kept list. None when the phone holds no key for it (an older server, a home-network one).
+ */
+function keyAndAddressesOf(url: string): Pick<CopyCommunity, 'peerId' | 'addresses'> {
+    try {
+        const r = communityRecordOf(url);
+        if (!r?.peerId) return {};
+        const list = r.list?.list;
+        const addresses: string[] = [];
+        for (const a of [addressOf(r.using), addressOf(url), list?.main, ...(list?.addresses ?? [])]) {
+            if (a && !addresses.includes(a)) addresses.push(a);
+            if (addresses.length === MAX_COPY_COMMUNITY_ADDRESSES) break;
+        }
+        return addresses.length ? { peerId: r.peerId, addresses } : {};
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * Where a restore saves a community from the copy (S8): with its key and addresses, the first address that proves now with
+ * that key (the copy's address first, then the others in order); with none answering, or none carried, the copy's address
+ * as before. Never throws.
+ */
+export async function answeringAddressOf(
+    c: CopyCommunity, prove: (address: string, peerId: string) => Promise<AddressAnswer>,
+): Promise<string | null> {
+    const url = copyCommunityUrl(c?.url);
+    if (!url || !c.peerId || !c.addresses?.length || !url.startsWith('https://')) return url;
+    const first = addressOf(url);
+    const tried = [...(first ? [first] : []), ...c.addresses.filter((a) => a !== first)];
+    for (const a of tried) {
+        const answer = await prove(a, c.peerId).catch((): AddressAnswer => ({ kind: 'silent' }));
+        if (answer.kind === 'proved') return `https://${a}`;
+    }
+    return url;
+}
+
+/**
  * This phone's communities, as a copy would list them: the one the phone is on first, then the rest as saved, each by
  * the name the phone shows for it. Name and address only. Never throws: a phone that can't read its list sends none.
  */
@@ -50,10 +96,11 @@ export async function communitiesOnPhoneForCopy(): Promise<CopyCommunity[]> {
     try {
         const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
         const saved = await getSavedNodes();
+        await communityRecordsReady().catch(() => {});
         const ordered = [...saved.filter((n) => n?.url === anchor), ...saved.filter((n) => n?.url !== anchor)];
         return ordered
             .filter((n) => n && typeof n.url === 'string' && isPlainNodeAddress(n.url))
-            .map((n) => ({ name: n.alias?.trim() || hostOf(n.url), url: n.url }));
+            .map((n) => ({ name: n.alias?.trim() || hostOf(n.url), url: n.url, ...keyAndAddressesOf(n.url) }));
     } catch {
         return [];
     }
@@ -78,14 +125,19 @@ export async function communitiesForCopy(chosen: boolean | undefined): Promise<C
 export async function saveCommunitiesFromCopy(
     list: readonly CopyCommunity[] | null | undefined,
     registerPush: () => Promise<unknown> = async () => (await import('../services/push-notifications')).retryPushRegistrations(),
+    prove: (address: string, peerId: string) => Promise<AddressAnswer> = async (address, peerId) => (await import('./address-verify')).proofAt(address, peerId),
 ): Promise<number> {
     if (!list?.length) return 0;
     let added = 0;
     try {
         const saved = new Set((await getSavedNodes()).map((n) => n.url.toLowerCase()));
         for (const c of list) {
-            // A community's address and nothing more (core copyCommunityUrl: no path, no user part), and plain for the phone.
-            const url = copyCommunityUrl(c?.url);
+            // A community already saved at any of its addresses keeps its row (S8: the copy carries up to three).
+            const known = [c?.url, ...(c?.addresses ?? []).map((a) => `https://${a}`)].some((u) => typeof u === 'string' && saved.has(u.toLowerCase()));
+            if (known) continue;
+            // A community's address and nothing more (core copyCommunityUrl: no path, no user part), and plain for the phone:
+            // the first of its addresses that proves with its key now, else the copy's address (answeringAddressOf).
+            const url = await answeringAddressOf(c, prove);
             if (!url || !isPlainNodeAddress(url) || saved.has(url.toLowerCase())) continue;
             try {
                 await addSavedNode(url, c.name?.trim() || undefined);

@@ -35,14 +35,19 @@ vi.mock('expo-secure-store', () => ({
 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { openSeedFromSso } from '@beanpool/core';
+import { hexToBytes } from '@noble/hashes/utils.js';
+import { createRequire } from 'node:module';
+import { openSeedFromSso, signAddressList, signAddressProof, type AddressListFields } from '@beanpool/core';
+import { proofAt } from '../address-verify';
+import { resetCommunityIndexForTests } from '../community-index';
+import { resetCommunityRecordsForTests } from '../community-record';
 import { enrolSsoKeeper } from '../keeper-enrolment';
 import { vaultTicket } from '../vault';
 import {
     communitiesForCopy, communitiesOnPhoneForCopy, copyListsCommunities, saveCommunitiesFromCopy, setCopyListsCommunities,
 } from '../copy-communities';
 import { getSavedNodes } from '../nodes';
-import { SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { installNetwork, fakeJwt, noVault, useVault, VAULT, type Network } from './fake-vault';
 
 const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
@@ -198,5 +203,70 @@ describe('a restore from a copy with the list', () => {
         for (const none of [null, undefined, []]) expect(await saveCommunitiesFromCopy(none)).toBe(0);
         expect(await getSavedNodes()).toEqual([]);
         expect(await saveCommunitiesFromCopy([null as any, { url: 7 } as any])).toBe(0);
+    });
+});
+
+// ── Several addresses S8: each community's key and up to three addresses, and a restore at whichever still answers ──
+
+describe('several addresses S8: the copy carries the key and addresses; a restore finds the community at whichever answers', () => {
+    const V = createRequire(import.meta.url)('@beanpool/core/vectors/address-list.json');
+    const KEY = { seed: hexToBytes(V.keys.community.seedHex), peerId: V.keys.community.peerId as string };
+    const OTHER_KEY = { seed: hexToBytes(V.keys.other.seedHex), peerId: V.keys.other.peerId as string };
+    const FIRST = '203.0.113.5';
+    const SECOND = '198.51.100.7';
+    const list = (): AddressListFields => ({ peerId: KEY.peerId, communityId: V.communityIds.community, epoch: 1, seq: 6, main: SECOND, addresses: [FIRST, SECOND, 'coop.example.org'], spares: [] });
+
+    /** Stand-in servers: who answers at each address, signing real proofs; any other address gives no answer. */
+    const proverWith = (who: Record<string, typeof KEY>) => {
+        let n = 0;
+        const get = async (url: string) => {
+            const u = new URL(url);
+            const key = who[u.host];
+            if (!key) return null;
+            const signed = { v: 1 as const, ...list(), peerId: key.peerId };
+            return { status: 200, body: await signAddressProof({ list: signed, for: u.searchParams.get('for')!, nonce: u.searchParams.get('nonce')!, ts: 1 }, (m) => ed25519.sign(m, key.seed)) };
+        };
+        return (address: string, peerId: string) => proofAt(address, peerId, { get, nonce: () => (++n).toString(16).padStart(32, '0') });
+    };
+    const fromCopy = { name: 'Riverside', url: `https://${FIRST}`, peerId: KEY.peerId, addresses: [FIRST, SECOND] };
+
+    it('the copy lists each community with its key and up to three addresses from its record, the one in use first', async () => {
+        const kept = await signAddressList(list(), (m) => ed25519.sign(m, KEY.seed));
+        mem.async.set('beanpool_anchor_url', `https://${SECOND}`);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: `https://${SECOND}`, alias: 'Riverside' }, { url: 'https://hill.example' }]));
+        mem.async.set(COMMUNITY_RECORDS_STORE_KEY, JSON.stringify({ v: 1, records: [
+            { v: 1, id: `https://${FIRST}`, using: `https://${SECOND}`, peerId: KEY.peerId, communityId: V.communityIds.community, epoch: 1, list: kept, proved: {}, refused: {} },
+        ] }));
+        resetCommunityRecordsForTests();
+        resetCommunityIndexForTests();
+        expect(await communitiesOnPhoneForCopy()).toEqual([
+            { name: 'Riverside', url: `https://${SECOND}`, peerId: KEY.peerId, addresses: [SECOND, FIRST, 'coop.example.org'] },
+            { name: 'hill.example', url: 'https://hill.example' },
+        ]);
+    });
+
+    it('a restore with the first address dead finds the community at the second', async () => {
+        const added = await saveCommunitiesFromCopy([fromCopy], async () => {}, proverWith({ [SECOND]: KEY }));
+        expect(added).toBe(1);
+        expect((await getSavedNodes()).map((n) => [n.url, n.alias])).toEqual([[`https://${SECOND}`, 'Riverside']]);
+    });
+
+    it('the first address answering is kept; one answering with another key is never chosen; none answering saves the copy\'s address as before', async () => {
+        await saveCommunitiesFromCopy([fromCopy], async () => {}, proverWith({ [FIRST]: KEY, [SECOND]: KEY }));
+        expect((await getSavedNodes()).map((n) => n.url)).toEqual([`https://${FIRST}`]);
+        mem.async.clear();
+        await saveCommunitiesFromCopy([fromCopy], async () => {}, proverWith({ [SECOND]: OTHER_KEY }));
+        expect((await getSavedNodes()).map((n) => n.url)).toEqual([`https://${FIRST}`]);
+        mem.async.clear();
+        await saveCommunitiesFromCopy([fromCopy], async () => {}, proverWith({}));
+        expect((await getSavedNodes()).map((n) => n.url)).toEqual([`https://${FIRST}`]);
+    });
+
+    it('a community already saved at any of its addresses keeps its row: nothing is asked or added', async () => {
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: `https://${SECOND}`, alias: 'Mine' }]));
+        const prove = vi.fn(proverWith({ [SECOND]: KEY }));
+        expect(await saveCommunitiesFromCopy([fromCopy], async () => {}, prove)).toBe(0);
+        expect(prove).not.toHaveBeenCalled();
+        expect((await getSavedNodes()).map((n) => [n.url, n.alias])).toEqual([[`https://${SECOND}`, 'Mine']]);
     });
 });

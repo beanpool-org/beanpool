@@ -1306,6 +1306,10 @@ async function main(): Promise<void> {
         const othersReply = freply(spamTopic.topicId, rae.pub);
         assert(reads(rae.pub, spamTopic.topicId), 'set up: a member reads the topic');
         const fr1 = freport(spamTopic.opening, rae.pub), frCs = freport(spamTopic.opening, goer.pub, 'Child safety');
+        const fReports = structured(await fo.callTool({ name: 'reports_list', arguments: { include_text: true } }));
+        const fView = (fReports?.reports ?? []).find((r: any) => r.id === fr1);
+        assert(fView?.targetKind === 'forum_post' && fView?.postTitle?.untrusted === true && /Cheap watches in the forum/.test(fView?.postTitle?.text ?? '')
+            && fView?.postDescription?.untrusted === true && fView?.authorCallsign?.untrusted === true, `reports_list reads a forum post's report as one, its words fenced (${JSON.stringify(fView).slice(0, 160)})`);
         const fDown = await fo.callTool({ name: 'forum_take_down', arguments: { report_id: fr1, reason: 'spam', why: WHY } });
         const fDownOut = structured(fDown);
         assert(fDownOut?.removed === spamTopic.opening && fDownOut?.topicId === spamTopic.topicId && fDownOut?.kind === 'topic' && fDownOut?.todayCount >= 1

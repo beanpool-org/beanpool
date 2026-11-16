@@ -34,7 +34,7 @@ import { logger } from '../logger.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { forumHideTally } from './auto-moderation.js';
 import { holdsRole } from './burst-cleanup.js';
-import { KEPT_WORDS, TAKEDOWN, takedownsTodayBy, type PutBackResult, type PutBackScope, type TakedownGrant } from './agent-takedowns.js';
+import { TAKEDOWN, takedownsTodayBy, type PutBackResult, type PutBackScope, type TakedownGrant } from './agent-takedowns.js';
 import { tellForumPutBack } from './forum-moderation.js';
 import {
     childSafetyOpenOn, closeReportsForTakedown, POST_TAKEN_DOWN_TITLE, postTakenDownBody, REMOVAL_REASON_LABELS, reopenClosedReports,
@@ -44,14 +44,17 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
-/** Why a forum post stays up, in words the assistant reads and passes on. */
+/**
+ * Why a forum post stays up, in words the assistant reads and passes on: the listings' (agent-takedowns.ts KEPT_WORDS) where they
+ * are the same, written out, so nothing here reads another module while this one loads (state-engine.ts has an import cycle).
+ */
 export const FORUM_KEPT_WORDS = {
     forumOff: 'The forum is switched off here, so there is no forum post to take down.',
     notHere: 'There is no forum post or topic with that id here. A first topic waiting for a look is not a post yet: a moderator answers it in the app.',
-    alreadyRemoved: KEPT_WORDS.alreadyRemoved,
-    alreadyDown: KEPT_WORDS.alreadyDown,
+    alreadyRemoved: 'It is already removed.',
+    alreadyDown: 'It is already taken down.',
     roleHolder: 'It is by an owner, an admin or a moderator: a person does that, in the app.',
-    overLimit: KEPT_WORDS.overLimit,
+    overLimit: "Over today's limit: the rest wait for tomorrow (UTC), or an owner raises the Owner and admin limit.",
 } as const;
 
 interface Row {

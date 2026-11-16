@@ -28,6 +28,8 @@
  *   DRIFT-HAS-ROWS <table> rows=<n> local: <what differs>    stop and ask
  *   DRIFT-REPLICATED <table> rows=<n> <kind>: <what differs> copied to standbys or carried by a take-over (or not found in
  *                                                            the manifest), whatever its rows: stop and ask
+ * and one per table schema.sql makes that isn't in the database, when db.ts's boot may make it first (below):
+ *   CANT-PROVE-NEW <table> <kind> (…): not in this database yet, …   stop and ask
  * <kind> is the table's entry in engine/replication-manifest.ts TABLES. Compared: the column set, each column's type,
  * NOT NULL, default, collation and generated form, the primary key, CHECKs, UNIQUEs, foreign keys, WITHOUT ROWID, STRICT
  * and AUTOINCREMENT, and a virtual table's whole definition. Not compared: indexes and triggers (CREATE ... IF NOT EXISTS keeps an old
@@ -37,7 +39,11 @@
  * reason, its column reads as missing, and the table is never OK. A step is read only in the shapes bootSteps proves run
  * on their own (db.ts parsed with TypeScript's parser); a table any other ALTER in db.ts adds or drops a column of is never
  * OK ("can't prove"), whatever it reads as, and no replay runs on it; any other ALTER (a rename, a form not parsed) makes
- * every table can't prove.
+ * every table can't prove. So does any other text the boot may run before the exec (in initSchema, or in what it calls in
+ * db.ts) that names a table schema.sql makes, whatever it does with it (CREATE, INSERT … SELECT, DROP, UPDATE, DELETE, …):
+ * that table can't prove, and when the node hasn't got it, it gets a CANT-PROVE-NEW line, not "the deploy makes them". A
+ * text whose names can't be read (a `${…}` or a `+` not of top-level consts, a statement from a call) makes every table
+ * can't prove. Other modules (an import initSchema calls) aren't read.
  *
  * Exit 0 only when every table compared is OK (proved against the rows that are there); 1 on any drift, a boot step
  * refused, or a table it could not prove; 2 when it could not run.
@@ -313,11 +319,14 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * may never run) or a `db` initSchema declares itself (a step may not reach the node's database) moves every step there.
  * An ALTER in initSchema after the exec, outside a function, runs after schema.sql and is no step. Comments are not code,
  * so a step in one is nothing. A db.ts the parser finds a syntax error in reads as having no initSchema (`found: false`).
+ *
+ * `named` lists, for each other text the boot may run before the exec, each of `tables` (schema.sql's) it names, or null
+ * when its names can't be read: see bootNamed.
  */
-export function bootSteps(dbTs) {
+export function bootSteps(dbTs, tables = []) {
     const ts = createRequire(import.meta.url)('typescript');
-    const file = ts.createSourceFile('db.ts', dbTs, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    const none = { steps: [], unread: [], found: false };
+    const file = ts.createSourceFile('/db.ts', dbTs, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const none = { steps: [], unread: [], named: [], found: false };
     if ((file.parseDiagnostics ?? []).length > 0) return none;
     const init = file.statements.find((s) => ts.isFunctionDeclaration(s) && s.name?.text === 'initSchema' && s.body);
     if (!init) return none;
@@ -390,6 +399,7 @@ export function bootSteps(dbTs) {
     }
 
     // Every other ALTER in db.ts, in a string or a template's text (comments aren't nodes), in the file's order.
+    const alterOf = new Map(); // each string node an ALTER was counted in: the table (or null) each ALTER there names
     const after = new Set(body.slice(execAt + 1));
     const counted = (n) => {
         // Inside a step read above: accounted for. In initSchema after the exec, outside any function: runs after schema.sql.
@@ -408,14 +418,17 @@ export function bootSteps(dbTs) {
         if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n)) {
             const alters = [...n.text.matchAll(/\bALTER\b/gi)];
             if (alters.length > 0 && counted(n)) {
+                const here = [];
                 for (const m of alters) {
                     // A table only for the forms that change that table alone: ADD [COLUMN] and DROP [COLUMN]. Anything
                     // else is null (every table): a table rename changes the table it names after TO, a column rename
                     // rewrites other tables' REFERENCES to the column, and a form not parsed here may do either. A name
                     // that runs on into a `${…}` or a `+` (no space before ADD or DROP) is null too.
                     const one = /^ALTER\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+(?:ADD|DROP)\b/i.exec(n.text.slice(m.index));
-                    unread.push(one ? one[1].toLowerCase() : null);
+                    here.push(one ? one[1].toLowerCase() : null);
                 }
+                unread.push(...here);
+                alterOf.set(n, here);
             }
         }
         if (n !== init && inInit(n) && n.name && named(n.name, 'db') && (ts.isVariableDeclaration(n) || ts.isBindingElement(n) || ts.isParameter(n)
@@ -426,14 +439,208 @@ export function bootSteps(dbTs) {
     // A `return` before the exec, outside a function (a step may never run), or a `db` initSchema declares itself (a step may
     // not reach the node's database): no step is proved, and the table each names can't be.
     const returns = (n) => !ts.isFunctionLike(n) && (ts.isReturnStatement(n) || ts.forEachChild(n, returns) === true);
-    if (shadowed || body.slice(0, execAt).some(returns)) return { steps: [], unread: [...unread, ...steps.map((s) => s.table)], found: true };
-    return { steps, unread, found: true };
+    const texts = bootNamed(ts, file, init, body.slice(0, execAt).filter((s) => !read.has(s)), alterOf, tables);
+    if (shadowed || body.slice(0, execAt).some(returns)) return { steps: [], unread: [...unread, ...steps.map((s) => s.table)], named: texts, found: true };
+    return { steps, unread, named: texts, found: true };
+}
+
+const SQL_METHODS = new Set(['exec', 'prepare', 'pragma']);
+
+/**
+ * Every table of `tables` (schema.sql's, lower case) that a text db.ts's boot may run before the schema.sql exec names, other
+ * than a step bootSteps reads, whatever the statement does with it (CREATE, INSERT … SELECT, DROP, UPDATE, DELETE, ALTER,
+ * anything); null (every table) for a text whose names can't be read. Without this, a boot that makes or rebuilds a table
+ * schema.sql makes, in its own words, reads OK: schema.sql's CREATE TABLE IF NOT EXISTS then keeps the boot's shape.
+ *
+ * Where: `region` (initSchema's statements before the exec, its read steps left out), and, followed through TypeScript's
+ * checker, every declaration in db.ts that code there names: a function it calls (its whole body, callbacks and all), a
+ * variable (and each assignment to it, when it isn't const), a class; and what code there names, in turn. An import is
+ * another module's: not read.
+ * A text: a string, a template or a `+` of them, read as the text it always has: a `${…}` or an operand of the `+` is
+ * resolved only from a top-level `const X = <string or number>` (and its own `${…}`, `+` and consts), so today's
+ * `${PLAIN_PUSH_TOKENS}` reads as push_tokens_plain; anything else (a parameter, a local, a call, a tagged template) can't
+ * be read: null. So is the argument of any exec, prepare or pragma call there that isn't such a text (db.exec(schemaSql)
+ * aside: schema.sql's own text), and an exec, prepare or pragma taken as a value without being called.
+ * A name: every word the text holds as SQLite reads words (sqlTokens: "t", `t`, [t] and 't' unquoted, any case, main.t and
+ * temp.t naming t), so IF [NOT] EXISTS, a quote or a schema name can't hide one. Each text counts once per table. A table
+ * an ALTER counted in the same text (bootSteps' `unread`) already names is left out here, and a text an ALTER counted as
+ * null (every table) adds nothing.
+ */
+function bootNamed(ts, file, init, region, alterOf, tables) {
+    const known = new Set([...tables].map((t) => String(t).toLowerCase()));
+    const host = {
+        getSourceFile: (name) => (name === file.fileName ? file : undefined),
+        getDefaultLibFileName: () => 'lib.d.ts',
+        writeFile: () => { },
+        getCurrentDirectory: () => '/',
+        getCanonicalFileName: (name) => name,
+        useCaseSensitiveFileNames: () => true,
+        getNewLine: () => '\n',
+        fileExists: (name) => name === file.fileName,
+        readFile: (name) => (name === file.fileName ? file.text : undefined),
+        directoryExists: () => true,
+        getDirectories: () => [],
+    };
+    const checker = ts.createProgram({ rootNames: [file.fileName], options: { noLib: true, noResolve: true, types: [] }, host }).getTypeChecker();
+    const symbolOf = (id) => {
+        const s = checker.getSymbolAtLocation(id);
+        return s && !(s.flags & ts.SymbolFlags.Alias) ? s : null;
+    };
+    const constOf = (d) => d && ts.isVariableDeclaration(d) && ts.isVariableDeclarationList(d.parent) && (d.parent.flags & ts.NodeFlags.Const) !== 0;
+
+    // Every identifier in the file, by its symbol: for the assignments to a variable that isn't const.
+    let refs = null;
+    const refsOf = (symbol) => {
+        if (!refs) {
+            refs = new Map();
+            const index = (n) => {
+                if (ts.isIdentifier(n)) {
+                    const s = checker.getSymbolAtLocation(n);
+                    if (s) refs.set(s, [...(refs.get(s) ?? []), n]);
+                }
+                ts.forEachChild(n, index);
+            };
+            index(file);
+        }
+        return refs.get(symbol) ?? [];
+    };
+    const ASSIGN = new Set([ts.SyntaxKind.EqualsToken, ts.SyntaxKind.PlusEqualsToken, ts.SyntaxKind.BarBarEqualsToken,
+        ts.SyntaxKind.AmpersandAmpersandEqualsToken, ts.SyntaxKind.QuestionQuestionEqualsToken]);
+
+    // The region, and every declaration code in it names, in turn.
+    const scope = [];
+    const inScope = new Set();
+    const add = (n) => { if (n && n !== init && !inScope.has(n)) { inScope.add(n); scope.push(n); } };
+    region.forEach(add);
+    for (let k = 0; k < scope.length; k++) {
+        const walk = (n) => {
+            if (ts.isIdentifier(n)) {
+                const symbol = symbolOf(n);
+                for (const d of symbol?.declarations ?? []) {
+                    if (ts.isParameter(d)) continue; // its value comes from a call, which is in the region or followed
+                    let decl = d;
+                    while (ts.isBindingElement(decl) || ts.isObjectBindingPattern(decl) || ts.isArrayBindingPattern(decl)) decl = decl.parent;
+                    if (ts.isParameter(decl)) continue;
+                    add(decl);
+                    if (ts.isVariableDeclaration(decl) && !constOf(decl)) {
+                        for (const r of refsOf(symbol)) {
+                            const p = r.parent;
+                            if ((ts.isBinaryExpression(p) && p.left === r && ASSIGN.has(p.operatorToken.kind))) add(p);
+                        }
+                    }
+                }
+            }
+            ts.forEachChild(n, walk);
+        };
+        walk(scope[k]);
+    }
+
+    const skipParens = (n) => { while (ts.isParenthesizedExpression(n)) n = n.expression; return n; };
+    const isPlus = (n) => ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken;
+    const isPiece = (n) => ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n);
+    // A top-level `const X = …`: its initializer, else null.
+    const topConst = (id) => {
+        const d = symbolOf(id)?.valueDeclaration;
+        return constOf(d) && ts.isIdentifier(d.name) && ts.isVariableStatement(d.parent.parent) && d.parent.parent.parent === file ? d.initializer ?? null : null;
+    };
+    // The text an expression always has, or null.
+    const textOf = (n, seen = new Set()) => {
+        n = skipParens(n);
+        if (seen.has(n)) return null;
+        seen.add(n);
+        if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isNumericLiteral(n)) {
+            return ts.isTaggedTemplateExpression(n.parent) ? null : n.text;
+        }
+        if (ts.isTemplateExpression(n)) {
+            if (ts.isTaggedTemplateExpression(n.parent)) return null;
+            let text = n.head.text;
+            for (const span of n.templateSpans) {
+                const value = textOf(span.expression, seen);
+                if (value === null) return null;
+                text += value + span.literal.text;
+            }
+            return text;
+        }
+        if (isPlus(n)) {
+            const [a, b] = [textOf(n.left, seen), textOf(n.right, seen)];
+            return a === null || b === null ? null : a + b;
+        }
+        if (ts.isIdentifier(n)) {
+            const value = topConst(n);
+            return value ? textOf(value, seen) : null;
+        }
+        return null;
+    };
+    // initSchema's own `const schemaSql = …`: schema.sql's text.
+    const isSchemaSql = (n) => {
+        const d = ts.isIdentifier(n) ? symbolOf(n)?.valueDeclaration : null;
+        return !!d && constOf(d) && ts.isIdentifier(d.name) && d.name.text === 'schemaSql' && d.parent.parent.parent === init.body;
+    };
+
+    const named = [];
+    const done = new Set();
+    // One text: its names (the ALTERs counted in it aside), or null.
+    const count = (root) => {
+        if (done.has(root)) return;
+        done.add(root);
+        const alters = [];
+        const pieces = (n) => {
+            if (alterOf.has(n)) alters.push(...alterOf.get(n));
+            ts.forEachChild(n, pieces);
+        };
+        pieces(root);
+        if (alters.includes(null)) return; // every table already
+        const text = textOf(root);
+        if (text === null) { named.push(null); return; }
+        const names = new Set(sqlTokens(text).filter((t) => t.kind === 'id' || t.kind === 'str').map((t) => t.text.toLowerCase()));
+        for (const t of [...names].filter((x) => known.has(x) && !alters.includes(x)).sort()) named.push(t);
+    };
+    for (const node of scope) {
+        const visit = (n) => {
+            if (isPiece(n)) {
+                let root = n;
+                for (let p = root.parent; p && (ts.isParenthesizedExpression(p) || isPlus(p) || ts.isTemplateSpan(p) || ts.isTemplateExpression(p) || ts.isTaggedTemplateExpression(p)); p = p.parent) {
+                    root = p;
+                }
+                count(ts.isTemplateSpan(root) ? root.parent : root);
+            }
+            const method = ts.isPropertyAccessExpression(n) ? n.name.text
+                : ts.isElementAccessExpression(n) && ts.isStringLiteralLike(n.argumentExpression) ? n.argumentExpression.text : null;
+            if (method !== null && SQL_METHODS.has(method) && !done.has(n)) {
+                done.add(n); // a declaration in the region is walked again as its own: each call counts once
+                let callee = n;
+                while (ts.isParenthesizedExpression(callee.parent)) callee = callee.parent;
+                const c = callee.parent;
+                if (!(ts.isCallExpression(c) && c.expression === callee)) named.push(null); // taken as a value: any text may reach it
+                else if (c.arguments.length > 0 && !isSchemaSql(skipParens(c.arguments[0]))) {
+                    // A text is counted where it is written (a top-level const's in its declaration, followed above); a
+                    // `+` of names here, whole, so a name split across two consts is read too; anything else can't be read.
+                    const arg = skipParens(c.arguments[0]);
+                    if (isPiece(arg) || isPlus(arg) || ts.isTaggedTemplateExpression(arg)) count(arg);
+                    else if (textOf(arg) === null) named.push(null);
+                }
+            }
+            ts.forEachChild(n, visit);
+        };
+        visit(node);
+    }
+    return named;
 }
 
 /** What the check compares against, read from the checkout (or from the packed copy). */
 export function readBuild({ schema, manifest, boot }) {
     const schemaSql = readFileSync(schema, 'utf8');
-    const boots = bootSteps(readFileSync(boot, 'utf8'));
+    // The tables schema.sql makes, as SQLite makes them: the names a text in db.ts's boot is read for.
+    const Database = loadSqlite();
+    const mem = new Database(':memory:');
+    let tables;
+    try {
+        mem.exec(schemaSql);
+        tables = [...tablesOf(mem).keys()];
+    } finally {
+        mem.close();
+    }
+    const boots = bootSteps(readFileSync(boot, 'utf8'), tables);
     return {
         schemaSql,
         schemaSha: createHash('sha256').update(schemaSql).digest('hex').slice(0, 12),
@@ -441,6 +648,7 @@ export function readBuild({ schema, manifest, boot }) {
         bootSteps: boots.steps,
         bootUnread: boots.found ? boots.unread.length : -1,
         bootUnreadTables: boots.unread,
+        bootNamedTables: boots.named,
     };
 }
 
@@ -529,18 +737,26 @@ export function checkDrift(Database, db, build) {
         const freshTables = tablesOf(fresh);
         const hereTables = tablesOf(db);
         const results = [];
+        let notYet = 0;
         for (const [key, f] of [...freshTables].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
             const h = hereTables.get(key);
-            if (!h) continue;
             const kind = build.kinds[key] ?? 'not in the manifest';
+            // Each ALTER in db.ts naming it (or no table) that isn't a step the reader can prove runs on its own, and each other
+            // text the boot may run before the exec that names it (or whose names can't be read): what the boot does to this
+            // table isn't known, so it is never OK, even when it reads as schema.sql's shape now, and no replay runs.
+            const unproved = (build.bootUnreadTables ?? []).filter((t) => t === key || t === null).length;
+            const namedBy = (build.bootNamedTables ?? []).filter((t) => t === key || t === null).length;
+            if (!h) {
+                // Not here: schema.sql makes it at the deploy, unless the boot may make it first, in a shape of its own.
+                if (unproved === 0 && namedBy === 0) notYet++;
+                else results.push({ status: 'CANT-PROVE-NEW', table: f.name, kind, rows: null, diffs: [], bootAdds: [], bootRefused: [], replayError: null, bootUnproved: unproved, bootNamed: namedBy });
+                continue;
+            }
             const freshShape = tableShape(fresh, f.name);
             let diffs = shapeDiffs(tableShape(db, h.name), freshShape);
             let replay = { added: [], refused: [], error: null };
             const steps = build.bootSteps.filter((s) => s.table === key);
-            // Each ALTER in db.ts naming it (or no table) that isn't a step the reader can prove runs on its own: what the boot
-            // does to this table isn't known, so it is never OK, even when it reads as schema.sql's shape now, and no replay runs.
-            const unproved = (build.bootUnreadTables ?? []).filter((t) => t === key || t === null).length;
-            if (diffs.length > 0 && steps.length > 0 && h.type === 'table' && unproved === 0) {
+            if (diffs.length > 0 && steps.length > 0 && h.type === 'table' && unproved === 0 && namedBy === 0) {
                 // Only ever turns a drift into OK when the boot's steps, run on the table's own rows in the boot's order, give
                 // schema.sql's shape; a step the rows refuse, or a replay that can't be made, leaves the drift as read.
                 replay = replayBootSteps(Database, db, h.name, steps);
@@ -550,16 +766,16 @@ export function checkDrift(Database, db, build) {
             let rows = null;
             // A refused step is never OK, whatever its column: the boot drops it without a word on this node. Nor is a boot the
             // reader can't prove.
-            if (diffs.length > 0 || replay.refused.length > 0 || unproved > 0) {
+            if (diffs.length > 0 || replay.refused.length > 0 || unproved > 0 || namedBy > 0) {
                 rows = db.prepare(`SELECT COUNT(*) AS n FROM ${quoteName(h.name)}`).get().n;
                 status = kind !== 'local' ? 'DRIFT-REPLICATED' : rows > 0 ? 'DRIFT-HAS-ROWS' : 'DRIFT-EMPTY-LOCAL';
             }
-            results.push({ status, table: h.name, kind, rows, diffs, bootAdds: replay.added, bootRefused: replay.refused, replayError: replay.error, bootUnproved: unproved });
+            results.push({ status, table: h.name, kind, rows, diffs, bootAdds: replay.added, bootRefused: replay.refused, replayError: replay.error, bootUnproved: unproved, bootNamed: namedBy });
         }
         return {
             results,
             ok: results.every((r) => r.status === 'OK'),
-            onlyInSchema: [...freshTables.keys()].filter((k) => !hereTables.has(k)).length,
+            onlyInSchema: notYet,
             onlyHere: [...hereTables.keys()].filter((k) => !freshTables.has(k)).length,
         };
     } finally {
@@ -573,9 +789,13 @@ export function formatResult(r) {
     if (r.bootAdds.length > 0) notes.push(`with the columns a boot step in db.ts adds: ${r.bootAdds.join(', ')}`);
     if (r.bootRefused?.length > 0) notes.push(`boot steps in db.ts refused here: ${r.bootRefused.join(', ')}`);
     if (r.replayError) notes.push(`its boot steps in db.ts could not be run on a copy of its rows (${r.replayError}), so the drift stands as read`);
-    if (r.bootUnproved > 0) notes.push(`can't prove its boot: ${r.bootUnproved} ALTER in db.ts not written as a step the check reads (alone in an empty try at initSchema's top level, before the schema.sql exec), so no replay ran`);
+    const why = [];
+    if (r.bootUnproved > 0) why.push(`${r.bootUnproved} ALTER in db.ts not written as a step the check reads (alone in an empty try at initSchema's top level, before the schema.sql exec)`);
+    if (r.bootNamed > 0) why.push(`${r.bootNamed} other text in db.ts the boot may run before the schema.sql exec (in initSchema or what it calls) that names it or whose names can't be read`);
+    if (why.length > 0) notes.push(`can't prove its boot: ${why.join('; ')}, so no replay ran`);
     const boot = notes.length > 0 ? ` (${notes.join('; ')})` : '';
     if (r.status === 'OK') return `OK ${r.table} ${r.kind}${boot}`;
+    if (r.status === 'CANT-PROVE-NEW') return `CANT-PROVE-NEW ${r.table} ${r.kind}${boot}: not in this database yet, and the boot may make it before schema.sql does`;
     return `${r.status} ${r.table} rows=${r.rows} ${r.kind}${boot}: ${r.diffs.length > 0 ? r.diffs.join('; ') : 'nothing else differs'}`;
 }
 
@@ -647,9 +867,15 @@ export function main(argv, out = console.log, err = console.error) {
     if (build.bootUnread !== 0) {
         out(`schema-drift: note: ${build.bootUnread < 0 ? "db.ts's initSchema was not found; a column a boot step adds reads as drift here" : `${build.bootUnread} ALTER in db.ts not written as a step the check reads; the table it adds or drops a column of (every table, for any other form: a rename, one not parsed) can't be proved and is never OK`}`);
     }
+    const named = build.bootNamedTables ?? [];
+    if (named.length > 0) {
+        out(`schema-drift: note: ${named.length} text in db.ts the boot may run before the schema.sql exec names a table schema.sql makes, outside a step the check reads (${[...new Set(named.map((t) => t ?? "every table: its names can't be read"))].join(', ')}); that table can't be proved and is never OK`);
+    }
     for (const r of result.results) out(formatResult(r));
-    const drift = result.results.filter((r) => r.status !== 'OK').length;
-    out(`schema-drift: ${result.results.length} tables compared, ${drift} drift; ${result.onlyInSchema} in schema.sql not in this database yet (the deploy makes them); ${result.onlyHere} here not in schema.sql (not compared)`);
+    const compared = result.results.filter((r) => r.status !== 'CANT-PROVE-NEW');
+    const cantNew = result.results.length - compared.length;
+    const drift = compared.filter((r) => r.status !== 'OK').length;
+    out(`schema-drift: ${compared.length} tables compared, ${drift} drift; ${result.onlyInSchema} in schema.sql not in this database yet (the deploy makes them); ${cantNew > 0 ? `${cantNew} not here that the boot may make first (can't prove); ` : ''}${result.onlyHere} here not in schema.sql (not compared)`);
     return result.ok ? 0 : 1;
 }
 

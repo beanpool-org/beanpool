@@ -47,7 +47,21 @@ already had those tables under the old CHECK, so the new build's writes would ha
   (`ALTER TABLE t_new RENAME TO t` changes `t`, not `t_new`), a column rename (SQLite also rewrites every other
   table's `REFERENCES` to that column), a quoted or `main.` name, an ALTER with no table name, and any form the check
   doesn't parse. A `return` before the exec, or a `db` that `initSchema` declares itself, makes every table a step
-  names "can't prove". A "can't prove" table is never `OK`,
+  names "can't prove".
+- Any other text that the boot may run before the exec and that names a table `schema.sql` makes also makes that
+  table "can't prove", whatever the statement does with it: `CREATE TABLE`, `INSERT … SELECT`, `DROP`, `UPDATE`,
+  `DELETE`, a trigger, an index, a `SELECT`, anything. Without this, a boot could make or rebuild a table in its own
+  words before `schema.sql` runs, and `schema.sql`'s `CREATE TABLE IF NOT EXISTS` would keep that shape (round 6:
+  three measured cases, and db.ts did this for `member_photos` before cutover N1). "Before the exec" means
+  `initSchema`'s own code there (its read steps aside), and every function, variable or class in db.ts that this code
+  names, followed through TypeScript's checker, and what those name in turn. A name counts however SQLite would read it:
+  `"t"`, `[t]`, `` `t` ``, `'t'`, `main.t`, any case, with `IF [NOT] EXISTS`. A `${…}` or a `+` is read through a
+  top-level `const X = '…'`, so `${PLAIN_PUSH_TOKENS}` reads as `push_tokens_plain`. A text whose names can't be read
+  makes every table "can't prove": a `${…}` or `+` of anything else (a local, a parameter, a call), a tagged template,
+  the argument of `exec`, `prepare` or `pragma` when it isn't such a text (`db.exec(schemaSql)` aside), or one of those
+  methods taken as a value. A table like that that the node doesn't have yet gets a `CANT-PROVE-NEW` line instead of
+  counting under "the deploy makes them". Other modules aren't read: a function `initSchema` imports and calls (today
+  `readSchemaGate` and `writeSchemaStamp`, in db/schema-gate.ts) is trusted not to change a table `schema.sql` makes. A "can't prove" table is never `OK`,
   even when it already has `schema.sql`'s shape, and no steps are run for it, because what the boot does to it isn't
   known. An `ALTER` in `initSchema` after the exec, outside a function, runs after `schema.sql` and is not a step.
 - It reads each table's kind from `apps/server/src/engine/replication-manifest.ts`.
@@ -92,6 +106,7 @@ It prints one line per table that is in both the database and `schema.sql`:
 | `DRIFT-EMPTY-LOCAL <table> rows=0 local: …` | The table is never copied to a standby (`local` in the manifest), and it's empty | It is a candidate to drop so the new build makes it again (below) |
 | `DRIFT-HAS-ROWS <table> rows=<n> local: …` | A local table with rows | Stop and ask. Dropping it would lose them |
 | `DRIFT-REPLICATED <table> rows=<n> <kind>: …` | The table is copied to standbys or carried by a take-over, whatever its rows. A table the manifest doesn't name reads this way too | Stop and ask |
+| `CANT-PROVE-NEW <table> <kind> (…): not in this database yet, …` | `schema.sql` makes the table and the node hasn't got it, but db.ts's boot may make it first, in a shape of its own | Stop and ask |
 
 After the colon, it says what differs, for example
 `CHECK only here: kind in ('invite', 'line'); CHECK only in schema.sql: kind in ('invite', 'line', 'edit')`. "Here"
@@ -105,7 +120,8 @@ a refused step is never `OK`, even when `schema.sql` doesn't name that step's co
 `nothing else differs`. If the steps couldn't be run on a copy of the rows (for example, the table's definition calls
 a function only the server has), the bracket says so and the line stays a drift line, because nothing was proved. The
 same goes for `can't prove its boot: …`, which means db.ts has an `ALTER` on the table that isn't written as a step
-the check reads. That line is never `OK`, even when nothing else differs. Rewrite the step in db.ts in one of the read
+the check reads, or another text the boot may run before the exec that names the table (or whose names can't be read).
+That line is never `OK`, even when nothing else differs. Rewrite the step in db.ts in one of the read
 shapes above before you deploy. Don't widen the check to read the other shape. Two cases need something else. Both
 fail closed:
 
@@ -116,8 +132,8 @@ fail closed:
   `initSchema` in one of the read shapes, or accept that line and check that table by hand.
 
 The first line names the database and the first 12 characters of the `schema.sql` sha256 it compared against. The last
-line counts the tables it compared, how many drift, how many the deploy will create, and how many it skipped because
-`schema.sql` doesn't make them.
+line counts the tables it compared, how many drift, how many the deploy will create, how many the boot may make first
+(`CANT-PROVE-NEW`, when there are any), and how many it skipped because `schema.sql` doesn't make them.
 
 Exit codes: `0` when every table it compared is OK, proved against the rows that are there; `1` on any drift,
 including any boot step refused (whatever its column) or a table it couldn't prove; `2` when it couldn't run (a bad

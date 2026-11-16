@@ -136,8 +136,14 @@ function fixture(old = OLD_SCHEMA, build = {}) {
 const run = (args, opts = {}) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', ...opts });
 const tableLines = (stdout) => stdout.split('\n').filter((l) => l && !l.startsWith('schema-drift:'));
 const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
-/** The bracket of a table that `n` ALTERs in db.ts name (or name no table) outside the step shapes the check reads. */
-const cantProve = (n) => `can't prove its boot: ${n} ALTER in db.ts not written as a step the check reads (alone in an empty try at initSchema's top level, before the schema.sql exec), so no replay ran`;
+/**
+ * The bracket of a table that `n` ALTERs in db.ts name (or name no table) outside the step shapes the check reads, and `m`
+ * other texts the boot may run before the exec name (or whose names can't be read).
+ */
+const cantProve = (n, m = 0) => `can't prove its boot: ${[
+    ...(n > 0 ? [`${n} ALTER in db.ts not written as a step the check reads (alone in an empty try at initSchema's top level, before the schema.sql exec)`] : []),
+    ...(m > 0 ? [`${m} other text in db.ts the boot may run before the schema.sql exec (in initSchema or what it calls) that names it or whose names can't be read`] : []),
+].join('; ')}, so no replay ran`;
 
 const EXPECTED = [
     'DRIFT-REPLICATED listings rows=2 replicated: title: NULL allowed here, NOT NULL in schema.sql',
@@ -178,7 +184,7 @@ test('a database the build itself made reads OK everywhere and exits 0', () => {
 test('a boot step that is not before the exec counts for nothing: the column reads as missing', () => {
     // notes.lang's ALTER in the fixture's db.ts is AFTER the exec, so it isn't a step this build runs before schema.sql.
     const steps = bootSteps(DB_TS);
-    assert.deepEqual(steps, { steps: [{ table: 'settings', def: 'shown INTEGER NOT NULL DEFAULT 1 CHECK (shown IN (0, 1))' }], unread: [], found: true });
+    assert.deepEqual(steps, { steps: [{ table: 'settings', def: 'shown INTEGER NOT NULL DEFAULT 1 CHECK (shown IN (0, 1))' }], unread: [], named: [], found: true });
 });
 
 test('the database is opened read-only: a write through it fails, and the file is left byte for byte', () => {
@@ -557,8 +563,8 @@ export function initSchema() {
         // A form the check doesn't read (db.exec) runs first at boot, and x stays nullable: a replay of the read step alone
         // would say OK. So no replay, and the drift stands.
         { extra: "try { db.exec('ALTER TABLE t ADD COLUMN x TEXT'); } catch { }", unread: ['t'] },
-        // The same through a template that names no table: every table's replay is unproved.
-        { extra: "for (const name of ['t']) { try { db.exec(`ALTER TABLE ${name} ADD COLUMN x TEXT`); } catch { } }", unread: [null] },
+        // The same through a template that names no table: every table's replay is unproved. The loop's 't' names t as well.
+        { extra: "for (const name of ['t']) { try { db.exec(`ALTER TABLE ${name} ADD COLUMN x TEXT`); } catch { } }", unread: [null], named: 1 },
     ];
     const NULLABLE = ['x: NULL allowed here, NOT NULL in schema.sql', "x: default none here, '' in schema.sql"];
     for (const c of cases) {
@@ -570,7 +576,7 @@ export function initSchema() {
             assert.deepEqual(shapeDiffs(bootFixture(bootWith(c.extra), f.db, 't').shape, fresh), c.asBooted ?? NULLABLE, c.extra);
             const r = run(f.args);
             assert.equal(r.status, c.line ? 0 : 1, r.stdout + r.stderr);
-            assert.deepEqual(tableLines(r.stdout), [c.line ?? `DRIFT-EMPTY-LOCAL t rows=0 local (${cantProve(1)}): columns only in schema.sql: x`], c.extra);
+            assert.deepEqual(tableLines(r.stdout), [c.line ?? `DRIFT-EMPTY-LOCAL t rows=0 local (${cantProve(1, c.named ?? 0)}): columns only in schema.sql: x`], c.extra);
         } finally {
             rmSync(f.dir, { recursive: true, force: true });
         }
@@ -583,7 +589,7 @@ export function initSchema() {
     for (const [table, column] of [...MORE, ['u', 'z TEXT']]) { try { db.prepare(\`ALTER TABLE \${table} ADD COLUMN \${column}\`).run(); } catch { } }
     db.exec(schemaSql);
 }
-`), { steps: [{ table: 't', def: 'y TEXT' }, { table: 'u', def: 'z TEXT' }], unread: ['t', null], found: true });
+`), { steps: [{ table: 't', def: 'y TEXT' }, { table: 'u', def: 'z TEXT' }], unread: ['t', null], named: [], found: true });
 });
 
 // ── A step is read only in a shape that provably runs on its own ─────────────────────────────────────────────────────
@@ -621,15 +627,15 @@ const SHAPES = [
     { shape: 'a step behind &&', unread: ['t'], misses: ['has a', 'neither'], code: `try { ${A}; } catch { }\n    try { ${UNSET} && ${B}; } catch { }` },
     { shape: 'a step in a ternary', unread: ['t'], misses: ['has a', 'neither'], code: `try { ${A}; } catch { }\n    try { ${UNSET} ? ${B} : null; } catch { }` },
     { shape: 'a step in a non-empty catch', unread: ['t', 't'], steps: [], misses: ['neither'], code: `try { ${A}; } catch { try { ${B}; } catch { } }` },
-    { shape: "a loop whose catch isn't empty", unread: ['t'], steps: [], misses: ['has a'], code: `for (const column of ${COLUMNS}) {\n        ${LOOP.replace('catch { }', 'catch { break; }')}\n    }` },
-    { shape: 'a loop with more in its body', unread: ['t'], steps: [], misses: [], code: `for (const column of ${COLUMNS}) {\n        ${LOOP}\n        if (${UNSET}) break;\n    }` },
-    { shape: 'a loop behind an if', unread: ['t'], steps: [], misses: ['has a', 'neither'], code: `if (${UNSET}) for (const column of ${COLUMNS}) {\n        ${LOOP}\n    }` },
+    { shape: "a loop whose catch isn't empty", unread: ['t'], named: 1, steps: [], misses: ['has a'], code: `for (const column of ${COLUMNS}) {\n        ${LOOP.replace('catch { }', 'catch { break; }')}\n    }` },
+    { shape: 'a loop with more in its body', unread: ['t'], named: 1, steps: [], misses: [], code: `for (const column of ${COLUMNS}) {\n        ${LOOP}\n        if (${UNSET}) break;\n    }` },
+    { shape: 'a loop behind an if', unread: ['t'], named: 1, steps: [], misses: ['has a', 'neither'], code: `if (${UNSET}) for (const column of ${COLUMNS}) {\n        ${LOOP}\n    }` },
     { shape: 'a step in a function initSchema never calls', unread: ['t'], misses: ['has a', 'neither'], code: `try { ${A}; } catch { }\n    function addB() { try { ${B}; } catch { } }` },
     { shape: 'a step in a callback', unread: ['t'], misses: [], code: `try { ${A}; } catch { }\n    [0].forEach(() => { try { ${B}; } catch { } });` },
     { shape: 'a step in a function declared after the exec (it hoists), called before it', unread: ['t'], misses: [], code: `try { ${A}; } catch { }\n    addB();`, after: `function addB() { try { ${B}; } catch { } }` },
-    { shape: 'a template with a ${…}, not a loop', unread: ['t'], misses: [], code: `try { ${A}; } catch { }\n    const column = "b TEXT NOT NULL DEFAULT ''";\n    try { db.prepare(\`ALTER TABLE t ADD COLUMN \${column}\`).run(); } catch { }` },
+    { shape: 'a template with a ${…}, not a loop', unread: ['t'], named: 1, misses: [], code: `try { ${A}; } catch { }\n    const column = "b TEXT NOT NULL DEFAULT ''";\n    try { db.prepare(\`ALTER TABLE t ADD COLUMN \${column}\`).run(); } catch { }` },
     { shape: 'db.exec', unread: ['t'], misses: [], code: `try { ${A}; } catch { }\n    try { db.exec("ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT ''"); } catch { }` },
-    { shape: 'the statement in a variable', unread: ['t'], misses: [], code: `try { ${A}; } catch { }\n    const sql = "ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT ''";\n    try { db.prepare(sql).run(); } catch { }` },
+    { shape: 'the statement in a variable', unread: ['t'], named: 1, misses: [], code: `try { ${A}; } catch { }\n    const sql = "ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT ''";\n    try { db.prepare(sql).run(); } catch { }` },
     { shape: 'a finally', unread: ['t'], misses: [], code: `try { ${A}; } catch { }\n    try { ${B}; } catch { } finally { }` },
     { shape: 'a return before the steps', unread: ['t', 't'], steps: [], misses: [], code: `if (${UNSET}) return;\n    try { ${A}; } catch { }\n    try { ${B}; } catch { }` },
     // Round 5: a table rename names t_new and changes t. It names no table the check may trust (null): every table.
@@ -652,6 +658,8 @@ test("each shape x what the table holds: the read shapes read OK as a real boot 
         const boot = `\nexport function initSchema() {\n    ${s.code}\n    db.exec(schemaSql);\n    ${s.after ?? ''}\n}\n`;
         const read = bootSteps(boot);
         assert.deepEqual(read.unread, s.unread ?? [], s.shape);
+        // A template over a value it can't read, or a statement held in a local: that text's names can't be read (every table).
+        assert.deepEqual(bootSteps(boot, ['t']).named, Array(s.named ?? 0).fill(null), s.shape);
         // A read shape's two steps; a can't-prove shape's `a` alone in its own try (unless `steps` says what is read).
         assert.deepEqual(read.steps, s.steps ?? (s.unread ? AB.slice(0, 1) : AB), s.shape);
         for (const st of SHAPE_STATES) {
@@ -663,7 +671,7 @@ test("each shape x what the table holds: the read shapes read OK as a real boot 
                 const short = shapeDiffs(real.shape, fresh);
                 if (s.unread) {
                     const rest = st.missing.length > 0 ? `columns only in schema.sql: ${st.missing.join(', ')}` : 'nothing else differs';
-                    assert.deepEqual(r.lines, [`DRIFT-HAS-ROWS t rows=1 local (${cantProve(s.unread.length)}): ${rest}`], what);
+                    assert.deepEqual(r.lines, [`DRIFT-HAS-ROWS t rows=1 local (${cantProve(s.unread.length, s.named ?? 0)}): ${rest}`], what);
                     assert.equal(r.code, 1, what);
                     // Where the real boot falls short, an OK would have been a lie.
                     assert.equal(short.length > 0, s.misses.includes(st.state), `${what}: a real boot leaves ${JSON.stringify(short)}`);
@@ -703,7 +711,7 @@ test("an unread ALTER names its table only for ADD and DROP; a rename or any for
         [exec('ALTER TABLE t /* why */ ADD COLUMN z TEXT'), [null]],
         [exec('ALTER TABLE t ADD COLUMN z TEXT; ALTER TABLE u RENAME TO t'), ['t', null]],
         ["console.log('never alter this');", [null]],
-    ]) assert.deepEqual(bootSteps(wrap(code)), { steps: [], unread, found: true }, code);
+    ]) assert.deepEqual(bootSteps(wrap(code)), { steps: [], unread, named: [], found: true }, code);
 
     const manifest = (...tables) => `export const TABLES: Record<string, TableEntry> = {\n${tables.map((t) => `    ${t}: { kind: 'local', reason: 'this server only' },\n`).join('')}};\n`;
     const cases = [
@@ -715,7 +723,9 @@ test("an unread ALTER names its table only for ADD and DROP; a rename or any for
             code: "try { db.prepare('ALTER TABLE u RENAME TO t').run(); } catch { }",
             steps: [],
             changed: 't',
-            lines: [`DRIFT-HAS-ROWS k rows=1 local (${cantProve(1)}): nothing else differs`],
+            // t isn't here, and the rename may make it before schema.sql does: never "the deploy makes them" (round 6).
+            lines: [`DRIFT-HAS-ROWS k rows=1 local (${cantProve(1)}): nothing else differs`,
+                `CANT-PROVE-NEW t local (${cantProve(1)}): not in this database yet, and the boot may make it before schema.sql does`],
         },
         {
             name: "a rebuild after t's steps, its CREATE text short of schema.sql's",
@@ -740,7 +750,7 @@ test("an unread ALTER names its table only for ADD and DROP; a rename or any for
     ];
     for (const c of cases) {
         const boot = wrap(c.code);
-        assert.deepEqual(bootSteps(boot), { steps: c.steps, unread: [null], found: true }, c.name);
+        assert.deepEqual(bootSteps(boot), { steps: c.steps, unread: [null], named: [], found: true }, c.name);
         const f = fixture(c.old, { schema: c.schema, manifest: c.manifest, boot });
         try {
             const r = checkLines(f.args);
@@ -758,28 +768,151 @@ test("an unread ALTER names its table only for ADD and DROP; a rename or any for
     }
 });
 
+// ── Any text the boot may run before the exec that names a table schema.sql makes ───────────────────────────────────
+
+/**
+ * A real boot of a fixture db.ts, its helpers and its top-level code too, on a copy of `file`: the module's own JavaScript with
+ * `db` a connection to the copy, initSchema run up to its schema.sql exec, then schema.sql itself. Returns how `table` then
+ * differs from schema.sql's.
+ */
+function bootThenSchema(dbTs, file, schema, table) {
+    const copy = `${file}-boot-copy`;
+    writeFileSync(copy, readFileSync(file));
+    const conn = new Database(copy);
+    const schemaSql = Symbol('schema.sql');
+    const reached = new Error('the schema.sql exec');
+    const db = {
+        prepare: (sql) => { const s = conn.prepare(sql); return { run: (...a) => s.run(...a), get: (...a) => s.get(...a) }; },
+        exec: (sql) => { if (sql === schemaSql) throw reached; conn.exec(sql); },
+    };
+    let stopped = null;
+    try { new Function('db', 'schemaSql', `${dbTs.replace(/^export /gm, '')}\nreturn initSchema();`)(db, schemaSql); } catch (e) { stopped = e; }
+    assert.equal(stopped, reached, 'the fixture boot ran to its schema.sql exec');
+    conn.exec(schema);
+    const freshDb = new Database(':memory:');
+    freshDb.exec(schema);
+    const diffs = shapeDiffs(tableShape(conn, table), tableShape(freshDb, table));
+    freshDb.close();
+    conn.close();
+    rmSync(copy);
+    return diffs;
+}
+
+// schema.sql makes k, t and photos. The node has k and t (schema.sql's shape, a row each) and no photos, unless a case says.
+// Each case is a db.ts whose boot, before the exec, runs one text that names a table (or one whose names can't be read).
+const NAMED_SCHEMA = `CREATE TABLE IF NOT EXISTS k (id TEXT PRIMARY KEY);
+${SHAPE_SCHEMA}
+CREATE TABLE IF NOT EXISTS photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL CHECK (length(photo) <= 100));`;
+const NAMED_OLD = "CREATE TABLE k (id TEXT PRIMARY KEY); CREATE TABLE t (id TEXT PRIMARY KEY, a TEXT, b TEXT NOT NULL DEFAULT ''); INSERT INTO k VALUES ('k1'); INSERT INTO t (id) VALUES ('t1');";
+const NOT_YET = "not in this database yet, and the boot may make it before schema.sql does";
+/** The lines when `alter` and `text` count, for each table, the ALTERs and the other texts that name it. */
+const namedLines = ({ alter = {}, text = {} }) => ['k', 'photos', 't'].flatMap((name) => {
+    const [n, m] = [alter[name] ?? 0, text[name] ?? 0];
+    if (name === 'photos') return n + m === 0 ? [] : [`CANT-PROVE-NEW photos local (${cantProve(n, m)}): ${NOT_YET}`];
+    return [n + m === 0 ? `OK ${name} local` : `DRIFT-HAS-ROWS ${name} rows=1 local (${cantProve(n, m)}): nothing else differs`];
+});
+const EVERY = (t = 1) => ({ text: { k: 1, photos: 1, t } }); // one text whose names can't be read (+ t - 1 that name t)
+const NAMED_CASES = [
+    // The reviewer's three (round 6). Before this round each read OK or "the deploy makes them", exit 0.
+    {
+        name: 'A: u moved into t with CREATE, INSERT … SELECT and DROP, on a node with no t',
+        old: "CREATE TABLE k (id TEXT PRIMARY KEY); CREATE TABLE u (id TEXT PRIMARY KEY); INSERT INTO k VALUES ('k1'); INSERT INTO u VALUES ('u1');",
+        code: "try { db.exec('CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY); INSERT INTO t (id) SELECT id FROM u; DROP TABLE u;'); } catch { }",
+        lines: ['OK k local', `CANT-PROVE-NEW t local (${cantProve(0, 1)}): ${NOT_YET}`],
+        lie: 't',
+    },
+    {
+        name: "B: a rebuild after t's steps, without the final RENAME",
+        old: "CREATE TABLE k (id TEXT PRIMARY KEY); CREATE TABLE t (id TEXT PRIMARY KEY); INSERT INTO k VALUES ('k1'); INSERT INTO t VALUES ('t1');",
+        code: `try { ${A}; } catch { }\n    try { ${B}; } catch { }\n    try { db.exec('CREATE TEMP TABLE t_keep AS SELECT id, a FROM t; DROP TABLE t; CREATE TABLE t (id TEXT PRIMARY KEY, a TEXT); INSERT INTO t (id, a) SELECT id, a FROM t_keep; DROP TABLE t_keep;'); } catch { }`,
+        steps: AB,
+        lines: ['OK k local', `DRIFT-HAS-ROWS t rows=1 local (${cantProve(0, 1)}): columns only in schema.sql: a, b`],
+        lie: 't',
+    },
+    {
+        name: "C: a helper initSchema calls makes photos in its own words, without schema.sql's CHECK",
+        top: "function movePhotos() { db.exec('CREATE TABLE IF NOT EXISTS photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL)'); }",
+        code: 'try { movePhotos(); } catch { }',
+        text: { photos: 1 },
+        lie: 'photos',
+    },
+    // Every verb: what the statement does with the table doesn't count, only that it names it.
+    { name: 'INSERT', code: `try { db.prepare("INSERT INTO t (id) VALUES ('x')").run(); } catch { }`, text: { t: 1 } },
+    { name: 'UPDATE', code: "try { db.prepare('UPDATE t SET a = NULL').run(); } catch { }", text: { t: 1 } },
+    { name: 'DELETE', code: "try { db.prepare('DELETE FROM t').run(); } catch { }", text: { t: 1 } },
+    { name: 'DROP', code: "try { db.exec('DROP TABLE t'); } catch { }", text: { t: 1 } },
+    { name: 'CREATE TABLE IF NOT EXISTS, on a table the node has', code: "try { db.exec('CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY)'); } catch { }", text: { t: 1 } },
+    { name: 'REPLACE', code: "try { db.exec('REPLACE INTO t (id) VALUES (1)'); } catch { }", text: { t: 1 } },
+    { name: 'CREATE TRIGGER', code: "try { db.exec('CREATE TRIGGER tg AFTER INSERT ON t BEGIN SELECT 1; END'); } catch { }", text: { t: 1 } },
+    { name: 'CREATE INDEX', code: "try { db.exec('CREATE INDEX IF NOT EXISTS i ON t (a)'); } catch { }", text: { t: 1 } },
+    { name: 'a SELECT', code: "try { db.prepare('SELECT COUNT(*) FROM t').get(); } catch { }", text: { t: 1 } },
+    { name: 'ALTER (counted as an ALTER, once)', code: "try { db.exec('ALTER TABLE t ADD COLUMN z TEXT'); } catch { }", alter: { t: 1 } },
+    // However the name is written.
+    { name: 'a double-quoted name', code: `try { db.exec('DELETE FROM "t"'); } catch { }`, text: { t: 1 } },
+    { name: 'a bracketed name', code: "try { db.exec('DELETE FROM [t]'); } catch { }", text: { t: 1 } },
+    { name: 'a backticked name', code: "try { db.exec('DELETE FROM `t`'); } catch { }", text: { t: 1 } },
+    { name: 'main.t', code: "try { db.exec('DELETE FROM main.t'); } catch { }", text: { t: 1 } },
+    { name: '"main"."t"', code: `try { db.exec('DELETE FROM "main"."t"'); } catch { }`, text: { t: 1 } },
+    { name: "a string as a name, IF EXISTS", code: `try { db.exec("DROP TABLE IF EXISTS 't'"); } catch { }`, text: { t: 1 } },
+    { name: 'another case, a comment', code: "try { db.exec('delete /* x */ from T'); } catch { }", text: { t: 1 } },
+    // A text read through a top-level const, a `+`, or a name split across two consts.
+    { name: 'a ${…} from a top-level const', top: "const TABLE = 't';", code: 'try { db.exec(`DELETE FROM ${TABLE}`); } catch { }', text: { t: 2 } },
+    { name: 'a + of a top-level const', top: "const TABLE = 't';", code: "try { db.exec('DELETE FROM ' + TABLE); } catch { }", text: { t: 2 } },
+    { name: 'a name split across two consts', top: "const P1 = 'pho';\nconst P2 = 'tos';", code: "try { db.exec('DROP TABLE IF EXISTS ' + P1 + P2); } catch { }", text: { photos: 1 } },
+    // A text whose names can't be read: every table, the ones not here included.
+    { name: 'a ${…} from a local', code: "const name = 't';\n    try { db.exec(`DELETE FROM ${name}`); } catch { }", ...EVERY(2) },
+    { name: 'a statement a function returns', top: "function sqlFor() { return 'DELETE FROM t'; }", code: 'try { db.exec(sqlFor()); } catch { }', ...EVERY(2) },
+    { name: 'exec taken as a value', code: "const run = db.exec.bind(db);\n    try { run('DELETE FROM t'); } catch { }", ...EVERY(2) },
+    { name: 'a top-level let another function sets', top: "let SQL = '';\nfunction setUp() { SQL = 'DELETE FROM t'; }\nsetUp();", code: 'try { db.exec(SQL); } catch { }', ...EVERY(2) },
+    { name: 'a tagged template', code: 'try { db.exec(String.raw`DELETE FROM t`); } catch { }', ...EVERY(1) },
+    // A helper's helper.
+    { name: 'a helper of a helper initSchema calls', top: "function inner() { db.exec('DELETE FROM t'); }\nfunction outer() { inner(); }", code: 'try { outer(); } catch { }', text: { t: 1 } },
+];
+
+test("any text the boot may run before the exec that names a table schema.sql makes, whatever its verb or quoting, makes that table can't prove (every table, where its names can't be read), exit 1, each against a real boot", () => {
+    const manifest = `export const TABLES: Record<string, TableEntry> = {\n${['k', 't', 'photos'].map((t) => `    ${t}: { kind: 'local', reason: 'this server only' },\n`).join('')}};\n`;
+    for (const c of NAMED_CASES) {
+        const boot = `${c.top ?? ''}\nexport function initSchema() {\n    ${c.code}\n    db.exec(schemaSql);\n}\n`;
+        const f = fixture(c.old ?? NAMED_OLD, { schema: NAMED_SCHEMA, manifest, boot });
+        try {
+            const read = bootSteps(boot, ['k', 't', 'photos']);
+            assert.deepEqual(read.steps, c.steps ?? [], c.name);
+            const r = checkLines(f.args);
+            assert.deepEqual(r.lines, c.lines ?? namedLines(c), c.name);
+            assert.equal(r.code, 1, c.name);
+            // The case's own code, booted for real on a copy and then schema.sql: it runs. For the reviewer's three, the table it
+            // makes is short of schema.sql's shape: an OK, or "the deploy makes them", was a lie.
+            const left = bootThenSchema(boot, f.db, NAMED_SCHEMA, c.lie ?? 't');
+            if (c.lie) assert.notDeepEqual(left, [], `${c.name}: a real boot leaves ${c.lie} short of schema.sql`);
+        } finally {
+            rmSync(f.dir, { recursive: true, force: true });
+        }
+    }
+});
+
 test("the reader, case by case: a db initSchema declares, an ALTER after the exec, one elsewhere in db.ts, a name that runs on, a syntax error, near misses", () => {
     const wrap = (code, after = '') => `export function initSchema() {\n    ${code}\n    db.exec(schemaSql);\n    ${after}\n}\n`;
     const STEP_A = `try { ${A}; } catch { }`;
     // A db of initSchema's own: no step surely reaches the node's database, so none is proved.
-    assert.deepEqual(bootSteps(wrap(`const db = openOther();\n    ${STEP_A}`)), { steps: [], unread: ['t'], found: true });
+    assert.deepEqual(bootSteps(wrap(`const db = openOther();\n    ${STEP_A}`)), { steps: [], unread: ['t'], named: [], found: true });
     // After the exec, outside a function: it runs after schema.sql, so it is no step and nothing is unread.
-    assert.deepEqual(bootSteps(wrap(STEP_A, `try { ${B}; } catch { }`)), { steps: [{ table: 't', def: 'a TEXT' }], unread: [], found: true });
+    assert.deepEqual(bootSteps(wrap(STEP_A, `try { ${B}; } catch { }`)), { steps: [{ table: 't', def: 'a TEXT' }], unread: [], named: [], found: true });
     // Elsewhere in db.ts (a helper initSchema may call): its table can't be proved.
     assert.deepEqual(bootSteps(`function helper() { db.exec('ALTER TABLE u ADD COLUMN z TEXT'); }\n${wrap(STEP_A)}`),
-        { steps: [{ table: 't', def: 'a TEXT' }], unread: ['u'], found: true });
+        { steps: [{ table: 't', def: 'a TEXT' }], unread: ['u'], named: [], found: true });
     // A name that ends where its text does may run on into a ${…} or a +: it names no table for sure.
     assert.deepEqual(bootSteps(wrap("try { db.exec(`ALTER TABLE t${n} ADD COLUMN z TEXT`); } catch { }\n    try { db.exec('ALTER TABLE t' + n + ' ADD COLUMN z TEXT'); } catch { }")).unread, [null, null]);
     // A syntax error: initSchema isn't read at all, so no step counts and a column one adds reads as drift.
-    assert.deepEqual(bootSteps(wrap(`${STEP_A} {`)), { steps: [], unread: [], found: false });
-    // Near misses: a catch binding, `?.`, an argument to run, a `let` loop, a loop body with no braces. Each is the table's.
-    for (const code of [
-        `try { ${A}; } catch (e) { }`,
-        "try { db?.prepare('ALTER TABLE t ADD COLUMN a TEXT').run(); } catch { }",
-        "try { db.prepare('ALTER TABLE t ADD COLUMN a TEXT').run(1); } catch { }",
-        `for (let column of ${COLUMNS}) {\n        ${LOOP}\n    }`,
-        `for (const column of ${COLUMNS}) ${LOOP}`,
-    ]) assert.deepEqual(bootSteps(wrap(code)), { steps: [], unread: ['t'], found: true }, code);
+    assert.deepEqual(bootSteps(wrap(`${STEP_A} {`)), { steps: [], unread: [], named: [], found: false });
+    // Near misses: a catch binding, `?.`, an argument to run, a `let` loop, a loop body with no braces. Each is the table's; a
+    // loop not read leaves its template's ${column} a value the reader can't read, so that text names every table (round 6).
+    for (const [code, named] of [
+        [`try { ${A}; } catch (e) { }`, []],
+        ["try { db?.prepare('ALTER TABLE t ADD COLUMN a TEXT').run(); } catch { }", []],
+        ["try { db.prepare('ALTER TABLE t ADD COLUMN a TEXT').run(1); } catch { }", []],
+        [`for (let column of ${COLUMNS}) {\n        ${LOOP}\n    }`, [null]],
+        [`for (const column of ${COLUMNS}) ${LOOP}`, [null]],
+    ]) assert.deepEqual(bootSteps(wrap(code)), { steps: [], unread: ['t'], named, found: true }, code);
 });
 
 test("a step with a second statement after a `;` is refused, as the boot's db.prepare refuses it", () => {
@@ -913,6 +1046,7 @@ test("this checkout: every table schema.sql makes has its kind in the manifest, 
         const unnamed = tables.filter((t) => !(t in build.kinds));
         assert.deepEqual(unnamed, [], 'a table the manifest reader did not find: a new form of entry in engine/replication-manifest.ts TABLES? Teach manifestKinds it');
         assert.ok(build.bootUnread >= 0, "db.ts's initSchema or its top-level db.exec(schemaSql) was not found, or the parser found a syntax error: teach bootSteps where it moved");
+        assert.deepEqual(build.bootNamedTables, [], 'a text the boot may run before the schema.sql exec names a table schema.sql makes (or its names can\'t be read): every table it names is never OK');
         const { results, ok } = checkDrift(Database, db, build);
         assert.equal(results.length, tables.length);
         assert.ok(ok, results.filter((r) => r.status !== 'OK').map(formatResult).join('\n'));

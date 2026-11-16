@@ -34,7 +34,11 @@
  *     told once per real change. Then the table: owner (phone, and computer with no fresh proof), admin, member, visitor
  *     and standby × add an address, Make main, remove → allowed, or refused in words with nothing changed. Make main
  *     refuses what can't be main (not listed, a number beside a name, a home-network address beside an internet one), and
- *     removing the main address clears the choice.
+ *     removing the main address clears the choice. Settings' report says of each row why Make main would be refused, in
+ *     /main's words (several-addresses S6), and carries the signed list's main and addresses. A beanpool.org name the
+ *     address service says another community holds, while the record still says live (nothing, another server or this one
+ *     answering there), can't be made main from the phone, the phone with a code or the computer: 409 in the report's
+ *     words, nothing moves; said to be this community's again, it can (S6 round 2, #3240's deciding review).
  * 10. Changing the main changes WHICH address is named, never WHICH addresses work (round 2 of #3222): every reader of the
  *     main (primaryAddress, invites through /api/community/info, the directory push, the search canonical, the card, the
  *     assistant's welcome and origin, the home other servers know it by, the OAuth issuer and resource) × no main chosen,
@@ -1003,9 +1007,19 @@ async function main(): Promise<void> {
         const notListed = await post(MAIN, phone(), { address: 'elsewhere.example.org' });
         assert(notListed.status === 409 && /not one of this community's addresses/.test(notListed.json?.error ?? '') && onlyAt(NAMED),
             `(9) an address not on the list can't be main (${notListed.status} ${show(notListed.json)})`);
-        await post(ADD, phone(), { address: IP });
+        const withIp = await post(ADD, phone(), { address: IP });
+        // What Settings reads (several-addresses S6): each row but the main says why Make main would be refused, in /main's own
+        // words, so a press that can only be refused is never offered; an address that can be main says nothing. And the
+        // signed list's main and addresses, for the line saying what members' phones follow.
+        const rowOf = (h: string) => (withIp.json?.addresses ?? []).find((a: any) => a.address === h);
+        assert(withIp.status === 200 && /number/.test(rowOf(IP)?.mainRefusal ?? '') && rowOf(DOMAIN) && !('mainRefusal' in rowOf(DOMAIN))
+            && rowOf(NAMED) && !('mainRefusal' in rowOf(NAMED)),
+            `(9) the report says why a number beside a name can't be main, and nothing of the domain or the main (${show(withIp.json?.addresses)})`);
+        assert(withIp.json?.list?.main === NAMED && [NAMED, DOMAIN, IP].every((h) => withIp.json.list.addresses.includes(h)),
+            `(9) the report carries the signed list's main and addresses (${show(withIp.json?.list)})`);
         const number = await post(MAIN, phone(), { address: IP });
         assert(number.status === 409 && /number/.test(number.json?.error ?? '') && onlyAt(NAMED), `(9) a number beside a name can't be main (${number.status} ${show(number.json)})`);
+        assert(number.json?.error === rowOf(IP)?.mainRefusal, `(9) the report's reason is the one /main answers with (${show(rowOf(IP)?.mainRefusal)} vs ${show(number.json?.error)})`);
         await post(REMOVE, phone(), { address: IP });
         // The main answers from outside (design §2.1; review 4580901278): a home-network address, listed beside a live name,
         // is refused in words, spends no code, and moves nothing.
@@ -1024,6 +1038,53 @@ async function main(): Promise<void> {
         assert(gone.status === 200 && !stored().mainAddress && onlyAt(NAMED), `(9) removing the main address clears the choice; the name is main again (${gone.status}, ${show(surfaces())})`);
         await post(ADD, phone(), { address: DOMAIN });
         assert(onlyAt(NAMED), `(9) added again, the domain is not main without Make main (${show(surfaces())})`);
+
+        // The name the address service says another community holds, while the record still says live: the watch marks it
+        // lost only on its proof, 10 minutes to a day later, and until then the name may lead to that community's server.
+        // From the own domain as main, Make main back to the name is refused on every path (the phone, the phone again with
+        // a code, the computer), in the words Settings' report says of the row, and nothing moves (several-addresses S6
+        // round 2, #3240's deciding review). The address service saying it is this community's again lets it be main.
+        const { NAME_WATCH_KEY } = await import('./services/registrar-name-watch.js');
+        const { registrarNames } = await import('./engine/registrar-names.js');
+        const writeWatch = (w: Record<string, unknown>) => db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+            .run(NAME_WATCH_KEY, JSON.stringify(w));
+        const heard = Date.now() - 60_000;
+        const HELD_ELSEWHERE = `The address service says another community holds ${NAMED}, so it can't be the main address: new members and invites sent there could reach that community instead.`;
+        await post(MAIN, phone(), { address: DOMAIN });
+        const recordSays = () => registrarNames().find((e) => e.address === NAMED);
+        assert(onlyAt(DOMAIN) && recordSays()?.status === 'live' && recordSays()?.role === 'current' && !recordSays()?.lost,
+            `(9) the own domain is main, and the record says the name is live, current and not lost (${show(surfaces())}, ${show(recordSays())})`);
+        try {
+            for (const [what, edge] of [['nothing answers there', 'silence'], ['another server answers there', 'holder'], ['it still leads here', 'own']] as const) {
+                writeWatch({ [NAMED]: { checkedAt: heard, registrar: 'other', registrarAt: heard, holderKey: 'ab'.repeat(32), edge, edgeAt: heard, ...(edge === 'own' ? { ownAt: heard } : {}) } });
+                const report = await post(ADD, phone(), { address: DOMAIN });
+                const row = (report.json?.addresses ?? []).find((a: any) => a.address === NAMED);
+                assert(report.status === 200 && row?.standing?.registrarSays === 'other' && !row?.lost && row?.mainRefusal === HELD_ELSEWHERE,
+                    `(9) another community's, ${what}: the report says why Make main would be refused, in words, of a row that is not lost (${show(row)})`);
+                for (const [how, headers, body] of [
+                    ['the phone', phone(), { address: NAMED }],
+                    ['the phone again, with a code', phone(), { address: NAMED, code: '123456' }],
+                    ['the computer', computer(), { address: NAMED }],
+                ] as const) {
+                    const r = await post(MAIN, headers, body);
+                    assert(r.status === 409 && r.json?.code === 'not_main_able' && r.json?.error === row?.mainRefusal && stored().mainAddress === DOMAIN && onlyAt(DOMAIN),
+                        `(9) another community's, ${what}: Make main from ${how} is refused in the report's words, and the domain stays main (${r.status} ${show(r.json)}; ${show(surfaces())})`);
+                }
+            }
+            writeWatch({ [NAMED]: { checkedAt: heard, registrar: 'you', registrarAt: heard, state: 'live', entryAtYou: 'current/live', edge: 'own', edgeAt: heard, ownAt: heard } });
+            const ours = await post(ADD, phone(), { address: DOMAIN });
+            const oursRow = (ours.json?.addresses ?? []).find((a: any) => a.address === NAMED);
+            assert(ours.status === 200 && oursRow && !('mainRefusal' in oursRow), `(9) the address service says it is this community's again: no refusal on the row (${show(oursRow)})`);
+            const backAgain = await post(MAIN, phone(), { address: NAMED });
+            assert(backAgain.status === 200 && onlyAt(NAMED), `(9) and Make main on it works (${backAgain.status} ${show(backAgain.json?.error)}; ${show(surfaces())})`);
+        } finally {
+            writeWatch({});
+        }
+        // As the section left it: no choice made, the domain listed beside the name.
+        await post(MAIN, phone(), { address: DOMAIN });
+        await post(REMOVE, phone(), { address: DOMAIN });
+        await post(ADD, phone(), { address: DOMAIN });
+        assert(onlyAt(NAMED) && !stored().mainAddress, `(9) back as it was: the name main with no choice made, the domain listed (${show(surfaces())}, ${show(stored().mainAddress)})`);
     }
     {
         // The table: who may add an address, change the main one, or remove one.
@@ -1090,6 +1151,18 @@ async function main(): Promise<void> {
             }
         }
         console.log(rows.join('\n'));
+
+        // On a standby every Make main is refused (409 standby), so Settings' report says so of every row but the main, and
+        // Settings offers none (several-addresses S6). An address already listed adds nothing and answers the report.
+        setNodeRole('backup');
+        try {
+            const r = await post(ADD, phone(), { address: DOMAIN });
+            const others = (r.json?.addresses ?? []).filter((a: any) => a.address !== r.json?.primaryAddress);
+            assert(r.status === 200 && others.length > 0 && others.every((a: any) => /standby/i.test(a.mainRefusal ?? '')),
+                `(9) on a standby the report says of every row that Make main is its main server's (${r.status} ${show(others.map((a: any) => [a.address, a.mainRefusal]))})`);
+        } finally {
+            setNodeRole('primary');
+        }
     }
 
     // ── 10 ──

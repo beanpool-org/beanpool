@@ -376,6 +376,30 @@ describe("the sheet's money line and Pay read the NODE's balance, never the phon
         expect(payOff()).toBe(false);
     });
 
+    it('a Pay the node refuses for money reads the balance again: the new line, Pay off; a lost answer reads nothing', async () => {
+        db.refreshBalanceFromServer.mockResolvedValueOnce({ balance_c: 10000, usableFloor_c: 0, floor_c: 0, liveOffers: 0 })
+            .mockResolvedValue({ balance_c: 0, usableFloor_c: 0, floor_c: 0, liveOffers: 0 });
+        await openOn(bill('to-pay'));
+        expect(byId('bill-money')!.textContent).toBe('You have 100 Beans. After this: 40.');
+        // A lost answer first: nothing is read again (the same press finds out).
+        db.payBill.mockRejectedValueOnce(new Error('Network request failed'));
+        await tap(byId('bill-pay'));
+        await tap(byId('bill-confirm-pay'));
+        expect(db.refreshBalanceFromServer).toHaveBeenCalledTimes(1);
+        expect(byId('bill-money')!.textContent).toBe('You have 100 Beans. After this: 40.');
+        // The node refuses for money (the payer spent elsewhere meanwhile): the sheet reads the node's figures again.
+        db.payBill.mockRejectedValueOnce(Object.assign(new Error('You need 60 Beans to pay this.'), { status: 409, code: 'bill_nothing' }));
+        await tap(byId('bill-pay'));
+        await tap(byId('bill-confirm-pay'));
+        expect(db.refreshBalanceFromServer).toHaveBeenCalledTimes(2);
+        expect(db.refreshBalanceFromServer).toHaveBeenLastCalledWith(KIM);
+        expect(db.getBalance).not.toHaveBeenCalled();
+        expect(byId('bill-refusal')!.textContent).toBe('You need 60 Beans to pay this.');
+        expect(byId('bill-money')!.textContent).toContain('You need 60 Beans to pay this.');
+        expect(byId('bill-money')!.textContent).not.toContain('After this');
+        expect(payOff()).toBe(true);
+    });
+
     it("a list that couldn't be read says so with Try again, which reads it again", async () => {
         db.getBills.mockRejectedValueOnce(new Error('Network request failed')).mockResolvedValue({ toPay: [bill('to-pay')], sent: [] });
         await panel(KIM);

@@ -5,8 +5,8 @@
  * The node API is answered from fixtures.mjs plus this file's own posts: nothing here talks to a real node.
  *
  * For each way of looking, signed in from the app as an owner:
- *  - the Type Filter offers All, Offers, Needs, Events, Polls and Shown from another community, and each picks the right rows
- *    (a copy of an event is an event and a copy);
+ *  - the Type Filter offers All, Offers, Needs, Events, Polls, Local knowledge and Shown from another community, and each picks
+ *    the right rows (a copy of an event is an event and a copy; a page of Local knowledge shows its topic's name, Learn K9);
  *  - each type's chip is a different colour from the central roles, and every chip, the taken-down line and Put back read at
  *    4.5:1 or better as the browser draws them (computed colours, not class names);
  *  - the posts an assistant took down say who, that they are hidden now and the day they go for good; the one left hidden says why;
@@ -48,6 +48,8 @@ const POSTS = [
     { id: 'post-e2e-need', type: 'need', title: 'A hand moving a fridge', category: 'labour', price_c: 0, ...owner(2) },
     { id: 'post-e2e-event', type: 'event', title: 'Seed swap at the hall', category: 'garden', ...owner(3) },
     { id: 'post-e2e-poll', type: 'poll', title: 'Which night suits the market?', category: 'general', ...owner(4) },
+    // A page of Local knowledge (Learn K9): Settings' posts list is where an owner or admin takes one down.
+    { id: 'post-e2e-knowledge', type: 'knowledge', title: 'How recycling works at the tip', category: 'local-services', price_c: 0, ...owner(4) },
     { id: 'post-e2e-copy-event', type: 'event', title: 'Harvest picnic in the next town', category: 'food', shownCopy: true, authorCallsign: '', createdAt: '2026-11-02T04:10:00.000Z' },
     { id: 'post-e2e-copy-offer', type: 'offer', title: LONG_WORD, category: 'food', shownCopy: true, shownFrom: { name: 'Castlemaine' }, authorCallsign: '', createdAt: '2026-11-02T04:10:00.000Z' },
     { id: 'post-fx-td-1', type: 'offer', title: 'Cheap watches, brand new, unbelievably low prices for this weekend only', category: 'goods', hiddenByReportsAt: '2026-11-03T10:00:00.000Z', ...owner(5) },
@@ -149,8 +151,8 @@ try {
 
         // The Type Filter.
         const options = await page.locator('#admin-post-type-filter option').allTextContents();
-        check(JSON.stringify(options) === JSON.stringify(['All Types', 'Offers', 'Needs', 'Events', 'Polls', 'Shown from another community']),
-            `${at}: the Type Filter offers All, Offers, Needs, Events, Polls and Shown from another community`, JSON.stringify(options));
+        check(JSON.stringify(options) === JSON.stringify(['All Types', 'Offers', 'Needs', 'Events', 'Polls', 'Local knowledge', 'Shown from another community']),
+            `${at}: the Type Filter offers All, Offers, Needs, Events, Polls, Local knowledge and Shown from another community`, JSON.stringify(options));
         const count = async () => (await page.locator('#post-count-label').textContent()).trim();
         const titles = async () => (await page.locator('#admin-posts-list h4').allTextContents()).map((s) => s.trim());
         check(await count() === `${POSTS.length} of ${POSTS.length} posts`, `${at}: every type is listed under All Types`, await count());
@@ -160,6 +162,11 @@ try {
             `${at}: Events picks the events, a copy of one included`, JSON.stringify(events));
         await page.selectOption('#admin-post-type-filter', 'poll');
         check(JSON.stringify(await titles()) === JSON.stringify(['Which night suits the market?']), `${at}: Polls picks the poll`, JSON.stringify(await titles()));
+        await page.selectOption('#admin-post-type-filter', 'knowledge');
+        check(JSON.stringify(await titles()) === JSON.stringify(['How recycling works at the tip']), `${at}: Local knowledge picks the page`, JSON.stringify(await titles()));
+        const topicChip = (await page.locator('#admin-posts-list h4', { hasText: 'How recycling' }).locator('xpath=preceding-sibling::span[1]').textContent())?.trim();
+        check(topicChip === '🚰 Local services', `${at}: the page's category chip is its topic's name, not its stored id`, String(topicChip));
+        await card.screenshot({ path: path.join(SHOTS, `${tag}-knowledge.png`) });
         await page.selectOption('#admin-post-type-filter', 'copy');
         const copies = await titles();
         check(copies.length === 2 && copies.includes('Harvest picnic in the next town') && copies.includes(LONG_WORD), `${at}: Shown from another community picks the two copies, whatever they copy`, JSON.stringify(copies));
@@ -172,8 +179,9 @@ try {
         const chipBg = async (title) => page.locator('#admin-posts-list h4', { hasText: title }).locator('xpath=preceding-sibling::span[@data-testid="post-type-chip"]').evaluate((n) => getComputedStyle(n).backgroundColor);
         const colours = {
             offer: await chipBg('Split firewood'), need: await chipBg('A hand moving'), event: await chipBg('Seed swap'), poll: await chipBg('Which night'),
+            knowledge: await chipBg('How recycling'),
         };
-        check(new Set(Object.values(colours)).size === 4, `${at}: Offer, Need, event and poll chips are four different colours`, JSON.stringify(colours));
+        check(new Set(Object.values(colours)).size === 5, `${at}: Offer, Need, event, poll and Local knowledge chips are five different colours`, JSON.stringify(colours));
         seen[at] = colours;
         const chips = await contrastOf(card, '[data-testid="post-type-chip"], [data-testid="post-copy-chip"]');
         const lowChips = chips.filter((c) => c.ratio < 4.5 || c.alpha < 1);

@@ -24,6 +24,10 @@
  *     an IPv6 number, a home-network name, a name at a port) x (main, other, was main, removed, former, lost) -> listed or not,
  *     main or not, proved (200) or refused (421), the other address still proved, and what outside readers are told
  *     (mainPublicUrl: a home-network main tells them nothing, from #3222's round-2 review).
+ * 6b. The table: (what the address service says of the community's beanpool.org name: live + ours, live + another community's
+ *     with nothing, another server or this one answering there, live + nobody's, gone, nothing heard yet) x (each address kind)
+ *     -> Make main allowed or refused in words (mainAddressRefusal): a name another community or no community holds is
+ *     refused whatever the record says, and no other kind's answer moves (#3240's round-2 deciding review).
  *  7. A restore or a roll-back never takes the number back (#3232 round 2, the deciding review's case), with real state.db
  *     files and a process per boot: the nightly backup restored onto a fresh machine after the lost server signed a newer
  *     list; the same after a past take-over, from a database-only backup (never a lower epoch); a roll-back through the real
@@ -35,7 +39,8 @@
  *     time after a change since the backup -> every list signed is at or above every one signed before it, strictly above
  *     each with other content; no bump for no change or a restart; a take-over's epoch above every epoch before it.
  *  9. The split-brain check asks EVERY listed address, at once: one address leading to a server with a higher take-over count
- *     replaces this one, wherever it is in the list; once replaced, the server signs no list and no proof (503).
+ *     replaces this one, wherever it is in the list; once replaced, the server signs no list and no proof (503), and
+ *     Settings' report names no list for members' phones to follow (it names the one served until then).
  *
  * Run: SERVER_SUITES_ONLY=test-address-list TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -596,7 +601,7 @@ async function main(): Promise<void> {
         };
         for (const k of KINDS) {
             reset(k.present());
-            const refusal = own.mainAddressRefusal(k.host);
+            const refusal = own.mainAddressRefusal(k.host, new Map());
             reset(k.present(k.host));
             await row(k, 'main', { listed: true, main: true, proved: true, outside: k.outside });
             if (refusal) wrong.push(`${k.name}: Make main refused (${refusal})`);
@@ -624,6 +629,82 @@ async function main(): Promise<void> {
         console.log(`  ${rows.join('\n  ')}`);
         assert(wrong.length === 0, `every kind × role gives the outcome in the table (${rows.length} rows)${wrong.length ? ` — wrong: ${wrong.join(' | ')}` : ''}`);
         assert(rows.length === KINDS.length * 5 + 1, `the table has every row: ${KINDS.length} kinds × main, other, was main, removed, former, and a lost beanpool.org name (${rows.length})`);
+
+        // ── 6b. Make main × what the address service says (several-addresses S6 round 2, #3240's deciding review) ──
+        // The record keeps a beanpool.org name `live` until the watch marks it lost, 10 minutes to a day after the address
+        // service first says another community holds it, and in that time the name may lead to that community's server. Make
+        // main refuses such a name whatever the record says, in words, and Settings' report says the same of the row (both are
+        // mainAddressRefusal: test-rename-main-name section 9). The address service speaks only of its own names: what it says
+        // of any other host changes nothing for that kind (the row's answer is the one it gets with nothing heard).
+        console.log('\n=== 6b. Make main × what the address service says of the community\'s beanpool.org name, for every kind ===\n');
+        const { db } = await import('./db/db.js');
+        const { nameStandings, NAME_WATCH_KEY } = await import('./services/registrar-name-watch.js');
+        const writeWatch = (w: Record<string, unknown>) => db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+            .run(NAME_WATCH_KEY, JSON.stringify(w));
+        const NAME = 'orchard.beanpool.org';
+        const HOLDER = 'ab'.repeat(32);
+        const heard = Date.now() - 60_000;
+        const HELD_ELSEWHERE = `The address service says another community holds ${NAME}, so it can't be the main address: new members and invites sent there could reach that community instead.`;
+        const STATES: Array<{ state: string; name: Record<string, unknown>; watch: Record<string, unknown> | null; want: string | RegExp | null }> = [
+            {
+                state: 'live + ours (the address service says it is this community\'s)', name: {},
+                watch: { checkedAt: heard, registrar: 'you', registrarAt: heard, state: 'live', entryAtYou: 'current/live', edge: 'own', edgeAt: heard, ownAt: heard },
+                want: null,
+            },
+            {
+                state: 'live + other, nothing answers there (at risk)', name: {},
+                watch: { checkedAt: heard, registrar: 'other', registrarAt: heard, holderKey: HOLDER, edge: 'silence', edgeAt: heard },
+                want: HELD_ELSEWHERE,
+            },
+            {
+                state: 'live + other, another server answers there (at risk)', name: {},
+                watch: { checkedAt: heard, registrar: 'other', registrarAt: heard, holderKey: HOLDER, edge: 'holder', edgeAt: heard },
+                want: HELD_ELSEWHERE,
+            },
+            {
+                state: 'live + other, it still leads here (a contradiction)', name: {},
+                watch: { checkedAt: heard, registrar: 'other', registrarAt: heard, holderKey: HOLDER, edge: 'own', edgeAt: heard, ownAt: heard },
+                want: HELD_ELSEWHERE,
+            },
+            {
+                state: 'live + free (it says no community holds it)', name: {},
+                watch: { checkedAt: heard, registrar: 'free', registrarAt: heard },
+                want: `The address service says no community holds ${NAME}, so it can't be the main address until the address service gives it to this community again.`,
+            },
+            {
+                state: 'gone (marked lost)', name: { lost: { since: now, why: 'another-key', holderKey: null } },
+                watch: { checkedAt: heard, registrar: 'other', registrarAt: heard, holderKey: HOLDER, edge: 'holder', edgeAt: heard },
+                want: /a former or lost name/,
+            },
+            { state: 'unknown (nothing heard yet)', name: {}, watch: null, want: null },
+        ];
+        const rows6b: string[] = [];
+        const wrong6b: string[] = [];
+        const says = (r: string | null) => (r === null ? 'may be main' : `refused: ${r}`);
+        try {
+            for (const s of STATES) {
+                for (const k of KINDS) {
+                    const cfg = k.present();
+                    reset({ ...cfg, names: [...(cfg?.names ?? []), regName(NAME, 'current', 'live', s.name)] });
+                    writeWatch({});
+                    const nothingHeard = own.mainAddressRefusal(k.host, nameStandings());
+                    // The same evidence about the kind's own host too: the address service's word on a host it doesn't give
+                    // (an own domain, a hand-set name, a number) is no word at all.
+                    writeWatch(s.watch ? { [NAME]: s.watch, [k.host]: s.watch } : {});
+                    const got = own.mainAddressRefusal(k.host, nameStandings());
+                    const want = k.host === NAME ? s.want : nothingHeard;
+                    const ok = want instanceof RegExp ? got !== null && want.test(got) : got === want;
+                    const line = `${s.state} × ${k.name} (${k.host}) → ${says(got)}`;
+                    rows6b.push(line);
+                    if (!ok) wrong6b.push(`${line}; wanted ${want instanceof RegExp ? `refused: ${want}` : says(want)}`);
+                }
+            }
+        } finally {
+            writeWatch({});
+        }
+        console.log(`  ${rows6b.join('\n  ')}`);
+        assert(wrong6b.length === 0, `every registrar state × kind gives the Make main answer in the table (${rows6b.length} rows)${wrong6b.length ? ` — wrong: ${wrong6b.join(' | ')}` : ''}`);
+        assert(rows6b.length === STATES.length * KINDS.length, `the table has every row: ${STATES.length} states × ${KINDS.length} kinds (${rows6b.length})`);
 
         // ── 7. A restore or a roll-back never takes the number back ──
         console.log('\n=== 7. A restore or a roll-back never takes the number back (real state.db files, a process per boot) ===\n');
@@ -905,6 +986,13 @@ async function main(): Promise<void> {
             `with every address answering this server, it is current, and every one was asked (${current.state}; ${show(Object.fromEntries(hits))})`);
         const stillOk = await proved('coop.example.org');
         assert(stillOk.status === 200 && stillOk.ok, `and still proves (${stillOk.status})`);
+        // Settings' line saying what members' phones follow reads the list this server serves (several-addresses S6 round 2,
+        // #3240's review note): its main and addresses while it serves one, and none once it serves none.
+        const { appAddressesReport } = await import('./routes/app-addresses.js');
+        const servedNow = ((await list()).body as SignedAddressList).list;
+        const followedNow = appAddressesReport().list;
+        assert(followedNow?.main === servedNow.main && show(followedNow?.addresses) === show(servedNow.addresses),
+            `Settings' report names the list served: main ${followedNow?.main}, ${show(followedNow?.addresses)} (served: ${servedNow.main}, ${show(servedNow.addresses)})`);
         const last = listedNow[listedNow.length - 1];
         answerNewerAt.add(last);
         hits.clear();
@@ -917,6 +1005,8 @@ async function main(): Promise<void> {
             `once replaced, the list is refused: 503 replaced, nothing signed (${refusedList.status} ${refusedList.body?.code})`);
         assert(refusedProof.status === 503 && refusedProof.body?.code === 'replaced' && !refusedProof.body?.sig,
             `and so is every proof, for an address on the list too (${refusedProof.status} ${refusedProof.body?.code})`);
+        const followedReplaced = appAddressesReport().list;
+        assert(followedReplaced === null, `and Settings' report names no list for members' phones to follow, as none is served (${show(followedReplaced)})`);
         const keptBefore = show(al.keptAddressList());
         se.updateNodeConfig({ ownerAddresses: ['second.example.org', 'third.example.org'] });
         own.forgetOwnAddresses();

@@ -11,7 +11,9 @@
  *   suggestion was declined in the last 48 h. All of a grant's go when it is revoked, and none is shown or approvable once
  *   the grant has expired or its member is no longer an owner or admin, nor while the owners' switch is off (they wait,
  *   hidden, and come back if it is turned on again before they expire).
- * - A dismiss or remove suggestion can't be approved once its report is closed (dismissed or actioned since).
+ * - A dismiss or remove suggestion can't be approved once its report is closed (dismissed or actioned since). A forum post's report
+ *   takes both (slice F2b: reports/:id/action removes a forum post as it removes a listing); a restore suggestion is never filed on
+ *   one (agent/tools.ts suggest_action refuses it: DESIGN-forums-fable.md §6, no assistant's word reaches a forum restore).
  * - Approve runs the EXISTING route (reports/:id/dismiss, reports/:id/action, posts/:id/restore) under the human's own
  *   session, so the moderator rules and any step-up there are unchanged: the card sends `suggestion: <id>` with that
  *   route's own call (`approveCall`), the route checks the suggestion matches (`admitSuggestion`) before it acts, and on
@@ -46,12 +48,22 @@ export const SUGGESTION_WORDS: Record<SuggestionKind, string> = {
     restore_post: 'Restore the post hidden by reports',
 };
 
+/** What a card asks to see whether "keep the post" is true: the report as state-engine.ts getReports reads it. */
+export interface AsksAbout {
+    postId?: string | null; postRemoved?: boolean | null; postOnHold?: boolean | null; targetPulseItemId?: string | null;
+    forumPost?: { removed: boolean } | null;
+}
+
 /**
- * What a card asks about this report, read when it is shown. Dismissing a report on a takedown on hold keeps nothing (state-engine.ts
- * dismissReport), so that card doesn't promise it.
+ * What a card asks about this report, read when it is shown. "Keep the post" only while there is a post that is up: dismissing a
+ * report on a takedown on hold keeps nothing (state-engine.ts dismissReport), a removed post is gone, and a member's, a chat line's or
+ * a Pulse item's report has no post, so those cards don't promise it (the moderators' own Dismiss reads the same: ModeratorView).
  */
-export function suggestionAsks(kind: SuggestionKind, report: { postOnHold?: boolean | null } | null | undefined): string {
-    return kind === 'dismiss_report' && report?.postOnHold ? 'Dismiss this report' : SUGGESTION_WORDS[kind];
+export function suggestionAsks(kind: SuggestionKind, report: AsksAbout | null | undefined): string {
+    if (kind !== 'dismiss_report') return SUGGESTION_WORDS[kind];
+    const up = !!report && !report.targetPulseItemId && report.postOnHold !== true
+        && ((!!report.postId && report.postRemoved !== true) || (!!report.forumPost && !report.forumPost.removed));
+    return up ? SUGGESTION_WORDS.dismiss_report : 'Dismiss this report';
 }
 
 export interface Suggestion {
@@ -222,14 +234,20 @@ export function suggestionCountsToday(now = Date.now()): { suggestions: number; 
     return { suggestions: s.filedToday.day === day ? s.filedToday.n : 0, approved: s.approved.day === day ? s.approved.n : 0 };
 }
 
-/** The report's subject, whether it is still open, and whether its post is still up, for a card's approve call and the route's checks. */
-function reportTarget(reportId: string): { postId: string | null; pulse: boolean; open: boolean; postLive: boolean } | null {
-    const r = db.prepare('SELECT target_post_id, target_pulse_item_id, status FROM abuse_reports WHERE id = ?').get(reportId) as
-        { target_post_id: string | null; target_pulse_item_id: string | null; status: string | null } | undefined;
+/**
+ * The report's subject, whether it is still open, and whether its post is still up, for a card's approve call and the route's checks.
+ * `forumPost`: the report names a forum post (slice F2), which reports/:id/action removes as it removes a listing (slice F2b).
+ */
+function reportTarget(reportId: string): { postId: string | null; forumPost: boolean; pulse: boolean; open: boolean; postLive: boolean } | null {
+    const r = db.prepare('SELECT target_post_id, target_pulse_item_id, target_forum_post_id, status FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_post_id: string | null; target_pulse_item_id: string | null; target_forum_post_id: string | null; status: string | null } | undefined;
     if (!r) return null;
     const postId = r.target_pulse_item_id ? null : r.target_post_id;
     const post = postId ? db.prepare('SELECT active FROM posts WHERE id = ?').get(postId) as { active: number | null } | undefined : undefined;
-    return { postId, pulse: !!r.target_pulse_item_id, open: r.status === 'pending' || r.status === null, postLive: !!post && post.active !== 0 };
+    return {
+        postId, forumPost: !postId && !r.target_pulse_item_id && !!r.target_forum_post_id, pulse: !!r.target_pulse_item_id,
+        open: r.status === 'pending' || r.status === null, postLive: !!post && post.active !== 0,
+    };
 }
 
 /**
@@ -246,7 +264,8 @@ export function approveCall(x: Suggestion): { method: 'POST'; path: string; body
     const rid = encodeURIComponent(x.target);
     if (x.kind === 'dismiss_report') return { method: 'POST', path: `/api/local/admin/reports/${rid}/dismiss`, body: { suggestion: x.id } };
     if (x.kind === 'remove_reported') {
-        if (!t.pulse && !t.postId) return null;
+        // A forum post's report removes the forum post through the same route and body (state-engine.ts actionReport, slice F2).
+        if (!t.pulse && !t.postId && !t.forumPost) return null;
         return {
             method: 'POST', path: `/api/local/admin/reports/${rid}/action`,
             body: t.pulse ? { removePulseItem: true, suggestion: x.id } : { deletePost: true, suggestion: x.id },

@@ -49,18 +49,20 @@ function findReport(id: string): AbuseReport | null {
 /** The report as the moderation list shows it: the member-written words as plain text, never the reporter. */
 function originalReport(r: AbuseReport | null) {
     if (!r) return null;
-    const kind = r.targetPulseItemId ? 'pulse_item' : (r.targetPostId || r.postId) ? 'post' : 'member';
+    // A forum post's report (slice F2b) is about the forum post: its topic's title, its words and its writer, as Settings' list shows it.
+    const forum = !r.targetPulseItemId && !(r.targetPostId || r.postId) && r.forumPost ? r.forumPost : null;
+    const kind = r.targetPulseItemId ? 'pulse_item' : (r.targetPostId || r.postId) ? 'post' : forum ? 'forum_post' : 'member';
     return {
         id: r.id,
         at: r.createdAt,
         status: r.status === 'actioned' ? 'actioned' : r.status === 'reviewed' ? 'dismissed' : 'open',
         targetKind: kind,
         reason: cleanMemberText(r.reason, 500) || null,
-        title: cleanMemberText(kind === 'pulse_item' ? r.pulseItem?.title : r.postTitle, 200) || null,
-        description: kind === 'post' ? cleanMemberText(r.postDescription, 500) || null : null,
-        author: cleanMemberText(kind === 'member' ? r.targetCallsign : r.postAuthorCallsign, 60) || null,
-        postRemoved: r.postRemoved === true || r.pulseItem?.removed === true,
-        hiddenByReports: r.postHiddenByReports === true,
+        title: cleanMemberText(kind === 'pulse_item' ? r.pulseItem?.title : forum ? forum.topicTitle : r.postTitle, 200) || null,
+        description: kind === 'post' ? cleanMemberText(r.postDescription, 500) || null : forum ? cleanMemberText(forum.words, 500) || null : null,
+        author: cleanMemberText(kind === 'member' ? r.targetCallsign : forum ? forum.writerName : r.postAuthorCallsign, 60) || null,
+        postRemoved: r.postRemoved === true || r.pulseItem?.removed === true || forum?.removed === true,
+        hiddenByReports: r.postHiddenByReports === true || forum?.hidden === true,
         postOnHold: r.postOnHold === true,
     };
 }

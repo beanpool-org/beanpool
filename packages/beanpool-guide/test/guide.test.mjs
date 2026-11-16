@@ -1289,6 +1289,13 @@ test("the claim path (operator path S5): every page names both phone routes, and
         assert.ok(lines.length > 0, `${rel} says how to claim`);
         const text = lines.join('\n');
         assert.ok(text.includes('**Installed BeanPool on a server? Claim it**'), `${rel}: the route with no account, the first screen's link`);
+        // A phone with no account opens on "Used BeanPool before?" and draws the claim link only after I'm New Here (#3209), so
+        // each line that names the link names that answer first (two manual lines skipped it: #3209's round-2 note).
+        for (const l of lines.filter(x => x.includes('**Installed BeanPool on a server? Claim it**'))) {
+            const answer = l.indexOf("**I'm New Here**");
+            assert.ok(answer >= 0 && answer < l.indexOf('**Installed BeanPool on a server? Claim it**'),
+                `${rel}: a claim line names **I'm New Here** before the claim link: ${l.slice(0, 120)}…`);
+        }
         assert.ok(text.includes('the bean at the top') && text.includes('**Set up a new community server**'),
             `${rel}: the route with an account, the bean at the top and then Set up a new community server`);
         assert.ok(!text.includes('**Find a community**') && !text.includes('**Start a community**'),

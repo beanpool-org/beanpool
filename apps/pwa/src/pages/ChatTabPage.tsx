@@ -66,24 +66,31 @@ export function ChatTabPage({ navNonce, openForum, openForumTopic = null, onForu
     navNonce?: number;
     /** The arrival was for the Forum (a forum notice, slice F5): the Forum side, once; {@link onForumOpened} then clears it. */
     openForum?: boolean;
-    /** With it, the topic the Forum opens on (a door to one topic, slice F7). */
+    /** With it, the topic the Forum opens on (a door to one topic, slice F7): read with that arrival only, like openForum. */
     openForumTopic?: string | null;
     onForumOpened?: () => void;
 }) {
     const features = useCommunityInfo()?.features;
     const sides = chatSides(features);
     const [picked, setPicked] = useState<ChatSide>('chats');
+    // A door's topic (slice F7), taken with its arrival as `openForum` is, and kept only while that Forum stays picked: a
+    // Forum drawn afresh later (the member went to Chats and back, or a forum notice came) opens on its list, not on the
+    // door's old topic again (#3228 review).
+    const [doorTopic, setDoorTopic] = useState<string | null>(null);
     const side = chatSideShown(picked, features);
-    useEffect(() => { setPicked('chats'); }, [navNonce]);
-    useEffect(() => { if (props.openConversationId) setPicked('chats'); }, [props.openConversationId]);
+    const toChats = () => { setPicked('chats'); setDoorTopic(null); };
+    useEffect(() => { toChats(); }, [navNonce]);
+    useEffect(() => { if (props.openConversationId) toChats(); }, [props.openConversationId]);
     // After the arrival's Chats above, in the same render: the Forum wins. Taken once, so the tab's own button later (which
     // draws the tab afresh) is not a Forum arrival. Where the forum is off, the Forum shows Chats (core chatSideShown).
     useEffect(() => {
         if (!openForum) return;
         setPicked('forum');
+        setDoorTopic(openForumTopic);
         onForumOpened?.();
     }, [openForum]);
-    const frame = sides.length ? <ChatFrameSwitch sides={sides} side={side} onChange={setPicked} /> : undefined;
+    const pick = (next: ChatSide) => { if (next === 'forum') setPicked(next); else toChats(); };
+    const frame = sides.length ? <ChatFrameSwitch sides={sides} side={side} onChange={pick} /> : undefined;
     return (
         <>
             <div data-testid="chat-side-chats-page" style={{ display: side === 'chats' ? 'contents' : 'none' }}>
@@ -94,7 +101,7 @@ export function ChatTabPage({ navNonce, openForum, openForumTopic = null, onForu
                 // MessagesPage's list padding and width, so the switch stays where it was.
                 <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
                     {frame}
-                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} topicId={openForumTopic} homeNonce={homeNonce} />
+                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} topicId={doorTopic} homeNonce={homeNonce} />
                 </div>
             )}
         </>

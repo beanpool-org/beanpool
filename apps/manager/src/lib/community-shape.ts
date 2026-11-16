@@ -101,6 +101,8 @@ export interface ShapeSettings {
     decisions: ShapeSetting<boolean>;
     /** The forum (server engine/forum.ts): on from the start, members only; the owners may switch it off. Absent on a server from before it. */
     forum?: ShapeSetting<boolean>;
+    /** Local knowledge, read in Learn (server engine/knowledge.ts): on for a local community, off for the global one; the owners may switch it either way. Absent on a server from before the setting. */
+    knowledge?: ShapeSetting<boolean>;
     /** Members may share one post outside the community (front doors S6). Absent on a server from before it. */
     shareOutside?: ShapeSetting<boolean>;
     listed: ShapeSetting<boolean>;
@@ -549,6 +551,10 @@ export function getConsequenceSentence(
             return targetValue === false
                 ? t('The forum disappears from both apps. Its topics are kept, and come back when it is turned on again.')
                 : t('Members can start topics and reply in the forum, in both apps.');
+        case 'knowledge':
+            return targetValue === false
+                ? t('Learn disappears from both apps. Its pages and the suggestions waiting are kept, and come back when it is turned on again.')
+                : t('Members read and suggest pages of things worth knowing about this place, in both apps. An owner or admin checks each page first.');
         case 'listed':
             return targetValue === false
                 ? t('This community comes off the directory and the map on beanpool.org at once; nothing new is sent.')

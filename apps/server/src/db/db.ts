@@ -563,6 +563,11 @@ export function initSchema() {
     // held by its section's starter. A file from before the forum finds no table; on a fresh install it finds its column.
     try { db.prepare('ALTER TABLE forum_topics ADD COLUMN never_listed INTEGER NOT NULL DEFAULT 0 CHECK (never_listed IN (0, 1))').run(); } catch { }
 
+    // Born with the assistant's forum takedowns (slice F2b, engine/forum-takedowns.ts): one empty column, NULL on every row that is
+    // there, so no post is on hold. An addition, as F2's above: nothing is read, filled in or rewritten. A file from before the forum
+    // finds no table and does nothing; schema.sql below makes it whole. On a fresh install it finds its column.
+    try { db.prepare('ALTER TABLE forum_posts ADD COLUMN taken_down_at TEXT').run(); } catch { }
+
     // Born with the community's name on its members' listings on the global community (list-on-global G5): one column on the
     // directory mirror's cache, as schema.sql has it, 1 (on) on every row that is there: SQLite gives a column added with a
     // constant default that value on every row at once, so nothing is read, filled in or rewritten, and the mirror's next run

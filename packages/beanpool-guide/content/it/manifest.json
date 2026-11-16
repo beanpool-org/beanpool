@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "Cosa condividono i tuoi vicini, i video Impara e come aggiungere i tuoi canali.",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "Cosa condividono i tuoi vicini, i video Come funziona e come aggiungere i tuoi canali.",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "Decisioni e votazioni, i fagioli condivisi, i tuoi gruppi, imprese e custodi. Qui trovi anche sondaggi ed eventi, visibili nel Mercato.",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "Decisioni e votazioni, i fagioli condivisi, i tuoi gruppi, imprese e custodi, e le Conoscenze locali in Impara. Qui trovi anche sondaggi ed eventi, visibili nel Mercato.",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "Spazio Impara",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "Video Come funziona",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "Brevi video su BeanPool e le relative pagine della guida a cui fanno riferimento.",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "Chiedere a qualcuno di pagarti dei fagioli per qualcosa. Una fattura non si paga mai da sola: l'altra persona sceglie se pagare. Per ora, una fattura può accompagnare un invito.",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "Conoscenze locali",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "Impara, lo scaffale della tua comunità con ciò che vale la pena sapere: trovare una pagina, suggerirne una, tenerla giusta e come un proprietario o un admin controlla ognuna.",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

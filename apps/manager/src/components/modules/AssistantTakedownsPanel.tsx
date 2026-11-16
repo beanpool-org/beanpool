@@ -20,6 +20,9 @@ import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
  * - Remove now: a post goes through the delete route Settings already has, so a person's refund and its warnings are that route's. A
  *   whole call asks an owner's fresh proof, and leaves a post with a deal in escrow or an open Child safety report for one-at-a-time.
  * - The assistant's words are rendered as text and read here only. No assistant reaches any of this.
+ * - Forum posts too (slice F2b, the server's engine/forum-takedowns.ts): one topic or reply a call, listed under "In the forum" with
+ *   Put back, which sends the forum post's id as `postId`. No Remove now: a moderator removes one through its report in the app, or
+ *   the server does at 7 days. "Put back all by" an assistant puts its forum posts back too.
  */
 
 const LIST = '/api/local/admin/agent/takedowns';
@@ -49,7 +52,20 @@ export interface TakedownCall {
     posts: PostLine[];
 }
 
-interface Answer { canActOnMany: boolean; takedowns: TakedownCall[] }
+/** One forum post an assistant took down (`forumTakedowns`; an older server sends none). */
+export interface ForumTakedownLine {
+    id: string;
+    grantId: string;
+    grantName: string;
+    member: string | null;
+    at: string;
+    reasonLabel: string;
+    why: string;
+    finalAfter: string;
+    post: { id: string; topicTitle: string | null; kind: 'topic' | 'reply'; writer: string | null; state: PostLine['state']; childSafetyOpen?: boolean };
+}
+
+interface Answer { canActOnMany: boolean; takedowns: TakedownCall[]; forumTakedowns: ForumTakedownLine[] }
 
 export interface AssistantTakedownsPanelProps {
     activeNode: NodeProfile;
@@ -99,7 +115,9 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'token' }
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, LIST), { headers: headers(), credentials: 'same-origin' });
             const json = await res.json().catch(() => ({}));
-            if (res.ok && Array.isArray(json.takedowns)) setData({ canActOnMany: json.canActOnMany === true, takedowns: json.takedowns });
+            if (res.ok && Array.isArray(json.takedowns)) {
+                setData({ canActOnMany: json.canActOnMany === true, takedowns: json.takedowns, forumTakedowns: Array.isArray(json.forumTakedowns) ? json.forumTakedowns : [] });
+            }
             // A server older than this has no such route: nothing to draw.
             else if (res.status !== 404) setMessage(`What assistants took down could not be listed: ${json.error || `HTTP ${res.status}`}`);
         } catch (e: unknown) {
@@ -180,8 +198,12 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'token' }
         }
     };
 
-    if (!drawn || !data || (data.takedowns.length === 0 && !message)) return null;
-    const assistants = [...new Map(data.takedowns.filter((t) => t.posts.some(isHeld)).map((t) => [t.grantId, t.grantName])).entries()];
+    if (!drawn || !data || (data.takedowns.length === 0 && data.forumTakedowns.length === 0 && !message)) return null;
+    const heldForum = data.forumTakedowns.filter((f) => isHeld({ state: f.post.state } as PostLine));
+    const assistants = [...new Map([
+        ...data.takedowns.filter((t) => t.posts.some(isHeld)).map((t) => [t.grantId, t.grantName] as const),
+        ...heldForum.map((f) => [f.grantId, f.grantName] as const),
+    ]).entries()];
 
     return (
         <section aria-labelledby="agent-takedowns-title" data-testid="agent-takedowns-card" className="bg-nature-900/80 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
@@ -278,6 +300,35 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'token' }
                     );
                 })}
             </ul>
+            {data.forumTakedowns.length > 0 && (
+                <div className="space-y-2 min-w-0">
+                    <h4 className="text-sm font-bold text-white m-0">In the forum</h4>
+                    <ul className="list-none m-0 p-0 space-y-3">
+                        {data.forumTakedowns.map((f) => {
+                            const held = isHeld({ state: f.post.state } as PostLine);
+                            const cs = held && f.post.childSafetyOpen === true;
+                            return (
+                                <li key={f.id} className="border border-nature-800 rounded-xl p-3 sm:p-4 space-y-2 min-w-0" data-testid="agent-forum-takedown">
+                                    <p className="text-sm text-white m-0 font-semibold break-words">{f.post.topicTitle ?? 'A removed topic'}</p>
+                                    <p className="text-xs text-nature-400 m-0 break-words">
+                                        {f.post.kind === 'topic' ? 'The topic' : 'A reply in it'}{f.post.writer ? ` by ${f.post.writer}` : ''} · {cs ? `${f.post.state === 'hidden' ? 'Hidden' : 'Left hidden'}: ${CHILD_SAFETY_OPEN}` : STATE_WORDS[f.post.state]} · {f.reasonLabel}
+                                    </p>
+                                    <p className="text-xs text-nature-400 m-0 break-words">
+                                        {f.grantName} · {when(f.at)}{f.member ? ` · for ${f.member}` : ''}{held ? ` · final ${when(f.finalAfter)}` : ''}
+                                    </p>
+                                    <p className="text-sm text-nature-200 m-0 break-words whitespace-pre-wrap border-l-2 border-nature-700 pl-3" data-testid="agent-forum-takedown-why">{f.why}</p>
+                                    {held && (
+                                        <button type="button" disabled={busy} data-testid="agent-forum-takedown-put-back" onClick={() => void putBack({ postId: f.post.id })}
+                                            className="min-h-[48px] px-3 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50">
+                                            Put back
+                                        </button>
+                                    )}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            )}
             <FreshProofBox proof={removeProof} testId="agent-takedown-remove-proof" />
             {confirmation}
         </section>

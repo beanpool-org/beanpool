@@ -23,7 +23,7 @@ interface Original {
     id: string;
     at: string | number;
     status: string;
-    targetKind: 'post' | 'pulse_item' | 'member';
+    targetKind: 'post' | 'forum_post' | 'pulse_item' | 'member';
     reason: string | null;
     title: string | null;
     description: string | null;

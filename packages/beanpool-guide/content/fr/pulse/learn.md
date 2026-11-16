@@ -1,32 +1,31 @@
 ---
 slug: learn
-title: L'espace Découvrir
+title: Vidéos Comment ça marche
 summary: Courtes vidéos sur BeanPool et pages du guide correspondantes.
-related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: 166271998bd0833a
+related: the-pulse, the-bean, how-it-works, your-channels, local-knowledge
+source-hash: 82b7f80c056f15e8
 ---
 
-## Ce qu'il contient
+## Ce que l'on y trouve
 
-Sur le téléphone, ouvrez le **Pouls** et touchez **Découvrir**. Dans l'application web, ouvrez le Pouls et touchez **Comment ça marche** en haut. Cet espace propose :
+Ouvrez le **Pouls** et touchez **Comment ça marche** en haut, sur le téléphone comme dans l'application web. Vous y trouverez des vidéos de BeanPool sur son fonctionnement.
 
-- des vidéos de BeanPool expliquant son fonctionnement ;
-- la **Réflexion quotidienne**, une courte pensée renouvelée chaque matin. Touchez-le pour ouvrir la réflexion du jour.
+Ce n'est pas **Découvrir**, les pages propres à votre communauté sur ce qui mérite d'être su là où vous vivez : voir « Savoirs locaux ».
 
-Les membres peuvent également ajouter leurs propres canaux de tutoriels à Découvrir, en choisissant le thème **Comment ça marche** lors de l'ajout d'un canal. Ces vidéos appartiennent aux membres et non à BeanPool : vérifiez qui a publié une vidéo avant d'en suivre les conseils.
+Les membres peuvent aussi ajouter ici leurs propres chaînes pratiques, en choisissant le sujet **Comment ça marche** quand ils ajoutent une chaîne. Ces vidéos sont celles des membres, pas celles de BeanPool : vérifiez qui a publié une vidéo avant de suivre ses conseils.
 
-## Les vidéos sont un complément
+## Les vidéos sont un plus
 
-Tout ce dont vous avez besoin est consigné dans ce guide. Les vidéos sont là si vous préférez regarder.
+Tout ce dont vous avez besoin est écrit dans ce guide. Les vidéos sont là si vous préférez regarder.
 
-Sur le téléphone, dans le canal Découvrir, touchez l'image d'une vidéo pour la lire directement dans la carte. Rien n'est chargé depuis YouTube tant que vous n'avez pas touché l'image. Dans l'application web, toucher une vidéo l'ouvre sur YouTube dans un nouvel onglet. Voir « Le Pouls ».
+Sur le téléphone, sous **Comment ça marche**, touchez l'image d'une vidéo et elle se lit là, dans la carte. Rien n'est chargé depuis YouTube avant que vous touchiez. Dans l'application web, toucher une vidéo l'ouvre sur YouTube dans un nouvel onglet. Voir « Le Pouls ».
 
-Lorsque BeanPool a créé une vidéo pour une page du guide et qu'elle figure dans le canal Découvrir de votre communauté, la page affiche **Regarder :** suivi du nom de la vidéo en haut. Touchez-le pour ouvrir la vidéo sur YouTube. S'il n'y a pas de vidéo pour cette page ou si vous êtes hors ligne, le lien ne s'affiche tout simplement pas.
+Quand BeanPool a réalisé une vidéo pour une page du guide, et qu'elle figure dans le Pouls de votre communauté sous **Comment ça marche**, la page affiche **Regarder :** et le nom de la vidéo en haut. Touchez-le pour ouvrir la vidéo sur YouTube. S'il n'y a pas de vidéo pour cette page, ou si vous êtes hors connexion, le lien n'apparaît tout simplement pas.
 
-Seules les vidéos officielles de BeanPool apparaissent sur les pages du guide. Une vidéo ajoutée par un membre dans Découvrir n'y apparaît jamais, quel que soit son titre.
+Seules les vidéos propres à BeanPool apparaissent jamais sur une page du guide. Une vidéo qu'un membre ajoute sous **Comment ça marche** ne s'y affiche jamais, quel que soit son nom.
 
-## Pourquoi une vidéo pourrait ne pas s'afficher
+## Pourquoi une vidéo peut ne pas s'afficher
 
-- Votre téléphone est hors ligne ou ne parvient pas à joindre le serveur de votre communauté.
+- Votre téléphone est hors connexion ou ne peut pas joindre le serveur de votre communauté.
 - Une nouvelle vidéo de BeanPool n'apparaît sur les pages du guide qu'après la mise à jour du serveur de votre communauté.
 - Il n'y a pas encore de vidéo pour cette page.

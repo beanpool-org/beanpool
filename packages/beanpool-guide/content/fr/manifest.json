@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "Ce que partagent vos voisins, les vidéos Découvrir et l'ajout de vos propres canaux.",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "Ce que partagent vos voisins, les vidéos Comment ça marche et l'ajout de vos propres canaux.",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "Décisions et votes, les haricots partagés, vos groupes, entreprises et gestionnaires. Les sondages et événements sont ici aussi ; retrouvez-les sur le Marché.",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "Décisions et votes, les haricots partagés, vos groupes, entreprises et gestionnaires, et les Savoirs locaux dans Découvrir. Les sondages et événements sont ici aussi ; retrouvez-les sur le Marché.",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "L'espace Découvrir",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "Vidéos Comment ça marche",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "Courtes vidéos sur BeanPool et pages du guide correspondantes.",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "Demander à quelqu'un de vous payer des haricots pour quelque chose. Une facture ne se paie jamais d'elle-même : l'autre personne choisit de payer ou non. Pour l'instant, une facture peut accompagner une invitation.",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "Savoirs locaux",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "Découvrir, l'étagère de votre communauté pour ce qui mérite d'être su : trouver une page, en suggérer une, la garder juste et comment un propriétaire ou un administrateur vérifie chacune.",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

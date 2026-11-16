@@ -1383,6 +1383,27 @@ CREATE TABLE IF NOT EXISTS agent_takedown_posts (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_post ON agent_takedown_posts(post_id);
 CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_held ON agent_takedown_posts(takedown_id) WHERE put_back_at IS NULL AND final_at IS NULL;
+-- What an assistant took down in the forum (slice F2b, engine/forum-takedowns.ts): one row per forum post (an opening post is its
+-- topic), one post a call. This server's own record, as agent_takedowns is (a standby never copies it; the hold travels in
+-- forum_posts.taken_down_at). `hidden_before`: its hide from before (NULL: it was up); `reports_closed`: the report ids (JSON) the
+-- takedown closed, for Put back. `why`: the assistant's own words, cleaned, read only in Settings.
+CREATE TABLE IF NOT EXISTS agent_forum_takedowns (
+    id TEXT PRIMARY KEY,
+    forum_post_id TEXT NOT NULL,
+    grant_id TEXT NOT NULL,
+    grant_name TEXT NOT NULL,
+    member_pubkey TEXT NOT NULL,
+    at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (reason IN ('spam', 'offensive', 'misleading', 'unsafe', 'rules')),
+    why TEXT NOT NULL DEFAULT '',
+    via TEXT NOT NULL CHECK (via IN ('ids', 'reports')),
+    hidden_before TEXT,
+    reports_closed TEXT NOT NULL DEFAULT '[]',
+    put_back_at TEXT,
+    final_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_forum_takedowns_post ON agent_forum_takedowns(forum_post_id);
+CREATE INDEX IF NOT EXISTS idx_agent_forum_takedowns_grant_at ON agent_forum_takedowns(grant_id, at);
 
 -- 14d. The communities directory as this node last fetched it (global profile G5, services/directory-mirror.ts).
 --
@@ -3305,7 +3326,11 @@ CREATE TABLE IF NOT EXISTS forum_posts (
     -- Hidden while the moderators look (slice F2, engine/forum-moderation.ts): reporters in enough independent circles, or a
     -- moderator's clean-up of a burst. Its writer and the moderators still read it; everyone else reads "Hidden while
     -- moderators look" in a reply's place, and nothing of a topic whose opening post it is.
-    hidden_by_reports_at TEXT
+    hidden_by_reports_at TEXT,
+    -- An owner's or an admin's AI assistant took it down (slice F2b, engine/forum-takedowns.ts): set with a hide, and while the
+    -- post is not removed, a takedown on hold, which a dismissed report, a burst's undo or a new report never brings back; Put
+    -- back clears it, and the 7-day sweep removes the post. It travels with the row, so the hold holds on a standby that took over.
+    taken_down_at TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_forum_posts_number ON forum_posts (topic_id, number);
 CREATE INDEX IF NOT EXISTS idx_forum_posts_writer ON forum_posts (writer_pubkey, created_at);

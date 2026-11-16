@@ -722,6 +722,7 @@ describe('goToNoticeTarget: where a row lands, as the phone\'s push tap', () => 
         const lands: Record<string, string> = {
             'chat.message': 'messages', 'chat.group': 'messages', 'chat.mention': 'messages', 'group.lead': 'messages',
             'forum.reply': 'messages-forum', 'forum.mention': 'messages-forum', 'forum.first-look': 'messages-forum', 'forum.first-look-answer': 'messages-forum',
+            'forum.learn-ask': 'messages-forum',
         };
         const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as Array<keyof typeof PUSH_NOTICE_KINDS>).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
         expect([...chatKinds].sort()).toEqual(Object.keys(lands).sort());
@@ -737,6 +738,7 @@ describe('goToNoticeTarget: where a row lands, as the phone\'s push tap', () => 
             ['forum.mention', { screen: 'forum_topic', topicId: 't1', postId: 'p2', number: 4 }],
             ['forum.first-look', { kind: 'forum_first_look_waiting', waitingId: 'w1', screen: 'forum_first_looks' }],
             ['forum.first-look-answer', { kind: 'forum_first_look_answered', outcome: 'ok', topicId: 't1', screen: 'forum_topic' }],
+            ['forum.learn-ask', { screen: 'forum_topic', topicId: 't1', postId: 'p3', number: 5, from: 'k1' }],
             ['not.a.kind', { screen: 'forum_topic', topicId: 't1' }],
         ];
         for (const [kind, data] of answers) {

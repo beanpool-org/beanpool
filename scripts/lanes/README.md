@@ -81,7 +81,7 @@ through `LANE_BUILD_BACKEND`, `LANE_REVIEW_BACKEND` and `LANE_DECIDE_BACKEND`:
 The model for a role is resolved each attempt, in this order: the `LANE_BUILD_MODEL` / `LANE_REVIEW_MODEL` /
 `LANE_DECIDE_MODEL` env var for this run, then the marker file `scratch/lanes/model-<role>-<backend>` in this
 checkout, then the default. Defaults are `gemini-4-hydrogen-high` for AGY, `claude-opus-5` for Claude builds and
-`claude-fable-5-1` for Claude deciding passes. To switch a running lane, use one `echo` into its marker. Markers
+`claude-opus-5-5` for Claude deciding passes. To switch a running lane, use one `echo` into its marker. Markers
 are per checkout: never use `~/.agy-model`, because a shared marker moved other sessions' lanes.
 
 A deciding pass never quietly runs on a weaker model. It probes first and waits for the model. If

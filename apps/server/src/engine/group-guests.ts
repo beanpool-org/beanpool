@@ -686,7 +686,8 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
  * 413), and the row goes; anything else and ALL the home's rows wait one backoff, by time (nextFanoutTry: the step moves on
  * only when the oldest row's wait has passed), until GUEST_FANOUT_QUEUE_MS, then a row goes. A 2xx starts the steps over.
  * With guests switched off, only removals go; to a home the owners blocked, nothing goes; a row the copy rule stops
- * (rowStillGoes: its line down, or the row past GUEST_FANOUT_QUEUE_MS) goes unsent; made a standby meanwhile, the send stops.
+ * (rowStillGoes: its line down, no guest it names still in, or the row past GUEST_FANOUT_QUEUE_MS) goes unsent; made a
+ * standby meanwhile, the send stops.
  */
 async function sendToHome(home: string): Promise<number> {
     let handled = 0;

@@ -65,7 +65,8 @@
  * waited reads `invited` after a take-over, and the member answers again (a host that took the first yes takes a second
  * as received). A standby takes no notice (it answers as the main server does and writes nothing), sends no member's item,
  * and its timer sweeps only this server's own tables: nothing it runs writes a copied row (setLink throws there,
- * moveLinkOn writes nothing).
+ * moveLinkOn writes nothing). Its held lines and edits can't be kept up to date there (the host's takedowns go to the
+ * server that took over), so it serves none and drops them, as it does at every role change (heldLinesStale, #3233 round 3).
  */
 import crypto from 'node:crypto';
 import { readRelayEnvelope, relayEnvelopeVerifies, relayPayloadHash, word, type RelayEnvelope } from '@beanpool/core';

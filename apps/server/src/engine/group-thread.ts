@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, nameLine, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
+import { clipName, detectMentions, groupPictureUrlOf, guestNameLine, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, nameLine, NAME_LINE_CHARS, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -50,10 +50,32 @@ export { detectMentions };
  * name their card gave, their community (their home, which the envelope proved) and "guest", in core's one name line
  * (joint design §2.6: as a guest the community always shows), "Dax · riverside.example · guest". Never the card's name
  * alone, which a guest chooses and nothing checks: a guest whose card says a member's name never passes as that member.
+ * Core's guestNameLine makes it under NAME_LINE_CHARS: the card's name read clean (padding and spoofing out) and cut so the
+ * line fits, " · <home> · guest" never cut. The places that pass it on cap it with core's servedName, which cuts nothing it
+ * made (#3275 round 3: Home cut a 60-character card name's line at 60, so " · a.example · guest" went and a guest read as
+ * a bare name).
  */
 export function guestLineName(groupId: string, key: string): string | null {
     const g = db.prepare('SELECT name, home FROM group_guests WHERE group_id = ? AND guest_key = ?').get(groupId, key) as { name: string; home: string } | undefined;
-    return g ? nameLine({ kind: 'guest', name: nameLine({ kind: 'community', name: g.name, community: g.home }) }) : null;
+    return g ? guestNameLine(g.name, g.home, NAME_LINE_CHARS) : null;
+}
+
+/**
+ * The name a line in a group's chat is served under: a member here by their name; else a guest of this group (invited, in,
+ * left or removed: their line stays) by core's guest line (guestLineName); else none, and the reader shows a short key.
+ * Every place that serves a group line names its author here: the chat's read, a new line, a retried line, a changed line,
+ * the chats list's last line (your-groups.ts, and Home's Groups card from it), a new line's push and the bell's notice of it,
+ * a reported line as the moderators open it (group-chat-report.ts) and the moderators' report queue (state-engine.ts
+ * getReports, which the owner's assistant reads too). test-group-guests 14c is the table: every author x every one of these.
+ * WALK 3 phone (17 Nov 2026): a guest's line was served under "2b3be71a",
+ * so the members' Groups list read "2b3be71a: 🔒 Message", and once the guest left, the chat named their lines
+ * "2b3be71a · no longer in this group" (the phone names a signer outside its roster by the name the node serves).
+ */
+export function groupLineAuthorName(groupId: string, authorPubkey: string, memberCallsign: string | null | undefined): string | null {
+    // A member's name by the rule a guest's card name goes by (core clipName): read clean, cut at NAME_LINE_CHARS.
+    if (memberCallsign) return clipName(memberCallsign) || null;
+    if (!authorPubkey || authorPubkey === 'SYSTEM') return null;
+    return guestLineName(groupId, authorPubkey);
 }
 
 export const GROUP_THREAD_TYPE = 'group_thread';
@@ -366,7 +388,10 @@ export function getGroupThreadMessages(groupId: string, viewer: string, limit = 
         ORDER BY m.timestamp DESC, m.rowid DESC
         LIMIT ? OFFSET ?
     `).all(groupId, fromEpoch, fromEpoch, limit, offset) as any[];
-    return rows.reverse().map(r => ({ ...toThreadMessage(r, groupId, removedMarkerFor(r)), systemType: r.system_type || undefined }) as any);
+    return rows.reverse().map(r => ({
+        ...toThreadMessage({ ...r, author_callsign: groupLineAuthorName(groupId, r.author_pubkey, r.author_callsign) }, groupId, removedMarkerFor(r)),
+        systemType: r.system_type || undefined,
+    }) as any);
 }
 
 /** The chat as one member sees it. Anyone who is not an active member of the group is refused. */
@@ -530,7 +555,7 @@ export function postGroupThreadMessage(
         if (existing) {
             if (existing.author_pubkey === authorPubkey && existing.conversation_id === groupId) {
                 const sender = getMember(db, authorPubkey) as any;
-                return toThreadMessage({ ...existing, author_callsign: sender?.callsign, author_avatar: sender?.avatar_url }, groupId, GROUP_THREAD_REMOVED_TEXT);
+                return toThreadMessage({ ...existing, author_callsign: groupLineAuthorName(groupId, authorPubkey, sender?.callsign), author_avatar: sender?.avatar_url }, groupId, GROUP_THREAD_REMOVED_TEXT);
             }
             throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
         }
@@ -575,7 +600,7 @@ export function postGroupThreadMessage(
 
     const sender = getMember(db, authorPubkey) as any;
     const msg = toThreadMessage({
-        id: msgId, author_pubkey: authorPubkey, author_callsign: sender?.callsign, author_avatar: sender?.avatar_url,
+        id: msgId, author_pubkey: authorPubkey, author_callsign: groupLineAuthorName(groupId, authorPubkey, sender?.callsign), author_avatar: sender?.avatar_url,
         ciphertext, nonce, type, metadata: metadata ?? undefined, timestamp,
     }, groupId, GROUP_THREAD_REMOVED_TEXT);
 
@@ -583,10 +608,10 @@ export function postGroupThreadMessage(
     // After the answer, never inside it: the push skips anyone who has blocked the author (state-engine.ts
     // dispatchPushNotification), and their badge count's work in the answer would make a line's answer faster when
     // someone in the group has blocked its author, which would tell them (#1403 review).
-    // A guest is named by core's guest line, never by the name on their card alone (guestLineName).
-    const senderName = opts.guest
-        ? guestLineName(groupId, authorPubkey) ?? nameLine({ kind: 'guest', name: authorPubkey.slice(0, 8) })
-        : sender?.callsign || 'A member';
+    // Named as the line itself is served (groupLineAuthorName): a guest by core's guest line, never by the name on their
+    // card alone. With no name, a guest's push still says "guest", and a member's "A member".
+    const senderName = groupLineAuthorName(groupId, authorPubkey, sender?.callsign)
+        ?? (opts.guest ? nameLine({ kind: 'guest', name: authorPubkey.slice(0, 8) }) : 'A member');
     setImmediate(() => {
         try { pushGroupMessage(cb, group, authorPubkey, senderName, mentions); }
         catch (e: any) { console.warn('[Push] A group line push failed:', e?.message ?? e); }
@@ -703,7 +728,7 @@ export function removedMarkerFor(row: { author_pubkey?: string | null; metadata?
 export function groupChatMessageOf(row: any, groupId: string): EventThreadMessage {
     const author = getMember(db, row.author_pubkey) as any;
     return toThreadMessage(
-        { ...row, author_callsign: author?.callsign, author_avatar: author?.avatar_url },
+        { ...row, author_callsign: groupLineAuthorName(groupId, row.author_pubkey, author?.callsign), author_avatar: author?.avatar_url },
         groupId,
         removedMarkerFor(row),
     );

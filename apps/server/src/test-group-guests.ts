@@ -37,6 +37,18 @@
  *      (their roster again after the yes); a yes from a guest out -> none
  *  14  close the class: every kind a guest's home brings x a guest whose card says a member's name -> every notice it makes
  *      says "Ana · a.example · guest", never "Ana" alone
+ *  14b what members read of a guest's line (WALK 3 phone): the chat, the Groups list, a report, a removed guest's line
+ *  14c close the class (#3275): every author of a group line (a member, a member also on the guest list, a guest in, left,
+ *      removed, invited again, a guest of another group, a key nobody knows) x every place this server serves its name (the
+ *      chat's read, the Groups list, Home's Groups and chat cards, a report opened, the report queue, the owner's
+ *      assistant, the moderators' view of an assistant's suggestion, a convenor's removal) -> a member's name, the guest
+ *      line, or that place's own stand-in; and (round 3) a guest whose card's name is 1, 40, 41, 58, 59 or 60 characters,
+ *      from a long home, or padded with each kind of character that shows nothing (a right-to-left override among them)
+ *      x every one of those places -> the line ends " · <home> · guest", fits 60 unless the home can't, and holds nothing
+ *      invisible; a card signed over a padded name is refused, and a phone's own card carries the clean name; and (round 4)
+ *      members and guests whose real names are spelled with a joiner, a non-joiner, a flag's tags, a chillu or a variation
+ *      selector -> served as written (the assistant's fence, agent/fence.ts, reads them without those, as on main), and a
+ *      card main signed over each is a card at the invite route
  *  15  each home on its own: while one home doesn't answer, another gets its line at once; a row queued during a send goes
  *      when that send ends; a home that refuses costs one try for all its rows, which wait, then go
  *  16  close the class: every timer job https-server.ts runs from group-guests x (standby, main server) -> a standby returns
@@ -80,7 +92,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, buildNodeRequestHeaders, dmPublicKeyOf, groupMessageKey, makeGroupEpochRecord, nodeRequestSignatureVerifies,
+    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, addressCardDigest, buildNodeRequestHeaders, dmPublicKeyOf, groupMessageKey, makeGroupEpochRecord, nodeRequestSignatureVerifies,
     openMyGroupKey, parseNodeRequestHeader, readNodeKeyDocument, relayPayloadHash, sealGroupLine, signAddressCard, signNodeKeyDocument,
     signRelayEnvelope, type GroupEpochReason, type GroupEpochRecord, type RelayItem, type RelayItemKind,
 } from '@beanpool/core';
@@ -825,6 +837,265 @@ async function main(): Promise<void> {
     }
     const kindsCovered = [...(guests?.GUEST_ITEM_KINDS ?? [])].every((k: string) => noticeRows.some((r) => r.kind === k));
     assert(kindsCovered && noticeRows.some((r) => r.want), '14z. the table covers every kind a guest\'s home brings, and the lines make notices');
+
+    // ── 14b. What members read of a guest's line ────────────────────────────────────────────
+    // WALK 3 phone (17 Nov 2026): a guest's line was served under the first 8 characters of their key, so the members'
+    // Groups list read "2b3be71a: 🔒 Message", and once the guest left or was removed the chat named their lines
+    // "2b3be71a · no longer in this group" (a phone names a signer outside its roster by the name the node serves).
+    console.log('\n14b. Every place a guest\'s line is served to members names it by the guest line, while they are in and after they go');
+    const { groupLineAuthorName } = await import('./engine/group-thread.js');
+    const { openReportedGroupLine } = await import('./engine/group-chat-report.js');
+    // The member Ana writes first, then the guest whose card says "Ana": the guest's line is the chat's last.
+    const anaPosted14b = await call('POST', ana, `/api/groups/${S}/chat/message`, lineIn(ana, S, curKey, curEpoch));
+    const fakeLine = lineIn(fakeAna, S, curKey, curEpoch);
+    await bring([await item(fakeAna, 'a.example', shedTo, 'group-line', JSON.stringify(fakeLine))]);
+    await settle();
+    const fakeName = 'Ana · a.example · guest';
+    const chat14b = await call('GET', jo, `/api/groups/${S}/chat`);
+    const fakeLines = ((chat14b.body?.messages ?? []) as any[]).filter((m) => m.authorPubkey === fakeAna.pk);
+    assert(chat14b.status === 200 && fakeLines.length >= 3 && fakeLines.every((m) => m.authorCallsign === fakeName),
+        `14b-1. the chat as a member reads it: every line of the guest whose card says "Ana" is "${fakeName}" (got ${chat14b.status}, ${JSON.stringify(fakeLines.map((m) => m.authorCallsign))})`);
+    const memberLines = ((chat14b.body?.messages ?? []) as any[]).filter((m) => m.authorPubkey === ana.pk);
+    assert(anaPosted14b.status === 201 && memberLines.length > 0 && memberLines.every((m) => m.authorCallsign === 'Ana'),
+        `14b-2. and the member Ana's own lines stay "Ana" (got ${anaPosted14b.status}, ${JSON.stringify(memberLines.map((m) => m.authorCallsign))})`);
+    const yours14b = await call('GET', jo, '/api/your-groups');
+    const shedRow = ((yours14b.body?.items ?? []) as any[]).find((i) => i.conversationId === S || i.id === S);
+    assert(shedRow?.lastMessage?.id === fakeLine.clientId && shedRow.lastMessage.authorCallsign === fakeName,
+        `14b-3. the members' Groups list: the chat's last line is "${fakeName}"'s, never a short key (got ${JSON.stringify({ id: shedRow?.lastMessage?.id === fakeLine.clientId, who: shedRow?.lastMessage?.authorCallsign })})`);
+    const mk14b = Buffer.from(groupMessageKey(curKey, fakeLine.clientId)).toString('base64');
+    const filed14b = await call('POST', jo, `/api/groups/${S}/chat/report`, { messageId: fakeLine.clientId, reason: 'Spam or scam', disclosure: { epoch: curEpoch, mk: mk14b } });
+    await settle();
+    const report14b = db.prepare('SELECT id FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(jo.pk, fakeLine.clientId) as { id: string } | undefined;
+    const seen14b = report14b ? await openReportedGroupLine(report14b.id) : null;
+    assert(filed14b.status === 200 && seen14b?.authorCallsign === fakeName,
+        `14b-4. the line as the moderators open a report of it: "${fakeName}" (got ${filed14b.status}, ${JSON.stringify(seen14b?.authorCallsign)})`);
+    // After they go: Gus (a.example) wrote in the first group in 4b, and the owners' switch removed him in 9b.
+    const gusRead = await call('GET', ana, `/api/groups/${G}/chat`);
+    const gusServed = ((gusRead.body?.messages ?? []) as any[]).find((m) => m.id === gusId);
+    assert(stateOf(G, gus) === 'removed' && gusServed?.authorCallsign === 'Gus · a.example · guest',
+        `14b-5. a removed guest's line keeps their guest line, so a phone shows "Gus · a.example · guest · no longer in this group", never a short key (got ${stateOf(G, gus)}, ${JSON.stringify(gusServed?.authorCallsign)})`);
+    // Every way the name is asked for, one rule: a member by their name; a guest of this group in any state by the guest
+    // line; a stranger, the system, or a guest of another group: none (the reader shows a short key).
+    const nameRows: Array<[string, string, string, string | null, string | null]> = [
+        ['a member', S, ana.pk, 'Ana', 'Ana'],
+        ['a guest in', S, fakeAna.pk, null, fakeName],
+        ['a guest who left', S, oz.pk, null, 'Oz · c.example · guest'],
+        ['a removed guest', G, gus.pk, null, 'Gus · a.example · guest'],
+        ['a member key that is also a guest elsewhere: the member name wins', S, fakeAna.pk, 'Ana (member)', 'Ana (member)'],
+        ['a guest of another group', S, gus.pk, null, null],
+        ['a stranger', S, stray.pk, null, null],
+        ['the system', S, 'SYSTEM', null, null],
+    ];
+    const nameMisses = nameRows.filter(([, g, k, member, want]) => groupLineAuthorName(g, k, member) !== want).map(([label]) => label);
+    assert(stateOf(S, oz) === 'left' && nameMisses.length === 0, `14b-6. groupLineAuthorName, one rule for every caller (misses: ${nameMisses.join(', ') || 'none'})`);
+
+    // ── 14c. Close the class: every author of a group line x every place this server serves its name ──
+    // #3275 round 2: a member by their name; a guest of the group in any state by core's guest line; anyone else by no
+    // name, and each place's own stand-in (a short key, "@" and a short key, or none). One table: each author's line is the
+    // chat's newest when it is read (the Groups list and Home's Groups card carry only that one), and a convenor's removal
+    // of it goes last, as it ends the line. The push and the bell for a guest's new line are 14's rows 'line' and 'line
+    // mentioning a member'; a line from a guest who is not in is refused before it is stored (4, 6, 7).
+    console.log('\n14c. Close the class: every author of a group line x every place this server serves its name');
+    const { ensureGroupThread, syncGroupThreadMembership } = await import('./engine/group-thread.js');
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+    const { AGENT_TOOLS } = await import('./agent/tools.js');
+    const { cleanMemberText } = await import('./agent/fence.js');
+    const K = createGroup({ name: 'Bike Kitchen', joinPolicy: 'open', createdBy: ana.pk }).id;
+    const mo = addLocal('Mo');
+    // #3275 round 4: members whose names are spelled with a joiner (an emoji sequence) and a non-joiner (a Persian surname):
+    // a group line names them as they wrote it, at every place below.
+    const samFlag = addLocal('Sam \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}'), mehdi = addLocal('\u{645}\u{647}\u{62F}\u{6CC}\u{200C}\u{632}\u{627}\u{62F}\u{647}');
+    // Rowan reads and Cyd, a second convenor, takes lines down for the card-name rows below: each account's signed requests
+    // have their own share of the node's nonces (engine/member-signature.ts), and Jo's and Ana's carry the sections around.
+    const k14Reader = addLocal('Rowan'), k14Convenor = addLocal('Cyd');
+    for (const who of [jo, ben, mo, k14Reader, samFlag, mehdi]) {
+        db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(K, who.pk);
+    }
+    db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'convenor', 'active', 1)`).run(K, k14Convenor.pk);
+    ensureGroupThread(K);
+    for (const who of [ana, jo, ben, mo, k14Reader, k14Convenor, samFlag, mehdi]) syncGroupThreadMembership(K, who.pk);
+    let reader14c = jo, convenor14c = ana;
+    const at14c = new Date().toISOString();
+    const listGuest14c = (who: Id, home: string, state: 'invited' | 'in' | 'left' | 'removed', name = who.name) => db.prepare(
+        `INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(K, who.pk, home, name, state, ana.pk, at14c, at14c);
+    const inAna = newId('Ana'), una = newId('Una'), ro = newId('Ro'), ed = newId('Ed'), nobody = newId('Nobody');
+    listGuest14c(inAna, 'a.example', 'in');
+    listGuest14c(una, 'c.example', 'left');
+    listGuest14c(ro, 'a.example', 'removed');
+    listGuest14c(ed, 'c.example', 'invited');   // in once, left, and invited again: the lines from when they were in stay
+    listGuest14c(mo, 'a.example', 'left', 'Ana');   // a member here on this group's guest list whose card said "Ana"
+    const authors14c: Array<{ who: string; key: string; name: string | null }> = [
+        { who: 'a member', key: ben.pk, name: 'Ben' },
+        { who: 'a member whose name ends in an emoji sequence (a joiner)', key: samFlag.pk, name: samFlag.name },
+        { who: 'a member whose Persian surname has its non-joiner', key: mehdi.pk, name: mehdi.name },
+        { who: 'a member who is also on the group\'s guest list (their name here wins)', key: mo.pk, name: 'Mo' },
+        { who: 'a guest in, whose card says a member\'s name', key: inAna.pk, name: 'Ana · a.example · guest' },
+        { who: 'a guest who left', key: una.pk, name: 'Una · c.example · guest' },
+        { who: 'a removed guest', key: ro.pk, name: 'Ro · a.example · guest' },
+        { who: 'a guest invited again', key: ed.pk, name: 'Ed · c.example · guest' },
+        { who: 'a guest of another group', key: gus.pk, name: null },
+        { who: 'a key nobody here knows', key: nobody.pk, name: null },
+    ];
+    // #3275 round 3: a guest's card name x its length x each kind of character that shows nothing. Core makes the line under
+    // NAME_LINE_CHARS (60) by cutting the card's name alone, so " · <home> · guest" stays whole wherever the line goes (Home's
+    // Groups and chat cards cut a 60-character card name's line at 60, and the moderators' view too, so the guest read as a
+    // bare name), and nothing invisible is served ("Ana" padded with zero-width spaces showed "Ana…" beside the member Ana).
+    // A name written straight into group_guests stands for one stored however it came; the invite route refuses a card
+    // signed over a name that isn't in its clean form, and a phone's own card (core signAddressCard) carries the clean one:
+    // both are checked on each padded row. These guests have left, so no change of a line goes to their homes.
+    const NAME60 = 'Wren Tallowmere of the Long Valley Seedbank Library and Mill Coop';
+    const LONG_HOME = 'the-long-name-of-a-community-garden-and-its-shed.green.hills.example:8443';
+    const lineFor14c = (clean: string, home: string): string => {
+        const tail = ` · ${home} · guest`, room = Math.max(2, 60 - [...tail].length), chars = [...clean];
+        return `${chars.length <= room ? clean : `${chars.slice(0, room - 1).join('').trimEnd()}…`}${tail}`;
+    };
+    const padded14c: Array<[string, string]> = [
+        ['zero-width spaces (U+200B)', '\u200B'], ['zero-width non-joiners (U+200C)', '\u200C'], ['zero-width joiners (U+200D)', '\u200D'],
+        ['left-to-right marks (U+200E)', '\u200E'], ['right-to-left marks (U+200F)', '\u200F'], ['Arabic letter marks (U+061C)', '\u061C'],
+        ['direction embeddings and overrides (U+202A to U+202E)', '\u202A\u202B\u202C\u202D\u202E'],
+        ['direction isolates (U+2066 to U+2069)', '\u2066\u2067\u2068\u2069'],
+        ['word joiners and invisible operators (U+2060 to U+2064)', '\u2060\u2061\u2062\u2063\u2064'], ['byte-order marks (U+FEFF)', '\uFEFF'],
+        ['soft hyphens (U+00AD)', '\u00AD'], ['Mongolian vowel separators (U+180E)', '\u180E'], ['tag characters (U+E0041, U+E007F)', '\u{E0041}\u{E007F}'],
+        ['interlinear annotation marks (U+FFF9 to U+FFFB)', '\uFFF9\uFFFA\uFFFB'], ['combining grapheme joiners (U+034F)', '\u034F'],
+        ['Hangul fillers (U+115F, U+1160, U+3164, U+FFA0)', '\u115F\u1160\u3164\uFFA0'],
+    ];
+    const names14c: Array<{ what: string; card: string; clean: string; home?: string }> = [
+        ...[1, 40, 41, 58, 59, 60].map((n) => ({ what: `${n} characters long`, card: NAME60.slice(0, n), clean: NAME60.slice(0, n) })),
+        { what: '60 characters long, from a long home (the line runs past 60: the name is cut to "W…", never the home or "guest")',
+            card: NAME60.slice(0, 60), clean: NAME60.slice(0, 60), home: LONG_HOME },
+        // 59 characters, as the review's: the table keeps a name to 60 (group_guests' CHECK), so each pad is 56 of the kind.
+        ...padded14c.map(([what, c]) => ({ what: `"Ana" padded to 59 characters with ${what}`, card: `Ana${[...c.repeat(56)].slice(0, 56).join('')}`, clean: 'Ana' })),
+        { what: '"Ana" inside a right-to-left override', card: '\u202EAna\u202C', clean: 'Ana' },
+        { what: 'a right-to-left override that shows "anA" as "Ana"', card: '\u202EanA', clean: 'anA' },
+        // Round 4: one joiner alone between two letters stays (it is how emoji and joining scripts spell names); the rest go.
+        { what: 'invisible characters before, between and after its letters', card: '\u200BA\u200Dn\u2066a\u202E\uFEFF', clean: 'A\u{200D}na' },
+        { what: '57 characters with three invisible ones among them (60 stored)', card: `${NAME60.slice(0, 30)}\u200B\u202E${NAME60.slice(30, 57)}\u2069`, clean: NAME60.slice(0, 57) },
+        { what: 'runs of spaces and no-break spaces', card: 'Ana \u00A0 \u3000Ríos', clean: 'Ana Ríos' },
+        // #3275 round 4: names people really write, served as written (core name-line.test.ts holds the whole corpus).
+        ...([
+            ['a rainbow flag after "Sam" (a joiner)', 'Sam \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}'],
+            ['a Persian surname with its non-joiner', '\u{645}\u{647}\u{62F}\u{6CC}\u{200C}\u{632}\u{627}\u{62F}\u{647}'],
+            ['Scotland\'s flag (tag characters)', 'Ewan \u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}'],
+            ['a Malayalam name ending in a chillu written with a joiner', '\u{D05}\u{D30}\u{D4D}\u{200D}\u{D1C}\u{D41}\u{D28}\u{D4D}\u{200D}'],
+            ['a Bengali ra-phala with a joiner', '\u{9B0}\u{200D}\u{9CD}\u{9AF}\u{9BE}\u{9AC}'],
+            ['a Japanese name with a variation selector and an ideographic space', '\u{845B}\u{E0100}\u{98FE}\u{3000}\u{5317}\u{658E}'],
+        ] as Array<[string, string]>).map(([what, card]) => ({ what: `a real name: ${what}`, card, clean: card })),
+    ];
+    const cards14c = new Map<string, { who: Id; home: string; card: string; clean: string }>();
+    for (const [i, n] of names14c.entries()) {
+        const who = newId(`Guest${i}`), home = n.home ?? 'a.example';
+        listGuest14c(who, home, 'left', n.card);
+        cards14c.set(who.pk, { who, home, card: n.card, clean: n.clean });
+        authors14c.push({ who: `a guest whose card's name is ${n.what}`, key: who.pk, name: lineFor14c(n.clean, home) });
+    }
+    // Nothing is served that shows nothing: Unicode's format characters, the combining grapheme joiner, the Hangul fillers.
+    const INVISIBLE14c = /[\p{Cf}\u034F\u115F\u1160\u3164\uFFA0]/u;
+    const invisibleOf14c = (s: string) => [...s].filter((ch) => INVISIBLE14c.test(ch)).join('');
+    // The moderators' view of an assistant's suggestion about the report (agent/suggestions-route.ts): Olive is the owner,
+    // and her assistants file one suggestion a line, each declined once read: a new assistant at each one's day's limit.
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    const { issueAutomationToken } = await import('./automation-tokens.js');
+    const { fileSuggestion, declineSuggestion, SUGGESTIONS_PER_DAY } = await import('./agent/suggestions.js');
+    const olive14c = ownerSessionHeaders(olive.pk);
+    const grantsUntil14c = Date.now() + 86_400_000;   // one clock read for all three: a day on
+    const grants14c = [1, 2, 3].map((n) => issueAutomationToken({ name: `Moderation helper ${n}`, scope: 'agent', expiresAt: grantsUntil14c, createdBy: olive.pk }));
+    let suggested14c = 0;
+    db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'home.layout', ?)
+                ON CONFLICT(public_key, pref_key) DO UPDATE SET pref_value = excluded.pref_value`)
+        .run(jo.pk, JSON.stringify({ v: 2, cards: [{ id: 'chat-k14c', type: 'chat', settings: { conversationId: K, kind: 'group', name: 'Bike Kitchen' } }], dismissed: {}, updatedAt: at14c }));
+    db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'home.layout', ?)
+                ON CONFLICT(public_key, pref_key) DO UPDATE SET pref_value = excluded.pref_value`)
+        .run(k14Reader.pk, JSON.stringify({ v: 2, cards: [{ id: 'chat-k14c', type: 'chat', settings: { conversationId: K, kind: 'group', name: 'Bike Kitchen' } }], dismissed: {}, updatedAt: at14c }));
+    const admin14c = ownerTokenHeaders('admin');
+    const adminGet = async (p: string) => (await (await fetch(`${BASE}${p}`, { headers: admin14c })).json().catch(() => null)) as any;
+    const reportGet = AGENT_TOOLS.find((t) => t.name === 'report_get');
+    const short = (k: string) => k.slice(0, 8);
+    interface Line14c { id: string; at: string; report: string }
+    // `fenced`: a place that hands the name on inside the assistant's fence (agent/fence.ts cleanMemberText, as on main), which
+    // takes joiners, tag characters and the supplement's selectors out of any member's words an assistant reads, a name too: they
+    // can carry words a reader never sees. The name rule (core cleanName) is every other place's (#3275 round 4).
+    const paths14c: Array<{ where: string; unnamed: (key: string) => string | null; read: (l: Line14c) => Promise<unknown>; fenced?: true }> = [
+        { where: 'the chat as a member reads it', unnamed: short,
+            read: async (l) => ((await call('GET', reader14c, `/api/groups/${K}/chat`)).body?.messages ?? []).find((m: any) => m.id === l.id)?.authorCallsign },
+        { where: 'the Groups list (its last line)', unnamed: short, read: async (l) => {
+            const row = ((await call('GET', reader14c, '/api/your-groups')).body?.items ?? []).find((i: any) => i.conversationId === K);
+            return row?.lastMessage?.id === l.id ? row.lastMessage.authorCallsign : `another line (${row?.lastMessage?.id})`;
+        } },
+        { where: 'Home\'s Groups card (its last line)', unnamed: short, read: async (l) => {
+            const g = ((await call('GET', reader14c, '/api/home?cards=groups')).body?.cards?.groups?.items ?? []).find((i: any) => i.id === K);
+            return g?.last?.at === l.at ? g.last.who : `another line (${g?.last?.at})`;
+        } },
+        { where: 'Home\'s chat card pinned to the group', unnamed: short,
+            read: async (l) => ((await call('GET', reader14c, '/api/home?cards=chat-k14c')).body?.cards?.['chat-k14c']?.lines ?? []).find((m: any) => m.id === l.id)?.who },
+        { where: 'a report of it, as the moderators open it', unnamed: () => null,
+            read: async (l) => (await adminGet(`/api/local/admin/reports/${l.report}/message`))?.message?.authorCallsign },
+        { where: 'the moderators\' report queue', unnamed: (k) => `@${short(k)}`,
+            read: async (l) => ((await adminGet('/api/local/admin/reports?status=all&limit=500'))?.reports ?? []).find((r: any) => r.id === l.report)?.targetCallsign },
+        { where: 'the owner\'s assistant reading the report', unnamed: (k) => `@${short(k)}`, fenced: true, read: async (l) => {
+            const got: any = await reportGet?.run({} as any, { report_id: l.report }, 'b14c');
+            return got?.result?.report?.authorCallsign?.text?.split('\n')[1];
+        } },
+        { where: 'the moderators\' view of an assistant\'s suggestion about the report', unnamed: (k) => `@${short(k)}`, fenced: true, read: async (l) => {
+            const grant = grants14c[Math.floor(suggested14c++ / SUGGESTIONS_PER_DAY)];
+            if (!grant?.ok) return `no assistant to suggest (${grant ? grant.error : 'past the grants made'})`;
+            const filed = fileSuggestion(grant.record.id, 'dismiss_report', l.report, 'Looks fine to me');
+            if (!filed.ok) return `not filed: ${filed.error}`;
+            const seen = (await (await fetch(`${BASE}/api/local/admin/agent/suggestions`, { headers: olive14c })).json().catch(() => null)) as any;
+            declineSuggestion(filed.suggestion.id);
+            return (seen?.suggestions ?? []).find((s: any) => s.id === filed.suggestion.id)?.report?.author;
+        } },
+        // Last: the line is a tombstone after it, as every member hears it (broadcastGroupChatUpdate) and as an edit's is.
+        { where: 'a convenor\'s removal (the changed line every member hears)', unnamed: short,
+            read: async (l) => (await call('POST', convenor14c, `/api/groups/${K}/chat/remove`, { messageId: l.id })).body?.message?.authorCallsign },
+    ];
+    const reports14c: string[] = [];
+    const base14c = Date.now();
+    for (const [i, a] of authors14c.entries()) {
+        const line: Line14c = { id: crypto.randomUUID(), at: new Date(base14c + (i + 1) * 1000).toISOString(), report: crypto.randomUUID() };
+        db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, 'text', NULL, ?)`)
+            .run(line.id, K, a.key, Buffer.from('a line').toString('base64'), `${'0'.repeat(24)}`, line.at);
+        db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at) VALUES (?, ?, ?, ?, ?, 'Spam or scam', ?)`)
+            .run(line.report, jo.pk, a.key, line.id, JSON.stringify({ epoch: 1, mk: Buffer.alloc(32).toString('base64') }), line.at);
+        reports14c.push(line.report);
+        const misses: string[] = [];
+        const card = cards14c.get(a.key);
+        [reader14c, convenor14c] = card ? [k14Reader, k14Convenor] : [jo, ana];
+        for (const p of paths14c) {
+            const as = (n: string) => (p.fenced ? cleanMemberText(n) : n);
+            const want = a.name === null ? p.unnamed(a.key) : as(a.name);
+            const got = await p.read(line);
+            if (got !== want) misses.push(`${p.where}: ${JSON.stringify(got)}`);
+            // A guest's line, wherever it goes: " · <home> · guest" whole at its end, and nothing in it that shows nothing but
+            // what the name itself is spelled with (a joiner, a flag's tags: round 4).
+            else if (card && (typeof got !== 'string' || !got.endsWith(` · ${card.home} · guest`) || invisibleOf14c(got) !== invisibleOf14c(as(card.clean)))) misses.push(`${p.where}: ${JSON.stringify(got)} (cut or invisible)`);
+        }
+        if (card && card.card !== card.clean) {
+            // The way in: a card signed over the padded name is no card; a phone's own card (core signAddressCard) carries the clean name.
+            const name = card.card, digest = addressCardDigest({ key: card.who.pk, home: card.home, name });
+            const handMade = { v: 1, key: card.who.pk, home: card.home, name, sig: Buffer.from(ed25519.sign(digest, card.who.seed)).toString('base64') };
+            const invited = await call('POST', k14Convenor, `/api/groups/${K}/guests`, { card: handMade });
+            if (invited.status !== 400 || invited.body?.code !== 'bad_card') misses.push(`the invite route, a card signed over this name: ${invited.status} ${invited.body?.code}`);
+            const phones = await signAddressCard({ key: card.who.pk, home: card.home, name }, signerOf(card.who.seed)).then((c) => c.name, (e) => `refused: ${e?.message}`);
+            if (phones !== card.clean) misses.push(`a phone's own card over this name: ${JSON.stringify(phones)}`);
+        } else if (card) {
+            // A real name (round 4): a card signed over it as main's core signs one (the name as written) is a card at the
+            // invite route. It names Ben's key, a member here, so the route stops at 'is_member' after the card's check,
+            // and nothing is written or sent; 'bad_card' would be the card refused.
+            const name = card.card, digest = addressCardDigest({ key: ben.pk, home: card.home, name });
+            const asMain = { v: 1, key: ben.pk, home: card.home, name, sig: Buffer.from(ed25519.sign(digest, ben.seed)).toString('base64') };
+            const invited = await call('POST', k14Convenor, `/api/groups/${K}/guests`, { card: asMain });
+            if (invited.status !== 400 || invited.body?.code !== 'is_member') misses.push(`the invite route, a card main signed over this name: ${invited.status} ${invited.body?.code}`);
+            const phones = await signAddressCard({ key: card.who.pk, home: card.home, name }, signerOf(card.who.seed)).then((c) => c.name, (e) => `refused: ${e?.message}`);
+            if (phones !== name) misses.push(`a phone's own card over this name: ${JSON.stringify(phones)}`);
+        }
+        assert(misses.length === 0, `14c. ${a.who}: every place serves ${JSON.stringify(a.name ?? 'no name, only its own stand-in')} (${misses.length} of ${paths14c.length} miss${misses.length ? `: ${misses.join('; ')}` : ''})`);
+    }
+    // Nothing of this table reaches the sections after it: the guest rows, the reports and Jo's Home go.
+    db.prepare('DELETE FROM group_guests WHERE group_id = ?').run(K);
+    db.prepare('DELETE FROM abuse_reports WHERE id IN (SELECT value FROM json_each(?))').run(JSON.stringify(reports14c));
+    db.prepare(`DELETE FROM member_preferences WHERE public_key IN (?, ?) AND pref_key = 'home.layout'`).run(jo.pk, k14Reader.pk);
+    await settle();
 
     // ── 15. Each home on its own ────────────────────────────────────────────────────────────
     console.log('\n15. One community that doesn\'t answer holds up no other; a row queued during a send goes when it ends');

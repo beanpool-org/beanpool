@@ -44,6 +44,7 @@ import { nodeRoleOf } from '../engine/node-roles.js';
 import { getMember, putBackTakedowns } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
+import { clipName, NAME_LINE_CHARS } from '@beanpool/core';
 import { cleanMemberText, newBoundary } from './fence.js';
 import {
     agentCallsToday, agentCreatesToday, agentPostsPerDay, forgetAgentGrant, isAgentPostsPerDay, setAgentPostsPerDay,
@@ -117,7 +118,7 @@ function oauthGrantView(g: OAuthGrantView, me: string | null, now = Date.now()) 
         id: g.id,
         name: cleanMemberText(g.clientName, 60) || 'AI assistant',
         sendsTo: redirectHost(g.redirectUri),
-        member: cleanMemberText(getMember(g.member)?.callsign ?? '', 60) || null,
+        member: cleanMemberText(clipName(getMember(g.member)?.callsign), NAME_LINE_CHARS) || null,
         mine: !!me && g.member === me,
         role: role === 'owner' || role === 'admin' ? role : null,
         via: 'oauth' as const,
@@ -142,7 +143,7 @@ function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) 
     return {
         id: t.id,
         name: cleanMemberText(t.name, 60),
-        member: cleanMemberText(getMember(t.createdBy)?.callsign ?? '', 60) || null,
+        member: cleanMemberText(clipName(getMember(t.createdBy)?.callsign), NAME_LINE_CHARS) || null,
         mine: !!me && t.createdBy === me,
         /** The maker's role now: null when they are no longer an owner or admin (the assistant answers 401 then). */
         role: role === 'owner' || role === 'admin' ? role : null,

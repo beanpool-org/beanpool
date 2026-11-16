@@ -15,6 +15,7 @@ import type { RouteDeps } from '../routes/types.js';
 import { requireAdminRole } from '../admin-auth.js';
 import { getMember, getReports, type AbuseReport } from '../state-engine.js';
 import { logger } from '../logger.js';
+import { clipName, servedName, NAME_LINE_CHARS, NAME_LINE_MAX } from '@beanpool/core';
 import { cleanMemberText } from './fence.js';
 import { approveCall, declineSuggestion, openSuggestions, suggestionAsks } from './suggestions.js';
 
@@ -60,7 +61,9 @@ function originalReport(r: AbuseReport | null) {
         reason: cleanMemberText(r.reason, 500) || null,
         title: cleanMemberText(kind === 'pulse_item' ? r.pulseItem?.title : forum ? forum.topicTitle : r.postTitle, 200) || null,
         description: kind === 'post' ? cleanMemberText(r.postDescription, 500) || null : forum ? cleanMemberText(forum.words, 500) || null : null,
-        author: cleanMemberText(kind === 'member' ? r.targetCallsign : forum ? forum.writerName : r.postAuthorCallsign, 60) || null,
+        // A name the report queue already made (a group line's author by group-thread.ts groupLineAuthorName: a guest's whole line),
+        // capped by core's servedName, which never cuts " · <their community> · guest" (#3275 round 3).
+        author: cleanMemberText(servedName(kind === 'member' ? r.targetCallsign : forum ? forum.writerName : r.postAuthorCallsign), NAME_LINE_MAX) || null,
         postRemoved: r.postRemoved === true || r.pulseItem?.removed === true || forum?.removed === true,
         hiddenByReports: r.postHiddenByReports === true || forum?.hidden === true,
         postOnHold: r.postOnHold === true,
@@ -87,7 +90,7 @@ export function createAgentSuggestionRoutes(deps: RouteDeps): Router {
                     asks: suggestionAsks(x.kind, report),
                     at: x.at,
                     expiresAt: x.expiresAt,
-                    agent: { id: x.grant.id, name: x.grant.name, member: cleanMemberText(getMember(x.grant.member)?.callsign ?? '', 60) || null },
+                    agent: { id: x.grant.id, name: x.grant.name, member: cleanMemberText(clipName(getMember(x.grant.member)?.callsign), NAME_LINE_CHARS) || null },
                     /** The assistant's words: text from outside, shown as text beside the original, never as markup. */
                     reason: { untrusted: true, text: x.reason },
                     report: originalReport(report),

@@ -10,7 +10,8 @@
  *      Settings and the community's info carry none of them, as before
  *   2. the same table with a public address set (a stored hostname): the front door names `https://<that address>/app`,
  *      once, in the head of the HTML as served; everything else as in 1. Then with a port and a trailing slash, with
- *      CF_RECORD_NAME alone, and with a stored hostname that is not an address (no canonical, nothing of it in the page)
+ *      CF_RECORD_NAME alone, and with a stored hostname that is not an address (no canonical, nothing of it in the page).
+ *      Then two addresses and the owner's main (several addresses S6): the canonical follows Make main each way
  *   3. the page itself is unchanged but for the one tag (its own head and body, byte for byte, around it)
  *   4. the rules underneath: which paths are the front door, where a tag goes in a page with and without a head, which
  *      public/ file is the page
@@ -214,6 +215,23 @@ async function main(): Promise<void> {
         const deep = await get('/app/post/x');
         assert(deep.robotsHeader === 'noindex' && canonicals(deep.body).length === 0, `${name}: GET /app/post/x stays noindex with no canonical`);
     }
+
+    // ── 2e. the owner's main (several addresses S6, design §2.1): the canonical follows Make main, and back ──
+    console.log('\n── 2e. the canonical follows the owner\'s main ──');
+    // Names the Internet reaches (a `.example` host does not, and a home-network main names no canonical: S2's rule).
+    setAddress({ mode: 'own', hostname: 'riverside.example.org' }, 'hills.example.org');
+    for (const main of ['hills.example.org', 'riverside.example.org', 'hills.example.org']) {
+        updateNodeConfig({ mainAddress: main } as any);
+        forgetOwnAddresses();
+        for (const p of ['/app', '/app?lang=it']) {
+            const res = await get(p);
+            const links = canonicals(res.body);
+            assert(res.status === 200 && JSON.stringify(links) === JSON.stringify([`https://${main}/app`]),
+                `main ${main}: GET ${p} names https://${main}/app as its canonical, once (got ${res.status} ${JSON.stringify(links)})`);
+        }
+    }
+    updateNodeConfig({ mainAddress: null } as any);
+    forgetOwnAddresses();
 
     // ── 3. the page is unchanged but for the one tag ──
     console.log('\n── 3. the page is the page, with one tag added ──');

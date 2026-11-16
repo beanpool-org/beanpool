@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "Apa yang dibagikan tetangga, video Belajar, dan menambahkan saluranmu sendiri.",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "Apa yang dibagikan tetangga, video Cara kerja, dan menambahkan saluranmu sendiri.",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "Keputusan dan pemungutan suara, kacang bersama, grupmu, usaha dan pengurus. Jajak pendapat dan acara juga ada di sini; kamu menemukannya di Pasar.",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "Keputusan dan pemungutan suara, kacang bersama, grupmu, usaha dan pengurus, dan Pengetahuan lokal di Belajar. Jajak pendapat dan acara juga ada di sini; kamu menemukannya di Pasar.",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "Ruang Belajar",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "Video cara kerja",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "Video pendek tentang BeanPool, dan halaman panduan yang sesuai.",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "Meminta seseorang membayarmu dengan kacang untuk sesuatu. Tagihan tidak pernah membayar dirinya sendiri; orang itu yang memilih apakah akan membayar. Untuk saat ini, tagihan bisa disertakan pada undangan.",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "Pengetahuan lokal",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "Belajar, rak komunitasmu berisi hal-hal yang layak diketahui: menemukan halaman, mengusulkannya, menjaganya tetap benar, dan cara pemilik atau admin memeriksa tiap halaman.",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

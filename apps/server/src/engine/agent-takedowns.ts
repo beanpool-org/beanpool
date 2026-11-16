@@ -149,16 +149,21 @@ function roleHolderPost(author: string | null): boolean {
 
 const utcDayStart = (now: number) => `${iso(now).slice(0, 10)}T00:00:00.000Z`;
 
-/** Posts this grant took down today (UTC), put back or not: the day's count. */
+/** Forum posts taken down (engine/forum-takedowns.ts, slice F2b), by one grant or every one: they count in the same day. */
+const forumToday = (since: string, grantId?: string): number =>
+    (db.prepare(`SELECT COUNT(*) AS c FROM agent_forum_takedowns WHERE at >= ?${grantId ? ' AND grant_id = ?' : ''}`)
+        .get(...(grantId ? [since, grantId] : [since])) as { c: number }).c;
+
+/** Posts this grant took down today (UTC), put back or not, listings and forum posts: the day's count. */
 export function takedownsTodayBy(grantId: string, now: number = Date.now()): number {
     return (db.prepare(`SELECT COUNT(*) AS c FROM agent_takedown_posts tp JOIN agent_takedowns t ON t.id = tp.takedown_id
-                         WHERE t.grant_id = ? AND t.at >= ?`).get(grantId, utcDayStart(now)) as { c: number }).c;
+                         WHERE t.grant_id = ? AND t.at >= ?`).get(grantId, utcDayStart(now)) as { c: number }).c + forumToday(utcDayStart(now), grantId);
 }
 
-/** Posts every assistant took down today (UTC): the owners' daily line. */
+/** Posts every assistant took down today (UTC), forum posts too: the owners' daily line. */
 export function takedownsToday(now: number = Date.now()): number {
     return (db.prepare('SELECT COUNT(*) AS c FROM agent_takedown_posts tp JOIN agent_takedowns t ON t.id = tp.takedown_id WHERE t.at >= ?')
-        .get(utcDayStart(now)) as { c: number }).c;
+        .get(utcDayStart(now)) as { c: number }).c + forumToday(utcDayStart(now));
 }
 
 function announce(cb: ModerationNoticeCallbacks, type: 'post_removed' | 'post_updated'): void {
@@ -274,10 +279,11 @@ export function takedownsBy(grantId: string, days: number, now: number = Date.no
     });
 }
 
-/** Posts this assistant took down that wait still, put back by no one and not yet final: what "Disconnect and put back" undoes. */
+/** Posts this assistant took down that wait still, forum posts too, put back by no one and not yet final: what "Disconnect and put back" undoes. */
 export function takedownsHeldBy(grantId: string): number {
     return (db.prepare(`SELECT COUNT(*) AS c FROM agent_takedown_posts tp JOIN agent_takedowns t ON t.id = tp.takedown_id
-                         WHERE t.grant_id = ? AND tp.put_back_at IS NULL AND tp.final_at IS NULL`).get(grantId) as { c: number }).c;
+                         WHERE t.grant_id = ? AND tp.put_back_at IS NULL AND tp.final_at IS NULL`).get(grantId) as { c: number }).c
+        + (db.prepare('SELECT COUNT(*) AS c FROM agent_forum_takedowns WHERE grant_id = ? AND put_back_at IS NULL AND final_at IS NULL').get(grantId) as { c: number }).c;
 }
 
 export type PutBackScope = { postId: string } | { takedownId: string } | { grantId: string; since: string };
@@ -494,4 +500,7 @@ export function listTakedowns(now: number = Date.now(), limit = 100): TakedownLi
 export function forgetTakedownsOf(publicKey: string): void {
     db.prepare('DELETE FROM agent_takedown_posts WHERE post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)').run(publicKey);
     db.prepare("UPDATE agent_takedowns SET member_pubkey = '' WHERE member_pubkey = ?").run(publicKey);
+    // And the forum's record (engine/forum-takedowns.ts): their forum posts, and their key as who it acted for.
+    db.prepare('DELETE FROM agent_forum_takedowns WHERE forum_post_id IN (SELECT id FROM forum_posts WHERE writer_pubkey = ?)').run(publicKey);
+    db.prepare("UPDATE agent_forum_takedowns SET member_pubkey = '' WHERE member_pubkey = ?").run(publicKey);
 }

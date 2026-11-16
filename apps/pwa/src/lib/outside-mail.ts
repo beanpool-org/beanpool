@@ -42,7 +42,7 @@
  * whenever it was kept for another address, so this browser never signs as a community it no longer talks to.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, audienceOf, gateOutsideItem, newDmMessageId, newOutsideDeviceId, nodeHomeOf,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, audienceOf, gateOutsideItem, newDmMessageId, newOutsideDeviceId, nodeHomeOf,
     openOutsideLine, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, t,
     type AddressCard, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
@@ -229,6 +229,26 @@ export async function doorOpen(ctx: Pick<OutsideMailContext, 'store' | 'identity
 
 export async function setDoor(ctx: Pick<OutsideMailContext, 'store' | 'identity'>, open: boolean): Promise<void> {
     await ctx.store.setMeta(ctx.identity.publicKey, DOOR_META, open ? 'open' : 'closed');
+}
+
+// ── Finding someone in another community by name (N1, @beanpool/core find-by-name.ts; the phone's utils/outside-mail.ts) ──
+
+/** Whether people in other communities can find me by name: my community's switch, the same on every device. */
+export async function findMeOn(ctx: OutsideMailContext): Promise<boolean> {
+    return (await get(ctx, '/api/find/me'))?.findable === true;
+}
+
+/** The switch on (my community is handed my card, signed now) or off; what it is now. Throws OutsideMailError. */
+export async function setFindMe(ctx: OutsideMailContext, on: boolean): Promise<boolean> {
+    const card = on ? await myAddressCard(ctx) : null;
+    if (on && !card) throw new OutsideMailError(503, t("This community's server knows none of its own names yet, so it can't send to another community."), 'no_home');
+    return (await post(ctx, '/api/find/me', on ? { on, card } : { on }))?.findable === true;
+}
+
+/** The card of whoever uses `name` at the community at `home`, or null for the one "nobody". Throws OutsideMailError with my server's words. */
+export async function findByName(ctx: OutsideMailContext, home: string, name: string): Promise<AddressCard | null> {
+    const answer = await post(ctx, '/api/find/name', { home, name });
+    return answer?.found === true && addressCardVerifies(answer.card) ? answer.card : null;
 }
 
 /**

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { PublicAddressPanel } from './PublicAddressPanel';
 import { AddressesPanel } from './AddressesPanel';
 import type { NodeProfile } from '../../lib/profiles';
@@ -116,6 +116,8 @@ describe('PublicAddressPanel: an owner\'s fresh proof (S4a)', () => {
         const input = await screen.findByPlaceholderText('e.g. cairns');
         fireEvent.change(input, { target: { value: 'newcairns' } });
         fireEvent.submit(input.closest('form')!);
+        // Add an address asks first (several addresses S6, design §7, §8).
+        fireEvent.click(within(await screen.findByTestId('in-page-confirm')).getByRole('button', { name: 'Add it' }));
         expect(await screen.findByTestId('address-proof-phone')).toBeInTheDocument();
         expect(sent).toHaveLength(1);
     });

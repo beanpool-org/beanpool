@@ -7,9 +7,10 @@
  * BEANPOOL_SSRF_TEST_HOOK=1); what the node sends a host reaches the suite through the transport hook. No other server is
  * contacted.
  *
- *   1  close the class: every notice a host brings (invite, roster, line, line with a mention, epoch, removal, edit) x
- *      (the host the guest answered, a host nobody answered, a blocked host, a removed guest, a key that is no member
- *      here, a standby) -> held for the guest or dropped, the answer always the same 202 (400 for a kind that is no notice)
+ *   1  close the class: every notice a host brings (invite, roster, line, line with a mention, epoch, removal, edit, a
+ *      line taken down) x (the host the guest answered, a host nobody answered, a blocked host, a removed guest, a key
+ *      that is no member here, a standby) -> held for the guest or dropped, the answer always the same 202 (400 for a kind
+ *      that is no notice)
  *   2  nothing reaches a device that isn't that guest's: one notice naming two guests -> each holds only their own wrap;
  *      each one's device reads only theirs; a member not named gets nothing
  *   3  close the class: every item a member sends a group elsewhere (yes, no, leave, line, line with a mention, epoch) x
@@ -227,9 +228,10 @@ async function main(): Promise<void> {
         'line-mention': { id: 'm-2', author: ana.pk, ciphertext: 'c', nonce: 'group-xc20p-v1:n', type: 'text', metadata: { mentions: [gus.pk] }, timestamp: new Date().toISOString() },
         epoch: { record, wraps: [wrap(gus), wrap(gia)] },
         removed: { why: 'removed' },
-        edit: { id: 'm-1', ciphertext: 'c2' },
+        edit: { id: 'm-1', action: 'edited', author: ana.pk, ciphertext: 'c2', nonce: 'group-xc20p-v1:n2', metadata: { epoch: 1, sender: ana.pk }, editedAt: new Date().toISOString() },
+        'line-taken-down': { id: 'm-1', action: 'removed', by: 'convenor' },
     };
-    const kindOfRow = (k: string) => (k === 'line-mention' ? 'line' : k);
+    const kindOfRow = (k: string) => (k === 'line-mention' ? 'line' : k === 'line-taken-down' ? 'edit' : k);
     const noticeOf = (k: string, host: string, g: string, guests: string[]) => ({ v: 1, kind: kindOfRow(k), group: g, host, guests, data: DATA[k] });
 
     if (!home) {
@@ -253,10 +255,10 @@ async function main(): Promise<void> {
 
     // ── 1. Every notice x where the guest stands ────────────────────────────────────────────
     console.log('\n1. Close the class: every notice a host brings x where the guest stands -> held or dropped, answered alike');
-    const KINDS = ['invite', 'roster', 'line', 'line-mention', 'epoch', 'removed', 'edit'] as const;
+    const KINDS = ['invite', 'roster', 'line', 'line-mention', 'epoch', 'removed', 'edit', 'line-taken-down'] as const;
     type Standing = 'answered host' | 'unknown host' | 'blocked host' | 'removed guest' | 'no member here' | 'standby';
     const STANDINGS: Standing[] = ['answered host', 'unknown host', 'blocked host', 'removed guest', 'no member here', 'standby'];
-    /** Whether the notice is held for the guest: [kind][standing]. 'edit' is no notice (item 3 splits off): 400 everywhere. */
+    /** Whether the notice is held for the guest: [kind][standing]. An edit, and a line taken down, are held as a line is (G1b part 2). */
     const HELD: Record<string, Record<Standing, boolean>> = {
         invite:         { 'answered host': false, 'unknown host': true,  'blocked host': false, 'removed guest': true,  'no member here': false, standby: false },
         roster:         { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
@@ -264,7 +266,8 @@ async function main(): Promise<void> {
         'line-mention': { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
         epoch:          { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
         removed:        { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
-        edit:           { 'answered host': false, 'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
+        edit:           { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
+        'line-taken-down': { 'answered host': true, 'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
     };
     let rowN = 0;
     for (const k of KINDS) {
@@ -280,7 +283,7 @@ async function main(): Promise<void> {
             if (s === 'standby') setNodeRole('primary');
             const held = heldCount(who, host, g) === 1;
             const link = linkOf(who, host, g);
-            const wantStatus = k === 'edit' ? 400 : 202;
+            const wantStatus: number = 202;
             const answerOk = r.status === wantStatus && (wantStatus === 400 ? r.body?.code === 'bad_notice' : r.body?.received === true);
             const linkOk = !HELD[k][s] ? JSON.stringify(link ?? null) === linkBefore
                 : k === 'invite' ? link?.state === 'invited' : k === 'removed' ? link?.state === 'removed' && link.roster === null
@@ -293,6 +296,10 @@ async function main(): Promise<void> {
         `1z. the table has a row for every notice kind and every standing (${rowN} rows)`);
     const notSigner = await notice('b.example', noticeOf('line', 'b.example', 'g1-x', [gus.pk]), { origin: 'd.example' });
     assert(notSigner.status === 400 && notSigner.body?.code === 'wrong_host', `1y. a notice naming a host that is not its signer: 400 wrong_host (got ${notSigner.status} ${notSigner.body?.code})`);
+    setLink(gus, 'b.example', 'g1-k', 'in');
+    const noKind = await notice('b.example', { v: 1, kind: 'reaction', group: 'g1-k', host: 'b.example', guests: [gus.pk], data: { id: 'm-1' } });
+    assert(noKind.status === 400 && noKind.body?.code === 'bad_notice' && heldCount(gus, 'b.example', 'g1-k') === 0,
+        `1x. a kind that is no notice: 400 bad_notice, nothing held (got ${noKind.status} ${noKind.body?.code})`);
 
     // ── 2. Only that guest's ────────────────────────────────────────────────────────────────
     console.log('\n2. Nothing reaches a device that isn\'t that guest\'s');

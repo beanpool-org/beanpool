@@ -188,9 +188,12 @@ async function main(): Promise<void> {
     }
     let n = 0;
     const newItemId = () => `gst-${String(++n).padStart(4, '0')}-${crypto.randomBytes(6).toString('hex')}`;
-    async function item(from: Id, fromHome: string, to: string, kind: RelayItemKind, payload: string, opts: { signer?: Id; at?: number } = {}): Promise<RelayItem> {
+    /** A guest's item, signed. A line goes under its own id (its payload's clientId), as the host stores it (takeGuestItem). */
+    async function item(from: Id, fromHome: string, to: string, kind: RelayItemKind, payload: string, opts: { signer?: Id; at?: number; itemId?: string } = {}): Promise<RelayItem> {
+        let lineId: unknown;
+        try { lineId = (JSON.parse(payload) as { clientId?: unknown }).clientId; } catch { lineId = undefined; }
         const envelope = await signRelayEnvelope({
-            kind, itemId: newItemId(), senderKey: from.pk, senderHome: fromHome, recipient: to, recipientHome: 'b.example',
+            kind, itemId: opts.itemId ?? (typeof lineId === 'string' ? lineId : newItemId()), senderKey: from.pk, senderHome: fromHome, recipient: to, recipientHome: 'b.example',
             at: opts.at ?? Date.now(), payloadHash: relayPayloadHash(payload),
         }, signerOf((opts.signer ?? from).seed));
         return { envelope, payload };

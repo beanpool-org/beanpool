@@ -40,9 +40,9 @@ export const RELAY_ENVELOPE_TAG = 'beanpool-relay-envelope/1';
 /** What a cross-community conversation's id is a hash under. */
 export const RELAY_CONVERSATION_TAG = 'beanpool-relay-conversation/1';
 
-/** Every kind of item that crosses between servers (design §3.2). */
+/** Every kind of item that crosses between servers (design §3.2; an edit and a reaction to a direct line, slice X6). */
 export const RELAY_ITEM_KINDS = [
-    'dm-line', 'dm-blob', 'dm-delete', 'receipt', 'group-invite', 'group-roster', 'group-epoch', 'group-line', 'group-blob',
+    'dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction', 'receipt', 'group-invite', 'group-roster', 'group-epoch', 'group-line', 'group-blob',
     'group-leave', 'call-signal', 'complaint',
 ] as const;
 export type RelayItemKind = (typeof RELAY_ITEM_KINDS)[number];

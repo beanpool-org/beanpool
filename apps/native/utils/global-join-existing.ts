@@ -46,6 +46,7 @@ import { SSO_PROVIDER_NAMES } from './sso-providers';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import type { JoinDeps } from './join-another-community';
 import { communitySwitched } from './community-switch';
+import { whileCommunityMoves, writeCommunityAddress } from './community-move-lock';
 import { assertPlainNodeAddress } from './node-url';
 
 /**
@@ -162,9 +163,12 @@ export async function enterOpenDoorCommunity(url: string, name: string | undefin
     // In the list and no guest's first, so a switch that fails below still leaves it one tap away in the BeanPool sheet.
     await deps.clearGuestNode(url).catch(() => {});
     await deps.addSavedNode(url, name).catch(() => {});
-    await deps.closeDB();
-    await AsyncStorage.setItem('beanpool_anchor_url', url);
-    await deps.initDB();
+    // A member move (community-move-lock.ts): closed, written and opened in one move.
+    await whileCommunityMoves(async (held) => {
+        await deps.closeDB();
+        await writeCommunityAddress(held, url);
+        await deps.initDB();
+    });
     // The update screen asks the community now in use (utils/community-switch.ts).
     communitySwitched();
     deps.requestSync().catch(() => {});

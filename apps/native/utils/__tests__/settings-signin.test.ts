@@ -34,6 +34,7 @@ import {
     AGENT_QUESTION, AGENT_WARNING, agentLines,
     DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
 } from '../settings-signin';
+import type { CommunityRecord } from '../community-index';
 
 // The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
 // (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
@@ -343,5 +344,34 @@ describe("an AI assistant's consent (admin MCP S2)", () => {
         const qr = { nodeUrl: 'https://mullum.beanpool.org', pairingId: ID, shortCode: 'K7F3QX' };
         mockFetch([{ status: 426, body: { error: 'Update the BeanPool app to connect an AI assistant', code: 'agent_app_too_old' } }]);
         expect(await approveComputerSignin({ qr, identity, communityName: 'Mullum' })).toEqual({ kind: 'refused', message: 'Update the BeanPool app to connect an AI assistant' });
+    });
+});
+
+describe('S5: a sign-in code at another address of the community this app is on (addresses §3.6)', () => {
+    const USING = 'https://riverside.example';
+    const list = (peerId: string, addresses: string[]) => ({ list: { v: 1, peerId, communityId: 'c1', epoch: 2, seq: 3, main: addresses[0], addresses, spares: [] }, sig: 'x' }) as unknown as CommunityRecord['list'];
+    const here: CommunityRecord = { v: 1, id: USING, using: USING, peerId: 'peer-r', epoch: 2, proved: {}, refused: {}, list: list('peer-r', ['riverside.example', 'coop.example.org']) };
+    const elsewhere: CommunityRecord = { v: 1, id: 'https://hilltop.example', using: 'https://hilltop.example', peerId: 'peer-h', epoch: 1, proved: {}, refused: {}, list: list('peer-h', ['hilltop.example', 'hill.example.org']) };
+    const recordOf = (address: string) => [here, elsewhere].find((r) => r.id === address.replace(/\/$/, '').toLowerCase()) ?? null;
+
+    it('another address its own list names: accepted, sent to the list\'s spelling of it, with the key to prove at the scan', () => {
+        expect(readSigninScan(qrText('https://coop.example.org'), USING, recordOf)).toEqual({
+            kind: 'ok', qr: { nodeUrl: 'https://coop.example.org', pairingId: ID, shortCode: 'K7F3QX' }, prove: { peerId: 'peer-r', epoch: 2 },
+        });
+    });
+
+    it('its own address with the key known: accepted as before, and proved at the scan too', () => {
+        expect(readSigninScan(qrText(USING), USING, recordOf)).toEqual({
+            kind: 'ok', qr: { nodeUrl: USING, pairingId: ID, shortCode: 'K7F3QX' }, prove: { peerId: 'peer-r', epoch: 2 },
+        });
+    });
+
+    it('an address another community lists, or none lists: a different community, as before (sign-in is the app\'s community only)', () => {
+        expect(readSigninScan(qrText('https://hill.example.org'), USING, recordOf).kind).toBe('wrong-node');
+        expect(readSigninScan(qrText('https://stranger.example'), USING, recordOf).kind).toBe('wrong-node');
+        // A community whose server can't say who it is (no key): today's rule, its own address only.
+        const keyless = (): CommunityRecord => ({ ...here, peerId: undefined, list: undefined });
+        expect(readSigninScan(qrText('https://coop.example.org'), USING, keyless).kind).toBe('wrong-node');
+        expect(readSigninScan(qrText(USING), USING, keyless)).toEqual({ kind: 'ok', qr: { nodeUrl: USING, pairingId: ID, shortCode: 'K7F3QX' } });
     });
 });

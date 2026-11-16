@@ -26,6 +26,7 @@ import { fetchNodeProfile, getCachedNodeProfile, membersByKey, nodeProfileIsFres
 import { readerFeaturesHeld, readerFeaturesKey, readsOwnWith } from '../utils/reads-own';
 import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
 import { nearbySetHash } from '../utils/nearby-hash';
+import { moveCommunityAddress } from '../utils/community-move-lock';
 import {
     nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
 } from '../utils/nearby-area';
@@ -256,7 +257,7 @@ async function discoverAnchor(): Promise<string | null> {
 
         // Any 200 OK response from /api/community/health means the node is BeanPool aware.
         // Cache the successful URL
-        await AsyncStorage.setItem('beanpool_anchor_url', winningUrl);
+        await moveCommunityAddress(winningUrl);
         return winningUrl;
     } catch (e) {
         // Promise.any rejects with AggregateError when all candidates fail

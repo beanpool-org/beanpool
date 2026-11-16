@@ -266,7 +266,8 @@ function ChatScreen({ id }: { id: string }) {
         // The wallpaper shows behind the thread; with it off, the chat keeps its plain card white.
         container: { flex: 1, backgroundColor: patternEnabled ? colors.surface.page : colors.surface.card },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
-        backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
+        // 44 x 44 dp, its own target (it was 40): the arrow stays at the header's left edge, where it was drawn.
+        backButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start' },
         headerProfileContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 8, gap: 10 },
         headerTextContainer: { flex: 1, justifyContent: 'center' },
         headerTitle: { fontSize: 16, fontWeight: '800', color: colors.text.body, letterSpacing: 0.5 },

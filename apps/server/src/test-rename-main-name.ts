@@ -28,6 +28,22 @@
  *  8. The three ways a community moves, end to end (rename S2): (a) its own domain, then a beanpool.org name; (b) its own
  *     name, a gated name pending, then approved: nothing moves until it is, on any surface, and the old name keeps its
  *     tunnel; (c) a registrar name to a registrar name, both answering.
+ *  9. The owner picks the main address (several-addresses S1, design scratch/fable-design/DESIGN-several-addresses-fable.md
+ *     §2.1, §7): the owner adds an own domain beside a beanpool.org name and makes it main, then makes the name main again;
+ *     every surface follows each time, a signature for every listed address passes both ways (no 421), the members are
+ *     told once per real change. Then the table: owner (phone, and computer with no fresh proof), admin, member, visitor
+ *     and standby × add an address, Make main, remove → allowed, or refused in words with nothing changed. Make main
+ *     refuses what can't be main (not listed, a number beside a name, a home-network address beside an internet one), and
+ *     removing the main address clears the choice.
+ * 10. Changing the main changes WHICH address is named, never WHICH addresses work (round 2 of #3222): every reader of the
+ *     main (primaryAddress, invites through /api/community/info, the directory push, the search canonical, the card, the
+ *     assistant's welcome and origin, the home other servers know it by, the OAuth issuer and resource) × no main chosen,
+ *     an own domain, a beanpool.org name that is not the stored one, switched back, a rename claim with a chosen main, an
+ *     address removed (not the main, then the main) → names the main, and at every listed address: a signature passes,
+ *     the OAuth metadata there names that address, an assistant connected at the first main refreshes there and its pass
+ *     works through each one, the registrar is asked about the stored name only, and the members are told once per real
+ *     change. A host not on the list never names itself. The name a claim replaces stays listed; the chosen main can't be
+ *     released, and the words say to make another address main first.
  *
  * Run: SERVER_SUITES_ONLY=test-rename-main-name TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -110,6 +126,9 @@ async function main(): Promise<void> {
     const held = new Map<string, any>();
     const gated = new Set<string>();
     let claimsAsked = 0;
+    /** The names the registrar was asked to claim, and asked about at /status (section 10: a call names its own name, never the main). */
+    const claimNames: string[] = [];
+    const statusAsked: string[] = [];
     /** Set: what /status answers whatever it is asked, as a registrar older than the one that reads `name` (the key's first name). */
     let statusAnswer: any = null;
     /** Set: the mode the service answers whatever is asked. A direct name is reachable once live, so its notice goes at once. */
@@ -126,6 +145,7 @@ async function main(): Promise<void> {
             res.setHeader('Content-Type', 'application/json');
             if (url.pathname === '/api/registrar/claim') {
                 claimsAsked++;
+                claimNames.push(String(body.name ?? ''));
                 const mode = answerMode ?? body.mode;
                 const answer = gated.has(body.name) && !held.has(body.name)
                     ? { status: 'pending', name: body.name, mode, reason: 'awaiting-approval' }
@@ -135,6 +155,7 @@ async function main(): Promise<void> {
             }
             if (url.pathname === '/api/registrar/status') {
                 const name = url.searchParams.get('name') ?? '';
+                statusAsked.push(name);
                 return res.end(JSON.stringify(statusAnswer ?? held.get(name) ?? { status: 'none' }));
             }
             if (url.pathname === '/api/registrar/holder') {
@@ -265,7 +286,7 @@ async function main(): Promise<void> {
         delete process.env.BEANPOOL_ADDRESSES;
         if (s.cf) process.env.CF_RECORD_NAME = s.cf;
         if (s.env) process.env.BEANPOOL_ADDRESSES = s.env;
-        updateNodeConfig({ publicAddress: null, ownerAddresses: [], registrarNames: [], ...s.config } as any);
+        updateNodeConfig({ publicAddress: null, ownerAddresses: [], registrarNames: [], mainAddress: null, ...s.config } as any);
         updateLocalConfig({ turnedAwayNames: [], addressNoticeDue: null } as any);
         held.clear();
         gated.clear();
@@ -949,6 +970,284 @@ async function main(): Promise<void> {
         assert(await until(() => notices().length > n0) && notices().length === n0 + 1 && notices()[n0].body === SOFT_BODY, `(c) the members hear the soft words, once (${show(notices().slice(n0))}; on main the critical ones)`);
         assert(onlyAt(BYRON) && (await info()).addresses?.includes(OLD), `(c) every surface says the new name, the old one still listed (${show(surfaces())})`);
         assert((await signedFor(OLD)).status === 200 && (await signedFor(BYRON)).status === 200, '(c) a signature for either passes');
+    }
+
+    // ── 9 ──
+    console.log('\n— 9. the owner picks the main address —');
+    const { setNodeRole } = await import('./config/node-role.js');
+    const ADD = '/api/local/admin/app-addresses/confirm', MAIN = '/api/local/admin/app-addresses/main', REMOVE = '/api/local/admin/app-addresses/remove';
+    {
+        // From (c): the new name is main, the old one listed beside it. The owner adds an own domain, from the phone.
+        const OLD = 'oldvale.beanpool.org';
+        const NAMED = primaryAddress()!;   // the name (c) claimed, read from the community itself
+        assert(/\.beanpool\.org$/.test(NAMED) && NAMED !== OLD, `(9) from (c), a beanpool.org name is main (${NAMED})`);
+        const n0 = notices().length;
+        const added = await post(ADD, phone(), { address: DOMAIN });
+        assert(added.status === 200 && added.json?.addresses?.some((a: any) => a.address === DOMAIN), `(9) the owner adds ${DOMAIN} (${added.status} ${show(added.json?.error)})`);
+        assert(onlyAt(NAMED), `(9) adding an address only adds: the main stays (${show(surfaces())})`);
+        const toDomain = await post(MAIN, phone(), { address: DOMAIN });
+        assert(toDomain.status === 200 && stored().mainAddress === DOMAIN, `(9) Make main on the own domain (${toDomain.status} ${show(toDomain.json?.error)})`);
+        assert(onlyAt(DOMAIN), `(9) every surface says the domain, over a live beanpool.org name (${show(surfaces())}; on main the name always won)`);
+        for (const h of [DOMAIN, NAMED, OLD]) assert((await signedFor(h)).status === 200, `(9) a signature for ${h} passes (no 421 at any listed address)`);
+        const i1 = await info();
+        assert(i1.primaryAddress === DOMAIN && [DOMAIN, NAMED, OLD].every((h) => i1.addresses?.includes(h)), `(9) info: the domain main, every address still listed (${show(i1)})`);
+        assert(notices().length === n0 + 1, `(9) the members are told once (${show(notices().slice(n0))})`);
+        const again = await post(MAIN, phone(), { address: DOMAIN });
+        assert(again.status === 200 && notices().length === n0 + 1, `(9) the same main again tells nobody twice (${again.status}, ${notices().length - n0})`);
+        const back = await post(MAIN, phone(), { address: NAMED });
+        assert(back.status === 200 && onlyAt(NAMED), `(9) and back: Make main on the name, every surface follows (${back.status}, ${show(surfaces())})`);
+        for (const h of [DOMAIN, NAMED, OLD]) assert((await signedFor(h)).status === 200, `(9) after the way back, a signature for ${h} still passes`);
+        assert(notices().length === n0 + 2, `(9) told once more, for the way back (${notices().length - n0})`);
+
+        // What can't be main is refused in words, and nothing moves.
+        const notListed = await post(MAIN, phone(), { address: 'elsewhere.example.org' });
+        assert(notListed.status === 409 && /not one of this community's addresses/.test(notListed.json?.error ?? '') && onlyAt(NAMED),
+            `(9) an address not on the list can't be main (${notListed.status} ${show(notListed.json)})`);
+        await post(ADD, phone(), { address: IP });
+        const number = await post(MAIN, phone(), { address: IP });
+        assert(number.status === 409 && /number/.test(number.json?.error ?? '') && onlyAt(NAMED), `(9) a number beside a name can't be main (${number.status} ${show(number.json)})`);
+        await post(REMOVE, phone(), { address: IP });
+        // The main answers from outside (design §2.1; review 4580901278): a home-network address, listed beside a live name,
+        // is refused in words, spends no code, and moves nothing.
+        for (const home of ['nas.local', 'beans.lan', '192.168.1.20']) {
+            await post(ADD, phone(), { address: home });
+            const mainBefore = stored().mainAddress ?? null;
+            const r = await post(MAIN, phone(), { address: home });
+            assert(r.status === 409 && /home network/.test(r.json?.error ?? '') && onlyAt(NAMED) && (stored().mainAddress ?? null) === mainBefore,
+                `(9) a home-network address (${home}) beside a live name can't be main (${r.status} ${show(r.json?.error)}; ${show(surfaces())})`);
+            await post(REMOVE, phone(), { address: home });
+        }
+
+        // Removing the main address clears the choice: added back later, it is not main without Make main.
+        await post(MAIN, phone(), { address: DOMAIN });
+        const gone = await post(REMOVE, phone(), { address: DOMAIN });
+        assert(gone.status === 200 && !stored().mainAddress && onlyAt(NAMED), `(9) removing the main address clears the choice; the name is main again (${gone.status}, ${show(surfaces())})`);
+        await post(ADD, phone(), { address: DOMAIN });
+        assert(onlyAt(NAMED), `(9) added again, the domain is not main without Make main (${show(surfaces())})`);
+    }
+    {
+        // The table: who may add an address, change the main one, or remove one.
+        const NAMED = primaryAddress()!;
+        const adminSeed = new Uint8Array(crypto.randomBytes(32));
+        const adminKey = Buffer.from(ed25519.getPublicKey(adminSeed)).toString('hex');
+        seedGenesisMember(adminKey, 'Ada');
+        grantNodeRole(adminKey, 'admin', owner);
+        const adminPhone = () => {
+            const ex = consumeHandshakeToken(mintHandshakeToken(adminKey, 'admin').handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
+            if (!ex.ok) throw new Error(`setup: no admin session: ${ex.error}`);
+            return { 'x-admin-session': ex.sessionId! };
+        };
+        const memberSeed = new Uint8Array(crypto.randomBytes(32));
+        const memberPk = Buffer.from(ed25519.getPublicKey(memberSeed)).toString('hex');
+        seedGenesisMember(memberPk, 'Milo');
+        /** A member's own signed request, as their app would send it to this route. */
+        const memberSigned = async (route: string, body: unknown) => {
+            const url = `https://${DOMAIN}${route}`;
+            const text = JSON.stringify(body);
+            return core.buildBoundRequestHeaders({ method: 'POST', url, body: text, publicKeyHex: memberPk, sign: core.ed25519Signer(memberSeed) });
+        };
+        const SPARE = 'spare.example.org';
+        const state = () => show({ owned: stored().ownerAddresses ?? [], main: stored().mainAddress ?? null });
+        type Who = 'owner (phone)' | 'owner (computer)' | 'admin' | 'member' | 'visitor' | 'standby owner (phone)';
+        const WHO: Who[] = ['owner (phone)', 'owner (computer)', 'admin', 'member', 'visitor', 'standby owner (phone)'];
+        const ACTS = [
+            { act: 'add an address', route: ADD, body: { address: SPARE }, ready: async () => { await post(REMOVE, phone(), { address: SPARE }); } },
+            { act: 'Make main', route: MAIN, body: { address: DOMAIN }, ready: async () => { await post(MAIN, phone(), { address: NAMED }); } },
+            { act: 'remove an address', route: REMOVE, body: { address: SPARE }, ready: async () => { await post(ADD, phone(), { address: SPARE }); } },
+        ];
+        // allowed, or the words a refusal must hold.
+        const WANT: Record<Who, Record<string, RegExp | 'allowed'>> = {
+            'owner (phone)': { 'add an address': 'allowed', 'Make main': 'allowed', 'remove an address': 'allowed' },
+            'owner (computer)': { 'add an address': /from your phone/i, 'Make main': /from your phone/i, 'remove an address': /from your phone/i },
+            admin: { 'add an address': /only an owner/i, 'Make main': /only an owner/i, 'remove an address': /only an owner/i },
+            member: { 'add an address': /./, 'Make main': /./, 'remove an address': /./ },
+            visitor: { 'add an address': /./, 'Make main': /./, 'remove an address': /./ },
+            'standby owner (phone)': { 'add an address': 'allowed', 'Make main': /standby/i, 'remove an address': 'allowed' },
+        };
+        const rows: string[] = [];
+        for (const who of WHO) {
+            for (const a of ACTS) {
+                await a.ready();
+                const before = state();
+                if (who.startsWith('standby')) setNodeRole('backup');
+                let r: { status: number; json: any };
+                try {
+                    const headers = who === 'owner (phone)' || who === 'standby owner (phone)' ? phone()
+                        : who === 'owner (computer)' ? computer()
+                            : who === 'admin' ? adminPhone()
+                                : who === 'member' ? await memberSigned(a.route, a.body)
+                                    : {};
+                    r = await post(a.route, headers, a.body);
+                } finally {
+                    if (who.startsWith('standby')) setNodeRole('primary');
+                }
+                const want = WANT[who][a.act];
+                const ok = want === 'allowed'
+                    ? r.status === 200 && state() !== before
+                    : r.status >= 400 && r.status < 500 && typeof r.json?.error === 'string' && want.test(r.json.error) && state() === before;
+                rows.push(`| ${who} | ${a.act} | ${r.status} ${want === 'allowed' ? 'allowed' : show(r.json?.error)} |`);
+                assert(ok, `(9 table) ${who} × ${a.act} → ${want === 'allowed' ? 'allowed' : `refused in words ${want}`}, nothing else changed (${r.status} ${show(r.json?.error)}; ${before} → ${state()})`);
+            }
+        }
+        console.log(rows.join('\n'));
+    }
+
+    // ── 10 ──
+    console.log('\n— 10. changing the main changes which address is named, never which addresses work —');
+    {
+        const { webAppCanonicalUrl } = await import('./web-app-robots.js');
+        const { ownNodeHome } = await import('./engine/node-key.js');
+        const { registerClient, issueCode } = await import('./agent/oauth.js');
+        const OLD = 'oldvale.beanpool.org';
+        // From 9: the name, the old name and the domain listed. Start with no choice made.
+        updateNodeConfig({ mainAddress: null } as any);
+        forgetOwnAddresses();
+        const NAMED = primaryAddress()!;
+        const listedNow = async () => ((await info()).addresses ?? []) as string[];
+        assert(show([...await listedNow()].sort()) === show([NAMED, OLD, DOMAIN].sort()), `(10) from 9: the name, the old name and the domain are listed (${show(await listedNow())})`);
+
+        /** A request as it reaches `host` through this server's own proxy (a tunnel, a reverse proxy): X-Forwarded-Host. */
+        const reaching = (host: string) => ({ 'X-Forwarded-Host': host });
+        const getAt = async (host: string, route: string) => {
+            resetGatewayRateLimit();
+            const res = await localFetch(base + route, { headers: reaching(host) });
+            return { status: res.status, json: await res.json().catch(() => null) as any };
+        };
+        const formAt = async (host: string, route: string, fields: Record<string, string>) => {
+            resetGatewayRateLimit();
+            const res = await localFetch(base + route, {
+                method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...reaching(host) }, body: new URLSearchParams(fields).toString(),
+            });
+            return { status: res.status, json: await res.json().catch(() => null) as any };
+        };
+        const mcpAt = async (host: string, access: string) => {
+            resetGatewayRateLimit();
+            const res = await localFetch(`${base}/mcp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${access}`, Origin: `https://${host}`, ...reaching(host) },
+                body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+            });
+            return res.status;
+        };
+
+        // An assistant connected through OAuth while the name was main: registered, approved (the phone's part is
+        // test-admin-mcp-oauth's), its code exchanged at the name, for the name's /mcp.
+        const REDIRECT = 'https://assistant.example/oauth/callback';
+        const reg = registerClient({ client_name: 'Assistant from before', redirect_uris: [REDIRECT] }, 'section 10');
+        const clientId = reg.ok ? reg.client.clientId : '';
+        const verifier = crypto.randomBytes(32).toString('base64url');
+        const oldResource = `https://${NAMED}/mcp`;
+        const code = issueCode({
+            pairingId: crypto.randomBytes(32).toString('hex'), clientId, clientName: 'Assistant from before', redirectUri: REDIRECT, state: null,
+            codeChallenge: crypto.createHash('sha256').update(verifier).digest('base64url'), resource: oldResource, createdAt: Date.now(),
+        }, owner);
+        const connected = await formAt(NAMED, '/oauth/token', { grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: verifier, resource: oldResource });
+        let refreshToken = String(connected.json?.refresh_token ?? '');
+        assert(connected.status === 200 && !!refreshToken, `(10) an assistant connects at ${NAMED} (${connected.status} ${show(connected.json?.error)})`);
+
+        /**
+         * How many times the members were told: Mia's rows (every member told holds the same; 9 seeded members after the
+         * earlier tellings, so notices() answers every row from here on).
+         */
+        const toldCount = () => (db.prepare("SELECT COUNT(*) AS n FROM push_notices WHERE kind = 'community.notice' AND recipient = ?").get(memberKey) as { n: number }).n;
+        /** Every reader of the main, as each names it. */
+        const readers = async () => ({
+            primary: primaryAddress(), invites: (await info()).primaryAddress, directory: getDirectoryInfo().publicUrl, canonical: webAppCanonicalUrl(),
+            card: communityCard().host, welcome: nodeUrlFor({ req: {}, host: 'unused' }), origin: ownOrigin(), home: ownNodeHome(),
+            issuer: (await getAt(main(), '/.well-known/oauth-authorization-server')).json?.issuer ?? null,
+            resource: (await getAt(main(), '/.well-known/oauth-protected-resource/mcp')).json?.resource ?? null,
+        });
+        const naming = (h: string) => ({
+            primary: h, invites: h, directory: `https://${h}`, canonical: `https://${h}/app`, card: h, welcome: `https://${h}`, origin: `https://${h}`, home: h,
+            issuer: `https://${h}`, resource: `https://${h}/mcp`,
+        });
+        let want = NAMED;
+        const main = () => want;
+        const rows: string[] = [];
+        /** One row of the table: every reader names `wantMain`, and every address in `listed` keeps working. */
+        const row = async (scene10: string, wantMain: string, listed: string[], told: number | null, n0: number) => {
+            want = wantMain;
+            const named = await readers();
+            const namesIt = show(named) === show(naming(wantMain));
+            const nowListed = await listedNow();
+            const stillListed = listed.every((h) => nowListed.includes(h));
+            const broken: string[] = [];
+            for (const h of listed) {
+                if ((await signedFor(h)).status !== 200) broken.push(`${h}: a signature`);
+                const as = await getAt(h, '/.well-known/oauth-authorization-server');
+                const prm = await getAt(h, '/.well-known/oauth-protected-resource/mcp');
+                if (as.json?.issuer !== `https://${h}` || as.json?.token_endpoint !== `https://${h}/oauth/token`) broken.push(`${h}: issuer ${as.json?.issuer}`);
+                if (prm.json?.resource !== `https://${h}/mcp` || show(prm.json?.authorization_servers) !== show([`https://${h}`])) broken.push(`${h}: resource ${prm.json?.resource}`);
+            }
+            // A host that is not on the list never names itself: the Host header is checked against the list, never trusted alone.
+            const forged = (await getAt('elsewhere.example.org', '/.well-known/oauth-authorization-server')).json?.issuer;
+            if (forged !== `https://${wantMain}`) broken.push(`a host not listed named itself: ${forged}`);
+            // The assistant connected at the name refreshes there, for the name's /mcp, and its new pass works at every address.
+            const refreshed = await formAt(NAMED, '/oauth/token', { grant_type: 'refresh_token', refresh_token: refreshToken, client_id: clientId, resource: oldResource });
+            if (refreshed.status === 200) refreshToken = String(refreshed.json?.refresh_token ?? '');
+            else broken.push(`the refresh at ${NAMED}: ${refreshed.status} ${refreshed.json?.error}`);
+            for (const h of listed) {
+                const s = refreshed.status === 200 ? await mcpAt(h, String(refreshed.json?.access_token ?? '')) : 0;
+                if (s !== 200) broken.push(`${h}: the assistant ${s}`);
+            }
+            // The registrar is asked about the stored name only, whatever the main (design §5).
+            statusAsked.length = 0;
+            await statusRead();
+            const storedName = stored().publicAddress?.name;
+            if (!statusAsked.length || statusAsked.some((n) => n !== storedName)) broken.push(`the registrar asked about ${show(statusAsked)}, not ${storedName}`);
+            const toldNow = toldCount() - n0;
+            const toldOk = told === null || toldNow === told;
+            rows.push(`| ${scene10} | ${wantMain} | ${namesIt ? 'every reader' : show(named)} | ${listed.length} listed, ${broken.length ? broken.join('; ') : 'every one works'} | told ${toldNow} |`);
+            assert(namesIt && stillListed && !broken.length && toldOk,
+                `(10) ${scene10}: every reader names ${wantMain} and each of ${show(listed)} keeps working (${namesIt ? 'named' : show(named)}; `
+                + `${stillListed ? 'listed' : `listed now ${show(nowListed)}`}; ${broken.length ? show(broken) : 'all work'}; told ${toldNow}${told === null ? '' : `, want ${told}`})`);
+        };
+        const makeMain = async (h: string) => {
+            const r = await post(MAIN, phone(), { address: h });
+            if (r.status !== 200) console.error(`  Make main on ${h}: ${r.status} ${show(r.json?.error)}`);
+        };
+
+        let n0 = toldCount();
+        await row('no main chosen', NAMED, [NAMED, OLD, DOMAIN], 0, n0);
+        n0 = toldCount();
+        await makeMain(DOMAIN);
+        await row('main = own domain', DOMAIN, [NAMED, OLD, DOMAIN], 1, n0);
+        n0 = toldCount();
+        await makeMain(OLD);
+        await row('main = a beanpool.org name not the stored one', OLD, [NAMED, OLD, DOMAIN], 1, n0);
+        // Releasing the chosen main is refused, with the way out: make another address main first (review 4580901426, 2).
+        const release = await post(RELEASE, phone(), { name: OLD.split('.')[0] });
+        assert(release.status >= 400 && /Make another address main first/.test(release.json?.error ?? '') && primaryAddress() === OLD,
+            `(10) the chosen main can't be released, and the words say how: make another address main first (${release.status} ${show(release.json?.error)})`);
+        n0 = toldCount();
+        await makeMain(NAMED);
+        await row('main switched back', NAMED, [NAMED, OLD, DOMAIN], 1, n0);
+
+        // A rename claim with a chosen main: the claim only adds. The name it replaces stays listed (review 4580901426, 1).
+        await makeMain(DOMAIN);
+        n0 = toldCount();
+        const NEW = 'newvale.beanpool.org';
+        held.set('newvale', withToken('newvale'));
+        claimNames.length = 0;
+        const claimed = await claim('newvale');
+        assert(claimed.status === 200 && claimed.json?.status === 'live' && show(claimNames) === show(['newvale']),
+            `(10) the owner claims a new name while the domain is main; the registrar is asked for that name alone (${claimed.status} ${show(claimed.json?.error)}, ${show(claimNames)})`);
+        assert(await until(() => getTunnelStatus().state === 'connected'), `(10) the claimed name's tunnel connects (${getTunnelStatus().state})`);
+        await row('a rename claim with a chosen main', DOMAIN, [NAMED, OLD, DOMAIN, NEW], 0, n0);
+        assert(!formerAddresses().includes(NAMED), `(10) the name the claim replaced is listed, not former (${show(formerAddresses())})`);
+
+        // An address removed: the others keep working. Removing one that is not main moves nothing and tells nobody.
+        n0 = toldCount();
+        const goneOld = await post(REMOVE, phone(), { address: OLD });
+        assert(goneOld.status === 200, `(10) the owner removes ${OLD} (${goneOld.status} ${show(goneOld.json?.error)})`);
+        await row('an address removed (not the main)', DOMAIN, [NAMED, DOMAIN, NEW], 0, n0);
+        // Removing the main clears the choice: the main is worked out as before one (the live stored name).
+        n0 = toldCount();
+        const goneMain = await post(REMOVE, phone(), { address: DOMAIN });
+        assert(goneMain.status === 200 && !stored().mainAddress, `(10) the owner removes the main, ${DOMAIN}, and the choice goes with it (${goneMain.status}, ${show(stored().mainAddress)})`);
+        // Whether the members then hear of the claimed name is the claim's notice (address-notice.ts), not this table's.
+        await row('the main address removed', NEW, [NAMED, NEW], null, n0);
+        console.log(['| case | main | named by | listed addresses | members told |', '|---|---|---|---|---|', ...rows].join('\n'));
     }
     await resetTunnelConnectorForTests();
 

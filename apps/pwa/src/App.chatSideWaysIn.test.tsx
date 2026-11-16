@@ -81,8 +81,8 @@ vi.mock('./pages/MarketplacePage', () => ({ MarketplacePage: () => <div data-tes
 vi.mock('./pages/PeoplePage', () => ({ PeoplePage: () => <div data-testid="people-page" /> }));
 // The list stood in: it draws the switch it is handed (the frame) at its top, as the real one does.
 vi.mock('./pages/MessagesPage', () => ({
-    MessagesPage: ({ frame, openConversationId }: { frame?: React.ReactNode; openConversationId?: string | null }) => (
-        <div data-testid="messages-page" data-open={openConversationId ?? ''}>{frame}</div>
+    MessagesPage: ({ frame, openConversationId, homeNonce }: { frame?: React.ReactNode; openConversationId?: string | null; homeNonce?: number }) => (
+        <div data-testid="messages-page" data-open={openConversationId ?? ''} data-home={String(homeNonce ?? '')}>{frame}</div>
     ),
 }));
 
@@ -218,5 +218,67 @@ describe('a forum notice lands on the Forum side, from anywhere (slice F5, parit
         await act(async () => { fireEvent.click(within(sidebar()).getByRole('button', { name: /^💬\s*Chat$/ })); });
         await settle();
         landedOnChats('back by the tab\'s button');
+    });
+});
+
+/**
+ * Chat chosen in the menu while Chat already shows (Marty, 16 Nov: "clicking on chat in menu should take you back to the main
+ * chat menu - not just need the tiny back arrow"): the side bar's Chat and the bottom bar's (phone width) each hand the page a
+ * new homeNonce, which closes whatever is open over the list (MessagesPage.chat-home.test.tsx, ForumPage.test.tsx). From another
+ * tab the page is drawn afresh at its list, so the choice there hands nothing new; a way in naming a chat still names it.
+ */
+describe('Chat chosen in the menu while Chat shows: back to the chat list', () => {
+    const home = () => screen.getByTestId('messages-page').getAttribute('data-home');
+    const bottomBar = () => screen.getByTestId('mobile-bottom-nav');
+    const sideChat = () => within(sidebar()).getByRole('button', { name: /^💬\s*Chat$/ });
+    const bottomChat = () => within(bottomBar()).getAllByRole('button').find((b) => /Chat/.test(b.textContent ?? '')) as HTMLElement;
+    async function onChat() {
+        render(<App />);
+        await screen.findByTestId('home-page');
+        await act(async () => { fireEvent.click(sideChat()); });
+        await settle();
+    }
+
+    for (const [menu, button] of [['the side bar', sideChat], ['the bottom bar', bottomChat]] as const) {
+        it(`${menu}'s Chat, chosen on Chats, hands the list a new homeNonce each time`, async () => {
+            await onChat();
+            const before = Number(home());
+            await act(async () => { fireEvent.click(button()); });
+            await settle();
+            expect(Number(home())).toBe(before + 1);
+            await act(async () => { fireEvent.click(button()); });
+            await settle();
+            expect(Number(home())).toBe(before + 2);
+            expect(side()).toBe('Chats');
+        });
+    }
+
+    it('on the Forum side, the side stays and the Forum gets the new homeNonce too (its topic list)', async () => {
+        await onChatTabAtForum();
+        const before = Number(home());
+        await act(async () => { fireEvent.click(sideChat()); });
+        await settle();
+        expect(side()).toBe('Forum');
+        expect(Number(home())).toBe(before + 1);
+    });
+
+    it('from another tab, Chat opens the list as before: nothing new handed over', async () => {
+        await onChat();
+        const before = home();
+        await act(async () => { fireEvent.click(within(sidebar()).getByRole('button', { name: /Home$/ })); });
+        await settle();
+        await act(async () => { fireEvent.click(sideChat()); });
+        await settle();
+        expect(home()).toBe(before);
+    });
+
+    it('a way in that names a chat still hands that chat to the list, after Chat was chosen in the menu', async () => {
+        await onChat();
+        await act(async () => { fireEvent.click(sideChat()); });
+        await settle();
+        await needs([CHAT]);
+        fireEvent.click(within(bellSheet()).getByRole('button', { name: CHAT.label }));
+        await settle();
+        expect(screen.getByTestId('messages-page')).toHaveAttribute('data-open', 'dm-ana');
     });
 });

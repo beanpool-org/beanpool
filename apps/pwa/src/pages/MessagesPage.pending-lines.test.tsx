@@ -565,7 +565,7 @@ describe('a line that couldn\'t go', () => {
         let answer!: (v: unknown) => void;
         vi.mocked(getGroupChat).mockReturnValueOnce(new Promise((r) => { answer = r; }) as never);
         await typed(composer, 'Goes on without me');
-        fireEvent.click(screen.getByRole('button', { name: 'Back to messages' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to chats' }));
         fireEvent.click(await screen.findByText('Ben'));
         await composerOpen();
         await act(async () => {});

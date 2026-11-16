@@ -47,6 +47,12 @@
  * carries them whole. Charged to the sender's photo budget once, when sent; approval stores them as the page's own photos
  * without charging them again; answered or taken back, they are deleted with their tombstones.
  *
+ * An assistant's draft carries pictures too (Damo's ask; Marty, 16 Nov 2026: "Yes, through the upload link only, the checker
+ * approves it"), only ones it uploaded through the door listings use (agent/owner-photos.ts: made 800 px, no metadata), at most
+ * 3, kept the same way. The checker keeps or removes each in To check; approval publishes only the ones sent back (or all, when
+ * none are sent), and they are charged to the approver then, as the page is theirs. Declined, taken back or disconnected, they
+ * go with the draft.
+ *
  * ## Who is told
  *
  * Owners and admins: one push per member's suggestion (`community.knowledge`; its details name who and what). None for an
@@ -418,14 +424,16 @@ export function assistantKnowledgeCounts(grantId: string, now = Date.now()): { w
  * An assistant files a draft (§6 knowledge_draft): it waits in To check for an owner or admin, for the member it acts for, and
  * nothing shows to anyone until a person approves it (approveKnowledgeDraft: the tick, then the approver's page marked
  * `assistant-draft:<grant>`). Its words are cleaned as a member's are (cleanKnowledgeInput: hidden characters out, markers
- * defused, plain text). At least one source; `about` one of KNOWLEDGE_ABOUT; no photo (the caller refuses the field). No push
- * goes to the owners and admins: the one it acts for asked for it. The limits are checked in the same transaction as the write.
+ * defused, plain text). At least one source; `about` one of KNOWLEDGE_ABOUT. `photos`: the data URLs of pictures it uploaded
+ * through the door (agent/knowledge.ts claims them; never an address), held to a member's suggestion's rules (draftPhotos: at
+ * most 3, checked, metadata stripped) and kept with the draft, charged to nobody until a person approves them. No push goes to
+ * the owners and admins: the one it acts for asked for it. The limits are checked in the same transaction as the write.
  */
 export function fileAssistantKnowledgeDraft(
     grant: { id: string; member: string; name: string },
-    raw: KnowledgeInput & { about?: unknown },
+    raw: KnowledgeInput & { about?: unknown; photos?: unknown },
     now = Date.now(),
-): { id: string; waiting: number; today: number } {
+): { id: string; waiting: number; today: number; photos: number } {
     assertPlainTablesWritable();
     assertFeatureOn('knowledge');
     if (typeof raw.about !== 'string' || !(KNOWLEDGE_ABOUT as readonly string[]).includes(raw.about)) {
@@ -433,6 +441,7 @@ export function fileAssistantKnowledgeDraft(
     }
     if (!Array.isArray(raw.sources) || raw.sources.length === 0) throw new KnowledgeRefusal(400, 'no_source', ASSISTANT_DRAFT_WORDS.noSource);
     const k = cleanKnowledgeInput(raw);
+    const photos = draftPhotos(raw.photos);
     const id = crypto.randomUUID();
     const via = viaOf(grant.id);
     db.transaction(() => {
@@ -445,8 +454,10 @@ export function fileAssistantKnowledgeDraft(
                     VALUES (?, 'new', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
             .run(id, grant.member, via, cleanMemberText(grant.name, 60) || null, k.title, k.body, k.topic, k.place,
                 JSON.stringify(k.sources), k.lang, storedFreeTags(k.freeTags), raw.about, iso(now));
+        const photo = db.prepare('INSERT INTO knowledge_draft_photos (draft_id, order_num, photo_data, bytes) VALUES (?, ?, ?, ?)');
+        photos.forEach((p, i) => photo.run(id, i, p, incomingPhotosBytes([p])));
     })();
-    return { id, ...assistantKnowledgeCounts(grant.id, now) };
+    return { id, ...assistantKnowledgeCounts(grant.id, now), photos: photos.length };
 }
 
 /** One of an assistant's own drafts as it reads it back (§6 my_knowledge_drafts): never who answered, never their words. */
@@ -616,6 +627,23 @@ function keptPhotos(draftId: string, sent: unknown): string[] {
     return [...new Set(sent as string[])];
 }
 
+/**
+ * An assistant's draft's pictures at approval: all of them, or, when the request sends `photos` (To check's Keep and Remove,
+ * "Edit first"), the ones it sends: each one of the draft's own exactly as read, or a new picture of the checker's own as a
+ * data URL (K6: the checking admin may add their own), held to a suggestion's rules. Never an address, and never another
+ * page's photo: nothing is fetched and nothing is copied. The draft's own pass the same checks again as the page is made.
+ */
+function assistantDraftPhotos(draftId: string, sent: unknown): string[] {
+    const own = draftPhotoData(draftId);
+    if (sent === undefined || sent === null) return own;
+    if (!Array.isArray(sent) || sent.some((p) => typeof p !== 'string')) throw new KnowledgeRefusal(400, 'bad_photos', KNOWLEDGE_WORDS.photos);
+    const kept = [...new Set((sent as string[]).map((p) => p.trim()))];
+    const added = kept.filter((p) => !own.includes(p));
+    if (added.length === 0) return kept;
+    const checked = draftPhotos(added);
+    return kept.map((p) => (own.includes(p) ? p : checked[added.indexOf(p)]));
+}
+
 /** The page's fields at approval: each one the request sends ("Edit first"), the suggestion's own for the rest. */
 function approvedFields(r: DraftRow, raw: KnowledgeInput): KnowledgeInput {
     const pick = (sent: unknown, own: unknown) => (sent !== undefined ? sent : own);
@@ -666,8 +694,9 @@ export interface KnowledgeAnswer {
 /**
  * "Approve" (§5.5): makes the page through publishKnowledge, with any edits the request sends; a member's suggestion with
  * the member as its writer and their photos (charged once, when sent; "Edit first" may leave some out by sending back the
- * ones kept, never add one), an assistant's with the approver as its writer, marked `assistant-draft:<grant id>`, and their
- * own photos if they add some. Checked is stamped. A fix (slice K5) changes the page it names instead (approveFix). In one
+ * ones kept, never add one), an assistant's with the approver as its writer, marked `assistant-draft:<grant id>`, with the
+ * pictures it uploaded that the checker kept and any of their own they add (assistantDraftPhotos), charged to the approver.
+ * Checked is stamped. A fix (slice K5) changes the page it names instead (approveFix). In one
  * transaction with the suggestion's answer and its photos' delete, so two owners at once make one page: the second reads
  * "This one was already answered." A member whose account is paused or gone: "This member's account is paused, so it can't
  * be added now."
@@ -687,7 +716,7 @@ export function approveKnowledgeDraft(
         if (grant !== null && raw.checkedSources !== true) throw new KnowledgeRefusal(400, 'sources_not_checked', DRAFT_WORDS.tickSources);
         if (r.kind === 'fix') return approveFix(broadcast, checker, r, raw, now);
         if (grant === null && !inStanding(r.member_pubkey)) throw new KnowledgeRefusal(409, 'writer_paused', DRAFT_WORDS.writerPaused);
-        const post = publishKnowledge(broadcast, checker, { ...approvedFields(r, raw), photos: grant === null ? keptPhotos(r.id, raw.photos) : raw.photos }, {
+        const post = publishKnowledge(broadcast, checker, { ...approvedFields(r, raw), photos: grant === null ? keptPhotos(r.id, raw.photos) : assistantDraftPhotos(r.id, raw.photos) }, {
             writer: grant === null ? r.member_pubkey : checker,
             ...(grant === null ? { photosPaidFor: true } : { createdVia: `assistant-draft:${grant}` }),
             now,

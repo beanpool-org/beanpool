@@ -773,6 +773,12 @@ export interface NodeConfig {
      * answer deletes an entry. Carried in the take-over envelope beside `ownerAddresses`.
      */
     registrarNames?: RegistrarName[];
+    /**
+     * The owner's main address (Settings → Addresses → Make main; engine/own-addresses.ts chosenMainAddress, design
+     * scratch/fable-design/DESIGN-several-addresses-fable.md §2.1): one of the published addresses, of any kind. Unset (or
+     * one that is no longer an address) leaves the main worked out as before an owner chose.
+     */
+    mainAddress?: string | null;
 }
 
 // Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
@@ -1619,6 +1625,8 @@ import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
 import { preferredAddress, reachableFromInternet } from './engine/host-kinds.js';
+// Read only inside functions (getDirectoryInfo), never at load: own-addresses reads this module too.
+import { mainPublicUrl } from './engine/own-addresses.js';
 import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
@@ -9912,6 +9920,7 @@ export function getNodeConfig(): NodeConfig {
         publicAddress: config.publicAddress ?? null,
         ...(Array.isArray(config.ownerAddresses) ? { ownerAddresses: config.ownerAddresses.filter((a: unknown) => typeof a === 'string') } : {}),
         ...(Array.isArray(config.registrarNames) ? { registrarNames: config.registrarNames } : {}),
+        ...(typeof config.mainAddress === 'string' ? { mainAddress: config.mainAddress } : {}),
     };
 
     if (migrated) {
@@ -10066,7 +10075,8 @@ export function getDirectoryInfo(): any {
     const localConfig = getLocalConfig();
     const info: any = {
         name: directoryName(),
-        publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config),
+        // Where it lives: the owner's main address once chosen (engine/own-addresses.ts mainPublicUrl, design several-addresses §2.1).
+        publicUrl: mainPublicUrl(),
         communityName: localConfig.communityName || null,
     };
 

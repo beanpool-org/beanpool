@@ -14,9 +14,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signedPost } from './node-post';
 import { finishOneWayBack, putAwayRecord, readOneWayBack } from './one-way-back';
 import { oneWayBackStoreKey, wordsKeptOwedStoreKey } from './storage-keys';
+import { communityKeyOf } from './community-index';
 import type { BeanPoolIdentity } from './identity';
 
-const sameUrl = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
+/** Whether two addresses are one community: compared by the name each is kept under (community-index.ts). */
+const sameUrl = (a: string, b: string) => {
+    const one = (u: string) => communityKeyOf(u).trim().replace(/\/+$/, '').toLowerCase();
+    return one(a) === one(b);
+};
 
 /** The one write. True when the node took it. */
 async function send(url: string, identity: BeanPoolIdentity): Promise<boolean> {
@@ -45,7 +50,7 @@ export async function keepWords(url: string | null, identity: BeanPoolIdentity, 
         await AsyncStorage.removeItem(wordsKeptOwedStoreKey(identity.publicKey)).catch(() => undefined);
         return;
     }
-    await AsyncStorage.setItem(wordsKeptOwedStoreKey(identity.publicKey), url).catch(() => undefined);
+    await AsyncStorage.setItem(wordsKeptOwedStoreKey(identity.publicKey), communityKeyOf(url)).catch(() => undefined);
 }
 
 /** A say-so that didn't land, sent again for this community (Home's landing). True when nothing is owed any more. */

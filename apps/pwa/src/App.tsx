@@ -308,6 +308,10 @@ export function App() {
     // The tour's Chat step lands on Chats, as every arrival from elsewhere does, even when the member was already on the tab's
     // Forum side (T0's note); its words name both sides (core TOUR_WORDS.chatForum), so a switch during the step stays true.
     useEffect(() => { if (tourTab === 'messages') setChatNavNonce((n) => n + 1); }, [tourTab, tourIndex]);
+    // Chat chosen in the menu (the side bar, or the bottom bar at phone width) while Chat already shows: the chat list again, on
+    // the side the member picked, whatever was open over it (pages/ChatTabPage.tsx; Marty, 16 Nov). From another tab the page
+    // is drawn afresh, at its list, so only a choice made on the tab itself counts.
+    const [chatHomeNonce, setChatHomeNonce] = useState(0);
     // The one arrival that shows the Forum side instead: a forum notice, from the bell or a web push (slice F5).
     const [openChatForum, setOpenChatForum] = useState(false);
     // And the topic it opens on: a door to one topic (`/app?forumTopic=<id>`, or the one a visitor kept at Join to reply; slice F7).
@@ -1309,6 +1313,7 @@ export function App() {
                                 onClick={() => {
                                     if (tab.id === 'marketplace') setMarketClickCount(c => c + 1);
                                     if (tab.id === 'people' && activeTab !== 'people') { setPeopleSubView('friends'); setPeopleFromNotice(false); }
+                                    if (tab.id === 'messages' && activeTab === 'messages') setChatHomeNonce(n => n + 1);
                                     setActiveTab(tab.id);
                                     setShowSettings(false);
                                     closePagesOver();
@@ -1586,6 +1591,7 @@ export function App() {
                                     identity={identity}
                                     openConversationId={openConversationId}
                                     navNonce={chatNavNonce}
+                                    homeNonce={chatHomeNonce}
                                     openForum={openChatForum}
                                     openForumTopic={openForumTopic}
                                     onForumOpened={() => setOpenChatForum(false)}
@@ -1827,6 +1833,7 @@ export function App() {
                                     setPeopleSubView('friends');
                                     setPeopleFromNotice(false);
                                 }
+                                if (tab.id === 'messages' && activeTab === 'messages') setChatHomeNonce(n => n + 1);
                                 setActiveTab(tab.id);
                                 setShowSettings(false);
                                 closePagesOver();

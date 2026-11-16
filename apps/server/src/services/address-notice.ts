@@ -65,6 +65,16 @@ export function forgetAddressNotice(): void {
     setDue(null);
 }
 
+/**
+ * The owner made `address` the main one (routes/app-addresses.ts /main, design several-addresses §2.1), and it is where the
+ * community lives now: the members are told once, now, as for a claim. The words stay the claim's until the notice slice
+ * (S7) gives Make main its own.
+ */
+export function tellMembersOfNewMain(address: string): void {
+    setDue(address);
+    tellMembersOfNewAddress();
+}
+
 /** Tells the members, once, if a notice is due and its name is where the community lives now. Never throws. */
 export function tellMembersOfNewAddress(): void {
     const address = getLocalConfig().addressNoticeDue;

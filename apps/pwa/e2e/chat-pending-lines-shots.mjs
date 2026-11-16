@@ -162,7 +162,7 @@ try {
             await cut.page.waitForTimeout(500);
             const failed = await cut.page.evaluate(MEASURE, ['chat-line-failed', 'chat-line-retry', 'chat-line-discard', 'chat-thread']);
             const failedShot = await shot(cut.page, vp, `chat-line-failed-${tag}`);
-            await cut.page.click('button[aria-label="Back to messages"]');
+            await cut.page.click('button[aria-label="Back to chats"]');
             await cut.page.waitForSelector('[data-testid="chat-row-not-delivered"]', { timeout: 15_000 });
             const list = await cut.page.evaluate(MEASURE, ['chat-row-not-delivered']);
             await cut.context.close();

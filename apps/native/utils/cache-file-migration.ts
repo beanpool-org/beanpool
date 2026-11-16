@@ -28,6 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getDatabaseFilenameForNode, getSavedNodes, legacyDatabaseFilenameForNode } from './nodes';
+import { communityRecordsReady } from './community-record';
 
 /** Set once every saved community's copy has its new name. */
 export const CACHE_NAMES_DONE_KEY = 'beanpool_cache_names_v2';
@@ -194,9 +195,12 @@ export async function renameCommunityCaches(): Promise<boolean> {
 
 let renamed: Promise<boolean> | null = null;
 
-/** The move, run once per app start; everything that opens a copy or reads a cursor waits for it. */
+/**
+ * The move, run once per app start; everything that opens a copy or reads a cursor waits for it. The community records
+ * load first (utils/community-record.ts): a copy's name and its cursors' go through its community's record.
+ */
 export function communityCachesRenamed(): Promise<boolean> {
-    return (renamed ??= renameCommunityCaches());
+    return (renamed ??= communityRecordsReady().then(renameCommunityCaches));
 }
 
 /** Tests only: forget that this run moved anything, to play the next app start. */

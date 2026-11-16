@@ -132,7 +132,7 @@ const READ = () => {
     const line = Math.min(rect(nav).top, mainContentBottom);
     const t = rect(thread);
     const c = rect(composer);
-    const back = rect(q('button[aria-label="Back to messages"]'));
+    const back = rect(q('button[aria-label="Back to chats"]'));
     return {
         navTop: Math.round(rect(nav).top),
         threadH: Math.round(t.height),
@@ -230,7 +230,7 @@ try {
                 const total = await page.evaluate(PINNED_BUTTONS);
                 const reached = new Set();
                 let inView = 0;
-                await page.focus('button[aria-label="Back to messages"]');
+                await page.focus('button[aria-label="Back to chats"]');
                 for (let i = 0; i < 40 && reached.size < total; i++) {
                     await page.keyboard.press('Tab');
                     const st = await page.evaluate(FOCUSED_IN_PINNED);

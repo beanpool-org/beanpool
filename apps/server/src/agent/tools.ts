@@ -30,10 +30,11 @@ import { getNodeRole } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import {
-    communityCountsCached, directoryName, getCommunityHealth, getMember, getReports, readWatchdogStatus, resolvePublicNodeUrl,
+    communityCountsCached, directoryName, getCommunityHealth, getMember, getReports, readWatchdogStatus,
     type AbuseReport,
 } from '../state-engine.js';
 import { getAdminQueue } from '../engine/admin-queue.js';
+import { mainPublicUrl } from '../engine/own-addresses.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
 import { communityTotals } from '../engine/community-health.js';
@@ -330,7 +331,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                 ok: true, rows: 1,
                 result: {
                     community: cleanMemberText(directoryName(), 120),
-                    addressHost: hostOnly(resolvePublicNodeUrl()),
+                    addressHost: hostOnly(mainPublicUrl()),
                     version: getVersion(),
                     role: getNodeRole() === 'backup' ? 'standby' : 'primary',
                     uptimeSeconds: Math.floor(process.uptime()),

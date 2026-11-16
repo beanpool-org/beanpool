@@ -719,11 +719,15 @@ async function main(): Promise<void> {
             assert(![...(listed.body?.unconfirmed ?? []), ...(listed.body?.heldBack ?? [])].some((u: any) => u.address === 'spam.example'),
                 "but not spam.example: only members' apps put an address on either list");
             const noAuth = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', {}, JSON.stringify({ address: 'community.example.org' }));
-            assert(noAuth.status === 401 || noAuth.status === 403, `confirming needs an owner or admin (${show(noAuth)})`);
-            const confirmed = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', await adminOf(U), JSON.stringify({ address: 'https://Community.Example.org/settings' }));
+            assert(noAuth.status === 401 || noAuth.status === 403, `confirming needs an owner (${show(noAuth)})`);
+            // Adding an address asks the owner's fresh proof (design several-addresses §7, decided pick 4): a key session
+            // that has not just proved adds nothing.
+            const stale = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', await adminOf(U), JSON.stringify({ address: 'https://Community.Example.org/settings' }));
+            assert(stale.status === 403 && !stale.body?.addresses, `a session with no fresh proof is asked for it, and adds nothing (${show(stale)})`);
+            const confirmed = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', await U.send('owner-phone-session'), JSON.stringify({ address: 'https://Community.Example.org/settings' }));
             assert(confirmed.status === 200 && confirmed.body?.addresses?.some((a: any) => a.address === 'community.example.org' && a.source === 'owner')
                 && !confirmed.body?.unconfirmed?.some((u: any) => u.address === 'community.example.org'),
-                `one tap confirms it, and it moves to the address list as the owner's (${show(confirmed)})`);
+                `the owner, from the phone just unlocked, confirms it, and it moves to the address list as the owner's (${show(confirmed)})`);
             const nowOwn = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://community.example.org/api/community/me'));
             const other = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://elsewhere.example.org/api/community/me'));
             const lanNow = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://192.168.1.20:8443/api/community/me'));

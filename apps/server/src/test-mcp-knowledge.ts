@@ -21,6 +21,13 @@
  *     (up to 3,000 characters), place, sources and the out-of-date note, and a `<<<END` in a body can't close its fence; no answer
  *     names the writer or carries a key; a member's waiting suggestion and a page hidden by reports are never listed. The filters.
  *  8. Settings' Connected assistants row counts its drafts waiting; the consent page says it drafts, where Learn is on.
+ *  9. Pictures through the upload door only (Damo's ask; Marty, 16 Nov: "Yes, through the upload link only, the checker approves
+ *     it"): a draft takes photo_ids an owner's ticked assistant uploaded (POST /mcp/photos), used once, kept with the draft and
+ *     shown to nobody but To check; refused in words: an address (photo_urls, or one in photo_ids), a picture written into the
+ *     call, more than 3, an id not its own, an admin's or unticked assistant; a refused draft leaves its uploads usable. Declined,
+ *     taken back or disconnected: its pictures are gone. A table: Approve keeping all (sent back, or not sent), removing one,
+ *     removing all, Edit first, Edit first with the checker's own added -> the pictures the page shows; an address or another
+ *     page's photo sent at approval is refused and nothing is published.
  *
  * Run: SERVER_SUITES_ONLY=test-mcp-knowledge TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -51,6 +58,7 @@ import { publishKnowledge, markKnowledgeOutdated } from './engine/knowledge.js';
 import { suggestKnowledge } from './engine/knowledge-drafts.js';
 import { REMOVE_ALL_CONFIRM } from './agent/owner-posts.js';
 import { resetAgentLimits } from './agent/limits.js';
+import { uploadedPhotosWaiting } from './agent/owner-photos.js';
 import { consentWords } from './agent/oauth-route.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -266,8 +274,10 @@ async function main(): Promise<void> {
             ['a source that is no link', { ...DRAFT, sources: [{ url: 'javascript:alert(1)', title: 'x' }] }, /A link must start with https:\/\/ or http:\/\//],
             ['no about', { ...DRAFT, about: undefined }, /^Local knowledge is about places, services and how to do things, never about a private person\.$/],
             ['about a person', { ...DRAFT, about: 'person' }, /^Local knowledge is about places, services and how to do things, never about a private person\.$/],
-            ['photos', { ...DRAFT, photos: ['data:image/png;base64,iVBORw0KGgo='] }, /^A draft carries no picture from the web: the admin adds their own when they check it\.$/],
-            ['photo_urls', { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, /^A draft carries no picture from the web: the admin adds their own when they check it\.$/],
+            // Pictures (16 Nov, Damo's ask, Marty: "through the upload link only"): a picture in the call or by its address is still
+            // refused, now pointing to the one door (section 9 has the rest).
+            ['photos', { ...DRAFT, photos: ['data:image/png;base64,iVBORw0KGgo='] }, /^A draft takes no picture from the web and none written into the call: .*photo_upload_link.*photo_ids/],
+            ['photo_urls', { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, /^A draft takes no picture from the web and none written into the call: .*photo_upload_link.*photo_ids/],
             ['a topic not on the list', { ...DRAFT, topic: 'gossip' }, /Pick a topic/],
             ['a fix', { ...DRAFT, fix_of: 'some-page', note: 'The bus moved' }, /later version of this server/],
             // Learn's tags (16 Nov): free tags only, under the Market's rule, as a member's; library ids refused as the node refuses
@@ -457,6 +467,139 @@ async function main(): Promise<void> {
         const off = consentWords('Claude', 'claude.ai', 'Example Valley', false).lines.join(' ');
         assert(/Anything else it can only SUGGEST/.test(on) && /draft Local knowledge/.test(on) && /shows to nobody until an owner or admin approves it/.test(on)
             && !/Local knowledge/.test(off), '8. the consent page says it drafts Local knowledge, only where Learn is on');
+
+        // ── 9. Pictures through the upload door only ──────────────────────────────────────────────────
+        console.log('── 9. pictures ──');
+        db.prepare('DELETE FROM knowledge_draft_photos').run();
+        db.prepare('DELETE FROM knowledge_drafts').run();
+        resetAgentLimits();
+        const picture = (w: number, h: number, rgb: [number, number, number]) =>
+            sharp({ create: { width: w, height: h, channels: 3, background: { r: rgb[0], g: rgb[1], b: rgb[2] } } }).jpeg({ quality: 80 }).toBuffer();
+        const WIDE = await picture(640, 480, [200, 40, 40]);
+        const TALL = await picture(480, 640, [40, 40, 200]);
+        const uploadAs = async (token: string, bytes: Buffer): Promise<string> => {
+            const r = await fetch(`${BASE}/mcp/photos`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg' }, body: new Uint8Array(bytes) });
+            const body = await r.json().catch(() => ({})) as { photoId?: string };
+            if (r.status !== 201 || typeof body.photoId !== 'string') throw new Error(`upload refused: ${r.status} ${JSON.stringify(body)}`);
+            return body.photoId;
+        };
+        const draftPics = (id: string) => (db.prepare('SELECT COUNT(*) AS n FROM knowledge_draft_photos WHERE draft_id = ?').get(id) as { n: number }).n;
+        const pagePics = (id: string) => (db.prepare('SELECT COUNT(*) AS n FROM post_photos WHERE post_id = ?').get(id) as { n: number }).n;
+        /** The shape of each picture a page shows, read back through the photo route members' apps use: 'wide' or 'tall'. */
+        const shapesOf = async (post: any): Promise<string> => {
+            const out: string[] = [];
+            for (const url of (post?.photos ?? []) as string[]) {
+                const r = await fetch(/^https?:/.test(url) ? url.replace(/^https?:\/\/[^/]+/, BASE) : `${BASE}${url}`);
+                const meta = r.status === 200 ? await sharp(Buffer.from(await r.arrayBuffer())).metadata() : null;
+                out.push(!meta ? `?${r.status}` : (meta.width ?? 0) > (meta.height ?? 0) ? 'wide' : 'tall');
+            }
+            return out.join(',');
+        };
+        /** The pages a member finds in Learn's search with exactly this title. */
+        const melFinds = async (title: string) =>
+            ((await call(mel, 'GET', `/api/knowledge/front?q=${encodeURIComponent(title)}`)).body?.rows ?? []).filter((row: any) => row.title === title).length;
+
+        // A draft with two pictures it uploaded: kept with the draft, used up, shown to nobody but To check.
+        const w1 = await uploadAs(A.token, WIDE);
+        const t1 = await uploadAs(A.token, TALL);
+        require_(uploadedPhotosWaiting(A.id) === 2, '9. two pictures uploaded through the door wait for a draft');
+        const posts9 = knowledgePosts();
+        const withPics = await a.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'Where the community garden is', photo_ids: [w1, t1] } });
+        const wp = structured(withPics);
+        assert(!withPics.isError && wp?.photos === 2 && draftPics(wp?.draftId) === 2 && uploadedPhotosWaiting(A.id) === 0 && knowledgePosts() === posts9,
+            `9. a draft takes photo_ids: kept with the draft, the uploads used up, no page made (${errorText(withPics) || JSON.stringify(wp)})`);
+        const seen9 = await call(owen, 'GET', `/api/knowledge/drafts/${wp?.draftId}`);
+        assert((seen9.body?.draft?.photos ?? []).length === 2 && seen9.body.draft.photos.every((p: string) => /^data:image\/(jpeg|webp);base64,/.test(p)),
+            `9. To check shows each picture to an owner (${show(seen9).slice(0, 120)})`);
+        const melSees = await call(mel, 'GET', `/api/knowledge/drafts/${wp?.draftId}`);
+        assert(melSees.status === 403 && await melFinds('Where the community garden is') === 0, `9. a member sees no draft and finds no page before it is approved (${melSees.status})`);
+        const again9 = await a.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'The garden again', photo_ids: [w1] } });
+        assert(again9.isError === true && /not a photo this assistant uploaded and has not used yet/.test(errorText(again9)), `9. an id is used once (${errorText(again9)})`);
+        const schema9 = (await a.listTools()).tools.find((x) => x.name === 'knowledge_draft');
+        const props9 = (schema9?.inputSchema as { properties?: Record<string, { description?: string }> } | undefined)?.properties ?? {};
+        const said9 = `${schema9?.description ?? ''} ${props9.photo_ids?.description ?? ''}`;
+        assert(!!props9.photo_ids && !props9.photo_urls && !props9.photos && /photo_upload_link/.test(said9) && /the member took or owns/.test(said9)
+            && /never one found on the web/.test(said9) && /checker sees each/.test(said9),
+            `9. the tool says it plainly: the upload door, only the member's own, never the web, the checker sees each (${(props9.photo_ids?.description ?? '').slice(0, 160)})`);
+
+        // Refused in words, nothing written, the upload still usable.
+        resetAgentLimits();
+        const keep1 = await uploadAs(A.token, WIDE);
+        const before9 = draftCount();
+        const picRefusals: Array<[string, Client, Record<string, unknown>, RegExp]> = [
+            ['photo_urls', a, { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, /^A draft takes no picture from the web and none written into the call: /],
+            ['a picture written into the call', a, { ...DRAFT, photos: [await jpeg(640, 480)] }, /^A draft takes no picture from the web and none written into the call: /],
+            ['a picture by another name', a, { ...DRAFT, image: 'https://pics.example/a.jpg' }, /^A draft takes no picture from the web and none written into the call: /],
+            ['an address in photo_ids', a, { ...DRAFT, photo_ids: ['https://pics.example/a.jpg'] }, /^photo_ids #1 is an address: this server never fetches a picture for a draft\./],
+            ['a picture written into photo_ids', a, { ...DRAFT, photo_ids: [await jpeg(640, 480)] }, /^photo_ids #1 is a picture written into the call: /],
+            ['photo_ids not a list', a, { ...DRAFT, photo_ids: keep1 }, /^photo_ids is a list/],
+            ['four pictures', a, { ...DRAFT, photo_ids: [keep1, keep1, keep1, keep1] }, /^At most 3 pictures a draft/],
+            ['an id never uploaded', a, { ...DRAFT, photo_ids: [`ph_${'0'.repeat(32)}`] }, /not a photo this assistant uploaded/],
+            ['the same id twice', a, { ...DRAFT, photo_ids: [keep1, keep1] }, /not a photo this assistant uploaded and has not used yet/],
+            ["another assistant's upload", c, { ...DRAFT, photo_ids: [keep1] }, /^Only an owner's assistant connected with "May post for me" can upload pictures/],
+            ['no source, with a picture', a, { ...DRAFT, sources: [], photo_ids: [keep1] }, /^Local knowledge from the web needs at least one source link\.$/],
+        ];
+        for (const [what, client, args, words] of picRefusals) {
+            const r = await client.callTool({ name: 'knowledge_draft', arguments: args });
+            assert(r.isError === true && words.test(errorText(r)) && draftCount() === before9 && uploadedPhotosWaiting(A.id) === 1,
+                `9. ${what}: refused in words, nothing written, the upload still there (${errorText(r)})`);
+        }
+
+        // Declined, taken back, disconnected: the pictures go with the draft.
+        const declined9 = await call(otto, 'POST', `/api/knowledge/drafts/${wp?.draftId}/no`, { reason: 'other' });
+        assert(declined9.status === 200 && draftPics(wp?.draftId) === 0 && pagePics(wp?.draftId) === 0, `9. declined: its pictures are gone (${show(declined9)})`);
+        const toTakeBack = structured(await a.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'Taken back', photo_ids: [keep1] } }))?.draftId as string;
+        require_(draftPics(toTakeBack) === 1 && uploadedPhotosWaiting(A.id) === 0, '9. a draft with the kept upload');
+        const tookBack = await a.callTool({ name: 'knowledge_draft_withdraw', arguments: { draft_id: toTakeBack } });
+        assert(!tookBack.isError && draftPics(toTakeBack) === 0, `9. taken back: its pictures are gone (${errorText(tookBack)})`);
+        const E = token(owen, "Owen's other Claude", true);
+        const e = await connect(E.token);
+        const eDraft = structured(await e.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'Disconnected', photo_ids: [await uploadAs(E.token, TALL)] } }))?.draftId as string;
+        const eLeft = await uploadAs(E.token, WIDE);
+        await e.close().catch(() => undefined);
+        require_(draftPics(eDraft) === 1 && !!eLeft && uploadedPhotosWaiting(E.id) === 1, '9. another ticked assistant has a draft with a picture and an upload waiting');
+        const revokeE = await call(null, 'POST', `/api/local/admin/agent/grants/${E.id}/revoke`, {}, OWNER());
+        assert(revokeE.status === 200 && !draftRow(eDraft) && draftPics(eDraft) === 0 && uploadedPhotosWaiting(E.id) === 0,
+            `9. disconnected: its waiting draft, the draft's pictures and its unused uploads are gone (${show(revokeE)})`);
+
+        // What is public after each answer: only the pictures the checker kept.
+        resetAgentLimits();
+        const fileWithTwo = async (title: string) => {
+            const ids = [await uploadAs(A.token, WIDE), await uploadAs(A.token, TALL)];
+            const r = await a.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title, photo_ids: ids } });
+            if (r.isError) throw new Error(errorText(r));
+            const id = structured(r).draftId as string;
+            const shown = ((await call(owen, 'GET', `/api/knowledge/drafts/${id}`)).body?.draft?.photos ?? []) as string[];
+            return { id, wide: shown[0], tall: shown[1] };
+        };
+        const ownPhoto = await jpeg(640, 480);
+        const table: Array<[string, string, (d: { wide: string; tall: string }) => Record<string, unknown>, string, string | null]> = [
+            ['Approve, every picture kept and sent back', 'Garden one', (d) => ({ photos: [d.wide, d.tall] }), 'wide,tall', null],
+            ['Approve from an app that sends no pictures: every one it showed', 'Garden two', () => ({}), 'wide,tall', null],
+            ['Remove one, then Approve', 'Garden three', (d) => ({ photos: [d.tall] }), 'tall', null],
+            ['Remove all, then Approve', 'Garden four', () => ({ photos: [] }), '', null],
+            ['Edit first, keeping the choice', 'Garden five', (d) => ({ title: 'Garden five, checked', photos: [d.wide] }), 'wide', 'Garden five, checked'],
+            ["Edit first, the checker's own added", 'Garden six', (d) => ({ photos: [d.tall, ownPhoto] }), 'tall,wide', null],
+        ];
+        for (const [what, title, body, expect, edited] of table) {
+            const d = await fileWithTwo(title);
+            const before = await melFinds(title);
+            const r = await call(owen, 'POST', `/api/knowledge/drafts/${d.id}/approve`, { checkedSources: true, ...body(d) });
+            const post = r.body?.post;
+            const shapes = await shapesOf(post);
+            assert(before === 0 && r.status === 200 && shapes === expect && pagePics(post?.id) === (expect ? expect.split(',').length : 0)
+                && draftPics(d.id) === 0 && (edited === null || post?.title === edited) && await melFinds(edited ?? title) === 1,
+                `9. ${what} -> the page shows [${expect}] (${r.status} [${shapes}] ${r.status === 200 ? '' : r.text.slice(0, 160)})`);
+        }
+        const refusedAt = await fileWithTwo('Garden seven');
+        for (const [what, photos] of [
+            ['an address', ['https://pics.example/a.jpg']],
+            ["another page's photo", [`/api/marketplace/posts/${pageId}/photos/0`]],
+        ] as const) {
+            const r = await call(owen, 'POST', `/api/knowledge/drafts/${refusedAt.id}/approve`, { checkedSources: true, photos: [refusedAt.wide, ...photos] });
+            assert(r.status === 400 && r.body?.code === 'bad_photos' && draftRow(refusedAt.id)?.state === 'waiting' && draftPics(refusedAt.id) === 2 && await melFinds('Garden seven') === 0,
+                `9. ${what} sent at approval: refused, nothing published, the draft still waiting (${show(r)})`);
+        }
     } finally {
         for (const client of [a, b, c, d]) await client.close().catch(() => undefined);
     }

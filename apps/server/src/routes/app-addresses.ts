@@ -32,17 +32,24 @@
  *                                                 names, checked or not. Reading this asks nothing of the network.
  *   POST /api/local/admin/app-addresses/check    Check now: a round, at most one every 30 seconds, and the report, with
  *                                                 `checking: true` when it hasn't finished within 20 seconds.
- *   POST /api/local/admin/app-addresses/confirm  { address }: "Yes, that's its address." Adds it to the owner-confirmed
+ *   POST /api/local/admin/app-addresses/confirm  { address, code? }: "Yes, that's its address." Adds it to the owner-confirmed
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
+ *                                                 An owner's, with the owner's fresh proof (design several-addresses §7,
+ *                                                 decided pick 4); one already listed adds nothing and asks for none.
  *                                                 A lost name is refused (409, with why): confirming it would not bring it
  *                                                 back, since the mark is per host, whatever lists it.
+ *   POST /api/local/admin/app-addresses/main     { address, code? }: Make main (node_config.mainAddress, engine/own-addresses.ts
+ *                                                 chosenMainAddress): any published address with a route, of any kind; a
+ *                                                 bare number only while the community has no name (409 in words
+ *                                                 otherwise). An owner's, with the owner's fresh proof; refused on a
+ *                                                 standby (409 standby). Nothing else moves the main address once chosen.
  *   POST /api/local/admin/app-addresses/remove   { address, code? }: takes an owner-confirmed address off the list again,
  *                                                 an owner's, with the owner's fresh proof (admin-auth.ts
  *                                                 requireFreshProof); an own address that is also the community's address
  *                                                 (`publicAddress` `ip`/`own`, beanpool claim --ip/--address) stops being
  *                                                 that too.
  *
- * An address is only ever added by an owner or admin here, by an owner's claim of a new name (the address it replaces,
+ * An address is only ever added by an owner here (with fresh proof), by an owner's claim of a new name (the address it replaces,
  * engine/own-addresses.ts keepReplacedAddress), or by config the operator set (the registrar's name, CF_RECORD_NAME,
  * BEANPOOL_ADDRESSES). Never from a request's Host header.
  */
@@ -50,9 +57,11 @@
 import Router from '@koa/router';
 import { getNodeConfig, isOwnPublicAddress, updateNodeConfig } from '../state-engine.js';
 import {
-    configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
-    primaryAddress, MAX_OWNER_ADDRESSES,
+    configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress, ownerConfirmedAddresses,
+    primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
 } from '../engine/own-addresses.js';
+import { tellMembersOfNewMain } from '../services/address-notice.js';
+import { getNodeRole } from '../config/node-role.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { nameStandings } from '../services/registrar-name-watch.js';
 import { addressReaches, checkAddressesNow, namesStoppedByProject } from '../services/address-check.js';
@@ -66,6 +75,12 @@ import type { RouteDeps } from './types.js';
 
 // The bound on the owner-confirmed list lives with the list (own-addresses.ts); `beanpool claim --ip/--address` adds to it too.
 export { MAX_OWNER_ADDRESSES };
+
+/** Adding an address and Make main are an owner's (design several-addresses §7; decided pick 4). */
+const ADD_OWNER_ONLY = 'Only an owner of this community can add an address';
+const MAIN_OWNER_ONLY = 'Only an owner of this community can change its main address';
+/** A standby is not where the community lives until it takes over: its main address is its main server's. */
+const MAIN_ON_STANDBY = 'This server is a standby. The main address is chosen on the community\'s main server.';
 
 /**
  * `pageHost` is the host Settings is open at (`?host=`): the only host offered with one tap (engine/address-offers.ts),
@@ -145,8 +160,12 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         ctx.body = { ...appAddressesReport(ctx.query.host), checking };
     });
 
+    // Every listed address is a place members' apps trust as this community and people sign in on the web, so adding one
+    // is an owner's, with the owner's fresh proof (design several-addresses §7, decided pick 4: an admin could once confirm
+    // one with a tap). The address is checked first, so a request that adds nothing spends no code (#2002 NB1).
     router.post('/api/local/admin/app-addresses/confirm', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
+        if (!requireAdminRole(ctx, ['owner'], ADD_OWNER_ONLY)) return;
         const address = normalizeAddress(bodyOf(ctx).address);
         if (!address) {
             ctx.status = 400;
@@ -171,6 +190,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
                 ctx.body = { error: `This community already has ${MAX_OWNER_ADDRESSES} confirmed addresses. Remove one you no longer use first.` };
                 return;
             }
+            if (!(await requireFreshProof(ctx, bodyOf(ctx).code, `add ${address}`))) return;
             updateNodeConfig({ ownerAddresses: [...current, address] });
             forgetOwnAddresses();
             logger.security('AUTH', `App address confirmed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
@@ -201,9 +221,49 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         // (services/public-address-agent.ts storeOwnAddress): removed, it is that no longer either, or it would stay accepted.
         const pa = getNodeConfig().publicAddress;
         const alsoPublic = isOwnPublicAddress(pa) && normalizeAddress(pa.hostname) === address;
-        updateNodeConfig({ ownerAddresses: current.filter((a) => a !== address), ...(alsoPublic ? { publicAddress: null } : {}) } as any);
+        // The main address removed: the owner's choice goes with it (the main is then worked out as before a choice), so
+        // the address added again later is not main again without Make main.
+        const wasMain = normalizeAddress(getNodeConfig().mainAddress) === address;
+        updateNodeConfig({
+            ownerAddresses: current.filter((a) => a !== address), ...(alsoPublic ? { publicAddress: null } : {}), ...(wasMain ? { mainAddress: null } : {}),
+        } as any);
         forgetOwnAddresses();
         logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = appAddressesReport(ctx.query.host);
+    });
+
+    // Make main: where new members, invites, the directory and search engines are sent (design several-addresses §2.1). Any
+    // published address with a route, of any kind; a bare number only while the community has no name. An owner's, with
+    // the owner's fresh proof; asked after the address is found, so a refused one spends no code. Every other address keeps
+    // working. The members are told once, when the main address really moved.
+    router.post('/api/local/admin/app-addresses/main', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        if (!requireAdminRole(ctx, ['owner'], MAIN_OWNER_ONLY)) return;
+        if (getNodeRole() === 'backup') {
+            ctx.status = 409;
+            ctx.body = { code: 'standby', error: MAIN_ON_STANDBY };
+            return;
+        }
+        const body = bodyOf(ctx);
+        const address = normalizeAddress(body.address);
+        if (!address) {
+            ctx.status = 400;
+            ctx.body = { error: 'Send { "address": "community.example.org" }: one of this community\'s addresses, with no path.' };
+            return;
+        }
+        const refused = mainAddressRefusal(address);
+        if (refused) {
+            ctx.status = 409;
+            ctx.body = { code: 'not_main_able', error: refused };
+            return;
+        }
+        if (!(await requireFreshProof(ctx, body.code, `make ${address} the main address`))) return;
+        const before = setMainAddress(address);
+        if (before !== address) {
+            logger.security('AUTH', `Main address set in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address} (was ${before ?? 'none'})`);
+            if (before) tellMembersOfNewMain(address);
+        }
         ctx.set('Cache-Control', 'no-store');
         ctx.body = appAddressesReport(ctx.query.host);
     });

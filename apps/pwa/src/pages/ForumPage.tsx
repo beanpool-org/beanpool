@@ -47,7 +47,13 @@ export const FORUM_WORDS = {
 /** `at`: a search's hit opens the topic at that post. */
 type View = { kind: 'list' } | { kind: 'topic'; id: string; at?: number } | { kind: 'new' } | { kind: 'firstLooks' };
 
-export function ForumPage({ me, onOpenProfile, topicId = null }: { me: string; onOpenProfile?: (pubkey: string) => void; topicId?: string | null }) {
+/**
+ * `topicId`: the topic it opens on (a door to one topic, slice F7). `homeNonce`: changes each time the member chooses Chat in the
+ * menu while the Forum shows (ChatTabPage): its topic list, even when a door opened it on a topic.
+ */
+export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
+    me: string; onOpenProfile?: (pubkey: string) => void; topicId?: string | null; homeNonce?: number;
+}) {
     // Before any kept copy is read: another account in this tab never sees the last one's forum, not even for a moment.
     keepForumFor(me);
     const [view, setView] = useState<View>(() => (topicId ? { kind: 'topic', id: topicId } : { kind: 'list' }));
@@ -99,6 +105,12 @@ export function ForumPage({ me, onOpenProfile, topicId = null }: { me: string; o
     }, [section, view.kind]);
 
     const toList = () => setView({ kind: 'list' });
+    const homeSeen = useRef(homeNonce);
+    useEffect(() => {
+        if (homeNonce === homeSeen.current) return;
+        homeSeen.current = homeNonce;
+        toList();
+    }, [homeNonce]);
     const open = (next: View) => { setGone(null); setView(next); };
     // The member agreed to the public forum's sheet: this page's front says so at once, so it never asks again (design §5).
     const told = () => setFront((f) => (f ? { ...f, told: true } : f));

@@ -300,6 +300,9 @@ test('a guide page adds no step (its tests take 5 min: CI runs them); a script r
 
 // ── the runner ──
 
+// The runner's defaults are under test: no PREFLIGHT_* setting from the shell that runs these tests (a preflight step, or
+// ci.yml's draft job, which sets PREFLIGHT_HARD_SECS) reaches it unless a test passes it.
+const ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PREFLIGHT_')));
 const made = [];
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 function tmpdir() { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-test-')); made.push(d); return d; }
@@ -313,7 +316,7 @@ function planFile(dir, rows) {
 function run(planPath, env = {}, runner = RUNNER, args = []) {
   const r = spawnSync('bash', [runner, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, TMPDIR: path.dirname(planPath), PREFLIGHT_PLAN_FILE: planPath,
+    env: { ...ENV, TMPDIR: path.dirname(planPath), PREFLIGHT_PLAN_FILE: planPath,
       PREFLIGHT_LOCK: path.join(path.dirname(planPath), 'no-lock-here'), ...env },
   });
   return { rc: r.status, out: r.stdout + r.stderr };
@@ -474,7 +477,7 @@ test('the step waits while the lock is held and runs once it is gone', async () 
   const d = tmpdir();
   const lock = path.join(d, 'heavy-test.lock');
   fs.mkdirSync(lock);
-  const child = spawn('bash', [RUNNER], { env: { ...process.env, PREFLIGHT_PLAN_FILE: planFile(d, [['one', 'first', `touch ${d}/ran`]]),
+  const child = spawn('bash', [RUNNER], { env: { ...ENV, PREFLIGHT_PLAN_FILE: planFile(d, [['one', 'first', `touch ${d}/ran`]]),
     PREFLIGHT_LOCK: lock, PREFLIGHT_LOCK_WAIT_SECS: '30', PREFLIGHT_LOCK_POLL_SECS: '1' } });
   let out = '';
   child.stdout.on('data', b => { out += b; });
@@ -501,6 +504,7 @@ test('draft table: each part x the paths a diff touches -> the steps it runs', (
     ['types',  { 'apps/pwa/src/a.tsx': 'x', 'package.json': 'x' },          ['turbo'],                     'pnpm turbo run build lint typecheck --continue'],
     ['types',  { 'pnpm-lock.yaml': 'x' },                                   ['turbo'],                     'pnpm turbo run build lint typecheck --continue'],
     ['types',  { 'scripts/lanes/preflight-plan.mjs': 'x', 'scripts/lanes/preflight.sh': 'x' }, ['scripts-syntax'], 'node --check scripts/lanes/preflight-plan.mjs && bash -n scripts/lanes/preflight.sh'],
+    ['types',  { 'scripts/lanes/lib.sh': 'x' },                             ['scripts-syntax'],            '{ ! command -v zsh >/dev/null || zsh -n scripts/lanes/lib.sh; }'],
     ['types',  { 'docs/merge-gate.md': 'x' },                               ['none'],                      'true'],
     ['guards', { 'docs/merge-gate.md': 'x' },                               ['guards', 'words'],           'bash scripts/test-all.sh'],
     ['guards', { 'apps/native/app/x.tsx': 'x' },                            ['guards', 'words'],           'node scripts/words/words.mjs check'],
@@ -558,10 +562,17 @@ test('the runner heads a red step\'s lines "Failure Details", where pr-state.mjs
 });
 
 test('--draft passes the part to the planner: an unknown part is no plan (exit 2), nothing run', () => {
-  const r = spawnSync('bash', [RUNNER, '--draft', 'everything', '--plan'], { encoding: 'utf8' });
+  const r = spawnSync('bash', [RUNNER, '--draft', 'everything', '--plan'], { encoding: 'utf8', env: ENV });
   assert.equal(r.status, 2, r.stdout + r.stderr);
   assert.match(r.stdout + r.stderr, /--draft takes types, guards, tests/);
-  const ok = spawnSync('bash', [RUNNER, '--draft', 'guards', '--plan'], { encoding: 'utf8' });
+  const ok = spawnSync('bash', [RUNNER, '--draft', 'guards', '--plan'], { encoding: 'utf8', env: ENV });
   assert.equal(ok.status, 0, ok.stdout + ok.stderr);
   assert.match(ok.stdout, /^guards +120s/m);
+});
+
+test('a step runs without the runner\'s own PREFLIGHT_* settings (a step that runs preflight again gets its defaults)', () => {
+  const d = tmpdir();
+  const r = run(planFile(d, [['env', 'prints them', `env | grep '^PREFLIGHT_' > ${d}/seen; true`]]), { PREFLIGHT_HARD_SECS: '1200' });
+  assert.equal(r.rc, 0, r.out);
+  assert.equal(fs.readFileSync(`${d}/seen`, 'utf8'), '', 'no PREFLIGHT_ setting reached the step');
 });

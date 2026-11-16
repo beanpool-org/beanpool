@@ -475,8 +475,11 @@ test('event x draft -> which jobs run, the name the required job reports, and th
     }
     // A skipped job reports success to a required check, so the one skipped where the required check is wanted must not carry it.
     assert.notEqual(evalExpr(jobKey(CI, 'test-all', 'name'), { event: 'pull_request', draft: true }), REQUIRED_CHECK);
-    // Whatever GitHub does with an unevaluated name, the raw line is not the required check's exact name either.
-    assert.notEqual(jobKey(CI, 'test-all', 'name'), REQUIRED_CHECK);
+    // GitHub lists a SKIPPED job under its name's expression text, unevaluated (measured on #3280's draft run: the check was
+    // "(github.event_name != 'pull_request' || ...) && 'Run BeanPool Test-All Pipeline' || ..."): not the exact name either.
+    const raw = jobKey(CI, 'test-all', 'name');
+    assert.notEqual(raw, REQUIRED_CHECK);
+    assert.notEqual(raw.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), REQUIRED_CHECK);
     // No trigger reads paths: every PR gets a run, whatever it touches.
     assert.ok(!Object.values(triggersOf(CI)).flat().some((l) => /\bpaths/.test(l)), 'a trigger filters by path');
     // The evaluator knows only what it is taught: a condition it cannot read fails here, never reads as true.

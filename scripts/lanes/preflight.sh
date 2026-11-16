@@ -100,6 +100,10 @@ wait_for_lock() {
 
 fmt() { if [ "$1" -ge 60 ]; then printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); else printf '%ds' "$1"; fi; }
 
+# The steps run without this run's own settings: a step that runs preflight again (the `workflows` check runs
+# preflight.test.mjs) must get its defaults, not ours (ci.yml's draft job sets PREFLIGHT_HARD_SECS; #3280's first draft run).
+unset ${!PREFLIGHT_*}
+
 START=$(date +%s)
 RED=0
 RED_LOGS=""

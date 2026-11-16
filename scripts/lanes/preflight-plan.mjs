@@ -356,9 +356,14 @@ export function planDraft(part, touched, repo, { mergeBase, planSecs = DRAFT_PLA
       why: `${pkgs.join(', ')} and every package that depends on ${pkgs.length > 1 ? 'them' : 'it'}`,
       cmd: `pnpm turbo run build lint typecheck --continue --filter=${shq(`...[${mergeBase}]`)}` });
     const scripts = files.filter(f => !WORKSPACE_DIR.test(f) && !/(^|\/)node_modules\//.test(f) && repo.exists(f)).sort();
-    const js = scripts.filter(f => /\.(m?js|cjs)$/.test(f)), sh = scripts.filter(f => /\.sh$/.test(f));
+    const js = scripts.filter(f => /\.(m?js|cjs)$/.test(f));
+    // A shell script parses in the shell its #! names; zsh only where the runner has it. One with no #! is a library sourced by
+    // its caller (scripts/lanes/lib.sh is zsh): not checked here, its callers' suites read it.
+    const sh = scripts.filter(f => /\.sh$/.test(f)).map(f => [f, (/^#!.*\b(bash|zsh|sh)\b/.exec(repo.read(f).split('\n')[0]) || [])[1]])
+      .filter(([, shell]) => shell);
+    const shCmd = ([f, shell]) => (shell === 'zsh' ? `{ ! command -v zsh >/dev/null || zsh -n ${shq(f)}; }` : `bash -n ${shq(f)}`);
     if (js.length || sh.length) steps.push({ name: 'scripts-syntax', est: 5, why: `${js.length + sh.length} changed script(s) parse`,
-      cmd: [...js.map(f => `node --check ${shq(f)}`), ...sh.map(f => `bash -n ${shq(f)}`)].join(' && ') });
+      cmd: [...js.map(f => `node --check ${shq(f)}`), ...sh.map(shCmd)].join(' && ') });
   } else if (part === 'guards') {
     const checks = readChecksShard(repo.ciYml).split(' ').filter(c => !DRAFT_TURBO_CHECKS.includes(c));
     steps.push({ name: 'guards', est: 120, why: 'CI\'s "checks" shard but build, lint and typecheck (the types part runs those)',

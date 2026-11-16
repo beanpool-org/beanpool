@@ -165,8 +165,10 @@ jobs:
   # it, and a check skipped inside a shard fails that shard (test-all.sh). always(), so it reports even then.
   #
   # On a DRAFT it is skipped, and GitHub reports a job skipped by its `if:` as a check that a required check accepts as passing.
-  # So on a draft it carries another name: a draft's run never reports "Run BeanPool Test-All Pipeline" at all, and the PR's
-  # required check waits for the full run that ready_for_review starts. scripts/check-ci-shards.test.mjs evaluates both.
+  # So its name is an expression that is the required check's only when the job runs. GitHub lists a SKIPPED job under its
+  # name's expression text, unevaluated (measured on #3280's draft run), which is not the required check's exact name either: a
+  # draft's run never reports "Run BeanPool Test-All Pipeline", and the PR's required check waits for the full run that
+  # ready_for_review starts. scripts/check-ci-shards.test.mjs evaluates both.
   test-all:
     name: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && 'Run BeanPool Test-All Pipeline' || 'Full run waits for ready (draft)' }}
     needs: shard
@@ -246,4 +248,16 @@ jobs:
         env:
           BASE: ${{ github.base_ref }}
           PREFLIGHT_HARD_SECS: '1200'
+          TEST_ALL_LOG_DIR: ${{ runner.temp }}/test-all-logs
         run: bash scripts/lanes/preflight.sh --draft ${{ matrix.part }} --base "origin/$BASE"
+
+      # The guards part's red shows only the end of a check's log; its whole log names the failing test (#3280's first run).
+      - name: Upload the draft check's logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: draft-check-logs-${{ matrix.part }}
+          path: ${{ runner.temp }}/test-all-logs
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14

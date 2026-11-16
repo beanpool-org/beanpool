@@ -5,6 +5,7 @@ import { KeyboardAwareScrollView, KeyboardController } from 'react-native-keyboa
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useModalKeyboardLift } from '../components/useModalKeyboardLift';
 import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -559,8 +560,7 @@ export default function TreasuryManageScreen() {
                             await deleteCrowdfundProjectApi(treasuryKey);
                             Alert.alert(t('Initiative Cancelled 🌱'), t('Pledges have been refunded to backers.'));
                             // Its page and this console are both of what is gone: back past the page too.
-                            router.back();
-                            if (router.canGoBack()) router.back();
+                            leaveScreen(router, 'treasury-manage', { steps: 2 });
                         } catch (e: any) {
                             Alert.alert(t('Cancellation Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel initiative.'));
                         } finally {
@@ -1259,7 +1259,7 @@ export default function TreasuryManageScreen() {
             <View style={styles.fill} testID="manage-screen">
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Go back')}>
+                <Pressable onPress={() => leaveScreen(router, 'treasury-manage')} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Go back')}>
                     <MaterialCommunityIcons name="chevron-left" size={30} color={colors.text.heading} />
                 </Pressable>
                 <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">{t('Manage {name}', { name })}</Text>

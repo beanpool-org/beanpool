@@ -34,11 +34,12 @@ export const LOOK_LANDING = '/(tabs)/market' as const;
  * where the node shows them), one listing, the members' guide, the BeanPool sheet, and Start a community (its ways to
  * run one and the details to copy: the organiser's door, which needs no key), and the map's + (app/new-listing.tsx: its
  * chooser tells a visitor nothing is saved until they join and offers Join to post, components/NewPostTypeSheet.tsx; the
- * Offer and Need form asks for a name first, and every submit on it checks for a key). Talk, People, Pulse and Settings
+ * Offer and Need form asks for a name first, and every submit on it checks for a key), and the forum read only (slice F7: the
+ * visitors' Forum tab and one topic, app/forum-public/[id].tsx, from the node's public answer). Talk, People, Pulse and Settings
  * are an account's, as is every other screen.
  */
-const LOOK_TABS: ReadonlySet<string> = new Set(['index', 'market', 'map', 'ledger', 'projects']);
-const LOOK_ROOTS: ReadonlySet<string> = new Set(['post', 'guide', 'beanpool', 'start-community', 'new-listing']);
+const LOOK_TABS: ReadonlySet<string> = new Set(['index', 'market', 'map', 'ledger', 'projects', 'visitor-forum']);
+const LOOK_ROOTS: ReadonlySet<string> = new Set(['post', 'guide', 'beanpool', 'start-community', 'new-listing', 'forum-public']);
 
 /** Whether `segments` (expo-router's useSegments) is a screen a visitor with no key may stay on. */
 export function isLookRoute(segments: readonly string[]): boolean {

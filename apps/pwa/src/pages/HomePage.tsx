@@ -107,6 +107,8 @@ import { CategoryTile } from '../components/CategoryTile';
 import { ListPhoto } from '../components/ListPhoto';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
+import { ForumVisitorHome } from '../components/forum/ForumVisitorHome';
+import { FORUM_VISITOR_WORDS } from '@beanpool/core';
 import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, liftedStyle, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
 import { LearnHomeBody } from '../components/LearnHomeBody';
 import { ArrangeStrip, type StripRow } from '../components/ArrangeStrip';
@@ -3406,6 +3408,13 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     />
                 );
             }
+            case 'forum':
+                // "From the forum" (slice F7): a visitor's only on the web for now. It reads the public forum itself and draws
+                // its frame only with something in it (the newest topics, else the guide's How BeanPool works).
+                return isVisitor ? (
+                    <ForumVisitorHome key={card.id} features={a.features} onNavigate={onNavigate}
+                        frame={(body) => <HomeCard key={card.id} {...common} title={t(FORUM_VISITOR_WORDS.card)}>{body}</HomeCard>} />
+                ) : null;
             default:
                 // A tool's card (`tool-<id>`): its lines worked out on this device from the tool's own document, never
                 // asked of the node (tools/home-card.tsx). Any other type this build doesn't draw is kept and not drawn.

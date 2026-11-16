@@ -21,6 +21,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+import { leaveScreen } from '../../utils/leave-screen';
 
 export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
@@ -80,7 +81,7 @@ export default function GroupInviteLanding() {
     useEffect(() => { load(); }, [load]);
 
     const phase = inviteLandingPhase({ group, error, openedAsInvite: !!preview.invited });
-    const close = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/chats'); };
+    const close = () => leaveScreen(router, 'group/[id]');
 
     const g = group || null;
     const viewerStatus = g?.viewerStatus ?? null;

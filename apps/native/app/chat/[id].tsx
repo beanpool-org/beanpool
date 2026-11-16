@@ -8,6 +8,7 @@ import { dealStateWords, dealStep, formatHundredths, freePriceWords, itemDealTit
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
+import { leaveScreen } from '../../utils/leave-screen';
 
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -1529,7 +1530,7 @@ function ChatScreen({ id }: { id: string }) {
             
             {/* Header */}
             <View style={styles.header} onLayout={measuredEdge('header')}>
-                <Pressable accessibilityRole="button" accessibilityLabel={t('Back')} onPress={() => router.back()} style={styles.backButton}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Back')} onPress={() => leaveScreen(router, 'chat/[id]')} style={styles.backButton}>
                     <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text.body} />
                 </Pressable>
 
@@ -1580,7 +1581,7 @@ function ChatScreen({ id }: { id: string }) {
                         peerName={keyChange.name}
                         change={keyChange}
                         onContinue={handleContinueWithNewKey}
-                        onNotNow={() => router.back()}
+                        onNotNow={() => leaveScreen(router, 'chat/[id]')}
                     />
                 </ScrollView>
             )}

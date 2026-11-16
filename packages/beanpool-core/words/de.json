@@ -2716,6 +2716,9 @@
   "Refresh your {provider} copy": "Deine {provider}-Kopie aktualisieren",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} ist aktualisiert. Wenn du dich damit anmeldest, kommt dieses Konto zurück, ohne dass du etwas eintippen musst.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} konnte nicht aktualisiert werden, daher hat sich nichts geändert. Versuche es in einer Minute noch einmal.",
+  "From the forum": "Aus dem Forum",
+  "Join to reply": "Mach mit, um zu antworten",
+  "No topics here yet. Join to start the first one.": "Hier gibt es noch keine Themen. Mach mit und starte das erste.",
   "Type a tag": "Stichwort eingeben",
   "Tags help people find this page in Learn. Everyone can see them.": "Stichwörter helfen anderen, diese Seite in Lernen zu finden. Alle können sie sehen.",
   "Search Learn for {tag}": "In Lernen nach {tag} suchen"

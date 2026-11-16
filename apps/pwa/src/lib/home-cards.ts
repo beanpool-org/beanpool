@@ -21,6 +21,7 @@ import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
 import { copyFromLine, eventCopyOf, freePriceWords, formatHundredths } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
+import { forumPublicOn } from '@beanpool/core';
 import { learnHomeLines, type HomeLearnCard } from '@beanpool/core';
 import { FIRST_STEPS_WORDS, firstStepsLeft, firstStepsOver, welcomeDrawn } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
@@ -376,7 +377,14 @@ export const frameOf = (a: HomeAnswer) => ({
 export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts: ShownOptions = {}): HomeCardInstance[] {
     const now = opts.now ?? Date.now();
     if (answer.welcome || !answer.me) {
-        return HOME_CARD_IDS.filter(id => VISITOR_CARDS.includes(id) && !!answer.cards[id as keyof HomeCards]).map(id => ({ id, type: id }));
+        const cards: HomeCardInstance[] = HOME_CARD_IDS.filter(id => VISITOR_CARDS.includes(id) && !!answer.cards[id as keyof HomeCards]).map(id => ({ id, type: id }));
+        // "From the forum" (slice F7) where anyone may read the forum: third, after "Near you" and "What people post". The page
+        // reads it itself (components/forum/ForumVisitorHome.tsx) and draws it only with something in it.
+        if (forumPublicOn(answer.features)) {
+            const after = cards.findIndex(c => c.type === 'market') + 1 || cards.findIndex(c => c.type === 'find') + 1;
+            cards.splice(after, 0, { id: 'forum', type: 'forum' });
+        }
+        return cards;
     }
     const me = answer.me;
     const has = ({ type, settings }: HomeCardInstance): boolean => {

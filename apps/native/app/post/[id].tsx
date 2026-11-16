@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyb
 import { useKeepCaretVisible } from '../../components/useKeepCaretVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
+import { leaveScreen } from '../../utils/leave-screen';
 
 export { ErrorBoundary };
 import { Picker } from '@react-native-picker/picker';
@@ -997,7 +998,7 @@ function PostDetailModal() {
         return (
             <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
                 <Text style={styles.errorText} testID="post-missing-line">{missingListingLine(cameFor)}</Text>
-                <Pressable accessibilityRole="button" onPress={() => { if (cameFor) router.replace('/(tabs)/market'); else if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); }} style={styles.closeBtn}>
+                <Pressable accessibilityRole="button" onPress={() => { if (cameFor) router.replace('/(tabs)/market'); else leaveScreen(router, 'post/[id]'); }} style={styles.closeBtn}>
                     <Text style={styles.closeBtnText}>{t('Return to Market')}</Text>
                 </Pressable>
             </View>
@@ -1012,7 +1013,7 @@ function PostDetailModal() {
     // own card, as the web's is (MarketplacePage setSelectedPost), under this screen's Back: its answers, its Close Poll and its
     // ··· are here, and its author's name opens their profile (a profile from inside the item, Marty 4 Nov).
     if (post.type === 'poll') {
-        const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
+        const leave = () => leaveScreen(router, 'post/[id]');
         return (
             <View style={[styles.container, { paddingTop: insets.top }]} testID="poll-page">
                 <View style={styles.header}>
@@ -1527,7 +1528,7 @@ function PostDetailModal() {
                 setDeleting(true);
                 try {
                     await deletePost(post.id);
-                    if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
+                    leaveScreen(router, 'post/[id]');
                 } catch (e: any) {
                     // The node's own sentence (a deal in escrow, its words in the member's language), or db.ts's "Offline or anchor node
                     // unreachable: …" for a send that never got an answer; "Failed to delete post" only when the error says nothing.
@@ -1673,7 +1674,7 @@ function PostDetailModal() {
         });
     };
 
-    const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
+    const goBack = () => leaveScreen(router, 'post/[id]');
 
     // The peer's part of the page, as one condition (it was one block): the rating with the action, Message in the quiet row,
     // the convenor's box and Report at the foot. Message is not drawn where the deal's own box has it (a deal pending to them).
@@ -2002,12 +2003,12 @@ function PostDetailModal() {
                                         setAccepting(true);
                                         try {
                                             await cancelMarketplaceTransaction(txToCancel, identity.publicKey);
-                                            if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
+                                            leaveScreen(router, 'post/[id]');
                                         } catch(e:any) { 
                                             if (changedElsewhere(e, 'transaction_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This transaction was already cancelled or completed on another device. Your feed will automatically refresh.'));
                                                 requestSync().catch(console.error);
-                                                if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
+                                                leaveScreen(router, 'post/[id]');
                                             } else {
                                                 Alert.alert(t('Error'), signedRequestWords(e.message));
                                             }
@@ -2689,7 +2690,7 @@ function PostDetailModal() {
                                                             const gId = (post.target_group_id || post.targetGroupId)!;
                                                             await deleteGroupPostApi(gId, post.id);
                                                             Alert.alert(t('Post Deleted'), t('The post has been removed from the group.'), [
-                                                                { text: t('OK'), onPress: () => router.back() }
+                                                                { text: t('OK'), onPress: () => leaveScreen(router, 'post/[id]') }
                                                             ]);
                                                         } catch (e: any) {
                                                             Alert.alert(t('Error'), e?.message ? signedRequestWords(e.message) : t('Failed to delete post'));
@@ -2755,7 +2756,7 @@ function PostDetailModal() {
                                                         Alert.alert(t('User Blocked'), authorName
                                                             ? t('{name} has been blocked and removed from your feed.', { name: authorName })
                                                             : t('This user has been blocked and removed from your feed.'), [
-                                                            { text: t('OK'), onPress: () => router.back() }
+                                                            { text: t('OK'), onPress: () => leaveScreen(router, 'post/[id]') }
                                                         ]);
                                                     } catch (e) {
                                                         Alert.alert(t('Error'), t('Failed to block user. Please try again.'));
@@ -2859,11 +2860,11 @@ function PostDetailModal() {
                     targetCallsign={promptReviewForTx.targetCallsign}
                     onClose={() => {
                         setPromptReviewForTx(null);
-                        if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
+                        leaveScreen(router, 'post/[id]');
                     }}
                     onSuccess={() => {
                         setPromptReviewForTx(null);
-                        if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
+                        leaveScreen(router, 'post/[id]');
                     }}
                 />
             )}

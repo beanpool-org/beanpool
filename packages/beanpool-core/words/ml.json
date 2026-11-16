@@ -2716,6 +2716,9 @@
   "Refresh your {provider} copy": "നിങ്ങളുടെ {provider} പകർപ്പ് പുതുക്കുക",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} പുതുക്കി. ഇതുപയോഗിച്ച് സൈൻ ഇൻ ചെയ്താൽ, ഒന്നും ടൈപ്പ് ചെയ്യാതെ ഈ അക്കൗണ്ട് തിരികെ വരും.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} പുതുക്കാനായില്ല, അതിനാൽ ഒന്നും മാറിയില്ല. ഒരു മിനിറ്റിനുശേഷം വീണ്ടും ശ്രമിക്കുക.",
+  "From the forum": "ഫോറത്തിൽ നിന്ന്",
+  "Join to reply": "മറുപടി നൽകാൻ ചേരുക",
+  "No topics here yet. Join to start the first one.": "ഇവിടെ ഇതുവരെ വിഷയങ്ങളൊന്നുമില്ല. ആദ്യത്തേത് തുടങ്ങാൻ ചേരുക.",
   "Type a tag": "ഒരു ടാഗ് എഴുതുക",
   "Tags help people find this page in Learn. Everyone can see them.": "പഠിക്കുക എന്നതിൽ ഈ പേജ് കണ്ടെത്താൻ ടാഗുകൾ ആളുകളെ സഹായിക്കുന്നു. എല്ലാവർക്കും അവ കാണാം.",
   "Search Learn for {tag}": "പഠിക്കുക എന്നതിൽ {tag} തിരയുക"

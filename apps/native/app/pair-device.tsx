@@ -28,6 +28,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { claimRouteFor, parseClaimLink } from '../utils/claim-link';
 import * as Haptics from 'expo-haptics';
 
@@ -107,8 +108,7 @@ export default function PairDeviceScreen() {
 
     /** ✕ and Done: back where the member was, or the tabs when this screen is the only one (a cold start from the camera app). */
     function leave() {
-        if (router.canGoBack()) router.back();
-        else router.replace('/(tabs)');
+        leaveScreen(router, 'pair-device');
     }
 
     // A phone's copy of the account with no name: the sheet shows, and the account carries, the name its member record

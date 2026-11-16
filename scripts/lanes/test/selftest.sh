@@ -131,8 +131,8 @@ FAKE_GH_PR=42; print 3 > "$FAKE_STATE/comments"
 { review feat/x; } >> "$LOG" 2>&1
 show
 check "CLEAN=1"                                  [ "$CLEAN" = 1 ]
-check "deciding model was probed first"          grep -q "probe 1 model=claude-fable-5-1" "$FAKE_STATE/claude.calls"
-check "deciding pass ran on claude-fable-5-1, permission-mode auto, stream-json --verbose" grep -q "^run 1 model=claude-fable-5-1 .*perm=auto format=stream-json verbose=yes" "$FAKE_STATE/claude.calls"
+check "deciding model was probed first"          grep -q "probe 1 model=claude-opus-5-5" "$FAKE_STATE/claude.calls"
+check "deciding pass ran on claude-opus-5-5, permission-mode auto, stream-json --verbose" grep -q "^run 1 model=claude-opus-5-5 .*perm=auto format=stream-json verbose=yes" "$FAKE_STATE/claude.calls"
 check "decide lock released"                     [ ! -e "$LANE_LOCK_DIR/decide.lock" ]
 
 scenario "10. deciding pass that finds new defects → NOT clean, nothing merged"
@@ -698,7 +698,7 @@ check "GitHub had not been read when the pass started" [ "$(cat "$FAKE_STATE/ci-
 check "the lane read it three times after the pass" [ "$(reads aaa1)" = 3 ]
 check "the wait shows in the log, after the pass" [ "$(line_of 'CCR-feat/x-3 exit')" -lt "$(line_of 'waiting for GitHub on #42, head aaa1: pending (poll 1 of 6)')" ]
 check "no CI read happened inside the slot"      [ ! -e "$FAKE_STATE/ci-read-in-the-slot" ]
-check "the model was probed first"               grep -q "probe 1 model=claude-fable-5-1" "$FAKE_STATE/claude.calls"
+check "the model was probed first"               grep -q "probe 1 model=claude-opus-5-5" "$FAKE_STATE/claude.calls"
 check "the brief says CI may still be running"   brief_has claude.prompt-1 "may still be running on it"
 check "... do not wait, do not poll, do not claim" brief_has claude.prompt-1 "Do not wait for it, do not poll it, and do not claim CI passed"
 check "... names the head, and asserts no green"  eval 'brief_has claude.prompt-1 "head aaa1" && ! brief_has claude.prompt-1 "GREEN"'

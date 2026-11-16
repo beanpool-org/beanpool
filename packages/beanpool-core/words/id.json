@@ -2598,6 +2598,9 @@
   "Refresh your {provider} copy": "Segarkan salinan {provider}-mu",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} sudah disegarkan. Masuk dengannya mengembalikan akun ini, tanpa perlu mengetik apa pun.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Tidak bisa menyegarkan {provider}, jadi tidak ada yang berubah. Coba lagi dalam satu menit.",
+  "From the forum": "Dari forum",
+  "Join to reply": "Gabung untuk membalas",
+  "No topics here yet. Join to start the first one.": "Belum ada topik di sini. Gabung untuk memulai yang pertama.",
   "Type a tag": "Ketik tag",
   "Tags help people find this page in Learn. Everyone can see them.": "Tag membantu orang menemukan halaman ini di Belajar. Semua orang bisa melihatnya.",
   "Search Learn for {tag}": "Cari {tag} di Belajar"

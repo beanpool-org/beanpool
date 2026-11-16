@@ -283,7 +283,7 @@ lane_model(){ # ROLE BACKEND → model id. Per-run env override first, then this
       agy:build|agy:review) v=gemini-4-hydrogen-high;;
       claude:build)         v=claude-opus-5;;
       claude:review)        v=claude-sonnet-5-5;;
-      claude:decide)        v=claude-fable-5-1;;
+      claude:decide)        v=claude-opus-5-5;;
       agy:decide) log "⚠ no deciding model for agy — set LANE_DECIDE_MODEL or $mf; refusing to guess" >&2; return 1;;
     esac
   fi

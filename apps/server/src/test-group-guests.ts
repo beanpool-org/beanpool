@@ -30,7 +30,8 @@
  *      table holds every path; the owners' switch is 16
  *  13  back from epoch-stale: a guest's refused epoch or line -> the roster follows to their home alone, with the current
  *      epoch (stale, or its record and their home's wraps); the epoch they make from it goes in, and so does the line they
- *      send again under the key they open from it; two refusals in one request -> one roster
+ *      send again under the key they open from it; two refusals in one request -> one roster; 13f the same items brought
+ *      again (their home never heard the answer) -> each hears the refusal it was given, never "received", nothing taken twice
  *  14  close the class: every kind a guest's home brings x a guest whose card says a member's name -> every notice it makes
  *      says "Ana · a.example · guest", never "Ana" alone
  *  15  each home on its own: while one home doesn't answer, another gets its line at once; a row queued during a send goes
@@ -713,7 +714,8 @@ async function main(): Promise<void> {
         && ep13.wraps.length > 0 && ep13.wraps.every((w: any) => homeGuests('a.example').includes(w.recipient)) && !!opened13 && Buffer.from(opened13).equals(Buffer.from(s4.groupKey)),
         `13c. her line under the epoch before: epoch-stale, and the roster follows with the current epoch and her home's wraps only; she opens its key (got ${JSON.stringify(r13c.body)}, ${JSON.stringify(ep13 && { current: ep13.current, stale: ep13.stale, wraps: ep13.wraps?.length })})`);
     const again13 = lineIn(gwen, S, opened13 ?? s4.groupKey, s4.record.epoch);
-    const r13d = await bring([await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(again13))]);
+    const item13d = await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(again13));
+    const r13d = await bring([item13d]);
     assert(r13d.body?.items?.[0]?.received === true && !!db.prepare('SELECT 1 FROM messages WHERE id = ?').get(again13.clientId), '13d. sent again under it, her line goes in');
     // Two items in one request, each with its own time from one reading of the clock.
     const t13e = Date.now();
@@ -722,6 +724,16 @@ async function main(): Promise<void> {
     const r13e = await bring([first13e, second13e]);
     assert(r13e.body?.items?.every((i: any) => i.refused === 'epoch-stale') && outsOf('roster', t13e).filter((o) => o.body.group === S).length === 1,
         `13e. two refused in one request: one roster follows, not two (got ${outsOf('roster', t13e).filter((o) => o.body.group === S).length})`);
+    // Her home never heard those answers and brings the same items again (G2 round 2, #3246 round 2 note: a home settles a
+    // received item `sent`, so a refused epoch would read as taken): each hears the refusal it was given, the line taken
+    // before still hears received, nothing is taken twice, and no second roster follows.
+    const t13f = Date.now();
+    const msgs13f = (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(S) as { n: number }).n;
+    const r13f = await bring([first13e, second13e, item13d]);
+    const msgsAfter13f = (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(S) as { n: number }).n;
+    const got13f = (r13f.body?.items ?? []).map((i: any) => i.refused ?? (i.received ? 'received' : '?')).join(', ');
+    assert(r13f.status === 202 && got13f === 'epoch-stale, epoch-stale, received' && msgsAfter13f === msgs13f && outsOf('roster', t13f).filter((o) => o.body.group === S).length === 0,
+        `13f. the same items brought again: each hears what it heard the first time (epoch-stale, epoch-stale, received; got ${got13f}), nothing taken twice (${msgs13f} -> ${msgsAfter13f}), no roster follows`);
 
     // ── 14. Every notice a guest's action makes names them as a guest, with their community ─
     console.log('\n14. Every notice a guest\'s action can make shows their community, never their card\'s name alone');

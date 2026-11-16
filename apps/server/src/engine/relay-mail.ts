@@ -36,7 +36,8 @@
  * learns how many devices fetch a member's mail and when each last asked; nothing of doors, requests or accepts. Nothing is
  * held past MAIL_HELD_DAYS. A replay dies on its sender and id (relay_mail_seen, MAIL_SEEN_MS),
  * and an item older than MAIL_ITEM_MAX_AGE_MS by its sender's clock, or dated more than MAIL_ITEM_MAX_AHEAD_MS ahead, is
- * stale, so none outlives the ids kept against it.
+ * stale, so none outlives the ids kept against it. A guest's group item refused here keeps its refusal as long as its id
+ * (relay_mail_refused), and its server bringing it again hears that refusal, never "received" (G2 round 2).
  *
  * **Never copied.** The five tables are `local` (engine/replication-manifest.ts), and every snapshot and backup file is
  * made without them (forgetRelayMailInCopy, from services/address-retention.ts). The files are never in the image store.
@@ -267,6 +268,15 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
         const at = answerAt.get(`${item.envelope.senderKey}\n${item.envelope.itemId}`);
         if (at !== undefined) answers[at] = { itemId: item.envelope.itemId, refused };
     }
+    // A guest's group item brought again by the server that brought it first (it never heard the answer): the refusal it
+    // was given then, never "received", which its home would settle `sent` (relay_mail_refused). Nothing is taken again.
+    const keptRefusal = db.prepare('SELECT refused FROM relay_mail_refused WHERE sender_key = ? AND item_id = ? AND sender_home = ?').pluck();
+    for (const item of fresh) {
+        if (newItems.includes(item) || !forGroupHere(item.envelope)) continue;
+        const refused = keptRefusal.get(item.envelope.senderKey, item.envelope.itemId, origin) as GuestItemRefusal | undefined;
+        const at = answerAt.get(`${item.envelope.senderKey}\n${item.envelope.itemId}`);
+        if (refused && at !== undefined) answers[at] = { itemId: item.envelope.itemId, refused };
+    }
     return { status: 202, body: { items: answers } };
 }
 
@@ -285,7 +295,13 @@ function takeItem(origin: string, item: RelayItem, now: number): GuestItemRefusa
     }
     if (forGroupHere(env)) {
         try {
-            return takeGuestItem(item, now);
+            const refused = takeGuestItem(item, now);
+            // Kept as long as the id is spent, so the same item brought again hears the same (receiveRelayItems).
+            if (refused) {
+                db.prepare(`INSERT INTO relay_mail_refused (sender_key, item_id, sender_home, refused, seen_at) VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT (sender_key, item_id) DO NOTHING`).run(env.senderKey, env.itemId, origin, refused, now);
+            }
+            return refused;
         } catch (e) {
             logger.warn('SYS', `Mail from another community: a guest's group item could not be taken (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
             return null;
@@ -544,5 +560,6 @@ export function sweepRelayMail(now = Date.now()): { expired: number; gone: numbe
     db.prepare(`DELETE FROM relay_mail_got WHERE NOT EXISTS (SELECT 1 FROM relay_mail m WHERE m.recipient = relay_mail_got.recipient
                 AND m.item_id = relay_mail_got.item_id)`).run();
     const seen = db.prepare('DELETE FROM relay_mail_seen WHERE seen_at < ?').run(now - MAIL_SEEN_MS).changes;
+    db.prepare('DELETE FROM relay_mail_refused WHERE seen_at < ?').run(now - MAIL_SEEN_MS);
     return { expired, gone, seen, devices };
 }

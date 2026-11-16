@@ -4050,6 +4050,22 @@ CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_home ON relay_mail_seen(sender_ho
 CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_stranger ON relay_mail_seen(sender_key, stranger_to, seen_at);
 CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_at ON relay_mail_seen(seen_at);
 
+-- relay_mail_refused: the refusal a guest's group item was given here (engine/group-guests.ts takeGuestItem: `epoch-stale`,
+-- `group-refused`), by its sender and id, for as long as relay_mail_seen keeps that id spent (7 days). Its home bringing the
+-- same item again (it never heard the answer) is given the same refusal, never "received": a guest's home settles a
+-- received item `sent`, and the guest's device would seal lines under an epoch this server never took (G2 round 2, #3246
+-- round 2 note). Answered only to the server that brought it the first time. This server's own (`local`), as
+-- relay_mail_seen is. Day zero: a new table, nothing converted.
+CREATE TABLE IF NOT EXISTS relay_mail_refused (
+    sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
+    item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 1 AND 64),
+    sender_home TEXT NOT NULL CHECK (length(sender_home) BETWEEN 1 AND 260),
+    refused     TEXT NOT NULL CHECK (refused IN ('epoch-stale', 'group-refused')),
+    seen_at     INTEGER NOT NULL,
+    PRIMARY KEY (sender_key, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_refused_at ON relay_mail_refused(seen_at);
+
 -- relay_outbox: an item a member here sent to someone in another community, and what became of it: `queued` (the other
 -- server has not taken it yet; retried with backoff for 24 hours), `sent` (it answered 2xx), `delivered` (the recipient's
 -- device confirmed it: their signed receipt came back), `failed` (24 hours and never taken), `expired` (sent, and no receipt

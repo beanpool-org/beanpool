@@ -2,7 +2,7 @@
 slug: privacy
 title: Gizliliğiniz
 summary: Başkalarının sizin hakkınızda neleri görebileceği ve bunu denetleyen ayarlar.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Diğer üyelerin sizin hakkınızda neleri görebileceği ve bunu denetleyen anahtarlar.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Topluluğunuzun sunucusunu işleten sahipler ve yöneticiler orada nelerin sakla
 - **Bölgeniz** (küresel toplulukta): Ayarlar'da, **Bölgeniz** altında, verdiğiniz bölgeyi (bir kasabanın çevresinde yaklaşık 10 km veya iki sayı) veya **Ayarlanmadı** ifadesini görün. **Temizle** onu kaldırır. Altındaki **Yaklaşık olarak neredesin?**, **Konumumu kullan** veya **Bir kasaba veya semt yaz** ile yeni bir bölge belirler; **İptal** (bir tarayıcıda **← Ayarlar'a Geri Dön**) ise olduğu gibi bırakır. Yalnızca yuvarlanmış bölge gönderilir. Diğer üyeler ne kadar uzakta olduğunuzu görür ve yaptığınız bir anket bölgenizde gösterilir. Bir bölgeniz olmadan dünya çapındaki en yeni ilanları görürsünüz ve yakındaki üyeler yaptığınız bir anketi listelerinde göremez; ancak yine de arayarak bulabilirler. "Bölgeniz" bölümüne bakın.
 - **Uygulama Kilidi:** uygulama açıldığında ve 15 saniye veya daha uzun süre uzakta kaldıktan sonra geri döndüğünüzde telefonunuzun ekran kilidini (PIN, desen, şifre, parmak izi veya yüz) ister. Kilit, uygulamanın ekranlarını ve açılır pencerelerini kapsar. Bir iPhone'da, uygulamanın açtığı bir web sayfasını da kapatır; örneğin **Yönet** üzerinden açılan topluluğunuzun Ayarlarını. Uygulamanın bir Android telefonda açtığı (uygulamanın dışında açılan) bir web sayfasını veya her iki telefonda da bir şey paylaşma panelini kapsayamaz: telefonunuzu elinizden bırakmadan önce bunları kapatın. **Yönet** üzerinden açılan topluluğunuzun Ayarları, kullanılmadığında 15 dakika sonra oturumunuzu kapatır. Uygulama Kilidi açıkken, uygulamadan ayrıldığınızda ekran kararır ve geri döndüğünüzde tekrar gelir. Telefonda bir ekran kilidine ihtiyaç duyar: kilit olmadan isteyebileceği hiçbir şey yoktur.
 - **Kanallar:** Nabız'da paylaştığınız her şey, topluluğunuzdaki herkese adınızla birlikte gösterilir. "Kanallarınızı paylaşma" bölümüne bakın.
+- **Diğer topluluklardaki kişiler:** adres kartınızın altındaki **Diğer topluluklardaki kişiler beni adımla bulabilir** anahtarını açmadıkça başka bir topluluktan hiç kimse sizi adınızla bulamaz. Siz açana kadar kapalıdır. O zaman bile adınızı tam olarak yazmaları gerekir: kimse bir liste görmez. Kart ve anahtar yalnızca topluluğunuzun diğer topluluklardan mesaj aldığı yerde bulunur. "Diğer topluluklardaki kişiler" bölümüne bakın.
 
 ## Başka kimler neleri görebilir
 

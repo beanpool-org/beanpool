@@ -24,7 +24,7 @@ Dans l'application web, il s'agit de l'onglet **Chat**. Il regroupe toutes vos d
 ## Démarrer une discussion
 
 - Depuis un profil : ouvrez son profil et touchez **Message**. Vous pouvez aussi l'y ajouter comme ami.
-- Depuis **Chat** : touchez le bouton du crayon, puis trouvez la personne par son nom. Sur la communauté mondiale, Nouveau message liste les membres avec qui vous avez déjà conclu un accord ainsi que vos amis. Pour trouver n'importe qui d'autre, saisissez au moins 2 lettres de son nom.
+- Depuis **Chat** : touchez le bouton du crayon, puis trouvez la personne par son nom. Sur la communauté mondiale, Nouveau message liste les membres avec qui vous avez déjà conclu un accord ainsi que vos amis. Pour trouver n'importe qui d'autre, saisissez au moins 2 lettres de son nom. Pour écrire à quelqu'un qui appartient à une autre communauté, voir « Personnes d'autres communautés ».
 - Depuis la liste des membres : ouvrez **Chat**, puis **Membres**, et touchez 💬 à côté du nom d'un membre dans **Communauté** ou **Amis**.
 - Depuis une annonce : touchez **Message** suivi du nom de la personne.
 

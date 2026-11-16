@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Yerel bilgi
 summary: Öğren, topluluğunuzun bilmeye değer şeyler rafı: bir sayfayı bulmak, bir sayfa önermek, doğru tutmak ve bir sahibin ya da yöneticinin her birini nasıl kontrol ettiği.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## Nedir
@@ -45,6 +45,14 @@ Her sayfa aynı satırla biter: "Yerel bilgiyi üyeler yazar. Güvenmeden önce 
 ## Bu işime yaradı
 
 Bir sayfa işinize yaradıysa **👍 Bu işime yaradı**'ya dokunun. Geri almak için tekrar dokunun. Sayfa, kaç üyeye yaradığını gösterir, örneğin **12 kişiye yaradı**, ve kimlere olduğunu asla göstermez. Kendi sayfanızda buna dokunamazsınız.
+
+## Yerel rehber
+
+Şu anda Öğren'de bulunan ve her biri en az 3 üyeye yarayan 3 sayfa yazmış bir üyede **🗺️ Yerel rehber** görünür: sayfalarının **Yazan** satırında ve profilinde. Yapay zekâ yardımcısıyla derlenen sayfalar sayılmaz. Sayfaları kaldırılırsa ya da Öğren kapatılırsa bu da kalkar. Yalnızca bir teşekkürdür: Fasulye vermez ve kimseye fazladan bir şey yapma imkânı tanımaz.
+
+## Yazara teşekkür etmek
+
+Başka birinin yazdığı bir sayfanın altında, onun adının geçtiği düğmeye dokunun, örneğin **🫘 Ada kişisine teşekkür et**. Bu, Defter'in Fasulye göndermek için kullanılan olağan formunu açar; yazar seçilmiş ve **“Kasabaya otobüs” için teşekkürler** gibi bir not doldurulmuş olarak. Miktarı ya da notu değiştirin, sonra kendi Fasulyenizden yaptığınız herhangi bir hediye gibi gönderin. Başka hiç kimse bir şey ödemez. Düğme yalnızca topluluğunuzun Fasulye kullandığı yerde görünür; yapay zekâ yardımcısıyla derlenen bir sayfada görünmez. "Hediye gönderme" bölümüne bakın.
 
 ## Bir sayfa önermek
 

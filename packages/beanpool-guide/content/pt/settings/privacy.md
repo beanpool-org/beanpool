@@ -2,7 +2,7 @@
 slug: privacy
 title: Sua privacidade
 summary: O que os outros podem ver sobre você e as configurações que controlam isso.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: O que outros membros podem ver sobre você e as opções que controlam isso.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Os proprietários e administradores que operam o servidor da sua comunidade aind
 - **Sua área** (na comunidade global): nas Configurações, em **Sua área**, veja a região definida, cerca de 10 km em torno de uma cidade ou de duas coordenadas, ou **Não definida**. O botão **Limpar** remove essa definição. Abaixo, **Mais ou menos onde você está?** define uma nova área com **Usar minha localização** ou **Digite uma cidade ou bairro**, e **Cancelar** (no navegador, **← Voltar para Configurações**) mantém como está. Apenas a área aproximada é transmitida. Outros membros veem a que distância você está, e uma enquete que você cria é exibida na sua área. Sem ela, você vê as publicações mais recentes do mundo todo, e os membros próximos não verão uma enquete sua na lista deles, embora ainda possam encontrá-la pela busca. Veja "Sua área".
 - **Bloqueio do aplicativo:** solicita o bloqueio de tela do celular (PIN, padrão, senha, impressão digital ou reconhecimento facial) quando o app abre e quando você retorna a ele após 15 segundos ou mais de ausência. O bloqueio protege as telas e avisos do app. No iPhone, ele também fecha uma página web que o app abriu, como as Configurações da comunidade a partir de **Gerenciar**. Ele não consegue cobrir uma página web aberta pelo app em um celular Android, que abre fora do aplicativo, nem o painel de compartilhamento em qualquer um dos dois sistemas: feche-os antes de pousar o celular. As Configurações da comunidade, abertas em **Gerenciar**, encerram a sessão após 15 minutos sem uso. Com o Bloqueio do aplicativo ativado, a tela fica em branco ao sair do app e retorna quando você volta. Ele necessita de um bloqueio de tela configurado no celular: sem ele, não há o que solicitar.
 - **Canais:** tudo o que você compartilha no Pulso é exibido com o seu nome para todos na comunidade. Veja "Compartilhando seus canais".
+- **Pessoas de outras comunidades:** ninguém de outra comunidade consegue encontrar você pelo nome, a não ser que você ative **Pessoas de outras comunidades podem me encontrar pelo nome**, abaixo do seu cartão de endereço. Fica desligado até você ativar. Mesmo assim, a pessoa precisa digitar seu nome exato: ninguém vê uma lista. O cartão e essa opção só aparecem onde a sua comunidade recebe mensagens de outras comunidades. Veja "Pessoas de outras comunidades".
 
 ## Quem mais pode ver as informações
 

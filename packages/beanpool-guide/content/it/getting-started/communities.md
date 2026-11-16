@@ -71,7 +71,7 @@ Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Comu
 
 Una comunità può rispondere a più di un indirizzo, e i suoi proprietari scelgono quale sia il suo indirizzo principale.
 
-- **Sul telefono non devi fare nulla.** Il tuo telefono controlla da solo gli indirizzi della tua comunità e passa a quello principale appena ha risposto con la chiave della tua comunità. Se l'indirizzo che usa il tuo telefono smette di rispondere, per ora ne usa un altro della tua comunità e torna indietro appena il principale risponde. La Home lo dice in una riga, una volta sola. Nient'altro cambia: i tuoi messaggi e tutto ciò che il telefono conserva per la comunità restano dove sono.
+- **Sul telefono non devi fare nulla.** Il tuo telefono controlla da solo gli indirizzi della tua comunità e passa a quello principale appena ha risposto con la chiave della tua comunità. Se l'indirizzo che usa il tuo telefono smette di rispondere, o non risponde più come la tua comunità, ne usa un altro che ha risposto con quella chiave e torna indietro appena il principale risponde. La Home lo dice in una riga, una volta sola. Se nessuno l'ha fatto, resta dov'è. Nient'altro cambia, nemmeno i tuoi messaggi.
 - **Nell'app web,** il tuo accesso appartiene all'indirizzo che hai aperto, quindi l'app web resta lì e continua a funzionare. Una riga discreta in alto indica l'indirizzo principale. Tocca **Aprila lì** per andarci, poi accedi lì con **Collega questo browser dal tuo telefono**, oppure con il tuo accesso o le tue 12 parole.
 
 ## Dimenticare una comunità su questo telefono

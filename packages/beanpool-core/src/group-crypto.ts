@@ -768,6 +768,19 @@ export function sealGroupLine(text: string, input: SealGroupLineInput, opts?: Gr
     return sealGroupContent(utf8ToBytes(text), input, GROUP_LINE_PARTS, opts);
 }
 
+/** What sealGroupLineEdit needs besides the new words: the line's own epoch, key and id, and what the line answers. */
+export type SealGroupLineEditInput = Omit<SealGroupLineInput, 'part' | 'after'>;
+
+/**
+ * Seal an edit of my line as every app seals one (editSealedGroupLine on the phone and the web app, §7.4): under the line's
+ * OWN epoch and key, as part 'edit', after the line's own id, still answering what the line answered. The one place an
+ * edit's binding is made: whoever opens an edited line's words opens them as part 'edit' (members: group-line-display;
+ * a guest's device: group-guest-chat.ts), and core's guest tests seal their edits here, never by hand (#3246 round 5).
+ */
+export function sealGroupLineEdit(text: string, input: SealGroupLineEditInput, opts?: GroupCryptoRandom): GroupLinePayload {
+    return sealGroupLine(text, { ...input, part: 'edit', after: input.messageId, replyToId: input.replyToId ?? null }, opts);
+}
+
 /** sealGroupLine's signature and seal, around any part's bytes, for a part among `parts`. */
 function sealGroupContent(content: Uint8Array, input: SealGroupLineInput, parts: readonly GroupLinePart[], opts?: GroupCryptoRandom): GroupLinePayload {
     if (!UUID_V4.test(input.messageId)) throw new Error('A line is sealed under its own lower-case UUID v4.');

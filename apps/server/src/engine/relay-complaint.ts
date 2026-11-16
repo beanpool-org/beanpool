@@ -63,6 +63,7 @@ import { db } from '../db/db.js';
 import { getNodeRole, isNodeMember, readsAsMember } from '../state-engine.js';
 import { addBlocks, BlockRefusal, hasBlocked } from './member-blocks.js';
 import { isOwnNodeHome } from './node-key.js';
+import { isServerBlocked } from '../connector-manager.js';
 import { NODE_BUSY_RETRY_AFTER_SEC, keptNodeKeyDocument, originKeyStanding, type NodeOrigin } from './node-signature.js';
 import { GroupLineReportError, guestLineComplaint, type GroupLineReport } from './group-chat-report.js';
 import { outsideMessagesOn, RELAY_LINE_MAX_CHARS } from './relay-mail.js';
@@ -224,9 +225,12 @@ export function toldAfter(status: number, sinceCreated: number): ToldState {
     return 'queued';
 }
 
-/** One complaint to its home, and its state after ({@link toldAfter}). */
+/**
+ * One complaint to its home, and its state after ({@link toldAfter}). Never to a server the owners blocked (the connector's
+ * `blocked` level): nothing goes there, so the complaint is `failed`, and the report stays with the moderators here.
+ */
 async function tell(row: QueuedRow, told: Told, createdAt: number): Promise<Told['state']> {
-    const complaint = complaintOf(row, told);
+    const complaint = isServerBlocked(row.target_home) ? null : complaintOf(row, told);
     if (!complaint) {
         setTold(row.id, { ...told, state: 'failed', next: null });
         return 'failed';
@@ -240,8 +244,12 @@ async function tell(row: QueuedRow, told: Told, createdAt: number): Promise<Told
     return state;
 }
 
-/** Tell the sender's home of one report now (the report route, after filing). */
+/**
+ * Tell the sender's home of one report now (the report route, after filing). Never from a standby, as retryComplaints
+ * never is: a report it filed stays `queued`, told by its own minute timer once it is promoted.
+ */
 export async function tellHomeOf(reportId: string): Promise<void> {
+    if (getNodeRole() === 'backup') return;
     const row = db.prepare(`SELECT id, target_pubkey, target_home, reason, disclosure, created_at FROM abuse_reports WHERE id = ? AND ${TELLS_HOME}`)
         .get(reportId) as (QueuedRow & { created_at: string }) | undefined;
     const told = row ? toldOf(row.disclosure) : null;

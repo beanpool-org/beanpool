@@ -53,7 +53,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, buildNodeRequestHeaders, dmPublicKeyOf, makeGroupEpochRecord, nodeRequestSignatureVerifies,
+    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, buildNodeRequestHeaders, dmPublicKeyOf, groupMessageKey, makeGroupEpochRecord, nodeRequestSignatureVerifies,
     openMyGroupKey, parseNodeRequestHeader, readNodeKeyDocument, relayPayloadHash, sealGroupLine, signAddressCard, signNodeKeyDocument,
     signRelayEnvelope, type GroupEpochReason, type GroupEpochRecord, type RelayItem, type RelayItemKind,
 } from '@beanpool/core';
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
 
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine, seedGenesisMember, createGroup, exportSyncState, removeGroupMemberByVote, purgeMemberSelf, setUserStatusRow, adminPruneUser, COMMUNITY_DECISION_ACTOR } = await import('./state-engine.js');
+    const { initStateEngine, seedGenesisMember, createGroup, exportSyncState, removeGroupMemberByVote, purgeMemberSelf, setUserStatusRow, adminPruneUser, closeGroupByVote, COMMUNITY_DECISION_ACTOR } = await import('./state-engine.js');
     const { issueRekeyCode, cancelRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const { setNodeRole } = await import('./config/node-role.js');
     const { startHttpsServer } = await import('./https-server.js');
@@ -911,6 +911,150 @@ async function main(): Promise<void> {
         refusing.delete(AH);
         await guests?.flushGuestOutbox(Date.now() + backoffOver);
     }
+
+    // ── 18. Close the class: what crosses x where the guest stands (G1b part 2) ─────────────
+    console.log('\n18. Close the class: every item that crosses (a guest\'s, a member\'s change, a report) x where the guest stands');
+    const { addConnector, removeConnector } = await import('./connector-manager.js');
+    type St18 = 'accepted' | 'blocked host' | 'removed guest' | 'closed group' | 'standby';
+    const STANDINGS18: St18[] = ['accepted', 'blocked host', 'removed guest', 'closed group', 'standby'];
+    const KINDS18 = ['guest line', 'guest leave', 'no once in', 'yes once in', 'member line', 'member edit', 'author delete', 'convenor removal', 'invite', 'report'] as const;
+    type K18 = (typeof KINDS18)[number];
+    /**
+     * What each item comes to: [kind][standing]. On a standby (checked on every standby row too): no guest's item is taken,
+     * no guest row is written, nothing is queued for or sent to another community. A member's own write there (a line, an
+     * edit, a report) is the routes' existing business, unchanged here, so the digest leaves messages and reports out.
+     */
+    const WANT18: Record<K18, Record<St18, string>> = {
+        //                   accepted                         blocked host               removed guest             closed group              standby
+        'guest line':       { accepted: 'stored',              'blocked host': 'dropped', 'removed guest': 'dropped', 'closed group': 'dropped', standby: 'dropped' },
+        'guest leave':      { accepted: 'left',                'blocked host': 'in',      'removed guest': 'removed', 'closed group': 'removed', standby: 'in' },
+        'no once in':       { accepted: 'left',                'blocked host': 'in',      'removed guest': 'removed', 'closed group': 'removed', standby: 'in' },
+        'yes once in':      { accepted: 'in',                  'blocked host': 'in',      'removed guest': 'removed', 'closed group': 'removed', standby: 'in' },
+        'member line':      { accepted: 'line',                'blocked host': 'none',    'removed guest': 'none',    'closed group': 'none',    standby: 'none' },
+        'member edit':      { accepted: 'edit:edited',         'blocked host': 'none',    'removed guest': 'none',    'closed group': 'none',    standby: 'none' },
+        'author delete':    { accepted: 'edit:removed:author', 'blocked host': 'none',    'removed guest': 'none',    'closed group': 'none',    standby: 'none' },
+        'convenor removal': { accepted: 'edit:removed:convenor', 'blocked host': 'none',  'removed guest': 'none',    'closed group': 'none',    standby: 'none' },
+        invite:             { accepted: 'invited, told',       'blocked host': 'refused server_blocked', 'removed guest': 'invited, told', 'closed group': 'refused group_closed', standby: 'refused standby' },
+        report:             { accepted: 'filed here, told',    'blocked host': 'filed here, not told', 'removed guest': 'filed here, told', 'closed group': 'filed here, told', standby: 'filed here, queued' },
+    };
+    const standbyDigest = (g: string) => JSON.stringify([
+        db.prepare('SELECT guest_key, state, state_at FROM group_guests WHERE group_id = ? ORDER BY guest_key').all(g),
+        db.prepare("SELECT id FROM messages WHERE conversation_id = ? AND author_pubkey IN (SELECT guest_key FROM group_guests WHERE group_id = ?) ORDER BY id").all(g, g),
+        db.prepare('SELECT COUNT(*) AS n FROM group_guest_outbox').get(),
+    ]);
+    let r18 = 0;
+    let closedTold = '';
+    let closedKey = '';
+    for (const kind of KINDS18) for (const st of STANDINGS18) {
+        const n18 = ++r18;
+        const H = st === 'blocked host' ? 'c.example' : 'a.example';
+        // The row's own group: Ana convenes, M is a member, X from H says yes and is in; epoch 1 over the three; M and X
+        // each have a line under it.
+        const g = createGroup({ name: `Row ${n18}`, joinPolicy: 'open', createdBy: ana.pk }).id;
+        const m = addLocal(`M18-${n18}`);
+        db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(g, m.pk);
+        const x = newId(`X18-${n18}`);
+        await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(x, H) });
+        await bring([await item(x, H, `group:${g}`, 'group-invite', yes)], H as 'a.example' | 'c.example');
+        const e = epochBy(ana, g, 1, 'start', [ana, m, x]);
+        const stored = await call('POST', ana, `/api/groups/${g}/keys/epoch`, { epoch: e.record });
+        const mLine = lineIn(m, g, e.groupKey, 1);
+        await call('POST', m, `/api/groups/${g}/chat/message`, mLine);
+        const xId = crypto.randomUUID();
+        const xText = `the guest's words, row ${n18}`;
+        await bring([await item(x, H, `group:${g}`, 'group-line', JSON.stringify({ ...sealGroupLine(xText, { myEdPrivHex: x.seedHex, groupKey: e.groupKey, groupId: g, epoch: 1, messageId: xId }), metadata: { epoch: 1 }, clientId: xId }))], H as 'a.example' | 'c.example');
+        await settle();
+        const setupOk = stateOf(g, x) === 'in' && stored.status === 201 && !!db.prepare('SELECT 1 FROM messages WHERE id = ? AND author_pubkey = ?').get(xId, x.pk);
+        // Where X stands.
+        if (st === 'blocked host') addConnector(`${H}:4001`, 'blocked', 'Blocked', `https://${H}`, false);
+        if (st === 'removed guest') await call('DELETE', ana, `/api/groups/${g}/guests/${x.pk}`);
+        if (st === 'closed group') {
+            const t = Date.now();
+            closeGroupByVote(g, `test-close-${n18}`);
+            await settle();
+            if (!closedTold) {
+                closedTold = JSON.stringify(outsOf('removed', t).filter((o) => o.body.group === g).map((o) => [o.home, o.body.guests, o.body.data.why]));
+                closedKey = x.pk;
+            }
+        }
+        await settle();
+        if (st === 'standby') setNodeRole('backup');
+        const before = standbyDigest(g);
+        const t0 = Date.now();
+        const sentBefore = outs.length;
+        // The item.
+        let got = '';
+        const to = `group:${g}`;
+        const home18 = H as 'a.example' | 'c.example';
+        if (kind === 'guest line') {
+            const id = crypto.randomUUID();
+            await bring([await item(x, H, to, 'group-line', JSON.stringify({ ...sealGroupLine('again', { myEdPrivHex: x.seedHex, groupKey: e.groupKey, groupId: g, epoch: 1, messageId: id }), metadata: { epoch: 1 }, clientId: id }))], home18);
+            got = db.prepare('SELECT 1 FROM messages WHERE id = ?').get(id) ? 'stored' : 'dropped';
+        } else if (kind === 'guest leave' || kind === 'no once in' || kind === 'yes once in') {
+            const it = kind === 'guest leave' ? await item(x, H, to, 'group-leave', JSON.stringify({ v: 1 }))
+                : await item(x, H, to, 'group-invite', JSON.stringify({ v: 1, answer: kind === 'no once in' ? 'no' : 'yes' }));
+            await bring([it], home18);
+            got = stateOf(g, x) ?? 'none';
+        } else if (kind === 'invite') {
+            const y = newId(`Y18-${n18}`);
+            const r = await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(y, H) });
+            await settle();
+            const told = outs.slice(sentBefore).some((o) => o.home === H && o.body.kind === 'invite' && o.body.guests.includes(y.pk));
+            got = r.status === 201 && told ? 'invited, told' : r.status === 201 ? 'invited, not told' : `refused ${r.body?.code}`;
+        } else if (kind === 'report') {
+            const mk = Buffer.from(groupMessageKey(e.groupKey, xId)).toString('base64');
+            const r = await call('POST', m, `/api/groups/${g}/chat/report`, { messageId: xId, reason: 'Spam or scam', disclosure: { epoch: 1, mk } });
+            await settle();
+            const row = db.prepare('SELECT target_pubkey, target_home, disclosure FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(m.pk, xId) as { target_pubkey: string; target_home: string | null; disclosure: string } | undefined;
+            const complaint = outs.slice(sentBefore).find((o) => o.path === '/api/relay/complaint');
+            const c = complaint?.body?.complaint;
+            const toldState = row ? (JSON.parse(row.disclosure).told?.state ?? null) : null;
+            const toldOk = !!complaint && complaint.home === H && complaint.signed && c?.member === x.pk && c?.itemId === xId && c?.words === xText && c?.reason === 'spam or scam'
+                && !JSON.stringify(c).includes(m.pk) && toldState === 'sent';
+            got = !row || r.status !== 200 ? 'not filed'
+                : row.target_pubkey !== x.pk || row.target_home !== H ? `filed wrong (${row.target_home})`
+                : toldOk ? 'filed here, told' : !complaint && toldState === 'failed' ? 'filed here, not told' : !complaint && toldState === 'queued' ? 'filed here, queued'
+                : `filed here, told wrongly (${toldState}, ${JSON.stringify(c)})`;
+        } else {
+            if (kind === 'member line') await call('POST', m, `/api/groups/${g}/chat/message`, lineIn(m, g, e.groupKey, 1));
+            if (kind === 'member edit') await call('POST', m, '/api/messages/edit', { messageId: mLine.clientId, ...sealGroupLine('edited', { myEdPrivHex: m.seedHex, groupKey: e.groupKey, groupId: g, epoch: 1, messageId: mLine.clientId }), metadata: { epoch: 1 } });
+            if (kind === 'author delete') await call('POST', m, '/api/messages/delete', { messageId: mLine.clientId });
+            if (kind === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: xId });
+            await settle();
+            const notes = outs.slice(sentBefore).filter((o) => o.body?.group === g && (o.body.kind === 'line' || o.body.kind === 'edit'));
+            const wantId = kind === 'convenor removal' ? xId : mLine.clientId;
+            const okShape = notes.every((o) => o.home === H && o.signed && JSON.stringify(o.body.guests) === JSON.stringify([x.pk])
+                && (o.body.kind === 'line' || (o.body.data.id === wantId && (o.body.data.action === 'removed' ? !('ciphertext' in o.body.data) : typeof o.body.data.ciphertext === 'string'))));
+            got = !notes.length ? 'none' : notes.length > 1 || !okShape ? `wrong ${JSON.stringify(notes.map((o) => [o.home, o.body.kind, o.body.data]))}`
+                : notes[0].body.kind === 'line' ? 'line' : ['edit', notes[0].body.data.action, notes[0].body.data.by].filter(Boolean).join(':');
+        }
+        const standbyOk = st !== 'standby' || (standbyDigest(g) === before && outs.length === sentBefore);
+        if (st === 'standby') setNodeRole('primary');
+        if (st === 'blocked host') removeConnector(`${H}:4001`);
+        const nothingToBlocked = st !== 'blocked host' || outs.slice(sentBefore).every((o) => o.home !== H);
+        assert(setupOk && got === WANT18[kind][st] && standbyOk && nothingToBlocked && t0 > 0,
+            `18. ${kind} x ${st}: ${WANT18[kind][st]} (got ${got}${setupOk ? '' : ', setup failed'}${standbyOk ? '' : ', the standby wrote or sent'}${nothingToBlocked ? '' : ', the blocked home was sent to'})`);
+    }
+    assert(r18 === KINDS18.length * STANDINGS18.length && Object.keys(WANT18).length === KINDS18.length, `18z. the table has a row for every item and every standing (${r18} rows)`);
+    assert(!!closedKey && closedTold === JSON.stringify([['a.example', [closedKey], 'group-closed']]),
+        `18y. a group its members close removes its guests: their home is told once, why group-closed (got ${closedTold})`);
+    // The take-over 'no', by its own path: X's home lost the yes's answer and showed the invitation again; X said no there.
+    const TO = createGroup({ name: 'Take-over', joinPolicy: 'open', createdBy: ana.pk }).id;
+    const tx = newId('Tox'), ty = newId('Toy');
+    for (const [who, h] of [[tx, 'a.example'], [ty, 'c.example']] as const) {
+        await call('POST', ana, `/api/groups/${TO}/guests`, { card: await cardOf(who, h) });
+        await bring([await item(who, h, `group:${TO}`, 'group-invite', yes)], h);
+    }
+    const eTO = epochBy(ana, TO, 1, 'start', [ana, tx, ty]);
+    await call('POST', ana, `/api/groups/${TO}/keys/epoch`, { epoch: eTO.record });
+    await settle();
+    const tTO = Date.now();
+    await bring([await item(tx, 'a.example', `group:${TO}`, 'group-invite', JSON.stringify({ v: 1, answer: 'no' }))]);
+    const rosterTO = outsOf('roster', tTO).filter((o) => o.body.group === TO);
+    const keysTO = await call('GET', ana, `/api/groups/${TO}/keys`);
+    assert(stateOf(TO, tx) === 'left' && rosterTO.length === 1 && rosterTO[0].home === 'c.example' && !rosterTO[0].body.data.guests.some((gg: any) => gg.key === tx.pk)
+        && !keysTO.body?.roster?.includes(tx.pk),
+        `18x. after a take-over, a no from a guest who is in is their leave: left, out of the key roster, and the other home gets the roster without them (got ${stateOf(TO, tx)}, ${rosterTO.map((o) => o.home)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -82,7 +82,7 @@ import crypto from 'node:crypto';
 import { addressCardVerifies, word, type RelayItem } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { getNodeRole } from '../config/node-role.js';
+import { getNodeRole, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
 import { GROUP_CLOSED, groupClosedAt, isNodeMember, postGuestGroupLine } from '../state-engine.js';
 import { isServerBlocked } from '../connector-manager.js';
 import { callsignOf, groupChatRole, loadGroupForThread } from './group-thread.js';
@@ -211,6 +211,8 @@ export function listGroupGuests(groupId: string, viewer: string): GuestView[] {
  */
 export function inviteGroupGuest(groupId: string, actor: string, card: unknown): GuestView {
     if (!groupGuestsOn()) throw new GroupGuestError(403, 'guests_off', GUESTS_OFF_ERROR);
+    // group_guests is a copied table: a standby writes none of it, and tells no home (queueToHome).
+    if (getNodeRole() === 'backup') throw new GroupGuestError(503, 'standby', STANDBY_WRITE_MESSAGE);
     assertConvenor(groupId, actor);
     if (!addressCardVerifies(card)) throw new GroupGuestError(400, 'bad_card', GUEST_CARD_ERROR);
     if (isOwnNodeHome(card.home) || isNodeMember(card.key)) throw new GroupGuestError(400, 'is_member', GUEST_IS_MEMBER_ERROR);
@@ -241,6 +243,7 @@ export function inviteGroupGuest(groupId: string, actor: string, card: unknown):
  * the roster, so the epoch goes stale; their home is told (a removal naming them), and the other guests' homes the roster.
  */
 export function removeGroupGuest(groupId: string, actor: string, key: string): GuestView {
+    if (getNodeRole() === 'backup') throw new GroupGuestError(503, 'standby', STANDBY_WRITE_MESSAGE);
     assertConvenor(groupId, actor);
     const view = db.transaction((): GuestView => {
         const row = guestRow(groupId, key);

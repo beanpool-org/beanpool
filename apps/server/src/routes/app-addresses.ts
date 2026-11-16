@@ -60,10 +60,11 @@
 import Router from '@koa/router';
 import { getNodeConfig, isOwnPublicAddress, updateNodeConfig } from '../state-engine.js';
 import {
-    addressListContent, configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress,
+    configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress,
     ownerConfirmedAddresses, primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
 } from '../engine/own-addresses.js';
 import { tellMembersOfNewMain } from '../services/address-notice.js';
+import { currentAddressList } from '../services/address-list.js';
 import { getNodeRole } from '../config/node-role.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { nameStandings } from '../services/registrar-name-watch.js';
@@ -140,10 +141,13 @@ export function appAddressesReport(pageHost?: unknown) {
     if (page && ![...unconfirmed, ...heldBack].some((u) => u.address === page)) {
         place({ address: page, today: 0, busiestDay: 0, ownerOrAdmin: staff.has(page) });
     }
+    // The list /api/node/addresses serves now, numbered as it is (currentAddressList): the addresses members' phones follow
+    // and the main one. None when it serves none (a replaced server, one with no node key or community yet), so Settings
+    // never says phones follow a list nobody serves.
+    const served = currentAddressList();
     return {
         primaryAddress: primary,
-        // What the signed list (/api/node/addresses) says now: the addresses members' phones follow and the main one.
-        list: addressListContent(),
+        list: served.ok ? { main: served.fields.main, addresses: served.fields.addresses } : null,
         formerApps: ownAddressesUsage(addresses.filter((a) => a.former).map((a) => a.address)),
         addresses,
         named: knowsItsNames(),

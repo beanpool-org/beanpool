@@ -258,6 +258,15 @@ describe('Addresses S6: Make main, around the table', () => {
         render(<AddressesPanel activeNode={node} />);
         expect(await screen.findByTestId('addresses-follow-line')).toHaveTextContent("Members' phones follow this list: 3 addresses, main hill.beanpool.org.");
     });
+
+    // S6 round 2: the report names the list the server serves (currentAddressList), so a server that serves none (replaced,
+    // or no node key or community yet) sends `list: null` (test-address-list section 9), and no line says phones follow one.
+    it('no follow line when the server serves no list', async () => {
+        stubNode({ ...reportOf('a name', [ROW.domain]), list: null }, () => [200, {}]);
+        render(<AddressesPanel activeNode={node} />);
+        await screen.findByTestId('address-row-coop.example.org');
+        expect(screen.queryByTestId('addresses-follow-line')).not.toBeInTheDocument();
+    });
 });
 
 describe('Addresses S6: the question before adding an address', () => {

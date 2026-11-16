@@ -37,7 +37,8 @@
  *     time after a change since the backup -> every list signed is at or above every one signed before it, strictly above
  *     each with other content; no bump for no change or a restart; a take-over's epoch above every epoch before it.
  *  9. The split-brain check asks EVERY listed address, at once: one address leading to a server with a higher take-over count
- *     replaces this one, wherever it is in the list; once replaced, the server signs no list and no proof (503).
+ *     replaces this one, wherever it is in the list; once replaced, the server signs no list and no proof (503), and
+ *     Settings' report names no list for members' phones to follow (it names the one served until then).
  *
  * Run: SERVER_SUITES_ONLY=test-address-list TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -940,6 +941,13 @@ async function main(): Promise<void> {
             `with every address answering this server, it is current, and every one was asked (${current.state}; ${show(Object.fromEntries(hits))})`);
         const stillOk = await proved('coop.example.org');
         assert(stillOk.status === 200 && stillOk.ok, `and still proves (${stillOk.status})`);
+        // Settings' line saying what members' phones follow reads the list this server serves (several-addresses S6 round 2,
+        // #3240's review note): its main and addresses while it serves one, and none once it serves none.
+        const { appAddressesReport } = await import('./routes/app-addresses.js');
+        const servedNow = ((await list()).body as SignedAddressList).list;
+        const followedNow = appAddressesReport().list;
+        assert(followedNow?.main === servedNow.main && show(followedNow?.addresses) === show(servedNow.addresses),
+            `Settings' report names the list served: main ${followedNow?.main}, ${show(followedNow?.addresses)} (served: ${servedNow.main}, ${show(servedNow.addresses)})`);
         const last = listedNow[listedNow.length - 1];
         answerNewerAt.add(last);
         hits.clear();
@@ -952,6 +960,8 @@ async function main(): Promise<void> {
             `once replaced, the list is refused: 503 replaced, nothing signed (${refusedList.status} ${refusedList.body?.code})`);
         assert(refusedProof.status === 503 && refusedProof.body?.code === 'replaced' && !refusedProof.body?.sig,
             `and so is every proof, for an address on the list too (${refusedProof.status} ${refusedProof.body?.code})`);
+        const followedReplaced = appAddressesReport().list;
+        assert(followedReplaced === null, `and Settings' report names no list for members' phones to follow, as none is served (${show(followedReplaced)})`);
         const keptBefore = show(al.keptAddressList());
         se.updateNodeConfig({ ownerAddresses: ['second.example.org', 'third.example.org'] });
         own.forgetOwnAddresses();

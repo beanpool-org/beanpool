@@ -443,10 +443,11 @@ async function main(): Promise<void> {
     const { RELAY_HANDLED_KINDS } = await import('./engine/relay-mail.js');
     const moe = addLocal('Moe');
     db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(MUTED_UNTIL_LIFTED, moe.pk);
-    async function direct(from: Id, kind: RelayItemKind, payload: string) {
+    // Two in one request get times a second apart from one clock read, so their order is never the clock's luck.
+    async function direct(from: Id, kind: RelayItemKind, payload: string, at = Date.now()) {
         const envelope = await signRelayEnvelope({
             kind, itemId: newItemId(), senderKey: from.pk, senderHome: 'a.example', recipient: ana.pk, recipientHome: 'b.example',
-            at: Date.now(), payloadHash: relayPayloadHash(payload),
+            at, payloadHash: relayPayloadHash(payload),
         }, signerOf(from.seed));
         return { envelope, payload };
     }
@@ -472,8 +473,8 @@ async function main(): Promise<void> {
         { what: 'a reaction (sealed: no server can tell one added from one taken back)', kinds: ['dm-reaction'], build: async () => [await direct(moe, 'dm-reaction', sealedish)], want: 'muted' },
         { what: 'a delete of his own line', kinds: ['dm-delete'], build: async () => [await direct(moe, 'dm-delete', sealedish)], want: 'taken' },
         { what: 'a receipt', kinds: ['receipt'], build: async () => [await direct(moe, 'receipt', receiptOf())], want: 'taken' },
-        { what: 'a delete and a receipt, one request', kinds: ['dm-delete', 'receipt'], build: async () => [await direct(moe, 'dm-delete', sealedish), await direct(moe, 'receipt', receiptOf())], want: 'taken' },
-        { what: 'a delete and a line, one request', kinds: ['dm-delete', 'dm-line'], build: async () => [await direct(moe, 'dm-delete', sealedish), await direct(moe, 'dm-line', sealedish)], want: 'muted' },
+        { what: 'a delete and a receipt, one request', kinds: ['dm-delete', 'receipt'], build: async () => { const at = Date.now(); return [await direct(moe, 'dm-delete', sealedish, at - 1000), await direct(moe, 'receipt', receiptOf(), at)]; }, want: 'taken' },
+        { what: 'a delete and a line, one request', kinds: ['dm-delete', 'dm-line'], build: async () => { const at = Date.now(); return [await direct(moe, 'dm-delete', sealedish, at - 1000), await direct(moe, 'dm-line', sealedish, at)]; }, want: 'muted' },
     ];
     let rowM = 0;
     for (const row of M_ROWS) {

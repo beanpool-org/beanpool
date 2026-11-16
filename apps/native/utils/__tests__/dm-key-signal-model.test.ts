@@ -446,7 +446,7 @@ describe('S2: what S1 left unreachable stays unreachable (every state the writer
     ];
     const deadShapes = (p: DmPeerPins): string[] => Object.entries(p).flatMap(([id, e]) => {
         if (isUnplacedSight(e)) return pinKeyOf(e.listed) ? [`${id}: a rule-5 record naming a key`] : [];
-        const o = (e as DmPeerPin).offered as (Record<string, unknown> & { peer: string | null }) | undefined;
+        const o = (e as DmPeerPin).offered as unknown as (Record<string, unknown> & { peer: string | null }) | undefined;
         if (!o) return [];
         const bad: string[] = [];
         if (o.peer !== null && o.firstSight) bad.push(`${id}: an offer naming a key with firstSight`);

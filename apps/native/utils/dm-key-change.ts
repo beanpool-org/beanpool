@@ -214,6 +214,7 @@ export const DM_KEY_CHANGE_TEXT_ON = {
     myCodeBody: 'myCodeCard',
     noticeText: 'notice',
     keyCodeHeading: 'keyCodeScreen',
+    keyCodeTitle: 'keyCodeHeader',
     keyCodeBody: 'keyCodeScreen',
     markText: 'markBtn',
     removeText: 'removeBtn',
@@ -252,6 +253,10 @@ export function dmKeyChangeStyleSpec(colors: AppColors) {
         notice: { backgroundColor: colors.surface.subtle, borderColor: colors.border.default, borderWidth: 1, borderRadius: 12, minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, marginVertical: 12, marginHorizontal: 24, alignSelf: 'center' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
         noticeText: { color: colors.text.heading, fontSize: 13, lineHeight: 18, fontWeight: '500' as const, flexShrink: 1 },
         // The key code screen (§3): a plain scrolling screen; the code reuses the banner's code box.
+        keyCodeContainer: { flex: 1, backgroundColor: colors.surface.app },
+        keyCodeHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: colors.surface.app },
+        keyCodeBack: { minWidth: 48, minHeight: 48, alignItems: 'center' as const, justifyContent: 'center' as const },
+        keyCodeTitle: { color: colors.text.heading, fontSize: 18, fontWeight: '700' as const, flexShrink: 1 },
         keyCodeScreen: { backgroundColor: colors.surface.app, padding: 16, gap: 12 },
         keyCodeHeading: { color: colors.text.heading, fontSize: 18, fontWeight: '700' as const },
         keyCodeBody: { color: colors.text.heading, fontSize: 14, lineHeight: 20 },

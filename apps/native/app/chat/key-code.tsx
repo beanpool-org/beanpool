@@ -10,7 +10,7 @@
  * removeDmPeerVerification), and Mark refuses when the key moved since the screen read it, which the screen then says.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -26,13 +26,7 @@ export { ErrorBoundary };
 
 export default function DmKeyCodeScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const styles = useStyles(({ colors }) => ({
-        ...dmKeyChangeStyleSpec(colors),
-        container: { flex: 1, backgroundColor: colors.surface.app },
-        header: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-        back: { minWidth: 48, minHeight: 48, alignItems: 'center' as const, justifyContent: 'center' as const },
-        headerTitle: { color: colors.text.heading, fontSize: 18, fontWeight: '700' as const, flexShrink: 1 },
-    }));
+    const styles = useStyles(({ colors }) => StyleSheet.create(dmKeyChangeStyleSpec(colors)));
     const { colors } = useTheme();
     const [info, setInfo] = useState<DmKeyCodeInfo | null | undefined>(undefined);
     const [unread, setUnread] = useState(false);
@@ -91,13 +85,13 @@ export default function DmKeyCodeScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-            <View style={styles.header}>
-                <Pressable style={styles.back} accessibilityRole="button" accessibilityLabel={t('Back')}
+        <SafeAreaView style={styles.keyCodeContainer} edges={['top', 'bottom']}>
+            <View style={styles.keyCodeHeader}>
+                <Pressable style={styles.keyCodeBack} accessibilityRole="button" accessibilityLabel={t('Back')}
                     onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/chat/[id]', params: { id: String(id) } }))}>
                     <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text.body} />
                 </Pressable>
-                <Text style={styles.headerTitle} accessibilityRole="header">{copy.title}</Text>
+                <Text style={styles.keyCodeTitle} accessibilityRole="header">{copy.title}</Text>
             </View>
             <ScrollView contentContainerStyle={styles.keyCodeScreen}>
                 {unread ? (

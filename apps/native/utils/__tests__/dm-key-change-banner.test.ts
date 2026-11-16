@@ -459,7 +459,7 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
         }
         expect(onPress).toHaveBeenCalledTimes(2);
         // Never the warning yellow: the notice is information (§4).
-        for (const colors of [lightColors, darkColors]) {
+        for (const colors of [lightColors, darkColors] as Array<typeof lightColors>) {
             const spec = dmKeyChangeStyleSpec(colors);
             expect(spec.notice.backgroundColor).not.toBe(colors.feedback.warning.bg);
             expect(spec.notice.minHeight).toBeGreaterThanOrEqual(48);

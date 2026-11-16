@@ -6,7 +6,7 @@
  * utils/dm-key-change.ts, where the small-screen and contrast rules are tested.
  */
 import React from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useStyles, useTheme } from '../../app/ThemeContext';
 import { dmKeyChangeStyleSpec, dmKeyChangedNoticeText } from '../../utils/dm-key-change';
@@ -18,7 +18,7 @@ export interface DmKeyChangedNoticeProps {
 }
 
 export function DmKeyChangedNotice({ peerName, onPress }: DmKeyChangedNoticeProps) {
-    const styles = useStyles(({ colors }) => dmKeyChangeStyleSpec(colors));
+    const styles = useStyles(({ colors }) => StyleSheet.create(dmKeyChangeStyleSpec(colors)));
     const { colors } = useTheme();
     const words = dmKeyChangedNoticeText(peerName);
     return (

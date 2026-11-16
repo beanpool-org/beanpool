@@ -7,6 +7,8 @@
 // db.ts, booted through tsx on a kept 1.4.0 file with a statement trace, runs the replay's statements in the replay's order); a
 // step is read only in a shape that runs on its own (one table of shapes x what the table holds, each against a real boot
 // of the shape's own code: the read shapes read OK, every other ALTER reads can't prove and exits 1, whatever the table holds);
+// any other text the boot may run before the exec that names a table schema.sql makes, whatever its verb or quoting, makes
+// that table can't prove (every table, for a text whose names can't be read), and a table the node lacks gets a line;
 // it opens the database read-only (a write fails) and leaves the file, and a live writer's WAL, byte for byte as they were;
 // its packed copy for `node -` in the container prints the same lines from what it carries; the repo's own schema.sql and
 // replication manifest read whole.
@@ -859,10 +861,13 @@ const NAMED_CASES = [
     { name: 'a ${…} from a top-level const', top: "const TABLE = 't';", code: 'try { db.exec(`DELETE FROM ${TABLE}`); } catch { }', text: { t: 2 } },
     { name: 'a + of a top-level const', top: "const TABLE = 't';", code: "try { db.exec('DELETE FROM ' + TABLE); } catch { }", text: { t: 2 } },
     { name: 'a name split across two consts', top: "const P1 = 'pho';\nconst P2 = 'tos';", code: "try { db.exec('DROP TABLE IF EXISTS ' + P1 + P2); } catch { }", text: { photos: 1 } },
+    { name: 'the same const twice in one template', top: "const T = 't';", code: 'try { db.exec(`DELETE FROM ${T} WHERE id IN (SELECT id FROM ${T})`); } catch { }', text: { t: 2 } },
     // A text whose names can't be read: every table, the ones not here included.
     { name: 'a ${…} from a local', code: "const name = 't';\n    try { db.exec(`DELETE FROM ${name}`); } catch { }", ...EVERY(2) },
     { name: 'a statement a function returns', top: "function sqlFor() { return 'DELETE FROM t'; }", code: 'try { db.exec(sqlFor()); } catch { }', ...EVERY(2) },
     { name: 'exec taken as a value', code: "const run = db.exec.bind(db);\n    try { run('DELETE FROM t'); } catch { }", ...EVERY(2) },
+    { name: 'exec taken out by name', code: "const { exec } = db;\n    try { exec('DELETE FROM t'); } catch { }", ...EVERY(2) },
+    { name: "a method by a key that can't be read", code: "const m = 'exec';\n    try { db[m]('DELETE FROM t'); } catch { }", ...EVERY(2) },
     { name: 'a top-level let another function sets', top: "let SQL = '';\nfunction setUp() { SQL = 'DELETE FROM t'; }\nsetUp();", code: 'try { db.exec(SQL); } catch { }', ...EVERY(2) },
     { name: 'a tagged template', code: 'try { db.exec(String.raw`DELETE FROM t`); } catch { }', ...EVERY(1) },
     // A helper's helper.

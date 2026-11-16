@@ -546,8 +546,11 @@ function bootNamed(ts, file, init, region, alterOf, tables) {
     // The text an expression always has, or null.
     const textOf = (n, seen = new Set()) => {
         n = skipParens(n);
-        if (seen.has(n)) return null;
+        if (seen.has(n)) return null; // a const that reads itself
         seen.add(n);
+        try { return textOfOnce(n, seen); } finally { seen.delete(n); }
+    };
+    const textOfOnce = (n, seen) => {
         if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isNumericLiteral(n)) {
             return ts.isTaggedTemplateExpression(n.parent) ? null : n.text;
         }
@@ -604,8 +607,18 @@ function bootNamed(ts, file, init, region, alterOf, tables) {
                 }
                 count(ts.isTemplateSpan(root) ? root.parent : root);
             }
+            // A method by a key that can't be read (`db[m](…)`), or exec, prepare or pragma taken out by name
+            // (`const { exec } = db`): any text may reach it.
+            if (ts.isElementAccessExpression(n) && !ts.isStringLiteralLike(n.argumentExpression) && textOf(n.argumentExpression) === null && !done.has(n)) {
+                done.add(n);
+                named.push(null);
+            }
+            if (ts.isBindingElement(n) && SQL_METHODS.has((n.propertyName ?? n.name).text ?? '') && !done.has(n)) {
+                done.add(n);
+                named.push(null);
+            }
             const method = ts.isPropertyAccessExpression(n) ? n.name.text
-                : ts.isElementAccessExpression(n) && ts.isStringLiteralLike(n.argumentExpression) ? n.argumentExpression.text : null;
+                : ts.isElementAccessExpression(n) ? (ts.isStringLiteralLike(n.argumentExpression) ? n.argumentExpression.text : textOf(n.argumentExpression)) : null;
             if (method !== null && SQL_METHODS.has(method) && !done.has(n)) {
                 done.add(n); // a declaration in the region is walked again as its own: each call counts once
                 let callee = n;

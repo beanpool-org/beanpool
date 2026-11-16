@@ -375,6 +375,17 @@ export class GroupKeyring {
         this.shown = new Set(keys);
     }
 
+    /** The guests in the group's chat as every member sees them (GET …/guests, state `in`); none when the node won't say. */
+    private async readGuestKeys(): Promise<string[]> {
+        try {
+            const body = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/guests`, this.identity as BeanPoolIdentity));
+            const guests: any[] = Array.isArray(body?.guests) ? body.guests : [];
+            return guests.filter((g) => g?.state === 'in' && typeof g.key === 'string').map((g) => g.key as string);
+        } catch {
+            return [];
+        }
+    }
+
     /** Read the members list the screen shows (GET …/members, active rows): null when the node won't say. */
     private async readShownRoster(): Promise<Set<string> | null> {
         try {
@@ -382,6 +393,9 @@ export class GroupKeyring {
             if (!Array.isArray(rows)) return null;
             const active = rows.filter((m: any) => m?.status === 'active' && typeof m.memberPubkey === 'string');
             const shown = new Set<string>(active.map((m: any) => m.memberPubkey as string));
+            // Guests from other communities in the chat (G2) are shown to every member under the members (GET …/guests), and
+            // the node's keys roster holds them: an epoch is wrapped to them too, and one a guest made is theirs.
+            for (const k of await this.readGuestKeys()) shown.add(k);
             this.shown = shown;
             const claimed = new Map<string, string[]>();
             const claims = new Map<string, number>();

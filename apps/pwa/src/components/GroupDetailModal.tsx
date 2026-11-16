@@ -24,11 +24,14 @@ import { usePictureCrop } from './PictureCropDialog';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupInvitedList } from './GroupInvitedList';
+import { GroupGuestsPanel } from './GuestChats';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
 import { alreadyInGroup, canInviteToGroup } from '../lib/group-invite';
-import { t, tn, word, type WordKey } from '@beanpool/core';
+import { forumOn, t, tn, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { GroupForumRows } from './forum/ForumLinks';
+import { useCommunityInfo } from '../lib/features';
 
 /** Sentences marked in core, translated here where they are shown. */
 const LINES = { closed: GROUP_CLOSED_NOTE };
@@ -65,6 +68,8 @@ interface Props {
     onPostToGroup?: (group: Group) => void;
     /** "Start a community" on a place circle's card. */
     onStartCommunity?: () => void;
+    /** The forum's rows (slice F9): "Topics about this group", its own section's Topics, a circle's "Talk about it in the forum". */
+    onNavigate?: (tab: string, contextId?: string) => void;
 }
 
 export function GroupDetailModal({
@@ -76,7 +81,9 @@ export function GroupDetailModal({
     onMembershipChanged,
     onPostToGroup,
     onStartCommunity,
+    onNavigate,
 }: Props) {
+    const forumHere = forumOn(useCommunityInfo()?.features) && !!onNavigate;
     const [groupData, setGroupData] = useState<Group | null>(group);
     const [members, setMembers] = useState<GroupMember[]>([]);
     // Where anyone can join in a minute (openMembership) the roster is its members': anyone else is told to join
@@ -455,6 +462,7 @@ export function GroupDetailModal({
 
                     {groupData.circle && (
                         <PlaceCircleCard id={groupData.id} circle={groupData.circle} identity={identity} closed={closed} onStart={onStartCommunity}
+                            onTalk={forumHere ? () => { onClose(); onNavigate!('forum-start-community', ''); } : undefined}
                             onChange={circle => setGroupData(g => (g ? { ...g, circle } : g))} />
                     )}
                     {groupDescriptionShown(groupData) && (
@@ -682,7 +690,11 @@ export function GroupDetailModal({
                                 onChanged={onMembershipChanged}
                             />
                         )}
+                        {/* Guests from other communities in the group's chat (G2); a convenor adds one by their card. */}
+                        {isMember && !rosterRefused && !closed && <GroupGuestsPanel groupId={groupData.id} isConvenor={isConvenor} />}
                     </div>
+
+                    {forumHere && <GroupForumRows groupId={groupData.id} onNavigate={(tab, id) => { onClose(); onNavigate!(tab, id); }} />}
 
                     {/* Action Area */}
                     <div className="pt-2 space-y-2">

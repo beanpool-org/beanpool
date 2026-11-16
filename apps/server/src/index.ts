@@ -75,6 +75,7 @@ import { initStateEngine, getNodeRole, createTreasury, adminBroadcastAnnouncemen
 import { refuseUnopenableDatabase } from './db/db.js';
 import { startRecoverNoticeWatch, RECOVER_ACTOR } from './recover-command.js';
 import { startRestoreNoticeWatch } from './services/restore-points.js';
+import { heldLinesAfterSwap } from './engine/group-guest-home.js';
 import { logger } from './logger.js';
 import { bumpMembersVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -191,6 +192,9 @@ async function main() {
         // The signed address list's number goes past every one signed before the swap, an address changed or not
         // (services/address-list.ts, #3232 round 2). Before anything is signed: the list's watch starts at step 7.35.
         renumber: renumberAddressListAfterSwap,
+        // The lines held for members' devices from groups at other communities came back from the backup's day: they go, as
+        // the hosts' takedowns since then went to the database it replaced (engine/group-guest-home.ts heldLinesAfterSwap, G2).
+        swapped: heldLinesAfterSwap,
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
     // (it asks whether there is an owner). Never throws: without a code, `beanpool recover` on the server still adds an owner.

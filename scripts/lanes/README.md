@@ -25,6 +25,9 @@ not repeat them; the code comments name the incident behind each rule.
 | `agy-brief-rules.md` | Appended to every AGY brief. |
 | `test/selftest.sh` | Proves all of the above against fake `agy`/`claude`/`gh`/`ssh`. No real model, PR or node is touched. |
 | `pr-state.mjs` | `node scripts/lanes/pr-state.mjs <PR>`: a PR's true state in one read-only look. Head, mergeable, base, merge queue; the last deciding verdict and MISMATCH when it names an older head; every check that is not success, with its log's failing lines and file:line (the summary job marked as the summary); each named file touched by the diff or not; one line `CLEAN+GREEN` / `CLEAN+RED (n reds)` / `NOT CLEAN` / `PENDING` (exit 0 / 3 / 4 / 5). It never comments, re-runs, requeues or boards. `test/pr-state.test.mjs` runs it against recorded GitHub answers, in test-all's `workflows` check. |
+| `ci-wait.sh` | `scripts/lanes/ci-wait.sh <PR> $(git rev-parse HEAD)`: waits for GitHub CI on the commit you pushed, at most about 9 minutes a call, so a headless stage's foreground call stays under the 10-minute cap. ALWAYS pass that sha: GitHub moves a PR's head a little after a push, so a call right after `git push` can still read the old head, and without the sha it would hand back that head's verdict. With it, a head that does not show the sha yet is a wait (pending), never a verdict. With no sha it waits on the PR's head at call time. Every exit is bounded and its line says what it saw and what to do. Exit 0 green, 1 red (with `pr-state.mjs`'s failing lines), 2 pending (checks still running, no checks yet, or GitHub not showing the sha yet: call it again, with the same sha; two in a row that say no checks yet or that the sha doesn't show mean no run is coming), 3 the head moved, the PR could not be read, or the second argument is not a commit id, 4 CONFLICTING with the base: no pull_request run starts until the branch is synced, so `git fetch origin && git merge origin/<base>`, push, and wait again with the new sha at most once. Waits for every check, even beside a red; no checks yet is never green: it reads the PR's mergeable state, a conflict is exit 4, and UNKNOWN, MERGEABLE or no answer is a wait whose line names which. Read-only. The CI-first flow in `LANE_ONE_PUSH` sends every stage here. |
+| `tsc-slot.sh` | `scripts/lanes/tsc-slot.sh <command…>`: runs a memory-heavy whole-app check (`tsc --noEmit`, a whole vitest run) only when one of `BP_SLOTS` (3) machine-wide slots, `~/.cache/bp-tsc-slot-<n>`, is free. A slot whose owner died is taken over; after 45 minutes it runs anyway. The command's exit code comes through. The heavy-test lock still comes first. |
+| `test/ci-wait-slot.test.sh` | Proves `ci-wait.sh`'s exit codes against the fake `gh`, and `tsc-slot.sh`'s slot limit, takeover, wait limit, signals and exit code. About 10 s. |
 
 ## Running a lane
 
@@ -59,9 +62,20 @@ The building blocks are `stage NAME TIMEOUT BRIEF [ROLE]`, `cont`, `item`, `revi
 `deploy_main NODE SYMBOL [LABEL]`, `count`, `prnum`, `pr_head`, `ci_head_state SHA` and `gh_try`. The comment above each
 function describes its contract.
 
-A fix round pushes once. The FIX, FIX-CI and CONTINUE briefs and both rule files tell a stage to commit locally and push when
-the round's findings are done and its local checks pass, because each push cancels and restarts GitHub's run. A long first
-build may still push early so work is not lost, and a run about to end must push what it has.
+A stage goes CI first (Marty, 16 Nov 2026: the Mac was overloaded). The FIX, FIX-CI and CONTINUE briefs carry `LANE_ONE_PUSH`,
+which takes precedence over the one-push line in both rule files. Locally a stage runs only the one test file or suite it is
+working on; a whole-app check it cannot avoid goes through `tsc-slot.sh`. It pushes, opens the PR as a draft if there is none,
+and waits with `ci-wait.sh <PR> $(git rev-parse HEAD)`, always with the sha it just pushed. Each red it caused gets a fix, that
+one test, and a push, at most 3 pushes for CI a round, because each push cancels and restarts GitHub's run. A red it cannot
+reach is named in the PR body as "red not caused here". Each call gets the Bash tool's full 600000 ms timeout (the default
+120000 ms kills it at 2 minutes), and every exit has a bound in the brief: two pending calls in a row that say no run is coming
+(no checks yet, or the sha doesn't show) end in a stop; a moved head or an unreadable PR gets at most two more calls; exit 4 (the
+branch conflicts with its base, and no pull_request run starts until it is synced) gets one fetch and merge of `origin/<base>`, one push
+and one more wait. Each stop is named in the PR body.
+Once green it runs `preflight.sh`, then `gh pr ready`. Both scripts are named from the library's own directory, so a fix round
+on a branch cut before they existed still finds them. A branch with no PR starts no run, so a long first build may still push
+early, and a run about to end must push what it has. The default deciding brief says the same from the other side: GitHub CI
+is the full run, read with `pr-state.mjs`, and locally only the single file that proves or disproves a finding.
 
 ## Backends and models
 
@@ -153,6 +167,9 @@ Every setting is an env var with a default derived from the checkout (see the to
 `$TMPDIR`), `LANE_GH_REPO`, `LANE_AGY_BIN`, `LANE_CLAUDE_BIN`, `LANE_BUILD_TIMEOUT` (60m), `LANE_REVIEW_TIMEOUT`
 (40m), `LANE_HEADER_FILE`, `LANE_CI_CHECK`, `LANE_CI_WORKFLOW`, and the timing knobs (`LANE_IDLE_OUTPUT_SECS`,
 `LANE_IDLE_WT_SECS`, `LANE_WAIT_SECS`, `LANE_GREEN_TRIES`, `LANE_GREEN_NONE_TRIES`, `LANE_GREEN_SECS`, …).
+`ci-wait.sh` reads `LANE_GH_REPO`, `LANE_CI_WAIT_SECS` (530), `LANE_CI_WAIT_POLL_SECS` (45) and `LANE_CI_WAIT_HEAD_POLL_SECS`
+(10, while GitHub has not shown the sha yet). `tsc-slot.sh` reads `BP_SLOTS` (3), `BP_SLOT_BASE` (keep the default: every
+copy on the machine must count the same slots), `BP_SLOT_WAIT_SECS` (2700) and `BP_SLOT_POLL_SECS` (15).
 
 ## zsh gotchas (each one has broken a lane script)
 
@@ -178,6 +195,7 @@ These scripts are macOS-only (`stat -f`, `find -mtime -Ns`, `caffeinate`), becau
 ## Testing changes
 
 ```zsh
-for f in scripts/lanes/*.sh scripts/lanes/test/selftest.sh; do zsh -n "$f"; done
+for f in scripts/lanes/*.sh scripts/lanes/test/*.sh; do zsh -n "$f"; done
 zsh scripts/lanes/test/selftest.sh      # ~4 min; fakes only; prints each scenario's lane log and ✓/✗ checks
+zsh scripts/lanes/test/ci-wait-slot.test.sh   # ~10 s; ci-wait.sh against the fake gh, tsc-slot.sh on temp slots
 ```

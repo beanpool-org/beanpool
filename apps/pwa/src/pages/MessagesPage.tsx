@@ -19,6 +19,9 @@ import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { OutsideChatRow, OutsideChatThread, OutsideRequestCard, outsideRoundNow } from '../components/OutsideChats';
+import { GuestChatRow, GuestChatThread, GuestInvitationCard, guestChatAsListed, useGuestChats } from '../components/GuestChats';
+import { guestRowsKnown } from '../lib/guest-chat-live';
+import { guestChatListed } from '@beanpool/core';
 import { AddressCardPanel } from '../components/AddressCardPanel';
 import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
 import type { OutsideChat } from '../lib/outside-chat-store';
@@ -344,15 +347,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return () => { alive = false; clearInterval(timer); window.removeEventListener(OUTSIDE_CHATS_EVENT, read); };
     }, [identity.publicKey]);
     const outsideRequests = outsideChats.filter((c) => c.state === 'request');
+    // Group chats hosted by other communities, as a guest (G2), kept in this browser only; an invitation waits behind the same row.
+    const guestChats = useGuestChats(identity.publicKey);
+    const guestInvites = guestChats.filter((c) => c.state === 'invited');
+    const [openGuest, setOpenGuest] = useState<string | null>(null);
     // A way in that names a conversation (a notice, a profile's Message) is never held behind an outside chat or the cards.
-    useEffect(() => { if (openConversationId) { setOpenOutside(null); setShowCard(false); } }, [openConversationId]);
+    useEffect(() => { if (openConversationId) { setOpenOutside(null); setShowCard(false); setOpenGuest(null); } }, [openConversationId]);
     // Chat chosen in the menu while Chat shows (homeNonce): back to the list. Counted, so a chat a way in was still finding
     // when the member chose Chat (the effect below, after its reads) does not open over the list they asked for.
     const homeSeenRef = useRef(homeNonce);
     const homeCountRef = useRef(0);
     const [activeTab, setActiveTab] = useState<ConversationTab>('all');
     // Requests turned off while the member is on them: the pill goes, so the list goes back to All, never to no chip.
-    useEffect(() => { if (!requests && !onGlobal && !outsideRequests.length && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, outsideRequests.length, activeTab]);
+    useEffect(() => { if (!requests && !onGlobal && !outsideRequests.length && !guestInvites.length && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, outsideRequests.length, guestInvites.length, activeTab]);
     // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to Start something on a community with
@@ -1127,7 +1134,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             try {
                 const active = (await getGroupMembers(convId)).filter((r) => r.status === 'active');
                 roster = active.map((r) => ({ memberPubkey: r.memberPubkey, callsign: r.callsign ?? null, formerKeys: (r as { formerKeys?: DisplayRosterRow['formerKeys'] }).formerKeys ?? null }));
-                ring.noteShownRoster(active.map((r) => r.memberPubkey));
+                // Guests from other communities in the chat (G2), named by core's guest line, never as members; shown to every
+                // member under the members, so a key may go to them (lib/group-chat-keys.ts).
+                const guests = guestRowsKnown(convId);
+                roster = [...roster, ...guests];
+                ring.noteShownRoster([...active.map((r) => r.memberPubkey), ...guests.map((g) => g.memberPubkey)]);
             } catch { /* names fall back to the node's; nothing is wrapped until the list reads */ }
         }
         let thread: OpenedGroupThread | null = null;
@@ -2247,6 +2258,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     if (openOutside) {
         // Accepted from the requests: Back goes on to the chats, as an accepted community request's does (onAccepted below).
         return <OutsideChatThread chatId={openOutside} onBack={() => setOpenOutside(null)} onAccepted={() => setActiveTab('all')} />;
+    }
+    if (openGuest) {
+        return <GuestChatThread chatId={openGuest} onBack={() => setOpenGuest(null)} />;
     }
     if (showCard) {
         return <AddressCardPanel onBack={() => setShowCard(false)} onOpenChat={(id) => { setShowCard(false); setOpenOutside(id); }} />;
@@ -4055,9 +4069,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // Requests (lib/dm-requests.ts): one plain row at the top of Chat, where the community has them on and one is waiting. No
     // count and no badge until one is accepted (Marty, 1 Nov 2026): every kind of outside request waits behind it.
     const requestCount = requests?.count ?? 0;
-    const showingRequests = activeTab === 'requests' && (!!requests || !!onGlobal || outsideRequests.length > 0);
-    // Open chats with people in other communities, in All and Direct, above the community's own (kept in this browser only).
-    const outsideShown = activeTab === 'all' || activeTab === 'direct' ? outsideChats.filter((c) => c.state === 'open') : [];
+    const showingRequests = activeTab === 'requests' && (!!requests || !!onGlobal || outsideRequests.length > 0 || guestInvites.length > 0);
+    // Open chats with people in other communities, in All and Direct, above the community's own (kept in this browser only),
+    // and group chats elsewhere as a guest in All (G2), each by its newest line.
+    const guestIds = new Set(guestChats.map((c) => c.id));
+    const outsideShown = [
+        ...(activeTab === 'all' || activeTab === 'direct' ? outsideChats.filter((c) => c.state === 'open') : []),
+        ...(activeTab === 'all' ? guestChats.filter(guestChatListed).map(guestChatAsListed) : []),
+    ];
     // When a person joined, on a request card, where this page holds their card.
     const joinedWordsOf = (pubkey: string): string | null => {
         const joinedAt = membersByPublicKey.get(pubkey)?.joinedAt;
@@ -4148,7 +4167,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             </div>
             </>)}
 
-            {(requestCount > 0 || !!onGlobal || outsideRequests.length > 0) && !showingRequests && (
+            {(requestCount > 0 || !!onGlobal || outsideRequests.length > 0 || guestInvites.length > 0) && !showingRequests && (
                 <button type="button" data-testid="message-requests-row" onClick={() => setActiveTab('requests')} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: '48px', padding: '0.5rem 1rem',
                     marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '12px',
@@ -4186,9 +4205,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <MessageRequestsList
                     entries={requests?.conversations ?? []}
                     count={requestCount}
-                    outside={outsideRequests.length === 0 ? null : (
+                    outside={outsideRequests.length === 0 && guestInvites.length === 0 ? null : (
                         <ul style={{ margin: 0, padding: 0 }}>
                             {outsideRequests.map((c) => <OutsideRequestCard key={c.id} chat={c} onOpen={() => setOpenOutside(c.id)} />)}
+                            {guestInvites.map((c) => <GuestInvitationCard key={c.id} chat={c} onOpen={() => setOpenGuest(c.id)} />)}
                         </ul>
                     )}
                     onGlobal={onGlobal}
@@ -4253,6 +4273,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         the order. Transactions keeps a live listing above the rest. */}
                     {orderChatList(listedConversations, outsideShown, activeTab, chatListSends)
                         .map(row => {
+                            if (row.kind === 'outside' && guestIds.has(row.chat.id)) {
+                                const g = guestChats.find((c) => c.id === row.chat.id)!;
+                                return <GuestChatRow key={g.id} chat={g} onOpen={() => setOpenGuest(g.id)} />;
+                            }
                             if (row.kind === 'outside') return <OutsideChatRow key={row.chat.id} chat={row.chat} onOpen={() => setOpenOutside(row.chat.id)} />;
                             const conv = row.conv;
                             // A finished trade with this DM's other person that I haven't rated (lib/trade-review) — the

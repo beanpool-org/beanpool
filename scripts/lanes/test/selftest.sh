@@ -702,6 +702,9 @@ check "the gate's count starts from what was there" logged "#42 comments before 
 check "the brief asks for no verdict on an early pass that did not run" eval '! brief_has claude.prompt-1 "WEIGH" && ! brief_has claude.prompt-1 "as REAL or NOT REAL"'
 check "a -fix lane's pass still checks the earlier findings" brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
 check "the lane's own deciding brief still follows" brief_has claude.prompt-1 "DECIDING pass — the code merges"
+check "... and says GitHub CI is the full run, read with this library's pr-state.mjs on the lane's repo" eval 'brief_has claude.prompt-1 "GITHUB CI IS THE FULL RUN" && brief_has claude.prompt-1 "node $LANE_DIR/pr-state.mjs <PR> -R example/fake" && [ -f "$LANE_DIR/pr-state.mjs" ]'
+check "... locally only the single file or suite that proves or disproves a finding" brief_has claude.prompt-1 "Locally run only the single test file or single suite that proves or disproves a finding"
+check "... no whole-app re-run, and anything whole-app through tsc-slot.sh" eval 'brief_has claude.prompt-1 "do not re-run a whole-app tsc --noEmit" && brief_has claude.prompt-1 "$LANE_DIR/tsc-slot.sh <command>"'
 
 scenario "49. a Claude-built lane: the pass starts while GitHub is pending and says so; the wait comes after it, outside the slot; the slot and the probe still hold"
 opus
@@ -742,8 +745,8 @@ FAKE_EARLY_POSTS=; print 5 > "$FAKE_STATE/comments"
 { review feat/x; } >> "$LOG" 2>&1
 check "a first pass with no comments still ends the early passes" eval '[ "$CLEAN:$(fixes):$(reviews)" = 1:1:1 ] && not_logged "CCR-feat/x-2"'
 
-scenario "51. a fix round pushes once: the FIX, FIX-CI and CONTINUE briefs and both rule files say so, with the two exceptions"
-one_push="push once, when this round's findings are done and the local checks pass"
+scenario "51. a fix round goes CI first, at most 3 pushes for CI: the FIX, FIX-CI and CONTINUE briefs say so, with the two exceptions; both rule files keep their one-push rule"
+one_push="At most 3 pushes for CI in this round, because each push cancels and restarts GitHub's run"
 says_once(){ grep -qF -- "$one_push" "$1" && ! grep -qE "[Cc]ommit and push per|push per fix" "$1"; }
 FAKE_GH_PR=42 FAKE_EARLY_POSTS=2; print 5 > "$FAKE_STATE/comments"
 { review feat/x; } >> "$LOG" 2>&1
@@ -760,6 +763,23 @@ check "the CONTINUE brief"                       says_once "$FAKE_STATE/brief-NO
 check "the second brief's CONTINUE"              says_once "$FAKE_STATE/brief-NOPR-b"
 check "a long first build may push early"        brief_has brief-NOPR-CONTINUE "first build may still push early"
 check "a run about to end pushes what it has"    brief_has brief-NOPR-CONTINUE "a run about to end must push what it has"
+check "the brief says it overrides the rules' one-push line" brief_has brief-NOPR-CONTINUE "this takes precedence over any one-push line in the rules below"
+check "locally only the one file or suite; the whole-app checks go to GitHub" eval 'brief_has brief-NOPR-CONTINUE "Locally run only the ONE test file or ONE suite" && brief_has brief-NOPR-CONTINUE "GitHub CI runs all of them on every push to a PR, drafts included"'
+check "a draft PR when there is none, on the lane's repo and base" brief_has brief-NOPR-CONTINUE "open it as a DRAFT (gh pr create -R example/fake --draft --base main --head <branch>)"
+check "the wait names this library's ci-wait.sh, and it is there to run" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/ci-wait.sh <PR>" && [ -x "$LANE_DIR/ci-wait.sh" ]'
+check "... ALWAYS with the sha just pushed, \$(git rev-parse HEAD) left for the stage's shell (#3257 round 2)" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/ci-wait.sh <PR> \$(git rev-parse HEAD) (ALWAYS pass the sha you just pushed" && brief_has brief-NOPR-CONTINUE "push, and wait again with the new sha"'
+check "... each call with the Bash tool's full 600000 ms timeout" brief_has brief-NOPR-CONTINUE "giving each call the Bash tool's full timeout of 600000 ms"
+codes_told(){ # every exit code ci-wait.sh has is in the brief as "<code> = "
+  local c; for c in $(grep -oE 'exit [0-9]+' "$LANE_DIR/ci-wait.sh" | sed 's/exit //' | sort -u); do brief_has brief-NOPR-CONTINUE "$c = " || return 1; done; }
+check "... with every exit code ci-wait.sh has (#3257 round 3: 0 to 4)" eval 'codes_told && [ "$(grep -oE "exit [0-9]+" "$LANE_DIR/ci-wait.sh" | sort -u | wc -l | tr -d " ")" = 5 ]'
+check "... 0 and 1"                               brief_has brief-NOPR-CONTINUE "0 = green; 1 = red, with the failing lines"
+check "... 2 is bounded: two that say no run is coming end in a stop" brief_has brief-NOPR-CONTINUE "2 = pending, call it again, but two in a row that say no checks yet, or that the PR doesn't show your sha, mean no run is coming: stop and say so in the PR"
+check "... and ci-wait.sh's PENDING lines use those words" eval 'grep -qF "(no checks yet: " "$LANE_DIR/ci-wait.sh" && grep -qF "PENDING: the PR doesn'"'"'t show " "$LANE_DIR/ci-wait.sh"'
+check "... 3 is bounded"                          brief_has brief-NOPR-CONTINUE "3 = the head moved or the PR could not be read, call it again at most twice more, then stop and say so in the PR"
+check "... 4: a conflict with the lane's base gets one merge-and-wait, in pr_conflicting's words, then a stop" eval 'brief_has brief-NOPR-CONTINUE "4 = CONFLICTING with main: no pull_request run starts until the branch is synced, so git fetch origin && git merge origin/main (fetch first: your copy of main is older than the conflict), push (one of the 3 pushes) and wait again with the new sha AT MOST ONCE; if it says 4 again, stop and say so in the PR" && grep -qF "no pull_request run starts until the branch is synced" "$LANE_DIR/ci-wait.sh"'
+check "a whole-app check goes through this library's tsc-slot.sh, and it is there to run" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/tsc-slot.sh <command>" && [ -x "$LANE_DIR/tsc-slot.sh" ]'
+check "green, or only reds not caused here: preflight, then ready; never ready on a red it caused" eval 'brief_has brief-NOPR-CONTINUE "run bash scripts/lanes/preflight.sh, then gh pr ready <PR> -R example/fake if it is a draft" && brief_has brief-NOPR-CONTINUE "Never mark it ready while a red you caused stands"'
+check "a red it did not cause is named, not chased" brief_has brief-NOPR-CONTINUE "name it in the PR body as 'red not caused here'"
 for r in "$LANE_AGY_RULES" "$LANE_CLAUDE_RULES"; do
   check "${r:t} sets the rule and its reason"    eval 'grep -qF "ONE PUSH PER FIX ROUND" "$r" && grep -qF "each push cancels and restarts" "$r"'
   check "${r:t} gives both exceptions"           eval 'grep -qF "first build may still push early" "$r" && grep -qF "a run about to end must push what it has" "$r"'

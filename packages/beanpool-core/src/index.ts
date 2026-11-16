@@ -110,6 +110,8 @@ export * from './relay-envelope.js';
 export * from './outside-chat.js';
 // A guest in a group hosted by another community: the step their phone takes from the host's roster (G1b).
 export * from './group-guest-steps.js';
+export * from './group-guest-chat.js';
+export * from './group-guest-mail.js';
 export * from './outside-devices.js';
 // Finding someone in another community by their exact name, when they said yes (N1).
 export * from './find-by-name.js';
@@ -202,14 +204,14 @@ export {
     groupKeyWrapAad, wrapGroupKey, openGroupKeyWrap, groupKeyCommit, groupMembersDigest, groupWrapsDigest, groupEpochCoversExactly,
     groupEpochCanonical, makeGroupEpochRecord, verifyGroupEpochRecord, openGroupEpochRecord, openMyGroupKey,
     groupTopUpCanonical, makeGroupTopUp, verifyGroupTopUp, openGroupTopUp,
-    groupMessageKey, groupLineAad, isGroupEncryptedNonce, isGroupEncryptedPayload, sealGroupLine, openGroupLineWithMessageKey, openGroupLine,
+    groupMessageKey, groupLineAad, isGroupEncryptedNonce, isGroupEncryptedPayload, sealGroupLine, sealGroupLineEdit, openGroupLineWithMessageKey, openGroupLine,
     sealGroupVoice, openGroupVoiceWithMessageKey, openGroupVoice,
     detectMentions, makeGroupEpochRecordAsync, groupLineVerdictKey,
     KEY_SUCCESSION_TAG, KEY_SUCCESSION_MAX, keySuccessionCanonical, makeKeySuccession, verifyKeySuccession, walkKeySuccession,
 } from './group-crypto.js';
 export type {
     GroupEpochReason, GroupLinePart, GroupCryptoRandom, GroupKeyWrap, GroupEpochRecord, GroupTopUp, GroupLinePayload, GroupLineBinding,
-    OpenedGroupLine, GroupWrapBinding, GroupWrapOpenBinding, GroupServedWrap, MakeGroupEpochInput, GroupEpochCheck, GroupKeyOpenCheck, GroupTopUpCheck, SealGroupLineInput,
+    OpenedGroupLine, GroupWrapBinding, GroupWrapOpenBinding, GroupServedWrap, MakeGroupEpochInput, GroupEpochCheck, GroupKeyOpenCheck, GroupTopUpCheck, SealGroupLineInput, SealGroupLineEditInput,
     GroupEpochProgress, GroupLineVerifyMemo, FormerKey, SealGroupVoiceInput, GroupVoiceBinding, OpenedGroupVoice,
 } from './group-crypto.js';
 // Voice messages (DESIGN-cross-chat-voice-fable.md §5, V1): the part's constants, frame and checks, read by the node and both apps.

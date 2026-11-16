@@ -109,6 +109,7 @@ import { ListPhoto } from '../components/ListPhoto';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { ForumVisitorHome } from '../components/forum/ForumVisitorHome';
+import { LINK_WORDS } from '../components/forum/ForumLinks';
 import { FORUM_VISITOR_WORDS } from '@beanpool/core';
 import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, liftedStyle, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
 import { LearnHomeBody } from '../components/LearnHomeBody';
@@ -2763,6 +2764,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 const circle = circleNow?.id === f.circle?.id ? circleNow ?? f.circle : f.circle;
                 const helping = helped || !!f.watches?.some(w => w.wouldHelp);
                 const demandLine = findOffersStart(f) && !circle ? circleDemandLine(f.demand) : null;
+                // The forum's "Start a community near you" section, searched for the town typed (forum slice F9, §10.5).
+                const talk = forumOn(answer?.features) && !visitor ? () => onNavigate('forum-start-community', townName ?? '') : undefined;
                 // The community a remembered request went to, and the name to call it by: the yes region above the waiting
                 // cards and the waiting cards below say the same name.
                 const knockCommunity = (k: RememberedKnock) => f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
@@ -2946,6 +2949,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                         {t(PLACE_CIRCLE_WORDS.help)}
                                     </button>
                                 )}
+                                {talk && <button type="button" onClick={talk} data-testid="home-find-forum" className={FIND_ACTION}>{t(LINK_WORDS.findTalk)}</button>}
                             </div>
                         )}
                         {/* Outside findOffersStart: a waiting card's own "I'd help" answers here too, and with a request out that
@@ -2955,7 +2959,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                         </div>
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
                         {demandLine && <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-demand">{demandLine}</p>}
-                        {circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} onAsked={handleAsked} onStart={() => setStartOpen(true)} onChange={card => setCircleNow({ ...card, id: circle.id })} />}
+                        {circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} onAsked={handleAsked} onStart={() => setStartOpen(true)} onTalk={talk} onChange={card => setCircleNow({ ...card, id: circle.id })} />}
                         {townName && !townOpen && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3" data-testid="home-town-picked">
                                 <span className="min-w-0 break-words text-sm font-semibold text-text-primary">{t('Near {town}', { town: townName })}</span>

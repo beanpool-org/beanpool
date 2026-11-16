@@ -785,6 +785,12 @@ export interface NodeConfig {
      * and never for none, across restarts. Carried in the take-over envelope, so a promoted server goes on from it.
      */
     addressList?: AddressListFields;
+    /**
+     * Set when a restore onto a new machine numbered the list by one with this server's clock behind it
+     * (services/address-list.ts renumberAddressListAfterSwap): the seq it fell back to. Once the clock's floor passes it, the
+     * next look numbers the list from the floor, content unchanged, and clears this.
+     */
+    addressListFloorOwed?: number;
 }
 
 // Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
@@ -9929,6 +9935,7 @@ export function getNodeConfig(): NodeConfig {
         ...(Array.isArray(config.registrarNames) ? { registrarNames: config.registrarNames } : {}),
         ...(typeof config.mainAddress === 'string' ? { mainAddress: config.mainAddress } : {}),
         ...(config.addressList && typeof config.addressList === 'object' ? { addressList: config.addressList } : {}),
+        ...(Number.isSafeInteger(config.addressListFloorOwed) && config.addressListFloorOwed >= 0 ? { addressListFloorOwed: config.addressListFloorOwed } : {}),
     };
 
     if (migrated) {

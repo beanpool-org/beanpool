@@ -28,7 +28,8 @@
  *     files and a process per boot: the nightly backup restored onto a fresh machine after the lost server signed a newer
  *     list; the same after a past take-over, from a database-only backup (never a lower epoch); a roll-back through the real
  *     rollBackTo (the notice carries the number signed before it); and a clock far behind (on the same machine the notice
- *     still puts it past; on a fresh machine it falls back to the kept seq + 1 and the boot logs why).
+ *     still puts it past; on a fresh machine it falls back to the kept seq + 1, marked, and the boot logs why; once the
+ *     clock is set right the next look numbers the list from the clock, above the lost server's, and clears the mark).
  *  8. The table: (restart, change, no change, restore, restore on a fresh machine, roll-back, take-over) taken two at a
  *     time after a change since the backup -> every list signed is at or above every one signed before it, strictly above
  *     each with other content; no bump for no change or a restart; a take-over's epoch above every epoch before it.
@@ -60,7 +61,7 @@ import { privateKeyFromRaw, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
     ADDRESS_LIST_PATH, ADDRESS_PROOF_PATH, checkAddressList, chooseAddressList, compareAddressNumbers, newAddressProofNonce,
-    verifyAddressProof, type SignedAddressList,
+    sameAddressListContent, verifyAddressProof, type SignedAddressList,
 } from '@beanpool/core';
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -207,6 +208,8 @@ async function specChild(spec: Spec): Promise<void> {
         await backup.rollBackTo(rp.resolveRestorePoint(spec.rollBackTo)!, spec.rollBackTo, null);
         out.notices = fs.readdirSync(dir).filter((f) => f.startsWith('restore-notice-')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
     }
+    // The clock-behind mark (address-list.ts renumberAddressListAfterSwap), as the database holds it at the end.
+    out.owed = (se.getNodeConfig() as any).addressListFloorOwed ?? null;
     console.log(`RESULT ${JSON.stringify(out)}`);
     process.exit(0);
 }
@@ -695,6 +698,17 @@ async function main(): Promise<void> {
                 && /behind the address list's number/.test(fBehind?.output ?? ''),
                 `restored onto a fresh machine with the clock far behind, it falls back to the kept seq + 1 (${num(L0)} → ${num(fR)}), above all the backup kept, and the boot logs that the clock is behind `
                 + `(the module comment's limit: the lost server's noon list ${num(L1)} can outrank it until the clock is right)`);
+            // 7d, then: the clock set right. Without the mark nothing would renumber (no change of content), and the lost
+            // server's noon list would outrank this one for good, with phones keeping (epoch, seq) from S4 on.
+            assert(fBehind?.owed === fR?.list?.seq, `the fall-back is marked at the seq it fell back to (${show(fBehind?.owed)})`);
+            const fRight = runSpec(freshBehind, { clock: T0 + 14 * HOUR });
+            const fRR = fRight?.signed as SignedAddressList;
+            assert(fRR?.list && L1?.list && fR?.list && compareAddressNumbers(fRR.list, L1.list) === 1 && fRR.list.seq === floorAt(T0 + 14 * HOUR)
+                && sameAddressListContent(fRR.list, fR.list) && phoneTakes(fRR, L1) === 'replace newer' && fRight?.owed === null,
+                `the clock set right, the next look numbers the list from the clock, content unchanged (${num(fR)} → ${num(fRR)}), above the lost server's noon list ${num(L1)} (${phoneTakes(fRR, L1)}), and the mark is cleared (${show(fRight?.owed)})`);
+            const fLater = runSpec(freshBehind, { clock: T0 + 15 * HOUR });
+            assert(fLater?.signed?.list?.seq === fRR?.list?.seq && fLater?.owed === null,
+                `an hour later, with no change, the number stays (${num(fLater?.signed)}): the mark renumbers once`);
         } finally {
             fs.rmSync(work, { recursive: true, force: true });
         }

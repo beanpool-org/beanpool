@@ -537,7 +537,8 @@ export function importRatchetState(j: RatchetStateJson): RatchetState {
         throw new Error(`ratchet: stored state refused (${why})`);
     };
     if (!j || j.v !== 1) bad('version');
-    const macBytes = macLength(j.macBytes);
+    if (j.macBytes !== 8 && j.macBytes !== 32) bad('mac length');
+    const macBytes = j.macBytes;
     if (typeof j.initiator !== 'boolean') bad('initiator');
     const key = (v: unknown): Uint8Array => {
         const out = typeof v === 'string' ? unb64(v) : bad('key');

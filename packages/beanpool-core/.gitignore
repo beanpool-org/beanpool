@@ -1,0 +1,2 @@
+# ratchet-mutants.test.ts writes its broken copies of src/ratchet.ts here for one run, then removes them.
+.ratchet-mutant-*/

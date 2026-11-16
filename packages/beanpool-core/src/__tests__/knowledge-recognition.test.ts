@@ -26,9 +26,10 @@ describe('the Local guide badge', () => {
 });
 
 describe('Thank', () => {
-    const base = { signedIn: true, live: true, beansLive: true, own: false, gathered: false, writer: 'ada-pk' };
+    type Facts = Parameters<typeof knowledgeThankOffered>[0];
+    const base: Facts = { signedIn: true, live: true, beansLive: true, own: false, gathered: false, writer: 'ada-pk' };
     // [what differs from a member reading someone else's page on a live Learn where Beans are live, offered?]
-    const TABLE: Array<[string, Partial<typeof base> & { writer?: string | null }, boolean]> = [
+    const TABLE: Array<[string, Partial<Facts>, boolean]> = [
         ['a member, someone else\'s page', {}, true],
         ['the writer themselves', { own: true }, false],
         ['a visitor (no key)', { signedIn: false }, false],

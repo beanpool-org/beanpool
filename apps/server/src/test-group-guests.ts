@@ -1457,21 +1457,28 @@ async function main(): Promise<void> {
     assert(d19 === TA19.length * DOWN19.length && Object.keys(AWAY19).length === TA19.length, `19dz. the table has a row for every take-away and every outage (${d19} rows)`);
 
     // The table: a row takes away exactly when it is a line's takedown or a removal; each take-away is kept at least as long as
-    // a home may hold what it takes away (MAIL_HELD_DAYS), and each row that adds a day, no longer.
+    // a home may hold what it takes away (MAIL_HELD_DAYS), and each row that adds a day, no longer. An invitation (G2) adds,
+    // and is kept as long as a take-away: its guest stays invited until they answer, and a removal queued before it is kept
+    // that long, so a home down for more than a day got the removal and lost the invitation (guests-g2-must-include.md).
     const KINDS19: Array<[string, Record<string, unknown>]> = [
         ['invite', { name: 'g' }], ['roster', { name: 'g' }], ['line', { id: 'l' }], ['edit', { id: 'l', action: 'edited' }], ['epoch', { record: {} }],
         ['edit', { id: 'l', action: 'removed', by: 'author' }], ['removed', { why: 'removed' }], ['removed', { why: 'closed' }], ['removed', { why: 'group-closed' }],
+        ['edit', { ids: ['l', 'm'], action: 'removed', by: 'author' }],
     ];
     for (const [kind, data] of KINDS19) {
         const away = kind === 'removed' || (kind === 'edit' && data.action === 'removed');
-        const label = `${kind}${data.action ? ` ${data.action}` : data.why ? ` (${data.why})` : ''}`;
+        const long = away || kind === 'invite';
+        const label = `${kind}${data.ids ? ' of many lines' : ''}${data.action ? ` ${data.action}` : data.why ? ` (${data.why})` : ''}`;
         const kept = typeof guests?.guestRowKeptMs === 'function' ? guests.guestRowKeptMs(kind, data) as number : NaN;
         const says = typeof guests?.takesAway === 'function' ? guests.takesAway(kind, data) as boolean : null;
-        assert(says === away && (away ? kept >= HELD19 : kept === QUEUE_MS),
-            `19d. table: ${label} ${away ? `takes away: kept ${kept / DAY19} days, at least the ${HELD_DAYS19} a home may hold what it takes away` : `adds: kept ${kept / DAY19} day(s), no longer than ${QUEUE_MS / DAY19}`} (takesAway says ${says})`);
+        assert(says === away && (long ? kept >= HELD19 : kept === QUEUE_MS),
+            `19d. table: ${label} ${away ? `takes away: kept ${kept / DAY19} days, at least the ${HELD_DAYS19} a home may hold what it takes away`
+                : long ? `adds, an invitation: kept ${kept / DAY19} days, at least the ${HELD_DAYS19} a removal before it is kept`
+                : `adds: kept ${kept / DAY19} day(s), no longer than ${QUEUE_MS / DAY19}`} (takesAway says ${says})`);
     }
 
-    // No over-retention: each row that adds, queued while its home is down, goes unsent once a day old, and none is left.
+    // No over-retention: each row that adds, queued while its home is down, goes unsent once a day old, and none is left;
+    // an invitation (G2) is kept, and goes once its home answers.
     {
         const { g, m, key, ok } = await row19('Adds aged');
         const sent = lineIn(m, g, key, 1);
@@ -1494,12 +1501,16 @@ async function main(): Promise<void> {
             await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
             await settle();
         } finally { refusing.delete('a.example'); }
-        for (const kind of ['edit', 'epoch', 'invite', 'line', 'roster']) {
+        for (const kind of ['edit', 'epoch', 'line', 'roster']) {
             const went = outs.filter((o, i) => i >= nAdd && o.home === 'a.example' && o.body?.group === g && o.body.kind === kind).length;
             const left = rowsOf19(g).filter((r) => r.kind === kind).length;
             assert(ok && kinds === 'edit epoch invite line roster' && went === 0 && left === 0,
-                `19d. no over-retention: ${({ edit: 'an edit with new words', epoch: 'an epoch', invite: 'an invitation', line: 'a line', roster: 'a roster' } as Record<string, string>)[kind]} queued while its home is down goes unsent once 25 hours old (${went}), none left (${left})${kinds === 'edit epoch invite line roster' ? '' : `, setup queued ${kinds}`}`);
+                `19d. no over-retention: ${({ edit: 'an edit with new words', epoch: 'an epoch', line: 'a line', roster: 'a roster' } as Record<string, string>)[kind]} queued while its home is down goes unsent once 25 hours old (${went}), none left (${left})${kinds === 'edit epoch invite line roster' ? '' : `, setup queued ${kinds}`}`);
         }
+        const invites = outs.filter((o, i) => i >= nAdd && o.home === 'a.example' && o.body?.group === g && o.body.kind === 'invite').length;
+        const invitesLeft = rowsOf19(g).filter((r) => r.kind === 'invite').length;
+        assert(ok && kinds === 'edit epoch invite line roster' && invites === 1 && invitesLeft === 0,
+            `19d. an invitation queued while its home is down, 25 hours old, is kept and goes once its home answers (went ${invites}, left ${invitesLeft})`);
     }
 
     // ── 19f. The send rule (#3233 round 5): every row x every change after it was queued x its age ──
@@ -1541,11 +1552,14 @@ async function main(): Promise<void> {
         invite:             cols19f(GO,  GO,          GO,         DROP,         DROP,          GO,                 DROP,      DROP,        WAIT,     GO,       DROP),
         removal:            cols19f(GO,  GO,          GO,         GO,           DROP,          GO,                 GO,        GO,          WAIT,     GO,       DROP),
     };
-    /** A row that takes away is kept MAIL_HELD_DAYS and a day, one that adds a day; past it, it goes unsent (a standby keeps it). */
+    /**
+     * A row that takes away, or an invitation (G2), is kept MAIL_HELD_DAYS and a day, one that adds a day; past it, it goes
+     * unsent (a standby keeps it).
+     */
     const want19f = (r: Row19f, ch: Ch19f, age: number): string => {
         const fresh = FRESH19F[r][ch];
         if (fresh === WAIT || fresh === DROP) return fresh;
-        const kept = r === 'edit (takedown)' || r === 'removal' ? HELD19 + QUEUE_MS : QUEUE_MS;
+        const kept = r === 'edit (takedown)' || r === 'removal' || r === 'invite' ? HELD19 + QUEUE_MS : QUEUE_MS;
         return age >= kept ? DROP : fresh;
     };
     /** One group for a row: X from a.example in (invited only, for an invitation), the row queued while a.example refuses. */

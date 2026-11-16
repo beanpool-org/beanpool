@@ -215,6 +215,8 @@ export type GroupNoticeAnswer =
 const RECEIVED: GroupNoticeAnswer = { status: 202, body: { received: true } };
 
 const sum = (sql: string, ...args: unknown[]): number => (db.prepare(sql).get(...args) as { n: number }).n;
+/** A held notice that carries a line's words (a line, an edit with new words): never a takedown, which only takes away. */
+const HELD_WORDS = `(kind = 'line' OR (kind = 'edit' AND (CASE WHEN json_valid(body) THEN json_extract(body, '$.action') END) IS NOT 'removed'))`;
 const NO_DEVICE_HAS = `NOT EXISTS (SELECT 1 FROM group_guest_mail_got g WHERE g.member = group_guest_mail.member AND g.mail_id = group_guest_mail.id)`;
 
 /**
@@ -409,7 +411,7 @@ export function heldGroupMailFor(member: string, device: string, since = 0, sinc
     // the host offers a take-away that long and a day more (group-guests.ts guestRowKeptMs), never shorter (#3233 round 4).
     const rows = db.prepare(`SELECT id, host, group_id, kind, body, received_at FROM group_guest_mail m WHERE member = ? AND received_at >= ?
                                AND NOT EXISTS (SELECT 1 FROM group_guest_mail_got g WHERE g.member = m.member AND g.mail_id = m.id AND g.device = ?)
-                               ${getNodeRole() === 'backup' ? "AND kind NOT IN ('line', 'edit')" : ''}
+                               ${getNodeRole() === 'backup' ? `AND NOT ${HELD_WORDS}` : ''}
                              ORDER BY received_at, rowid LIMIT ?`).all(member, Date.now() - MAIL_HELD_DAYS * DAY_MS, device, MAIL_FETCH_PAGE + 1) as Array<{
         id: string; host: string; group_id: string; kind: GroupNoticeKind; body: string; received_at: number;
     }>;
@@ -471,13 +473,15 @@ function dropNotices(member: string, ids: string[]): number {
  * THE COPY RULE at the home (#3233 round 3): a held copy of a host's line (`line`, `edit`) is served only while this server
  * has been the main one since it was held. On a standby, the host's takedowns go to the server that took over (and one that
  * reaches a standby is answered and dropped, receiveGroupNotice), so a copy held here before can no longer be kept up to
- * date: every held line and edit, for every member, goes at each role change (demoted, or promoted again: everything a
- * standby holds is from before its demotion), at a standby's sweep (one that started as a standby changed no role in this
- * process), and a standby's fetch serves none meanwhile. A device misses the lines it never fetched, as it does after a
- * take-over (the promoted server starts with none held). Invitations, rosters, epochs and removals stay. How many went.
+ * date: every held line and edit with new words (HELD_WORDS), for every member, goes at each role change (demoted, or
+ * promoted again: everything a standby holds is from before its demotion), at a standby's sweep (one that started as a
+ * standby changed no role in this process), and a standby's fetch serves none meanwhile. A device misses the lines it never
+ * fetched, as it does after a take-over (the promoted server starts with none held). Invitations, rosters, epochs, removals
+ * and TAKEDOWNS stay, and are served (G2): a takedown only takes away, and is never out of date, so a device that took the
+ * line before still hears it went. How many went.
  */
 function heldLinesStale(): number {
-    const rows = db.prepare("SELECT member, id FROM group_guest_mail WHERE kind IN ('line', 'edit')").all() as Array<{ member: string; id: string }>;
+    const rows = db.prepare(`SELECT member, id FROM group_guest_mail WHERE ${HELD_WORDS}`).all() as Array<{ member: string; id: string }>;
     const byMember = new Map<string, string[]>();
     for (const r of rows) byMember.set(r.member, [...(byMember.get(r.member) ?? []), r.id]);
     let gone = 0;

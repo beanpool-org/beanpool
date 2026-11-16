@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { FIND_DAY_USED, FIND_ME_HELP, FIND_ME_SWITCH, FIND_NOBODY, ed25519Signer, signAddressCard } from '@beanpool/core';
+import { FIND_DAY_USED, FIND_ME_HELP, FIND_ME_SWITCH, FIND_NOBODY, FIND_NOT_A_MEMBER, FIND_OUTSIDE_OFF, ed25519Signer, signAddressCard } from '@beanpool/core';
 import { MemoryIDBKeyRange, memoryIndexedDB } from '../lib/memory-indexeddb';
 
 vi.mock('qrcode.react', () => ({ QRCodeSVG: ({ value }: { value: string }) => <span data-testid="qr" data-value={value} /> }));
@@ -115,6 +115,16 @@ describe('find by name: the look-up', () => {
         expect(await screen.findByText(FIND_DAY_USED)).toBeTruthy();
         expect(screen.queryByText('words from the server')).toBeNull();
     });
+
+    for (const [code, words] of [['outside_off', FIND_OUTSIDE_OFF], ['not_a_member', FIND_NOT_A_MEMBER]] as const) {
+        it(`a 403 ${code} says why, not "couldn't be asked"`, async () => {
+            here.refuse = { status: 403, code };
+            render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);
+            await find('riverside.example', 'Wren Tallowmere');
+            expect(await screen.findByText(words)).toBeTruthy();
+            expect(screen.queryByText('words from the server')).toBeNull();
+        });
+    }
 
     it('320 px: every field of the step is 100% wide with its border inside, and every line may wrap', async () => {
         render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);

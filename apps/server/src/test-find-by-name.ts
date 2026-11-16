@@ -20,7 +20,10 @@
  *      here with nothing sent (this community, no community, no name, a visitor); the 11th look-up today is 429, nothing sent
  *   5  the owner's switch off: asking refused here, answering "nobody"
  *   6  a renamed member: nobody by either name until their app hands a new card
- *   7  the logs: no name typed, no key, no community named, in any line
+ *   7  ROOM: party (a member here, origin A, origin D past its day, origin E flooding with fresh askers) x the answering
+ *      store (empty, near full, full) -> the member and A answered as before, the flood and the day refused only for the
+ *      origin that sent them, the one "nobody" answer the same; one origin's flood adds nothing past its day
+ *   8  the logs: no name typed, no key, no community named, in any line
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-find-by-name.ts
  */
@@ -364,11 +367,79 @@ async function main(): Promise<void> {
     const kept = db.prepare("SELECT COUNT(*) AS n FROM member_preferences WHERE public_key = ? AND pref_key = 'find_by_name'").get(wren.key) as { n: number };
     assert(kept.n === 0, '6d. off keeps nothing of her card');
 
-    // ── 7. The logs ───────────────────────────────────────────────────────────────────────
-    console.log('\n7. Nothing found or typed is logged');
+    // ── 7. Room: nothing one party sends uses up a day that is someone else's ─────────────
+    // INVARIANT: no outside party can use up a count that belongs to someone else. The party x the store's state: a member
+    // here asking out, origin A, origin D past its day, origin E flooding with a fresh asker each time; the answering store
+    // empty, one origin short of FIND_ORIGINS_KEPT, and at it (each origin seeded at its most: past its day, its
+    // FIND_PER_ORIGIN_DAY askers held). Sky is opted in here; Ben and Moss ask c.example, which answers with Cara's card.
+    console.log("\n7. Room: party x the store's state");
+    cAnswer = asks[0].answer;
+    const D = keys(), E = keys();
+    for (const [host, k] of [['d.example', D], ['e.example', E]] as Array<[string, Keys]>) {
+        docs.set(`https://${host}/api/node/key`, await signNodeKeyDocument({ key: k.key, validUntil: Date.now() + NODE_KEY_VALIDITY_MS, previousKeys: [] }, signerOf(k.seed)));
+    }
+    const fromD = { name: 'd.example', k: D }, fromE = { name: 'e.example', k: E };
+    const FLOOD = find.FIND_PER_ORIGIN_DAY + 100;
+    const isNobody = (r: Answer) => r.status === 200 && r.text === FIND_NOBODY_BODY && r.type === nobodyType && r.cache === 'no-store' && sameSteps();
+    const findsSky = (r: Answer) => r.status === 200 && addressCardVerifies(r.body?.card) && r.body.card.key === sky.key && sameSteps();
+    const show = (r: Answer) => `${r.status} ${r.text.slice(0, 60)}`;
+    const asksOut = (who: Keys) => asMember(who, 'POST', '/api/find/name', { home: 'c.example', name: CARA });
+    const foundOut = (r: Answer) => r.status === 200 && r.body?.found === true && r.body.card?.key === cara.key;
+    const stores: Array<[string, number]> = [['empty', 0], ['near full', find.FIND_ORIGINS_KEPT - 1], ['full', find.FIND_ORIGINS_KEPT]];
+    let roomRows = 0;
+    const roomFailures: string[] = [];
+    const roomRow = (label: string, ok: boolean, why: string) => { roomRows++; if (!ok) roomFailures.push(`${label}: ${why}`); };
+    for (const [store, seeded] of stores) {
+        find.forgetFindCounts();
+        find.__seedFindCountsForTests(seeded);
+        const seededHeld = find.heldFindCounts();
+        const aAsker = keys().key;
+        // Before anything floods: Ben asks out, and an asker at a.example finds Sky.
+        const benBefore = await asksOut(ben);
+        const aBefore = await lookup(aAsker, NAMES.sky);
+        // d.example uses its day: 199 look-ups for nobody, the 200th for Sky; then one more for Sky.
+        for (let i = 0; i < find.FIND_PER_ORIGIN_DAY - 1; i++) await lookup(keys().key, 'Nobody Atall', 'signed', fromD);
+        const dLast = await lookup(keys().key, NAMES.sky, 'signed', fromD);
+        const dPast = await lookup(keys().key, NAMES.sky, 'signed', fromD);
+        // e.example floods: FLOOD look-ups, a fresh asker each time.
+        let eAtDay = -1;
+        for (let i = 0; i < FLOOD; i++) {
+            await lookup(keys().key, 'Nobody Atall', 'signed', fromE);
+            if (i === find.FIND_PER_ORIGIN_DAY - 1) eAtDay = find.heldFindCounts().askersOf('e.example') ?? -1;
+        }
+        const held = find.heldFindCounts();
+        const ePast = await lookup(keys().key, NAMES.sky, 'signed', fromE);
+        // After: the same parties, and ones that had not asked today.
+        const benAfter = await asksOut(ben);
+        const mossFirst = await asksOut(moss);
+        const aAgain = await lookup(aAsker, NAMES.sky);
+        const aNew = await lookup(keys().key, NAMES.sky);
+        const dAgain = await lookup(keys().key, NAMES.sky, 'signed', fromD);
+
+        roomRow(`member here x ${store}`, foundOut(benBefore) && foundOut(benAfter) && foundOut(mossFirst),
+            `Ben before ${show(benBefore)}, after ${show(benAfter)}; Moss's first ${show(mossFirst)}`);
+        roomRow(`member here x ${store}: the members' store`, held.members === 1 && seededHeld.members === 0,
+            `seeding held ${seededHeld.members} members, the floods left ${held.members} (Ben's one)`);
+        roomRow(`origin A x ${store}`, findsSky(aBefore) && findsSky(aAgain) && findsSky(aNew),
+            `before ${show(aBefore)}, the same asker after ${show(aAgain)}, a new asker after ${show(aNew)}`);
+        roomRow(`origin D past its day x ${store}`, findsSky(dLast) && isNobody(dPast) && isNobody(dAgain),
+            `the 200th ${show(dLast)}, the 201st ${show(dPast)}, after the flood ${show(dAgain)}`);
+        roomRow(`origin E flooding x ${store}`, isNobody(ePast),
+            `after ${FLOOD} look-ups, a fresh asker for Sky got ${show(ePast)}`);
+        roomRow(`origin E flooding x ${store}: adds nothing past its day`,
+            eAtDay === find.FIND_PER_ORIGIN_DAY && held.askersOf('e.example') === find.FIND_PER_ORIGIN_DAY
+                && held.origins <= find.FIND_ORIGINS_KEPT && held.askers <= find.FIND_ORIGINS_KEPT * find.FIND_PER_ORIGIN_DAY,
+            `e.example's askers at its 200th: ${eAtDay}, after ${FLOOD}: ${held.askersOf('e.example')}; origins ${held.origins}, askers ${held.askers}`);
+    }
+    for (const f of roomFailures) console.error(`  ${f}`);
+    assert(roomRows === stores.length * 6 && roomFailures.length === 0,
+        `7a. room: a member's look-up and origin A's answered in every state, the flood and the day refused only for the origin that sent them, the one nobody the same: ${roomRows - roomFailures.length} of ${roomRows}`);
+
+    // ── 8. The logs ───────────────────────────────────────────────────────────────────────
+    console.log('\n8. Nothing found or typed is logged');
     const secrets = [...Object.values(NAMES), CARA, 'Wren Hartwell', 'Nobody Atall', 'wREN TALLOWMERE', wren.key, sky.key, ben.key, cara.key, juno.key];
     const named = logs.filter((line) => secrets.some((s) => line.includes(s)));
-    assert(named.length === 0, `7a. no log line names a name typed or a key (${named.length}: ${named.slice(0, 2).join(' | ').slice(0, 200)})`);
+    assert(named.length === 0, `8a. no log line names a name typed or a key (${named.length}: ${named.slice(0, 2).join(' | ').slice(0, 200)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

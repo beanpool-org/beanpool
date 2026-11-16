@@ -68,7 +68,7 @@ vi.mock('../outside-chat-live', () => ({
     outsideErrorWords: (e: unknown) => (e instanceof Error ? e.message : 'error'),
 }));
 
-import { FIND_DAY_USED, FIND_ME_HELP, FIND_ME_SWITCH, FIND_NOBODY } from '@beanpool/core';
+import { FIND_DAY_USED, FIND_ME_HELP, FIND_ME_SWITCH, FIND_NOBODY, FIND_NOT_A_MEMBER, FIND_OUTSIDE_OFF } from '@beanpool/core';
 import { FindByNameStep, FindMeSwitch } from '../../components/FindByName';
 import { lightColors, darkColors, type AppColors } from '../../constants/colors';
 
@@ -157,6 +157,18 @@ describe('the look-up (FindByNameStep)', () => {
         expect(byId(host, 'find-note').textContent).toBe(FIND_DAY_USED);
         expect(host.textContent).not.toContain('words from the server');
     });
+
+    for (const [code, words] of [['outside_off', FIND_OUTSIDE_OFF], ['not_a_member', FIND_NOT_A_MEMBER]] as const) {
+        it(`a 403 ${code} says why, not "couldn't be asked"`, async () => {
+            here.refuse = code;
+            const host = await render(createElement(FindByNameStep, { colors: lightColors, onCard: vi.fn() }));
+            await type(host, 'find-home', 'riverside.example');
+            await type(host, 'find-name', 'Wren Tallowmere');
+            await press(host, 'find-them');
+            expect(byId(host, 'find-note').textContent).toBe(words);
+            expect(host.textContent).not.toContain('words from the server');
+        });
+    }
 });
 
 describe('320 dp, text at 1.3x, light and dark', () => {

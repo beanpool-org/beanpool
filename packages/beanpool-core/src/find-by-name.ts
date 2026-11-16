@@ -28,8 +28,8 @@ export const FIND_NOBODY_BODY = '{"v":1,"card":null}';
 /**
  * A typed name as it is looked up: runs of spaces made one, trimmed at both ends, as an address card writes a name. Letter
  * case is the server's name rule (@beanpool/engine foldName: the one rule by which two names on a community are the same).
- * Nothing else is forgiven: a part of a name, a missing letter or a dropped accent is another name. Null for text no card
- * could carry (empty, past 60 characters, a line break).
+ * Nothing else is forgiven: a part of a name, a missing letter or a dropped accent is another name. A line break or a tab
+ * is a space like any other (so it is forgiven too). Null for text no card could carry (empty, past 60 characters).
  */
 export function findTypedName(name: unknown): string | null {
     if (typeof name !== 'string') return null;
@@ -66,15 +66,21 @@ export const FIND_OWN_COMMUNITY = word("That's your own community: write to them
 export const FIND_BAD_COMMUNITY = word("That isn't a community's address.");
 /** The name typed is none a card could carry. */
 export const FIND_BAD_NAME = word('Type their name as they use it, up to 60 characters.');
+/** The asker's own community takes nothing from other communities just now (its owner's switch): the server's own words. */
+export const FIND_OUTSIDE_OFF = word("This community doesn't take messages from other communities.");
+/** The asker doesn't read as a member of their own community now (suspended, say): the server's own words. */
+export const FIND_NOT_A_MEMBER = word('Only members of this community can do this.');
 
 /** The words both apps show, as a table: each app shows `t(FIND_WORDS.nobody)`, which the words check reads as a word() key. */
 export const FIND_WORDS = {
     meSwitch: FIND_ME_SWITCH, meHelp: FIND_ME_HELP, nobody: FIND_NOBODY, dayUsed: FIND_DAY_USED, notReached: FIND_NOT_REACHED,
-    ownCommunity: FIND_OWN_COMMUNITY, badCommunity: FIND_BAD_COMMUNITY, badName: FIND_BAD_NAME,
+    ownCommunity: FIND_OWN_COMMUNITY, badCommunity: FIND_BAD_COMMUNITY, badName: FIND_BAD_NAME, outsideOff: FIND_OUTSIDE_OFF,
+    notAMember: FIND_NOT_A_MEMBER,
 } as const;
 
 const REFUSALS: Readonly<Record<string, keyof typeof FIND_WORDS>> = {
     find_day_used: 'dayUsed', not_reached: 'notReached', own_community: 'ownCommunity', bad_home: 'badCommunity', bad_name: 'badName',
+    outside_off: 'outsideOff', not_a_member: 'notAMember',
 };
 
 /** Which of FIND_WORDS says why the asker's server refused a look-up, by its code: `notReached` for any other. */

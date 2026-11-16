@@ -21,18 +21,25 @@
  * **Answering (the other community).** The request passed the server signature door (engine/node-signature.ts: unsigned,
  * stale, replayed, signed for another server, a key its origin doesn't name are refused there, before this runs). Then
  * every look-up takes the same steps in the same order, whatever is found (FIND_STEPS; the suite reads them back):
- * count it against the asker (FIND_BY_NAME_PER_DAY, by origin and key) and against the asking server (FIND_PER_ORIGIN_DAY),
- * the one indexed read by the name rule, the member check, the block check, the card check (a placeholder card of the
- * same shape, its signature checked too, when nothing was found), the owner's switch. Only then the answer: the card when
+ * count it against the asking server (FIND_PER_ORIGIN_DAY) and then against the asker (FIND_BY_NAME_PER_DAY, by origin and
+ * key; read, not counted, once the server is past its day), the one indexed read by the name rule, the member check, the
+ * block check, the card check (a placeholder card of the same shape, its signature checked too, when nothing was found),
+ * the owner's switch. Only then the answer: the card when
  * every one of them says yes, else FIND_NOBODY_BODY in its exact bytes, for no such member, one who didn't say yes, one who
  * blocked the asker, one who left or was removed, the asker themselves, and an asker or a server past its day. This file
- * writes no log line at all: nothing found or typed, no key, no name, no community.
+ * writes no log line at all: nothing found or typed, no key, no name, no community. (A look-up this server sends that
+ * cannot reach the other community goes through the relay's own warning, relay-outbox.ts, which may name that community's
+ * address, never a member or a name typed.)
  *
  * The card's home is the one its owner signed (a community answers at more than one name); the asker's app shows it as it
  * is, as for a scanned card.
  *
- * The day's counts are kept in this process, by UTC day, at most COUNTERS_MAX keys (a key past that counts as over:
- * shut, never open). A restart forgets them.
+ * **The day's counts**, kept in this process by UTC day (a restart forgets them), in two stores, so no outside party can use
+ * up a count that is someone else's. Asking: one count a member here, and only members add to it. Answering: one entry an
+ * origin, its askers inside it, counted only while that origin is within its day, so one origin holds at most
+ * FIND_PER_ORIGIN_DAY askers and a flood past its day adds nothing. At most FIND_ORIGINS_KEPT origins: a new one past that
+ * makes room by forgetting the origin that asked least recently, which then only starts its day again; a full store
+ * refuses nobody.
  */
 import {
     FIND_BAD_COMMUNITY, FIND_BAD_NAME, FIND_BY_NAME_PER_DAY, FIND_DAY_USED, FIND_NOBODY_BODY, FIND_NOT_REACHED, FIND_OWN_COMMUNITY,
@@ -53,10 +60,13 @@ import { OUTSIDE_OFF_ERROR, forwardSignedForAnswer } from './relay-outbox.js';
 export const FIND_BY_NAME_PREF = 'find_by_name';
 /** Look-ups one other community's server may bring here in a day, all its askers together. */
 export const FIND_PER_ORIGIN_DAY = 200;
-/** The most keys counted in a day; a new one past it counts as over. */
-export const COUNTERS_MAX = 100_000;
+/**
+ * The most origins counted in a day (as many as the door keeps keys for, engine/node-signature.ts NODE_KEYS_KEPT). Each holds
+ * at most FIND_PER_ORIGIN_DAY askers, so the answering store holds about 100,000 keys at the most.
+ */
+export const FIND_ORIGINS_KEPT = 512;
 /** The steps every answer takes, in order (the suite checks each look-up took exactly these). */
-export const FIND_STEPS = ['count-asker', 'count-origin', 'read-name', 'check-member', 'check-block', 'check-card', 'check-switch'] as const;
+export const FIND_STEPS = ['count-origin', 'count-asker', 'read-name', 'check-member', 'check-block', 'check-card', 'check-switch'] as const;
 
 export const FIND_BAD_CARD = word("Your card doesn't match your name here. Open your card again and try once more.");
 
@@ -73,28 +83,66 @@ export class FindError extends Error {
 }
 
 // ── The day's counts ────────────────────────────────────────────────────────────────────────
+// Two stores, so nothing one party sends can use up a count that is someone else's.
 
 let countedDay = -1;
-const counts = new Map<string, number>();
+/** Asking: each member here who looked someone up today, by key (only a member who reads as one asks: routes/find-by-name.ts). */
+const askedByMembers = new Map<string, number>();
+/** One other community's server's day here: its look-ups, and its askers, counted only while it is within its day. */
+interface OriginDay { looked: number; askers: Map<string, number> }
+/** Answering: each origin that brought look-ups today, the one that asked least recently first. */
+const answeredForOrigins = new Map<string, OriginDay>();
 
-/** Counts one look-up for `who` today, and whether it is within `max`, this one included. One past the day counts too. */
-function countLookup(who: string, max: number, now: number): boolean {
+function sameDay(now: number): void {
     const day = Math.floor(now / DAY_MS);
-    if (day !== countedDay) {
-        counts.clear();
-        countedDay = day;
-    }
-    const had = counts.get(who);
-    if (had === undefined && counts.size >= COUNTERS_MAX) return false;
-    const n = (had ?? 0) + 1;
+    if (day === countedDay) return;
+    askedByMembers.clear();
+    answeredForOrigins.clear();
+    countedDay = day;
+}
+
+/** One more for `who` in `counts`, held at `max` + 1, and whether it is within `max`, this one included. */
+function countOne(counts: Map<string, number>, who: string, max: number): boolean {
+    const n = (counts.get(who) ?? 0) + 1;
     counts.set(who, Math.min(n, max + 1));
     return n <= max;
 }
 
+/**
+ * `origin`'s day, moved to the most recent end. A new origin past FIND_ORIGINS_KEPT makes room by forgetting the one that
+ * asked least recently: a full store refuses nobody, and the origin forgotten only starts its day again.
+ */
+function originDay(origin: string): OriginDay {
+    const had = answeredForOrigins.get(origin);
+    if (had) answeredForOrigins.delete(origin);
+    const day = had ?? { looked: 0, askers: new Map<string, number>() };
+    answeredForOrigins.set(origin, day);
+    if (answeredForOrigins.size > FIND_ORIGINS_KEPT) answeredForOrigins.delete(answeredForOrigins.keys().next().value!);
+    return day;
+}
+
 /** Tests: forget the day's counts. */
 export function forgetFindCounts(): void {
-    counts.clear();
+    askedByMembers.clear();
+    answeredForOrigins.clear();
     countedDay = -1;
+}
+
+/** Tests: what the day's counts hold: members asking, origins answered, their askers in all and one origin's. */
+export function heldFindCounts(): { members: number; origins: number; askers: number; askersOf: (origin: string) => number | undefined } {
+    let askers = 0;
+    for (const d of answeredForOrigins.values()) askers += d.askers.size;
+    return { members: askedByMembers.size, origins: answeredForOrigins.size, askers, askersOf: (o) => answeredForOrigins.get(o)?.askers.size };
+}
+
+/** Tests: today's answering store holding `origins` made-up origins, each at its most (past its day, FIND_PER_ORIGIN_DAY askers). */
+export function __seedFindCountsForTests(origins: number, now = Date.now()): void {
+    sameDay(now);
+    for (let o = 0; o < origins; o++) {
+        const day = originDay(`seed-${o}.example`);
+        day.looked = FIND_PER_ORIGIN_DAY + 1;
+        for (let a = 0; a < FIND_PER_ORIGIN_DAY; a++) day.askers.set(a.toString(16).padStart(64, '0'), 1);
+    }
 }
 
 // ── The name rule ───────────────────────────────────────────────────────────────────────────
@@ -175,7 +223,8 @@ export async function findByName(asker: string, input: { home?: unknown; name?: 
     if (isOwnNodeHome(home)) throw new FindError(400, 'own_community', FIND_OWN_COMMUNITY);
     const name = findTypedName(input?.name);
     if (!name) throw new FindError(400, 'bad_name', FIND_BAD_NAME);
-    if (!countLookup(`m:${asker}`, FIND_BY_NAME_PER_DAY, now)) throw new FindError(429, 'find_day_used', FIND_DAY_USED);
+    sameDay(now);
+    if (!countOne(askedByMembers, asker, FIND_BY_NAME_PER_DAY)) throw new FindError(429, 'find_day_used', FIND_DAY_USED);
     const answer = await forwardSignedForAnswer(`https://${home}${RELAY_FIND_PATH}`, JSON.stringify({ v: 1, asker, name }));
     if (answer.status !== 200 || (answer.body as { v?: unknown } | null | undefined)?.v !== 1) throw new FindError(502, 'not_reached', FIND_NOT_REACHED);
     const card = readFindAnswer(answer.body);
@@ -212,10 +261,14 @@ export async function answerFind(origin: string, body: unknown, now = Date.now()
     }
     const asker = b.asker;
     const steps: string[] = [];
-    steps.push('count-asker');
-    const askerWithin = countLookup(`a:${origin} ${asker}`, FIND_BY_NAME_PER_DAY, now);
+    sameDay(now);
     steps.push('count-origin');
-    const originWithin = countLookup(`o:${origin}`, FIND_PER_ORIGIN_DAY, now);
+    const day = originDay(origin);
+    day.looked = Math.min(day.looked + 1, FIND_PER_ORIGIN_DAY + 1);
+    const originWithin = day.looked <= FIND_PER_ORIGIN_DAY;
+    steps.push('count-asker');
+    // Counted only while the origin is within its day; past it, read, so the steps are the same and the origin adds nothing.
+    const askerWithin = originWithin ? countOne(day.askers, asker, FIND_BY_NAME_PER_DAY) : (day.askers.get(asker) ?? 0) < FIND_BY_NAME_PER_DAY;
     steps.push('read-name');
     // One indexed read (idx_members_callsign_fold) by the name rule, the name as typed and as a card writes it.
     const row = db.prepare(`

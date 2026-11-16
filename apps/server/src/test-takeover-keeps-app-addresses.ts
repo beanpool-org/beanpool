@@ -16,6 +16,10 @@
  *   4. The main server dies; the standby takes over with the recovery code and restarts as the main server.
  *   5. There, requests signed for primary.beanpool.org and both confirmed addresses are accepted, other.test → 421,
  *      and Settings lists them with where each came from.
+ *   6. The owner's main address and the address list's number come too (several addresses S2, design
+ *      scratch/fable-design/DESIGN-several-addresses-fable.md §6): an own domain the owner made main on the main server is
+ *      the promoted server's main, and its signed list is the same key's at take-over count 1, which a phone holding the
+ *      main server's list takes as newer.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-takeover-keeps-app-addresses.ts
  */
@@ -70,6 +74,23 @@ async function child(): Promise<void> {
             const current = (se.getNodeConfig() as any).ownerAddresses ?? [];
             se.updateNodeConfig({ ownerAddresses: [...current, a.address] });
             return { envelopeId: (await flushTakeoverChecks()).envelopeId };
+        },
+        // An own domain confirmed and made main (Settings → Addresses → Make main), and the signed list it gives.
+        'make-main': async (a: { address: string }) => {
+            const se = await import('./state-engine.js');
+            const own = await import('./engine/own-addresses.js');
+            const { flushTakeoverChecks } = await import('./services/takeover-envelope.js');
+            const current = (se.getNodeConfig() as any).ownerAddresses ?? [];
+            se.updateNodeConfig({ ownerAddresses: [...current, a.address] });
+            own.forgetOwnAddresses();
+            own.setMainAddress(a.address);
+            const res = await fetch(`${await ownHttps()}/api/node/addresses`);
+            const list = await res.json().catch(() => null);
+            return { status: res.status, list, envelopeId: (await flushTakeoverChecks()).envelopeId };
+        },
+        list: async () => {
+            const res = await fetch(`${await ownHttps()}/api/node/addresses`);
+            return { status: res.status, body: await res.json().catch(() => null) };
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
@@ -145,6 +166,10 @@ async function main(): Promise<void> {
         assert(onMain['other.test'].status === 421 && onMain['later-confirmed.test'].status === 421,
             `other.test and later-confirmed.test (not yet confirmed) → 421 (${onMain['other.test'].status}, ${onMain['later-confirmed.test'].status})`);
 
+        const made = await main.send('make-main', { address: 'coop.example.org' });
+        assert(made.status === 200 && made.list?.list?.main === 'coop.example.org' && made.list.list.epoch === 0 && made.envelopeId && made.envelopeId !== setup.envelopeId,
+            `the owner makes an own domain main: the signed list names it, at take-over count 0, and the envelope is sealed again (${made.status} ${JSON.stringify(made.list?.list ?? made.list).slice(0, 200)})`);
+
         console.log('\n— 2. a standby copies it —');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
@@ -152,13 +177,13 @@ async function main(): Promise<void> {
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const pull1 = await standby.send('pull');
-        assert(pull1.resync.ok && pull1.envelope === 'stored' && pull1.held.at(-1) === setup.envelopeId, `the standby copied the database and holds the envelope (${JSON.stringify(pull1.resync)})`);
+        assert(pull1.resync.ok && pull1.envelope === 'stored' && pull1.held.at(-1) === made.envelopeId, `the standby copied the database and holds the envelope (${JSON.stringify(pull1.resync)})`);
         const standbyOwn = await standby.send('addresses');
         assert(Array.isArray(standbyOwn) && standbyOwn.length === 0, `the standby itself knows none of the main server's names (${JSON.stringify(standbyOwn)})`);
 
         console.log('\n— 3. a second address confirmed on the main server —');
         const later = await main.send('confirm-address', { address: 'later-confirmed.test' });
-        assert(later.envelopeId && later.envelopeId !== setup.envelopeId, 'confirming an address re-seals the take-over envelope');
+        assert(later.envelopeId && later.envelopeId !== made.envelopeId, 'confirming an address re-seals the take-over envelope');
         const pull2 = await standby.send('pull');
         assert(pull2.envelope === 'stored' && pull2.held.at(-1) === later.envelopeId, 'and the standby holds the newer copy');
 
@@ -187,6 +212,17 @@ async function main(): Promise<void> {
             assert(after[host].status === 200 && after[host].publicKey === setup.anna, `a request signed for ${host} is accepted there (${JSON.stringify(after[host])})`);
         }
         assert(after['other.test'].status === 421 && after['other.test'].code === 'wrong_community', `other.test → 421 (${JSON.stringify(after['other.test'])})`);
+
+        console.log('\n— 6. the owner\'s main and the list\'s number came too —');
+        const core = await import('@beanpool/core');
+        const promoted = await standby.send('list');
+        const pl = promoted.body?.list;
+        assert(promoted.status === 200 && core.checkAddressList(promoted.body).ok && pl.peerId === made.list.list.peerId && pl.main === 'coop.example.org',
+            `the promoted server's signed list is the same key's and names the owner's main (${promoted.status} ${JSON.stringify(pl).slice(0, 220)})`);
+        assert(pl?.epoch === 1 && pl.seq >= made.list.list.seq && pl.addresses.includes('later-confirmed.test'),
+            `at take-over count 1, its counter going on from the main server's (${made.list.list.epoch}.${made.list.list.seq} → ${pl?.epoch}.${pl?.seq})`);
+        const choice = core.chooseAddressList(promoted.body, { peerId: made.list.list.peerId, kept: made.list });
+        assert(choice.action === 'replace' && choice.why === 'newer', `a phone holding the main server's list takes the promoted server's as newer (${choice.action} ${(choice as any).why})`);
 
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     } catch (e: any) {

@@ -1509,6 +1509,8 @@ async function main(): Promise<void> {
             'POST /api/vouchers/ask',
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'POST /api/node/check', 'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'GET /api/node/key',
+            // The community's signed address list and an address's proof (several addresses S2, routes/address-list.ts): public, nobody named.
+            'GET /api/node/addresses', 'GET /api/node/proof',
             // The mailbox between communities (routes/relay.ts): another server's signed request, and a member's own mail.
             'POST /api/relay/mail', 'POST /api/mail/send', 'GET /api/mail', 'GET /api/mail/blob/:itemId', 'POST /api/mail/confirm',
             'POST /api/mail/device/forget', 'POST /api/mail/report', 'POST /api/relay/complaint',

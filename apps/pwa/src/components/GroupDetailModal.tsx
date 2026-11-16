@@ -27,11 +27,10 @@ import { GroupInvitedList } from './GroupInvitedList';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
 import { alreadyInGroup, canInviteToGroup } from '../lib/group-invite';
-import { t, tn, word, type WordKey } from '@beanpool/core';
+import { forumOn, t, tn, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { GroupForumRows } from './forum/ForumLinks';
 import { useCommunityInfo } from '../lib/features';
-import { forumOn } from '@beanpool/core';
 
 /** Sentences marked in core, translated here where they are shown. */
 const LINES = { closed: GROUP_CLOSED_NOTE };

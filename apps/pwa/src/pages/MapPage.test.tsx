@@ -15,6 +15,12 @@ import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { getProfileStatus } from '../lib/profile-status';
 
 vi.mock('leaflet.markercluster', () => ({}));
+// Make this a Need (forum slice F9): the Need the composer posts is linked to its topic through lib/forum.
+const forumLinks = vi.hoisted(() => ({ link: null as null | ((...a: unknown[]) => Promise<unknown>) }));
+vi.mock('../lib/forum', async (orig) => ({
+    ...(await orig<typeof import('../lib/forum')>()),
+    linkForumThing: vi.fn((...a: unknown[]) => (forumLinks.link ? forumLinks.link(...a) : Promise.resolve({}))),
+}));
 
 const mockCreatedMarkers: Array<{ coords: [number, number]; opts: any; listeners: Record<string, (...args: any[]) => any>; addTo?: any }> = [];
 
@@ -3016,6 +3022,67 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
         expect(body.type).toBe('need');
         expect(body.price_c).toBe(0);
         expect(body.photos).toHaveLength(1);
+    });
+
+    // Forum slice F9, Make this a Need (DESIGN-forums-fable.md §10.2): the Need form opened from a topic, posted as any Need,
+    // then linked to the topic, and the member is back on it; a Need posted any other way links nothing.
+    it('Make this a Need: the Need posts as any Need, is linked to its topic, and the member lands back on the topic', async () => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(false) as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'n1' } } as any);
+        const calls: unknown[][] = [];
+        forumLinks.link = async (...a) => { calls.push(a); return {}; };
+        const navigate = vi.fn();
+        const draft = { type: 'need' as const, title: 'Seed swap ideas', description: 'Who has beans to swap?', category: null, credits: null, priceType: null, repeatable: false, cashAlsoNeeded: false, forumTopicId: 'ft-7' };
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onNavigate={navigate} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(within(panel).getByPlaceholderText('What do you need/offer?')).toHaveValue('Seed swap ideas');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+        const approx = within(panel).queryByRole('button', { name: 'Approximate (~100m)' });
+        if (approx) await act(async () => { fireEvent.click(approx); });
+        await pickPhoto(panel);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Post Need' })); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect((create.mock.calls[0][0] as any).type).toBe('need');
+        await waitFor(() => expect(calls).toEqual([['ft-7', 'listing', 'n1']]));
+        await waitFor(() => expect(navigate).toHaveBeenCalledWith('forum-topic', 'ft-7'));
+        expect(navigate).not.toHaveBeenCalledWith('marketplace', 'deals_active');
+    });
+
+    it('a Need posted the usual way after a topic\'s form was closed unposted links nothing', async () => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(false) as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'n2' } } as any);
+        const calls: unknown[][] = [];
+        forumLinks.link = async (...a) => { calls.push(a); return {}; };
+        const navigate = vi.fn();
+        const draft = { type: 'need' as const, title: 'Seed swap ideas', description: 'Who has beans?', category: null, credits: null, priceType: null, repeatable: false, cashAlsoNeeded: false, forumTopicId: 'ft-7' };
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onNavigate={navigate} />); });
+        let panel = await view!.findByTestId('map-new-post-panel');
+        // Closed without posting: the topic is let go of.
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Close new post' })); });
+        await act(async () => { view!.rerender(<MapPage identity={mockIdentity} openNewPost onNavigate={navigate} />); });
+        panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🟠 Need' })); });
+        fireEvent.change(within(panel).getByPlaceholderText('What do you need/offer?'), { target: { value: 'Help moving a couch' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Describe what you need/offer...'), { target: { value: 'Saturday morning' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+        const approx = within(panel).queryByRole('button', { name: 'Approximate (~100m)' });
+        if (approx) await act(async () => { fireEvent.click(approx); });
+        await pickPhoto(panel);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Post Need' })); });
+        await waitFor(() => expect(navigate).toHaveBeenCalledWith('marketplace', 'deals_active'));
+        expect(calls).toEqual([]);
     });
 
     it('Beans on: a member the node calls blocked is asked for an Offer first, and nothing is sent', async () => {

@@ -15,8 +15,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FORUM_LIMITS, t, timeAgo, tn, word, wordn, type ForumLink, type ForumLinkKind } from '@beanpool/core';
-import { getMarketplacePosts, getYourGroups } from '../../lib/api';
-import { getMyEvents } from '../../lib/event-extras';
+import { getMarketplacePosts, getMyEvents, getYourGroups } from '../../lib/api';
 import { forumLinkedTopics, forumSectionOfGroup, type ForumLinkedTopic, type ForumTopic } from '../../lib/forum';
 import { useCoversScreen } from '../../lib/screen-cover';
 import type { ComposerDraft } from '../../tools/builder';

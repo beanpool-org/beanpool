@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Call = { method: string; path: string; body?: any };
-const node = vi.hoisted(() => ({ calls: [] as Call[], answer: null as null | ((c: Call) => unknown), role: 'member' as string | null }));
+const node = vi.hoisted(() => ({ calls: [] as Call[], answer: null as null | ((c: Call) => unknown), role: 'member' as string | null, linkables: { groups: [] as any[], listings: [] as any[], events: [] as any[] } }));
 vi.mock('../lib/api', async (orig) => ({
     ...(await orig<typeof import('../lib/api')>()),
     request: vi.fn(async (method: string, path: string, body?: unknown) => {
@@ -20,6 +20,10 @@ vi.mock('../lib/api', async (orig) => ({
     }),
     signedFetch: vi.fn(async () => new Response(new Blob(['x']), { status: 200 })),
     myNodeRoleOnce: vi.fn(async () => node.role),
+    // What the Link sheet lists (slice F9): the member's groups, listings and events, as those reads answer them.
+    getYourGroups: vi.fn(async () => ({ items: node.linkables.groups })),
+    getMarketplacePosts: vi.fn(async () => node.linkables.listings),
+    getMyEvents: vi.fn(async () => node.linkables.events),
 }));
 vi.mock('../lib/blocklist', () => ({ blockUser: vi.fn(async () => true) }));
 
@@ -83,6 +87,13 @@ function standIn(c: Call): unknown {
     if (c.method === 'POST' && p === '/api/reports') return { success: true };
     if (c.method === 'POST' && p.startsWith('/api/forum/first-looks/fw-1/')) { state.waiting = []; return p.endsWith('/ok') ? { topicId: 'ft-9' } : { ok: true }; }
     if (c.method === 'GET' && p === '/api/forum/search') return searched(new URLSearchParams(c.path.split('?')[1] ?? '').get('q') ?? '');
+    // Links (slice F9, routes/forum.ts): the writer links one thing, or takes one off; the answer is the topic, links and all.
+    if (c.method === 'POST' && p === '/api/forum/topics/ft-1/links') {
+        const links = (state.topics[0].links ?? []).filter((l: any) => !(l.shown && l.kind === c.body.kind && l.id === c.body.targetId));
+        if (c.body.on !== false) links.push({ kind: c.body.kind, shown: true, id: c.body.targetId, title: `Linked ${c.body.targetId}`, photo: null, listingType: null, startAt: null, byWriter: true });
+        state.topics[0] = { ...state.topics[0], links };
+        return { topic: state.topics[0] };
+    }
     return new Error(`not answered: ${c.method} ${c.path}`);
 }
 
@@ -556,5 +567,125 @@ describe('Chat chosen in the menu while the Forum shows', () => {
         view.rerender(<ForumPage me={ME} topicId="ft-1" homeNonce={4} />);
         expect(screen.queryByTestId('forum-topic-title')).toBeNull();
         expect(screen.getAllByTestId('forum-topic-row')).toHaveLength(2);
+    });
+});
+
+describe('links (slice F9)', () => {
+    const shownLink = (kind: string, id: string, title: string, over: Record<string, unknown> = {}) => ({ kind, shown: true, id, title, photo: null, listingType: null, startAt: null, byWriter: false, ...over });
+    const mine = (over: Record<string, unknown> = {}) => { state.topics[0] = { ...state.topics[0], writer: { publicKey: ME, name: 'Me' }, ...over }; };
+    const menu = async () => { fireEvent.click(screen.getByTestId('forum-topic-menu')); return screen.findByTestId('forum-menu'); };
+    beforeEach(() => { node.linkables = { groups: [], listings: [], events: [] }; });
+
+    it('the chips under the opening words are the node\'s answer: a shown link opens its thing, a placeholder says its kind and opens nothing', async () => {
+        state.topics[0] = { ...state.topics[0], links: [shownLink('group', 'g-1', 'Garden Crew'), { kind: 'listing', shown: false }, shownLink('listing', 'n-1', 'Seed swap', { listingType: 'need', byWriter: true })] };
+        const navigate = vi.fn();
+        render(<ForumPage me={ME} onNavigate={navigate} />);
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        const chips = await screen.findByTestId('forum-link-chips');
+        expect(Array.from(chips.children).map((li) => li.textContent)).toEqual(['👥Garden Crew›', 'Linked: a listing', '🛍️Posted as a Need ›']);
+        fireEvent.click(within(chips).getByTestId('forum-link-group'));
+        expect(navigate).toHaveBeenLastCalledWith('group', 'g-1');
+        fireEvent.click(within(chips).getByText('Posted as a Need ›'));
+        expect(navigate).toHaveBeenLastCalledWith('marketplace', 'n-1');
+        expect(within(chips).getByTestId('forum-link-listing-placeholder').closest('button')).toBeNull();
+    });
+
+    it('the writer links one of their listings from ⋯ Link: the node is asked with its kind and id, and the chip comes from its answer', async () => {
+        mine();
+        node.linkables = {
+            groups: [{ kind: 'group', id: 'g-1', name: 'Garden Crew', role: 'member' }, { kind: 'group', id: 'g-old', name: 'Closed one', role: 'member', readOnly: true }],
+            listings: [{ id: 'n-1', type: 'need', title: 'Spade', authorPublicKey: ME }, { id: 'e-9', type: 'event', title: 'Not a listing', authorPublicKey: ME }],
+            events: [{ postId: 'ev-1', title: 'Seed day' }],
+        };
+        await openTopic();
+        fireEvent.click(within(await menu()).getByText('Link'));
+        const sheet = await screen.findByTestId('forum-link-sheet');
+        await within(sheet).findByText('Spade');
+        expect(within(sheet).queryByText('Closed one')).toBeNull();
+        expect(within(sheet).queryByText('Not a listing')).toBeNull();
+        expect(within(sheet).getByText('Garden Crew')).toBeInTheDocument();
+        expect(within(sheet).getByText('Seed day')).toBeInTheDocument();
+        await act(async () => { fireEvent.click(within(sheet).getByText('Spade')); });
+        expect(sent('POST', '/api/forum/topics/ft-1/links').map((c) => c.body)).toEqual([{ kind: 'listing', targetId: 'n-1' }]);
+        expect(await screen.findByTestId('forum-link-listing')).toHaveTextContent('Linked n-1');
+        // Linked now, with Take off; the same listing can't be linked twice.
+        expect(within(sheet).getByText('Spade').closest('button')).toBeDisabled();
+        await act(async () => { fireEvent.click(within(sheet).getByTestId('forum-link-take-off')); });
+        expect(sent('POST', '/api/forum/topics/ft-1/links').at(-1)!.body).toEqual({ kind: 'listing', targetId: 'n-1', on: false });
+        await waitFor(() => expect(screen.queryByTestId('forum-link-chips')).toBeNull());
+    });
+
+    it('a topic with three things linked offers no more, and no Make this a Need: the Decision chip counts, and so does a placeholder', async () => {
+        mine({ links: [shownLink('group', 'g-1', 'Garden Crew'), { kind: 'event', shown: false }], decision: { id: 'd-1', title: 'Budget', status: 'open' } });
+        render(<ForumPage me={ME} onMakeNeed={vi.fn()} />);
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        await screen.findByTestId('forum-topic-title');
+        const m = await menu();
+        expect(within(m).queryByText('Make this a Need')).toBeNull();
+        fireEvent.click(within(m).getByText('Link'));
+        expect(await screen.findByTestId('forum-link-full')).toHaveTextContent('A topic can link at most 3 things. Take one off first.');
+    });
+
+    it('someone else\'s topic: no Link and no Make this a Need for a member; an owner may take a shown link off, never add one', async () => {
+        state.topics[0] = { ...state.topics[0], links: [shownLink('group', 'g-1', 'Garden Crew'), { kind: 'listing', shown: false }] };
+        render(<ForumPage me={ME} onMakeNeed={vi.fn()} />);
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        await screen.findByTestId('forum-topic-title');
+        let m = await menu();
+        expect(within(m).queryByText('Link')).toBeNull();
+        expect(within(m).queryByText('Make this a Need')).toBeNull();
+        cleanup();
+        node.role = 'owner';
+        await openTopic();
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        m = await menu();
+        fireEvent.click(within(m).getByText('Link'));
+        const sheet = await screen.findByTestId('forum-link-sheet');
+        // Only what the node showed can be taken off: the placeholder has no id, so it isn't listed.
+        expect(within(sheet).getAllByTestId('forum-link-take-off')).toHaveLength(1);
+        expect(within(sheet).queryByTestId('forum-link-pick-listing')).toBeNull();
+    });
+
+    it('Make this a Need: the Market\'s Need form, filled with the title and the opening words, naming the topic', async () => {
+        mine();
+        const makeNeed = vi.fn();
+        render(<ForumPage me={ME} onMakeNeed={makeNeed} />);
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        await screen.findByTestId('forum-topic-title');
+        fireEvent.click(within(await menu()).getByText('Make this a Need'));
+        expect(makeNeed).toHaveBeenCalledWith(expect.objectContaining({ type: 'need', title: 'Seed swap ideas', description: 'Who has beans to swap?', forumTopicId: 'ft-1', credits: null }));
+        expect(screen.queryByTestId('forum-menu')).toBeNull();
+    });
+
+    it('a new topic links what was picked, once the node has made it a topic', async () => {
+        node.linkables = { groups: [{ kind: 'group', id: 'g-1', name: 'Garden Crew', role: 'member' }], listings: [], events: [] };
+        render(<ForumPage me={ME} />);
+        fireEvent.click(await screen.findByTestId('forum-new'));
+        fireEvent.change(screen.getByTestId('forum-new-title'), { target: { value: 'Seed swap ideas' } });
+        fireEvent.change(screen.getByTestId('forum-new-words'), { target: { value: 'Bring a jar.' } });
+        fireEvent.click(screen.getByTestId('forum-new-link'));
+        const sheet = await screen.findByTestId('forum-link-sheet');
+        await act(async () => { fireEvent.click(await within(sheet).findByText('Garden Crew')); });
+        fireEvent.click(within(sheet).getByText('Done'));
+        expect(sent('POST', '/api/forum/topics/ft-1/links')).toHaveLength(0);
+        await act(async () => { fireEvent.click(screen.getByTestId('forum-new-post')); });
+        await waitFor(() => expect(sent('POST', '/api/forum/topics/ft-1/links').map((c) => c.body)).toEqual([{ kind: 'group', targetId: 'g-1' }]));
+    });
+
+    it('a first topic that waits for a look offers no Link: it is no topic yet', async () => {
+        state.front = front({ firstTopicWaits: true });
+        render(<ForumPage me={ME} />);
+        fireEvent.click(await screen.findByTestId('forum-new'));
+        expect(screen.queryByTestId('forum-new-link')).toBeNull();
+    });
+
+    it('a door from elsewhere opens its topic; the Start a community door picks that section and searches for the town', async () => {
+        state.front = front({ sections: [...SECTIONS, { id: 's-start', starter: 'start-community', name: null, about: null, position: 2, starts: 'members', listed: true, archived: false }] });
+        const { rerender } = render(<ForumPage me={ME} door={{ topic: 'ft-1' }} />);
+        expect(await screen.findByTestId('forum-topic-title')).toHaveTextContent('Seed swap ideas');
+        rerender(<ForumPage me={ME} door={{ starter: 'start-community', q: 'Riverside' }} />);
+        await waitFor(() => expect((screen.getByTestId('forum-section-pick') as HTMLSelectElement).value).toBe('s-start'));
+        await waitFor(() => expect(node.calls.some((c) => c.path === '/api/forum/search?q=Riverside')).toBe(true));
+        expect(screen.getByTestId('forum-search-box')).toHaveValue('Riverside');
     });
 });

@@ -6,8 +6,8 @@
  *   an event's, a Learn page), its kind on the first line ("Posted as a Need ›" for a Need the topic's writer made) and its title
  *   under it; a link this member can't see is the sketch's "Linked: a group", its kind alone, nothing to tap.
  * - **ForumLinkPicker**, from the topic's ⋯ (its writer only): what to link (one of your groups, one of your listings, an event),
- *   then the member's own of that kind. One already linked says so, and a tap takes it off. The node decides: it refuses what the
- *   member may not link, and past three a topic, in its own words.
+ *   then the member's own of that kind (events: the ones they host, then the ones they RSVP'd to). One already linked says so,
+ *   and a tap takes it off. The node decides: it refuses what the member may not link, and past three a topic, in its own words.
  * - **ForumLinkedTopics**, the topics that link one thing (GET /api/forum/linked): "Talked about in the forum" on a listing,
  *   "Topics about this group" in a group's sheet, "From the forum" on a Learn page. Nothing at all when there are none, when the
  *   member can't see the thing, or with no answer (a community with no forum, or a node from before F9): never an empty heading.
@@ -55,16 +55,24 @@ export function forumLinkKindLine(link: Shown): string {
 /** A link this member can't see: its kind alone (#3237's placeholder holds nothing else, and nothing else is drawn). */
 export const forumLinkHiddenLine = (kind: ForumLinkKind): string => t(LINK_WORDS.hidden[kind]);
 
-/** The member's own things of one kind that the picker lists: their groups, their open listings, the events they are going to. */
+/**
+ * The member's own things of one kind that the picker lists: their groups, their open listings, and events: the ones they host
+ * first (a host has no RSVP row), then the ones they RSVP'd to, one row an event, as the web's linkablesOf (#3252).
+ */
 export async function linkCandidates(kind: PickKind, me: string): Promise<LinkCandidate[]> {
-    const { fetchMyEvents, fetchYourGroups, getMyPosts } = await import('../../utils/db');
+    const { fetchMyEvents, fetchYourGroups, getMyHostedEvents, getMyPosts } = await import('../../utils/db');
     if (kind === 'group') return (await fetchYourGroups()).items.filter((g) => g.kind === 'group').map((g) => ({ id: g.id, title: g.name }));
     if (kind === 'listing') {
         return ((await getMyPosts(me)) as { id: string; title: string; type: string; status: string }[])
             .filter((p) => (p.type === 'offer' || p.type === 'need') && ['active', 'paused', 'pending'].includes(p.status))
             .map((p) => ({ id: p.id, title: p.title }));
     }
-    return (await fetchMyEvents()).map((e) => ({ id: e.postId, title: e.title }));
+    const [hosted, going] = await Promise.all([getMyHostedEvents(me), fetchMyEvents()]);
+    const events: LinkCandidate[] = [];
+    const add = (id: string, title: string) => { if (!events.some((e) => e.id === id)) events.push({ id, title }); };
+    hosted.forEach((e) => add(e.id, e.title));
+    going.forEach((e) => add(e.postId, e.title));
+    return events;
 }
 
 export function ForumLinkChips({ links }: { links: ForumLink[] | undefined }) {

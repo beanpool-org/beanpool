@@ -891,8 +891,9 @@ function connectorHostNames(c: ConnectorConfig): string[] {
 
 /**
  * Whether the owners blocked the server at `home` (a relay home: its host, and its port when not 443): a connector at the
- * `blocked` level names that host, on any port. Read today by a guest's home (engine/group-guest-home.ts): a blocked host's
- * group notices are taken from nobody. The host's own side, sending no fan-out to a blocked server, is G1b's next part.
+ * `blocked` level names that host, on any port. Read by a guest's home (engine/group-guest-home.ts): a blocked host's group
+ * notices are taken from nobody, though its takedowns still drop what it brought. Read by a group's host
+ * (engine/group-guests.ts): no invitation to, fan-out to or item from a blocked server, and no complaint to one.
  */
 export function isServerBlocked(home: string): boolean {
     const host = home.trim().toLowerCase().replace(/:\d+$/, '').replace(/^\[|\]$/g, '');

@@ -4,7 +4,8 @@
  *
  * - **The note** is asked of the community the member picks from the directory (GET /api/global/communities?q=, on the
  *   worldwide community this web app talks to), at that community's own address, signed by this browser's key for that
- *   host (api.ts signedFetchAt). The member's community opens that one route to a web app on another origin (#3199).
+ *   host, in the member's language so a refusal comes back in it (api.ts signedFetchAt). The member's community opens that
+ *   one route to a web app on another origin, `x-language` among its headers (#3199).
  * - **The choice** goes to this web app's own community, the worldwide forum, signed (api.ts signedFetch).
  * - **Renewing** needs the address again: the browser keeps, for its own key, the community's directory key and the
  *   address it was asked at (localStorage, a convenience: gone, and Settings says the note ran out until the member picks

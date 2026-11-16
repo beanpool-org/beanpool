@@ -91,7 +91,10 @@ Under **Public Address**, the list of the community's addresses has **Make main*
 
 Certificates and their keys never travel: they are not in a backup from Settings or in the take-over keys. A standby asks for none. After it takes over, it gets its own once the address leads to it: for a domain, point the A record at the new server; a .beanpool.org name needs nothing. A community reached only by an IP address can't follow it to a new server, which has another IP address. The take-over preview says so: "Members reached this community at 203.0.113.5, which this server does not have. They will need its new address."
 
-**Spares** are an owner's choice that Settings doesn't offer yet: a standby's own address, published beside the community's addresses. Members' phones would try a spare only when no listed address answers as the community, and use it only once it proves, with the community's key, that it has taken over. A spare's address becomes public when it is added.
+**Spares** are an owner's choice, under **Public Address**: a standby's own address, published beside the community's addresses, up to 4. Members' phones try a spare only when no listed address answers as the community, and use it only once it proves, with the community's key, that it has taken over. A spare's address becomes public when it is added.
+
+- **Add a spare** asks first, because a spare is a door too: "Members' phones go to ‹address› only when none of this community's addresses answers, and only once a standby there has taken over and proves it is this community. Anyone can see it. Only add a standby you control." Adding or removing a spare takes the fresh proof each time (Access and security). An admin sees the list but can't change it.
+- One of the community's own addresses can't be a spare. A standby's Settings refuses to change spares: they are chosen on the community's main server.
 
 ## Addresses members' apps use
 

@@ -458,7 +458,8 @@ export function guestSealEpoch(chat: GuestChat): { epoch: number; key: Uint8Arra
     const current = e && !e.stale ? e.current : null;
     const epoch = current !== null && chat.keys[String(current)] ? current : chat.epochSent !== null && chat.keys[String(chat.epochSent)] ? chat.epochSent : numbers[0];
     if (epoch === undefined || !chat.keys[String(epoch)]) return null;
-    if (e && e.current > epoch) return null;
+    // Behind the host's, or the stale one itself: the line waits for the next epoch (guestEpochDue makes it).
+    if (e && (e.current > epoch || (e.stale && e.current === epoch))) return null;
     return { epoch, key: unb64(chat.keys[String(epoch)]) };
 }
 

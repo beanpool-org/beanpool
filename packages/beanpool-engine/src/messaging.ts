@@ -86,6 +86,11 @@ export interface Conversation {
     name?: string | null;
     createdBy: string;
     createdAt: string;
+    /**
+     * When the chat's newest line was written, null while it has none: what both apps order the chat list by, newest first
+     * (core chat-list-order.ts; Marty, 16 Nov 2026). Set by the list (getConversationsByMember) only.
+     */
+    lastMessageAt?: string | null;
     participants: string[];
     peerCallsign?: string;
     peerAvatar?: string | null;
@@ -226,6 +231,7 @@ export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: 
             name: r.name,
             createdBy: r.created_by,
             createdAt: r.created_at,
+            lastMessageAt: r.last_msg_time ?? null,
             participants: parts,
             peerCallsign,
             peerAvatar,

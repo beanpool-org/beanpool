@@ -8,11 +8,13 @@ import { freeTagsOf, postTagsOf, t, tagIndex } from '@beanpool/core';
 
 const CHIP = 'inline-flex items-center min-h-[44px] max-w-full break-words px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700/60 cursor-pointer transition-colors';
 
-export function PostTagChips({ tags, freeTags, onPick, onPickFree, className = '' }: {
+export function PostTagChips({ tags, freeTags, onPick, onPickFree, freeTagLabel, className = '' }: {
     tags: unknown;
     freeTags?: unknown;
     onPick: (id: string) => void;
     onPickFree?: (tag: string) => void;
+    /** What a screen reader says for a typed tag (`#word`), in the member's language: a page of Local knowledge searches Learn. The Market's filter by default. */
+    freeTagLabel?: (tag: string) => string;
     className?: string;
 }) {
     const index = tagIndex();
@@ -41,7 +43,7 @@ export function PostTagChips({ tags, freeTags, onPick, onPickFree, className = '
                     type="button"
                     onClick={() => onPickFree?.(tag)}
                     className={CHIP}
-                    aria-label={t('Filter marketplace by tag {tag}', { tag: `#${tag}` })}
+                    aria-label={freeTagLabel ? freeTagLabel(`#${tag}`) : t('Filter marketplace by tag {tag}', { tag: `#${tag}` })}
                 >
                     <span className="min-w-0">#{tag}</span>
                 </button>

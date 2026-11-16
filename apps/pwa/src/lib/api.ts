@@ -1423,6 +1423,8 @@ export interface Conversation {
     participants: string[];
     createdBy: string;
     createdAt: string;
+    /** When its newest line was written, null while it has none: what the list is ordered by (lib/chat-list-order.ts). */
+    lastMessageAt?: string | null;
     postId?: string;
     postTitle?: string;
     postStatus?: string;

@@ -133,6 +133,8 @@ export function EventChatView({ eventId }: Props) {
         hapticTick();
         try {
             await postEventChatMessage(eventId, text);
+            // On Talk → Groups at once: the event's chat goes to the top (utils/your-groups-store.ts noteSent).
+            yourGroupsStore.noteSent(eventId);
             await load();
             scrollChatToBottom(listRef, true);
         } catch (e: any) {

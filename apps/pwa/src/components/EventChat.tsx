@@ -64,11 +64,13 @@ interface Props {
      * after it ends, or after the host cancels it — so the header always carries the way to it.
      */
     onOpenEvent?: () => void;
+    /** The node took a line of the member's: the chat list puts this chat at the top at once (lib/chat-list-order.ts). */
+    onSent?: () => void;
     /** Poll interval while the chat is open; 0 turns it off (tests). */
     refreshMs?: number;
 }
 
-export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 12000 }: Props) {
+export function EventChat({ postId, identity, onBack, onOpenEvent, onSent, refreshMs = 12000 }: Props) {
     const [view, setView] = useState<EventThreadView | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
@@ -156,6 +158,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                 return;
             }
             await postEventChatMessage(postId, text);
+            onSent?.();
             setDraft('');
             setImageNotice(null);
             await load();

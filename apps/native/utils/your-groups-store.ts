@@ -7,12 +7,15 @@
  *   (Talk re-loads on every sync nudge, and those come in bursts);
  * - the last list stays on screen while a refresh runs, and stays when it fails;
  * - opening a chat clears its count at once (markRead), and an answer that left the node before that read cannot
- *   bring the count back.
+ *   bring the count back;
+ * - newest line first, the member's own included (core chat-list-order.ts; Marty, 16 Nov 2026): a line sent from this
+ *   phone puts its chat at the top at once (noteSent), and keeps it there until an answer asked after the send shows a
+ *   newer line in it, so an answer that left the node before the line got there cannot put the chat back.
  *
  * Pure apart from the injected fetcher, so it is unit tested.
  */
 
-import { t } from '@beanpool/core';
+import { chatTimeMs, movedAtWithSend, newestChatsFirst, sentHere, sentHereSettled, t, type ChatSentHere } from '@beanpool/core';
 import { markChatRead, setChatMute, type YourChat, type YourChatMute, type YourChatsResponse } from './your-groups';
 
 export interface YourGroupsState {
@@ -30,6 +33,8 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
     let again = false;
     // conversationId → when it was read here. An answer from a request that started before then shows it as read.
     const readAt = new Map<string, number>();
+    // conversationId → a line sent from here the node's list may not show yet: the chat stays at the top (applySends).
+    const sends = new Map<string, ChatSentHere>();
 
     const set = (next: Partial<YourGroupsState>) => {
         state = { ...state, ...next };
@@ -45,12 +50,26 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
         return out;
     };
 
+    /** A chat's place in the list: its newest line (the node's lastActivityAt), or a send from here not yet in it. */
+    const movedAt = (item: YourChat) => movedAtWithSend(chatTimeMs(item.lastActivityAt), sends.get(item.conversationId));
+
+    /** The node's answer, asked at `startedAt`, with this phone's sends that it doesn't show yet: newest first. */
+    const applySends = (items: YourChat[], startedAt: number): YourChat[] => {
+        if (sends.size === 0) return items;
+        for (const [conversationId, sent] of sends) {
+            const item = items.find(i => i.conversationId === conversationId);
+            // A chat the member is no longer in has no row to keep at the top.
+            if (!item ? startedAt > sent.mark : sentHereSettled(sent, chatTimeMs(item.lastActivityAt), startedAt)) sends.delete(conversationId);
+        }
+        return newestChatsFirst(items, movedAt);
+    };
+
     const runOnce = async () => {
         const startedAt = now();
         set({ loading: true });
         try {
             const res = await fetcher();
-            const items = applyReads(res.items, startedAt);
+            const items = applySends(applyReads(res.items, startedAt), startedAt);
             const same = state.items && JSON.stringify(state.items) === JSON.stringify(items);
             set({ items: same ? state.items : items, error: null, loading: false });
         } catch (e: any) {
@@ -91,6 +110,16 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
                 if (items !== state.items) set({ items });
             }
         },
+        /**
+         * This member sent a line in a chat (the node took it, or it is on its way): the chat goes to the top at once, as
+         * the line shows at once in the chat, whatever this phone's clock says against the node's.
+         */
+        noteSent(conversationId: string) {
+            const items = state.items ?? [];
+            const own = items.find(i => i.conversationId === conversationId);
+            sends.set(conversationId, sentHere(own ? chatTimeMs(own.lastActivityAt) : 0, items.map(movedAt), now(), now()));
+            if (state.items) set({ items: newestChatsFirst(state.items, movedAt) });
+        },
         /** This member muted or unmuted a chat: its row (and so the Groups total) shows it now, not at the next refresh. */
         setMute(conversationId: string, mute: YourChatMute | null) {
             if (!state.items) return;
@@ -103,6 +132,7 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
          */
         reset() {
             readAt.clear();
+            sends.clear();
             state = { items: null, error: null, loading: false };
         },
     };

@@ -16,7 +16,7 @@
 import { useEffect, useState } from 'react';
 import {
     KNOWLEDGE_EMOJI, KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPICS, KNOWLEDGE_TOPIC_PAGE, compareKnowledge,
-    isKnowledgeTopic, knowledgeFeatureMode, knowledgeFirstLine, knowledgeTopic, pinLive, t, type FeatureMode, type KnowledgeDraftMine,
+    isKnowledgeTopic, knowledgeFeatureMode, knowledgeFirstLine, knowledgeTagsDiffer, knowledgeTopic, pinLive, t, type FeatureMode, type KnowledgeDraftMine,
     type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgeFields, type KnowledgeFront, type KnowledgeHelped, type KnowledgeRow,
     type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
 } from '@beanpool/core';
@@ -44,6 +44,8 @@ export interface LearnPost {
     photos?: string[];
     pinnedUntil?: string | null;
     pinnedAt?: string | null;
+    /** Its own tags (free tags only), each in its stored form; a node before Learn's tags sends none. */
+    freeTags?: string[];
     knowledge: KnowledgeFields;
 }
 
@@ -222,6 +224,8 @@ export interface LearnInput {
     photos?: string[];
     /** A fix's "What changed?" (slice K5): the form's own field, sent beside the page's words, never as one of them. */
     note?: string;
+    /** Its own tags (free tags only, as the picker stores them). Sent as held: [] takes a page's off (an edit, "Edit first"). */
+    freeTags?: string[];
 }
 
 /** The first thing the form must say before it sends (§3.3's refusals), or null when it may go. */
@@ -247,6 +251,7 @@ export function learnInputToSend(input: LearnInput): LearnInput {
         sources,
         lang: input.lang ?? shownLanguage(),
         photos: (input.photos ?? []).slice(0, KNOWLEDGE_LIMITS.photos),
+        ...(input.freeTags ? { freeTags: [...input.freeTags] } : {}),
     };
 }
 
@@ -416,6 +421,7 @@ export function learnFixToSend(page: LearnPost, input: LearnInput): Record<strin
     if (now.topic !== page.category) out.topic = now.topic;
     if ((now.place ?? '') !== (page.knowledge.place ?? '').trim()) out.place = now.place;
     if (!sameSources(now.sources ?? [], page.knowledge.sources ?? [])) out.sources = now.sources;
+    if (now.freeTags && knowledgeTagsDiffer(now.freeTags, page.freeTags)) out.freeTags = now.freeTags;
     return out;
 }
 

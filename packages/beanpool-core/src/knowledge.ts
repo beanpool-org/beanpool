@@ -16,6 +16,7 @@
  * Pure and universal: no Node built-ins, no Intl, no regular expressions (the barrel is bundled for the phone).
  */
 import { featureMode, type FeatureMode } from './features.js';
+import { freeTagStored, freeTagsOf } from './tags/free-tags.js';
 import { t, word, wordn, type Words } from './words.js';
 
 /** The post type, as `posts.type` stores it and `types=` names it. */
@@ -111,6 +112,27 @@ export type KnowledgeDeclineReason = (typeof KNOWLEDGE_DECLINE_REASONS)[number][
 
 /** The standing line under every page and at the foot of Learn (§3.2 item 8, amended §3.1 item 7). */
 export const KNOWLEDGE_STANDING_LINE = word('Local knowledge is written by members. Check the source before you rely on it.');
+
+/**
+ * A page's own tags (Learn's tags, 16 Nov 2026; the node is #3219): free tags only, under the Market's rule for the tags a member
+ * types (tags/free-tags.ts), never the library's ids. Both apps' forms take them in the Market's Tags field, free tags alone
+ * (typed-tags.ts `freeOnly`); a page shows them, and a tap searches Learn for one.
+ */
+export const KNOWLEDGE_TAG_WORDS = Object.freeze({
+    /** Under the Tags field's sheet, in place of the Market's two lines. */
+    hint: word('Tags help people find this page in Learn. Everyone can see them.'),
+    /** What a screen reader says for a tag on a page. `{tag}` is the tag with its `#`. */
+    searchFor: word('Search Learn for {tag}'),
+});
+
+/**
+ * Whether two lists of a page's tags differ, each read in its stored form and in its order, as the node compares a fix's part
+ * (engine/knowledge-drafts.ts): what "Suggest a fix" sends only when the member changed it.
+ */
+export function knowledgeTagsDiffer(a: unknown, b: unknown): boolean {
+    const stored = (tags: unknown) => JSON.stringify(freeTagsOf(tags).map(freeTagStored));
+    return stored(a) !== stored(b);
+}
 
 /** The line under Learn's title and on the Home card (amended §3.1 item 1, §3.6). */
 export const KNOWLEDGE_PLACE_LINE = word('Things worth knowing about your community.');

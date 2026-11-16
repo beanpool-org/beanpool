@@ -152,6 +152,8 @@ describe('a member suggests', () => {
         expect(writes()).toEqual([{ path: '/api/knowledge/drafts', body: {
             title: 'Bins day', body: 'Tuesday, kerbside by 7.', topic: 'local-services', place: 'Every street',
             sources: [{ url: 'https://council.example/bins', label: 'Council bins' }], lang: 'en', photos: [],
+            // Learn's tags: the form sends the tags it holds, none here.
+            freeTags: [],
         } }]);
         const sent = within(screen.getByTestId('learn-sent'));
         expect(sent.getByRole('heading').textContent).toBe('Sent');
@@ -332,6 +334,8 @@ describe('an owner or admin', () => {
         expect(writes()).toEqual([{ path: '/api/knowledge/drafts/d1/approve', body: {
             title: 'When the low bridge floods', body: 'Call the council roads line first.', topic: 'emergencies', place: 'The low bridge',
             sources: [{ url: 'https://council.example/roads', label: 'Council roads' }], lang: 'en', photos: [],
+            // Learn's tags: "Edit first" sends the tags it holds (what Approve writes), none here.
+            freeTags: [],
         } }]);
     });
 

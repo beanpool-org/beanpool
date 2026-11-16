@@ -13,6 +13,7 @@
 #   $FAKE_STATE/run-<sha>  that commit's workflow run, one line per read, the last one sticks: queued in_progress success failure cancelled. No file: no run.
 #                          Several runs on the commit: comma-separated, newest first, as gh lists them up to --limit (its default is 20).
 #   $FAKE_STATE/files      the PR's changed files, one per line (no file: src/a.ts)
+#   $FAKE_STATE/mergeable  what `gh pr view --json mergeable` says: MERGEABLE CONFLICTING UNKNOWN (no file: MERGEABLE)
 #   $FAKE_STATE/checks     what `gh pr checks --json bucket` lists (ci-wait.sh reads it), one line per read, the last one sticks:
 #                          gh's buckets separated by spaces (pass fail pending skipping cancel), none (no checks yet: gh says so on
 #                          stderr and exits 1), or either of those +push (a push lands during that read). No file: pass. Like gh, it
@@ -60,7 +61,7 @@ case "$1 $2" in
   "pr view")  case "$*" in
                 *headRefOid*) cat "$S/head" 2>/dev/null || print fakehead;;
                 *isDraft*) print false;; *state*) print OPEN;; *headRefName*) print feat/x;;
-                *mergeable*) print MERGEABLE;; *title*) print "Fake title";;
+                *mergeable*) cat "$S/mergeable" 2>/dev/null || print MERGEABLE;; *title*) print "Fake title";;
               esac;;
   "pr checks") [ "$(grep -c '^gh pr checks' "$S/gh.calls")" -gt 100 ] && { print -u2 "fake gh: runaway polling"; exit 1; }
               st=$(pop "$S/checks" pass)

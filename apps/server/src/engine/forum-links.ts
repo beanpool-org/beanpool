@@ -75,9 +75,12 @@ export function forumLinkFor(reader: string, kind: ForumLinkKind, id: string, to
 
 const F9_KINDS_SQL = "kind IN ('group', 'listing', 'event', 'learn')";
 
-/** A topic's links (not its Decision chip), oldest first, each as `reader` reads it. */
+/**
+ * A topic's links (not its Decision chip, nor a Learn page made from one of its answers, which that answer shows: `post_id`,
+ * engine/forum-learn.ts), oldest first, each as `reader` reads it.
+ */
 export function forumLinksOf(reader: string, topicId: string, topicWriter: string): ForumLink[] {
-    const rows = db.prepare(`SELECT kind, target_id FROM forum_links WHERE topic_id = ? AND ${F9_KINDS_SQL} ORDER BY created_at, kind, target_id`)
+    const rows = db.prepare(`SELECT kind, target_id FROM forum_links WHERE topic_id = ? AND ${F9_KINDS_SQL} AND post_id IS NULL ORDER BY created_at, kind, target_id`)
         .all(topicId) as { kind: ForumLinkKind; target_id: string }[];
     return rows.map((r) => forumLinkFor(reader, r.kind, r.target_id, topicWriter));
 }

@@ -35,8 +35,8 @@ import {
     hideBurst, undoBurst,
     removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal, branchPrunePreview,
 } from '../state-engine.js';
-import { listMutedMembers } from '../engine/auto-moderation.js';
-import { forumPostWriter } from '../engine/forum-moderation.js';
+import { listMutedMembers, onHold } from '../engine/auto-moderation.js';
+import { forumPostWriter, reportedForumPost } from '../engine/forum-moderation.js';
 import { listRequestLimits } from '../engine/request-limits.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
 import { logAlertsLook, logBalanceLook, logDisputesLook, type TradeLookAction } from '../engine/community-health.js';
@@ -1498,18 +1498,84 @@ function refuseModeratorsOwnPost(ctx: any, postId: string | null | undefined, do
     const post = db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(postId) as { author_pubkey: string | null } | undefined;
     if (!isModeratorsOwn(ctx, post?.author_pubkey)) return false;
     ctx.status = 403;
-    ctx.body = { success: false, error: `A moderator cannot ${doing} their own post, or one by an enterprise they keep. Ask another moderator, an admin or an owner.` };
+    ctx.body = { success: false, error: ownPostWords(doing) };
     return true;
+}
+
+const ownPostWords = (doing: string) => `A moderator cannot ${doing} their own post, or one by an enterprise they keep. Ask another moderator, an admin or an owner.`;
+const ownForumPostWords = (doing: string) => `A moderator cannot ${doing} their own forum post. Ask another moderator, an admin or an owner.`;
+
+/** What a moderator reads on trying to restore a post on hold. Their card already says it (apps/manager lib/post-on-hold-words.ts). */
+const HELD_RESTORE_REFUSAL = 'This post is on hold: only an owner or admin can put it back.';
+const HELD_RESTORE_CODE = 'on_hold_owner_or_admin';
+
+/**
+ * Who may put back a post on hold, an assistant's takedown that goes for good at 7 days (engine/agent-takedowns.ts,
+ * engine/forum-takedowns.ts): an owner's or an admin's own session, as Settings' Put back (agent/takedowns-route.ts). Never a
+ * moderator, and never a token.
+ */
+const mayPutBackHeld = (ctx: any): boolean =>
+    !ctx.state?.automationTokenId && (ctx.state?.adminRole === 'owner' || ctx.state?.adminRole === 'admin');
+
+type RestoreTarget = { kind: 'post' | 'forum'; id: string };
+type RestoreAnswer = { status: 200 } | { status: 403 | 404 | 409; error: string; code?: string };
+
+/**
+ * What this caller's restore of this post answers, before anything changes. Decided here once, for listings and forum posts
+ * alike: both restore routes refuse by it, and Settings' list hands each report's card the answer (`restorable`), so a card
+ * offers Restore only when pressing it works (#3239 round 3).
+ * - No such post: 404. Nothing to restore: 409, for a post not hidden, or a forum post removed already (a listing its author
+ *   took down while hidden can still be restored: its reporters hear it is no longer up).
+ * - A moderator's own post, or one by an enterprise they keep: 403, what members did about it is someone else's to undo.
+ * - A post on hold: 403 unless an owner or an admin asks (mayPutBackHeld). A post merely hidden by reports stays a moderator's.
+ */
+function restoreAnswer(ctx: any, t: RestoreTarget): RestoreAnswer {
+    let hidden: boolean, held: boolean, writer: string | null;
+    if (t.kind === 'post') {
+        const p = db.prepare('SELECT author_pubkey, active, status, hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?').get(t.id) as
+            { author_pubkey: string | null; active: number; status: string | null; hidden_by_reports_at: string | null; removed_by_moderator_at: string | null } | undefined;
+        if (!p) return { status: 404, error: 'Post not found' };
+        hidden = !!p.hidden_by_reports_at;
+        held = onHold(p as any);
+        writer = p.author_pubkey;
+    } else {
+        const f = reportedForumPost(t.id);
+        if (!f) return { status: 404, error: 'Forum post not found' };
+        if (f.removed) return { status: 409, error: 'This forum post was removed, so there is nothing to restore' };
+        hidden = f.hidden;
+        held = f.onHold;
+        writer = forumPostWriter(t.id);
+    }
+    if (isModeratorsOwn(ctx, writer)) return { status: 403, error: t.kind === 'post' ? ownPostWords('restore') : ownForumPostWords('restore') };
+    if (!hidden) return { status: 409, error: t.kind === 'post' ? 'This post is not hidden, so there is nothing to restore' : 'This forum post is not hidden, so there is nothing to restore' };
+    if (held && !mayPutBackHeld(ctx)) return { status: 403, error: HELD_RESTORE_REFUSAL, code: HELD_RESTORE_CODE };
+    return { status: 200 };
+}
+
+/** Answers the refusal and returns true when restoreAnswer refuses this caller. */
+function refuseRestore(ctx: any, t: RestoreTarget): boolean {
+    const answer = restoreAnswer(ctx, t);
+    if (answer.status === 200) return false;
+    ctx.status = answer.status;
+    ctx.body = { success: false, error: answer.error, ...(answer.code ? { code: answer.code } : {}) };
+    return true;
+}
+
+/** The post a report names, as restoreAnswer reads it: a listing's or a forum post's, never a Pulse item's. */
+function reportRestoreTarget(r: { postId?: unknown; targetPulseItemId?: unknown; targetForumPostId?: unknown }): RestoreTarget | null {
+    if (typeof r.targetForumPostId === 'string' && r.targetForumPostId) return { kind: 'forum', id: r.targetForumPostId };
+    if (typeof r.postId === 'string' && r.postId && !r.targetPulseItemId) return { kind: 'post', id: r.postId };
+    return null;
 }
 
 /**
  * Restore a post hidden by reports (G3, engine/auto-moderation.ts). Owners, admins and moderators: every open report
  * on it is dismissed (its reporters hear it was kept, and cannot hide it again), and everyone sees it again. A
- * moderator can't restore their own.
+ * moderator can't restore their own, nor a post on hold: that is an owner's or an admin's (restoreAnswer).
  */
 router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    if (refuseModeratorsOwnPost(ctx, ctx.params.id, 'restore')) return;
+    if (refuseRestore(ctx, { kind: 'post', id: ctx.params.id })) return;
     // An assistant's suggestion is approved by this same call (agent/suggestions.ts): it must match before anything changes.
     if (!admitSuggestion(ctx, { kind: 'restore_post', postId: ctx.params.id })) return;
     const result = restoreHiddenPost(ctx.params.id);
@@ -1533,18 +1599,19 @@ router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
 function refuseModeratorsOwnForumPost(ctx: any, postId: string | null | undefined, doing: string): boolean {
     if (!postId || !isModeratorsOwn(ctx, forumPostWriter(postId))) return false;
     ctx.status = 403;
-    ctx.body = { success: false, error: `A moderator cannot ${doing} their own forum post. Ask another moderator, an admin or an owner.` };
+    ctx.body = { success: false, error: ownForumPostWords(doing) };
     return true;
 }
 
 /**
  * Restore a forum post hidden while the moderators look (slice F2, engine/forum-moderation.ts). Owners, admins and
  * moderators: every open report on it is dismissed (its reporters hear it was kept, and cannot hide it again), and everyone
- * reads it again. A moderator can't restore their own. No assistant's suggestion reaches it (DESIGN-forums-fable.md §6).
+ * reads it again. A moderator can't restore their own, nor a post on hold: that is an owner's or an admin's (restoreAnswer). No
+ * assistant's suggestion reaches it (DESIGN-forums-fable.md §6).
  */
 router.post('/api/local/admin/forum/posts/:id/restore', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    if (refuseModeratorsOwnForumPost(ctx, ctx.params.id, 'restore')) return;
+    if (refuseRestore(ctx, { kind: 'forum', id: ctx.params.id })) return;
     const result = restoreHiddenForumPost(ctx.params.id);
     if (result === 'not_found') {
         ctx.status = 404;
@@ -2213,7 +2280,11 @@ router.get('/api/local/admin/reports', async (ctx) => {
         const result = getReports(statusFilter, limit, offset);
         ctx.body = {
             success: true,
-            reports: result.reports,
+            // Whether this caller's restore of the reported post would work (restoreAnswer): each card draws Restore from it.
+            reports: result.reports.map((r: any) => {
+                const target = reportRestoreTarget(r);
+                return { ...r, restorable: !!target && restoreAnswer(ctx, target).status === 200 };
+            }),
             total: result.total,
             pendingCount: result.pendingCount,
             limit,

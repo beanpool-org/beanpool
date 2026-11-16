@@ -225,6 +225,21 @@ describe('PeopleSafetySection Component', () => {
         vi.unstubAllGlobals();
     });
 
+    it('draws a forum post\'s Restore exactly when the node says this person may restore it (#3239 round 3)', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }));
+        // The node decides who may restore once (server: routes/admin.ts restoreAnswer, its table in test-mcp-takedown.ts); the card follows it.
+        const forumReport = (id: string, restorable: boolean | undefined, onHold: boolean) => ({
+            id, targetPubkey: mockMembers[1].publicKey, reason: 'Spam', status: 'pending', targetForumPostId: `fp-${id}`, postOnHold: onHold,
+            ...(restorable === undefined ? {} : { restorable }),
+            forumPost: { id: `fp-${id}`, topicId: `t-${id}`, topicTitle: `Topic ${id}`, number: 1, words: 'Words', writerName: 'oscar', hidden: true, removed: false, onHold },
+        });
+        renderModeration([forumReport('held-owner', true, true), forumReport('held-refused', false, true), forumReport('hidden', true, false), forumReport('no-answer', undefined, false)]);
+        expect(screen.getAllByTestId('reported-forum-post')).toHaveLength(4);
+        expect(screen.getAllByRole('button', { name: 'Restore' })).toHaveLength(2);
+        expect(screen.getAllByRole('button', { name: /Remove forum post/ })).toHaveLength(4);
+        vi.unstubAllGlobals();
+    });
+
     // Bulk delete is an owner's (design case 18 D1): the server refuses an admin, so an admin sees no such card; an owner is
     // asked in the page, with the count, before anything is sent.
     it('bulk delete: hidden for an admin viewer, shown to an owner', async () => {

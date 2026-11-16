@@ -86,6 +86,7 @@ ci_gate(){ # PR BRANCH — 0 once a deciding pass may run on the PR's head; sets
           CI_HEAD=$sha; CI_NOTE="This PR changes only .md files, so ci.yml started no run on its head $sha. Review that commit."
           log "#$pr changes only .md files — no run to wait for"; return 0
         fi
+        if pr_conflicting "$pr"; then ci_hold "$pr" "it conflicts with $LANE_BASE, so GitHub starts no run on ${sha[1,8]} until the branch is synced"; return 1; fi
         none=$((none+1))
         (( none < LANE_GREEN_NONE_TRIES )) || { ci_hold "$pr" "no run started on ${sha[1,8]} after $none polls"; return 1; };;
     esac
@@ -115,6 +116,7 @@ ci_beside(){ # PR SHA — after a pass on SHA, wait for GitHub's word on exactly
       unknown) CI_SAYS="unknown: GitHub did not answer about ${sha[1,8]}"; return 1;;
       none)
         if pr_only_md "$pr"; then CI_SAYS="no run on ${sha[1,8]}, which changes only .md files"; return 0; fi
+        if pr_conflicting "$pr"; then CI_SAYS="no run on ${sha[1,8]}: it conflicts with $LANE_BASE, and GitHub starts none until the branch is synced"; return 1; fi
         none=$((none+1))
         (( none < LANE_GREEN_NONE_TRIES )) || { CI_SAYS="no run started on ${sha[1,8]} after $none polls"; return 1; };;
     esac

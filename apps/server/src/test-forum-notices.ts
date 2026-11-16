@@ -465,7 +465,7 @@ async function main(): Promise<void> {
 
     // ── 9. The kinds ────────────────────────────────────────────────────────────────────────────
     console.log('── 9. the kinds ──');
-    const KINDS = ['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer'];
+    const KINDS = ['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer', 'forum.learn-ask'];
     assert(KINDS.every((k) => isPushNoticeKind(k) && PUSH_NOTICE_KINDS[k as keyof typeof PUSH_NOTICE_KINDS].tab === 'chats'), 'every new kind is in the kinds table, opening the Chat tab');
     const pushSuite = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-push-notices.ts'), 'utf8');
     const prefixes = /const KIND = String\.raw`\(\?:([a-z|]+)\)/.exec(pushSuite)?.[1]?.split('|') ?? [];

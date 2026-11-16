@@ -141,6 +141,21 @@ describe('a line sent here: at once, and kept until the list knows it', () => {
         expect(ids(later, out, 'all').slice(0, 2)).toEqual(['dm', 'group']);
     });
 
+    it("an older answer landing after a newer one is not shown: the reviewer's case, a send settled and the older list last (#3225)", () => {
+        const { convs, outside: out } = before();
+        const askA = chatListAskBegins();
+        noteLineSentHere('group', convs, out, ms(6));
+        const askB = chatListAskBegins();
+        // B answers first, with the line: the send is settled, and the list is the list's own from here.
+        const withIt = convs.map((c) => (c.id === 'group' ? { ...c, lastMessageAt: iso(6) } : c));
+        expect(settleChatListSends(withIt, askB)).toBe(true);
+        expect(ids(withIt, out, 'all')[0]).toBe('group');
+        // A answers last, from before the line: not to be shown (nothing is left to settle, so only this guard holds it).
+        expect(settleChatListSends(convs, askA)).toBe(false);
+        // The next ask is shown as ever.
+        expect(settleChatListSends(withIt, chatListAskBegins())).toBe(true);
+    });
+
     it('two sends: the later is first', () => {
         const { convs, outside: out } = before();
         noteLineSentHere('dm', convs, out, ms(6));

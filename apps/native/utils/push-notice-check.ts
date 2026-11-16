@@ -538,8 +538,11 @@ const GROUP_CHAT_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['
  * "Forum", then clears it, as it does Chats' (app/(tabs)/chats.tsx). Where this community's forum is off, the tab shows Chats.
  */
 const CHAT_FORUM_ROUTE = '/(tabs)/chats?view=forum' satisfies NoticeRoute;
-/** The forum's kinds (core push-notice.ts): a reply in a followed topic, a mention, a first topic waiting, its answer. */
-const FORUM_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer']);
+/**
+ * The forum's kinds (core push-notice.ts): a reply in a followed topic, a mention, a first topic waiting, its answer, and an
+ * owner's or admin's ask to make an answer a Learn page (slice F9).
+ */
+const FORUM_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer', 'forum.learn-ask']);
 /**
  * The places the forum's notices name (server engine/forum-notices.ts and forum-first-look.ts): a topic, and the first topics
  * waiting for a moderator's look. Neither app has a page for either yet (slice F3 adds them on the phone, F4 on the web), so

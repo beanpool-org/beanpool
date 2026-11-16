@@ -25,6 +25,7 @@ import { db } from '../db/db.js';
 import { ChannelCategory, ChannelPlatform } from './creator-channels.js';
 import { scrubEndedEvents } from './posts.js';
 import { sweepTakedowns } from './agent-takedowns.js';
+import { sweepForumTakedowns } from './forum-takedowns.js';
 import { avatarUrlOf, type PulseKnowledgeCard } from '@beanpool/core';
 import { pulseHarvestAllowance } from './writer-bounds.js';
 
@@ -2200,6 +2201,9 @@ export async function runPulseSchedulerTick(): Promise<void> {
         try {
             const finalTakedowns = sweepTakedowns();
             if (finalTakedowns > 0) console.log(`🛡️ [Takedowns] ${finalTakedowns} post(s) taken down by an assistant 7 days ago removed`);
+            // The forum's (slice F2b, engine/forum-takedowns.ts), on the same tick.
+            const finalForum = sweepForumTakedowns();
+            if (finalForum > 0) console.log(`🛡️ [Takedowns] ${finalForum} forum post(s) taken down by an assistant 7 days ago removed`);
         } catch (e) {
             console.warn('[Takedowns] The sweep did not run this tick:', e);
         }

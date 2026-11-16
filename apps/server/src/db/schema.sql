@@ -1383,6 +1383,27 @@ CREATE TABLE IF NOT EXISTS agent_takedown_posts (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_post ON agent_takedown_posts(post_id);
 CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_held ON agent_takedown_posts(takedown_id) WHERE put_back_at IS NULL AND final_at IS NULL;
+-- What an assistant took down in the forum (slice F2b, engine/forum-takedowns.ts): one row per forum post (an opening post is its
+-- topic), one post a call. This server's own record, as agent_takedowns is (a standby never copies it; the hold travels in
+-- forum_posts.taken_down_at). `hidden_before`: its hide from before (NULL: it was up); `reports_closed`: the report ids (JSON) the
+-- takedown closed, for Put back. `why`: the assistant's own words, cleaned, read only in Settings.
+CREATE TABLE IF NOT EXISTS agent_forum_takedowns (
+    id TEXT PRIMARY KEY,
+    forum_post_id TEXT NOT NULL,
+    grant_id TEXT NOT NULL,
+    grant_name TEXT NOT NULL,
+    member_pubkey TEXT NOT NULL,
+    at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (reason IN ('spam', 'offensive', 'misleading', 'unsafe', 'rules')),
+    why TEXT NOT NULL DEFAULT '',
+    via TEXT NOT NULL CHECK (via IN ('ids', 'reports')),
+    hidden_before TEXT,
+    reports_closed TEXT NOT NULL DEFAULT '[]',
+    put_back_at TEXT,
+    final_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_forum_takedowns_post ON agent_forum_takedowns(forum_post_id);
+CREATE INDEX IF NOT EXISTS idx_agent_forum_takedowns_grant_at ON agent_forum_takedowns(grant_id, at);
 
 -- 14d. The communities directory as this node last fetched it (global profile G5, services/directory-mirror.ts).
 --
@@ -1474,6 +1495,12 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 -- leaves the knock plain). The ticket itself is never stored. Only the members who answer read them, as one line under
 -- the request (the post's title as it is now and the sharer's name); never the applicant's status read, the card or the
 -- directory. Cleared with what the applicant sent once the knock is off the list. A re-key moves `via_sharer_pubkey`.
+-- `forum_posts` (forums F11, DESIGN-forums-fable.md §13): up to three of the applicant's posts on the worldwide forum, as a
+-- JSON list of { postId, topicId, number, proof } (no words: the admins' apps show only what the worldwide forum answers), or
+-- NULL. `proof` is made here when the knock is taken, from the key that signed it and the secret it carried (@beanpool/core
+-- forumPostProof); the secret is kept nowhere, and this server never calls the worldwide community. Only the members who
+-- answer read it (`forum` in the list); an admin's app compares
+-- each proof with the one the worldwide forum's public page shows. Cleared with what the applicant sent.
 CREATE TABLE IF NOT EXISTS join_requests (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL,
@@ -1490,6 +1517,7 @@ CREATE TABLE IF NOT EXISTS join_requests (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     via_post_id TEXT,
     via_sharer_pubkey TEXT,
+    forum_posts TEXT CHECK (forum_posts IS NULL OR (json_valid(forum_posts) AND json_type(forum_posts) = 'array' AND length(forum_posts) <= 2000)),
     CHECK ((status = 'pending') = (decided_at IS NULL)),
     CHECK ((status = 'approved') = (invite_code IS NOT NULL))
 );
@@ -3202,7 +3230,10 @@ CREATE TABLE IF NOT EXISTS knowledge_drafts (
     result_post_id TEXT,
     created_at     TEXT NOT NULL,
     -- The replication watermark (a plain table): db.ts stamps every write.
-    updated_at     TEXT
+    updated_at     TEXT,
+    -- "Turn into a Learn page" (forum slice F9, DESIGN-forums-fable.md §10.3): the forum answer a member's suggestion came from,
+    -- their own, live when sent; NULL for any other. Approval links the page to that answer (engine/forum-learn.ts).
+    from_forum_post_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_member ON knowledge_drafts (member_pubkey, created_at);
 CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_state ON knowledge_drafts (state, created_at);
@@ -3305,7 +3336,11 @@ CREATE TABLE IF NOT EXISTS forum_posts (
     -- Hidden while the moderators look (slice F2, engine/forum-moderation.ts): reporters in enough independent circles, or a
     -- moderator's clean-up of a burst. Its writer and the moderators still read it; everyone else reads "Hidden while
     -- moderators look" in a reply's place, and nothing of a topic whose opening post it is.
-    hidden_by_reports_at TEXT
+    hidden_by_reports_at TEXT,
+    -- An owner's or an admin's AI assistant took it down (slice F2b, engine/forum-takedowns.ts): set with a hide, and while the
+    -- post is not removed, a takedown on hold, which a dismissed report, a burst's undo or a new report never brings back; Put
+    -- back clears it, and the 7-day sweep removes the post. It travels with the row, so the hold holds on a standby that took over.
+    taken_down_at TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_forum_posts_number ON forum_posts (topic_id, number);
 CREATE INDEX IF NOT EXISTS idx_forum_posts_writer ON forum_posts (writer_pubkey, created_at);
@@ -3339,7 +3374,12 @@ CREATE TABLE IF NOT EXISTS forum_members (
     updated_at     TEXT,
     -- When a moderator first OK'd a topic of theirs (slice F2, engine/forum-first-look.ts): known in this forum from then, so
     -- their topics go up at once and their links are links, whatever their new-account days say.
-    known_at       TEXT
+    known_at       TEXT,
+    -- The member's secret for the proof each public post of theirs carries (slice F11, engine/forum-ask-posts.ts; design §13):
+    -- 32 random bytes as 64 hex, made on a public forum by the main server when they are told the forum is public, or the
+    -- first time they ask for it. Only they read it (GET /api/forum/ask-posts); nobody without it can test a key against a
+    -- public post. A standby copies it, so it answers the same proofs. Moves with the member on a re-key; deleted with them.
+    proof_secret   TEXT CHECK (proof_secret IS NULL OR (length(proof_secret) = 64 AND proof_secret NOT GLOB '*[^0-9a-f]*'))
 );
 -- A first topic waiting for a moderator's look (slice F2, engine/forum-first-look.ts; design §5): a new member's topic where
 -- `forumFirstLook` is on. Not a topic: it lives here until a moderator says yes, so no list, read, search or copy of the
@@ -3414,6 +3454,9 @@ CREATE TABLE IF NOT EXISTS forum_links (
     target_id  TEXT NOT NULL CHECK (length(target_id) BETWEEN 1 AND 128),
     created_at TEXT NOT NULL,
     updated_at TEXT,
+    -- A Learn page made from an answer in the topic (slice F9, §10.3): that answer's id, so it reads "Now a Learn page"; written
+    -- only when the page is made, never a chip of the topic's writer and never counted in their 3. NULL for every chip.
+    post_id    TEXT,
     PRIMARY KEY (topic_id, kind, target_id)
 );
 -- The forum's search (slice F6, engine/forum-search.ts; design §3 "a search index", §8, §16): one row per post, keyed by the

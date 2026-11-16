@@ -16,6 +16,9 @@ describe('UnclaimedCard', () => {
         const steps = screen.getByTestId('claim-phone-steps');
         expect(steps).toHaveTextContent('Claiming is done from the phone app only.');
         expect(steps).toHaveTextContent('Installed BeanPool on a server? Claim it');
+        // A phone with no account opens on "Used BeanPool before?" and draws the claim link only after I'm New Here (#3209),
+        // so the card names that answer first, as the operator manual does.
+        expect(steps).toHaveTextContent("open BeanPool, tap I'm New Here on its first screen, then Installed BeanPool on a server? Claim it");
         expect(steps).toHaveTextContent('tap the bean at the top, then Set up a new community server');
         expect(screen.getByTestId('claim-card')).not.toHaveTextContent('Find a community');
         expect(screen.getByTestId('claim-qr-no-code')).toHaveTextContent("This QR code carries this server's address and the waiting code's short name, never the code itself: the code is read on the server.");

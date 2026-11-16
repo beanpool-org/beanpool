@@ -126,6 +126,18 @@ export interface NodeFeatures {
      */
     outsideMessages?: boolean;
     /**
+     * A convenor may invite someone from another community into a group's chat (apps/server config/node-profile.ts, said
+     * only where `groupGuests` and `outsideMessages` are both on). Kept so a screen that offers the invitation can read it;
+     * a node that doesn't say takes no guests.
+     */
+    groupGuests?: boolean;
+    /**
+     * Whether this community keeps members' locked contact lists (apps/server config/contact-copies.ts, the owner's choice
+     * under How this community works; in `features` on the community's info and a member's answer, after the profile's own
+     * switches: config/features-for.ts ReaderFeatures). A node that doesn't say is from before the choice.
+     */
+    contacts?: boolean;
+    /**
      * The community tells a member when a neighbour posts a Need in a category they starred (`market.asked`, cold start N3;
      * core askedPushOn). The What are you into? card says so and Settings → Notifications shows its switch only then: a
      * node that doesn't say (the worldwide one, Beans off, a node from before it) sends no such push and takes no switch.
@@ -155,6 +167,13 @@ export interface NodeFeatures {
      */
     forum?: boolean;
     /**
+     * Anyone may read this community's forum (the worldwide one; apps/server config/node-profile.ts, slice F7; core
+     * forumPublicOn): a visitor there gets the Forum tab in Chat's place, "From the forum" on Home, and the public pages'
+     * "Open in the app" (utils/forum-public.ts, utils/forum-link.ts). The node says it only where its forum is on and
+     * public, never in a private preview. A node that doesn't say keeps its forum for its members.
+     */
+    forumPublic?: boolean;
+    /**
      * This node sends the forum's notices and takes the member's Forum switch (`notify_forum`; apps/server
      * engine/forum-notices.ts, slice F5; core forumNoticesOn): Settings → Notifications shows that switch only then. A node
      * that doesn't say (no forum, or from before F5) sends none and refuses the key.
@@ -180,7 +199,8 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumNotices', 'outsideMessages', 'bills',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumPublic', 'forumNotices', 'outsideMessages', 'bills',
+    'groupGuests', 'contacts',
 ];
 
 export interface NodeProfile {

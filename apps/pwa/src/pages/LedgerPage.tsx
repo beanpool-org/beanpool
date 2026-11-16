@@ -467,7 +467,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         const ask = sendStart;
         if (!ask.to || ask.to === myKey) return;
         const listed = members.find(m => m.publicKey === ask.to);
-        (listed ? Promise.resolve([listed]) : membersByKeys([ask.to]))
+        const named: Promise<Array<{ publicKey: string; callsign: string }>> = listed ? Promise.resolve([listed]) : membersByKeys([ask.to]);
+        named
             .then((cards) => {
                 const card = cards.find(c => c.publicKey === ask.to);
                 if (!card || !isMountedRef.current) return;

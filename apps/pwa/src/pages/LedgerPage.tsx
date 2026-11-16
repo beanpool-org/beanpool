@@ -58,6 +58,12 @@ interface Props extends LocalCommunityWays {
     waitCapMs?: number;
     /** The member's own deals, as the app already holds them (App.tsx `myTransactions`): what is held in trust, and which deal a hold is. */
     deals?: MarketplaceTransaction[];
+    /**
+     * Send opened by another page (Learn's "🫘 Thank {name}", K8; DESIGN-local-knowledge-fable.md §3.7): the recipient, their
+     * name and a note, each changeable in the form. Taken once the member's figures are read (`onSendStartTaken`).
+     */
+    sendStart?: { to: string; name: string; note: string } | null;
+    onSendStartTaken?: () => void;
 }
 
 const ESCROW_ACCOUNT = 'escrow_';
@@ -117,7 +123,7 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
-export function LedgerPage({ identity, onNavigate, isMember, preview = false, waitCapMs, deals, ...ways }: Props) {
+export function LedgerPage({ identity, onNavigate, isMember, preview = false, waitCapMs, deals, sendStart, onSendStartTaken, ...ways }: Props) {
     const viewerIsMember = isMember !== false && identity !== null;
     const myKey = identity?.publicKey ?? '';
     // Drawn from, never stored: a preview that turns live while the page is open never shows the sample as the member's own.
@@ -446,6 +452,26 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             setSending(false);
         }
     }
+
+    // Send opened by another page with a recipient and a note (K8): the Beans tab with both filled in, once the member's own
+    // figures are read. A member who can't send Beans yet reads today's words there (the locked line), the recipient kept.
+    // Nothing else about sending changes.
+    useEffect(() => {
+        if (!sendStart) return;
+        if (preview || !viewerIsMember) { onSendStartTaken?.(); return; }
+        if (!ownBalanceInfo) return;
+        onSendStartTaken?.();
+        if (sendStart.to === myKey) return;
+        setSendTo(sendStart.to);
+        setPickedCard(sendStart.name ? { publicKey: sendStart.to, callsign: sendStart.name } : null);
+        setSendMemo(sendStart.note);
+        setSendAmount('');
+        setActiveTab('financials');
+        setSendKind('beans');
+        setGiftNote(null);
+        setShowSend(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sendStart, ownBalanceInfo, preview, viewerIsMember]);
 
     /** Opens Send: on Beans when they can go, else on the Credit line tab; the node's offer read again as it opens. */
     function openSend() {

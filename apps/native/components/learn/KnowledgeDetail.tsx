@@ -17,7 +17,8 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Te
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, currentLanguage, formatCount, formatDate, inCapitalsOf, pinLive, t,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LOCAL_GUIDE_EMOJI, currentLanguage, formatCount, formatDate, inCapitalsOf,
+    knowledgeThankNote, knowledgeThankOffered, pinLive, t,
 } from '@beanpool/core';
 import { useStyles, useTheme } from '../../app/ThemeContext';
 import { useIdentity } from '../../app/IdentityContext';
@@ -30,6 +31,7 @@ import { reportAbuse, signedGet, signedRequestWithMethod } from '../../utils/db'
 // The page has a text field (the out-of-date note), so its alerts close the keyboard first (utils/keyboard-alert.ts).
 import { Alert } from '../../utils/keyboard-alert';
 import { useLearnMode } from '../../utils/use-learn-mode';
+import { useShowcaseMode } from '../../utils/use-reader-features';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { signedRequestWords } from '../signed-request-lines';
 import { LANGUAGE_NAMES } from '../../utils/language-choice';
@@ -110,20 +112,29 @@ export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
     const { checks } = useLearnWriter(live, false);
     const own = !!identity?.publicKey && page.authorPublicKey === identity.publicKey;
     const acts = pageActions({ signedIn: !!identity?.publicKey, live, own, checks, outdated: !!page.knowledge?.outdatedAt });
+    // Thank (K8, §2.10): where Beans are live for this member, on a page with a writer that isn't theirs and wasn't gathered with
+    // the assistant. It opens the Ledger's Send form; whether they can send yet is the form's to say, in today's words.
+    const beansLive = useShowcaseMode('beans') === 'live';
+    const thank = knowledgeThankOffered({ signedIn: !!identity?.publicKey, live, beansLive, own, gathered: !!page.knowledge?.gathered, writer: page.authorPublicKey });
+    // The writer's Local guide badge (K8): only a signed read of the page by id says, worked out now (the copy never holds one).
+    const [writerGuide, setWriterGuide] = useState(false);
+    const reads = !!identity?.publicKey && live;
     // Whether this member tapped before: only a signed read of the page by id says (never the copy, never a list).
     useEffect(() => {
-        setHelped(null); setStillRight(false); setMarking(null); setRefusal(null);
-        if (!acts.helped) return undefined;
+        setHelped(null); setStillRight(false); setMarking(null); setRefusal(null); setWriterGuide(false);
+        if (!reads) return undefined;
         let gone = false;
         signedGet(`/api/marketplace/posts?type=knowledge&id=${encodeURIComponent(held.id)}`)
             .then((res) => (res.ok ? res.json() : null))
             .then((rows) => {
                 const k = Array.isArray(rows) ? rows.find((r: any) => r?.id === held.id)?.knowledge : null;
-                if (!gone && k && typeof k.helpedByMe === 'boolean') setHelped({ n: typeof k.helped === 'number' ? k.helped : 0, mine: k.helpedByMe });
+                if (gone || !k) return;
+                if (acts.helped && typeof k.helpedByMe === 'boolean') setHelped({ n: typeof k.helped === 'number' ? k.helped : 0, mine: k.helpedByMe });
+                setWriterGuide(k.writerLocalGuide === true);
             })
             .catch(() => { /* offline: the count is the copy's, and a tap asks the node */ });
         return () => { gone = true; };
-    }, [held.id, acts.helped]);
+    }, [held.id, acts.helped, reads]);
     /** One action, signed: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
     const act = async (method: string, path: string, body?: unknown, after?: (answer: any) => void) => {
         if (busy) return;
@@ -183,6 +194,7 @@ export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
             borderColor: colors.border.default, backgroundColor: colors.surface.card,
         },
         toolOn: { backgroundColor: colors.chip.learn.bg, borderColor: colors.chip.learn.fg },
+        thank: { alignSelf: 'flex-start' },
         toolText: { fontSize: 15, fontWeight: '800', color: colors.text.body },
         toolTextOn: { color: colors.chip.learn.fg },
         count: { fontSize: 14, fontWeight: '700', color: colors.text.secondary },
@@ -267,8 +279,15 @@ export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
                         pubkey={page.authorPublicKey}
                         callsign={page.authorCallsign ?? ''}
                         rating={rating}
+                        badge={writerGuide ? `${LOCAL_GUIDE_EMOJI} ${t(KNOWLEDGE_NAMES.badge)}` : null}
                         onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: page.authorPublicKey, callsign: page.authorCallsign ?? '' } })}
                     />
+                ) : null}
+                {thank ? (
+                    <Pressable testID="knowledge-thank" accessibilityRole="button" style={[styles.tool, styles.thank]}
+                        onPress={() => router.push({ pathname: '/(tabs)/ledger', params: { sendTo: page.authorPublicKey, sendName: page.authorCallsign ?? '', sendNote: knowledgeThankNote(page.title ?? '') } } as any)}>
+                        <Text style={styles.toolText}>{t(KNOWLEDGE_THANK.button, { name: page.authorCallsign ?? '' })}</Text>
+                    </Pressable>
                 ) : null}
                 <Text style={styles.standing}>{t(LEARN_LINES.standing)}</Text>
                 {(() => {

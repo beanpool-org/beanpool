@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Alert } from '../../utils/keyboard-alert';
 import { keyboardAwareList } from '../../components/keyboardAwareList';
-import { useFocusEffect, router } from 'expo-router';
+import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -242,6 +242,12 @@ export default function LedgerScreen() {
     }, [sendSuccess]);
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
+    // A recipient chosen by the page that opened Send (Learn's "Thank {name}", K8): their name, for a recipient this phone's
+    // member list doesn't hold. Any pick from the list replaces it.
+    const [sendToName, setSendToName] = useState<{ publicKey: string; callsign: string } | null>(null);
+    const opener = useLocalSearchParams<{ sendTo?: string; sendName?: string; sendNote?: string }>();
+    // Whether the member's own figures have been read (getBalance answered), so Send's gate reads them, not the empty start.
+    const [balanceRead, setBalanceRead] = useState(false);
     // The Credit line tab beside Beans on Send (slice G1, utils/credit-gift.ts): the node's answer at each load, never a
     // copy; null (or not offered) is no tab. `sendKind`: which tab the form is on. Never read in preview (loadData,
     // openSend and handleGift return first there), and never drawn there (giftTab).
@@ -482,6 +488,7 @@ export default function LedgerScreen() {
             // (sync_data_updated), and no answer at all means the line couldn't be read.
             getBalance(identity.publicKey).then(latest((answer: any) => {
                 setBalanceState(answer);
+                setBalanceRead(true);
                 if (answer?.lineKnown !== false) { setBalanceUnread(false); return; }
                 refreshBalanceFromServer(key)
                     .then(latest((read: unknown) => setBalanceUnread(read === null)))
@@ -607,22 +614,26 @@ export default function LedgerScreen() {
 
     // Open the Send flow from anywhere (Levels hero or Wallet). Surfaces the form in the Wallet tab. With Beans locked
     // and part of the credit line to give, it opens on the Credit line tab.
+    /** Why Beans can't go yet, in today's words: the first trade, else a positive balance. */
+    const sayCantSendYet = () => {
+        if (earned <= 0) {
+            Alert.alert(
+                t('First trade required'),
+                t('Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.'),
+                [{ text: t('OK') }]
+            );
+        } else {
+            Alert.alert(
+                t('Positive balance required'),
+                t('You can only send beans you currently hold — direct sends require a positive balance.'),
+                [{ text: t('OK') }]
+            );
+        }
+    };
     const openSend = async () => {
         if (preview) { setSheetOpen(true); return; }
         if (!canSend && !giftOpen) {
-            if (earned <= 0) {
-                Alert.alert(
-                    t('First trade required'),
-                    t('Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.'),
-                    [{ text: t('OK') }]
-                );
-            } else {
-                Alert.alert(
-                    t('Positive balance required'),
-                    t('You can only send beans you currently hold — direct sends require a positive balance.'),
-                    [{ text: t('OK') }]
-                );
-            }
+            sayCantSendYet();
             return;
         }
         const url = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -637,6 +648,34 @@ export default function LedgerScreen() {
         setShowSend(true);
         getCreditGiftOffer().then(setGiftOffer).catch(() => {});
     };
+
+    /**
+     * Send opened by another page with a recipient and a note (Learn's "🫘 Thank {name}", K8; DESIGN-local-knowledge-fable.md
+     * §3.7): the Beans form with both filled in, each changeable, once the member's figures are read. A member who can't send Beans
+     * yet reads today's words and no form. Taken once: the request is cleared as it is read. Nothing else about sending changes.
+     */
+    const openSendFor = (to: string, name: string, note: string) => {
+        if (!canSend) { sayCantSendYet(); return; }
+        setSendTo(to);
+        setSendToName(name ? { publicKey: to, callsign: name } : null);
+        setSendMemo(note);
+        setSendAmount('');
+        loadMembers();
+        setActiveTab('financials');
+        setSendError(null); setSendSuccess(false);
+        setSendKind('beans');
+        setShowSend(true);
+        getCreditGiftOffer().then(setGiftOffer).catch(() => {});
+    };
+    const openerTo = typeof opener.sendTo === 'string' ? opener.sendTo : '';
+    React.useEffect(() => {
+        if (!openerTo || beansMode === undefined || (!preview && !balanceRead)) return;
+        router.setParams({ sendTo: '', sendName: '', sendNote: '' } as any);
+        if (preview) { setSheetOpen(true); return; }
+        if (openerTo === identity?.publicKey) return;
+        openSendFor(openerTo, typeof opener.sendName === 'string' ? opener.sendName : '', typeof opener.sendNote === 'string' ? opener.sendNote : '');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openerTo, beansMode, preview, balanceRead]);
 
     // Trust calculations (value-based)
     const earned = balanceState.earnedCredit_c || 0;   // from the saturating value curve (hundredths)
@@ -690,7 +729,7 @@ export default function LedgerScreen() {
 
     // ⚡ Bolt: Pre-compute Map to convert O(M) member lookups on render cycles into O(1) constant-time retrievals
     const membersMap = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
-    const selectedMember = sendTo ? membersMap.get(sendTo) : undefined;
+    const selectedMember = sendTo ? (membersMap.get(sendTo) ?? (sendToName?.publicKey === sendTo ? sendToName : undefined)) : undefined;
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
 
     // Credit position is now the reusable <CreditBar> component (zero-centred, anchored scale).

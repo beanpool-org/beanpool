@@ -29,7 +29,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatHundredths, formatNumber, freePriceWords, isHundredths, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor } from '@beanpool/core';
+import { KNOWLEDGE_NAMES, LOCAL_COMMUNITY_LINES, LOCAL_GUIDE_EMOJI, formatDate, formatHundredths, formatNumber, freePriceWords, isHundredths, isLocalGuide, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
@@ -120,6 +120,7 @@ export default function PublicProfileScreen() {
         },
         bioText: { marginTop: 10, fontSize: 14, color: colors.text.secondary, fontStyle: 'italic', textAlign: 'center', lineHeight: 20 },
         joinedText: { fontSize: 12, color: colors.text.muted, fontWeight: '600', marginTop: 6 },
+        guideText: { fontSize: 13, color: colors.text.body, fontWeight: '800', marginTop: 6 },
         // The way on when no card is held offline: read at 4.5:1 in both schemes, unlike the muted lines around it.
         unreachableText: { fontSize: 13, color: colors.text.secondary, fontWeight: '600', marginTop: 6, textAlign: 'center' },
 
@@ -519,7 +520,7 @@ export default function PublicProfileScreen() {
     const [friendsCount, setFriendsCount] = useState(0);
     const [trust, setTrust] = useState<any>(null);
     // Your own profile's inviter line and Brought in (I3), from the same trust profile read for yourself.
-    const [selfInvite, setSelfInvite] = useState<{ vouchedInBy: any; broughtIn?: number } | null>(null);
+    const [selfInvite, setSelfInvite] = useState<{ vouchedInBy: any; broughtIn?: number; badges?: unknown } | null>(null);
     /** The key whose trust profile the node has answered (or failed to): until then, what the key is isn't known. */
     const [trustFor, setTrustFor] = useState<string | null>(null);
     const [editingReview, setEditingReview] = useState<any | null>(null);
@@ -782,7 +783,7 @@ export default function PublicProfileScreen() {
             const asked = pubKeyStr;
             setSelfInvite(null);
             getTrustProfile(asked)
-                .then(own => { if (!cancelled && own) setSelfInvite({ vouchedInBy: own.vouchedInBy ?? null, broughtIn: own.broughtIn }); })
+                .then(own => { if (!cancelled && own) setSelfInvite({ vouchedInBy: own.vouchedInBy ?? null, broughtIn: own.broughtIn, badges: own.badges }); })
                 .catch(() => null);
         }
 
@@ -1097,6 +1098,10 @@ export default function PublicProfileScreen() {
                     {cardUnreachable && <Text style={styles.unreachableText} numberOfLines={2}>{t('Connect to see more')}</Text>}
                     {!!fmtDay(profile?.joined_at) && (
                         <Text style={styles.joinedText} numberOfLines={1}>{t('📅 Joined {date}', { date: fmtDay(profile.joined_at) })}</Text>
+                    )}
+                    {/* The Local guide badge (Learn K8): the trust profile's `badges`, this key's own answer only. Gates nothing. */}
+                    {isLocalGuide(isSelf ? selfInvite?.badges : trustFor === pubKeyStr ? trust?.badges : undefined) && (
+                        <Text style={styles.guideText} testID="profile-local-guide">{`${LOCAL_GUIDE_EMOJI} ${t(KNOWLEDGE_NAMES.badge)}`}</Text>
                     )}
                     {/* Visual Reciprocity Health Ring / Badge (#4). The deal completion rate: Beans, gated like the trust
                         panel below. Where nobody makes a deal (the worldwide community) it read 100% for everyone. */}

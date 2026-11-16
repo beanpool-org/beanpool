@@ -23,6 +23,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import { communityName } from './community-name';
 import { communitySwitched } from './community-switch';
+import { whileCommunityMoves, writeCommunityAddress } from './community-move-lock';
 import { assertPlainNodeAddress, plainOriginOf } from './node-url';
 import { takeOffSavedList } from './nodes';
 import { sameCommunityRecord } from './community-index';
@@ -92,9 +93,12 @@ async function defaultSwitchDeps(): Promise<SwitchDeps> {
 export async function switchFromUpdateBlock(url: string, injected?: SwitchDeps): Promise<void> {
     assertPlainNodeAddress(url);
     const deps = injected ?? await defaultSwitchDeps();
-    await deps.closeDB();
-    await deps.storage.setItem(ANCHOR_STORE_KEY, url);
-    await deps.initDB();
+    // A member move (community-move-lock.ts): the copy closed, the address written and the next copy open, in one move.
+    await whileCommunityMoves(async (held) => {
+        await deps.closeDB();
+        await writeCommunityAddress(held, url, deps.storage);
+        await deps.initDB();
+    });
     communitySwitched();
 }
 
@@ -162,13 +166,16 @@ async function defaultLeaveDeps(): Promise<LeaveDeps> {
  * update screen has nothing to hold, and Welcome takes another invite. Its own storage only.
  */
 async function forgetCommunity(here: string, storage: Pick<Storage, 'getItem' | 'setItem'> & { removeItem(key: string): Promise<void> } = AsyncStorage): Promise<void> {
-    try {
-        const { removeCommunityCaches } = await import('./community-cache');
-        await removeCommunityCaches([here]);
-    } catch (e) {
-        console.warn('[Update] The cached copy of the community left could not be removed', e);
-    }
-    await storage.removeItem(ANCHOR_STORE_KEY);
+    // A member move (community-move-lock.ts): the copy closed and gone, and the address taken off, in one move.
+    await whileCommunityMoves(async (held) => {
+        try {
+            const { removeCommunityCaches } = await import('./community-cache');
+            await removeCommunityCaches([here]);
+        } catch (e) {
+            console.warn('[Update] The cached copy of the community left could not be removed', e);
+        }
+        await writeCommunityAddress(held, null, storage);
+    });
     // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
     communitySwitched();
     const hereAddress = plainOriginOf(here);

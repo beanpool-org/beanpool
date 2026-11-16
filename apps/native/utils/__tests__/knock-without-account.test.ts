@@ -337,7 +337,7 @@ describe('the root guard (auth-return.ts setupRedirect)', () => {
         expect(read).toBeGreaterThan(-1);
         expect(toWelcome).toBeGreaterThan(read);
         // Everything that switches the community or redeems comes after: a phone with a community still gets them.
-        for (const later of ["t('Switch Nodes?')", "t('Switch & Join')", 'redeemInvite(parsedCode', "AsyncStorage.setItem('beanpool_anchor_url', targetOrigin)"]) {
+        for (const later of ["t('Switch Nodes?')", "t('Switch & Join')", 'redeemInvite(parsedCode', 'switchPhoneTo(targetOrigin)']) {
             expect(case2.indexOf(later), later).toBeGreaterThan(toWelcome);
         }
         // The invite step gets the link's invite and its community, as for a phone with no account.
@@ -380,7 +380,7 @@ describe('the welcome screen joins a yes through the invite step, and Safety Bac
     it('the knock\'s mark is read with the record, before the community is set, and makes the key new', () => {
         const record = handleCreate.indexOf('const joinRecord = storedIdentity ? await getPendingOnboarding() : null;');
         const mark = handleCreate.indexOf('const knockMade = storedIdentity ? await knockKeyIsNew(storedIdentity.publicKey) : false;');
-        const community = handleCreate.indexOf("await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);\n                // The update screen");
+        const community = handleCreate.indexOf("await moveCommunityAddress(nodeUrl);\n                // The update screen");
         expect(record).toBeGreaterThan(-1);
         expect(mark).toBeGreaterThan(record);
         expect(community).toBeGreaterThan(mark);
@@ -400,7 +400,7 @@ describe('the welcome screen joins a yes through the invite step, and Safety Bac
         const landed = handleCreate.indexOf('setInviteRedeemed(true);\n                undoCommunity = false;');
         expect(landed).toBeGreaterThan(-1);
         const caught = handleCreate.slice(handleCreate.indexOf('} catch (err: any) {'));
-        expect(caught).toMatch(/if \(undoCommunity\) \{\s*await AsyncStorage\.removeItem\('beanpool_anchor_url'\)\.catch\(\(\) => \{\}\);[\s\S]*communitySwitched\(\);/);
+        expect(caught).toMatch(/if \(undoCommunity\) \{\s*await moveCommunityAddress\(null\)\.catch\(\(\) => \{\}\);[\s\S]*communitySwitched\(\);/);
     });
 
     it('a yes is joined by the invite step\'s own Next, with this phone\'s key: no join of its own', () => {

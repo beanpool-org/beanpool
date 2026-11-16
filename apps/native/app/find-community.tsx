@@ -39,6 +39,9 @@ import { findLineWords, findTownSearchWords, nearWords } from '../components/fin
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
 import { DoorRuleLine } from '../components/DoorRuleLine';
+import { communityRecordByKey, directoryRowCommunity, recordAddresses } from '../utils/community-index';
+import { askMemberHere, directoryRowDoor } from '../utils/member-here';
+import { communityRecordsReady } from '../utils/community-record';
 
 export { ErrorBoundary };
 
@@ -224,6 +227,61 @@ export default function FindCommunityScreen() {
     const [members, setMembers] = useState<Record<string, string>>({});
     // Requests this key cancelled within the day (utils/knock.ts cancelledKnocks): said so, and not asked again yet.
     const [cancelled, setCancelled] = useState<Record<string, number>>({});
+    // The community in front, once the records are read: a row whose key is one of the phone's communities opens it
+    // (addresses S5, §3.6; community-index.ts directoryRowCommunity), whatever address the row carries.
+    const [anchorNow, setAnchorNow] = useState<string | null | undefined>(undefined);
+    useEffect(() => {
+        let alive = true;
+        Promise.all([AsyncStorage.getItem('beanpool_anchor_url'), communityRecordsReady()])
+            .then(([anchor]) => { if (alive) setAnchorNow(anchor); })
+            .catch(() => { if (alive) setAnchorNow(null); });
+        return () => { alive = false; };
+    }, []);
+    // Whether this phone is a member of each row's community that is one of its own (utils/member-here.ts): asked of the
+    // community once per row key while the screen is open, never by a record alone. Until it answers, the row knocks.
+    const [memberAt, setMemberAt] = useState<Record<string, boolean>>({});
+    const memberAsked = useRef(new Set<string>());
+    // Another account on the phone: every row is asked again.
+    useEffect(() => { memberAsked.current.clear(); setMemberAt({}); }, [pubkey]);
+    useEffect(() => {
+        if (anchorNow === undefined || !communities) return;
+        let alive = true;
+        for (const c of communities) {
+            const record = communityRecordByKey(c.key);
+            if (!record || memberAsked.current.has(c.key)) continue;
+            memberAsked.current.add(c.key);
+            void askMemberHere({ using: record.using, addresses: recordAddresses(record) }, identity)
+                .then((member) => { if (alive) setMemberAt((m) => ({ ...m, [c.key]: member })); });
+        }
+        return () => { alive = false; };
+    }, [communities, anchorNow, identity]);
+    const [opening, setOpening] = useState<string | null>(null);
+    /** Open a community the phone is a member of from its row: the one switch to the address it uses, then the newest list asked. */
+    const openMine = async (mine: { using: string; askList: boolean }) => {
+        // Loaded at the tap: the switch and the check bring the whole sync with them, which this screen needs only then.
+        const [{ communitySwitchUnderWay, switchCommunity }, { askNewestListOnce }] = await Promise.all([
+            import('../utils/use-communities'), import('../utils/address-verify'),
+        ]);
+        if (opening || communitySwitchUnderWay()) return;
+        setOpening(mine.using);
+        try {
+            await switchCommunity(mine.using);
+        } catch (e) {
+            console.warn('[Find] Could not open a community this phone has', e);
+        } finally {
+            setOpening(null);
+        }
+        // The row named an address the kept list lacks: the community's own address is asked for the newest list, once.
+        if (mine.askList) askNewestListOnce(mine.using).catch(() => {});
+    };
+    // The community in front listed at an address its kept list lacks: its own address is asked for the newest list, once per
+    // community in front per app open (address-verify.ts askNewestListOnce), however many searches reload the rows.
+    useEffect(() => {
+        if (!anchorNow || !communities) return;
+        if (communities.some((c) => { const m = directoryRowCommunity(c, anchorNow); return !!m && m.inFront && m.askList; })) {
+            import('../utils/address-verify').then((m) => m.askNewestListOnce(anchorNow)).catch(() => {});
+        }
+    }, [communities, anchorNow]);
 
     const readStatus = useCallback(async (url: string, signer?: BeanPoolIdentity) => {
         const key = signer ?? identity;
@@ -625,6 +683,35 @@ export default function FindCommunityScreen() {
         );
     };
 
+    /**
+     * A row of a community this phone is a MEMBER of (its own key, asked of the community: utils/member-here.ts): said so,
+     * and opened from here. Any other row knocks as before, a guest's, a visitor's or a removed account's included: Ask to
+     * join, the waiting request, Join.
+     */
+    const renderMineOrKnock = (c: DirectoryCommunity) => {
+        const door = directoryRowDoor(anchorNow === undefined ? null : directoryRowCommunity(c, anchorNow), memberAt[c.key]);
+        if (door.kind === 'knock') return renderKnock(c.url, c.name, c);
+        const name = communityLabel(c);
+        return (
+            <View testID={`find-mine-${c.key}`}>
+                <Text style={styles.note}>{findLineWords(KNOCK_MESSAGES.member)}</Text>
+                {door.kind === 'open' && (
+                    <View style={styles.actions}>
+                        <Pressable
+                            style={[styles.primary, opening === door.using && { opacity: 0.6 }]}
+                            onPress={() => { void openMine(door); }}
+                            disabled={!!opening}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Open {name}', { name })}
+                        >
+                            <Text style={styles.primaryText}>{t('Open {name}', { name })}</Text>
+                        </Pressable>
+                    </View>
+                )}
+            </View>
+        );
+    };
+
     const listed = communities ?? [];
     // Nearest first from a place, with no name typed, and the nearest past 250 km: say so above the list (B2).
     const farLine = point && !query.trim() && findCommunityState({ communities: listed, point: 'request', directoryFetchedAt: listFetchedAt }) === 'far'
@@ -778,7 +865,7 @@ export default function FindCommunityScreen() {
                                     {c.contactEmail}
                                 </Text>
                             )}
-                            {renderKnock(c.url, c.name, c)}
+                            {renderMineOrKnock(c)}
                         </View>
                     )),
                     ]}

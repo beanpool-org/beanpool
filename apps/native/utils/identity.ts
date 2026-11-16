@@ -18,6 +18,7 @@ import {
 import { forgetNoticeCounts } from './notice-counts';
 import { Platform } from 'react-native';
 import { communitySwitched } from './community-switch';
+import { moveCommunityAddress } from './community-move-lock';
 import { namesPinSecretName } from './names-list';
 import { TOOL_SETTINGS_PREFIX } from '../tools/schema';
 
@@ -552,7 +553,8 @@ interface WipeableStorage {
 export async function wipeIdentityScopedStorage(storage: WipeableStorage, secrets: WipeableSecrets = DEVICE_SECRETS): Promise<void> {
     homeAccountLeft();
     await forgetAllPulseTokens();
-    await storage.removeItem('beanpool_anchor_url');
+    // The one write of the phone's community address, inside a move (community-move-lock.ts).
+    await moveCommunityAddress(null, storage);
     // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
     communitySwitched();
     await storage.removeItem('beanpool:identity');

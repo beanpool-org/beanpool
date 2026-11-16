@@ -31,6 +31,7 @@ import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } fr
 import type { JoinKey } from './door-key';
 import { forgetTheLook } from './look-around';
 import { communitySwitched } from './community-switch';
+import { moveCommunityAddress } from './community-move-lock';
 import { KNOCK_KEY_STORE_KEY } from './storage-keys';
 
 /** What a phone holding another account is told: the request was not sent, and nothing was written. */
@@ -62,7 +63,7 @@ const defaultDeps: CommitDeps = {
     forgetTheLook: () => forgetTheLook(),
     removeAnchor: async () => {
         if (!(await AsyncStorage.getItem('beanpool_anchor_url'))) return;
-        await AsyncStorage.removeItem('beanpool_anchor_url');
+        await moveCommunityAddress(null);
         // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
         communitySwitched();
     },

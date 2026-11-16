@@ -23,6 +23,8 @@
  * write, the move, the rows following) reads the anchor again immediately before it. Once the member has moved, nothing
  * goes and the round keeps only what it learned about the addresses, moving nothing; a copy, saved row or record that
  * holds the anchor never goes; and an address another record holds is never written into this one (records never cross).
+ * Those steps run under the one move lock the member's switch holds (community-move-lock.ts, S5), so a switch started but
+ * not yet written finishes before any of them, and is then seen.
  *
  * Who the community is. A record with no key takes it from the first read: the key the phone kept from its first
  * statement at that address (address-follow.ts keepCommunityIdentity), else the list the address serves over TLS, as a
@@ -38,7 +40,8 @@
  * address is not used.
  *
  * Not here (later slices, named in the PR): the banner and the stop when the address in use answers as something else and
- * there is nowhere proved to go (§3.5: `refuse` is recorded, nothing more yet); links, codes and the directory (S5); the
+ * there is nowhere proved to go (§3.5: `refuse` is recorded, nothing more yet); links, codes and the directory (S5: they
+ * read the records this writes, and a code's address is proved at the scan with proofAt below); the
  * worldwide community (followableOrigin leaves it out), an http address (no key on a home network) and the hall (its own
  * check and number) are never verified here.
  */
@@ -52,6 +55,7 @@ import { decideAddress, PROOF_FRESH_MS, type AddressAnswer, type AddressLineKind
 import { followableOrigin, keptIdentityAt } from './address-follow';
 import { addressSpelling, communityKeyOf, communityRecordOf, recordHolds, type CommunityRecord } from './community-index';
 import { changeCommunityRecords, communityRecordsReady } from './community-record';
+import { whileCommunityMoves, type CommunityMoveHeld } from './community-move-lock';
 
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
 const MINUTE = 60_000;
@@ -78,7 +82,7 @@ export interface VerifyDeps {
      * stores still kept by address (S3's second part) that the old move took along go too: a guest visit's mark and alerts
      * turned off (push-alerts-off.ts carryAlertsOff: no DELETE, the same server answers at both).
      */
-    moveTo(from: string, to: string): Promise<void>;
+    moveTo(from: string, to: string, held: CommunityMoveHeld): Promise<void>;
     /** The saved rows of the community `using` belongs to become one row at `using` (nodes.ts followSavedRow). */
     followRow(using: string): Promise<void>;
     /** A second record of the same community: the copy kept under its id goes (community-cache.ts removeCommunityCaches). */
@@ -115,9 +119,9 @@ async function defaultDeps(): Promise<VerifyDeps> {
         now: () => Date.now(),
         anchor: async () => AsyncStorage.getItem(ANCHOR_STORE_KEY),
         inHall: async () => !!(await readHall().catch(() => null)),
-        moveTo: async (from, to) => {
+        moveTo: async (from, to, held) => {
             if (await nodes.isGuestNode(from).catch(() => false)) await nodes.markGuestNode(to);
-            await switchPhoneTo(to);
+            await switchPhoneTo(to, undefined, held);
             await carryAlertsOff(from, to);
         },
         followRow: nodes.followSavedRow,
@@ -154,10 +158,26 @@ export function answerToProof(
 }
 
 /** One proof asked of `address` for the community's key, as decide reads it. */
-async function prove(address: string, peerId: string, deps: VerifyDeps): Promise<AddressAnswer> {
+async function prove(address: string, peerId: string, deps: Pick<VerifyDeps, 'get' | 'nonce'>): Promise<AddressAnswer> {
     const nonce = deps.nonce();
     const answer = await deps.get(addressProofUrl(address, nonce)).catch(() => null);
     return answerToProof(answer, { peerId, for: address, nonce });
+}
+
+/**
+ * One fresh proof of `address` for the community key `peerId`, asked and read as a round asks it: the scan's own proof
+ * (pair-device-target.ts provedAtScan, addresses S5 §3.6). Writes nothing. Never throws.
+ */
+export async function proofAt(address: string, peerId: string, injected?: Pick<VerifyDeps, 'get' | 'nonce'>): Promise<AddressAnswer> {
+    try {
+        const deps = injected ?? await (async () => {
+            const Crypto = await import('expo-crypto');
+            return { get: getJson, nonce: () => Array.from(Crypto.getRandomBytes(16), (b) => b.toString(16).padStart(2, '0')).join('') };
+        })();
+        return await prove(address, peerId, deps);
+    } catch {
+        return { kind: 'silent' };
+    }
 }
 
 /** This run's last ask of each address: when, how many in a row gave no answer, and whether it answered. */
@@ -166,9 +186,13 @@ let running: Promise<void> | null = null;
 /** The first round since the app started is at app open. */
 let opening = true;
 
+/** The communities a directory row asked the newest list of since the app started (askNewestListOnce), by their record. */
+const newestListAsked = new Set<string>();
+
 /** Tests only: forget this run's asks, mid-run (a cold start is this, then a round with `atOpen`). */
 export function forgetAddressChecks(): void {
     asked.clear();
+    newestListAsked.clear();
     running = null;
     opening = false;
 }
@@ -178,17 +202,33 @@ export function forgetAddressChecks(): void {
  * front, when the address in use is asked whatever the last ask was and no answer at all makes the switch due at once.
  * One round at a time. Never throws.
  */
-export function verifyAddressInUse(opts: { atOpen?: boolean } = {}, injected?: Partial<VerifyDeps>): Promise<void> {
+export function verifyAddressInUse(opts: { atOpen?: boolean; newestList?: boolean } = {}, injected?: Partial<VerifyDeps>): Promise<void> {
     if (running) return running;
     const atOpen = !!opts.atOpen || opening;
     opening = false;
-    running = round(atOpen, injected)
+    running = round(atOpen, injected, !!opts.newestList)
         .catch((e) => console.warn('[addresses] Could not verify the community\'s addresses; nothing changed', e))
         .finally(() => { running = null; });
     return running;
 }
 
-async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<void> {
+/**
+ * A directory row named an address the kept list of `community` (the community in front, or the one a row opens) lacks
+ * (§3.6, Find a community): its own address is asked for the newest list, ONCE per community per app open, however many
+ * searches reload the rows (PR #3251 round 2). Past the hourly limit, since the row is news; never as an app-open round, so
+ * one missed answer is not made due at once. A round already out finishes first. Never throws.
+ */
+export async function askNewestListOnce(community: string, injected?: Partial<VerifyDeps>): Promise<void> {
+    await communityRecordsReady().catch(() => {});
+    const key = addressSpelling(communityRecordOf(community)?.id ?? community);
+    if (newestListAsked.has(key)) return;
+    newestListAsked.add(key);
+    if (running) await running;
+    await verifyAddressInUse({ newestList: true }, injected);
+}
+
+/** `newestList`: askNewestListOnce's round (past the hourly limit; a missed answer not due at once). */
+async function round(atOpen: boolean, injected?: Partial<VerifyDeps>, newestList = false): Promise<void> {
     const deps = await depsWith(injected);
     const anchor = await deps.anchor();
     const from = followableOrigin(anchor);
@@ -200,7 +240,7 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
     const now = deps.now();
     const last = asked.get(usingAddress);
     const age = last ? now - last.at : -1;
-    if (!atOpen && last && age >= 0 && age < (last.silent ? MINUTE : HOUR)) return;
+    if (!atOpen && !newestList && last && age >= 0 && age < (last.silent ? MINUTE : HOUR)) return;
 
     // Who the community is: the record's key, else what the phone first verified here, else the first list (over TLS).
     let kept: SignedAddressList | null = record.list ? readAddressList(record.list) : null;
@@ -283,92 +323,98 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
         proved, answers, silentDue, now,
     });
 
-    // From here each step removes or writes, so each reads the anchor again immediately before it (PR #3236 round 3: the
-    // file's comment, "What counts"). The member's own switch wins over this round.
-    const memberMoved = async () => (await deps.anchor()) !== anchor || await deps.inHall();
-    // The copy, rows and record that hold the anchor (as the anchor read just before shows it) are never a duplicate's.
-    const holdsAnchor = (r: CommunityRecord) => recordHolds(r, anchor) || addressSpelling(communityKeyOf(anchor)) === addressSpelling(r.id);
+    // From here each step removes or writes, and they run under the one move lock (community-move-lock.ts), which the
+    // member's own switch holds from before it closes the copy until the new address is written: a switch started but not
+    // yet written finishes first, and this round then reads where it landed (the S4 leftover race, closed in S5). The lock
+    // is held for these local steps only, never for a network ask.
+    await whileCommunityMoves(async (held) => {
+        // Each step still reads the anchor again immediately before it (PR #3236 round 3: the
+        // file's comment, "What counts"). The member's own switch wins over this round.
+        const memberMoved = async () => (await deps.anchor()) !== anchor || await deps.inHall();
+        // The copy, rows and record that hold the anchor (as the anchor read just before shows it) are never a duplicate's.
+        const holdsAnchor = (r: CommunityRecord) => recordHolds(r, anchor) || addressSpelling(communityKeyOf(anchor)) === addressSpelling(r.id);
 
-    // A second record of the same community at an address just proved goes first, so that address keys to this record: its
-    // copy, then its saved rows with the record (Marty's pick 5: the phone keeps the copy it is on). The record in use is
-    // known by its id: any record write rebuilds the index, so the object read at the round's start is not the one read now
-    // (round 3's self-check: a community joined while the proofs were out made the record in use its own duplicate).
-    for (const a of decision.proved) {
-        const holder = communityRecordOf(originOf(a));
-        if (!holder || holder.id === record.id || (holder.peerId && holder.peerId !== peerId)) continue;
-        if (await memberMoved()) break;
-        if (holdsAnchor(holder)) continue;
-        console.warn(`[addresses] ${originOf(a)} is ${from}'s community too: this phone keeps the copy it is on, and the other one goes`);
-        await deps.removeCopy(holder.id);
-        if (await memberMoved()) break;
-        // Never a row of the record that holds the anchor. Each row's record goes after its row (nodes.ts takeOffSavedList),
-        // and that step reads the anchor itself, inside its write, and keeps the record that holds it (community-record.ts
-        // forgetCommunityRecord).
-        const anchored = communityRecordOf(anchor);
-        await deps.takeOffSavedList(holder.id, (url) => typeof url === 'string' && recordHolds(holder, url)
-            && addressSpelling(url) !== addressSpelling(anchor) && !(anchored && recordHolds(anchored, url)));
-    }
-
-    // The record write reads the anchor inside the write itself. When the member moved, what was learned about the addresses
-    // is kept, and nothing about the community in use is written. An address another record holds is that record's: its
-    // proof is not written here, and the phone never goes there (records never cross).
-    const written: { stays: boolean; to: string | null } = { stays: true, to: null };
-    await changeCommunityRecords(async (records) => {
-        const r = records.find((x) => x.id === record.id);
-        if (!r) return null;
-        const stays = await memberMoved();
-        const elsewhere = (address: string) => records.some((x) => x.id !== r.id && recordHolds(x, originOf(address)));
-        const to = decision.to && !stays && !elsewhere(decision.to) ? originOf(decision.to) : null;
-        const standsOnMain = !stays && main !== null && (to ? decision.to : usingAddress) === main && !decision.drop.includes(main);
-        written.stays = stays;
-        written.to = to;
-        const nextProved = { ...r.proved };
-        const nextRefused = { ...r.refused };
+        // A second record of the same community at an address just proved goes first, so that address keys to this record: its
+        // copy, then its saved rows with the record (Marty's pick 5: the phone keeps the copy it is on). The record in use is
+        // known by its id: any record write rebuilds the index, so the object read at the round's start is not the one read now
+        // (round 3's self-check: a community joined while the proofs were out made the record in use its own duplicate).
         for (const a of decision.proved) {
-            if (elsewhere(a)) continue;
-            nextProved[originOf(a)] = { at: now, epoch: decision.epoch };
-            delete nextRefused[originOf(a)];
+            const holder = communityRecordOf(originOf(a));
+            if (!holder || holder.id === record.id || (holder.peerId && holder.peerId !== peerId)) continue;
+            if (await memberMoved()) break;
+            if (holdsAnchor(holder)) continue;
+            console.warn(`[addresses] ${originOf(a)} is ${from}'s community too: this phone keeps the copy it is on, and the other one goes`);
+            await deps.removeCopy(holder.id);
+            if (await memberMoved()) break;
+            // Never a row of the record that holds the anchor. Each row's record goes after its row (nodes.ts takeOffSavedList),
+            // and that step reads the anchor itself, inside its write, and keeps the record that holds it (community-record.ts
+            // forgetCommunityRecord).
+            const anchored = communityRecordOf(anchor);
+            await deps.takeOffSavedList(holder.id, (url) => typeof url === 'string' && recordHolds(holder, url)
+                && addressSpelling(url) !== addressSpelling(anchor) && !(anchored && recordHolds(anchored, url)));
         }
-        for (const a of decision.drop) {
-            delete nextProved[originOf(a)];
-            const answer = answers[a];
-            nextRefused[originOf(a)] = { at: now, why: answer?.kind === 'other-key' ? answer.why : 'older' };
+
+        // The record write reads the anchor inside the write itself. When the member moved, what was learned about the addresses
+        // is kept, and nothing about the community in use is written. An address another record holds is that record's: its
+        // proof is not written here, and the phone never goes there (records never cross).
+        const written: { stays: boolean; to: string | null } = { stays: true, to: null };
+        await changeCommunityRecords(async (records) => {
+            const r = records.find((x) => x.id === record.id);
+            if (!r) return null;
+            const stays = await memberMoved();
+            const elsewhere = (address: string) => records.some((x) => x.id !== r.id && recordHolds(x, originOf(address)));
+            const to = decision.to && !stays && !elsewhere(decision.to) ? originOf(decision.to) : null;
+            const standsOnMain = !stays && main !== null && (to ? decision.to : usingAddress) === main && !decision.drop.includes(main);
+            written.stays = stays;
+            written.to = to;
+            const nextProved = { ...r.proved };
+            const nextRefused = { ...r.refused };
+            for (const a of decision.proved) {
+                if (elsewhere(a)) continue;
+                nextProved[originOf(a)] = { at: now, epoch: decision.epoch };
+                delete nextRefused[originOf(a)];
+            }
+            for (const a of decision.drop) {
+                delete nextProved[originOf(a)];
+                const answer = answers[a];
+                nextRefused[originOf(a)] = { at: now, why: answer?.kind === 'other-key' ? answer.why : 'older' };
+            }
+            const learned: CommunityRecord = {
+                ...r, peerId: peerId!, ...(communityId ? { communityId } : {}), epoch: decision.epoch, proved: nextProved, refused: nextRefused,
+                ...(kept ? { list: kept } : {}),
+            };
+            if (stays) return records.map((x) => (x === r ? learned : x));
+            const line = to && decision.line ? { kind: decision.line, from: r.using, to, at: now } : r.line;
+            const next: CommunityRecord = {
+                ...learned, using: to ?? r.using, ...(standsOnMain ? { mainSeen: originOf(main!) } : {}),
+                ...(silent && !to ? { silent } : { silent: undefined }), ...(line ? { line } : {}),
+            };
+            return records.map((x) => (x === r ? next : x));
+        });
+        const { stays, to } = written;
+        if (stays) return;
+        if (to && await memberMoved()) {
+            // The member switched while the record was written: put back where the record was going, and the line, and stay.
+            await changeCommunityRecords((records) => records.map((x) => (x.id === record.id && x.using === to
+                ? { ...x, using: record.using, line: x.line?.at === now ? record.line : x.line } : x)));
+            return;
         }
-        const learned: CommunityRecord = {
-            ...r, peerId: peerId!, ...(communityId ? { communityId } : {}), epoch: decision.epoch, proved: nextProved, refused: nextRefused,
-            ...(kept ? { list: kept } : {}),
-        };
-        if (stays) return records.map((x) => (x === r ? learned : x));
-        const line = to && decision.line ? { kind: decision.line, from: r.using, to, at: now } : r.line;
-        const next: CommunityRecord = {
-            ...learned, using: to ?? r.using, ...(standsOnMain ? { mainSeen: originOf(main!) } : {}),
-            ...(silent && !to ? { silent } : { silent: undefined }), ...(line ? { line } : {}),
-        };
-        return records.map((x) => (x === r ? next : x));
+        const at = to ?? anchor;
+        try {
+            if (to) {
+                asked.set(decision.to!, { at: now, silent: 0 });
+                console.log(`[addresses] ${from} → ${to} (${decision.action}${decision.line ? `, ${decision.line}` : ''})`);
+                await deps.moveTo(anchor, to, held);
+            }
+        } finally {
+            // The rows last: switchPhoneTo closes the copy before it writes the new address, and a copy opened in between saves
+            // the address it read, the old one, again (db.ts openAndMakeCopy; measured on the emulator, 16 Nov). Only while the
+            // phone is where the round left it: after the member's own switch (or a move that never set the address) the rows
+            // stay as they are, so the row at the anchor never goes.
+            const followed = await (async () => (await deps.anchor()) === at && !(await deps.inHall()))().catch(() => false);
+            if (followed) await deps.followRow(at).catch((e) => console.warn('[addresses] The saved row could not follow', e));
+        }
     });
-    const { stays, to } = written;
-    if (stays) return;
-    if (to && await memberMoved()) {
-        // The member switched while the record was written: put back where the record was going, and the line, and stay.
-        await changeCommunityRecords((records) => records.map((x) => (x.id === record.id && x.using === to
-            ? { ...x, using: record.using, line: x.line?.at === now ? record.line : x.line } : x)));
-        return;
-    }
-    const at = to ?? anchor;
-    try {
-        if (to) {
-            asked.set(decision.to!, { at: now, silent: 0 });
-            console.log(`[addresses] ${from} → ${to} (${decision.action}${decision.line ? `, ${decision.line}` : ''})`);
-            await deps.moveTo(anchor, to);
-        }
-    } finally {
-        // The rows last: switchPhoneTo closes the copy before it writes the new address, and a copy opened in between saves
-        // the address it read, the old one, again (db.ts openAndMakeCopy; measured on the emulator, 16 Nov). Only while the
-        // phone is where the round left it: after the member's own switch (or a move that never set the address) the rows
-        // stay as they are, so the row at the anchor never goes.
-        const followed = await (async () => (await deps.anchor()) === at && !(await deps.inHall()))().catch(() => false);
-        if (followed) await deps.followRow(at).catch((e) => console.warn('[addresses] The saved row could not follow', e));
-    }
 }
 
 /** The line Home shows once, for the community in use: taken off its record as it is read. Null for none. */

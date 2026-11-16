@@ -9,7 +9,7 @@ import { assertPlainNodeAddress } from './node-url';
 import { getLastSyncTime } from '../services/pillar-sync';
 import { communityName, realName } from './community-name';
 import { fetchMembership } from './membership-probe';
-import { communitySwitched } from './community-switch';
+import { switchPhoneTo } from './reconnect';
 import { sameCommunity } from './push-pins';
 import { sameCommunityRecord } from './community-index';
 
@@ -47,13 +47,10 @@ export async function switchCommunity(url: string, beforeWelcome?: () => Promise
     try {
         // Only a plain host[:port] becomes the phone's community (node-url.ts); refused before anything moves.
         assertPlainNodeAddress(url);
-        const { closeDB, initDB } = await import('./db');
-        await closeDB();
-        await AsyncStorage.setItem('beanpool_anchor_url', url);
-        await initDB();
-        // The full-screen "Update required" was the community left's; the one now in use is asked at once, so
-        // switching back to a community whose floor stops this app puts it up again (utils/community-switch.ts).
-        communitySwitched();
+        // The one switch (reconnect.ts switchPhoneTo): its own database, the anchor, and the full-screen "Update required"
+        // asked again for the community now in use (utils/community-switch.ts). It holds the one move lock
+        // (community-move-lock.ts), so the address check never acts on the address this switch is leaving.
+        await switchPhoneTo(url);
         await beforeWelcome?.().catch((e) => console.warn('[Communities] Before the bounce through Welcome', e));
         // Back to the bottom of the stack, then bounce the whole app through Welcome for the new community.
         if (router.canDismiss()) router.dismissAll();

@@ -4,7 +4,7 @@ title: Gruplar
 summary: Gruplarınız ve sohbetleri, grup içinde konuşma, grup kurma, insanları davet etme, davetle katılma ve grubun kendi oylamaları.
 related: messages, mute, mentions, enterprises, event-chat, posting, decisions, keepers
 help: Gruplarınız ve sohbetleri. Bir grup başlatın, insanları davet edin veya birlikte konuşup oylamak için açın.
-source-hash: 5093ecbc7c68e8dc
+source-hash: 7669768827172c66
 ---
 
 ## Bir grubun ne olduğu
@@ -15,35 +15,42 @@ Bir sohbet grubunu yöneten kişiler onun **koordinatörler**idir; içlerinden b
 
 ## Gruplarınız
 
-**Sohbet**'e, ardından **Gruplar**'a dokunun. İçinde bulunduğunuz her grup, en yeni mesaj en başta olacak şekilde orada listelenir; liderlik ettiğiniz veya üzerinde çalıştığınız projeler (🎯), yürüttüğünüz girişimler (🥖) ve ev sahipliği yaptığınız veya katılacağınız etkinlikler (📅) ile birlikte. Bir girişimin sohbeti onun herkese açık tartışmasıdır: topluluğunuzun herhangi bir üyesi bunu okuyabilir. Bkz. "Mesajlar". Her biri en son mesajını ve kaç tanesini okumadığınızı gösterir. Şifrelenmiş bir sohbette satır, kelimeleri değil, en son kimin yazdığını ve **🔒 Mesaj** ifadesini gösterir.
+**Sohbet**'e, ardından **Gruplar**'a dokunun. İçinde bulunduğunuz her grup, en yeni mesaj en başta olacak şekilde orada listelenir; liderlik ettiğiniz veya üzerinde çalıştığınız projeler (🎯), yürüttüğünüz girişimler (🥖) ve etkinliğin sohbetine biri yazdıktan sonra, ev sahipliği yaptığınız veya katılacağınız etkinlikler (📅) ile birlikte. Bir girişimin sohbeti onun herkese açık tartışmasıdır: topluluğunuzun herhangi bir üyesi bunu okuyabilir. Bkz. "Mesajlar". Her biri en son mesajını ve kaç tanesini okumadığınızı gösterir. Şifrelenmiş bir sohbette satır, kelimeleri değil, en son kimin yazdığını ve **🔒 Mesaj** ifadesini gösterir.
 
 - Üstteki **Gruplar** üzerindeki sayı, susturduğunuz sohbetler hariç okunmamış mesajlarınızı toplar.
 - Sohbetini açmak için bir gruba dokunun. Bu, onu okundu olarak işaretler.
 - Yenilemek için listeyi aşağı çekin.
 
-Telefonda aynı liste, okunmamış sayıları olmadan **Ortak** içinde, **Gruplar** altında, **Gruplarınız** olarak yer alır. Aynı sohbetleri açar.
+Telefonda **Ortak**, **Gruplar**'ın en üstünde **Senin** bölümünü gösterir: önce yürüttüğünüz girişimler ve projeler (onları yönetmek için bir **Yönet** düğmesiyle), sonra içinde bulunduğunuz gruplar; hepsi aynı sohbetleri açar.
+
+## Yer çevreleri
+
+Küresel toplulukta uygulama bir tür grubu kendiliğinden oluşturur: aynı yerin yakınında bekleyen ve bir topluluk başlatmaya yardım edeceğini söyleyen kişiler için bir **place circle** (yer çevresi). Onu yalnızca üyeleri görebilir; adı, amacı ve kimlerin katılabileceği olduğu gibi kalır. Bkz. "Yakınınızda bir topluluk bulma".
 
 ## Grup başlatma
 
-- Telefonda, **Sohbet** içinde, **Gruplar** altında **Yeni grup**'a dokunun. Veya **Ortak** içinde, **Gruplar** altında yuvarlak **+** düğmesine dokunun. Her ikisi de aynı **Grup Oluştur** formunu açar. (**Projeler** veya **Girişimler** sekmesinde **+**, bunun yerine bir proje veya bir girişim başlatır.)
-- Web uygulamasında **Ortak**'ı, ardından **Gruplar**'ı açın ve **+ Grup Oluştur**'a dokunun. Sonrasında **Ortak** üzerinde kalırsınız. Kişileri davet etmek için grubu açın ve **Kişileri davet et** seçeneğine dokunun. Ayrıca **Sohbet**'i açabilir, **Gruplar**'a ve ardından **Yeni grup**'a dokunabilirsiniz: bu sizi doğrudan yeni grubun sohbetine götürür.
+- Telefonda, **Sohbet** içinde, **Gruplar** altında **Yeni grup**'a dokunun. Veya **Ortak** üzerinde **+** düğmesine, ardından **Bir şey başlat** seçeneğine dokunun ve **Sohbet grubu**'nu seçin. Her ikisi de **Grup Oluştur** formunu açar.
+- Web uygulamasında **Ortak**'ı, ardından **Gruplar**'ı açın, **Bir şey başlat**'a dokunun ve **Sohbet grubu**'nu seçin. Sonrasında **Ortak** üzerinde kalırsınız. Kişileri davet etmek için grubu açın ve **Kişileri davet et** seçeneğine dokunun. Ayrıca **Sohbet**'i açabilir, **Gruplar**'a ve ardından **Yeni grup**'a dokunabilirsiniz: bu sizi doğrudan yeni grubun sohbetine götürür.
+- Her grubun bir resmi vardır: türüne ait olan zaten seçilidir ve siz kendiniz bir tane seçene kadar **Kategori**'yi takip eder. Başka bir resim seçmek için **Başka birini seç**'e dokunun. Telefonda kameranızı, fotoğraflarınızı ve hazır resimleri sunar. Web uygulamasında hazır resimleri gösterir ve **Fotoğraf seç** kendi fotoğraflarınızdan birini seçer.
 - En fazla 60 karakterden oluşan bir **Grup Adı** ve isterseniz 300 karaktere kadar bir **Amaç / Açıklama** verin: grubun ne için ve kimin için olduğu.
-- Bir **Kategori** seçin: **Sosyal Çevre**, **Genel**, **Çalışma Grubu** veya **Lonca**. Telefonda sizin için **Sosyal Çevre** seçilidir. Web uygulamasında ise **Çalışma Grubu** seçilidir.
+- Bir **Kategori** seçin: **Sosyal Çevre**, **Genel**, **Çalışma Grubu** veya **Lonca**. Sizin için **Sosyal Çevre** seçilidir.
 - Bir **Katılma İlkesi** seçin: **Açık**, **Katılma İsteği** veya **Yalnızca Davetle**.
-- **Grup Oluştur** seçeneğine dokunun. Grubun **baş koordinatörü** olursunuz. Telefonda uygulama sizi doğrudan yeni grubun sohbetine götürür.
+- **Grup Oluştur** seçeneğine dokunun. Grubun **baş koordinatör**ü olursunuz. Telefonda uygulama sizi doğrudan yeni grubun sohbetine götürür.
 
-Herhangi bir 24 saat içinde en fazla 5 grup başlatabilirsiniz.
+Herhangi bir 24 saat içinde en fazla 5 grup başlatabilirsiniz. Bir sahip veya yönetici, sahiplerin belirlediği **Owner and admin limit** ne kadarına izin veriyorsa o kadar grup başlatabilir (bir sahip değiştirmedikçe 100).
 
-Fasulye mi söz konusu? Kategorilerin altından bunun yerine bir proje veya girişim başlatın: telefonda **Bir proje veya girişim başlat**, web'de **Proje başlat** veya **Girişim başlat**. Bkz. "Projeler ve girişimler".
+Fasulye mi söz konusu? Bunun yerine bir proje veya girişim başlatın: **Ortak** üzerinde **Bir şey başlat**'a (telefonda yuvarlak **+** düğmesi) dokunun, ardından **Proje** veya **Girişim** seçin (ya da grup formunun altındaki bağlantıdan: **Bir proje ya da girişim başlatın →**). Bkz. "Projeler ve girişimler".
 
 ## İnsanları davet etme
 
 İnsanları telefonda ve web uygulamasında davet edebilirsiniz. Telefonda yeni bir grubun sohbeti **Kimi davet etmek istiyorsun?** diye sorar.
 
-- **Kişileri davet et**'e dokunun, istediğiniz kişileri işaretleyin ve alttaki düğmeye dokunun (örneğin **2 kişiyi davet et**).
+- **Kişileri davet et**'e dokunun, istediğiniz kişileri işaretleyin ve alttaki düğmeye dokunun (örneğin **2 kişiyi davet et**). Aynı ada sahip kişileri ayırt edebilmeniz için her kişinin adının altında kısa bir anahtar öneki görünür.
 - Veya geçmek için **Şimdi değil**'e dokunun.
 
-Daha sonra bir koordinatör, sohbetin **⋮** menüsünden **Kişileri davet et** seçeneğini kullanarak insanları davet edebilir. Web uygulamasında bir koordinatör grubu açar ve **Kişileri davet et**'e dokunur, kişileri işaretler ve aynı şekilde alttaki düğmeye dokunur. Davet ettiğiniz her kişi grubu, telefon uygulamasında **Ortak** içinde, **Gruplar** altında **DAVET EDİLDİ** olarak işaretlenmiş olarak görür (telefonda **Ortak** sekmesi olmayan bir toplulukta, **Sohbet** içinde **Grup bul** altında). Web uygulaması henüz davetleri işaretlemez: orada grubu açarlar ve **Daveti kabul et** seçeneğine dokunurlar. Katıldıklarında sohbet bunu belirtir.
+Daha sonra bir koordinatör, sohbetin **⋮** menüsünden **Kişileri davet et** seçeneğini kullanarak insanları davet edebilir. Web uygulamasında bir koordinatör grubu açar ve **Kişileri davet et**'e dokunur, kişileri işaretler ve aynı şekilde alttaki düğmeye dokunur. Davet ettiğiniz her kişiye haber verilir: telefonunda "Bir gruba katılmaya davet edildin." bildirimi ve Ana Sayfa'sında **Sana ihtiyacı var** içinde bir satır (telefonda ve web uygulamasında üstte bir simge de). Başka hiç kimse bildirim almaz, grubun diğer üyeleri bile. Ayrıca grubu **Ortak** içinde, **Gruplar** altında **DAVET EDİLDİ** olarak işaretlenmiş şekilde görürler (telefonda **Ortak** sekmesi olmayan bir toplulukta, **Sohbet** içinde **Grup bul** altında). Katıldıklarında sohbet bunu belirtir.
+
+Bir daveti geri alıp aynı kişiyi tekrar davet ederseniz, o kişi bir saat içinde ikinci bir bildirim almaz. Sizi engellemiş biri daveti yine alır, ancak bildirim almaz.
 
 ## Grubun sohbeti
 
@@ -53,15 +60,15 @@ Daha sonra bir koordinatör, sohbetin **⋮** menüsünden **Kişileri davet et*
 - Birini uyarmak için **@** ve adını yazın. Bkz. "Bahsetmeler (@ad)".
 - En yeni mesaj mesaj kutusunun hemen üzerinde yer alır ve klavye açıldığında orada kalır. Geçmişi okumak için yukarı kaydırın; gelen yeni bir mesaj sizi aşağı çekmek yerine sizi bekler.
 
-Bir grubun sohbeti uçtan uca şifrelidir: topluluğunuzun sunucusunu işleten kişiler değil, yalnızca grubun üyeleri okuyabilir. Mesaj kutusunun üzerinde **Uçtan uca şifreli** olduğu belirtilir. Topluluğunuzun sunucusu yine de kimin ne zaman yazdığını, kimden bahsedildiğini, her satırın hangi mesaja yanıt verdiğini ve emoji tepkilerini görür.
+Bir grubun sohbeti uçtan uca şifrelidir: topluluğunuzun sunucusunu işleten kişiler değil, yalnızca grubun üyeleri okuyabilir. Mesaj kutusunun üzerinde **Uçtan uca şifreli** olduğu belirtilir. Topluluğunuzun sunucusu yine de kimin ne zaman yazdığını, kimden bahsedildiğini, her satırın hangi mesaja yanıt verdiğini, emoji tepkilerini ve hangi satırların fotoğraf olduğunu ve her birinin ne kadar büyük olduğunu görür.
 
-- Sohbeti yalnızca katıldığınız günden itibaren görürsünüz. Daha önce yazılan hiçbir şey gösterilmez ve telefonunuz bunun anahtarını asla tutmaz. Önceki gri çizgileri görmeye devam edersiniz, ancak kimsenin sözlerini göremezsiniz.
+- Sohbeti yalnızca katıldığınız günden itibaren görürsünüz. Daha önce yazılan hiçbir şey gösterilmez ve telefonunuz bunun anahtarını asla tutmaz. Önceki gri çizgileri görmeye devam edersiniz, ancak kimsenin sözlerini veya fotoğraflarını göremezsiniz.
 - Biri çıkarıldığında veya ayrıldığında grup yeni bir anahtar oluşturur. 10 veya daha fazla kişilik bir grupta, telefonunuz anahtarı oluştururken sohbette **Sohbet N kişi için güvenli hale getiriliyor…** yazar.
-- Kilitlenemeyen bir mesaj gönderilmez. **! iletilmedi** gösterilir ve mesaj kutusunun üzerindeki bir satır nedenini belirtebilir. **Yeniden Gönder** veya **Sil** için üzerine dokunun.
+- Kilitlenemeyen bir mesaj gönderilmez. **! iletilmedi** gösterilir ve mesaj kutusunun üzerindeki bir satır nedenini belirtebilir. **Yeniden gönder** veya **Vazgeç** için üzerine dokunun; web uygulamasında mesajın üzerindeki **Yeniden deneyin** veya **Vazgeç** seçeneğini kullanın.
 - Bir üye tarafından yazıldığı doğrulanamayan bir mesaj **Doğrulanmamış** olarak, kimseye ait olmadan **Bu mesaj doğrulanamadı.** ifadesiyle görünür. Anahtarı henüz telefonunuza ulaşmamış bir mesajda **Bu mesajın anahtarı bekleniyor.** yazar.
-- Topluluğunuzun sunucusu eskiyse ve grup sohbetlerini henüz kilitleyemiyorsa, sohbet sunucunun bunu okuyabileceğini ve sunucu güncellendiğinde kilitleneceğini söyler. Güncellendiğinde, grubun sunucunun okuyabildiği önceki mesajları kaldırılır ve sohbette bir satır bunu belirtir. Önceki her mesajda **Bu sohbet kilitlendiğinde önceki bir mesaj kaldırıldı** yazar ve art arda gelen birkaç mesaj tek bir satır olarak gösterilir, örneğin **Bu sohbet kilitlendiğinde 11 önceki mesaj kaldırıldı**.
+- Topluluğunuzun sunucusu eskiyse ve grup sohbetlerini henüz kilitleyemiyorsa, sohbet sunucunun bunu okuyabileceğini ve sunucu güncellendiğinde kilitleneceğini söyler. Güncellendiğinde, grubun sunucunun okuyabildiği önceki mesajları kaldırılır ve sohbette bir satır bunu belirtir. Önceki her mesajda **Bu sohbet kilitlendiğinde önceki bir mesaj kaldırıldı** yazar ve art arda gelen birkaç mesaj tek bir satır olarak gösterilir, örneğin **Bu sohbet kilitlendiğinde önceki 11 mesaj kaldırıldı**.
 
-Web uygulamasında grup sohbetleriniz 👥 ile işaretlenmiş olarak **Sohbet** bölümündedir. Telefonda olduğu gibi uçtan uca şifreli olarak orada okuyabilir ve yazabilirsiniz: yanıtlayabilir, tepki verebilir, 15 dakika boyunca düzenleyebilir ve sohbette arama yapabilirsiniz. Sessize alma, **Sil** ve **Kaldır** yalnızca telefondadır. Web uygulamasında, grubu açmak için sohbetinin üst kısmındaki grup adına dokunun; bir koordinatör oradan insanları davet edebilir. Bir girişimin sohbeti şifrelenmez: bkz. "Mesajlar".
+Web uygulamasında grup sohbetleriniz 👥 ile işaretlenmiş olarak **Sohbet** bölümündedir. Telefonda olduğu gibi uçtan uca şifreli olarak orada okuyabilir ve yazabilirsiniz: yanıtlayabilir, tepki verebilir, 15 dakika boyunca düzenleyebilir, silebilir, kaldırabilir, bildirimleri sessize alabilir, sohbette arama yapabilir ve başkasının mesajını bildirebilirsiniz (altındaki **Bildir** ile). Grubu açmak için sohbetinin üst kısmındaki grup adına dokunun; bir koordinatör oradan insanları davet edebilir. Bir girişimin sohbeti şifrelenmez: bkz. "Mesajlar".
 
 ## Grup sohbetinde konuşma
 
@@ -69,19 +76,24 @@ Grup sohbeti tam olarak bir kişiyle yapılan sohbet gibi çalışır. Bir mesaj
 
 - **Yanıtla**, bir sonraki yazacağınız şeyin üzerinde alıntılar. Neye yanıt verdiğine geri dönmek için alıntıya dokunun.
 - **Tepki Ver** yedi emoji açar. Her biri için bir tane; geri almak için tekrar dokunun. Tepkiler mesajın altında bir rozet olarak görünür.
-- Kendi mesajlarınızda 15 dakika boyunca **Düzenle**. Mesaj daha sonra **düzenlendi** olarak gösterilir.
+- Kendi mesajlarınızda 15 dakika boyunca **Düzenle**. Mesaj daha sonra **düzenlendi** olarak gösterilir. Fotoğraflar düzenlenemez.
 - Kendi mesajlarınızda istediğiniz zaman **Sil**. Bir kez **Herkesten silinsin mi?** diye sorar ve mesaj daha sonra gruptaki herkes için **Bu mesaj silindi** olarak görünür.
 - Başkasının mesajında koordinatörler için **Kaldır**. Bir kez sorar ve mesaj daha sonra **Bir koordinatör tarafından kaldırıldı** olarak görünür. Kendi mesajınız **Kaldır** değil, **Sil** işlemidir.
+- Başka herhangi birinin mesajında **Bildir** (bir bayrak). Bir neden seçin, isterseniz birkaç sözcük ekleyin ve **Bildirimi gönder**'e dokunun. Topluluğunuzun moderatörleri yalnızca o mesajı (varsa fotoğrafıyla birlikte) ve onu kimin gönderdiğini alır; sohbetten başka hiçbir şey almaz. Bkz. "Sorun bildirme".
 
-Yazarlarının sildiği art arda iki veya daha fazla mesaj tek bir satır olarak gösterilir, örneğin **3 mesaj silindi**. Bir koordinatörün kaldırdığı iki veya daha fazlası **Bir koordinatör tarafından kaldırılan 3 mesaj** olarak gösterilir.
+Yazarlarının sildiği art arda iki veya daha fazla mesaj tek bir satır olarak gösterilir, örneğin **3 mesaj silindi**. Bir koordinatörün kaldırdığı iki veya daha fazlası **Bir koordinatör tarafından 3 mesaj kaldırıldı** olarak gösterilir.
 
-Kendi mesajınızın altında: gönderilirken bir saat, grubun sunucusuna ulaştığında bir onay işareti veya gönderilemediyse **! iletilmedi** — **Yeniden Gönder** veya **Sil** için buna dokunun. Bir grupta mavi çift onay işareti yoktur: bir grubun tek bir okuyucusu yoktur.
+Kendi mesajınızın altında: gönderilirken bir saat, grubun sunucusuna ulaştığında bir onay işareti veya gönderilemediyse **! iletilmedi** — **Yeniden gönder** veya **Vazgeç** için buna dokunun ya da web uygulamasında mesajın üzerindeki **Yeniden deneyin** veya **Vazgeç** seçeneğini kullanın. Bir grupta mavi çift onay işareti yoktur: bir grubun tek bir okuyucusu yoktur.
 
-Grup sohbetinde fotoğraf gönderilemez ve grupta bir anlaşma başlatılamaz. Her ikisi de iki kişi arasındaki sohbete aittir. Bkz. "Mesajlar".
+Kilitli bir grup sohbetinde, telefonda ve web'de, mesaj başına bir fotoğraf gönderebilirsiniz, açıklamalı veya açıklamasız. Fotoğraflar en uzun kenarı en fazla 800 px olacak şekilde küçültülür. Bir fotoğrafı tam ekran açmak için ona dokunun, telefonda ve web'de. Grup sohbetindeki fotoğraflar yazılar gibi şifrelenir: onları yalnızca grubun üyeleri açabilir ve yalnızca grupta bulundukları süre için (yeni gelen biri katılmadan önceki fotoğrafları görmez; çıkarılan bir üye sonrasındakilerin hiçbirini görmez). Açılamayan bir fotoğraf, örneğin başka birinin sunucuda değiştirdiği bir fotoğraf, **🔒 Görsel kullanılamıyor** olarak görünür. Fotoğraflı bir mesaj düzenlenemez. Her mesaj gibi silinebilir (yazarı siler; bir koordinatör kaldırabilir), telefonda ve web'de.
 
-Bir **gözlemci** sohbeti okuyabilir ancak içine yazamaz, tepki veremez veya yanıtlayamaz.
+Kilitli bir grup sohbetinde, telefonda ve web uygulamasında sesli mesaj da gönderebilirsiniz: telefonda mikrofonu basılı tutun ve göndermek için bırakın; web uygulamasında başlatmak için ona tıklayın. Bkz. "Sesli mesajlar".
 
-Yanıt, tepkiler, düzenleme ve silme için topluluğunuzun sunucusunun güncel olması gerekir. Yalnızca sizinki güncel değilse uygulama **Bu toplulukta henüz mevcut değil** der — bu durum sunucuyla ilgilenen kişiye iletilmeye değerdir.
+Grup sohbetinde bir anlaşma başlatılamaz: anlaşmalar iki kişi arasındaki sohbete aittir. Bkz. "Mesajlar".
+
+Bir **gözlemci** sohbeti okuyabilir ancak içine yazamaz, tepki veremez veya yanıtlayamaz. Bir mesajı bildirebilir.
+
+Yanıt, tepkiler, düzenleme ve silme için topluluğunuzun sunucusunun güncel olması gerekir. Yalnızca sizinki güncel değilse uygulama **Bu toplulukta henüz kullanılamıyor** der — bu durum sunucuyla ilgilenen kişiye iletilmeye değerdir.
 
 Sunucunun geri çevirdiği başka her şeyi sunucu kendi sözleriyle geri çevirir ve uygulama size o satır yerine bu sözleri gösterir. "Kaldırılan bir mesaj düzenlenemez", siz yazarken bir koordinatörün onu kaldırdığı anlamına gelir, sunucunuzun geride kaldığı anlamına gelmez.
 
@@ -99,7 +111,7 @@ Sonunda telefonunuz ne olduğunu söyler: yalnızca her anahtarı ilettiğinde *
 
 ## Bir gruba katılma
 
-Telefonda, **Ortak** içinde, **Gruplar** altında, **Katılabileceğiniz gruplar** içinde olmadığınız grupları listeler. Listenin üzerindeki düğmelerle onları türlerine göre filtreleyin. Web uygulamasında **Gruplar**, görebildiğiniz her grubu rolünüzle işaretlenmiş olarak listeler; **Gruplarım** yalnızca sizinkileri gösterir. Her biri açıklamasının başlangıcını gösterir. Tamamını okumak için bir grubu açın, ardından:
+**Ortak** içinde, **Gruplar** altında, içinde bulunduğunuz gruplar **Senin** altında en başta yer alır. Bunların altında liste, katılabileceklerinizi neyin gösterildiğini adlandıran bir başlıkla gösterir (örneğin **Buradaki gruplar, projeler ve girişimler**; bu başlık **Tümü**, **Projeler**, **Girişimler** ve **Sohbet grupları** filtreleriyle değişir). Her biri açıklamasının başlangıcını gösterir. Tamamını okumak için bir grubu açın, ardından:
 
 - Herkese açıksa **Gruba Katıl**;
 - Bir koordinatör üyeleri onaylıyorsa **Katılma İsteği**. Onaylayana kadar **Onay Bekleyen İstek** ifadesini görürsünüz.
@@ -108,7 +120,7 @@ Telefonda, katılmak istediğiniz bir grup bir koordinatör sizi içeri alana ka
 
 **Yalnızca Davetle** olan bir grup, içinde olmayan veya davet edilmeyen herkesten gizlenir.
 
-Telefonda Fasulyesi olmayan yerel bir topluluğun **Ortak** sekmesi yoktur. Orada **Sohbet**'e, ardından **Gruplar**'a ve ardından **Grup bul**'a dokunun: aynı listeyi açar. Henüz hiçbir grupta değilseniz bağlantı **Katılacak bir grup bul** şeklindedir. Küresel topluluğun **Ortak** sekmesi vardır: grupları orada, yerel bir topluluk örneğinin altında yer alır (bkz. "Fasulye ve küresel topluluk").
+Telefonda Fasulyesi ve Kararları olmayan yerel bir topluluğun **Ortak** sekmesi yoktur. Orada **Sohbet**'e, ardından **Gruplar**'a ve ardından **Grup bul**'a dokunun: aynı listeyi açar. Henüz hiçbir grupta değilseniz bağlantı **Katılmak için bir grup bul** şeklindedir. Kararlar açıksa **Ortak** sekmesi Kararlar ve gruplar için kalır. Küresel topluluğun **Ortak** sekmesi vardır: grupları orada, yerel bir topluluk örneğinin altında yer alır (bkz. "Fasulye ve küresel topluluk").
 
 Bir koordinatör sizi bir gruptan çıkardıysa, gruba kendi başınıza tekrar katılamazsınız.
 
@@ -116,14 +128,17 @@ Hesabınız askıya alındığında bir grup başlatamaz, bir gruba katılamaz, 
 
 ## Davetle katılma
 
-Davet edildiğiniz bir grup telefon uygulamasında **Ortak** içinde, **Gruplar** altında **DAVET EDİLDİ** olarak işaretlenmiş şekilde gösterilir. Telefonda **Ortak** sekmesi olmayan bir toplulukta, **Sohbet** içinde **Grup bul** altındadır. Daveti görmek için üzerine dokunun: sizi kimin davet ettiği, grubun ne olduğu, kimlerin içinde olduğu (yalnızca davetle girilen bir grup için kaç kişi olduğu) ve sohbetini kimlerin okuyabileceği. Telefonda:
+Biri sizi bir gruba davet ettiğinde telefonunuza "Bir gruba katılmaya davet edildin." bildirimi gelir ve **Sana ihtiyacı var** daveti gösterir: Ana Sayfa'da ve, telefonda ve web uygulamasında, üstte bir simge olarak (bir zarf). Daveti açmak için bildirime veya satıra dokunun. Siz katılana ya da hayır diyene veya koordinatör onu geri alana kadar **Sana ihtiyacı var** içinde kalır. Bu bildirim **Doğrudan Mesajlar** bildirimlerinizle birlikte gelir, bu yüzden onları kapatırsanız gelmez.
+
+Davet edildiğiniz bir grup ayrıca **Ortak** içinde, **Gruplar** altında **DAVET EDİLDİ** olarak işaretlenmiş şekilde gösterilir. Telefonda **Ortak** sekmesi olmayan bir toplulukta, **Sohbet** içinde **Grup bul** altındadır. Daveti görmek için üzerine dokunun: sizi kimin davet ettiği, grubun ne olduğu, kimlerin içinde olduğu (yalnızca davetle girilen bir grup için kaç kişi olduğu) ve sohbetini kimlerin okuyabileceği. Telefonda:
 
 - **Gruba katıl** seçeneğine dokunun. Sohbetine geçersiniz.
 - Daha sonra karar vermek için **Şimdi değil** seçeneğine dokunun. Davet kalır.
-- **Bu davet artık açık değil** yazıyorsa geri çekilmiştir. Sizi davet eden kişiden tekrar davet etmesini isteyin.
+- Hayır demek için **Daveti reddet**'e dokunun. Uygulama bir kez daha sorar, ardından davet **Sana ihtiyacı var** içinden de kaldırılır. Sizi davet eden kişi sizi yeniden davet edebilir.
+- **Bu davet artık geçerli değil** yazıyorsa geri çekilmiştir. Sizi davet eden kişiden tekrar davet etmesini isteyin.
 - **Bu grup açılamadı** yazıyorsa telefonunuz topluluğunuzun sunucusuna ulaşamamıştır. **Tekrar dene** seçeneğine dokunun.
 
-Web uygulaması henüz davetleri işaretlemez. Grubu **Ortak** içinde, **Gruplar** altında açın ve **Daveti kabul et** seçeneğine dokunun. Gruba katılırsınız ve grubun sayfasında kalırsınız.
+Web uygulamasında Ana Sayfa'daki **Sana ihtiyacı var** içindeki satıra veya **Ortak** içinde, **Gruplar** altında **DAVET EDİLDİ** olarak işaretlenmiş gruba dokunun ve **Daveti kabul et** seçeneğine dokunun. Gruba katılırsınız ve grubun sayfasında kalırsınız. Hayır demek için onun altındaki **Daveti reddet**'e dokunun.
 
 ## Bir gruba ilan paylaşma
 
@@ -131,7 +146,9 @@ Web'de grubu **Ortak** içinde, **Gruplar** altında açın ve **Şuraya ilan ve
 
 ## Koordinatörler ve baş koordinatör
 
-Bir koordinatör grupla ilgilenir. Grubu kim oluşturduysa onun **baş koordinatörü**dür ve grubun kartında adı **Baş koordinatör: Ali** şeklinde belirtilir. Üye listesinde satırları **LİDER** olarak işaretlenir.
+Bir koordinatör grupla ilgilenir. Grubu kim oluşturduysa onun **baş koordinatör**üdür ve grubun kartında adı **Baş koordinatör: Ali** şeklinde belirtilir. Üye listesinde satırları **LİDER** olarak işaretlenir.
+
+Herhangi bir koordinatör grubun resmini değiştirebilir: grubu açın (telefonda, sohbetinin **⋮** menüsündeki **Grup bilgisi**) ve **Resmi değiştir**'e dokunun (web uygulamasında ayrıca **Fotoğraf seç**). Bir grubun her zaman bir resmi olur; değiştirilebilir, asla kaldırılamaz.
 
 **Koordinatör Araçları** içinde herhangi bir koordinatör şunları yapabilir:
 
@@ -143,7 +160,7 @@ Bir koordinatör grupla ilgilenir. Grubu kim oluşturduysa onun **baş koordinat
 - bir üyenin veya bir gözlemcinin rolünü değiştirebilir (telefonda **Rol**, web uygulamasında bir açılır menü), onları koordinatör yapmak da dahil;
 - bir üyeyi veya gözlemciyi çıkarabilir (**✕**).
 
-Bir koordinatör bir ilanı ilanın kendisinden, telefonda ise bir mesajı sohbetin içinden kaldırır. Bir grubun adı ve açıklaması henüz uygulamada değiştirilemez.
+Bir koordinatör bir ilanı ilanın kendisinden, bir mesajı da sohbetin içinden kaldırır. Bir grubun adı ve açıklaması henüz uygulamada değiştirilemez.
 
 Yalnızca **baş koordinatör** bir koordinatörü çıkarabilir veya koordinatör rolünü birinden alabilir. İşlem yapamayacağınız bir satırın yanında hiçbir şekilde **Rol** veya **✕** gösterilmez — bu, uygulamanın bunun sizin göreviniz olmadığını söylemesidir.
 
@@ -181,7 +198,7 @@ Küresel toplulukta bir grubun kendine ait oylamaları ve **Bir oylama öner** s
 - **Kimin katılabileceğini değiştir**: herkese açık, insanlar katılım ister ve bir koordinatör onları içeri alır veya yalnızca davetle.
 - **Grubu kapat.** Sohbeti okunmak üzere kalır ancak yeni mesaj, ilan veya üye kabul etmez ve diğer açık oylamaları sona erer. İlanları Pazar'dan kaldırılır.
 
-Bir başlık verin ve nedenini belirtin, ardından **Oylamayı başlat** seçeneğine dokunun. Bir oylama asla Fasulye taşımaz: bir grup hiç Fasulye tutmaz. Topluluktaki kimsenin konumunu da değiştiremez; bunun için bir topluluk Kararı gerekir.
+Bir başlık verin ve nedenini belirtin, ardından **Oylamayı aç** seçeneğine dokunun. Bir oylama asla Fasulye taşımaz: bir grup hiç Fasulye tutmaz. Topluluktaki kimsenin konumunu da değiştiremez; bunun için bir topluluk Kararı gerekir.
 
 **Kimler oy kullanır.** Oylama açıldığında grubun üyesi veya koordinatörü olan herkes; lider ve öneren kişi dahil. Gözlemciler izler: oyları görürler ancak Evet veya Hayır hakları yoktur. Bir oylama açıldıktan sonra katılan biri oylamada yer almaz. Tek kişilik bir grubun birlikte oy kullanacak kimsesi yoktur, bu nedenle o zaman **Bir oylama öner** düğmesi bulunmaz. Bir grupta aynı anda kendinize ait bir açık oylamaya sahip olabilirsiniz.
 
@@ -189,11 +206,11 @@ Bir başlık verin ve nedenini belirtin, ardından **Oylamayı başlat** seçene
 
 **Gördükleriniz.** Bir oylama açıkken herkes kaç kişinin oy kullandığını görür, nasıl oy kullandığını değil. Evet ve Hayır kapandıktan sonra gösterilir. Kullanılan bir oy değiştirilemez. Kimse kimin nasıl oy kullandığını görmez. Çok küçük bir grupta ise sonuç ve kimin oy kullandığı bunu gösterebilir: üç kişi de oy kullanır ve 3–0 biterse herkes kimin nasıl oy kullandığını bilir.
 
-**Haber verilmesi.** Oylamadaki herkes (öneren kişi hariç), grubun sohbetini sessize almadılarsa veya sohbet bildirimlerini kapatmadılarsa açıldığında bir bildirim alır. Hiçbir kişinin ve hiçbir grubun adını vermez: **Gruplarınızdan birinde bir oylama başladı.** yazar. Üzerine dokunun ve grup **Kararlar** bölümünde açılır. Ana Sayfa'da henüz kullanmadığınız açık bir oylama **Sana ihtiyacı var** altında görünür ve o da grubu açar.
+**Haber verilmesi.** Oylamadaki herkes (öneren kişi hariç), grubun sohbetini sessize almadılarsa veya sohbet bildirimlerini kapatmadılarsa açıldığında bir bildirim alır. Hiçbir kişinin ve hiçbir grubun adını vermez: **Gruplarından birinde bir oylama açıldı.** yazar. Üzerine dokunun ve grup **Kararlar** bölümünde açılır. Ana Sayfa'da henüz kullanmadığınız açık bir oylama **Sana ihtiyacı var** altında görünür ve o da grubu açar.
 
 **Gelenler ve gidenler.** Bir oylama sırasında gruptan ayrılan biri oylamadan ayrılır ve oyu onunla birlikte gider. Bir koordinatörün oylama sırasında çıkardığı veya gözlemci yaptığı biri oylamada kalır: kullandığı oyu korur ve henüz kullanmadıysa yine de oy kullanabilir. İnsanları çıkarmak hiçbir zaman bir oylamayı yönlendirmenin yolu değildir. Oylamada ikiden az kişi kalırsa oylama bir yanıta ulaşmadan sona erer.
 
-**Kapatılmış bir grup** sayfasında **Kapalı** yazar ve "Grup üyelerinin oylamasıyla kapatıldı. Sohbeti okunmak üzere duruyor." satırı yer alır. Sohbeti, oylamaları ve içinde kimlerin olduğu okunmak üzere orada kalır; yeni hiçbir şey eklenemez.
+**Kapatılmış bir grup** sayfasında **Kapandı** yazar ve "Grup üyelerinin oylamasıyla kapatıldı. Sohbeti okunmak üzere duruyor." satırı yer alır. Sohbeti, oylamaları ve içinde kimlerin olduğu okunmak üzere orada kalır; yeni hiçbir şey eklenemez.
 
 ## Çok yakında
 

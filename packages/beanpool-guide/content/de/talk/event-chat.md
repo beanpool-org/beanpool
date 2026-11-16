@@ -3,7 +3,7 @@ slug: event-chat
 title: Event-Chat
 summary: Ein Gruppenchat für alle Teilnehmenden und wie er sich von anderen Chats unterscheidet.
 related: events, messages, pin-locations, reporting
-source-hash: 5db33c065b67e6b8
+source-hash: 6da207cb35f1e3c7
 ---
 
 ## Wer dabei ist
@@ -12,8 +12,8 @@ Jede Veranstaltung hat ihren eigenen Chat. Der Gastgeber und alle, die auf **Dab
 
 ## Den Chat öffnen
 
-- Öffne die Veranstaltung und tippe auf **Veranstaltungs-Chat öffnen**.
-- Oder finde ihn im **Chat** unter **Gruppen**, gekennzeichnet mit 📅 **Veranstaltung**. In der Web-App befindet er sich im Reiter **Chat** bei deinen anderen Chats.
+- Öffne die Veranstaltung und tippe auf **Mit allen chatten, die kommen**. Wenn es Nachrichten gibt, die du noch nicht gelesen hast, zeigt die Schaltfläche, wie viele, zum Beispiel **3 neu**.
+- Sobald jemand darin geschrieben hat, findest du ihn auch im **Chat** unter **Gruppen**, gekennzeichnet mit 📅 **Veranstaltung**. In der Web-App befindet er sich im Reiter **Chat** bei deinen anderen Chats. Bis dahin steht er nicht in diesen Listen: Öffne ihn über die Veranstaltung.
 
 Ganz oben zeigt ein angepinnter Kasten den **Hinweis für Teilnehmende** des Gastgebers an, beispielsweise die genaue Adresse. Tippe ganz oben auf den Namen der Veranstaltung (in der Web-App auf **Veranstaltung anzeigen**), um zur Veranstaltung zurückzukehren.
 
@@ -23,7 +23,7 @@ Schreibe in das Feld **Nachricht an alle Teilnehmenden…** und tippe auf die Se
 
 ## Gut zu wissen
 
-- Event-Chats sind nicht Ende-zu-Ende-verschlüsselt. Der Gastgeber, alle Teilnehmenden (sofern der Gastgeber Teilnehmende zulässt: diejenigen, die hereingelassen wurden) sowie die Personen, die den Server deiner Community betreiben, können mitlesen. Der Chat weist über dem Eingabefeld darauf hin.
+- Event-Chats sind nicht Ende-zu-Ende-verschlüsselt. Der Gastgeber, alle Teilnehmenden (sofern der Gastgeber Teilnehmende zulässt: diejenigen, die hereingelassen wurden) sowie die Personen, die den Server deiner Community betreiben, können mitlesen. Der Chat weist über dem Eingabefeld darauf hin. Weil der Server den Chat lesen kann, können in einem Event-Chat keine Fotos gesendet werden.
 - Der Gastgeber kann jede Nachricht entfernen: auf die Nachricht tippen, dann auf **Entfernen**. Dort steht dann „vom Gastgeber entfernt“.
 - Ein Event-Chat bietet keine Antworten, keine Reaktionen, kein Bearbeiten und kein Löschen eigener Nachrichten – anders als ein Chat mit einer Person oder ein Gruppenchat. Bitte den Gastgeber, etwas zu entfernen, wenn du es bereust. Wenn du dein Konto löschst, lautet jede von dir verfasste Nachricht hier **Diese Nachricht wurde gelöscht**.
 - Wenn die Veranstaltung endet oder abgesagt wird, wird der Chat schreibgeschützt. Der Chat einer wiederkehrenden Veranstaltung bleibt zwischen den Terminen geöffnet: bis zu ihrem letzten Termin, wenn der Gastgeber ein **Bis** festgelegt hat, und ansonsten, bis der Gastgeber die Veranstaltung absagt. Dreißig Tage nach dem Ende verschwindet der Chat.

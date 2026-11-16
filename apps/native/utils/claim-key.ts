@@ -17,7 +17,6 @@
  *   ({@link releaseClaimKey}). A lost answer keeps it, and the record brings the next launch back to the claim screen,
  *   where the node says whether the claim landed.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     adoptJoinKey, commitDoorKey, countDoorJoinOut, countDoorJoinRefused, keepJoinedIdentity, keyForThisPhone, madeByTheDoor,
     releaseDoorKey, type JoinKey, type KeyDoor,
@@ -26,6 +25,7 @@ import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { claimAndHear, confirmLostClaim, type ClaimOutcome, type OwnerCheck } from './node-claim';
 import { claimInFlight, getPendingOnboarding, keyMadeForThisJoin, setPendingOnboarding } from './onboarding-state';
 import { communitySwitched } from './community-switch';
+import { moveCommunityAddress } from './community-move-lock';
 import { assertPlainNodeAddress } from './node-url';
 import { addSavedNode, clearGuestNode } from './nodes';
 
@@ -210,7 +210,7 @@ export async function finishClaim(
     const identity = await keepJoinedIdentity(keptName ? { ...claimed, callsign: keptName } : claimed);
     // The origin came through claimNodeOrigin on the claim screen; this is the write's own check.
     assertPlainNodeAddress(origin);
-    await AsyncStorage.setItem('beanpool_anchor_url', origin);
+    await moveCommunityAddress(origin);
     // The update screen asks the community now in use (utils/community-switch.ts).
     communitySwitched();
     await addSavedNode(origin, communityName ?? undefined).catch(() => {});

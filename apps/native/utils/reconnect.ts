@@ -16,10 +16,10 @@
  * - no answer: nothing is written, and the screen says it couldn't reach it.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertPlainNodeAddress } from './node-url';
 import { membershipAnswerOf } from './membership-answer';
 import { communitySwitched } from './community-switch';
+import { whileCommunityMoves, writeCommunityAddress, type CommunityMoveHeld } from './community-move-lock';
 import type { NodeProfile } from './node-profile';
 import type { CopyCarry } from './community-copy-carry';
 
@@ -49,20 +49,23 @@ export interface ReconnectDeps {
  * `carryFrom`, following the community from that address to its new one (utils/address-follow.ts): its copy and what
  * guards its chats go to `url`'s name first, and the carry writes the address once they are there and before the old
  * copy goes (utils/community-copy-carry.ts), with no copy open and none opened until it is done. Resolves what the carry
- * did (null with none). A carry that fails throws, the address unchanged.
+ * did (null with none). A carry that fails throws, the address unchanged. One move at a time (community-move-lock.ts).
  */
-export async function switchPhoneTo(url: string, carryFrom?: string): Promise<CopyCarry | null> {
+export async function switchPhoneTo(url: string, carryFrom?: string, held?: CommunityMoveHeld): Promise<CopyCarry | null> {
     assertPlainNodeAddress(url);
+    // One move at a time, the address check's writing steps included (community-move-lock.ts): from the record to the new
+    // address written, inside the lock. `held`: the caller already holds it (the check's own move), so it doesn't wait for itself.
+    if (!held) return whileCommunityMoves((inside) => switchPhoneTo(url, carryFrom, inside));
     // The community gets its record before the phone is set to it (community-record.ts), as at an app start.
     await (await import('./community-record')).keepCommunityRecord(url);
-    const { closeDB, initDB, whileCopyMoves } = await import('./db');
+    const { closeDB, initDB } = await import('./db');
     let carried: CopyCarry | null = null;
     if (carryFrom) {
-        const { carryCommunityCopy } = await import('./community-copy-carry');
-        carried = await whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => AsyncStorage.setItem('beanpool_anchor_url', url)));
+        const [{ carryCommunityCopy }, { whileCopyMoves }] = await Promise.all([import('./community-copy-carry'), import('./db')]);
+        carried = await whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => writeCommunityAddress(held, url)));
     } else {
         await closeDB();
-        await AsyncStorage.setItem('beanpool_anchor_url', url);
+        await writeCommunityAddress(held, url);
     }
     await initDB();
     // The update screen asks the community now in use (utils/community-switch.ts).

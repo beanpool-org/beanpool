@@ -66,6 +66,13 @@
  *      answers to a yes, a no and a leave, each with its counter, a roster, a removal, an invitation again) x (every
  *      arrival order the transports allow) x (a device's stale tab: a page read halfway, applied after the end one) ->
  *      the same final state at the home and on the device, for every order
+ *  18  close the class, GENERATED (G2 follow-ups round 2, #3266: a yes that moved nothing recorded its counter and shadowed
+ *      an invitation made again): every history of up to 4 of the host's acts (invite, withdraw, invite again, the guest's
+ *      yes, no and leave as the host takes them, remove, a roster) its own rules allow x every arrival order of its words
+ *      at the home (notices in any order; each of the guest's items sent while the home lets them, before any word the
+ *      host made after taking it, oldest first, its answer after it) x a device's stale tab -> where the guest stands at
+ *      the home and on the device is what the host's newest word says, for every row; a word that applies nothing records
+ *      nothing
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests-home node scripts/run-server-suites.mjs
  */
@@ -180,7 +187,17 @@ async function main(): Promise<void> {
     const triesTo = new Map<string, number>();
     const failing = new Set<string>();
     const refuseIds = new Map<string, string>();       // item id -> the refusal b.example answers for it
-    const answerSeq = new Map<string, number>();       // item id -> the counter b.example's answer carries (the guest's own word, section 17)
+    // item id -> the counter b.example's answer carries (the guest's own word, sections 17 and 18), or null for none (a yes
+    // from a guest it has out). Unset: its next counter, as the host stamps every yes, no or leave it takes (group-guests.ts
+    // takeGuestItem), never older than a notice this suite made before it.
+    const answerSeq = new Map<string, number | null>();
+    let hostClock = 0;
+    const hostSeqFor = (i: any): number | null => (answerSeq.has(i.envelope.itemId) ? answerSeq.get(i.envelope.itemId)!
+        : i.envelope.kind === 'group-invite' || i.envelope.kind === 'group-leave' ? (hostClock = Math.max(Date.now() + 1, hostClock + 1)) : null);
+    const receivedBy = (i: any) => {
+        const s = hostSeqFor(i);
+        return { itemId: i.envelope.itemId, received: true, ...(s === null ? {} : { seq: s }) };
+    };
     /** Each server's next answers, one a try, in order: '2xx', 'refused' (a 2xx refusing every item), a status, or 'timeout'. */
     const script = new Map<string, string[]>();
     __useRelayTransportForTests(async (url, init) => {
@@ -197,7 +214,7 @@ async function main(): Promise<void> {
         if (u.pathname === '/api/relay/mail') {
             return { status: 202, body: { items: body.items.map((i: any) => (scripted === 'refused' || refuseIds.has(i.envelope.itemId)
                 ? { itemId: i.envelope.itemId, refused: refuseIds.get(i.envelope.itemId) ?? 'group-refused' }
-                : { itemId: i.envelope.itemId, received: true, ...(answerSeq.has(i.envelope.itemId) ? { seq: answerSeq.get(i.envelope.itemId) } : {}) })) } };
+                : receivedBy(i))) } };
         }
         return { status: 202, body: { received: true } };
     });
@@ -1699,6 +1716,167 @@ async function main(): Promise<void> {
         }
     }
     assert(r17 === want17 && r17 >= 30, `17z. the table has a row for every history x every arrival order the transports allow (${r17} rows)`);
+
+    // ── 18. The same invariant, GENERATED: every history the host can make x every arrival order at the home ─────────
+    // #3266 round 1 (the deciding review, measured): a yes taken after its invitation was withdrawn and made again recorded
+    // its counter at the home although its answer moved nothing there, so the invitation made again (older) and the roster
+    // (newer, but not taken: no yes queued, no link answered) were both dropped, and the home stayed `removed` while the
+    // host had the guest in. THE INVARIANT: a word's counter is recorded at the home only when the word is applied (it
+    // changes or confirms the state it names), and where a guest stands is the state the newest applied word names. So:
+    // every history of up to 4 of the host's acts its own rules allow (engine/group-guests.ts: invite from nothing, invite
+    // again after a leave or a removal, withdraw an invitation, remove a guest in, a roster while they are in; the guest's
+    // yes, no and leave as the host takes them: a yes to an invitation puts them in and the roster follows, a no or a leave
+    // takes them out, one that agrees with where they stand confirms it under a new counter, a yes from a guest out moves
+    // nothing and carries none), each word stamped with the next counter, x every arrival order of its words at the home:
+    // the notices in any order (two servers, a take-over between); each of the guest's own items sent while the home lets
+    // them (else the row is not one the guest can make, and is counted apart), before every word the host made after
+    // taking it, oldest first; its answer after it, the answers in order, and items queued together answered together.
+    // Then a device: the end page, and a page read halfway applied after it (a stale tab). The final state at the home and
+    // on the device must be the one the host's newest word names, for every row.
+    console.log('\n18. Close the class, generated: (every history of up to 4 host acts its rules allow) x (every arrival order at the home) x (a stale tab) -> the state the newest word names, at the home and on the device');
+    type Act18 = 'invite' | 'withdraw' | 'invite again' | 'yes' | 'no' | 'leave' | 'remove' | 'roster';
+    type Host18 = 'none' | 'invited' | 'in' | 'left' | 'removed';
+    type Kind18 = 'invite' | 'removed' | 'roster' | 'yes' | 'no' | 'leave';
+    const ACTS18: Act18[] = ['invite', 'withdraw', 'invite again', 'yes', 'no', 'leave', 'remove', 'roster'];
+    /** The host's own rules: where an act leaves the guest, and the words it makes (null: the host can't make it there). */
+    const act18 = (s: Host18, a: Act18): { s: Host18; words: Array<{ kind: Kind18; counted: boolean }> } | null => {
+        const out = s === 'left' || s === 'removed';
+        const w = (kind: Kind18, counted = true) => ({ kind, counted });
+        switch (a) {
+            case 'invite': return s === 'none' ? { s: 'invited', words: [w('invite')] } : null;
+            case 'invite again': return out ? { s: 'invited', words: [w('invite')] } : null;
+            case 'withdraw': return s === 'invited' ? { s: 'removed', words: [w('removed')] } : null;
+            case 'remove': return s === 'in' ? { s: 'removed', words: [w('removed')] } : null;
+            case 'roster': return s === 'in' ? { s: 'in', words: [w('roster')] } : null;
+            case 'yes': return s === 'none' ? null : out ? { s, words: [w('yes', false)] } : { s: 'in', words: [w('yes'), w('roster')] };
+            case 'no': case 'leave': return s === 'none' ? null : { s: out ? s : 'left', words: [w(a)] };
+        }
+    };
+    interface Hist18 { acts: Act18[]; words: Array<{ kind: Kind18; counted: boolean }> }
+    const hists18: Hist18[] = [];
+    const grow18 = (s: Host18, h: Hist18) => {
+        if (h.acts.length) hists18.push(h);
+        if (h.acts.length === 4) return;
+        for (const a of ACTS18) {
+            const r = act18(s, a);
+            if (r) grow18(r.s, { acts: [...h.acts, a], words: [...h.words, ...r.words] });
+        }
+    };
+    grow18('none', { acts: [], words: [] });
+    type Ev18 = { k: 'arrive' | 'send' | 'answer'; i: number };
+    const OWN18: ReadonlySet<Kind18> = new Set(['yes', 'no', 'leave']);
+    /** Every arrival order of `h`'s words at the home the transports allow (the rules above). */
+    const orders18 = (h: Hist18): Ev18[][] => {
+        const own = h.words.flatMap((w, i) => (OWN18.has(w.kind) ? [i] : []));
+        const events: Ev18[] = h.words.flatMap((w, i): Ev18[] => (OWN18.has(w.kind) ? [{ k: 'send', i }, { k: 'answer', i }] : [{ k: 'arrive', i }]));
+        const out: Ev18[][] = [];
+        const walk = (left: Ev18[], placed: Ev18[]) => {
+            if (!left.length) { out.push(placed); return; }
+            const has = (k: Ev18['k'], i: number) => placed.some((p) => p.k === k && p.i === i);
+            const last = placed[placed.length - 1];
+            // An item sent before the answer to an older one is queued with it: the two are answered together, one after the other.
+            const together = own.find((j) => !has('answer', j) && has('send', j) && own.some((o) => o < j && has('answer', o) && last?.k === 'answer' && last.i === o
+                && placed.findIndex((p) => p.k === 'send' && p.i === j) < placed.findIndex((p) => p.k === 'answer' && p.i === o)));
+            for (const e of left) {
+                if (together !== undefined && !(e.k === 'answer' && e.i === together)) continue;
+                // Before any invitation has arrived the home has no link to send under (it refuses every item): not generated.
+                if (e.k === 'send' && !placed.some((p) => p.k === 'arrive' && h.words[p.i].kind === 'invite')) continue;
+                if (e.k === 'answer' && !has('send', e.i)) continue;
+                if ((e.k === 'send' || e.k === 'answer') && own.some((j) => j < e.i && !has(e.k, j))) continue;
+                if (e.k === 'arrive' && own.some((j) => j < e.i && !has('send', j))) continue;
+                walk(left.filter((x) => x !== e), [...placed, e]);
+            }
+        };
+        walk(events, []);
+        return out;
+    };
+    /** What the host's newest word names: at the home, and on a device. */
+    const want18 = (h: Hist18): { home: string[]; device: string[] } => {
+        const counted = h.words.filter((w) => w.counted);
+        const newest = counted[counted.length - 1].kind;
+        const rosters = h.words.filter((w) => w.kind === 'roster').length;
+        if (newest === 'invite') return { home: ['invited'], device: ['invited'] };
+        if (newest === 'roster' || newest === 'yes') return { home: [`in, roster R${rosters}`], device: [`in, roster R${rosters}`] };
+        if (newest === 'no') return { home: ['declined'], device: ['none'] };
+        if (newest === 'leave') return { home: ['left'], device: ['none'] };
+        // A removal: out, whichever way the home had them (an invitation withdrawn leaves no link; one answered, `removed`).
+        return { home: ['none', 'removed', 'declined', 'left'], device: ['none', 'removed'] };
+    };
+    const name18 = (h: Hist18, i: number) => {
+        const w = h.words[i];
+        return w.kind === 'roster' ? `roster R${h.words.slice(0, i + 1).filter((x) => x.kind === 'roster').length}` : w.counted ? w.kind : `${w.kind} (no counter)`;
+    };
+    const failures18: string[] = [];
+    let rows18 = 0, orders18n = 0, notMade18 = 0, histsRun18 = 0;
+    const histsWithRows18 = new Set<number>();
+    const ran18 = new Set<string>();
+    for (const [hi, h] of hists18.entries()) {
+        const seqs = (() => { let n = 0; return h.words.map((w) => (w.counted ? ++n : null)); })();
+        const want = want18(h);
+        histsRun18++;
+        for (const order of orders18(h)) {
+            orders18n++;
+            const g = `g18-${hi}-${orders18n}`;
+            clear16();
+            db.prepare('DELETE FROM group_guest_sent WHERE sender_key = ?').run(gus.pk);
+            const dev = device();
+            const steps: string[] = [];
+            let made = true;
+            let halfway: any = null;
+            for (const [k, e] of order.entries()) {
+                const w = h.words[e.i];
+                if (e.k === 'arrive') {
+                    const data = w.kind === 'removed' ? { why: 'removed' } : w.kind === 'roster' ? { ...(DATA.roster as object), name: name18(h, e.i).slice('roster '.length) } : DATA.invite;
+                    const a = home.receiveGroupNotice('b.example', { v: 1, kind: w.kind, group: g, host: 'b.example', guests: [gus.pk], seq: seqs[e.i], data });
+                    steps.push(`${name18(h, e.i)} ${a.status}`);
+                } else if (e.k === 'send') {
+                    const it = await item(gus, w.kind === 'leave' ? 'group-leave' : 'group-invite', g, w.kind === 'leave' ? '{"v":1}' : JSON.stringify({ v: 1, answer: w.kind }));
+                    answerSeq.set(it.envelope.itemId, seqs[e.i]);
+                    // Queued while the host is out of reach (a 503: it waits), so its answer lands where the order puts it.
+                    script.set('b.example', ['503']);
+                    try {
+                        await home.sendGroupItems(gus.pk, [it]);
+                        steps.push(`${w.kind} sent`);
+                    } catch {
+                        made = false;
+                    } finally {
+                        script.delete('b.example');
+                    }
+                    if (!made) break;
+                } else {
+                    const queued = db.prepare("SELECT COUNT(*) FROM group_guest_sent WHERE sender_key = ? AND group_id = ? AND state = 'queued'").pluck().get(gus.pk, g) as number;
+                    if (queued) steps.push(`${name18(h, e.i)} answered ${await home.retryGroupSent(Date.now() + 10 * MIN)}`);
+                }
+                if (k + 1 === Math.ceil(order.length / 2)) { noteMailDevice(gus.pk, dev); halfway = home.heldGroupMailFor(gus.pk, dev); }
+            }
+            if (!made) { notMade18++; continue; }
+            rows18++;
+            histsWithRows18.add(hi);
+            noteMailDevice(gus.pk, dev);
+            const end = home.heldGroupMailFor(gus.pk, dev);
+            const link = linkOf(gus, 'b.example', g);
+            const queued = db.prepare("SELECT COUNT(*) FROM group_guest_sent WHERE sender_key = ? AND group_id = ? AND state = 'queued'").pluck().get(gus.pk, g) as number;
+            const homeGot = `${link?.state ?? 'none'}${link?.roster ? `, roster ${JSON.parse(link.roster).name}` : ''}${queued ? ', an item still queued' : ''}`;
+            const ctx18 = (seen: number | null) => ({ me: gus.pk, myEdPrivHex: gus.seedHex, blocked: () => false, now: Date.now(), linksSeen: seen });
+            const alone = applyGuestMail({}, end, ctx18(null));
+            const both = applyGuestMail(alone.chats, halfway ?? {}, ctx18(end.linksAt));
+            const devAlone = chat17(alone.chats, g), devGot = chat17(both.chats, g);
+            ran18.add(`${h.acts.join(', ')}: ${order.map((e) => `${e.k} ${name18(h, e.i)}`).join(', ')}`);
+            if (!(want.home.includes(homeGot) && want.device.includes(devAlone) && devGot === devAlone && both.confirm.length === 0)) {
+                failures18.push(`${h.acts.join(', ')} x arriving ${order.map((e) => `${e.k === 'send' ? 'send ' : e.k === 'answer' ? 'answer to ' : ''}${name18(h, e.i)}`).join(', ')}: `
+                    + `home ${want.home.join(' or ')}, device ${want.device.join(' or ')} (got home ${homeGot}; device ${devAlone}, after the stale tab ${devGot}, it confirmed ${both.confirm.length}; ${steps.join('; ')})`);
+            }
+        }
+    }
+    for (const f of failures18.slice(0, 12)) assert(false, `18. ${f}`);
+    // #3266's measured row: invited, withdrawn, invited again, the yes taken (its roster after it), arriving removal, the
+    // answer to the yes, the invitation again, the roster.
+    const reviewer18 = 'invite, withdraw, invite again, yes: arrive invite, send yes, arrive removed, answer yes, arrive invite, arrive roster R1';
+    const unmade18 = hists18.filter((_, i) => !histsWithRows18.has(i)).map((h) => h.acts.join(', '));
+    console.log(`   (18: histories with no row the guest can make, an item of theirs refused in every order: ${unmade18.join(' | ')})`);
+    assert(failures18.length === 0 && ran18.has(reviewer18) && rows18 >= 400 && histsWithRows18.size >= 41,
+        `18. every row: the state the host's newest word names, at the home and on the device (${hists18.length} histories, ${histsWithRows18.size} the guest can make; `
+        + `${orders18n} arrival orders, ${rows18} rows run, ${notMade18} not ones the guest can make: the home refused an item; ${failures18.length} wrong; #3266's row among them: ${ran18.has(reviewer18)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -4069,8 +4069,8 @@ CREATE TABLE IF NOT EXISTS relay_mail_refused (
 );
 CREATE INDEX IF NOT EXISTS idx_relay_mail_refused_at ON relay_mail_refused(seen_at);
 
--- relay_mail_answered: the counter a guest's yes, no or leave was stamped with when it was taken here and moved where they
--- stand (engine/group-guests.ts takeGuestItem: the order rule, THE GUEST'S OWN WORD), by its sender and id, for as long as
+-- relay_mail_answered: the counter a guest's yes, no or leave was stamped with when it was taken here and moved or confirmed
+-- where they stand (engine/group-guests.ts takeGuestItem: the order rule, THE GUEST'S OWN WORD), by its sender and id, for as long as
 -- relay_mail_seen keeps that id spent (7 days). Its home bringing the same item again (it never heard the answer) hears the
 -- same counter, never a bare "received": its home orders the answer with the host's notices by it (G2 follow-ups).
 -- Answered only to the server that brought it the first time. This server's own (`local`), as relay_mail_seen is. Day

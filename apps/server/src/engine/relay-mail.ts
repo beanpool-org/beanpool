@@ -40,7 +40,7 @@
  * and an item older than MAIL_ITEM_MAX_AGE_MS by its sender's clock, or dated more than MAIL_ITEM_MAX_AHEAD_MS ahead, is
  * stale, so none outlives the ids kept against it. A guest's group item refused here keeps its refusal as long as its id
  * (relay_mail_refused), and its server bringing it again hears that refusal, never "received" (G2 round 2). A guest's yes, no
- * or leave that moved where they stand is answered `received` with the group's counter it was stamped with (the order rule,
+ * or leave that moved or confirmed where they stand is answered `received` with the group's counter it was stamped with (the order rule,
  * engine/group-guests.ts), kept as long as its id too (relay_mail_answered), so a replay hears the same counter.
  *
  * **Never copied.** This file's tables, `relay_mail`, `relay_mail_seen`, `relay_mail_refused`, `relay_mail_answered`,

@@ -100,7 +100,9 @@
  * too, so it is stamped with the group's next counter as it is taken, before the roster that follows, and the answer to it
  * carries that counter (takeGuestItem, GuestItemTaken; relay-mail.ts puts it on the item's `received`); their home orders
  * it with the notices by it, so an invitation told again before the yes (a take-over's retellGroup), arriving after the
- * answer, is older and never takes them out. A yes that moves nothing (in already) carries none. The same item brought
+ * answer, is older and never takes them out. One that agrees with where they stand already (a yes from a guest in, a no or
+ * a leave from one out) confirms it under the next counter (confirmStanding); a yes from a guest out carries none, and
+ * their home moves nothing on it. The same item brought
  * again (its answer lost on the way back) hears the same counter, kept as long as its id is spent (relay-mail.ts,
  * relay_mail_answered), never a bare "received" its home could not order. TELLING HOMES AGAIN (retellGuestHomes): the
  * counters THIS server issued are its own record
@@ -399,8 +401,8 @@ export function closeGroupGuests(groupId: string): number {
 /** What takeGuestItem answers for one item: null (received, said of everything else) or a refusal an in-guest may hear. */
 export type GuestItemRefusal = 'epoch-stale' | 'group-refused';
 /**
- * Their yes, no or leave taken, and where they stand moved by it: received, with the group's counter it was stamped with (the
- * order rule, the file's header: THE GUEST'S OWN WORD). Their home orders it with the host's notices by that counter.
+ * Their yes, no or leave taken, and where they stand moved or confirmed by it: received, with the group's counter it was
+ * stamped with (the order rule, the file's header: THE GUEST'S OWN WORD). Their home orders it with the host's notices by it.
  */
 export interface GuestItemTaken { seq: number }
 
@@ -424,7 +426,8 @@ function parsePayload(payload: string): Record<string, unknown> | null {
 /**
  * One item a guest's home brought for a group here (`group:<id>`), its envelope already checked by core (relay-mail.ts):
  * applied, or dropped. See the file's header for each kind. A yes, a no or a leave that moves where they stand answers the
- * counter it was stamped with (GuestItemTaken); one that moves nothing (a yes from a guest in already) answers received.
+ * counter it was stamped with (GuestItemTaken), and so does one that agrees with where they stand already (confirmStanding);
+ * a yes from a guest who is out (left, removed) moves nothing and answers received, with no counter.
  */
 export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefusal | GuestItemTaken | null {
     const env = item.envelope;
@@ -444,6 +447,8 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
         // A no from a guest who is in: their home showed the invitation again (a take-over, or a day of lost answers) and
         // they said no, so the home has them `declined`: taken as their leave, never kept in a roster they can't leave.
         if (row.state === 'in' && payload.answer === 'no') return takeGuestLeave(groupId, row);
+        if (row.state === 'in' || ((row.state === 'left' || row.state === 'removed') && payload.answer === 'no')) return confirmStanding(groupId, row);
+        // A yes from a guest who is out: it says nothing of where they stand (the host's removal, or their own word, does).
         if (row.state !== 'invited') return null;
         // Their yes puts them in the roster: markGroupEpochStale sends it to every guest's home, theirs too (queueGroupRoster).
         // The counter is issued first, so the roster that follows is newer than the answer (the order rule).
@@ -456,10 +461,7 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
         flushSoon();
         return { seq };
     }
-    if (env.kind === 'group-leave') {
-        if (row.state !== 'in' && row.state !== 'invited') return null;
-        return takeGuestLeave(groupId, row);
-    }
+    if (env.kind === 'group-leave') return row.state === 'in' || row.state === 'invited' ? takeGuestLeave(groupId, row) : confirmStanding(groupId, row);
     if (row.state !== 'in') return null;
     if (!payload) return 'group-refused';
     let refusal: GuestItemRefusal | null = null;
@@ -503,6 +505,23 @@ function takeGuestLeave(groupId: string, row: GuestRow): GuestItemTaken {
         setState(groupId, row.guest_key, 'left');
         seq = issueGuestSeq(groupId);
         if (row.state === 'in') markGroupEpochStale(groupId);
+    })();
+    flushSoon();
+    return { seq };
+}
+
+/**
+ * A guest's word that agrees with where they stand here already (a yes from a guest in; a no or a leave from one who left
+ * or was removed): nothing moves, and the answer CONFIRMS where they stand under the group's next counter (the order
+ * rule, THE GUEST'S OWN WORD), so their home, ordering it with the notices, ends where they stand here (a home whose own
+ * take-over lost the first answer: group-guest-home.ts, "A standby"). A yes from a guest in takes the roster to their
+ * home again, newer than the answer, so the home holds the newest roster.
+ */
+function confirmStanding(groupId: string, row: GuestRow): GuestItemTaken {
+    let seq = 0;
+    db.transaction(() => {
+        seq = issueGuestSeq(groupId);
+        if (row.state === 'in') queueGroupRoster(groupId, row.home);
     })();
     flushSoon();
     return { seq };

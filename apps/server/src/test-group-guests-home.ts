@@ -1752,17 +1752,17 @@ async function main(): Promise<void> {
             case 'no': case 'leave': return s === 'none' ? null : { s: out ? s : 'left', words: [w(a)] };
         }
     };
-    interface Hist18 { acts: Act18[]; words: Array<{ kind: Kind18; counted: boolean }> }
+    interface Hist18 { acts: Act18[]; words: Array<{ kind: Kind18; counted: boolean }>; host: Host18 }
     const hists18: Hist18[] = [];
-    const grow18 = (s: Host18, h: Hist18) => {
+    const grow18 = (h: Hist18) => {
         if (h.acts.length) hists18.push(h);
         if (h.acts.length === 4) return;
         for (const a of ACTS18) {
-            const r = act18(s, a);
-            if (r) grow18(r.s, { acts: [...h.acts, a], words: [...h.words, ...r.words] });
+            const r = act18(h.host, a);
+            if (r) grow18({ acts: [...h.acts, a], words: [...h.words, ...r.words], host: r.s });
         }
     };
-    grow18('none', { acts: [], words: [] });
+    grow18({ acts: [], words: [], host: 'none' });
     type Ev18 = { k: 'arrive' | 'send' | 'answer'; i: number };
     const OWN18: ReadonlySet<Kind18> = new Set(['yes', 'no', 'leave']);
     /** Every arrival order of `h`'s words at the home the transports allow (the rules above). */
@@ -1869,6 +1869,10 @@ async function main(): Promise<void> {
         }
     }
     for (const f of failures18.slice(0, 12)) assert(false, `18. ${f}`);
+    // The oracle is the host's own final state: what the newest word names is where the host has the guest after the history.
+    const class18 = (s: string) => (s === 'invited' ? 'invited' : s.startsWith('in') ? 'in' : 'out');
+    const offOracle18 = hists18.filter((h) => want18(h).home.some((w) => class18(w) !== class18(h.host === 'none' ? 'out' : h.host)));
+    assert(offOracle18.length === 0, `18. for every history, the state its newest word names is the host's final state (${offOracle18.length} not: ${offOracle18.slice(0, 3).map((h) => h.acts.join(', ')).join(' | ')})`);
     // #3266's measured row: invited, withdrawn, invited again, the yes taken (its roster after it), arriving removal, the
     // answer to the yes, the invitation again, the roster.
     const reviewer18 = 'invite, withdraw, invite again, yes: arrive invite, send yes, arrive removed, answer yes, arrive invite, arrive roster R1';

@@ -72,7 +72,8 @@
  * So the copy holds only states a promoted standby can settle from the copy alone (#3217 round 2, invariant D): `joining`
  * is never stored, it is read from this server's own queue (a yes still queued: standingOf). A link copied while a yes
  * waited reads `invited` after a take-over, and the member answers again (a host that took the first yes answers a second
- * with a new counter that says they are in, and sends their roster again: engine/group-guests.ts takeGuestItem). A standby takes no notice (it answers as the main server does and writes nothing), sends no member's item,
+ * with a new counter that says they are in, and sends their roster again: engine/group-guests.ts confirmStanding). A
+ * standby takes no notice (it answers as the main server does and writes nothing), sends no member's item,
  * and its timer sweeps only this server's own tables: nothing it runs writes a copied row (setLink throws there,
  * moveLinkOn writes nothing). Its held lines and edits can't be kept up to date there (the host's takedowns go to the
  * server that took over), so it serves none and drops them, as it does at every role change (heldLinesStale, #3233 round 3).
@@ -670,7 +671,7 @@ function maySend(member: string, c: Checked): boolean {
 
 /**
  * Where the host's answer for one item moves `member`'s link: only a yes, a no or a leave move it, only when the host took
- * it (`taken`: a 2xx that doesn't refuse it), and only from where that item left it. A yes the host did not take (refused
+ * it (`taken`: a 2xx that doesn't refuse it), and only by its counter (below). A yes the host did not take (refused
  * in its answer, a 400/413, or a day of no answer) leaves the invitation waiting, so they can answer again, and drops the
  * roster taken while it was queued. THE GUEST'S OWN WORD (the order rule, G2 follow-ups): the host's answer to a yes, no or
  * leave that moved or confirmed where they stand carries the group's counter it was stamped with (`seq`, engine/group-guests.ts

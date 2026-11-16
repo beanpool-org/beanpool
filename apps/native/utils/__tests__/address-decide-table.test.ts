@@ -3,17 +3,45 @@
  * Nov): (state of the address in use) × (main) × (others) × (take-over count) → action (keep / follow / switch / drop /
  * refuse), where it goes, and the line Home shows. Every combination is checked against the design's rows, written out
  * below in the design's order, and the design's own rows are checked by name.
+ *
+ * And the round's table (PR #3236 round 2, the invariant): (proof age: fresh / stale past the wait / never) × (answer:
+ * proves, proves another community, 421, 429, 503, timeout, unparsed, offline) × (address role: in use, main, other) ×
+ * (the member switched mid-round: yes / no) → stay / follow / switch, and whether the address is refused for a day. Each
+ * row runs a whole round (utils/address-verify.ts) against stand-in servers signing with real keys, as
+ * address-verify.test.ts does: the phone moves only on a fresh proof or the member's own act; a transient answer never
+ * counts as answering as something else and never starts a day's refusal; the member's switch always wins.
  */
-import { describe, it, expect } from 'vitest';
-import { decideAddress, type AddressAnswer, type AddressSituation } from '../address-decide';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mem = vi.hoisted(() => new Map<string, string>());
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (k: string) => mem.get(k) ?? null),
+        setItem: vi.fn(async (k: string, v: string) => { mem.set(k, v); }),
+        removeItem: vi.fn(async (k: string) => { mem.delete(k); }),
+    },
+}));
+
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { hexToBytes } from '@noble/hashes/utils.js';
+import { createRequire } from 'node:module';
+import {
+    ADDRESS_LIST_PATH, ADDRESS_PROOF_PATH, signAddressList, signAddressProof, type AddressListFields,
+} from '@beanpool/core';
+import { decideAddress, PROOF_FRESH_MS, type AddressAnswer, type AddressSituation } from '../address-decide';
+import { forgetAddressChecks, verifyAddressInUse, type VerifyDeps } from '../address-verify';
+import { resetCommunityIndexForTests, type CommunityRecord } from '../community-index';
+import { loadCommunityRecords, parseCommunityRecords, resetCommunityRecordsForTests } from '../community-record';
+import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const USING = 'riverside.example';
 const MAIN = 'coop.example.org';
 const OTHER = 'ourtown.example.net';
 const HELD = 2;
+const NOW = Date.UTC(2026, 10, 16, 3);
 
 const IN_USE = ['proved', 'silent', 'silent-due', 'other-key', 'older', 'off-list'] as const;
-const MAIN_STATES = ['is-in-use', 'proved-new', 'proved-seen', 'proved-before', 'silent', 'other-key', 'older'] as const;
+const MAIN_STATES = ['is-in-use', 'proved-new', 'proved-seen', 'proved-before', 'proved-stale', 'silent', 'other-key', 'older'] as const;
 const OTHERS = ['none', 'proved', 'silent', 'other-key'] as const;
 const COUNTS = ['same', 'higher-all', 'higher-elsewhere'] as const;
 type InUse = typeof IN_USE[number];
@@ -31,7 +59,7 @@ function situation(inUse: InUse, main: MainState, others: Others, count: Count):
         : inUse === 'other-key' ? { kind: 'other-key', why: 'other-key' }
         : inUse === 'older' ? { kind: 'proved', epoch: HELD - 1, seq: 9 }
         : proved(USING);
-    if (main !== 'is-in-use' && main !== 'proved-before') {
+    if (main !== 'is-in-use' && main !== 'proved-before' && main !== 'proved-stale') {
         answers[MAIN] = main === 'silent' ? { kind: 'silent' } : main === 'other-key' ? { kind: 'other-key', why: 'other-address' }
             : main === 'older' ? { kind: 'proved', epoch: HELD - 1, seq: 9 } : proved(MAIN);
     }
@@ -45,10 +73,12 @@ function situation(inUse: InUse, main: MainState, others: Others, count: Count):
         listed,
         mainSeen: main === 'proved-seen' ? MAIN : main === 'proved-new' ? 'old-main.example' : MAIN,
         epoch: HELD,
-        // A main proved before this round, at the count held then.
-        proved: main === 'proved-before' ? { [MAIN]: { epoch: HELD } } : {},
+        // A main proved before this round, at the count held then: inside the wait (fresh), or past it (stale).
+        proved: main === 'proved-before' ? { [MAIN]: { epoch: HELD, at: NOW - 2 * 60_000 } }
+            : main === 'proved-stale' ? { [MAIN]: { epoch: HELD, at: NOW - PROOF_FRESH_MS } } : {},
         answers,
         silentDue: inUse === 'silent-due',
+        now: NOW,
     };
 }
 
@@ -66,6 +96,7 @@ function expected(inUse: InUse, main: MainState, others: Others, count: Count): 
     // "Any address shows a higher take-over count: never again uses an address that answers lower."
     const inUseBad = inUse === 'other-key' || inUse === 'older' || ((inUse === 'proved' || inUse === 'off-list') && inUseAt < top);
     const mainIsOther = main !== 'is-in-use' || inUse === 'off-list';
+    // A proof from before this round counts only inside the wait (fresh), never past it (the phone moves only on a fresh proof).
     const mainGood = mainIsOther && (main === 'proved-new' || main === 'proved-seen' || (main === 'proved-before' && HELD >= top));
     const otherGood = others === 'proved';
     const somewhere = mainGood ? MAIN : otherGood ? OTHER : null;
@@ -125,7 +156,7 @@ describe('S4: the table, (address in use) × (main) × (others) × (take-over co
 
 describe('S4: the design\'s rows by name (§3.4)', () => {
     const base = (over: Partial<AddressSituation>): AddressSituation => ({
-        using: USING, main: MAIN, listed: [MAIN, OTHER, USING], mainSeen: null, epoch: HELD, proved: {}, answers: {}, silentDue: false, ...over,
+        using: USING, main: MAIN, listed: [MAIN, OTHER, USING], mainSeen: null, epoch: HELD, proved: {}, answers: {}, silentDue: false, now: NOW, ...over,
     });
     const ok = (epoch = HELD): AddressAnswer => ({ kind: 'proved', epoch, seq: 14 });
 
@@ -163,7 +194,181 @@ describe('S4: the design\'s rows by name (§3.4)', () => {
         const d = decideAddress(base({ using: MAIN, mainSeen: MAIN, answers: { [MAIN]: ok(), [OTHER]: ok(HELD + 1) } }));
         expect(d).toMatchObject({ action: 'switch', to: OTHER, line: 'left', epoch: HELD + 1, drop: [MAIN] });
         // A proof from before the higher count is not enough: proved again at it first.
-        expect(decideAddress(base({ using: OTHER, proved: { [MAIN]: { epoch: HELD } }, answers: { [OTHER]: ok(HELD + 1) } })))
+        expect(decideAddress(base({ using: OTHER, proved: { [MAIN]: { epoch: HELD, at: NOW - 60_000 } }, answers: { [OTHER]: ok(HELD + 1) } })))
             .toMatchObject({ action: 'keep', epoch: HELD + 1 });
     });
+    it('a proof from before this round: inside the wait it is enough, past it or from a clock now behind it never is', () => {
+        const at = (ago: number) => ({ [MAIN]: { epoch: HELD, at: NOW - ago } });
+        expect(decideAddress(base({ mainSeen: MAIN, proved: at(PROOF_FRESH_MS - 1), answers: { [USING]: ok() } }))).toMatchObject({ action: 'follow', to: MAIN });
+        expect(decideAddress(base({ mainSeen: MAIN, proved: at(PROOF_FRESH_MS), answers: { [USING]: ok() } }))).toMatchObject({ action: 'keep', to: null });
+        expect(decideAddress(base({ mainSeen: MAIN, proved: at(-60_000), answers: { [USING]: ok() } }))).toMatchObject({ action: 'keep', to: null });
+        // Its last ask got no answer (address-verify carries that in as silent): the fresh proof does not count either.
+        expect(decideAddress(base({ mainSeen: MAIN, proved: at(60_000), answers: { [USING]: ok(), [MAIN]: { kind: 'silent' } } })))
+            .toMatchObject({ action: 'keep', to: null });
+        // And no switch rests on one: the address in use silent past the card's time, the main proved long ago, stays.
+        expect(decideAddress(base({ proved: at(2 * 60 * 60_000), answers: { [USING]: { kind: 'silent' } }, silentDue: true })))
+            .toMatchObject({ action: 'keep', to: null });
+    });
+});
+
+// ─── The round's table ───────────────────────────────────────────────────────────────────────────────────────────────
+
+const V = createRequire(import.meta.url)('@beanpool/core/vectors/address-list.json');
+const KEY = { seed: hexToBytes(V.keys.community.seedHex), peerId: V.keys.community.peerId as string };
+const OTHER_KEY = { seed: hexToBytes(V.keys.other.seedHex), peerId: V.keys.other.peerId as string };
+const CID = V.communityIds.community as string;
+const ANCHOR = 'beanpool_anchor_url';
+const ELSEWHERE = 'https://elsewhere.example';
+const T = Date.UTC(2026, 10, 16, 4);
+
+const AGES = ['fresh', 'stale', 'never'] as const;
+const ANSWERS = ['proves', 'proves-other-community', '421', '429', '503', 'timeout', 'unparsed', 'offline'] as const;
+const ROLES = ['in-use', 'main', 'other'] as const;
+type Age = typeof AGES[number];
+type Answer = typeof ANSWERS[number];
+type Role = typeof ROLES[number];
+
+/** The list before the round (main: the address in use) and the one the servers that prove sign in it (main: MAIN). */
+const before = (): AddressListFields => ({ peerId: KEY.peerId, communityId: CID, epoch: 2, seq: 14, main: USING, addresses: [USING, MAIN, OTHER], spares: [] });
+const during = (): AddressListFields => ({ ...before(), seq: 15, main: MAIN });
+
+/** Each address's answer to a proof (and its list), as the row sets it. */
+type Behaviour = Answer | 'silent';
+let behave: Record<string, Behaviour>;
+let fieldsNow: AddressListFields;
+let onAsk: (() => void) | null;
+
+const get: VerifyDeps['get'] = async (url) => {
+    const u = new URL(url);
+    onAsk?.();
+    const b = behave[u.host] ?? 'timeout';
+    if (b === 'offline') throw new TypeError('Network request failed');
+    if (b === 'timeout' || b === 'silent') return null;
+    if (b === '429') return { status: 429, body: { error: 'Too many requests from this address; try again shortly.' } };
+    if (b === '503') return { status: 503, body: null, unparsed: true };
+    if (b === 'unparsed') return { status: 200, body: null, unparsed: true };
+    if (b === '421') return { status: 421, body: { error: 'not listed', code: 'not_listed' } };
+    if (u.pathname === ADDRESS_LIST_PATH) return { status: 200, body: await signAddressList(fieldsNow, (m) => ed25519.sign(m, KEY.seed)) };
+    if (u.pathname !== ADDRESS_PROOF_PATH) return { status: 404, body: null };
+    const key = b === 'proves-other-community' ? OTHER_KEY : KEY;
+    const list = b === 'proves-other-community'
+        ? { v: 1 as const, ...fieldsNow, peerId: OTHER_KEY.peerId, communityId: V.communityIds.other as string }
+        : { v: 1 as const, ...fieldsNow };
+    const proof = await signAddressProof({ list, for: u.searchParams.get('for')!, nonce: u.searchParams.get('nonce')!, ts: 1 }, (m) => ed25519.sign(m, key.seed));
+    return { status: 200, body: proof };
+};
+
+let n = 0;
+let clock = T;
+const moves: Array<[string, string]> = [];
+const deps = (): VerifyDeps => ({
+    get,
+    nonce: () => (++n).toString(16).padStart(32, '0'),
+    now: () => clock,
+    anchor: async () => mem.get(ANCHOR) ?? null,
+    inHall: async () => false,
+    moveTo: async (from, to) => { moves.push([from, to]); mem.set(ANCHOR, to); },
+    followRow: async () => {},
+    forgetDuplicate: async () => {},
+});
+const records = (): CommunityRecord[] => parseCommunityRecords(mem.get(COMMUNITY_RECORDS_STORE_KEY) ?? null);
+const origin = (a: string) => `https://${a}`;
+
+/** The tested address for each role. */
+const TESTED: Record<Role, string> = { 'in-use': USING, main: MAIN, other: OTHER };
+const TRANSIENT: readonly Answer[] = ['429', '503', 'timeout', 'unparsed', 'offline'];
+const SAYS_SO: readonly Answer[] = ['proves-other-community', '421'];
+
+interface Outcome { move: 'stay' | 'follow' | 'switch'; refused: boolean }
+
+/** One row, run: the phone on USING (main before the round), the community's key and list kept. */
+async function runRow(age: Age, answer: Answer, role: Role, switched: boolean): Promise<Outcome & { anchor: string | null; line: unknown }> {
+    mem.clear();
+    forgetAddressChecks();
+    moves.length = 0;
+    onAsk = null;
+    const kept = await signAddressList(before(), (m) => ed25519.sign(m, KEY.seed));
+    mem.set(ANCHOR, origin(USING));
+    mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: origin(USING), alias: 'Riverside' }]));
+    const base: CommunityRecord = { v: 1, id: origin(USING), using: origin(USING), peerId: KEY.peerId, communityId: CID, epoch: 2, list: kept, proved: {}, refused: {} };
+    mem.set(COMMUNITY_RECORDS_STORE_KEY, JSON.stringify({ v: 1, records: [base] }));
+    resetCommunityRecordsForTests();
+    resetCommunityIndexForTests();
+    await loadCommunityRecords();
+
+    // The proof age: every address proved at a round 2 minutes before (inside the wait), or 2 hours before (past every
+    // wait), in this run; or never.
+    if (age !== 'never') {
+        clock = T - (age === 'fresh' ? 2 * 60_000 : 2 * 60 * 60_000);
+        fieldsNow = before();
+        behave = { [USING]: 'proves', [MAIN]: 'proves', [OTHER]: 'proves' };
+        await verifyAddressInUse({ atOpen: true }, deps());
+        expect(moves).toEqual([]);
+    }
+
+    // The round: at an app open (the address in use asked whatever the last ask was), the list now naming MAIN.
+    clock = T;
+    fieldsNow = during();
+    behave = role === 'in-use' ? { [USING]: answer, [MAIN]: 'proves', [OTHER]: 'silent' }
+        : role === 'main' ? { [USING]: 'proves', [MAIN]: answer, [OTHER]: 'silent' }
+        : { [USING]: 'silent', [MAIN]: 'silent', [OTHER]: answer };
+    if (switched) onAsk = () => { onAsk = null; mem.set(ANCHOR, ELSEWHERE); };
+    await verifyAddressInUse({ atOpen: true }, deps());
+
+    const r = records().find((x) => x.id === origin(USING))!;
+    const refusedAt = r.refused[origin(TESTED[role])]?.at;
+    const anchor = mem.get(ANCHOR) ?? null;
+    const moved = moves.length > 0;
+    const kind = r.line?.kind;
+    return {
+        move: !moved ? 'stay' : kind === 'left' || kind === 'not-answering' ? 'switch' : 'follow',
+        refused: refusedAt === T,
+        anchor,
+        line: r.line ?? null,
+    };
+}
+
+/** What the invariant says for a row, in its words. */
+function want(age: Age, answer: Answer, role: Role, switched: boolean): Outcome {
+    const saysSo = SAYS_SO.includes(answer);
+    let o: Outcome;
+    if (role === 'in-use') {
+        // Proves: the list it names makes MAIN main, freshly proved this round (or inside the wait): follow. Says it is
+        // something else: switch to MAIN, refused for a day. Transient at app open: the 2 Nov card's switch, no refusal.
+        o = answer === 'proves' ? { move: 'follow', refused: false } : { move: 'switch', refused: saysSo };
+    } else if (role === 'main') {
+        // Inside the wait MAIN is not asked again: its 2-minute-old proof is fresh, so the phone follows on it. Otherwise only
+        // a fresh proof this round moves it; what says so is refused; a transient answer changes nothing.
+        o = age === 'fresh' || answer === 'proves' ? { move: 'follow', refused: false } : { move: 'stay', refused: saysSo };
+    } else {
+        // The address in use and MAIN give no answer at app open: everything is asked; OTHER proving is the one place to go.
+        o = answer === 'proves' ? { move: 'switch', refused: false } : { move: 'stay', refused: saysSo };
+    }
+    // The member's own switch wins: nothing moves; what was learned about the addresses is kept.
+    return switched ? { move: 'stay', refused: o.refused } : o;
+}
+
+describe('S4 round 2: the round\'s table, (proof age) × (answer) × (address role) × (member switched mid-round)', () => {
+    beforeEach(() => { vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+
+    it(`every row (${AGES.length} × ${ANSWERS.length} × ${ROLES.length} × 2 = ${AGES.length * ANSWERS.length * ROLES.length * 2}) does what the invariant says`, async () => {
+        const wrong: string[] = [];
+        let rows = 0;
+        for (const age of AGES) for (const answer of ANSWERS) for (const role of ROLES) for (const switched of [false, true]) {
+            rows++;
+            const name = `${age} | ${answer} | ${role} | ${switched ? 'switched' : 'not switched'}`;
+            const got = await runRow(age, answer, role, switched);
+            const w = want(age, answer, role, switched);
+            if (got.move !== w.move || got.refused !== w.refused) wrong.push(`${name}: got ${got.move}${got.refused ? ' + refused' : ''}, want ${w.move}${w.refused ? ' + refused' : ''}`);
+            // A transient answer never starts a day's refusal, of any address.
+            if (TRANSIENT.includes(answer)) {
+                const refusedNow = Object.entries(records()[0].refused).filter(([, v]) => v.at === T).map(([k]) => k);
+                if (refusedNow.length) wrong.push(`${name}: a transient answer refused ${refusedNow.join(', ')}`);
+            }
+            // The member's switch always wins: the phone stays where the member put it, and no line is left to show.
+            if (switched && (got.anchor !== ELSEWHERE || got.line)) wrong.push(`${name}: the anchor ended at ${got.anchor}, line ${JSON.stringify(got.line)}`);
+        }
+        expect(rows).toBe(AGES.length * ANSWERS.length * ROLES.length * 2);
+        expect(wrong).toEqual([]);
+    }, 60_000);
 });

@@ -26,20 +26,25 @@ vi.mock('react-native', () => {
         Platform: { OS: 'android' },
         View: el('div'), Text: el('span'),
         StyleSheet: { create: (s: unknown) => s },
-        AppState: { currentState: 'active', addEventListener: vi.fn(() => ({ remove: () => {} })) },
+        AppState: { currentState: 'active', addEventListener: vi.fn((_: string, f: (s: string) => void) => { appState.on = f; return { remove: () => {} }; }) },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
 vi.mock('expo-router', () => ({
     useFocusEffect: (effect: () => void | (() => void)) => { useEffect(() => effect(), [effect]); },
 }));
-vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => 'https://coop.example.org'), setItem: vi.fn(), removeItem: vi.fn() } }));
+const anchor = vi.hoisted(() => ({ value: 'https://coop.example.org' as string | null }));
+const appState = vi.hoisted(() => ({ on: null as null | ((s: string) => void) }));
+const switched = vi.hoisted(() => ({ listeners: [] as Array<() => void> }));
+vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => anchor.value), setItem: vi.fn(), removeItem: vi.fn() } }));
 const verify = vi.hoisted(() => ({ line: null as null | { kind: string; from: string; to: string }, rounds: 0 }));
 vi.mock('../address-verify', () => ({
     verifyAddressInUse: vi.fn(async () => { verify.rounds++; }),
     takeAddressLine: vi.fn(async () => { const l = verify.line; verify.line = null; return l; }),
 }));
-vi.mock('../community-switch', () => ({ onCommunitySwitched: vi.fn(() => () => {}) }));
+vi.mock('../community-switch', () => ({
+    onCommunitySwitched: vi.fn((f: () => void) => { switched.listeners.push(f); return () => { switched.listeners = switched.listeners.filter((x) => x !== f); }; }),
+}));
 const saved = vi.hoisted(() => ({ rows: [] as { url: string; alias?: string }[] }));
 vi.mock('../nodes', () => ({ getSavedNodes: vi.fn(async () => saved.rows) }));
 
@@ -59,6 +64,8 @@ const line = (host: HTMLElement) => host.querySelector('[data-testid="address-li
 beforeEach(() => {
     verify.line = null;
     verify.rounds = 0;
+    anchor.value = 'https://coop.example.org';
+    switched.listeners = [];
     saved.rows = [{ url: 'https://coop.example.org', alias: 'Riverside Beans and Barter Cooperative' }];
 });
 
@@ -114,5 +121,36 @@ describe('Home\'s line after a follow, at 320 dp x 1.3', () => {
 
     it('nothing to say: nothing drawn', async () => {
         expect(line(await render())).toBeNull();
+    });
+
+    it('a switch to another community clears the line at once: Home shows only the community in use (PR #3236 review)', async () => {
+        verify.line = { kind: 'followed', from: 'https://riverside.example', to: 'https://coop.example.org' };
+        const host = await render();
+        expect(line(host)?.textContent).toContain('now lives at coop.example.org');
+        // The member switches to another community from the sheet; Home stays mounted.
+        anchor.value = 'https://elsewhere.example';
+        await act(async () => { switched.listeners.forEach((f) => f()); });
+        await act(async () => {});
+        expect(line(host)).toBeNull();
+    });
+
+    it('back from the background on another community (switched elsewhere meanwhile): the old line goes too', async () => {
+        verify.line = { kind: 'not-answering', from: 'https://riverside.example', to: 'https://coop.example.org' };
+        const host = await render();
+        expect(line(host)).not.toBeNull();
+        anchor.value = 'https://elsewhere.example';
+        await act(async () => { appState.on?.('background'); appState.on?.('active'); });
+        await act(async () => {});
+        expect(line(host)).toBeNull();
+    });
+
+    it('the phone\'s own follow still shows its line: the switch clears, the look after it shows the new one', async () => {
+        const host = await render();
+        expect(line(host)).toBeNull();
+        anchor.value = 'https://coop.example.org';
+        verify.line = { kind: 'followed', from: 'https://riverside.example', to: 'https://coop.example.org' };
+        await act(async () => { switched.listeners.forEach((f) => f()); });
+        await act(async () => {});
+        expect(line(host)?.textContent).toContain('now lives at coop.example.org');
     });
 });

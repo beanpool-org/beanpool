@@ -21,7 +21,7 @@ import { createRequire } from 'node:module';
 import {
     ADDRESS_LIST_PATH, ADDRESS_PROOF_PATH, signAddressList, signAddressProof, type AddressListFields, type SignedAddressList,
 } from '@beanpool/core';
-import { forgetAddressChecks, takeAddressLine, verifyAddressInUse, type VerifyDeps } from '../address-verify';
+import { answerToProof, forgetAddressChecks, takeAddressLine, verifyAddressInUse, type VerifyDeps } from '../address-verify';
 import { communityKeyOf, communityRecordOf, resetCommunityIndexForTests, type CommunityRecord } from '../community-index';
 import { loadCommunityRecords, parseCommunityRecords, resetCommunityRecordsForTests } from '../community-record';
 import { followSavedRow, getDatabaseFilenameForNode } from '../nodes';
@@ -39,7 +39,7 @@ const ANCHOR = 'beanpool_anchor_url';
 const T0 = Date.UTC(2026, 10, 16, 2);
 
 type Key = typeof KEY;
-interface Server { key: Key; fields: AddressListFields; listKey?: Key; listFields?: AddressListFields; proofFor?: string; replay?: unknown; silent?: boolean }
+interface Server { key: Key; fields: AddressListFields; listKey?: Key; listFields?: AddressListFields; proofFor?: string; replay?: unknown; silent?: boolean; status?: number }
 let servers: Record<string, Server>;
 let asked: string[];
 let now: number;
@@ -62,6 +62,7 @@ const get: VerifyDeps['get'] = async (url) => {
     asked.push(`${address}${u.pathname}`);
     const s = servers[address];
     if (!s || s.silent) return null;
+    if (s.status) return { status: s.status, body: { error: 'Too many requests from this address; try again shortly.' } };
     if (u.pathname === ADDRESS_LIST_PATH) return { status: 200, body: await signedList(s.listFields ?? s.fields, s.listKey ?? s.key) };
     if (u.pathname === ADDRESS_PROOF_PATH) {
         if (s.replay) return { status: 200, body: s.replay };
@@ -299,5 +300,128 @@ describe('S4: the same community saved twice (Marty\'s pick 5: the phone keeps t
         await verifyAddressInUse({ atOpen: true }, { ...deps(), get: noList });
         expect(recordAt(`https://${A}`).peerId).toBeUndefined();
         expect(moves).toEqual([]);
+    });
+});
+
+describe('S4 round 2: the deciding review\'s three reproductions (PR #3236, 7ff6ef8f), kept', () => {
+    it('1. a main that just gave no answer is never followed back to on its older proof, at any reopen inside the wait', async () => {
+        // On main M with A listed; the round at open proves both. M stops answering: the next open switches to A. Two minutes
+        // later another open (every return from the background is one) must keep the phone on A: at 7ff6ef8f it went back to
+        // M on the proof from before M went quiet, and flipped at every reopen during the outage.
+        for (const s of Object.values(servers)) s.fields = fields({ main: M });
+        await phoneAt(`https://${M}`);
+        await round(true);
+        expect(Object.keys(recordAt(`https://${M}`).proved).sort()).toEqual([`https://${M}`, `https://${A}`]);
+        servers[M].silent = true;
+        now += 60_000;
+        await round(true);
+        expect(moves).toEqual([[`https://${M}`, `https://${A}`]]);
+        now += 2 * 60_000;
+        await round(true);
+        expect(moves).toEqual([[`https://${M}`, `https://${A}`]]);
+        expect(mem.get(ANCHOR)).toBe(`https://${A}`);
+        // Still quiet after the wait: asked again, still no answer, still on A.
+        now += 5 * 60_000;
+        await round(true);
+        expect(mem.get(ANCHOR)).toBe(`https://${A}`);
+        // M answers again: asked once its hour is up, it proves fresh, and the phone goes back quietly.
+        servers[M].silent = false;
+        now += 61 * 60_000;
+        await round();
+        expect(mem.get(ANCHOR)).toBe(`https://${M}`);
+    });
+
+    it('2. a busy gateway (429) is not answering, never "answers as something else": no day\'s refusal, even of the main', async () => {
+        for (const s of Object.values(servers)) s.fields = fields({ main: M });
+        await phoneAt(`https://${M}`);
+        await round(true);
+        servers[M].status = 429;
+        // An hourly round: not answering for a moment, so the phone stays and nothing is refused.
+        now += 61 * 60_000;
+        await round();
+        expect(moves).toEqual([]);
+        expect(recordAt(`https://${M}`).refused).toEqual({});
+        // At an open, no answer makes the switch due (the 2 Nov card): to A, with the not-answering line, M never refused.
+        now += 60_000;
+        await round(true);
+        expect(moves).toEqual([[`https://${M}`, `https://${A}`]]);
+        expect(recordAt(`https://${M}`).refused).toEqual({});
+        expect((await takeAddressLine(`https://${A}`))?.kind).toBe('not-answering');
+        // M answers again within the hour: it was never refused, so it is asked and followed back to.
+        servers[M].status = undefined;
+        now += 61 * 60_000;
+        await round();
+        expect(mem.get(ANCHOR)).toBe(`https://${M}`);
+    });
+
+    it('3. the member\'s own switch while a round is out wins: the phone stays where the member put it, with no line', async () => {
+        await phoneAt(`https://${A}`);
+        await round(true);
+        for (const s of Object.values(servers)) s.fields = fields({ seq: 15, main: M });
+        now += 61 * 60_000;
+        const real = deps();
+        await verifyAddressInUse({}, {
+            ...real,
+            get: async (url) => {
+                // The member switches community while M's proof is out (the community sheet, a link, joining).
+                if (url.includes(M) && url.includes(ADDRESS_PROOF_PATH)) mem.set(ANCHOR, 'https://elsewhere.example');
+                return get(url);
+            },
+        });
+        expect(moves).toEqual([]);
+        expect(mem.get(ANCHOR)).toBe('https://elsewhere.example');
+        const r = recordAt(`https://${A}`);
+        expect(r.using).toBe(`https://${A}`);
+        expect(r.line).toBeUndefined();
+        // What it learned about the addresses is kept: M proved, the newer list.
+        expect(Object.keys(r.proved)).toContain(`https://${M}`);
+        expect(r.list?.list.seq).toBe(15);
+    });
+
+    it('a member\'s switch that lands while the record is written: the record goes back, the phone never moves', async () => {
+        await phoneAt(`https://${A}`);
+        await round(true);
+        for (const s of Object.values(servers)) s.fields = fields({ seq: 15, main: M });
+        now += 61 * 60_000;
+        const real = deps();
+        let reads = 0;
+        await verifyAddressInUse({}, {
+            ...real,
+            // The round reads the anchor at its start, once after the network and once before the move: the switch lands
+            // between the second and third reads.
+            anchor: async () => { reads++; const a = mem.get(ANCHOR) ?? null; if (reads === 2) mem.set(ANCHOR, 'https://elsewhere.example'); return a; },
+        });
+        expect(moves).toEqual([]);
+        expect(mem.get(ANCHOR)).toBe('https://elsewhere.example');
+        expect(recordAt(`https://${A}`).using).toBe(`https://${A}`);
+        expect(recordAt(`https://${A}`).line).toBeUndefined();
+    });
+});
+
+describe('S4 round 2: what an answer to a proof says (only what says so is "answers as something else")', () => {
+    const q = { peerId: KEY.peerId, for: A, nonce: '0'.repeat(32) };
+    const rows: Array<[string, Parameters<typeof answerToProof>[0], string]> = [
+        ['no answer (offline, a timeout)', null, 'silent'],
+        ['429, the gateway\'s limit', { status: 429, body: { error: 'Too many requests' } }, 'silent'],
+        ['a proxy\'s 503 page', { status: 503, body: null, unparsed: true }, 'silent'],
+        ['a 503 that is not the server\'s replaced', { status: 503, body: { error: 'down' } }, 'silent'],
+        ['502, 500, 403, 400', { status: 502, body: null, unparsed: true }, 'silent'],
+        ['a 200 whose body did not parse', { status: 200, body: null, unparsed: true }, 'silent'],
+        ['a 421 that is not the server\'s', { status: 421, body: null, unparsed: true }, 'silent'],
+        ['the server\'s 421, not on its list', { status: 421, body: { error: 'not listed', code: 'not_listed' } }, 'other-key'],
+        ['the server\'s 503, replaced', { status: 503, body: { error: 'replaced', code: 'replaced' } }, 'other-key'],
+        ['404, no proof route', { status: 404, body: null, unparsed: true }, 'other-key'],
+        ['a 200 that parsed and is not a proof', { status: 200, body: { hello: 1 } }, 'other-key'],
+    ];
+    for (const [name, answer, kind] of rows) {
+        it(`${name}: ${kind}`, () => { expect(answerToProof(answer, q).kind).toBe(kind); });
+    }
+    it('each other status below 600 that is not 200, 404, the server\'s 421 or 503 is not answering', () => {
+        const odd: number[] = [];
+        for (let status = 100; status < 600; status++) {
+            if ([200, 404].includes(status)) continue;
+            if (answerToProof({ status, body: { error: 'x' } }, q).kind !== 'silent') odd.push(status);
+        }
+        expect(odd).toEqual([]);
     });
 });

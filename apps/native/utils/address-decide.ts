@@ -5,7 +5,9 @@
  *
  * An address is the community's on this phone only when the community's own signed list names it AND it signed this
  * phone's fresh question with the community's key, at a take-over count no lower than the highest the phone has seen
- * (§3.2 "proved"). Only such an address is ever used. Per address, this round:
+ * (§3.2 "proved"). Only such an address is ever used, and only on a FRESH proof: this round's, or one within the wait
+before it is asked again (PROOF_FRESH_MS) that no later ask contradicted. A proof older than that is no reason to move.
+Per address, this round:
  *   - proved at the count, or higher: good (a higher count raises what the phone keeps);
  *   - proved at a lower count, or answered as anything else (another key, another address, an older question, no proof
  *     route, not on that server's list, a replaced server): dropped on this phone, never used (§7);
@@ -24,13 +26,20 @@
  * One address answering with another key is dropped alone; the rest stay one community (Marty's pick 3).
  */
 
+/**
+ * How long a proof stays fresh: the wait before an address that proved is asked again (utils/address-verify.ts). Past it,
+ * the address is asked again before the phone goes there (PR #3236 review: an old proof sent the phone back to a main that
+ * had just failed to answer).
+ */
+export const PROOF_FRESH_MS = 5 * 60_000;
+
 /** What one address said this round. */
 export type AddressAnswer =
     /** It signed this phone's question with the community's key, naming this list number. */
     | { kind: 'proved'; epoch: number; seq: number }
     /** It answered, but not as the community for this question (why: for the record). */
     | { kind: 'other-key'; why: string }
-    /** No answer. */
+    /** No answer, or one that says nothing about who answers (a timeout, 429, a 5xx, a body that didn't parse). */
     | { kind: 'silent' };
 
 export interface AddressSituation {
@@ -43,10 +52,15 @@ export interface AddressSituation {
     mainSeen: string | null;
     /** The highest take-over count the phone has seen for the community. */
     epoch: number;
-    /** Addresses proved before this round, with the take-over count each proved at. */
-    proved: Readonly<Record<string, { epoch?: number }>>;
-    /** What each address asked this round said; an address not asked is absent. */
+    /** Addresses proved before this round, with when and the take-over count each proved at. */
+    proved: Readonly<Record<string, { at: number; epoch?: number }>>;
+    /**
+     * What each address said this round; an address not asked is absent, except one whose last ask got no answer within
+     * the wait (it reads `silent`: an older proof of it never counts while it is not answering).
+     */
     answers: Readonly<Record<string, AddressAnswer>>;
+    /** The time of this round, which `proved` is fresh against. */
+    now: number;
     /** The address in use has not answered for the 2 Nov card's time (5 minutes of tries, or no answer at app open). */
     silentDue: boolean;
 }
@@ -81,10 +95,17 @@ export function decideAddress(s: AddressSituation): AddressDecision {
         if (a.kind === 'other-key' || (a.kind === 'proved' && a.epoch < epoch)) drop.push(address);
         else if (a.kind === 'proved' && listed.has(address)) provedNow.push(address);
     }
-    // Usable: on the list, not dropped or silent this round, and proved this round or before at the count kept now.
+    // Usable: on the list, not dropped or silent this round, and proved this round, or within the wait before this round
+    // at the count kept now. Never on an older proof (the invariant: the phone moves only on a fresh proof).
+    const fresh = (address: string): boolean => {
+        const p = s.proved[address];
+        if (!p || (p.epoch ?? 0) < epoch) return false;
+        const age = s.now - p.at;
+        return Number.isFinite(age) && age >= 0 && age < PROOF_FRESH_MS;
+    };
     const usable = (address: string): boolean => listed.has(address) && !drop.includes(address)
         && s.answers[address]?.kind !== 'silent'
-        && (provedNow.includes(address) || (s.proved[address] !== undefined && (s.proved[address].epoch ?? 0) >= epoch));
+        && (provedNow.includes(address) || fresh(address));
     const mainOk = s.main !== null && s.main !== s.using && usable(s.main);
     const other = s.listed.find((a) => a !== s.using && a !== s.main && usable(a)) ?? null;
     const target = mainOk ? s.main : other;

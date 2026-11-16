@@ -13,6 +13,15 @@
  * longest ago once a day, so a take-over is seen. Everything listed is asked at once
  * when the address in use answers as something else, is off the list, or has not answered for the 2 Nov card's time.
  *
+ * What counts (the invariant, PR #3236 round 2). The phone moves only on a FRESH proof (this round's, or one inside the
+ * wait before that address is asked again, with no unanswered ask since: address-decide.ts PROOF_FRESH_MS) or by the
+ * member's own act. Only what says so is "answers as something else" and starts a day's refusal: a 404 (no proof route),
+ * the server's 421 (not on its list), its 503 `replaced`, or an answer that parsed and is not a good proof. A timeout, no
+ * connection, a 429 (the gateway's per-address limit, shared behind one household or carrier), any other status and a
+ * body that didn't parse say nothing about who answers: not answering. A member's switch while a round is out wins: the
+ * anchor is read again before anything about the community in use is written and again before the move, and when it
+ * changed the round keeps what it learned about the addresses and moves nothing.
+ *
  * Who the community is. A record with no key takes it from the first read: the key the phone kept from its first
  * statement at that address (address-follow.ts keepCommunityIdentity), else the list the address serves over TLS, as a
  * first contact is trusted today (§3.2). From then on every list must be that key's (core chooseAddressList), and an
@@ -37,9 +46,9 @@ import {
     addressListUrl, addressOf, addressProofUrl, chooseAddressList, compareAddressNumbers, readAddressList, verifyAddressProof,
     type SignedAddressList,
 } from '@beanpool/core';
-import { decideAddress, type AddressAnswer, type AddressLineKind } from './address-decide';
+import { decideAddress, PROOF_FRESH_MS, type AddressAnswer, type AddressLineKind } from './address-decide';
 import { followableOrigin, keptIdentityAt } from './address-follow';
-import { communityRecordOf, recordHolds, type CommunityRecord } from './community-index';
+import { addressSpelling, communityRecordOf, recordHolds, type CommunityRecord } from './community-index';
 import { changeCommunityRecords, communityRecordsReady } from './community-record';
 
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
@@ -52,8 +61,11 @@ const TRIES_GAP_MS = HOUR;
 const ASK_TIMEOUT_MS = 8_000;
 
 export interface VerifyDeps {
-    /** A public GET: its status and JSON, or null for no answer (no connection, a timeout). */
-    get(url: string): Promise<{ status: number; body: unknown } | null>;
+    /**
+     * A public GET: its status and JSON, or null for no answer (no connection, a timeout). `unparsed`: an answer came, but its
+     * body was not JSON (a cut connection, a proxy's page); `body` is then null.
+     */
+    get(url: string): Promise<{ status: number; body: unknown; unparsed?: true } | null>;
     nonce(): string;
     now(): number;
     anchor(): Promise<string | null>;
@@ -71,12 +83,17 @@ export interface VerifyDeps {
     forgetDuplicate(record: CommunityRecord): Promise<void>;
 }
 
-async function getJson(url: string): Promise<{ status: number; body: unknown } | null> {
+async function getJson(url: string): Promise<{ status: number; body: unknown; unparsed?: true } | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);
     try {
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal: controller.signal });
-        return { status: res.status, body: await res.json().catch(() => null) };
+        const text = await res.text().catch(() => null);
+        try {
+            return { status: res.status, body: JSON.parse(text ?? '') };
+        } catch {
+            return { status: res.status, body: null, unparsed: true };
+        }
     } catch {
         return null;
     } finally {
@@ -114,17 +131,31 @@ async function depsWith(injected?: Partial<VerifyDeps>): Promise<VerifyDeps> {
 
 const originOf = (address: string) => `https://${address}`;
 
+const codeOf = (body: unknown): unknown => (body && typeof body === 'object' ? (body as { code?: unknown }).code : undefined);
+
+/**
+ * What one answer to a proof says, as decide reads it (the file's comment, "What counts"). Only what says so answers as
+ * something else: no proof route (404), not on that server's list (its 421 `not_listed`), a replaced server (its 503
+ * `replaced`), or a proof that parsed and is not good (another key, address or nonce, a bad signature, not a proof): no
+ * downgrade (§7). Everything else is not answering: no answer, a 429, any other status, a body that didn't parse.
+ */
+export function answerToProof(
+    answer: { status: number; body: unknown; unparsed?: true } | null, question: { peerId: string; for: string; nonce: string },
+): AddressAnswer {
+    if (!answer) return { kind: 'silent' };
+    if (answer.status === 404) return { kind: 'other-key', why: 'status 404' };
+    if (answer.status === 421 && codeOf(answer.body) === 'not_listed') return { kind: 'other-key', why: 'status 421' };
+    if (answer.status === 503 && codeOf(answer.body) === 'replaced') return { kind: 'other-key', why: 'status 503 replaced' };
+    if (answer.status !== 200 || answer.unparsed) return { kind: 'silent' };
+    const verdict = verifyAddressProof(answer.body, question);
+    return verdict.ok ? { kind: 'proved', epoch: verdict.epoch, seq: verdict.seq } : { kind: 'other-key', why: verdict.why };
+}
+
 /** One proof asked of `address` for the community's key, as decide reads it. */
 async function prove(address: string, peerId: string, deps: VerifyDeps): Promise<AddressAnswer> {
     const nonce = deps.nonce();
     const answer = await deps.get(addressProofUrl(address, nonce)).catch(() => null);
-    // No answer, or a server error other than a replaced server's 503: not answering. Anything else that is not a good proof
-    // (421 not on its list, 404 no proof route, a 503 replaced, another key, another address or nonce) answers as
-    // something else: no downgrade (§7).
-    if (!answer || (answer.status >= 500 && answer.status !== 503)) return { kind: 'silent' };
-    if (answer.status !== 200) return { kind: 'other-key', why: `status ${answer.status}` };
-    const verdict = verifyAddressProof(answer.body, { peerId, for: address, nonce });
-    return verdict.ok ? { kind: 'proved', epoch: verdict.epoch, seq: verdict.seq } : { kind: 'other-key', why: verdict.why };
+    return answerToProof(answer, { peerId, for: address, nonce });
 }
 
 /** This run's last ask of each address: when, how many in a row gave no answer, and whether it answered. */
@@ -192,7 +223,8 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
     if (own.kind === 'proved' && (!kept || compareAddressNumbers(own, kept.list) > 0)) {
         // The proof names a newer list: it must come from the same address, at least that new (§2.3).
         const offered = await deps.get(addressListUrl(usingAddress)).catch(() => null);
-        const choice = offered?.status === 200 ? chooseAddressList(offered.body, { peerId, kept, communityId }) : null;
+        // A list that didn't arrive whole (no answer, another status, a body that didn't parse) says nothing: not answering.
+        const choice = offered?.status === 200 && !offered.unparsed ? chooseAddressList(offered.body, { peerId, kept, communityId }) : null;
         if (choice?.action === 'replace' && compareAddressNumbers(choice.signed.list, own) >= 0) kept = choice.signed;
         else if (choice?.action === 'refuse') answers[usingAddress] = { kind: 'other-key', why: `list ${choice.why}` };
         else if (!kept || compareAddressNumbers(kept.list, own) < 0) answers[usingAddress] = { kind: 'silent' };
@@ -223,9 +255,14 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
         const refusedAt = record.refused[originOf(a)]?.at;
         if (refusedAt !== undefined && now - refusedAt >= 0 && now - refusedAt < DAY) return false;
         const m = asked.get(a);
-        const waited = !m || now - m.at < 0 || now - m.at >= (m.silent <= 1 ? 5 * MINUTE : HOUR);
+        const waited = !m || now - m.at < 0 || now - m.at >= (m.silent <= 1 ? PROOF_FRESH_MS : HOUR);
         if (askAll) return true;
-        if (!waited) return false;
+        if (!waited) {
+            // Not asked again inside the wait. When its last ask got no answer it is still not answering: an older proof of it
+            // is no reason to go there (PR #3236 review: the phone went back to a main that had just failed to answer).
+            if (m && m.silent > 0) answers[a] = { kind: 'silent' };
+            return false;
+        }
         // The main, whenever it is not the address in use: the phone goes there only on a fresh proof.
         return !p || a === main || (a === daily && now - p.at >= DAY);
     });
@@ -234,14 +271,14 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
         asked.set(a, { at: now, silent: answers[a].kind === 'silent' ? (asked.get(a)?.silent ?? 0) + 1 : 0 });
     }));
 
-    const proved: Record<string, { epoch?: number }> = {};
+    const proved: Record<string, { at: number; epoch?: number }> = {};
     for (const [origin, p] of Object.entries(record.proved)) {
         const a = addressOf(origin);
         if (a) proved[a] = p;
     }
     const decision = decideAddress({
         using: usingAddress, main, listed, mainSeen: record.mainSeen ? addressOf(record.mainSeen) : null, epoch: epochHeld,
-        proved, answers, silentDue,
+        proved, answers, silentDue, now,
     });
 
     // A second record of the same community at an address just proved goes first, so that address keys to this record.
@@ -252,8 +289,12 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
             await deps.forgetDuplicate(holder);
         }
     }
-    const to = decision.to ? originOf(decision.to) : null;
-    const standsOnMain = main !== null && (decision.to ?? usingAddress) === main && !decision.drop.includes(main);
+    // The member's own switch wins over this round (PR #3236 review): read the anchor again now, after the network waits.
+    // When it changed, what was learned about the addresses is kept, and nothing about the community in use is written.
+    const memberMoved = async () => (await deps.anchor()) !== anchor || await deps.inHall();
+    const stays = await memberMoved();
+    const to = decision.to && !stays ? originOf(decision.to) : null;
+    const standsOnMain = !stays && main !== null && (decision.to ?? usingAddress) === main && !decision.drop.includes(main);
     await changeCommunityRecords((records) => {
         const r = records.find((x) => x.id === record.id);
         if (!r) return null;
@@ -268,14 +309,25 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
             const answer = answers[a];
             nextRefused[originOf(a)] = { at: now, why: answer?.kind === 'other-key' ? answer.why : 'older' };
         }
+        const learned: CommunityRecord = {
+            ...r, peerId: peerId!, ...(communityId ? { communityId } : {}), epoch: decision.epoch, proved: nextProved, refused: nextRefused,
+            ...(kept ? { list: kept } : {}),
+        };
+        if (stays) return records.map((x) => (x === r ? learned : x));
         const line = to && decision.line ? { kind: decision.line, from: r.using, to, at: now } : r.line;
         const next: CommunityRecord = {
-            ...r, peerId: peerId!, ...(communityId ? { communityId } : {}), epoch: decision.epoch, proved: nextProved, refused: nextRefused,
-            ...(kept ? { list: kept } : {}), using: to ?? r.using, ...(standsOnMain ? { mainSeen: originOf(main!) } : {}),
+            ...learned, using: to ?? r.using, ...(standsOnMain ? { mainSeen: originOf(main!) } : {}),
             ...(silent && !to ? { silent } : { silent: undefined }), ...(line ? { line } : {}),
         };
         return records.map((x) => (x === r ? next : x));
     });
+    if (stays) return;
+    if (to && await memberMoved()) {
+        // The member switched while the record was written: put back where the record was going, and the line, and stay.
+        await changeCommunityRecords((records) => records.map((x) => (x.id === record.id && x.using === to
+            ? { ...x, using: record.using, line: x.line?.at === now ? record.line : x.line } : x)));
+        return;
+    }
     try {
         if (to) {
             asked.set(decision.to!, { at: now, silent: 0 });
@@ -301,5 +353,7 @@ export async function takeAddressLine(anchor: string | null): Promise<{ kind: Ad
     } catch {
         return null;
     }
+    // Home shows only the community in use, at the address in use: a line about a move to another address is taken, unshown.
+    if (addressSpelling(line.to) !== addressSpelling(anchor)) return null;
     return { kind: line.kind, from: line.from, to: line.to };
 }

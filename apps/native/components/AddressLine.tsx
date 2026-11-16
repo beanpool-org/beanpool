@@ -1,7 +1,9 @@
 /**
  * Home's one line after the phone followed its community to another of its addresses by itself (utils/address-verify.ts;
  * scratch/fable-design/DESIGN-several-addresses-fable.md §8, slice S4; Marty 16 Nov: one line on Home, no card, no tap).
- * Shown once: the line is taken off the community's record as Home reads it, and stays while Home is in view.
+ * Shown once: the line is taken off the community's record as Home reads it, and stays while Home is in view and the
+ * community in use is the one it was taken for. A switch to any other community (or address) clears it at once, as the
+ * copies card beside it does: Home shows only the community in use (PR #3236 review).
  *
  * It also keeps the verification going while Home is in view: once a minute (address-verify.ts asks the network at most
  * hourly while the address in use answers, once a minute while it doesn't), after any switch, and when the app comes back
@@ -39,29 +41,38 @@ export function addressLineWords(line: { kind: AddressLineKind; from: string; to
 }
 
 export function AddressLine({ colors }: { colors: AppColors }) {
-    const [words, setWords] = useState<string | null>(null);
+    // The words, with the address in use they were taken for.
+    const [shown, setShown] = useState<{ anchor: string; words: string } | null>(null);
     const lookRef = useRef<((atOpen?: boolean) => void) | null>(null);
 
     useFocusEffect(
         useCallback(() => {
             let live = true;
+            // The words go when the phone is no longer where they were taken for (a switch, or a focus after one elsewhere).
+            const inUse = async () => {
+                const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+                if (live) setShown((s) => (s && s.anchor !== anchor ? null : s));
+                return anchor;
+            };
             const look = (atOpen = false) => {
-                verifyAddressInUse({ atOpen })
-                    .then(async () => {
-                        const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+                inUse()
+                    .then(() => verifyAddressInUse({ atOpen }))
+                    .then(inUse)
+                    .then(async (anchor) => {
                         const line = await takeAddressLine(anchor);
-                        if (!live || !line) return;
+                        if (!live || !line || !anchor) return;
                         // The community's name as this phone kept it, else the address the member knew it by: never the
                         // new address, which would read "{address} now lives at {address}".
                         const row = (await getSavedNodes().catch(() => [])).find((n) => n.url === line.to);
-                        setWords(addressLineWords(line, communityName({ alias: row?.alias ?? null, url: line.from })));
+                        if (live) setShown({ anchor, words: addressLineWords(line, communityName({ alias: row?.alias ?? null, url: line.from })) });
                     })
                     .catch(() => {});
             };
             lookRef.current = look;
             look();
             const timer = setInterval(() => look(), ADDRESS_RECHECK_MS);
-            const off = onCommunitySwitched(() => look());
+            // A switch clears the line at once; the look after it shows the new one when the switch was the phone's own follow.
+            const off = onCommunitySwitched(() => { if (live) setShown(null); look(); });
             return () => { live = false; lookRef.current = null; clearInterval(timer); off(); };
         }, []),
     );
@@ -79,10 +90,10 @@ export function AddressLine({ colors }: { colors: AppColors }) {
         return () => sub.remove();
     }, []);
 
-    if (!words) return null;
+    if (!shown) return null;
     return (
         <Text style={[styles.line, { color: colors.text.body }]} accessibilityLiveRegion="polite" testID="address-line">
-            {words}
+            {shown.words}
         </Text>
     );
 }

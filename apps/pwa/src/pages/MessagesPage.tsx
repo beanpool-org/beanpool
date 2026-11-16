@@ -961,11 +961,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const locked = await lockedGroupsOrNull(identity.publicKey);
             const held = (result.conversations || []).map((c: Conversation) => holdConversation(c, locked));
             const blocked = new Set(getBlockedUsers());
+            // A DM with someone blocked under any key it lists for them (a re-key moves both the DM's people and the block
+            // on the node, so one key; any, as on the phone: apps/native utils/dm-blocked.ts).
             const filtered = held.filter((c: Conversation) => {
-                if (c.type === 'dm') {
-                    const peer = (c.participants || []).find(p => p !== identity.publicKey);
-                    if (peer && blocked.has(peer)) return false;
-                }
+                if (c.type === 'dm' && (c.participants || []).some(p => p !== identity.publicKey && blocked.has(p))) return false;
                 return true;
             }).map((c: Conversation) => {
                 if (activeConvIdRef.current && c.id === activeConvIdRef.current) {
@@ -2432,7 +2431,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const peerPubkey = activeConv.type === 'dm'
             ? (activeConv.participants?.find(p => p !== identity.publicKey) || '')
             : '';
-        const isPeerBlocked = peerPubkey ? isUserBlocked(peerPubkey) : false;
+        // Blocked when any other key the DM lists is (as its list above, and the phone's thread).
+        const isPeerBlocked = activeConv.type === 'dm' && (activeConv.participants || []).some(p => p !== identity.publicKey && isUserBlocked(p));
         // A DM's ⋮ (DESIGN-dm-key-signal-model §5, S3): its one item, Key code, reads the listed key's digits, so it is there
         // in every DM, the one whose other side is unknown too (it says there is no code yet).
         const dmMenuButton = activeConv.type === 'dm' ? (

@@ -8,6 +8,7 @@ import { getConversations, getActionableDeals, createConversationApi, syncMessag
 import { openGlobalRequests, requestsWaitingOnGlobal } from '../../utils/global-requests';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
+import { talkShowsChat } from '../../utils/dm-blocked';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -470,20 +471,18 @@ export default function ChatsScreen() {
             const keepIfSame = <T,>(prev: T, next: T): T =>
                 JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
 
-            const getPeerKey = (obj: any): string | undefined =>
-                obj?.peer_pubkey ?? obj?.peerPublicKey ?? obj?.peer_public_key ?? undefined;
+            // getConversations and getActionableDeals both name the other person's key `peerPubkey` (utils/db.ts). The three
+            // names read here before matched neither, so a blocked person's chats and deals were always listed (#3268).
+            const getPeerKey = (obj: any): string | undefined => obj?.peerPubkey ?? undefined;
 
             const loadData = async () => {
                 if (identity?.publicKey && active) {
                     const blocked = await getBlockedUsers();
                     getConversations(identity.publicKey)
                         .then(res => {
-                            const filtered = (res || []).filter((c: any) => {
-                                // Group, enterprise and event chats live under Groups now (decision 6).
-                                if (c.type === 'group_thread' || c.type === 'event_thread' || c.type === 'enterprise_thread') return false;
-                                const pk = getPeerKey(c);
-                                return !pk || !blocked.includes(pk);
-                            });
+                            // Group, enterprise and event chats live under Groups now (decision 6); a DM with someone the
+                            // member blocked, under any key they are known by here, is not listed (utils/dm-blocked.ts).
+                            const filtered = (res || []).filter((c: any) => talkShowsChat(c, blocked));
                             if (active) setConversations(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);

@@ -21,6 +21,12 @@
  *      operator's node_config row nodeProfile.announceProfiles = true puts card edits back on every socket.
  *   4. The member list never misses a change: a node role granted and revoked, and a tier badge each move the list's
  *      ETag (a held one is answered 200) and put the member's row in the next delta, with the new role or credit. Neither moved for a role, and none was in a delta (#1467's finding).
+ *      One table over every way the server changes what a phone's members table holds from the list: a rename, a photo, a
+ *      role granted and revoked, an admin's re-key (the member under the new key, the old key in neither), a role a
+ *      suspension takes and its lift gives back, a member back from a removal and from a retire, and the genesis
+ *      member's owner role on a row already there. From the re-key on, none was in a delta (walk of
+ *      #3263 on the API 26 phone, 16 Nov 2026): the phone kept the old key's card until its hourly full read, so a DM
+ *      with the re-keyed member, and its "{name}'s key changed" line, named them by the conversation's id.
  *
  * On origin/main sections 2 and 4 fail; 1 and 3 pin what must not change, and pass there by design.
  *
@@ -88,6 +94,10 @@ async function main() {
     const { getMembersVersion, getPostsVersion } = await import('./engine/versions.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
     const { grantNodeRole, revokeNodeRole } = await import('./engine/node-roles.js');
+    const { issueRekeyCode, completeRekey, cancelRekeyCode } = await import('./engine/member-wizards.js');
+    const { adminEmergencySuspend, adminLiftSuspension } = await import('./decisions-engine.js');
+    const { retireEmptyDuplicate, bringBackRetired } = await import('./engine/retire-duplicate.js');
+    const { seedGenesisMember } = await import('./engine/members.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
 
     await initTls();
@@ -252,23 +262,94 @@ async function main() {
     console.log('\n— 4. the member list: every change moves its ETag and is in the next delta —');
     {
         const wes = member('Wes');
-        /** Hold the list's ETag and a cursor, make the change, then read both as a phone's sync does. */
-        async function afterChange(what: string, change: () => void, field: string, want: (row: any) => boolean) {
+        /**
+         * Hold the list's ETag and a cursor, make the change, then read both as a phone's sync does: the list (a held ETag
+         * answered 200) and the next delta each have the member's row as the change left it. `key`: the key the member is
+         * listed under after the change (a re-key moves it).
+         */
+        async function afterChange(what: string, change: () => void, field: string, want: (row: any) => boolean, key = wes.pubKeyHex) {
             const held = await get(olive, '/api/members');
             const cursor = new Date(Date.now() - 1).toISOString();
             await sleep(5);
             change();
             const full = await get(olive, '/api/members', held.etag ?? undefined);
-            const row = (full.json ?? []).find((m: any) => m.publicKey === wes.pubKeyHex);
+            const row = (full.json ?? []).find((m: any) => m.publicKey === key);
             assert(full.status === 200 && !!row && want(row),
                 `${what}: a held ETag of the list is not confirmed (${full.status}), and the list has it (${field} ${JSON.stringify(row?.[field])})`);
             const delta = await get(olive, `/api/members?updatedAfter=${encodeURIComponent(cursor)}`);
-            const inDelta = (delta.json ?? []).find((m: any) => m.publicKey === wes.pubKeyHex);
+            const inDelta = (delta.json ?? []).find((m: any) => m.publicKey === key);
             assert(delta.status === 200 && !!inDelta && want(inDelta),
                 `${what}: the next delta has the member's row (${inDelta ? `${field} ${JSON.stringify(inDelta[field])}` : 'not in it'})`);
+            return { full: full.json ?? [], delta: delta.json ?? [] };
         }
-        await afterChange('a node role granted', () => grantNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), 'nodeRole', r => r.nodeRole === 'moderator');
-        await afterChange('a node role revoked', () => revokeNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), 'nodeRole', r => r.nodeRole === null);
+        /** A step a row needs, refused loudly: a refusal would otherwise read as the row's own failure. */
+        const done = (ok: boolean, step: string, said?: unknown) => { if (!ok) throw new Error(`${step} was refused: ${JSON.stringify(said)}`); };
+        const isListed = async (pk: string) => ((await get(olive, '/api/members')).json ?? []).some((m: any) => m.publicKey === pk);
+
+        // EVERY way the server changes what a phone's members table holds from this list (a card's key, name, photo and
+        // node role, and whether the card is listed at all), one row each. Before the walk of #3263 (16 Nov 2026) only the
+        // grant and revoke had #1467's fix, and the rename and photo their own stamp: a re-key, a role a suspension takes
+        // or its lift gives back, a member back from a removal or a retire, and the owner role the boot's genesis member
+        // gets on a row already there each moved neither joined_at nor profile_updated_at, so no delta carried them and a
+        // phone kept the old card until its hourly full read (a DM with a re-keyed member, and its "{name}'s key changed"
+        // line, named them by the conversation's id). Each of those rows fails on origin/main; the rename, photo, grant
+        // and revoke rows pin what was right. Not a row, and why: a removal or a retire takes the card OUT of the list,
+        // which no delta carries (it lists rows changed, never rows gone); the phone's hourly full read drops it.
+        const kit = member('Kit'), kitNew = keypair();
+        const sue = member('Sue'), ray = member('Ray'), tam = member('Tam'), gen = member('Gen'), mo = member('Mo'), pat = member('Pat'), lee = member('Lee');
+        const reason = 'Held aside while the table is read.';
+        type Change = { what: string; who: Id; setup?: () => void; change: () => void; field: string; want: (r: any) => boolean; movesTo?: Id; comesBack?: true };
+        const changes: Change[] = [
+            { what: 'a rename', who: wes, change: () => done(!!se.updateProfile(wes.pubKeyHex, { callsign: 'Wesley' }), 'the rename'),
+                field: 'callsign', want: r => r.callsign === 'Wesley' },
+            { what: 'a new photo', who: wes, change: () => done(!!se.updateProfile(wes.pubKeyHex, { avatar: 'bundled://avatar-4' }), 'the photo'),
+                field: 'avatarUrl', want: r => typeof r.avatarUrl === 'string' && r.avatarUrl.includes('avatar-4') },
+            { what: 'a node role granted', who: wes, change: () => grantNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), field: 'nodeRole', want: r => r.nodeRole === 'moderator' },
+            { what: 'a node role revoked', who: wes, change: () => revokeNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), field: 'nodeRole', want: r => r.nodeRole === null },
+            // The admin screen's re-key (routes/admin.ts: issueRekeyCode + completeRekey): the card is under the new key.
+            { what: 'an admin re-key', who: kit, movesTo: kitNew, field: 'callsign', want: r => r.callsign === 'Kit',
+                change: () => { const r = completeRekey(kit.pubKeyHex, kitNew.pubKeyHex, issueRekeyCode(kit.pubKeyHex, 'owner:password').code, 'owner:password'); done(r.success, 'the re-key', r); } },
+            // An admin's suspension (decisions-engine adminEmergencySuspend): the member stays listed, their role held aside.
+            { what: 'a role a suspension takes', who: sue, setup: () => grantNodeRole(sue.pubKeyHex, 'moderator', 'owner:password'), field: 'nodeRole', want: r => r.nodeRole === null,
+                change: () => { const r = adminEmergencySuspend(sue.pubKeyHex, 'owner:password', reason); done(r.success, 'the suspension', r); } },
+            // Its lift (adminLiftSuspension) gives the same role back.
+            { what: 'the role a lifted suspension gives back', who: sue, field: 'nodeRole', want: r => r.nodeRole === 'moderator',
+                change: () => { const r = adminLiftSuspension(sue.pubKeyHex, 'owner:password'); done(r.success, 'the lift', r); } },
+            // A re-key code (issueRekeyCode) holds the member 'suspended' while it waits: a role holder keeps the node_roles
+            // row, but the list names a role only while the member is active (listNodeRoles). Review of #3268, finding 1.
+            { what: 'a role a re-key code holds', who: mo, setup: () => grantNodeRole(mo.pubKeyHex, 'moderator', 'owner:password'), field: 'nodeRole', want: r => r.nodeRole === null,
+                change: () => { issueRekeyCode(mo.pubKeyHex, 'owner:password'); } },
+            // Its cancel (cancelRekeyCode) puts the member back to active, and the role shows again.
+            { what: 'the role back after a re-key code is cancelled', who: mo, field: 'nodeRole', want: r => r.nodeRole === 'moderator',
+                change: () => { const r = cancelRekeyCode(mo.pubKeyHex, 'owner:password'); done(r.status === 'active', 'the cancel', r); } },
+            // A pause written as a status alone (setUserStatusRow, adminSetUserStatus 'disabled'): it takes the role (dropNodeRoleRow).
+            { what: 'a role a pause takes', who: pat, setup: () => grantNodeRole(pat.pubKeyHex, 'moderator', 'owner:password'), field: 'nodeRole', want: r => r.nodeRole === null,
+                change: () => se.adminSetUserStatus(pat.pubKeyHex, 'disabled') },
+            // A re-key code's hold keeps the role row (above); a status write back to 'active' (setUserStatusRow) shows it again.
+            { what: "the role back when a status write ends a re-key code's hold", who: lee, field: 'nodeRole', want: r => r.nodeRole === 'moderator',
+                setup: () => { grantNodeRole(lee.pubKeyHex, 'moderator', 'owner:password'); issueRekeyCode(lee.pubKeyHex, 'owner:password'); },
+                change: () => se.adminSetUserStatus(lee.pubKeyHex, 'active') },
+            // A removed member back, as a passed reinstate vote brings them (setUserStatusRow, the one writer of a status).
+            { what: 'a removed member back', who: ray, comesBack: true, setup: () => se.adminSetUserStatus(ray.pubKeyHex, 'pruned'),
+                change: () => se.adminSetUserStatus(ray.pubKeyHex, 'active'), field: 'callsign', want: r => r.callsign === 'Ray' },
+            // A retired empty duplicate brought back (engine/retire-duplicate.ts, the owners' Bring back).
+            { what: 'a retired duplicate brought back', who: tam, comesBack: true, field: 'callsign', want: r => r.callsign === 'Tam',
+                setup: () => { const r = retireEmptyDuplicate(olive.pubKeyHex, tam.pubKeyHex); done(r === null, 'the retire', r); },
+                change: () => done(bringBackRetired(tam.pubKeyHex), 'Bring back') },
+            // The boot's genesis member (ADMIN_PUBKEY) whose row is already here: seedGenesisMember gives it the owner role.
+            { what: "the genesis member's owner role on a row already here", who: gen,
+                change: () => { seedGenesisMember(gen.pubKeyHex, 'Gen'); }, field: 'nodeRole', want: r => r.nodeRole === 'owner' },
+        ];
+        for (const c of changes) {
+            c.setup?.();
+            // A card that comes back was out of the list first: the setup took it out.
+            if (c.comesBack) assert(!(await isListed(c.who.pubKeyHex)), `${c.what}: not in the list before it comes back`);
+            const read = await afterChange(c.what, c.change, c.field, c.want, (c.movesTo ?? c.who).pubKeyHex);
+            if (c.movesTo) {
+                const oldKeyIn = (rows: any[]) => rows.some((m: any) => m.publicKey === c.who.pubKeyHex);
+                assert(!oldKeyIn(read.full) && !oldKeyIn(read.delta), `${c.what}: the old key is in neither the list nor the delta (list ${oldKeyIn(read.full)}, delta ${oldKeyIn(read.delta)})`);
+            }
+        }
         // A badge is recognition only (engine/badges.ts): it gives no credit, so the list's earnedCredit (the granted lane) stays 0.
         setMemberBadge('owner:password', wes.pubKeyHex, 'Steward');
         const listed = ((await get(olive, '/api/members')).json ?? []).find((m: any) => m.publicKey === wes.pubKeyHex);

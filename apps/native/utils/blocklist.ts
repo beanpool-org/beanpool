@@ -21,19 +21,33 @@
  * the next account on the phone.
  *
  * And the community keeps the block for the account (POST /api/blocks, the web app's route, apps/server routes/blocks.ts),
- * so it stops delivering the blocked member's messages (Marty, 23 Oct, design message-a-friend Q5): {@link syncBlocks}
- * brings the list the community the phone is set to keeps for the account in line with the phone's, after each block and
- * unblock, at start and as the app comes back. The phone's own list stays the one the screens read: it holds offline,
- * and on a community whose node has no block list.
+ * so it stops delivering the blocked member's messages (Marty, 23 Oct, design message-a-friend Q5).
+ *
+ * The community's list is the truth about a block; the phone's list is derived (review of #3268, round 4). What the
+ * phone keeps is the member's own changes, each block and unblock in the order they made them (storage-keys.ts
+ * `blockChangesStoreKey`): the queue the community hears ({@link syncBlocks}), which holds offline and shows on every
+ * screen at once. Every answer the community gives, to a change or to a read ({@link followRekeyedBlocks}), names the
+ * keys on its list, which keys a re-key made one person (`formerKeys`) and the person a change was of (`person`), and
+ * the phone takes from it which keys are one person (`blockedKeyChainsStoreKey`) and what the community holds of its
+ * own (`communityBlocksStoreKey`), never assuming either. The list the screens read is then, for each person, the
+ * member's latest change of any of their keys ({@link derive}): every key of a blocked person, Settings shows each once
+ * ({@link getBlockedPeople}), and an unblock of any key lifts them all. A change the community has not yet answered is
+ * never undone by an answer, and one it confirmed is never brought back: answers change only what the phone knows of
+ * the community, and the next sync sends what still differs. One writer ({@link serially}) reads and writes these
+ * stores, so no answer lands on a change made while it was out.
+ *
+ * A block made in the web app alone is the web app's: the phone neither shows it nor takes it off, and an Unblock All
+ * on the phone leaves it. A block of the phone's that the community no longer holds (an unblock in the web app, a list
+ * the node lost) is sent again: the member's change on the phone stands until they change it there.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { DeviceEventEmitter } from 'react-native';
 import { onAccountOnPhone } from './account-on-phone';
 import { loadIdentity } from './identity';
-import { signedPost } from './node-post';
+import { signedGet, signedPost } from './node-post';
 import { isGuestNode } from './nodes';
-import { blockedUsersStoreKey, communityBlocksStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
+import { blockChangesStoreKey, blockedKeyChainsStoreKey, blockedUsersStoreKey, communityBlocksStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
 
 export const BLOCKLIST_UPDATED_EVENT = 'beanpool_blocklist_updated';
 
@@ -110,6 +124,213 @@ function parseKeys(raw: string | null): string[] {
     }
 }
 
+/** The keys a person on the list is known by (storage-keys.ts blockedKeyChainsStoreKey): a key a re-key put in place of others → those others. */
+type KeyChains = Record<string, string[]>;
+
+function parseChains(raw: string | null): KeyChains {
+    if (!raw) return {};
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const chains: KeyChains = {};
+        for (const [key, formers] of Object.entries(parsed as Record<string, unknown>)) {
+            if (Array.isArray(formers)) chains[key] = formers.filter((f): f is string => typeof f === 'string');
+        }
+        return chains;
+    } catch {
+        return {};
+    }
+}
+
+/** Every key the person known by `key` is known by on the chains, `key` among them: the chains that share a key, joined. */
+function personKeys(key: string, chains: KeyChains): Set<string> {
+    const keys = new Set([key]);
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const [now, formers] of Object.entries(chains)) {
+            const chain = [now, ...formers];
+            if (chain.some(k => keys.has(k)) && chain.some(k => !keys.has(k))) {
+                chain.forEach(k => keys.add(k));
+                grew = true;
+            }
+        }
+    }
+    return keys;
+}
+
+/** `list` with each person on it once, under the key they hold now: the one of theirs on the list no re-key replaced. */
+function onePerPerson(list: readonly string[], chains: KeyChains): string[] {
+    const replaced = new Set(Object.values(chains).flat());
+    const seen = new Set<string>();
+    const people: string[] = [];
+    for (const key of list) {
+        if (seen.has(key)) continue;
+        const person = personKeys(key, chains);
+        person.forEach(k => seen.add(k));
+        people.push(list.find(k => person.has(k) && !replaced.has(k)) ?? key);
+    }
+    return people;
+}
+
+// ── the account's block stores, and their one writer ─────────────────────────────────────────────────────────────
+
+/** One change the member made of one key on this phone: a block or an unblock, and its place in the order they made them. */
+interface Change {
+    blocked: boolean;
+    n: number;
+}
+
+/** The member's latest change of each key (storage-keys.ts blockChangesStoreKey), and the place the next change takes. */
+interface Changes {
+    next: number;
+    of: Record<string, Change>;
+}
+
+/** What the phone keeps of one account's blocks: the list the screens read, which keys are one person, and the changes. */
+interface Blocks {
+    list: string[];
+    chains: KeyChains;
+    changes: Changes;
+}
+
+/**
+ * The most changes kept. A block's change stays while the person is blocked; past this many, the oldest unblocks go
+ * first (an unblock matters after its own sync only when a key it named turns out to be one person with a key blocked
+ * before it, and the community says so at that key's first answer).
+ */
+const CHANGES_MAX = 1000;
+
+function parseChanges(raw: string | null): Changes {
+    const none: Changes = { next: 0, of: {} };
+    if (!raw) return none;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return none;
+        const of: Record<string, Change> = {};
+        let next = Number.isSafeInteger(parsed.next) && parsed.next >= 0 ? parsed.next : 0;
+        for (const [key, c] of Object.entries((parsed.of ?? {}) as Record<string, Partial<Change> | null>)) {
+            if (!c || typeof c.blocked !== 'boolean' || !Number.isSafeInteger(c.n)) continue;
+            of[key] = { blocked: c.blocked, n: c.n as number };
+            next = Math.max(next, (c.n as number) + 1);
+        }
+        return { next, of };
+    } catch {
+        return none;
+    }
+}
+
+/** Records the member's change of `keys`, as one change in the order: the newest. */
+function recordChange(changes: Changes, keys: readonly string[], blocked: boolean): void {
+    const n = changes.next;
+    changes.next += 1;
+    for (const key of keys) changes.of[key] = { blocked, n };
+    const unblocks = Object.entries(changes.of).filter(([, c]) => !c.blocked).sort((a, b) => a[1].n - b[1].n);
+    for (let over = Object.keys(changes.of).length - CHANGES_MAX, i = 0; over > 0 && i < unblocks.length; over--, i++) {
+        delete changes.of[unblocks[i][0]];
+    }
+}
+
+/**
+ * Whether the person known by these keys is blocked: as the member's latest change of any of their keys says; a key on
+ * the list the member made no change of here (a block from before this build, the move of the phone-wide list) counts as
+ * blocked before every change. Null when the phone has no word of them at all.
+ */
+function personBlocked(person: ReadonlySet<string>, list: readonly string[], changes: Changes): boolean | null {
+    let latest: Change | undefined;
+    for (const key of person) {
+        const change = changes.of[key];
+        if (change && (!latest || change.n > latest.n)) latest = change;
+    }
+    if (latest) return latest.blocked;
+    return list.some(k => person.has(k)) ? true : null;
+}
+
+/**
+ * The list the screens read: every key of each person the member's changes say is blocked, and none of anyone else's.
+ * Each person is every key the community has named as theirs (`chains`), so the same changes give the same list however
+ * the keys and the re-keys arrived, and a person the community later names as one with a key the member changed after
+ * takes that later change. In the order the keys were listed, a person's other keys after them.
+ */
+function derive(list: readonly string[], chains: KeyChains, changes: Changes): string[] {
+    const out: string[] = [];
+    const done = new Set<string>();
+    for (const key of [...list, ...Object.keys(changes.of)]) {
+        if (done.has(key)) continue;
+        const person = personKeys(key, chains);
+        person.forEach(k => done.add(k));
+        if (personBlocked(person, list, changes) !== true) continue;
+        for (const k of [...list.filter(l => person.has(l)), ...person]) if (!out.includes(k)) out.push(k);
+    }
+    return out;
+}
+
+/**
+ * Each person's latest change only: an earlier change of another key the community has named as theirs decides nothing
+ * now or after any later merge (the latest of a merged person is the latest of its parts), and kept, it could outlast
+ * the change that overrode it when {@link CHANGES_MAX} drops the oldest unblocks, and bring a block back.
+ */
+function latestOnly(blocks: Blocks): void {
+    const done = new Set<string>();
+    for (const key of Object.keys(blocks.changes.of)) {
+        if (done.has(key)) continue;
+        const person = [...personKeys(key, blocks.chains)].filter(k => blocks.changes.of[k]);
+        person.forEach(k => done.add(k));
+        const latest = person.reduce((a, b) => (blocks.changes.of[b].n > blocks.changes.of[a].n ? b : a));
+        for (const k of person) if (k !== latest) delete blocks.changes.of[k];
+    }
+}
+
+let writing: Promise<unknown> = Promise.resolve();
+
+/**
+ * The one writer of the account's block stores (the list, its chains, its changes, and the record of what each community
+ * holds): each read-then-write runs whole, after the one before it, and none spans a request to a community. So Block and
+ * Unblock never wait for a community's answer, and an answer never lands on what a change made while it was out: each
+ * reads again first (round 4 of #3268's review: the follow and Block each read, waited, then wrote, and an unblock made in
+ * between was written over).
+ */
+function serially<T>(work: () => Promise<T>): Promise<T> {
+    const run = writing.then(work, work);
+    writing = run.catch(() => undefined);
+    return run;
+}
+
+/** `owner`'s block stores, the list as its changes say. Only inside {@link serially}. */
+async function readBlocks(owner: string): Promise<Blocks> {
+    await movePhoneWide(owner);
+    const [list, chains, changes] = await Promise.all([
+        AsyncStorage.getItem(blockedUsersStoreKey(owner)),
+        AsyncStorage.getItem(blockedKeyChainsStoreKey(owner)),
+        AsyncStorage.getItem(blockChangesStoreKey(owner)),
+    ]);
+    const blocks = { list: parseKeys(list), chains: parseChains(chains), changes: parseChanges(changes) };
+    blocks.list = derive(blocks.list, blocks.chains, blocks.changes);
+    return blocks;
+}
+
+/** What {@link saveBlocks} compares with, to write only what changed. */
+function asRead(blocks: Blocks): { list: string[]; chains: string; changes: string } {
+    return { list: [...blocks.list], chains: JSON.stringify(blocks.chains), changes: JSON.stringify(blocks.changes) };
+}
+
+/**
+ * Writes what changed of `owner`'s stores, the changes first and the list, as they say, last; and when the account is
+ * still the one on the phone, the list in memory, and the screens hear of a list that changed. Only inside {@link serially}.
+ */
+async function saveBlocks(owner: string, blocks: Blocks, was: ReturnType<typeof asRead>): Promise<void> {
+    latestOnly(blocks);
+    const changes = JSON.stringify(blocks.changes);
+    const chains = JSON.stringify(blocks.chains);
+    if (changes !== was.changes) await AsyncStorage.setItem(blockChangesStoreKey(owner), changes);
+    if (chains !== was.chains) await AsyncStorage.setItem(blockedKeyChainsStoreKey(owner), chains);
+    blocks.list = derive(blocks.list, blocks.chains, blocks.changes);
+    const changed = blocks.list.length !== was.list.length || blocks.list.some((k, i) => k !== was.list[i]);
+    if (changed) await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(blocks.list));
+    if ((await accountOnPhone()) !== owner) return;
+    cached = { owner, list: blocks.list };
+    if (changed) DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, blocks.list);
+}
+
 /**
  * The list and the queue of offline reports the builds before this one kept for the whole phone go to the account on
  * the phone when this build starts, and the old keys go. Once: a marker says it is done, so a copy that could not be
@@ -179,13 +400,6 @@ async function moveOnce(owner: string): Promise<void> {
     await SecureStore.deleteItemAsync(PHONE_WIDE_LIST_KEY).catch(() => {});
 }
 
-/** `owner`'s list: the one in memory when it is theirs, otherwise read from the phone. */
-async function listOf(owner: string): Promise<string[]> {
-    if (cached?.owner === owner) return cached.list;
-    await movePhoneWide(owner);
-    return parseKeys(await AsyncStorage.getItem(blockedUsersStoreKey(owner)));
-}
-
 /**
  * The public keys the account on this phone has blocked; empty when the phone holds no account.
  * Uses AsyncStorage for unbounded capacity (avoiding SecureStore 2KB limits).
@@ -198,11 +412,12 @@ export async function getBlockedUsers(): Promise<string[]> {
             if (!owner) return [];
             if (cached?.owner === owner) return cached.list;
             const generation = accountGeneration;
-            const list = await listOf(owner);
-            if (generation === accountGeneration) {
-                cached = { owner, list };
-                return list;
-            }
+            const list = await serially(async () => {
+                const { list: read } = await readBlocks(owner);
+                if (generation === accountGeneration) cached = { owner, list: read };
+                return read;
+            });
+            if (generation === accountGeneration) return list;
         }
     } catch (e) {
         console.error('[blocklist] Failed to read blocked users from AsyncStorage', e);
@@ -219,9 +434,26 @@ export async function isUserBlocked(pubkey: string): Promise<boolean> {
 }
 
 /**
+ * The people the account on this phone has blocked, each once, by the key they hold now (Settings' Manage Blocked Users):
+ * a person re-keyed since is on the list under each of their keys, and one Unblock lifts them all.
+ */
+export async function getBlockedPeople(): Promise<string[]> {
+    try {
+        const owner = await accountOnPhone();
+        if (!owner) return [];
+        const { list, chains } = await serially(() => readBlocks(owner));
+        return onePerPerson(list, chains);
+    } catch (e) {
+        console.error('[blocklist] Failed to read the blocked people', e);
+        return [];
+    }
+}
+
+/**
  * Blocks a user for the account on this phone, notifies server moderation (per Apple Guideline 1.2) in that account's
  * name, queues a report the node didn't take for retry, and dispatches a global event for immediate UI updates.
- * With no account on the phone, nothing is blocked.
+ * With no account on the phone, nothing is blocked. The block stands on the phone at once, as a change the community
+ * hears next ({@link syncBlocks}); its answer names every key the person is known by, and the list follows.
  */
 export async function blockUser(
     targetPubkey: string,
@@ -234,16 +466,15 @@ export async function blockUser(
     try {
         const owner = await accountOnPhone();
         if (!owner) return false;
-        const generation = accountGeneration;
-        const list = await listOf(owner);
-        if (!list.includes(targetPubkey)) {
-            const newList = [...list, targetPubkey];
-            await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(newList));
-            if (generation === accountGeneration) {
-                cached = { owner, list: newList };
-                DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
-            }
-
+        const made = await serially(async () => {
+            const blocks = await readBlocks(owner);
+            if (blocks.list.includes(targetPubkey)) return false;
+            const was = asRead(blocks);
+            recordChange(blocks.changes, [targetPubkey], true);
+            await saveBlocks(owner, blocks, was);
+            return true;
+        });
+        if (made) {
             // Blocked on the phone already: the block goes to the community without waiting for its answer, nor for a
             // sync already under way. The report goes side by side, and is sent or queued before this returns.
             void syncBlocks();
@@ -286,8 +517,9 @@ async function reportBlock(owner: string, targetPubkey: string, reporterPubkey: 
 }
 
 /**
- * Unblocks a single user for the account on this phone, takes it off the community's list ({@link syncBlocks}), and
- * dispatches a global event.
+ * Unblocks a person for the account on this phone: the change is of the person, so every key the phone knows them by
+ * comes off the list, and so does any key the community later names as theirs ({@link derive}). Takes them off the
+ * community's list ({@link syncBlocks}), and dispatches a global event.
  */
 export async function unblockUser(targetPubkey: string): Promise<boolean> {
     if (!targetPubkey) return false;
@@ -295,19 +527,18 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
     try {
         const owner = await accountOnPhone();
         if (!owner) return false;
-        const generation = accountGeneration;
-        const list = await listOf(owner);
-        if (list.includes(targetPubkey)) {
-            const newList = list.filter(pk => pk !== targetPubkey);
-            await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(newList));
-            if (generation === accountGeneration) {
-                cached = { owner, list: newList };
-                DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
-            }
-            // Unblocked on the phone already: the community hears of it without this waiting for its answer.
-            void syncBlocks();
+        const made = await serially(async () => {
+            const blocks = await readBlocks(owner);
+            const person = personKeys(targetPubkey, blocks.chains);
+            if (!blocks.list.some(k => person.has(k))) return false;
+            const was = asRead(blocks);
+            recordChange(blocks.changes, [targetPubkey], false);
+            await saveBlocks(owner, blocks, was);
             return true;
-        }
+        });
+        // Unblocked on the phone already: the community hears of it without this waiting for its answer.
+        if (made) void syncBlocks();
+        return made;
     } catch (e) {
         console.error('[blocklist] Failed to unblock user', e);
     }
@@ -315,21 +546,20 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
 }
 
 /**
- * Clears the account on this phone's whole blocklist in a single operation ("Unblock All").
- * Prevents thread blocking and O(N) storage writes when unblocking all users.
+ * Clears the account on this phone's whole blocklist in a single operation ("Unblock All"): one change, an unblock of
+ * everyone on it, the newest in the order.
  */
 export async function clearBlocklist(): Promise<boolean> {
     try {
         const owner = await accountOnPhone();
         if (!owner) return false;
-        const generation = accountGeneration;
-        // First, so a list an older build kept can't come back after it.
-        await movePhoneWide(owner);
-        await AsyncStorage.removeItem(blockedUsersStoreKey(owner));
-        if (generation === accountGeneration) {
-            cached = { owner, list: [] };
-            DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, []);
-        }
+        await serially(async () => {
+            const blocks = await readBlocks(owner);
+            const was = asRead(blocks);
+            const blocked = Object.entries(blocks.changes.of).filter(([, c]) => c.blocked).map(([k]) => k);
+            recordChange(blocks.changes, [...new Set([...blocks.list, ...blocked])], false);
+            await saveBlocks(owner, blocks, was);
+        });
         // Takes off the community's list each block this phone sent there, even one the web app had made too (the community
         // keeps one list), and no other: a block made only in the web app stays. One request each, not waited for, so the
         // list on screen empties at once.
@@ -368,25 +598,38 @@ const BLOCK_REQUESTS_PER_MINUTE = 30;
 const MINUTE_MS = 60 * 1000;
 
 /**
- * What this phone knows of one community's list for one account: `on`, keys this phone put there that the community's
- * answer showed it holds; `sent`, keys sent whose answer never came, which it may hold. After a refusal asking again
- * won't soon change: `waitUntil`, when it may be asked anything again (it has no block list, or refused a removal);
- * `addsWaitUntil`, when it may be sent blocks again (it refused one), while unblocks still go.
+ * What this phone knows of one community's list for one account: `on`, the keys on the community's last answer of people
+ * this phone put there or blocks ({@link reconcile}); `sent`, keys sent since whose answer never came, which it may hold;
+ * `asked`, the keys of those people the community has answered about: on its list, named by it as a key a re-key replaced
+ * with one of that person's, or sent to it and answered, taken or not (a list takes only the keys it has a row for). A
+ * re-key is one community's own, so a key the phone learned at another community is one this community may not know:
+ * the person counts as held here only once this community has answered about every key the phone knows them by
+ * ({@link heldAt}). After a refusal asking again won't soon change: `waitUntil`, when it may be asked anything again (it
+ * has no block list, or refused a removal); `addsWaitUntil`, when it may be sent blocks again (it refused one), while
+ * unblocks still go.
  */
 interface BlocksAt {
     on: string[];
     sent: string[];
+    asked: string[];
     waitUntil?: number;
     addsWaitUntil?: number;
 }
 
 /**
- * What a change met: the keys on the community's list after it; `later`, ask again at the next sync (no answer);
+ * What a change met: the community's list after it; `later`, ask again at the next sync (no answer);
  * `no member`, the account is no member there, yet or now ({@link NO_MEMBER_CODES}), so it keeps no list for it; `no
  * list`, a node with no block list (404, 405), where no change can land; `refused`, any other refusal (another 403, the
  * community's limit).
  */
-type ChangeAnswer = string[] | 'later' | 'no member' | 'no list' | 'refused';
+type ChangeAnswer = ListAnswer | 'later' | 'no member' | 'no list' | 'refused';
+
+/** A community's list, as its answer gives it ({@link listAnswerOf}). */
+interface ListAnswer {
+    keys: string[];
+    formerKeys: Record<string, string[]>;
+    person: string[] | null;
+}
 
 let syncing: Promise<void> = Promise.resolve();
 /** When each block request of the last minute went, oldest first. */
@@ -396,10 +639,14 @@ let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Brings the block list the community the phone is set to keeps for the account on the phone (routes/blocks.ts) in line
- * with the phone's: each key on the phone's list that the community hasn't answered it holds is added, and each this
- * phone put there that is no longer on the phone's list is taken off. A key this phone never sent (a block made only in
- * the web app) is never touched; one it sent comes off when the member unblocks it on the phone, even if the web app had
- * blocked it too, since the community keeps one list for the member. Nothing is sent when nothing changed.
+ * with the member's changes, person by person ({@link planChange}): each person the member blocks whom the community's
+ * answers don't show it holds is sent, by every key the phone knows them by (a re-key is one community's own: the
+ * community says which of them it has), and each this phone put there whom the member no longer blocks is taken off.
+ * Each answer is taken before the next change is planned ({@link reconcile}): it names the person's keys, so two keys
+ * the phone hadn't known were one person take the member's later change, as the community would have taken the changes
+ * in their order. A person this phone never sent (a block made only in the web app) is never touched; one it sent comes
+ * off when the member unblocks them on the phone, even if the web app had blocked them too, since the community keeps
+ * one list for the member. Nothing is sent when nothing changed.
  *
  * - Each community the member is on with this phone gets the phone's list; the first time, every block from before this
  *   build, in one request (a key the community has no row for, which a list skips, goes again on its own, as the web
@@ -438,80 +685,292 @@ async function syncBlocksOnce(): Promise<void> {
     try {
         const owner = await accountOnPhone();
         if (!owner) return;
-        const anchor = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
-        const community = anchor?.replace(/\/+$/, '');
-        if (!anchor || !community) return;
-        // Marked as the visit wrote the address, with or without its trailing slash.
-        for (const url of new Set([anchor, community, `${community}/`])) {
-            if (await isGuestNode(url)) return;
-        }
-        const list = await listOf(owner);
-        const storeKey = communityBlocksStoreKey(owner);
-        const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
-        const at: BlocksAt = record[community] ?? { on: [], sent: [] };
-        const now = Date.now();
-        if (at.waitUntil !== undefined && now < at.waitUntil) return;
-        delete at.waitUntil;
-        if (at.addsWaitUntil !== undefined && now >= at.addsWaitUntil) delete at.addsWaitUntil;
-        const save = async () => {
-            record[community] = at;
-            await AsyncStorage.setItem(storeKey, JSON.stringify(record));
-        };
-        const waitADay = async (what: 'waitUntil' | 'addsWaitUntil') => {
-            at[what] = Date.now() + BLOCKS_WAIT_MS;
-            await save();
-        };
-        // A refused block holds back the blocks only; a node with no block list, everything.
-        const addRefused = (answer: 'no list' | 'refused') => waitADay(answer === 'no list' ? 'waitUntil' : 'addsWaitUntil');
-        const noMember = async () => {
-            keepsNone(at);
-            await save();
-        };
-        const took = (keys: string[]) => {
-            at.on = [...new Set([...at.on, ...keys])];
-            at.sent = at.sent.filter(k => !keys.includes(k));
-        };
-
-        for (const key of [...new Set([...at.on, ...at.sent])]) {
-            if (list.includes(key)) continue;
-            const answer = await sendBlockChange(owner, community, BLOCKS_REMOVE_PATH, { targetPubkey: key });
-            if (answer === 'later') return;
-            if (answer === 'no member') return noMember();
-            if (answer === 'no list' || answer === 'refused') return waitADay('waitUntil');
-            at.on = at.on.filter(k => k !== key);
-            at.sent = at.sent.filter(k => k !== key);
-            await save();
-        }
-
-        if (at.addsWaitUntil !== undefined) return;
-        const adds = [...new Set(list)].filter(k => MEMBER_KEY.test(k) && k !== owner && !at.on.includes(k));
-        if (adds.length === 0) return;
-        // Written down before they go: one whose answer never comes may be on the list, and an unblock takes it off.
-        at.sent = [...new Set([...at.sent, ...adds])];
-        await save();
-        const alone: string[] = adds.length === 1 ? [adds[0]] : [];
-        for (let i = 0; adds.length > 1 && i < adds.length; i += COMMUNITY_BLOCKS_MAX) {
-            const batch = adds.slice(i, i + COMMUNITY_BLOCKS_MAX);
-            const answer = await sendBlockChange(owner, community, BLOCKS_PATH, { targetPubkeys: batch });
-            if (answer === 'later') return;
-            if (answer === 'no member') return noMember();
-            if (answer === 'no list' || answer === 'refused') return addRefused(answer);
-            took(batch.filter(k => answer.includes(k)));
-            alone.push(...batch.filter(k => !answer.includes(k)));
-            await save();
-        }
-        // One key on its own is taken whether or not the community has a row for it (routes/blocks.ts).
-        for (const key of alone) {
-            const answer = await sendBlockChange(owner, community, BLOCKS_PATH, { targetPubkey: key });
-            if (answer === 'later') return;
-            if (answer === 'no member') return noMember();
-            if (answer === 'no list' || answer === 'refused') return addRefused(answer);
-            took([key]);
-            await save();
+        const community = await communityToSync();
+        if (!community) return;
+        // Each change at most once a sync: one the community's answer leaves undone waits for the next.
+        const tried = new Set<string>();
+        for (;;) {
+            const change = await serially(() => planChange(owner, community, tried));
+            if (!change) return;
+            const answer = await sendBlockChange(owner, community, change.path, change.body);
+            if (!(await serially(() => takeAnswer(owner, community, change, answer)))) return;
         }
     } catch (e) {
         console.warn('[blocklist] Could not bring the community\'s block list in line with this phone\'s; tried again at the next sync', e);
     }
+}
+
+/** The community the phone is set to, as its records name it, or null with none, or on a guest visit there. */
+async function communityToSync(): Promise<string | null> {
+    const anchor = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
+    const community = anchor?.replace(/\/+$/, '');
+    if (!anchor || !community) return null;
+    // Marked as the visit wrote the address, with or without its trailing slash.
+    for (const url of new Set([anchor, community, `${community}/`])) {
+        if (await isGuestNode(url)) return null;
+    }
+    return community;
+}
+
+/** One change to send: where, its body, the keys it names, and whether it blocks. */
+interface PlannedChange {
+    path: string;
+    body: Record<string, unknown>;
+    keys: string[];
+    adds: boolean;
+}
+
+async function recordOf(owner: string, community: string): Promise<{ record: Record<string, BlocksAt>; at: BlocksAt }> {
+    const record = parseCommunityBlocks(await AsyncStorage.getItem(communityBlocksStoreKey(owner)));
+    return { record, at: record[community] ?? { on: [], sent: [], asked: [] } };
+}
+
+async function saveRecord(owner: string, record: Record<string, BlocksAt>, community: string, at: BlocksAt): Promise<void> {
+    record[community] = at;
+    await AsyncStorage.setItem(communityBlocksStoreKey(owner), JSON.stringify(record));
+}
+
+/** Each person among `keys`, once: every key the chains join to one of them. In the order the keys come. */
+function peopleOf(keys: readonly string[], chains: KeyChains): Set<string>[] {
+    const people: Set<string>[] = [];
+    const done = new Set<string>();
+    for (const key of keys) {
+        if (done.has(key)) continue;
+        const person = personKeys(key, chains);
+        person.forEach(k => done.add(k));
+        people.push(person);
+    }
+    return people;
+}
+
+/**
+ * Every key of a person, the ones no re-key replaced first (the key they hold now, as far as the phone knows), those on the
+ * list before the rest. All go to a community that doesn't hold them yet: the phone learns a re-key at any community, and
+ * the person may still hold a replaced key at another (review of #3268, round 4: sent only the newest, a community that
+ * never saw the re-key took a key nobody there signs with, and never the one they hold there).
+ */
+function keysNowFirst(person: ReadonlySet<string>, blocks: Blocks): string[] {
+    const replaced = new Set(Object.values(blocks.chains).flat());
+    const keys = [...new Set([...blocks.list.filter(k => person.has(k)), ...person])];
+    return [...keys.filter(k => !replaced.has(k)), ...keys.filter(k => replaced.has(k))];
+}
+
+/**
+ * Whether the community holds the person, as its answers show: one of their keys is on its list, and it has answered
+ * about every key the phone knows them by (`asked`). So a key the phone learned at another community goes here too, and
+ * this community's answer says which it has.
+ */
+function heldAt(at: BlocksAt, person: ReadonlySet<string>): boolean {
+    return at.on.some(k => person.has(k)) && [...person].every(k => at.on.includes(k) || at.asked.includes(k));
+}
+
+/**
+ * The next change `community`'s list needs to say what the phone's does, person by person: first an unblock of a person
+ * the member no longer blocks, by a key this phone put there (or sent, its answer lost); then a block of each person the
+ * member blocks whom the community's answers don't show it holds ({@link heldAt}), by every key the phone knows them by.
+ * Several keys go first in one request (the community takes only keys it has a row for, each as the key its member holds
+ * there now, one row per person), and each it didn't take on its own, while it holds none of that person's. Null when
+ * nothing is left, or the community is waited for. A block about to go is written down first: one whose answer never
+ * comes may be on the list, and an unblock takes it off.
+ */
+async function planChange(owner: string, community: string, tried: Set<string>): Promise<PlannedChange | null> {
+    const blocks = await readBlocks(owner);
+    const { record, at } = await recordOf(owner, community);
+    const now = Date.now();
+    if (at.waitUntil !== undefined && now < at.waitUntil) return null;
+    let dirty = at.waitUntil !== undefined;
+    delete at.waitUntil;
+    if (at.addsWaitUntil !== undefined && now >= at.addsWaitUntil) {
+        delete at.addsWaitUntil;
+        dirty = true;
+    }
+    const people = peopleOf([...blocks.list, ...Object.keys(blocks.changes.of), ...at.on, ...at.sent], blocks.chains);
+    const blocked = (person: Set<string>) => blocks.list.some(k => person.has(k));
+    let change: PlannedChange | null = null;
+    for (const person of people) {
+        if (blocked(person)) continue;
+        const key = [...at.on, ...at.sent].find(k => person.has(k) && !tried.has(`unblock ${k}`));
+        if (key) {
+            tried.add(`unblock ${key}`);
+            change = { path: BLOCKS_REMOVE_PATH, body: { targetPubkey: key }, keys: [key], adds: false };
+            break;
+        }
+    }
+    if (!change && at.addsWaitUntil === undefined) {
+        const adds = people.filter(p => blocked(p) && !heldAt(at, p))
+            .flatMap(p => keysNowFirst(p, blocks))
+            .filter(k => MEMBER_KEY.test(k) && k !== owner);
+        const together = adds.filter(k => !tried.has(`together ${k}`) && !tried.has(`alone ${k}`)).slice(0, COMMUNITY_BLOCKS_MAX);
+        const alone = adds.find(k => !tried.has(`alone ${k}`));
+        if (together.length > 1) {
+            together.forEach(k => tried.add(`together ${k}`));
+            change = { path: BLOCKS_PATH, body: { targetPubkeys: together }, keys: together, adds: true };
+        } else if (alone) {
+            // One key on its own is taken whether or not the community has a row for it (routes/blocks.ts).
+            tried.add(`alone ${alone}`);
+            change = { path: BLOCKS_PATH, body: { targetPubkey: alone }, keys: [alone], adds: true };
+        }
+    }
+    if (change?.adds) {
+        at.sent = [...new Set([...at.sent, ...change.keys])];
+        dirty = true;
+    }
+    if (dirty) await saveRecord(owner, record, community, at);
+    return change;
+}
+
+/**
+ * What a change's answer means for the phone, read again first (a Block or an Unblock made while it was out stands).
+ * The community's list: the phone learns from it which keys are one person, and what the community holds of this
+ * phone's ({@link reconcile}). A refusal: the waits {@link syncBlocks} describes. True when the sync goes on.
+ */
+async function takeAnswer(owner: string, community: string, change: PlannedChange, answer: ChangeAnswer): Promise<boolean> {
+    if (answer === 'later') return false;
+    const { record, at } = await recordOf(owner, community);
+    if (answer === 'no member') {
+        keepsNone(at);
+        await saveRecord(owner, record, community, at);
+        return false;
+    }
+    if (answer === 'no list' || answer === 'refused') {
+        // A refused block holds back the blocks only; a node with no block list, or a refused unblock, everything.
+        at[change.adds && answer === 'refused' ? 'addsWaitUntil' : 'waitUntil'] = Date.now() + BLOCKS_WAIT_MS;
+        await saveRecord(owner, record, community, at);
+        return false;
+    }
+    const blocks = await readBlocks(owner);
+    const was = asRead(blocks);
+    reconcile(owner, blocks, at, answer, change.adds ? change.keys : []);
+    await saveBlocks(owner, blocks, was);
+    await saveRecord(owner, record, community, at);
+    return true;
+}
+
+/**
+ * The community's answer (any change's, or its read) is the truth about its list, and about whom a re-key made one person
+ * (apps/server routes/blocks.ts): the phone learns from `person` and `formerKeys` which keys are one person, for anyone
+ * it has blocked, unblocked or put there, and the list it shows follows ({@link derive}); and what the community holds
+ * of this phone's is what the answer lists, never what was assumed: `on` is each key on it of a person this phone put
+ * there, blocks, or just sent, and nothing is left in doubt (`sent`). A block of the member's the community no longer
+ * holds is sent again; a person the member unblocked that it still holds is taken off. The member's own changes are
+ * never changed here.
+ */
+function reconcile(owner: string, blocks: Blocks, at: BlocksAt, answer: ListAnswer, sentNow: readonly string[]): void {
+    const stake = new Set([...blocks.list, ...Object.keys(blocks.changes.of), ...at.on, ...at.sent, ...sentNow]);
+    const learn = (chain: readonly string[]) => {
+        const [now, ...formers] = chain;
+        if (!now || formers.length === 0 || chain.includes(owner) || !chain.some(k => stake.has(k))) return;
+        const known = blocks.chains[now] ?? [];
+        const more = formers.filter(f => f !== now && !known.includes(f));
+        if (more.length > 0) blocks.chains[now] = [...known, ...more];
+    };
+    if (answer.person) learn(answer.person);
+    for (const [now, formers] of Object.entries(answer.formerKeys)) if (answer.keys.includes(now)) learn([now, ...formers]);
+    const shown = derive(blocks.list, blocks.chains, blocks.changes);
+    const ours = new Set([...at.on, ...at.sent, ...sentNow, ...shown]);
+    at.on = answer.keys.filter(k => [...personKeys(k, blocks.chains)].some(p => ours.has(p)));
+    at.sent = [];
+    // What it has answered about: this answer's keys just sent (taken or not), those on its list, the keys it names as
+    // replaced by one there, and the person a block was of; and what it answered before about a person still on its list.
+    // A person it no longer lists starts again: what it said of a key they were known by before an unblock says nothing
+    // of the person now. Kept only for the people the phone still has a stake in.
+    const onList = (k: string) => [...personKeys(k, blocks.chains)].some(p => at.on.includes(p));
+    const named = [...sentNow, ...at.on, ...at.on.flatMap(k => answer.formerKeys[k] ?? []), ...(sentNow.length > 0 ? answer.person ?? [] : [])];
+    const people = new Set([...stake, ...shown].flatMap(k => [...personKeys(k, blocks.chains)]));
+    at.asked = [...new Set([...at.asked.filter(onList), ...named])].filter(k => people.has(k));
+}
+
+/**
+ * The community's read of the account's list (GET /api/blocks), taken as any change's answer is ({@link reconcile}): after
+ * an admin re-keys someone the member blocked (they lost their phone), the community moved its copy of the block to their
+ * new key (apps/server engine/member-blocks.ts moveBlocks) and names the old key as its former one, so the phone's list
+ * holds the person under every key they are known by, and every screen that reads one key (the DM's thread and Talk, a
+ * profile, the market, the forum) holds the block (review of #3268, finding 2; the DM screens also hold it before this
+ * runs, utils/dm-blocked.ts). It also finds what the community no longer holds of this phone's, and the next sync sends
+ * it again. Nothing is reported, and nothing is sent but the one read.
+ *
+ * Only while the account has a block here or on the community's list from this phone, only for the account on the phone
+ * at the community it is set to, never on a guest visit, and one at a time with every sync ({@link syncBlocks}). It runs
+ * at start, on each return and every 5 minutes (app/_layout.tsx), just before the sync.
+ */
+export function followRekeyedBlocks(): Promise<void> {
+    const run = syncing.then(followOnce, followOnce);
+    syncing = run;
+    return run;
+}
+
+async function followOnce(): Promise<void> {
+    try {
+        const owner = await accountOnPhone();
+        if (!owner) return;
+        const community = await communityToSync();
+        if (!community) return;
+        const ask = await serially(async () => {
+            const { list } = await readBlocks(owner);
+            const { at } = await recordOf(owner, community);
+            if (list.length + at.on.length + at.sent.length === 0) return false;
+            return at.waitUntil === undefined || Date.now() >= at.waitUntil;
+        });
+        if (!ask) return;
+        const answer = await readList(owner, community);
+        if (!answer) return;
+        await serially(async () => {
+            const blocks = await readBlocks(owner);
+            const was = asRead(blocks);
+            const { record, at } = await recordOf(owner, community);
+            reconcile(owner, blocks, at, answer, []);
+            await saveBlocks(owner, blocks, was);
+            await saveRecord(owner, record, community, at);
+        });
+    } catch (e) {
+        console.warn('[blocklist] Could not read the community\'s block list; tried again at the next sync', e);
+    }
+}
+
+/**
+ * The community's read of `owner`'s list, or null when it couldn't be read, or isn't the node's answer. Counted with the
+ * block requests ({@link roomForARequest}).
+ */
+async function readList(owner: string, community: string): Promise<ListAnswer | null> {
+    const signer = await loadIdentity();
+    if (!signer?.privateKey || signer.publicKey !== owner) return null;
+    if (!roomForARequest()) return null;
+    const controller = new AbortController();
+    try {
+        const { res, text } = await withTimeout((async () => {
+            const answer = await signedGet(community, BLOCKS_PATH, signer, controller.signal);
+            return { res: answer, text: await answer.text() };
+        })(), REPORT_TIMEOUT_MS);
+        if (!res.ok) return null;
+        return listAnswerOf(JSON.parse(text));
+    } catch {
+        // Not left running behind the next sync.
+        controller.abort();
+        return null;
+    }
+}
+
+/**
+ * The list in a community's answer (routes/blocks.ts): the keys on it; for each, the keys a re-key replaced with it; and,
+ * for a change of one key, every key of the person it changed, their key now first. Null for anything that isn't a list:
+ * not the node's answer. Keys not in the one spelling are dropped. A node from before former keys names none.
+ */
+function listAnswerOf(answer: unknown): ListAnswer | null {
+    const parsed = answer as { blocked?: unknown; formerKeys?: unknown; person?: unknown } | null;
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.blocked)) return null;
+    const isKey = (k: unknown): k is string => typeof k === 'string' && MEMBER_KEY.test(k);
+    const keys = parsed.blocked.map((b: { publicKey?: unknown } | null) => b?.publicKey).filter((k: unknown): k is string => typeof k === 'string');
+    const formerKeys: Record<string, string[]> = {};
+    const named = parsed.formerKeys;
+    if (named && typeof named === 'object' && !Array.isArray(named)) {
+        for (const [key, formers] of Object.entries(named as Record<string, unknown>)) {
+            if (!isKey(key) || !Array.isArray(formers)) continue;
+            const valid = formers.filter(isKey);
+            if (valid.length > 0) formerKeys[key] = valid;
+        }
+    }
+    const person = Array.isArray(parsed.person) && parsed.person.length > 0 && parsed.person.every(isKey) ? parsed.person as string[] : null;
+    return { keys, formerKeys, person };
 }
 
 /**
@@ -542,9 +1001,8 @@ async function sendBlockChange(owner: string, community: string, path: string, b
         // Only the node's own answer counts: a 200 from something in front of it (a Wi-Fi login page) took nothing.
         try {
             const parsed = JSON.parse(text);
-            if (parsed?.success === true && Array.isArray(parsed.blocked)) {
-                return parsed.blocked.map((b: { publicKey?: unknown } | null) => b?.publicKey).filter((k: unknown): k is string => typeof k === 'string');
-            }
+            const list = parsed?.success === true ? listAnswerOf(parsed) : null;
+            if (list) return list;
         } catch {
             // Not JSON: not the node's answer.
         }
@@ -586,6 +1044,7 @@ function roomForARequest(): boolean {
 function keepsNone(at: BlocksAt): void {
     at.sent = [...new Set([...at.on, ...at.sent])];
     at.on = [];
+    at.asked = [];
 }
 
 /**
@@ -604,11 +1063,13 @@ export function communityKeepsNoBlocks(publicKey: string, community: string): Pr
         try {
             const here = sameCommunity(community);
             const storeKey = communityBlocksStoreKey(publicKey);
-            const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
-            const entries = Object.entries(record).filter(([url, at]) => here(url) && at.on.length > 0);
-            if (entries.length === 0) return;
-            for (const [, at] of entries) keepsNone(at);
-            await AsyncStorage.setItem(storeKey, JSON.stringify(record));
+            await serially(async () => {
+                const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
+                const entries = Object.entries(record).filter(([url, at]) => here(url) && at.on.length > 0);
+                if (entries.length === 0) return;
+                for (const [, at] of entries) keepsNone(at);
+                await AsyncStorage.setItem(storeKey, JSON.stringify(record));
+            });
         } catch (e) {
             console.warn('[blocklist] Could not forget what a community that keeps no list held; the next refusal there does', e);
         }
@@ -647,7 +1108,7 @@ function parseCommunityBlocks(raw: string | null): Record<string, BlocksAt> {
         const out: Record<string, BlocksAt> = {};
         for (const [community, value] of Object.entries(parsed as Record<string, Partial<BlocksAt> | null>)) {
             if (!value || typeof value !== 'object') continue;
-            out[community] = { on: keysIn(value.on), sent: keysIn(value.sent) };
+            out[community] = { on: keysIn(value.on), sent: keysIn(value.sent), asked: keysIn(value.asked) };
             if (typeof value.waitUntil === 'number') out[community].waitUntil = value.waitUntil;
             if (typeof value.addsWaitUntil === 'number') out[community].addsWaitUntil = value.addsWaitUntil;
         }

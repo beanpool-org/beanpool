@@ -15,8 +15,8 @@ import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType, isKeyStore
 import {
     createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, applyResetVerdict, judgeFirstSight,
     settleFirstSight, isUnplacedSight, isHeldLostSight, markHeldLost, isDmPinStoreError, isDmPinsFullError, DmPinsFullError, isPinnableId,
-    noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict,
-    type DmPinsReset, type DmPeerOffer,
+    noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, restDmEntry, dmEntryRestless, dmEntryWaitsForMember, isVerifiedPin,
+    markVerified, removeVerified, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
 import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
@@ -1445,10 +1445,10 @@ export async function getConversations(myPubkey: string) {
             peerAvatar: row.otherAvatar || null,
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
-            // The "key changed" tag: an offer waiting for the member, from a sync or a first-sight pause, or a rule-5 record
-            // whose banner asks for a check (15 Oct words design, D1) (from the same one read as the preview; unreadable
-            // pins, no tag: the chat itself says why it can't send).
-            keyChanged: (row.convType || 'dm') === 'dm' && !!previewPins && (!!dmPinFor(previewPins, row.id)?.offered || isUnplacedSight(dmSightFor(previewPins, row.id))),
+            // The "key changed" tag: only while the chat waits for the member (DESIGN-dm-key-signal-model §4): a verified
+            // person's change, or no single key listed. An ordinary change shows none: the chat carries on with a notice in
+            // the thread (from the same one read as the preview; unreadable pins, no tag: the chat itself says why).
+            keyChanged: (row.convType || 'dm') === 'dm' && !!previewPins && dmEntryWaitsForMember(dmSightFor(previewPins, row.id)),
             lastMessage: displayMsg,
             lastMessageFromApp: fromApp,
             lastMsgType: row.lastMsgType,
@@ -6065,6 +6065,10 @@ interface PinnedDmKeyContext extends DMKeyContext {
     keyChanged: boolean;
     /** The key offered in the pinned one's place (null: none, or the node lists several): its lines are marked, never read. */
     offeredPeer: string | null;
+    /** The member marked the pinned key verified (DESIGN-dm-key-signal-model §2.2): only then does a changed listing pause. */
+    verified?: boolean;
+    /** When this phone saw the key change, newest first: one notice each in the thread (getMessages). */
+    changedAt?: string[];
 }
 
 /** How many encrypted lines first sight reads at each end of a thread (design §3.4 amendments 2 and 3). */
@@ -6201,7 +6205,18 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
             listed = entry.offered ? entry.offered.peer : entry.peer;
             heard = entry.heard;
         }
-        const verdict = await judgeThread(conversationId, identity.privateKey, me, listed, heard, judging.held, database);
+        let verdict = await judgeThread(conversationId, identity.privateKey, me, listed, heard, judging.held, database);
+        // Every listing of the chat this phone holds must name that one key (DESIGN-dm-key-signal-model §2.1): a twin the
+        // node listed in other capitals whose rows name another key is a listing that disagrees. Where the thread's lines
+        // already place the key this spelling lists (rules 1-2) it stands, as before; where first sight would take it
+        // against the lines (rules 3-5), there is no single key: a keyless pause on the key the lines placed (rules 3-4),
+        // or the rule-5 record. So no twin can carry the chat to its key by itself, and nothing is sent until one key is listed.
+        const twinSays = listed ? (await otherSpellingsHeld(database, conversationId)).some((o) => o.participants.some((pk) => {
+            const k = pinKeyOf(pk);
+            return !!k && k !== me.toLowerCase() && k !== listed;
+        })) : false;
+        if (twinSays && (verdict.rule === 3 || verdict.rule === 4)) verdict = { rule: 3, pin: verdict.pin, offer: true };
+        if (twinSays && verdict.rule !== 1 && verdict.rule !== 2) listed = null;
         const judged = entry;
         const now = new Date().toISOString();
         // Through the pins' queue, and only over what was kept when the lines were read: another writer's change stands,
@@ -6211,6 +6226,14 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
             const kept = dmSightFor(pins, conversationId);
             return (kept === judged || (onHeld && isHeldLostSight(kept))) && applySightVerdict(pins, conversationId, verdict, listed, heard, now);
         });
+        entry = dmSightFor(await dmPins.read(me, database), conversationId);
+    }
+    // The resting rule before a send or the check answers (DESIGN-dm-key-signal-model §2.5): a person not marked verified
+    // never rests on an offer naming one key, and a rule-5 record never on a listing naming one key, so a send never
+    // depends on which path ran last. Never on 'open', which writes nothing.
+    if (use !== 'open' && dmEntryRestless(entry)) {
+        const now = new Date().toISOString();
+        await dmPins.update(me, database, (pins) => restDmEntry(pins, conversationId, now));
         entry = dmSightFor(await dmPins.read(me, database), conversationId);
     }
     if (!entry || isUnplacedSight(entry)) {
@@ -6232,7 +6255,30 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
         await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, pin.peer]).catch(() => {});
         await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, identity.publicKey]).catch(() => {});
     }
-    return { myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered, offered: pin.offered, offeredPeer: pin.offered?.peer ?? null, myPubHex: me };
+    return {
+        myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered, offered: pin.offered,
+        offeredPeer: pin.offered?.peer ?? null, myPubHex: me, verified: isVerifiedPin(pin), changedAt: pin.changedAt ?? [],
+    };
+}
+
+/**
+ * The participant rows this phone holds for every OTHER spelling of a conversation's id (a twin the node listed in other
+ * capitals), each as a listing: `{ id, type, participants }`. Under Signal's model a pin follows the one key every listing
+ * of the chat names (DESIGN-dm-key-signal-model §2.3), so a path that hears one spelling (the screen's check, a push's
+ * refresh) counts the others the phone already holds, as the sync pass that lists them together does. Unreadable: none.
+ */
+async function otherSpellingsHeld(database: SQLite.SQLiteDatabase, conversationId: string): Promise<Array<{ id: string; type: string; participants: string[] }>> {
+    const rows = await database.getAllAsync<any>(
+        'SELECT c.id AS id, c.type AS type, cp.public_key AS pk FROM conversations c JOIN conversation_participants cp ON cp.conversation_id = c.id WHERE lower(c.id) = lower(?) AND c.id != ?',
+        [conversationId, conversationId],
+    ).catch(() => [] as any[]);
+    const byId = new Map<string, { id: string; type: string; participants: string[] }>();
+    for (const r of rows) {
+        if (typeof r?.id !== 'string' || typeof r?.pk !== 'string' || !r.pk) continue;
+        if (!byId.has(r.id)) byId.set(r.id, { id: r.id, type: typeof r.type === 'string' ? r.type : 'dm', participants: [] });
+        byId.get(r.id)!.participants.push(r.pk);
+    }
+    return [...byId.values()];
 }
 
 /**
@@ -6441,7 +6487,10 @@ async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: 
     // The gate (§3.4 amendment 5): with the pins unread, nothing of the node's is written into a DM here. Any other
     // chat's row is still written (#1872 ultrareview, U6): a group opened from a push routes as the group it is.
     if (me && !before && await isDmHere(database, conv.id, conv.type)) return;
-    const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, [conv]).catch(() => []) : [];
+    // The node answers for this one spelling; the phone's rows for any other spelling of the id count as listings too, so a
+    // twin that disagrees leaves no single key (DESIGN-dm-key-signal-model §2.1), as in the sync pass that lists both.
+    const heardWith = me && before ? [conv, ...await otherSpellingsHeld(database, conv.id)] : [conv];
+    const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, heardWith).catch(() => []) : [];
     // Its request as a read asked for when `asOf` decisions had been taken here leaves it (requestAfterReadHere), worked out
     // just before each write: a decision landing between them is never written over (PR #2540 review 4395706539).
     const read = 'request' in conv;
@@ -6463,7 +6512,7 @@ async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: 
         }
     }
     // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
-    if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, [conv])].some(Boolean)).catch(() => {});
+    if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, heardWith)].some(Boolean)).catch(() => {});
 }
 
 /**
@@ -6532,6 +6581,8 @@ export interface DmKeyChange {
     firstSight: boolean;
     /** True when that first-sight pause came from the re-seed after the member's reset (§3.4 amendment 7 §1): the banner says so. */
     afterReset?: boolean;
+    /** The member marked this person verified (DESIGN-dm-key-signal-model §4): the card opens with "You marked … as verified". */
+    verified?: boolean;
     /** When the node says the account was re-keyed (slice 3). Only ever wording for the banner, never a reason to accept (pick 4). */
     rekeyedAt?: string;
     /**
@@ -6569,8 +6620,68 @@ export async function getDmKeyChange(conversationId: string): Promise<DmKeyChang
     const name = (await callsignOfKey(ctx.peerEdPubHex)) ?? (await callsignOfKey(ctx.offered.peer));
     const change: DmKeyChange = { offeredPeer: ctx.offered.peer, firstSight: !!ctx.offered.firstSight, name };
     if (ctx.offered.afterReset) change.afterReset = true;
+    if (ctx.verified) change.verified = true;
     if (ctx.offered.nodeSays?.rekeyedAt) change.rekeyedAt = ctx.offered.nodeSays.rekeyedAt;
     return change;
+}
+
+/** What the key code screen shows for a DM (DESIGN-dm-key-signal-model §3): read from the pins only, nothing judged or written. */
+export interface DmKeyCodeInfo {
+    /** The key this chat is sealed to (its pin), or null when there is none yet. */
+    peer: string | null;
+    /** The person's name as this phone holds the directory, or null (the screen's unknown-name sentences). */
+    name: string | null;
+    /** The member marked that key verified. */
+    verified: boolean;
+    /** Sends wait for the member: a verified person's key changed, or no single key is listed. */
+    paused: boolean;
+    /** While paused, one new key is on offer (a verified person's change): removing the mark carries on with it. */
+    offersKey: boolean;
+}
+
+/**
+ * The key code screen's read (§3): the pinned key's code, whether it is marked verified, and whether the chat waits.
+ * Reads only, through the pins' book. Null for anything that isn't a DM; throws DmPinStoreError when the pins can't be read.
+ */
+export async function getDmKeyCodeInfo(conversationId: string): Promise<DmKeyCodeInfo | null> {
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return null;
+    const database = await getDb();
+    const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    if (!conv || conv.type !== 'dm') return null;
+    const entry = dmSightFor(await dmPins.read(me, database), conversationId);
+    const pin = entry && !isUnplacedSight(entry) ? entry : null;
+    const paused = dmEntryWaitsForMember(entry);
+    return { peer: pin?.peer ?? null, name: await callsignOfKey(pin?.peer), verified: isVerifiedPin(pin), paused, offersKey: paused && !!pin?.offered?.peer };
+}
+
+/**
+ * The member's "Mark as verified" (§2.5): marks `expectedPeer`, the key whose code the screen showed, through the pins' one
+ * queue and this call's own handle. False, nothing written, when the pin holds an offer or has moved since the screen read
+ * it (the screen then shows the new code). Throws DmPinStoreError when the pins can't be read or written.
+ */
+export async function markDmPeerVerified(conversationId: string, expectedPeer: string): Promise<boolean> {
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return false;
+    const database = await getDb();
+    const now = new Date().toISOString();
+    let marked = false;
+    await dmPins.update(me, database, (pins) => (marked = markVerified(pins, conversationId, expectedPeer, now)));
+    return marked;
+}
+
+/**
+ * The member's "Remove verification" (§2.5): the mark goes, and in the same write a pause for one offered key ends with
+ * the pin moved to it (the resting rule). Throws DmPinStoreError when the pins can't be read or written.
+ */
+export async function removeDmPeerVerification(conversationId: string): Promise<boolean> {
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return false;
+    const database = await getDb();
+    const now = new Date().toISOString();
+    let removed = false;
+    await dmPins.update(me, database, (pins) => (removed = removeVerified(pins, conversationId, now)));
+    return removed;
 }
 
 /**
@@ -6907,7 +7018,12 @@ export async function judgeHomeChatDmLines(
     );
 }
 
-export async function getMessages(conversationId: string, opts?: { limit?: number }) {
+/**
+ * A conversation's rows as the chat screen shows them, oldest first. `limit`: only the newest that many. `notices` (the DM
+ * screen): the thread notices that the key changed are merged in by time (withKeyChangedNotices), as items with
+ * `keyChangedNotice: true` and no words of anyone's.
+ */
+export async function getMessages(conversationId: string, opts?: { limit?: number; notices?: boolean }) {
     const database = await getDb();
     // With a limit, return only the NEWEST `limit` messages (WhatsApp-style history
     // window — the chat screen grows the window as the user scrolls up). Selected
@@ -7001,7 +7117,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         }
     }
 
-    return rows.map(row => {
+    const shown = rows.map(row => {
         let displayTxt = row.ciphertext;
         let integrityNote: string | null = null;
         let unattributed = false;
@@ -7082,9 +7198,40 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             // Who a reply quoting this line shows it as from (e2e-crypto dmQuoteFrom): its check, never its row's name.
             quoteFrom: lineViews ? dmQuoteFrom({ authorPubkey: row.author_pubkey, nonce: row.nonce, type: row.type, metadata: row.metadata }, view) : 'author',
             rawTimestamp: row.timestamp,
-            timestamp: new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            timestamp: new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            keyChangedNotice: false,
         };
     });
+    if (!opts?.notices) return shown;
+    // The notice in the same shape as a line, with nothing of anyone's in it: the screen draws DmKeyChangedNotice for it.
+    const notice = (d: string): (typeof shown)[number] => ({
+        id: `key-changed:${d}`, senderId: '', authorPubkey: '', text: '', type: 'key-changed', systemType: null, metadata: undefined, about: null,
+        sendState: undefined, outgoing: false, readByPeer: false, edited: false, editedAt: null, integrityNote: null, unattributed: false, oldLine: false,
+        fromOfferedKey: false, quoteFrom: 'author', rawTimestamp: d, timestamp: new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        keyChangedNotice: true,
+    });
+    return withKeyChangedNotices(shown, dmCtx?.changedAt, !!opts.limit && rows.length >= opts.limit, notice);
+}
+
+/**
+ * One notice item per date this phone saw the DM's key change (DESIGN-dm-key-signal-model §2.2: the pin's `changedAt`, the
+ * phone's own clock), merged into the thread by time. `windowed`: the thread is a window of the newest lines, so a notice
+ * older than its oldest line waits until the window reaches back to it. The phone writes these from its own memory, so a
+ * node can't hide a key change from a phone that already had the chat.
+ */
+function withKeyChangedNotices<T extends { rawTimestamp?: string | null }>(shown: T[], changedAt: readonly string[] | undefined, windowed: boolean, notice: (date: string) => T): T[] {
+    if (!changedAt?.length) return shown;
+    const at = (iso: string | null | undefined) => { const ms = Date.parse(iso ?? ''); return Number.isFinite(ms) ? ms : 0; };
+    const oldest = shown.length ? at(shown[0].rawTimestamp) : 0;
+    const notices = changedAt.filter((d) => !windowed || at(d) >= oldest).map(notice).sort((a, b) => at(a.rawTimestamp) - at(b.rawTimestamp));
+    const out: T[] = [];
+    let n = 0;
+    for (const item of shown) {
+        while (n < notices.length && at(notices[n].rawTimestamp) < at(item.rawTimestamp)) out.push(notices[n++]);
+        out.push(item);
+    }
+    while (n < notices.length) out.push(notices[n++]);
+    return out;
 }
 
 // Resend path may pass the failed row's id so a retry of a send that actually

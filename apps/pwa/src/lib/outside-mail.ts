@@ -103,7 +103,7 @@ function refusalWords(e: OutsideMailError): string {
     return e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('Your community refused this message.');
 }
 
-async function answerOf(res: Response): Promise<any> {
+export async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
     if (!res.ok) {
         // The server's sentence: `message` when it sent one beside a code in `error` (a report's 429: { error: 'rate_limited',

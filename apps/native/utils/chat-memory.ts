@@ -18,6 +18,8 @@ export const CHAT_MEMORY_COPY = {
     cancel: word('Cancel'),
     /** Amendment 8 §3's confirmation, word for word (case 14's reword): the reset's two stated residuals. */
     confirm: CHAT_MEMORY_RESET_WORDS.confirm,
+    /** Said after the confirmation: the reset takes the verified marks with the pins (DESIGN-dm-key-signal-model §4). */
+    verifiedGo: CHAT_MEMORY_RESET_WORDS.verifiedGo,
     none: word('No communities on this phone yet.'),
     failed: word("This phone couldn't reset it. Try again."),
 } as const;

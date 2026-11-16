@@ -42,6 +42,7 @@ import { CommunityAdminsSection } from '../components/CommunityAdminsSection';
 import { webCommunityCopyStatus, type WebCommunityCopyStatus } from '../lib/community-copy';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { CopyPhotoHere } from '../components/CopyPhotoHere';
+import { MyKeyCodeCard } from '../components/KeyCode';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../lib/event-extras';
@@ -1102,7 +1103,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 {/* Copy on request (Profile S4): the photo this browser kept from another community, into this one, only on the tap. */}
                                 <CopyPhotoHere publicKey={identity.publicKey} />
 
-
+                                {/* My key code (DESIGN-dm-key-signal-model §5, S3): the phone's card from Settings → Account
+                                    Protection, at the head of the same things here (the ways back below). Worked out from this
+                                    browser's own key, so it never waits on the community; nothing is stored. */}
+                                <MyKeyCodeCard publicKey={identity.publicKey} />
 
                                 <button
                                     onClick={() => setMode('seed')}

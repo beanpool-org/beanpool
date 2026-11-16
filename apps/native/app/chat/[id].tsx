@@ -19,6 +19,7 @@ import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
+import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
 import { ChatImage, dmKeyContextOf } from '../../components/chat/DmChatImage';
 import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
 import { EventChatView } from '../../components/EventChatView';
@@ -649,9 +650,14 @@ function ChatScreen({ id }: { id: string }) {
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
+        // The key check first (DESIGN-dm-key-signal-model §7 S1): it applies the resting rule, so a person not marked
+        // verified has already moved to the new key when the thread is read, and no frame shows the paused box or the
+        // "Sent from the new key" line for them. Unreadable pins: the banner stays as it was (undefined), and a send says why
+        // it refused. A rule-5 record comes back as a change too (unplaced).
+        const change = await getDmKeyChange(id as string).catch(() => undefined);
         let data: any[];
         try {
-            data = await getMessages(id as string, { limit: msgLimitRef.current });
+            data = await getMessages(id as string, { limit: msgLimitRef.current, notices: true });
             setLoadError(null);
         } catch (e: any) {
             console.warn('[Chat] Could not read this conversation:', e?.message || e);
@@ -660,10 +666,9 @@ function ChatScreen({ id }: { id: string }) {
         } finally {
             setFirstLoadDone(true);
         }
-        messagesLenRef.current = data.length;
-        // Unreadable pins: the banner stays as it was, and a send says why it refused. The check judges first sight first;
-        // a rule-5 record comes back as a change too (unplaced).
-        getDmKeyChange(id as string).then(setKeyChange, () => {});
+        // Lines only: the key-changed notices are the phone's own and don't count toward the history window.
+        messagesLenRef.current = data.filter((m: any) => !m.keyChangedNotice).length;
+        if (change !== undefined) setKeyChange(change);
         if (identity?.publicKey) {
             await markConversationRead(id as string, identity.publicKey).catch(() => {});
         }
@@ -732,6 +737,7 @@ function ChatScreen({ id }: { id: string }) {
             setConvRow((prev: any) => prev ? { ...prev, request: nextRequest } : prev);
             if (messages.length > 0) {
                 for (const m of messages) {
+                    if (m.keyChangedNotice) continue;
                     await deleteLocalMessage(m.id).catch(() => {});
                 }
             }
@@ -1337,7 +1343,12 @@ function ChatScreen({ id }: { id: string }) {
         </View>
     );
 
+    // The key code screen for this chat (DESIGN-dm-key-signal-model §3): from the ⋯ menu and from a key-changed notice.
+    const openKeyCode = () => router.push({ pathname: '/chat/key-code', params: { id: String(id) } });
+
     const renderMessage = (item: any) => {
+        // The phone's own notice that the key changed and the chat carried on (a person not marked verified): never anyone's words.
+        if (item.keyChangedNotice) return <DmKeyChangedNotice peerName={peerName} onPress={openKeyCode} />;
         if (item.type === 'system' || item.senderId === 'SYSTEM') return renderSystemMessage(item);
         if (item.unattributed || item.fromOfferedKey) return renderUnattributedLine(item);
 
@@ -1521,6 +1532,13 @@ function ChatScreen({ id }: { id: string }) {
                 setMenuOpen(false);
                 if (peerPubkey) router.push({ pathname: '/public-profile', params: { publicKey: peerPubkey, callsign: peerName } });
             },
+        },
+        {
+            // The person's key code, where the member checks it and marks them verified (§3). DMs only.
+            icon: 'shield-key-outline',
+            label: t('Key code'),
+            hidden: !isEncrypted,
+            onPress: () => { setMenuOpen(false); openKeyCode(); },
         },
     ];
 

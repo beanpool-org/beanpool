@@ -38,9 +38,13 @@ vi.mock('../../app/ThemeContext', () => ({
     useStyles: (make: (c: { colors: unknown }) => unknown) => make({ colors: theme.colors }),
 }));
 vi.mock('../db', () => ({}));
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 
 import { lightColors, darkColors } from '../../constants/colors';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
+import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
+import { dmKeyChangedNoticeText, dmKeyCodeCopy } from '../dm-key-change';
+import { CHAT_MEMORY_RESET_WORDS } from '../dm-guard-list';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD, DM_RESET_LEAD, dmKeyBannerMaxHeight, dmThreadFloor, DM_KEY_BANNER_FLOOR } from '../dm-key-change';
 import { keyCodeOf, keyCodeSpoken } from '../key-code';
@@ -293,7 +297,11 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         const { readFileSync } = await import('node:fs');
         const { join } = await import('node:path');
         const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
-        expect(src).toMatch(/getDmKeyChange\(id as string\)\.then\(setKeyChange, \(\) => \{\}\);/);
+        // The key check runs BEFORE the thread is read (DESIGN-dm-key-signal-model §7 S1): its resting rule moves a person not
+        // marked verified to the new key first, so no frame shows the paused box or the fixed line for them.
+        expect(src).toMatch(/const change = await getDmKeyChange\(id as string\)\.catch\(\(\) => undefined\);\s*let data: any\[\];\s*try \{\s*data = await getMessages\(id as string, \{ limit: msgLimitRef\.current, notices: true \}\);/);
+        expect(src).toMatch(/if \(change !== undefined\) setKeyChange\(change\);/);
+        expect(src).not.toMatch(/getDmKeyChange\(id as string\)\.then\(setKeyChange/);
         expect(src).toMatch(/const keyChangePending = !!keyChange;\s*const unplaced = !!keyChange\?\.unplaced;/);
         expect(src).not.toMatch(/isDmUnplaced/);
         expect(src).toMatch(/disabled=\{keyChangePending\}/);
@@ -415,4 +423,102 @@ describe('the banner\'s height on a 320 × 533 phone and up (finding 7)', () => 
                 .toBe(dmKeyBannerMaxHeight({ column, composer, deals: 0, fontScale, windowHeight: column + 88 }));
         });
     }
+});
+
+// Signal's model on the phone (DESIGN-dm-key-signal-model §3, §4, §7 S1): the verified card's first sentence, the thread's
+// notice, the key code screen's words and wiring. One toBe per new sentence (amendment 7 §5).
+describe('Signal\'s model: the verified card, the thread notice and the key code screen', () => {
+    const newKey = 'ab'.repeat(32);
+
+    it('the verified card opens with "You marked … as verified"; an ordinary card never says it; one sentence each, with its unknown-name twin', () => {
+        const ben = dmKeyChangeCopy({ peerName: 'Ben', code: '1111 2222 3333 4444 5555', firstSight: false, verified: true });
+        expect(ben.body).toBe('You marked Ben as verified, so this phone is asking before it sends to a new key. Anything you send now would go to the new key. If Ben got a new phone and re-keyed, check with them first, in person or on a call: their key code should be');
+        const nobody = dmKeyChangeCopy({ peerName: null, code: '1111 2222 3333 4444 5555', firstSight: false, verified: true });
+        expect(nobody.body.startsWith('You marked this person as verified, so this phone is asking before it sends to a new key. ')).toBe(true);
+        expect(dmKeyChangeCopy({ peerName: 'Ben', code: '1111 2222 3333 4444 5555', firstSight: false }).body).not.toContain('You marked');
+        // No single key listed: the same card for everyone, verified or not (T3).
+        expect(dmKeyChangeCopy({ peerName: 'Ben', code: null, firstSight: false, verified: true }).body).not.toContain('You marked');
+        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: false, verified: true }, onContinue: vi.fn(), onNotNow: vi.fn() }));
+        expect(host.textContent).toContain('You marked Ben as verified, so this phone is asking before it sends to a new key.');
+        expect(host.querySelector('[role="checkbox"]')).not.toBeNull();
+    });
+
+    it('the thread notice: information words, one per name case, a button that opens the key code screen', async () => {
+        expect(dmKeyChangedNoticeText('Ben')).toBe("Ben's key changed. This usually means they got back into their account on a new phone. Tap to see their key code.");
+        for (const peerName of [null, undefined, '', 'Loading...']) {
+            expect(dmKeyChangedNoticeText(peerName)).toBe("This chat's key changed. This usually means the other person got back into their account on a new phone. Tap to see their key code.");
+        }
+        const onPress = vi.fn();
+        for (const colors of [lightColors, darkColors]) {
+            theme.colors = colors;
+            render(createElement(DmKeyChangedNotice, { peerName: 'Ben', onPress }));
+            const b = button("Ben's key changed. This usually means they got back into their account on a new phone. Tap to see their key code.");
+            expect(b).not.toBeNull();
+            expect(b!.textContent).toBe(dmKeyChangedNoticeText('Ben'));
+            await click(b);
+        }
+        expect(onPress).toHaveBeenCalledTimes(2);
+        // Never the warning yellow: the notice is information (§4).
+        for (const colors of [lightColors, darkColors] as Array<typeof lightColors>) {
+            const spec = dmKeyChangeStyleSpec(colors);
+            expect(spec.notice.backgroundColor).not.toBe(colors.feedback.warning.bg);
+            expect(spec.notice.minHeight).toBeGreaterThanOrEqual(48);
+        }
+    });
+
+    it('the notice at 320 dp with 1.3× text: one wrapping line of words, its longest word inside the row, no line limit', () => {
+        const spec = dmKeyChangeStyleSpec(lightColors);
+        const room = 320 - 2 * Number(spec.notice.marginHorizontal) - 2 * Number(spec.notice.paddingHorizontal) - 16 - Number(spec.notice.gap);
+        for (const words of [dmKeyChangedNoticeText('Bartholomew'), dmKeyChangedNoticeText(null)]) {
+            const longest = words.split(/\s+/).reduce((a, w) => (w.length > a.length ? w : a), '');
+            expect(longest.length * 0.62 * Number(spec.noticeText.fontSize) * 1.3).toBeLessThan(room);
+        }
+        expect(spec.noticeText).not.toHaveProperty('numberOfLines');
+    });
+
+    it('the key code screen\'s words, each whole with its unknown-name twin; the menu item; the reset\'s new sentence', () => {
+        const ben = dmKeyCodeCopy('Ben');
+        expect(ben.title).toBe('Key code');
+        expect(ben.heading).toBe("Ben's key code");
+        expect(ben.howTo).toBe('Ask Ben to open Settings, then Account Protection, and read you My key code. Do it in person or on a call. If every digit matches, this chat is really with Ben.');
+        expect(ben.mark).toBe('Mark as verified');
+        expect(ben.markNote).toBe('After that, this phone asks you before it sends to a new key for Ben. Kept on this phone only.');
+        expect(ben.verified).toBe('Verified ✓');
+        expect(ben.verifiedNote).toBe('This phone asks you before it sends to a new key for Ben. Kept on this phone only.');
+        expect(ben.remove).toBe('Remove verification');
+        expect(ben.paused).toBe("Ben's key changed. The new code is at the top of the chat.");
+        expect(ben.none).toBe('There is no key code to show for this chat yet.');
+        expect(ben.moved).toBe("This chat's key changed while you were checking. Look at the new code and check it again.");
+        expect(ben.removeConfirmTitle).toBe('Remove verification?');
+        expect(ben.removeConfirmBody).toBe('This phone will stop asking before it sends to a new key for Ben.');
+        expect(dmKeyCodeCopy('Ben', true).removeConfirmBody).toBe("This chat will carry on with Ben's new key, without the check.");
+        const nobody = dmKeyCodeCopy(null);
+        expect(nobody.heading).toBe("This chat's key code");
+        expect(nobody.howTo).toBe('Ask the other person to open Settings, then Account Protection, and read you My key code. Do it in person or on a call. If every digit matches, this chat is really with them.');
+        expect(nobody.markNote).toBe('After that, this phone asks you before it sends to a new key for this person. Kept on this phone only.');
+        expect(nobody.verifiedNote).toBe('This phone asks you before it sends to a new key for this person. Kept on this phone only.');
+        expect(nobody.paused).toBe("This chat's key changed. The new code is at the top of the chat.");
+        expect(nobody.removeConfirmBody).toBe('This phone will stop asking before it sends to a new key for this person.');
+        expect(dmKeyCodeCopy(null, true).removeConfirmBody).toBe("This chat will carry on with the other person's new key, without the check.");
+        expect(JSON.stringify(dmKeyCodeCopy('Ben'))).not.toMatch(/safety number/i);
+        expect(CHAT_MEMORY_RESET_WORDS.verifiedGo).toBe('People you marked as verified in this community go back to not verified.');
+    });
+
+    it('the wiring: the ⋯ menu\'s Key code (DMs only), the notice in the thread, and a plain key code screen that marks only the key it showed', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const chatSrc = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
+        expect(chatSrc).toMatch(/label: t\('Key code'\),\s*hidden: !isEncrypted,/);
+        expect(chatSrc).toMatch(/const renderMessage = \(item: any\) => \{\s*\/\/[^\n]*\n\s*if \(item\.keyChangedNotice\) return <DmKeyChangedNotice peerName=\{peerName\} onPress=\{openKeyCode\} \/>;/);
+        expect(chatSrc).toMatch(/router\.push\(\{ pathname: '\/chat\/key-code', params: \{ id: String\(id\) \} \}\)/);
+        const screen = readFileSync(join(process.cwd(), 'app', 'chat', 'key-code.tsx'), 'utf8');
+        expect(screen).not.toMatch(/<Modal\b/);
+        expect(screen).not.toMatch(/import \{[^}]*\bModal\b[^}]*\} from 'react-native'/);
+        expect(screen).not.toMatch(/numberOfLines/);
+        expect(screen).toMatch(/<ScrollView/);
+        expect(screen).toMatch(/markDmPeerVerified\(String\(id\), info\.peer\)/);
+        expect(screen).toMatch(/getDmKeyCodeInfo\(String\(id\)\)/);
+        const card = readFileSync(join(process.cwd(), 'components', 'ChatMemoryCard.tsx'), 'utf8');
+        expect(card).toMatch(/\{t\(CHAT_MEMORY_COPY\.confirm\)\}<\/Text>\s*<Text style=\{styles\.confirmText\}>\{t\(CHAT_MEMORY_COPY\.verifiedGo\)\}<\/Text>/);
+    });
 });

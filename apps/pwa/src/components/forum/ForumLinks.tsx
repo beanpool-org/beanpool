@@ -12,7 +12,7 @@
  * - **What may be linked** (§10.4): one of the writer's groups, their listings, or an event of theirs; at most
  *   FORUM_LIMITS.topicLinks things a topic, the Decision chip counted. The node decides again and says why in its refusal.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactPortal } from 'react';
 import { createPortal } from 'react-dom';
 import { FORUM_LIMITS, t, timeAgo, tn, word, wordn, type ForumLink, type ForumLinkKind } from '@beanpool/core';
 import { getMarketplacePosts, getMyEvents, getYourGroups } from '../../lib/api';
@@ -131,7 +131,7 @@ async function linkablesOf(me: string): Promise<{ groups: LinkPick[]; listings: 
  */
 export function ForumLinkSheet({ me, linked, room, onPick, onTakeOff, onClose }: {
     me: string; linked: LinkPick[]; room: number; onPick?: (pick: LinkPick) => Promise<void>; onTakeOff?: (pick: LinkPick) => Promise<void>; onClose: () => void;
-}) {
+}): ReactPortal {
     useCoversScreen(true);
     const [lists, setLists] = useState<Awaited<ReturnType<typeof linkablesOf>> | null>(null);
     const [failed, setFailed] = useState(false);
@@ -235,20 +235,23 @@ export function ForumLinkedTopics({ kind, id, heading, onOpenTopic }: {
         <section data-testid={`forum-linked-${kind}`} className="flex flex-col gap-1 min-w-0">
             <h3 className="m-0 text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>{heading}</h3>
             <ul className="m-0 p-0 list-none flex flex-col gap-1">
-                {topics.map((topic) => (
-                    <li key={topic.id}>
-                        <button type="button" onClick={() => onOpenTopic(topic.id)} data-testid="forum-linked-topic"
-                            className="w-full min-h-[48px] px-3 py-2 rounded-lg text-left flex items-center gap-2" style={chipStyle}>
-                            <span className="flex-1 min-w-0 flex flex-col">
-                                <span className="font-semibold text-sm" style={{ overflowWrap: 'anywhere' }}>{topic.title}</span>
-                                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                                    {tn(topic.replyCount, LINK_WORDS.replies.one, LINK_WORDS.replies.other, { n: topic.replyCount })} · {timeAgo(Math.max(0, Date.now() - Date.parse(topic.lastActivityAt)))}
+                {topics.map((topic) => {
+                    // Each a whole sentence of its own, as the forum's list rows draw them.
+                    const replies = tn(topic.replyCount, LINK_WORDS.replies.one, LINK_WORDS.replies.other, { n: topic.replyCount });
+                    const when = timeAgo(Math.max(0, Date.now() - Date.parse(topic.lastActivityAt)));
+                    return (
+                        <li key={topic.id}>
+                            <button type="button" onClick={() => onOpenTopic(topic.id)} data-testid="forum-linked-topic"
+                                className="w-full min-h-[48px] px-3 py-2 rounded-lg text-left flex items-center gap-2" style={chipStyle}>
+                                <span className="flex-1 min-w-0 flex flex-col">
+                                    <span className="font-semibold text-sm" style={{ overflowWrap: 'anywhere' }}>{topic.title}</span>
+                                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{replies} · {when}</span>
                                 </span>
-                            </span>
-                            <span aria-hidden="true">›</span>
-                        </button>
-                    </li>
-                ))}
+                                <span aria-hidden="true">›</span>
+                            </button>
+                        </li>
+                    );
+                })}
             </ul>
         </section>
     );

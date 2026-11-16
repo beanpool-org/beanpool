@@ -25,6 +25,10 @@
  *  11  each device for itself, the whole gate table (kind x chat x door x block) through a round with a second device listed
  *      (the phone's 15; X4b): this browser judges and confirms under its own id, and the phone is still served every item
  *  12  a blocked person's chat is never listed nor opened from their card (the phone's chatsShown, openChatFromCard; X4b)
+ *  X6  changes to lines (the phone's X6): one table over kind x sender (the writer, the other person, a third key, a forged
+ *      seal, a blocked sender) x state (fetched, already deleted, a request here) through a round, and how the line reads
+ *      after; sending one: kept at once, sent, sent again when unreached, taken back when refused for good, never for a line
+ *      that isn't mine to edit
  *
  * The mailbox played here is X2b's: GET /api/mail and POST /api/mail/confirm refuse a request without the device (400
  * bad_device), an item is served to each device until it has confirmed it, and goes once every device listed has.
@@ -33,8 +37,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
-    checkRelayItem, ed25519Signer, gateOutsideItem, relayConversationId, relayPayloadHash, sealOutsideLine, signRelayEnvelope,
-    type OutsideChatState, type RelayItem,
+    checkRelayItem, ed25519Signer, gateOutsideItem, openOutsideChange, outsideLineShown, relayConversationId, relayEnvelopeVerifies, relayPayloadHash,
+    sealOutsideChange, sealOutsideLine, signRelayEnvelope, type OutsideChangeKind, type OutsideChatState, type RelayItem,
 } from '@beanpool/core';
 import { MemoryIDBKeyRange, memoryIndexedDB, type MemoryIndexedDB } from './memory-indexeddb';
 
@@ -191,8 +195,8 @@ vi.mock('./outside-chat-store', async (importOriginal) => {
 
 import { clearOutsideChats, outsideChatStore } from './outside-chat-store';
 import {
-    FORGET_DEVICE_MS, chatsShown, doorOpen, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, openChatFromCard, sendFromBox, setDoor,
-    syncOutsideMail, type OutsideMailContext,
+    FORGET_DEVICE_MS, chatsShown, doorOpen, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, openChatFromCard, sendFromBox, sendOutsideChange,
+    setDoor, syncOutsideMail, OutsideMailError, type OutsideMailContext,
 } from './outside-mail';
 import { setNodeApiUrl } from './api';
 import { resetAccountEpochForTest } from './account-epoch';
@@ -315,15 +319,15 @@ describe('2  a write that fails is never confirmed', () => {
 });
 
 describe('3  the request gate', () => {
-    const kinds = ['dm-line', 'dm-blob', 'dm-delete', 'group-line', 'call-signal'];
+    const kinds = ['dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction', 'group-line', 'call-signal'];
     const chats: Array<{ state: OutsideChatState; theirLines: number } | null> = [
         null, { state: 'request', theirLines: 0 }, { state: 'request', theirLines: 1 }, { state: 'open', theirLines: 0 }, { state: 'open', theirLines: 5 },
         { state: 'declined', theirLines: 1 },
     ];
-    /** The rule in words (design §3.5): blocked never; an open chat takes lines; a stranger, one line of words, through an open door. */
+    /** The rule in words (design §3.5): blocked never; an open chat takes lines and changes to lines (X6); a stranger, one line of words, through an open door. */
     const expected = (kind: string, chat: typeof chats[number], doorOpen: boolean, isBlocked: boolean) => {
         if (isBlocked) return 'drop';
-        if (chat?.state === 'open') return kind === 'dm-line' ? 'line' : 'drop';
+        if (chat?.state === 'open') return kind === 'dm-line' ? 'line' : ['dm-delete', 'dm-edit', 'dm-reaction'].includes(kind) ? 'change' : 'drop';
         if (kind !== 'dm-line' || chat?.state === 'declined') return 'drop';
         if (chat?.state === 'request') return chat.theirLines === 0 ? 'request' : 'drop';
         return doorOpen ? 'request' : 'drop';
@@ -1159,5 +1163,117 @@ describe('12  a blocked person\'s chat is never listed nor opened from their car
         ctx.isBlocked = async () => { throw new Error('The block list could not be read.'); };
         await expect(chatsShown(ctx)).rejects.toThrow('could not be read');
         await expect(openChatFromCard(ctx, sol)).rejects.toThrow('could not be read');
+    });
+});
+
+describe('X6  changes to lines across communities', () => {
+    type Kind = 'edit' | 'reaction add' | 'reaction change' | 'reaction remove' | 'delete';
+    type Sender = 'writer' | 'other person' | 'third key' | 'forged' | 'blocked';
+    type State = 'fetched' | 'already deleted' | 'request';
+    const coreKind = (k: Kind): OutsideChangeKind => (k === 'edit' ? 'dm-edit' : k === 'delete' ? 'dm-delete' : 'dm-reaction');
+    const extraOf = (k: Kind) => (k === 'edit' ? { text: 'Edited words' } : k === 'delete' ? {} : { emoji: k === 'reaction change' ? '❤️' : k === 'reaction add' ? '👍' : '' });
+    async function heldChange(from: { seed: string; key: string }, kind: OutsideChangeKind, lineId: string, extra: { text?: string; emoji?: string }, sealer = from) {
+        const itemId = uuid();
+        const payload = sealOutsideChange({ kind, lineId, ...extra, myEdPrivHex: sealer.seed, myKey: sealer.key, peerKey: BEN.key, itemId });
+        const envelope = await signRelayEnvelope({
+            kind, itemId, senderKey: from.key, senderHome: ANA_HOME, recipient: BEN.key, recipientHome: HOME, at: Date.now(), payloadHash: relayPayloadHash(payload),
+        }, ed25519Signer(hexToBytes(from.seed)));
+        server.held.push({ kind, envelope, payload, bytes: payload.length, receivedAt: Date.now() });
+        return itemId;
+    }
+    const want = (kind: Kind, sender: Sender, state: State) => {
+        if (sender === 'forged' || sender === 'blocked' || state === 'request') return 'dropped';
+        if (sender === 'third key') return 'refused';
+        if (state === 'already deleted') return 'dropped';
+        if (sender === 'other person' && (kind === 'edit' || kind === 'delete')) return 'refused';
+        return 'applied';
+    };
+    const KINDS: Kind[] = ['edit', 'reaction add', 'reaction change', 'reaction remove', 'delete'];
+    const SENDERS: Sender[] = ['writer', 'other person', 'third key', 'forged', 'blocked'];
+    const STATES: State[] = ['fetched', 'already deleted', 'request'];
+    for (const kind of KINDS) for (const sender of SENDERS) for (const state of STATES) {
+        const w = want(kind, sender, state);
+        it(`${kind}, from ${sender}, ${state}: ${w}, and confirmed`, async () => {
+            const anaChat = chatWith(ANA.key), cyChat = chatWith(CY.key);
+            await openWith(ANA.key);
+            await openWith(CY.key);
+            let lineId: string;
+            if (sender === 'other person') {
+                lineId = uuid();
+                await ctx.store.addMine(BEN.key, { id: lineId, chatId: anaChat, author: BEN.key, text: 'Original words', replyTo: null, at: Date.now() - 5_000, item: '{}' });
+                await ctx.store.setMineState(BEN.key, anaChat, lineId, 'delivered');
+            } else {
+                lineId = (await heldLine(ANA, 'Original words')).envelope.itemId;
+            }
+            await syncOutsideMail(ctx);
+            if (state === 'already deleted') {
+                if (sender === 'other person') await ctx.store.putChange(BEN.key, anaChat, { kind: 'dm-delete', itemId: uuid(), lineId, author: BEN.key, at: Date.now() });
+                else { await heldChange(ANA, 'dm-delete', lineId, {}); await syncOutsideMail(ctx); }
+            }
+            const maker = sender === 'third key' ? CY : ANA;
+            if (kind === 'reaction change' || kind === 'reaction remove') { await heldChange(maker, 'dm-reaction', lineId, { emoji: '👍' }); await syncOutsideMail(ctx); }
+            // A request here, as the store keeps one before Accept.
+            if (state === 'request') await (ctx.store.decide as (me: string, id: string, s: string) => Promise<void>)(BEN.key, maker === CY ? cyChat : anaChat, 'request');
+            if (sender === 'blocked') blocked.add(ANA.key);
+            const id = await heldChange(maker, coreKind(kind), lineId, extraOf(kind), sender === 'forged' ? CY : maker);
+            const out = await syncOutsideMail(ctx);
+            expect(out.changes).toBe(w === 'applied' ? 1 : 0);
+            expect(server.confirmed.flat()).toContain(id);
+            const line = (await ctx.store.lines(BEN.key, anaChat)).find((l) => l.id === lineId)!;
+            const shown = outsideLineShown(line, await ctx.store.changes(BEN.key, anaChat), BEN.key);
+            // The earlier 👍 came while the chat was open here: it stands but on a line in another chat or a deleted one.
+            const prior = (kind === 'reaction change' || kind === 'reaction remove') && sender !== 'third key' && state !== 'already deleted';
+            const expectShown = state === 'already deleted' ? { text: '', edited: false, deleted: true, reactions: [] }
+                : w !== 'applied' ? { text: 'Original words', edited: false, deleted: false, reactions: prior ? [{ emoji: '👍', count: 1, mine: false }] : [] }
+                    : kind === 'edit' ? { text: 'Edited words', edited: true, deleted: false, reactions: [] }
+                        : kind === 'delete' ? { text: '', edited: false, deleted: true, reactions: [] }
+                            : { text: 'Original words', edited: false, deleted: false, reactions: kind === 'reaction remove' ? [] : [{ emoji: kind === 'reaction add' ? '👍' : '❤️', count: 1, mine: false }] };
+            expect(shown).toEqual(expectShown);
+        });
+    }
+
+    describe('sending one', () => {
+        async function withLines() {
+            await openWith(ANA.key);
+            const mine = uuid();
+            await ctx.store.addMine(BEN.key, { id: mine, chatId: chatWith(ANA.key), author: BEN.key, text: 'Mine', replyTo: null, at: Date.now() - 5_000, item: '{}' });
+            await ctx.store.setMineState(BEN.key, chatWith(ANA.key), mine, 'delivered');
+            const theirs = (await heldLine(ANA, 'Theirs')).envelope.itemId;
+            await syncOutsideMail(ctx);
+            server.sent = [];
+            return { mine, theirs };
+        }
+
+        it('an edit and a reaction: kept here at once, sent sealed to Ana, opening there as Ben\'s own; a delete reads deleted', async () => {
+            const { mine, theirs } = await withLines();
+            await sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-edit', lineId: mine, text: 'Mine, fixed' });
+            await sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-reaction', lineId: theirs, emoji: '😂' });
+            const sent = server.sent.filter((i: RelayItem) => i.envelope.kind !== 'receipt');
+            expect(sent.map((i: RelayItem) => i.envelope.kind)).toEqual(['dm-edit', 'dm-reaction']);
+            for (const i of sent) expect(relayEnvelopeVerifies(i.envelope)).toBe(true);
+            expect(openOutsideChange(sent[0].payload, sent[0].envelope, { key: ANA.key, edPrivHex: ANA.seed })).toMatchObject({ kind: 'dm-edit', lineId: mine, author: BEN.key, text: 'Mine, fixed' });
+            const changes = await ctx.store.changes(BEN.key, chatWith(ANA.key));
+            expect(outsideLineShown({ id: mine, author: BEN.key, text: 'Mine' }, changes, BEN.key)).toMatchObject({ text: 'Mine, fixed', edited: true });
+            expect(outsideLineShown({ id: theirs, author: ANA.key, text: 'Theirs' }, changes, BEN.key).reactions).toEqual([{ emoji: '😂', count: 1, mine: true }]);
+            expect(await ctx.store.unsent(BEN.key)).toEqual([]);
+            await sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-delete', lineId: mine });
+            expect(outsideLineShown({ id: mine, author: BEN.key, text: 'Mine' }, await ctx.store.changes(BEN.key, chatWith(ANA.key)), BEN.key).deleted).toBe(true);
+            await expect(sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-edit', lineId: theirs, text: 'x' })).rejects.toMatchObject({ code: 'not_yours' });
+            await expect(sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-reaction', lineId: mine, emoji: '👍' })).rejects.toMatchObject({ code: 'not_yours' });
+        });
+
+        it('unreached: kept with its item and sent again at the next round; refused for good: taken back here', async () => {
+            const { mine, theirs } = await withLines();
+            server.sendFails = true;
+            await expect(sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-edit', lineId: mine, text: 'Later' })).rejects.toThrow();
+            expect((await ctx.store.unsent(BEN.key)).length).toBe(1);
+            server.sendFails = false;
+            await syncOutsideMail(ctx);
+            expect(server.sent.filter((i: RelayItem) => i.envelope.kind === 'dm-edit')).toHaveLength(1);
+            expect(await ctx.store.unsent(BEN.key)).toEqual([]);
+            server.refuse = () => ({ status: 403, error: "This community doesn't take messages from other communities.", code: 'outside_messages_off' });
+            await expect(sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-reaction', lineId: theirs, emoji: '👍' })).rejects.toBeInstanceOf(OutsideMailError);
+            expect(outsideLineShown({ id: theirs, author: ANA.key, text: 'Theirs' }, await ctx.store.changes(BEN.key, chatWith(ANA.key)), BEN.key).reactions).toEqual([]);
+        });
     });
 });

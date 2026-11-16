@@ -20,6 +20,7 @@
  */
 import type { Context, Next } from 'koa';
 import { word } from '@beanpool/core';
+import { READER_CACHE_CONTROL } from '../guest-cache.js';
 
 export const PRIVATE_PREVIEW_ENV = 'PRIVATE_PREVIEW';
 export const PRIVATE_PREVIEW = 'private_preview';
@@ -66,6 +67,13 @@ export class PrivatePreviewError extends Error {
 /** The body every refusal carries, word for word what the apps show. */
 export function privatePreviewRefusal(): { error: string; code: string } {
     return { error: PRIVATE_PREVIEW_MESSAGE, code: PRIVATE_PREVIEW };
+}
+
+/** The gates' refusal: 403 with the sentence, never kept by a shared cache (a preview's answer is no visitor's copy). */
+function refuse(ctx: Context): void {
+    ctx.set('Cache-Control', READER_CACHE_CONTROL);
+    ctx.status = 403;
+    ctx.body = privatePreviewRefusal();
 }
 
 /**
@@ -172,8 +180,7 @@ export function privatePreviewEarlyGate(isMember: (pubkey: string | undefined) =
         const claimed = ctx.get('X-Public-Key').trim().toLowerCase();
         if (isRefusedJoin(path) || (!isVisitorOpenRoute(path) && (!claimed || !isMember(claimed))
             && !opensKeyedImage(ctx.method, ctx.path, ctx.query.k, images))) {
-            ctx.status = 403;
-            ctx.body = privatePreviewRefusal();
+            refuse(ctx);
             return;
         }
         await next();
@@ -192,8 +199,7 @@ export function privatePreviewGate(isMember: (pubkey: string | undefined) => boo
         if (!path.startsWith('/api/')) return next();
         if (isRefusedJoin(path) || (!isMember(ctx.state.actor as string | undefined) && !isVisitorOpenRoute(path)
             && !opensKeyedImage(ctx.method, ctx.path, ctx.query.k, images))) {
-            ctx.status = 403;
-            ctx.body = privatePreviewRefusal();
+            refuse(ctx);
             return;
         }
         await next();

@@ -761,9 +761,11 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.forum ? { forumNotices: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
-    // post go outside: the preview shows visitors nothing.
+    // post go outside, nor is the forum public (engine/forum-public.ts forumPublicOn): the preview shows visitors nothing.
+    // Members are still told before their first post, by the forum's own front (`public`): what they write goes public
+    // once the preview ends.
     if (isPrivatePreview()) {
-        const { shareOutside: _off, ...rest } = features;
+        const { shareOutside: _off, forumPublic: _closed, ...rest } = features;
         return { ...rest, openJoin: false, wordsDoor: false, privatePreview: true };
     }
     return features;

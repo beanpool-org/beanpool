@@ -23,6 +23,7 @@ import {
     type ProfileSwitch, type ProfileSwitches,
 } from '../config/node-profile.js';
 import { StandbyLedgerError } from '../config/node-role.js';
+import { READER_CACHE_CONTROL } from '../guest-cache.js';
 import { ProbationLimitError } from '../engine/probation.js';
 import { WriterLimitError } from '../engine/writer-bounds.js';
 import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
@@ -95,6 +96,12 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         needs: ['forum'],
         paths: [/^\/api\/forum(\/|$)/],
     },
+    // The forum for anyone on the web (slice F7, routes/forum-public.ts): only where it is public too, the global community.
+    // A local community's forum is for its members.
+    {
+        needs: ['forum', 'forumPublic'],
+        paths: [/^\/api\/forum\/(public|photos)(\/|$)/],
+    },
     // "Ask to join" (G6, routes/knocks.ts): the applicant's knock and status, and the members' list and answers. Off on
     // the global node, and wherever the operator opted out. Not the operator's count (/api/local/admin/knocks), which
     // Settings shows beside the switch that turns them back on. A knock is answered with an invite, so where invites
@@ -154,6 +161,8 @@ export async function profileFeatureGate(ctx: Context, next: Next): Promise<void
     if (!ctx.path.startsWith('/api/')) return next();
     const off = featureOffFor(ctx.path, undefined, ctx.method.toUpperCase());
     if (!off) return next();
+    // Never kept by a shared cache: a switch turned back on answers at once.
+    ctx.set('Cache-Control', READER_CACHE_CONTROL);
     ctx.status = 404;
     ctx.body = { error: featureOffMessage(off), code: FEATURE_OFF, feature: off };
 }

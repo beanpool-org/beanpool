@@ -102,7 +102,7 @@ function refusalWords(e: OutsideMailError): string {
     return e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('Your community refused this message.');
 }
 
-async function answerOf(res: Response): Promise<any> {
+export async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
     if (!res.ok) throw new OutsideMailError(res.status, typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`, body?.code);
     return body;

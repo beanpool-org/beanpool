@@ -24,6 +24,7 @@ import { usePictureCrop } from './PictureCropDialog';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupInvitedList } from './GroupInvitedList';
+import { GroupGuestsPanel } from './GuestChats';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
 import { alreadyInGroup, canInviteToGroup } from '../lib/group-invite';
@@ -682,6 +683,8 @@ export function GroupDetailModal({
                                 onChanged={onMembershipChanged}
                             />
                         )}
+                        {/* Guests from other communities in the group's chat (G2); a convenor adds one by their card. */}
+                        {isMember && !rosterRefused && !closed && <GroupGuestsPanel groupId={groupData.id} isConvenor={isConvenor} />}
                     </div>
 
                     {/* Action Area */}

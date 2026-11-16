@@ -5,7 +5,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { makeGroupEpochRecord, openGroupLine, sealGroupLine } from '../group-crypto.js';
 import {
     applyGuestMail, applyGuestTicks, gateGuestNotice, guestAccess, guestChatAuthorName, guestChatId, guestChatListed, guestEpochDue, guestLinePayload,
-    guestSealEpoch, guestViewerOf, makeGuestEpochFor, readGuestChats,
+    guestRosterMark, guestSealEpoch, guestViewerOf, makeGuestEpochFor, readGuestChats, takeOwnEpoch,
     type GuestAccess, type GuestChat, type GuestChats, type GuestScreen, type GuestViewer,
 } from '../group-guest-chat.js';
 import * as core from '../index.js';
@@ -155,7 +155,7 @@ describe('a server page applied to the chats', () => {
         expect(step).toMatchObject({ send: 'group-epoch', epoch: 4, reason: 'join', recipients: [ana.pk, ben.pk, gus.pk].sort() });
         const made = makeGuestEpochFor(chats[ID], step!, gus.pk, gus.seedHex, NOW, uuid(6));
         expect(JSON.parse(made.payload).epoch).toMatchObject({ epoch: 4, reason: 'join', subject: gus.pk, createdBy: gus.pk });
-        chats = { ...chats, [ID]: made.chat };
+        chats = { ...chats, [ID]: takeOwnEpoch(chats[ID], made.ownEpoch, gus.pk, NOW)! };
         // Never a second epoch for the same number in the next round.
         expect(guestEpochDue(chats[ID], gus.pk)).toBeNull();
         // My epoch seals nothing until the host has taken it (round 2, finding 4); then my line goes under it.
@@ -381,7 +381,7 @@ describe('EPOCH: a line is sealed only under an epoch the host has taken (my epo
         ({ chats } = applyGuestMail(chats, { groups: [{ host: HOST, group: GROUP, state: 'in', roster: rosterData({ current: 3, stale: true }), rosterAt: NOW }] }, ctx()));
         chats[ID].lines.push({ id: uuid(51), author: gus.pk, text: 'waits', at: NOW, state: 'waiting' });
         const step = guestEpochDue(chats[ID], gus.pk)!;
-        return { ...chats, [ID]: makeGuestEpochFor(chats[ID], step, gus.pk, gus.seedHex, NOW, MINE).chat };
+        return { ...chats, [ID]: takeOwnEpoch(chats[ID], makeGuestEpochFor(chats[ID], step, gus.pk, gus.seedHex, NOW, MINE).ownEpoch, gus.pk, NOW)! };
     };
     const epochTick = (state: string, refused: string | null, itemId = MINE) => [{ itemId, kind: 'group-epoch', host: HOST, group: GROUP, state, refused, at: NOW }];
     it.each([
@@ -399,11 +399,21 @@ describe('EPOCH: a line is sealed only under an epoch the host has taken (my epo
             return;
         }
         expect(seal).toBeNull();
-        if (ticks && ticks[0].state !== 'queued') {
-            // Refused or failed: its key goes for good, and another epoch may be made for the line that waits.
+        if (ticks && ticks[0].state === 'failed') {
+            // Failed (my server never reached the host): its key goes for good, and another may be made at once for the
+            // line that waits.
             expect(chats[ID].ownEpoch).toBeNull();
             expect(chats[ID].keys).toEqual({});
             expect(guestEpochDue(chats[ID], gus.pk)).toMatchObject({ epoch: 4 });
+        } else if (ticks && ticks[0].state !== 'queued') {
+            // Refused (round 3, "Refusals"): its key goes for good, and none is made again from the roster it was made from
+            // (round 2 made it again at once, from that same roster, every round until the roster came). The roster the
+            // host sends after a refusal makes the next one, even when it names the same epoch with someone new in it.
+            expect(chats[ID].ownEpoch).toBeNull();
+            expect(chats[ID].keys).toEqual({});
+            expect(guestEpochDue(chats[ID], gus.pk)).toBeNull();
+            const next = applyGuestMail(chats, { groups: [{ host: HOST, group: GROUP, state: 'in', roster: rosterData({ current: 3, stale: true }, [gus, stray]), rosterAt: NOW }] }, ctx()).chats;
+            expect(guestEpochDue(next[ID], gus.pk)).toMatchObject({ epoch: 4, recipients: [ana.pk, ben.pk, gus.pk, stray.pk].sort() });
         } else {
             // On its way: no second one.
             expect(chats[ID].ownEpoch).toMatchObject({ epoch: 4, itemId: MINE });

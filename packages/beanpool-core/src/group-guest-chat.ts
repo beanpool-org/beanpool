@@ -33,11 +33,24 @@
  *     longer lists (answered on another device, withdrawn) is gone from here; a chat it no longer lists was left there.
  *   - **Epochs**: my line is sealed only under an epoch the host has taken: one it sent (a roster, an epoch notice), or my
  *     own once my server says the host took it ({@link GuestOwnEpoch}). While my own is queued or refused, the line waits.
+ *
+ * Two more since round 3:
+ *   - **Writes**: every write to the chats is made from the chats as they are at that write (the change function's `c`)
+ *     and a small change worked out before it (an id, a key, a page): never a whole chat read before an await. So a
+ *     round's page and a send never undo each other, whichever lands first.
+ *   - **Refusals**: an epoch the host refused is written on the chat, and nothing goes again that the same roster would
+ *     make again. A line refused `epoch-stale` under epoch N: nothing is sealed under N, or an older one, again
+ *     ({@link GuestChat.refusedEpoch}), and no epoch of mine is made that isn't newer than N. My own epoch refused: none is
+ *     made again from the roster it was made from ({@link GuestChat.epochWait}). The host sends its roster after each
+ *     refusal; until it comes, my lines wait and nothing new goes out (engine/group-guest-home.ts's header: "a phone
+ *     that heard `epoch-stale` waits for the roster").
  */
 import {
     openGroupLine, openMyGroupKey, sealGroupLine, type GroupEpochRecord, type GroupServedWrap,
 } from './group-crypto.js';
 import { guestEpochStep, makeGuestEpoch, openGuestEpochKey, readGuestRoster, type GuestRoster, type GuestRosterWrap } from './group-guest-steps.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { nameLine } from './name-line.js';
 import { t, word } from './words.js';
 
@@ -105,6 +118,14 @@ export interface GuestChat {
     epochSent: number | null;
     /** My own epoch on its way, until my server says what the host did with it; absent or null when none is. */
     ownEpoch?: GuestOwnEpoch | null;
+    /**
+     * The newest epoch the host refused a line of mine under (`epoch-stale`), or null. Nothing is sealed under it or an
+     * older one again, and no epoch of mine is made that isn't newer (the file's header, "Refusals"). Epochs only go up,
+     * so it is never cleared while the chat lasts.
+     */
+    refusedEpoch?: number | null;
+    /** {@link guestRosterMark} of the roster my last refused epoch was made from: none is made again while the roster is that one. */
+    epochWait?: string | null;
     lines: GuestLine[];
     held: GuestHeldLine[];
     /** Why the chat closed, when the host said: removed by a convenor, or the group closed. */
@@ -120,7 +141,11 @@ export interface GuestChat {
  * reached yet). The host took it (`sent`): the key joins {@link GuestChat.keys}. Refused or failed: it goes, and the next
  * round may make another.
  */
-export interface GuestOwnEpoch { epoch: number; key: string; itemId: string; state: 'sending' | 'queued'; item: string | null }
+export interface GuestOwnEpoch {
+    epoch: number; key: string; itemId: string; state: 'sending' | 'queued'; item: string | null;
+    /** {@link guestRosterMark} of the roster it was made from. */
+    from: string;
+}
 
 /** Every guest chat this account has on this device, by id. */
 export type GuestChats = Record<string, GuestChat>;
@@ -233,7 +258,7 @@ function unb64(s: string): Uint8Array {
 function newChat(host: string, group: string, now: number): GuestChat {
     return {
         id: guestChatId(host, group), host, group, name: '', invitedBy: null, state: 'invited', roster: null, keys: {}, epochSent: null,
-        ownEpoch: null, lines: [], held: [], why: null, updatedAt: now,
+        ownEpoch: null, refusedEpoch: null, epochWait: null, lines: [], held: [], why: null, updatedAt: now,
     };
 }
 
@@ -461,8 +486,11 @@ export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number,
             : tk.state === 'queued' ? 'queued' : tk.state === 'sent' ? 'sent' : tk.state === 'failed' ? 'failed' : null;
         if (!next || next === line.state) continue;
         if (next === 'waiting') {
-            // Refused for its epoch: the next epoch may be made (unless mine is on its way), whether or not a tick for my
-            // last one ever came; the line goes again under a new id.
+            // Refused for its epoch: that epoch is written down, so nothing is sealed under it again (the line waits for
+            // the roster the host sends after a refusal); the next epoch may be made (unless mine is on its way), whether
+            // or not a tick for my last one ever came; the line goes again under a new id.
+            const under = sealedEpochOf(line) ?? guestSealEpoch(chat)?.epoch ?? null;
+            if (under !== null && under > (chat.refusedEpoch ?? 0)) chat.refusedEpoch = under;
             if (!chat.ownEpoch) chat.epochSent = null;
             line.id = newId();
         }
@@ -481,7 +509,11 @@ function applyOwnEpochTick(chat: GuestChat, tk: GuestSentTick, now: number): boo
     if (own && own.itemId !== tk.itemId) return false;
     if (tk.refused || tk.state === 'refused' || tk.state === 'failed') {
         if (!own && chat.epochSent === null) return false;
-        Object.assign(chat, { ownEpoch: null, epochSent: null, updatedAt: now });
+        // Refused: none is made again from the roster this one was made from (the host sends a new one after a refusal).
+        // Failed (my server never reached the host): another may be made at once.
+        const refused = !!tk.refused || tk.state === 'refused';
+        const wait = refused ? (own?.from ?? guestRosterMark(chat.roster)) : (chat.epochWait ?? null);
+        Object.assign(chat, { ownEpoch: null, epochSent: null, epochWait: wait, updatedAt: now });
         return true;
     }
     if (!own) return false;
@@ -496,6 +528,22 @@ function applyOwnEpochTick(chat: GuestChat, tk: GuestSentTick, now: number): boo
         return true;
     }
     return false;
+}
+
+/** The epoch a line of mine was sealed under, read from its item as it was posted; null when it has none. */
+function sealedEpochOf(line: GuestLine): number | null {
+    try {
+        const item = JSON.parse(line.item ?? '') as { payload?: unknown };
+        const epoch = (JSON.parse(String(item.payload)) as { metadata?: { epoch?: unknown } })?.metadata?.epoch;
+        return Number.isSafeInteger(epoch) ? epoch as number : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A short mark of a roster, to tell whether the roster is still the one an epoch was made from. */
+export function guestRosterMark(roster: GuestRoster | null | undefined): string {
+    return bytesToHex(sha256(utf8ToBytes(JSON.stringify(roster ?? null)))).slice(0, 32);
 }
 
 function structuredCloneChats(c: GuestChats): GuestChats {
@@ -533,25 +581,40 @@ export function guestLeavePayload(): string {
 /**
  * What a guest's device sends next for a chat, from its latest roster: an epoch (the newcomer makes theirs, or a stale one
  * needs the next before a waiting line can go), or nothing. An epoch only when one is needed for me: I have no key yet, or a
- * line of mine waits; never a second for the same number, nor while one of mine is on its way.
+ * line of mine waits; never a second for the same number, nor while one of mine is on its way; never one no newer than an
+ * epoch a line of mine was refused under, nor one from the roster my last refused epoch was made from (the file's header,
+ * "Refusals": the device waits for the roster the host sends after a refusal).
  */
 export function guestEpochDue(chat: GuestChat, me: string): Extract<ReturnType<typeof guestEpochStep>, { send: 'group-epoch' }> | null {
     if (chat.state !== 'in' || !chat.roster || chat.ownEpoch) return null;
     const step = guestEpochStep(chat.roster, me, { joining: Object.keys(chat.keys).length === 0 });
     if (step.send !== 'group-epoch' || chat.epochSent === step.epoch) return null;
+    if (step.epoch <= (chat.refusedEpoch ?? 0)) return null;
+    if (chat.epochWait && chat.epochWait === guestRosterMark(chat.roster)) return null;
     const needed = Object.keys(chat.keys).length === 0 || chat.lines.some((l) => l.state === 'waiting');
     return needed ? step : null;
 }
 
 /**
- * The epoch made for a step, to go as item `itemId`: its `group-epoch` payload, and the chat with it on its way
- * ({@link GuestOwnEpoch}, `sending`). Its key seals nothing yet: the host may refuse it for one made at the same time (the
- * roster after that brings the key it took), and only a tick saying it took it puts the key with the others.
+ * The epoch made for a step, to go as item `itemId`: its `group-epoch` payload and the {@link GuestOwnEpoch} to keep
+ * (`sending`), which {@link takeOwnEpoch} puts on the chat as it is when written. Its key seals nothing yet: the host may
+ * refuse it for one made at the same time (the roster after that brings the key it took), and only a tick saying it took
+ * it puts the key with the others.
  */
-export function makeGuestEpochFor(chat: GuestChat, step: NonNullable<ReturnType<typeof guestEpochDue>>, me: string, myEdPrivHex: string, now: number, itemId: string): { payload: string; chat: GuestChat } {
+export function makeGuestEpochFor(chat: GuestChat, step: NonNullable<ReturnType<typeof guestEpochDue>>, me: string, myEdPrivHex: string, now: number, itemId: string): { payload: string; ownEpoch: GuestOwnEpoch } {
     const { payload, groupKey } = makeGuestEpoch(step, chat.group, me, myEdPrivHex, new Date(now).toISOString());
-    const ownEpoch: GuestOwnEpoch = { epoch: step.epoch, key: b64(groupKey), itemId, state: 'sending', item: null };
-    return { payload, chat: { ...chat, ownEpoch, epochSent: step.epoch, updatedAt: now } };
+    return { payload, ownEpoch: { epoch: step.epoch, key: b64(groupKey), itemId, state: 'sending', item: null, from: guestRosterMark(chat.roster) } };
+}
+
+/**
+ * My epoch put on the chat as it is now (`c`, read inside the write), or null when that chat no longer wants this one:
+ * an epoch of mine is already on its way, or the epoch due now is another (a roster, a key or a refusal came while it was
+ * made and signed). Nothing else of the chat changes, so a page or a line written meanwhile stays.
+ */
+export function takeOwnEpoch(c: GuestChat, own: GuestOwnEpoch, me: string, now: number): GuestChat | null {
+    const due = guestEpochDue(c, me);
+    if (!due || due.epoch !== own.epoch || guestRosterMark(c.roster) !== own.from) return null;
+    return { ...c, ownEpoch: own, epochSent: own.epoch, updatedAt: now };
 }
 
 /**
@@ -565,6 +628,8 @@ export function guestSealEpoch(chat: GuestChat): { epoch: number; key: Uint8Arra
     const numbers = Object.keys(chat.keys).map(Number).filter((n) => Number.isSafeInteger(n)).sort((a, b) => b - a);
     const epoch = numbers[0];
     if (epoch === undefined || !chat.keys[String(epoch)]) return null;
+    // Refused under it (or a newer one) already: the line waits for a newer key (the file's header, "Refusals").
+    if (epoch <= (chat.refusedEpoch ?? 0)) return null;
     // Behind the host's, or the stale one itself: the line waits for the next epoch (guestEpochDue makes it).
     if (e && (e.current > epoch || (e.stale && e.current === epoch))) return null;
     return { epoch, key: unb64(chat.keys[String(epoch)]) };

@@ -15,8 +15,8 @@
 import type { RelayEnvelope, RelayEnvelopeFields, RelayItem } from './relay-envelope.js';
 import { relayPayloadHash } from './relay-envelope.js';
 import {
-    applyGuestMail, applyGuestTicks, guestAnswerPayload, guestEpochDue, guestLinePayload, guestSealEpoch, makeGuestEpochFor,
-    GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, type GuestChat, type GuestChats, type GuestLine,
+    applyGuestMail, applyGuestTicks, guestAnswerPayload, guestEpochDue, guestLinePayload, guestSealEpoch, makeGuestEpochFor, takeOwnEpoch,
+    GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, type GuestChat, type GuestChats, type GuestLine, type GuestOwnEpoch,
 } from './group-guest-chat.js';
 import { t } from './words.js';
 
@@ -128,7 +128,9 @@ export async function answerGuestInvitation(io: GuestMailIO, id: string, answer:
     const answered = await post(io, [await item(io, chat, 'group-invite', io.newId(), guestAnswerPayload(answer))]);
     const refused = answered.some((a) => a.refused || a.state === 'refused' || a.state === 'failed');
     if (refused && answer === 'yes') return;
-    await update(io, id, (c) => ({ ...c, state: answer === 'yes' ? 'joining' : 'declined', updatedAt: io.now() }));
+    // Only the invitation answered, as it is now: one a round moved on meanwhile (withdrawn, a new one, answered on
+    // another device) is left as the round wrote it.
+    await update(io, id, (c) => (c.state === 'invited' && c.inviteId === chat.inviteId ? { ...c, state: answer === 'yes' ? 'joining' : 'declined', updatedAt: io.now() } : null));
 }
 
 /** What a line of mine needs before it goes: the words checked. */
@@ -177,8 +179,11 @@ async function sendOwnEpoch(io: GuestMailIO, id: string, chat: GuestChat): Promi
             const itemId = io.newId();
             const made = makeGuestEpochFor(chat, step, io.me, io.myEdPrivHex, io.now(), itemId);
             epochItem = await item(io, chat, 'group-epoch', itemId, made.payload);
-            const kept = epochItem;
-            const written = await update(io, id, (c) => (c.ownEpoch || c.state !== 'in' ? null : { ...made.chat, ownEpoch: { ...made.chat.ownEpoch!, item: JSON.stringify(kept) } }));
+            // Put on the chat as it is now (takeOwnEpoch): what a round or a send wrote while this one was made and signed
+            // stays. A chat that no longer wants this epoch (one of mine on its way, another due) takes nothing, and nothing
+            // is posted.
+            const keep: GuestOwnEpoch = { ...made.ownEpoch, item: JSON.stringify(epochItem) };
+            const written = await update(io, id, (c) => takeOwnEpoch(c, keep, io.me, io.now()));
             if (written?.ownEpoch?.itemId !== itemId) return { chat: written, posted: false };
         }
     }
@@ -204,8 +209,10 @@ async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
     chat = epoch.chat;
     if (!chat || chat.state !== 'in') return changed;
     const seal = guestSealEpoch(chat);
+    const sealKey = seal ? chat.keys[String(seal.epoch)] : null;
     const now = io.now();
-    const go: RelayItem[] = [];
+    const resend: RelayItem[] = [];
+    const fresh: RelayItem[] = [];
     const sealed = new Map<string, string>();
     const tooOld = new Set<string>();
     for (const l of chat.lines) {
@@ -214,9 +221,9 @@ async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
             const payload = guestLinePayload(l.text, { group: chat.group, epoch: seal.epoch, key: seal.key, messageId: l.id, myEdPrivHex: io.myEdPrivHex });
             const it = await item(io, chat, 'group-line', l.id, payload);
             sealed.set(l.id, JSON.stringify(it));
-            go.push(it);
+            fresh.push(it);
         } else if (l.state === 'sending' && l.item && now - l.at < RESEND_WITHIN_MS) {
-            try { go.push(JSON.parse(l.item) as RelayItem); } catch { /* not kept as sent */ }
+            try { resend.push(JSON.parse(l.item) as RelayItem); } catch { /* not kept as sent */ }
         } else if (l.state === 'sending' && now - l.at >= RESEND_WITHIN_MS) {
             // Too old for my server to take again: it never will be sent, so it says so.
             tooOld.add(l.id);
@@ -226,10 +233,26 @@ async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
         const note = t(GUEST_CHAT_WORDS.notReached);
         await update(io, id, (c) => ({ ...c, lines: c.lines.map((l) => (tooOld.has(l.id) && l.state === 'sending' ? { ...l, state: 'failed', note, item: null } : l)) }));
     }
+    // Kept as `sending` with the item before it is posted: a round that stops now posts the same item again. Written onto
+    // the chat as it is now, and only while the epoch it would seal under is still the one these were sealed under (a
+    // refusal or a key that came while they were signed moves it). A line no longer waiting under that id (another send
+    // sealed it meanwhile, a refusal gave it a new one) is left as it is. Only what was written here is posted.
+    const marked = new Set<string>();
+    if (sealed.size) {
+        await update(io, id, (c) => {
+            marked.clear();
+            const now2 = guestSealEpoch(c);
+            if (!now2 || now2.epoch !== seal!.epoch || c.keys[String(now2.epoch)] !== sealKey) return null;
+            const lines = c.lines.map((l) => {
+                if (!sealed.has(l.id) || l.state !== 'waiting' || l.author !== io.me) return l;
+                marked.add(l.id);
+                return { ...l, state: 'sending' as const, item: sealed.get(l.id)! };
+            });
+            return marked.size ? { ...c, lines } : null;
+        });
+    }
+    const go = [...resend, ...fresh.filter((it) => marked.has(it.envelope.itemId))];
     if (!go.length) return changed || tooOld.size > 0;
-    // Kept as `sending` with the item before it is posted: a round that stops now posts the same item again. A line no
-    // longer waiting under that id (another send sealed it meanwhile) is left as it is.
-    await update(io, id, (c) => ({ ...c, lines: c.lines.map((l) => (sealed.has(l.id) && l.state === 'waiting' ? { ...l, state: 'sending', item: sealed.get(l.id)! } : l)) }));
     let answered: Array<{ itemId: string; state: string; refused?: string }>;
     try {
         answered = await post(io, go);
@@ -239,7 +262,7 @@ async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
         if (typeof status === 'number' && status >= 400 && status < 500 && ![401, 408, 425, 429].includes(status)) {
             const why = e instanceof Error && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : null;
             const ids = new Set(go.map((g) => g.envelope.itemId));
-            await update(io, id, (c) => ({ ...c, lines: c.lines.map((l) => (ids.has(l.id) ? { ...l, state: 'failed', note: why, item: null } : l)) }));
+            await update(io, id, (c) => ({ ...c, lines: c.lines.map((l) => (ids.has(l.id) && l.state === 'sending' ? { ...l, state: 'failed', note: why, item: null } : l)) }));
         }
         throw e;
     }

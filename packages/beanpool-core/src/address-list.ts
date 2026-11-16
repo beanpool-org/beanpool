@@ -504,8 +504,12 @@ export function chooseAddressList(offered: unknown, held: AddressListHeld): Addr
 
 /** What a spare said this round: its proof, and the list it served (as {@link chooseAddressList} took it), or null for none. */
 export interface SpareAnswer {
-    /** `proved`: it signed the phone's question with the community's key, naming this list number. */
-    proof: { kind: 'proved'; epoch: number; seq: number } | { kind: 'other-key' | 'silent' };
+    /**
+     * What it said, as the phone records an address's answer (apps/native/utils/address-decide.ts AddressAnswer): `proved`,
+     * it signed the phone's question with the community's key, naming this list number; `other-key`, it answered but not as
+     * the community (why: for the record); `silent`, no answer that says who answers.
+     */
+    proof: { kind: 'proved'; epoch: number; seq: number } | { kind: 'other-key'; why?: string } | { kind: 'silent' };
     /** The list the spare served when the community's key signed it and it is newer than the one kept; else null. */
     list: { epoch: number; seq: number; addresses: readonly string[] } | null;
 }

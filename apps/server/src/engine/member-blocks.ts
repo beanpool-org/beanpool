@@ -28,7 +28,10 @@
  * - A block is of a person, both ways: a block or an unblock of a key a re-key replaced acts on the key its member holds
  *   now (key-succession.ts rekeyedToNow), as the re-key's move did. A phone keeps its own copy of the list and may still
  *   name the old key (apps/native utils/blocklist.ts): its unblock of it lifts the block the community moved, and its
- *   block of it blocks the member, never a key nobody signs with any more (review of #3268, round 3).
+ *   block of it blocks the member, never a key nobody signs with any more (review of #3268, round 3). Every change leaves
+ *   one row per person: an unblock takes off every key they are known by, a block leaves only the key they hold now, and
+ *   each answer names the person's keys (routes/blocks.ts `formerKeys`, `person`), so the phone's copy follows the
+ *   community's list (round 4).
  *
  * ## A standby holds every list (mergeReplicatedBlocks)
  *
@@ -58,7 +61,7 @@
  */
 import { db, rethrowUnlessRowRefused } from '../db/db.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './member-key.js';
-import { rekeyedToNow } from './key-succession.js';
+import { personKeysOf, rekeyedFromChains, rekeyedToNow } from './key-succession.js';
 import type { SyncMemberBlock } from '@beanpool/engine';
 import { word, wordsFor } from '@beanpool/core';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
@@ -338,10 +341,16 @@ export function addBlocks(owner: string, blocked: readonly string[], now: number
     const keys = checkedKeys(owner, blocked);
     return db.transaction(() => {
         const has = db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?');
+        // One row per person: a row of a key a re-key replaced (a list from before the re-key moved blocks) goes, with
+        // its tombstone, and the person is held under the key they hold now.
+        const formers = rekeyedFromChains(keys);
+        const stale = keys.flatMap(k => (formers[k] ?? []).filter(f => has.get(owner, f)))
+            .map(f => db.prepare('SELECT * FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').get(owner, f) as BlockRow);
         const fresh = keys.filter(k => !has.get(owner, k));
-        if (fresh.length === 0) return [];
+        if (fresh.length === 0 && stale.length === 0) return [];
         const count = (db.prepare('SELECT COUNT(*) AS n FROM member_blocks WHERE owner_pubkey = ?').get(owner) as { n: number }).n;
-        if (count + fresh.length > MEMBER_BLOCKS_MAX) throw new BlockRefusal(409, 'block_limit', BLOCK_LIMIT_ERROR);
+        if (count - stale.length + fresh.length > MEMBER_BLOCKS_MAX) throw new BlockRefusal(409, 'block_limit', BLOCK_LIMIT_ERROR);
+        if (stale.length > 0) deleteBlockRows(stale, now);
         const insert = db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)');
         for (const k of fresh) insert.run(owner, k, iso(now), blockStamp(owner, k, now));
         return fresh;
@@ -375,13 +384,14 @@ function checkedKeys(owner: string, blocked: readonly string[]): string[] {
 }
 
 /**
- * Unblocks one person: the key, and the key its member holds now when a re-key replaced it (the re-key moved the block
- * there). False when neither was on the owner's list.
+ * Unblocks one person: every key they are known by here (key-succession.ts personKeysOf), the key named, the key they hold
+ * now and each one a re-key replaced, so no row of theirs is left holding them blocked. False when none was on the
+ * owner's list.
  */
 export function removeBlock(owner: string, blocked: string, now: number = Date.now()): boolean {
     return db.transaction(() => {
         const read = db.prepare('SELECT * FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?');
-        const rows = [...new Set([blocked, rekeyedToNow(blocked)])]
+        const rows = [...new Set([blocked, ...personKeysOf(blocked)])]
             .map(k => read.get(owner, k) as BlockRow | undefined)
             .filter((r): r is BlockRow => !!r);
         if (rows.length === 0) return false;

@@ -113,6 +113,17 @@ export function rekeyedFromChains(keys: readonly string[]): Record<string, strin
 }
 
 /**
+ * Every key the member `key` names is known by here: the key they hold now first (rekeyedToNow), then each key a completed
+ * re-key replaced with it (rekeyedFromChains). A block is of a person (member-blocks.ts): a change of one leaves one row
+ * for them, under their key now, and its answer names them by all of these, so a phone's own copy of the list knows the
+ * person it changed even when they are no longer on the list (apps/native utils/blocklist.ts).
+ */
+export function personKeysOf(key: string): string[] {
+    const now = rekeyedToNow(key);
+    return [now, ...(rekeyedFromChains([now])[now] ?? [])];
+}
+
+/**
  * Every member's served chain of former keys, read once (a roster names many members): from each key back through
  * `rekeyed_to`, attested rows only, newest first, at most KEY_SUCCESSION_MAX. The walk stops at the first row with no
  * statement: a chain broken there could not be followed past it by any app (core walkKeySuccession).

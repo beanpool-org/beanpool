@@ -480,6 +480,27 @@ async function main(): Promise<void> {
     const annBlocksOwnOld = await call('POST', annNew, '/api/blocks', { targetPubkey: ann.pk });
     assert(annBlocksOwnOld.status === 400 && annBlocksOwnOld.body?.code === 'block_self' && sameSet(keysOf(annNew), [bo.pk, eve.pk]),
         `her own old key is hers: she can't block it, and her list is as it was (${show(annBlocksOwnOld)})`);
+    // Every change's answer names the person it changed by all their keys, on the list or not, and every answer the list's
+    // former keys, so the phone's copy follows the community's list from each answer, not only from a read (round 4).
+    assert(same(boUnblocksOld.body?.person ?? [], [annNew.pk, ann.pk]) && same(Object.keys(boUnblocksOld.body?.formerKeys ?? { x: 1 }), []),
+        `the unblock's answer names her by her key now and her old one, though she is off the list (${show(boUnblocksOld)})`);
+    assert(same(boBlocksOld.body?.person ?? [], [annNew.pk, ann.pk]) && same(boBlocksOld.body?.formerKeys?.[annNew.pk] ?? [], [ann.pk]),
+        `the block's answer names her, and her old key as her new key's former one (${show(boBlocksOld)})`);
+    // One row per person, whatever a list held before: a row of her old key beside her new one (a list from before a
+    // re-key moved blocks) goes with any change of her, an unblock of either key takes off both, and a block leaves one.
+    const staleRow = () => db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)')
+        .run(bo.pk, ann.pk, new Date().toISOString(), new Date().toISOString());
+    staleRow();
+    const boBlocksNewAgain = await call('POST', bo, '/api/blocks', { targetPubkey: annNew.pk });
+    assert(boBlocksNewAgain.status === 200 && same(keysOf(bo), [annNew.pk]) && same(listed(boBlocksNewAgain), [annNew.pk]) && tombOf(bo.pk, ann.pk) !== null,
+        `a block of her leaves one row, under her key now, and the old one's goes with its tombstone (${show(boBlocksNewAgain)})`);
+    staleRow();
+    const boUnblocksNew = await call('POST', bo, '/api/blocks/remove', { targetPubkey: annNew.pk });
+    assert(boUnblocksNew.status === 200 && boUnblocksNew.body?.removed === true && same(keysOf(bo), []) && same(listed(boUnblocksNew), [])
+        && same(boUnblocksNew.body?.person ?? [], [annNew.pk, ann.pk]),
+        `an unblock of her new key takes off her old key's row too (${show(boUnblocksNew)})`);
+    const boBlocksAgain = await call('POST', bo, '/api/blocks', { targetPubkey: annNew.pk });
+    assert(boBlocksAgain.status === 200 && same(keysOf(bo), [annNew.pk]), `blocked again for what follows (${show(boBlocksAgain)})`);
 
     // ── 8. replication ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 8. replication: a standby holds every list ──');

@@ -3,7 +3,7 @@ name: CI Pipeline
 # A DRAFT pull request's run is titled "Draft check: <PR title>", so a reader of the runs can tell a draft's fast run from a full
 # one without opening it (scripts/lanes/lib.sh ci_head_state skips it). Every other run keeps GitHub's own title: a run-name
 # that is only whitespace falls back to it.
-run-name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && format('Draft check: {0}', github.event.pull_request.title) || '' }}
+run-name: "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && format('Draft check: {0}', github.event.pull_request.title) || '' }}"
 
 on:
   workflow_dispatch:

@@ -450,8 +450,12 @@ test('the queue starts the whole matrix, every PR gets the required check, and e
 test('event x draft -> which jobs run, the name the required job reports, and the run title (the conditions evaluated)', () => {
     const ifOf = (job) => jobKey(CI, job, 'if');
     for (const job of ['shard', 'test-all', 'draft']) assert.ok(ifOf(job), `jobs.${job} has an if:`);
-    const runName = /^run-name: (.*)$/m.exec(CI)?.[1];
-    assert.ok(runName, 'ci.yml has a run-name');
+    const runName = /^run-name: "(.*)"$/m.exec(CI)?.[1];
+    assert.ok(runName, 'ci.yml has a run-name, quoted');
+    // YAML: an unquoted value with ": " in it is a nested mapping, and GitHub refuses the whole file (a run with no jobs on every
+    // push: this PR's first push, run 43962846570). An expression with a colon in a string, such as the run-name's, is quoted.
+    const bare = [...CI.matchAll(/^ *(?:- )?[\w-]+: (\$\{\{.*)$/gm)].map((m) => m[1]).filter((v) => /: /.test(v));
+    assert.deepEqual(bare, [], 'an unquoted expression value with ": " in it');
     const ALL = 'Full run waits for ready (draft)';
     const TABLE = [
         // event               draft  shard  test-all  its check's name   draft job  run title ('' = GitHub's own)

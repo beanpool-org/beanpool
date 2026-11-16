@@ -3,8 +3,8 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { makeGroupEpochRecord, openGroupEpochRecord, openGroupLine, sealGroupLine } from '../group-crypto.js';
-import { guestChatId, type GuestChats } from '../group-guest-chat.js';
-import { answerGuestInvitation, sendGuestLine, syncGuestMail, GUEST_CURSOR_META, type GuestMailIO } from '../group-guest-mail.js';
+import { guestChatId, guestPageStale, GUEST_PAGE_STALE_MS, type GuestChats } from '../group-guest-chat.js';
+import { answerGuestInvitation, sendGuestLine, syncGuestMail, GUEST_CURSOR_META, GUEST_LINKS_META, type GuestMailIO } from '../group-guest-mail.js';
 import { relayEnvelopeVerifies, signRelayEnvelope, type RelayItem } from '../relay-envelope.js';
 
 // G2: the guest's round and sends against a fake of their own community's server (engine/group-guest-home.ts's routes):
@@ -530,5 +530,57 @@ describe('NOTICES (round 4): the round applies a takedown before it confirms it,
         expect(f.confirmed).not.toContain('n-later-kind');
         // The page with the takedown, then the same page again holding only what can't be applied yet: no third read.
         expect(gets).toBe(2);
+    });
+});
+
+describe('TWO TABS (G2 follow-ups): a page read before the newest one this device applied moves nothing', () => {
+    /** Each tab's next page as my server served it, in the order the tabs' fetches come back (not the order they went out). */
+    function tabs(f: ReturnType<typeof fake>, pages: unknown[]) {
+        f.io.get = async () => pages.shift() ?? { items: [], more: false, groups: [], sent: [], sentMore: false };
+    }
+    const listed = (state: string) => ({ host: HOST, group: GROUP, state, roster: null, rosterAt: null });
+    const tick = { itemId: '00000000-0000-4000-8000-0000000000aa', kind: 'group-line', host: HOST, group: GROUP, state: 'sent', refused: null, at: 50 };
+
+    it("the newer tab brought an invitation; the older tab's page (no such group listed, a removal from before it, a tick) changes nothing, confirms nothing, moves no cursor", async () => {
+        const f = fake();
+        // The page read later (an invitation arrived between the two reads) comes back first.
+        tabs(f, [
+            { items: [inviteNotice('n-new')], more: false, groups: [listed('invited')], linksAt: 2_000, sent: [], sentMore: false },
+            { items: [{ id: 'n-old-removal', host: HOST, group: GROUP, kind: 'removed', data: { why: 'removed' }, receivedAt: 1 }], more: false, groups: [], linksAt: 1_000, sent: [tick], sentMore: false },
+        ]);
+        await syncGuestMail(f.io);
+        expect(f.chats[ID]?.state).toBe('invited');
+        expect(f.meta.get(GUEST_LINKS_META)).toBe('2000');
+        const savesBefore = f.saves;
+        await syncGuestMail(f.io);
+        expect(f.chats[ID]?.state).toBe('invited');
+        expect(f.chats[ID]?.inviteId).toBe('n-new');
+        expect(f.confirmed).toEqual(['n-new']);
+        expect(f.saves).toBe(savesBefore);
+        expect(f.meta.get(GUEST_LINKS_META)).toBe('2000');
+        expect(f.meta.get(GUEST_CURSOR_META)).toBeUndefined();
+    });
+
+    it("close the class: (behind the newest by 1 ms / a round / the stale window exactly / past it: my server's clock went back / no linksAt / none applied yet / newer) -> moves nothing, or is read", async () => {
+        const ROWS: Array<[string, number | null, unknown, boolean]> = [
+            ['1 ms behind', 2_000_000, 1_999_999, false],
+            ['a round (30 s) behind', 2_000_000, 2_000_000 - 30_000, false],
+            ['exactly the stale window behind', 2_000_000, 2_000_000 - GUEST_PAGE_STALE_MS, false],
+            ["past the window (my server's clock went back)", 2_000_000, 2_000_000 - GUEST_PAGE_STALE_MS - 1, true],
+            ['no linksAt (a server from before it)', 2_000_000, undefined, true],
+            ['none applied yet', null, 1_000, true],
+            ['newer than the newest', 2_000_000, 2_000_001, true],
+        ];
+        for (const [label, seen, linksAt, read] of ROWS) {
+            const f = fake();
+            if (seen !== null) f.meta.set(GUEST_LINKS_META, String(seen));
+            tabs(f, [{ items: [inviteNotice(`n-${label}`)], more: false, groups: [listed('invited')], linksAt, sent: [], sentMore: false }]);
+            await syncGuestMail(f.io);
+            expect({ invited: f.chats[ID]?.state === 'invited', confirmed: f.confirmed.length === 1 }, label).toEqual({ invited: read, confirmed: read });
+            // A page read sets the mark to its own linksAt (after a clock that went back too); a stale one leaves it.
+            const mark = typeof linksAt === 'number' && read ? String(linksAt) : seen === null ? undefined : String(seen);
+            expect(f.meta.get(GUEST_LINKS_META), label).toBe(mark);
+            expect(guestPageStale(linksAt, seen), label).toBe(!read);
+        }
     });
 });

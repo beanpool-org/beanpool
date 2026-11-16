@@ -37,6 +37,7 @@ import {
 import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from './useKeepCaretVisible';
+import { useScreenKeyboardOffset } from './useScreenKeyboardOffset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -132,6 +133,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [approximate, setApproximate] = useState(false);
     const mapRef = useRef<MapView | null>(null);
     const { scrollRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
+    // A page sheet starts below the window's top, so the keyboard view needs that much offset to lift the form clear of
+    // the keyboard (and the caret-follow above needs that lift: it keeps the field inside the visible part of the form).
+    const screenKeyboard = useScreenKeyboardOffset();
     // Where the address box sits in the scroll content, for bringing it (and the map under it) into view.
     const addressY = useRef(0);
     // The spot a new pin was placed at, kept while the pin shows Approximate, so the host can still choose it.
@@ -667,7 +671,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onShow={onShow}>
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset} onLayout={screenKeyboard.onScreenLayout}>
                 <View style={styles.container}>
                     <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
                         <Pressable onPress={onClose} hitSlop={12} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={t('Cancel')}>

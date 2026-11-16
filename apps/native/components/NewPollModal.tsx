@@ -40,6 +40,7 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { nearbyListingsOn, useMyArea } from '../utils/member-area';
 import { signedRequestWords } from './signed-request-lines';
 import { useKeepCaretVisible } from './useKeepCaretVisible';
+import { useScreenKeyboardOffset } from './useScreenKeyboardOffset';
 
 const HEADER_PAD_TOP = 14;
 
@@ -58,6 +59,9 @@ export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollMod
     // Android draws this pageSheet full-screen under the status bar; see utils/modal-safe-area.
     const topInset = pageSheetTopInset(Platform.OS, useSafeAreaInsets().top);
     const { scrollRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
+    // A page sheet starts below the window's top, so the keyboard view needs that much offset to lift the form clear of
+    // the keyboard (and the caret-follow above needs that lift: it keeps the field inside the visible part of the form).
+    const screenKeyboard = useScreenKeyboardOffset();
 
     const [question, setQuestion] = useState('');
     const [description, setDescription] = useState('');
@@ -198,6 +202,8 @@ export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollMod
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior="padding"
+                keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}
+                onLayout={screenKeyboard.onScreenLayout}
             >
                 <View style={styles.container}>
                     {/* Header */}

@@ -200,7 +200,8 @@ export function eventChatHasPostedLine(postId: string): boolean {
  * Whether a chat is in this member's chat list (Marty, 16 Nov 2026: "yes only when someone posts and only if you are going
  * or interested"). Every chat but an event's is, as before. An event's chat is listed once someone has posted a line in it
  * (eventChatHasPostedLine), and only for the people who may read it (canReadEventThread: the host, or Going and let in;
- * Interested can't open it, decision 17), while the event is there for them (chatHiddenFrom). One whose event is gone is not.
+ * Interested can't open it, decision 17), which holds only while the event is there for them (never hidden by reports, nor
+ * a group's event out of their sight: chatHiddenFrom is false for every reader). One whose event is gone is not.
  * Both lists (GET /api/messages/conversations, GET /api/your-groups) and every unread count behind a badge
  * (state-engine.ts listedUnreadChats) go by this, so no badge comes from an event chat that isn't listed. The chat still
  * opens from the event itself (GET /api/marketplace/posts/:id/chat), listed or not.
@@ -209,7 +210,7 @@ export function chatListedFor(conv: { id: string; type: string }, pubkey: string
     if (conv.type !== 'event_thread') return true;
     let row: EventRow;
     try { row = loadEventForThread(conv.id); } catch { return false; }
-    return !eventUnknownTo(row, pubkey) && canReadEventThread(row, pubkey) && eventChatHasPostedLine(conv.id);
+    return canReadEventThread(row, pubkey) && eventChatHasPostedLine(conv.id);
 }
 
 /**

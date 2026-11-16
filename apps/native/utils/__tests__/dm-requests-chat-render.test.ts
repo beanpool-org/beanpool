@@ -182,7 +182,7 @@ const KOFI_REQUEST = { state: 'pending', from: 'kofi-key', at: iso(now - 120_000
 type Answers = Record<string, unknown>;
 function standIn(over: Answers): void {
     const answers: Answers = {
-        getConversation: null, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getKnownChatMute: null,
+        getConversation: null, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null,
         markConversationRead: undefined,
         getDb: { getAllAsync: async () => [], getFirstAsync: async () => null, runAsync: async () => ({}) },
         ...over,

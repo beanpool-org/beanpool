@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmSightFor, judgeFirstSight, applySightVerdict, settleFirstSight, dmOpenPeers, acceptOffer, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, markHeldLost, noRoomForFirstSight, rekeyDateOf, DmPinsFullError, DM_PINS_MAX_BYTES, FORMER_MAX, salvagePinIds, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
+import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmSightFor, judgeFirstSight, applySightVerdict, settleFirstSight, dmOpenPeers, acceptOffer, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, markHeldLost, noRoomForFirstSight, rekeyDateOf, DmPinsFullError, DM_PINS_MAX_BYTES, FORMER_MAX, salvagePinIds, restDmEntry, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
 import { dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey } from '../storage-keys';
 
 // The pin store itself (utils/dm-peer-pins.ts): what a listing may do to a pin, and what an unreadable store does. The
@@ -114,7 +114,7 @@ describe('applyDmListings: a listing only offers on a pin the member marked veri
 
     it('a stored pause the member\'s reset made, on a pin not marked verified, follows the next one-key listing — Signal\'s model (16 Nov): its flags are no longer read (§2.6)', () => {
         const LATER = '2026-10-15T00:00:00.000Z';
-        const p: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW, firstSight: true, afterReset: true } } };
+        const p: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW, firstSight: true } } };
         expect(applyDmListings(p, D0, [[OTHER]], LATER)).toBe(true);
         expect(p[D0]).toEqual({ peer: OTHER, since: LATER, by: 'listing', checked: true, former: [BEN], changedAt: [LATER] });
     });
@@ -222,29 +222,24 @@ describe('acceptOffer: the member\'s "Continue with the new key" (slice 2)', () 
         }
         expect(JSON.stringify(pins)).toBe(before);
     });
-    it('a rule-5 record (heldLost too) continues to the one key its listing names, by the member, with nothing as former; any other key, or no single key listed: nothing changes (15 Oct words design, D1)', () => {
+    // S2 (DESIGN-dm-key-signal-model §7): Continue no longer has a rule-5 branch. A record whose listing names one key becomes
+    // a pin on it by itself (restDmEntry, §2.3 row 5), so it is never a card with a key; one with no single key offers nothing.
+    it('a rule-5 record (heldLost too) is never continued from: its listing\'s one key makes it a pin by itself, and Continue changes nothing (S2)', () => {
         const pins: DmPeerPins = {
             [D0]: { unplaced: true, since: NOW, listed: PUPPET },
             [D1]: { unplaced: true, since: NOW, listed: BEN, heldLost: true, stale: true },
             [D2]: { unplaced: true, since: NOW, listed: null },
         };
         const before = JSON.stringify(pins);
-        expect(acceptOffer(pins, D0, BEN, LATER)).toBe(false);
-        expect(acceptOffer(pins, D0, OTHER, LATER)).toBe(false);
-        expect(acceptOffer(pins, D0, 'not a key', LATER)).toBe(false);
-        expect(acceptOffer(pins, D1, PUPPET, LATER)).toBe(false);
-        for (const k of [BEN, PUPPET, OTHER]) expect(acceptOffer(pins, D2, k, LATER)).toBe(false);
+        for (const id of [D0, D1, D2]) for (const k of [BEN, PUPPET, PUPPET.toUpperCase(), OTHER, 'not a key']) expect(acceptOffer(pins, id, k, LATER)).toBe(false);
         expect(JSON.stringify(pins)).toBe(before);
-        expect(dmPinFor(pins, D0)).toBeNull();
-        expect(acceptOffer(pins, D0, PUPPET.toUpperCase(), LATER)).toBe(true);
-        expect(pins[D0]).toEqual({ peer: PUPPET, since: LATER, by: 'member' });
-        expect(acceptOffer(pins, D1, BEN, LATER)).toBe(true);
-        expect(pins[D1]).toEqual({ peer: BEN, since: LATER, by: 'member' });
+        // What takes the listed key instead: the resting rule, with no former and no notice (no key was ever placed).
+        expect(restDmEntry(pins, D0, LATER)).toBe(true);
+        expect(pins[D0]).toEqual({ peer: PUPPET, since: LATER, by: 'listing', checked: true });
+        expect(restDmEntry(pins, D1, LATER)).toBe(true);
+        expect(pins[D1]).toEqual({ peer: BEN, since: LATER, by: 'listing', checked: true });
         expect(dmOpenPeers(dmPinFor(pins, D1)!)).toEqual([BEN]);
-        // Once continued, first sight never judges it again; not marked verified, a listing moves it (Signal's model, 16 Nov).
-        expect(applySightVerdict(pins, D0, { rule: 5 }, OTHER, undefined, LATER)).toBe(false);
-        expect(applyDmListings(pins, D0, [[OTHER]], LATER)).toBe(true);
-        expect(dmPinFor(pins, D0)).toMatchObject({ peer: OTHER, by: 'listing', former: [PUPPET], changedAt: [LATER] });
+        expect(restDmEntry(pins, D2, LATER)).toBe(false);
         expect(pins[D2]).toEqual({ unplaced: true, since: NOW, listed: null });
     });
     it('a first-sight pause (rules 3-4) continues to the key on offer only; the verdict, the offer and what was heard go', () => {
@@ -644,7 +639,7 @@ describe('salvagePinIds and the reset\'s ids for the guard list (#1938 case 14 Q
     const [I1, I2, I3] = ['6F9619FF-8B86-D011-B42D-00C04FC964FF', '7c9e6679-7425-40de-944b-e07fc1f90ae7', '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed'];
     /** Every shape the format writes: a checked pin with an offer and what the listing said, a member's pin, a first sight's record. */
     const honest = () => record({
-        [I1]: { peer: BEN, since: NOW, by: 'first-seen', checked: true, former: [OTHER], offered: { peer: PUPPET, at: NOW, nodeSays: { rekeyedAt: NOW }, firstSight: true, afterReset: true }, heard: { tryKeys: [PUPPET], rekeyedAt: NOW } },
+        [I1]: { peer: BEN, since: NOW, by: 'first-seen', checked: true, former: [OTHER], offered: { peer: PUPPET, at: NOW, nodeSays: { rekeyedAt: NOW }, firstSight: true }, heard: { tryKeys: [PUPPET], rekeyedAt: NOW } },
         [I2]: { peer: BEN, since: NOW, by: 'member' },
         [I3]: { unplaced: true, since: NOW, listed: PUPPET, heard: { tryKeys: [BEN] }, stale: true, heldLost: true },
     });

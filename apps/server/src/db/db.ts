@@ -504,7 +504,7 @@ export function initSchema() {
     if (gate.kind === 'fresh') db.transaction(() => { db.exec(schemaSql); writeSchemaStamp(db, getVersion()); })();
 
     // ── The schema steps born since 1.4.0 ─────────────────────────────────────────────────────────────────────────────
-    // The gate opens a file 1.4.0 or later last started (db/schema-gate.ts). These bring one from 1.4.0 to this release's
+    // The gate opens a file 1.4.0 or later last started (db/schema-gate.ts). These bring one from 1.4.1 to this release's
     // shape, and do nothing on a file that has it. Before the schema.sql exec, which may index their columns: CREATE INDEX
     // on a missing column stops the whole exec (test-schema-upgrade-fresh-shape.ts holds every column schema.sql names to
     // that). (The steps born between 1.2.36 and 1.4.0, the hundredths step among them, were log rows CUT2, B10 and B11,

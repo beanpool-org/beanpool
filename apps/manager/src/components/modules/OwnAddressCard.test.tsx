@@ -82,6 +82,8 @@ const openAdd = (choice: 'number' | 'domain') => {
     fireEvent.click(screen.getByRole('button', { name: choice === 'number' ? "this server's number" : 'your own domain' }));
 };
 const row = (address: string) => screen.getAllByTestId('own-address').find((li) => li.getAttribute('data-address') === address)!;
+/** Add an address asks first (several addresses S6, design §7, §8): yes, add it. */
+const addIt = async () => fireEvent.click(within(await screen.findByTestId('in-page-confirm')).getByRole('button', { name: 'Add it' }));
 
 describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
     beforeEach(() => vi.restoreAllMocks());
@@ -234,11 +236,13 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         openAdd('number');
         fireEvent.change(screen.getByLabelText("This server's public IP address"), { target: { value: ' 203.0.113.5 ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this IP address' }));
+        await addIt();
         await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent("203.0.113.5 is this community's address now"));
         expect(sent[0]).toEqual({ path: '/public-address/own', body: { ip: '203.0.113.5' } });
         openAdd('domain');
         fireEvent.change(screen.getByLabelText('Your own domain name'), { target: { value: 'https://beans.example.org/settings' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this domain' }));
+        await addIt();
         await waitFor(() => expect(sent).toHaveLength(2));
         expect(sent[1].body).toEqual({ domain: 'beans.example.org' });
         expect(domainOf('HTTP://coop.example.net?x=1')).toBe('coop.example.net');
@@ -253,6 +257,7 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         openAdd('number');
         fireEvent.change(screen.getByLabelText("This server's public IP address"), { target: { value: '192.168.1.20' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this IP address' }));
+        await addIt();
         await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent(why));
         expect(screen.getByTestId('addresses-action-message').className).toContain('text-bp-chip-danger-ink');
         expect(screen.getByRole('alert')).toHaveTextContent(why);
@@ -269,9 +274,11 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         openAdd('domain');
         fireEvent.change(screen.getByLabelText('Your own domain name'), { target: { value: 'coop.example.net' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this domain' }));
+        await addIt();
         expect(await screen.findByTestId('address-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
         expect(screen.queryByTestId('address-proof-input')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Use this domain' }));
+        await addIt();
         await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent("coop.example.net is this community's address now"));
         expect(sent.map((s) => s.body.code)).toEqual([undefined, undefined]);
         expect(sent.map((s) => s.body.domain)).toEqual(['coop.example.net', 'coop.example.net']);

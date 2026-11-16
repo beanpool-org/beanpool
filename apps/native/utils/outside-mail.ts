@@ -40,7 +40,7 @@
  * by itself), so the caller's deadline (outside-chat-live.ts) ends a stalled request, and the round with it.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, newDmMessageId, newOutsideDeviceId, openOutsideLine, outsideReceiptPayload,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, newDmMessageId, newOutsideDeviceId, openOutsideLine, outsideReceiptPayload,
     readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, nodeHomeOf, audienceOf, t,
     type AddressCard, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
@@ -257,6 +257,27 @@ export async function doorOpen(store: OutsideChatStore): Promise<boolean> {
 
 export async function setDoor(store: OutsideChatStore, open: boolean): Promise<void> {
     await store.setMeta(DOOR_META, open ? 'open' : 'closed');
+}
+
+// ── Finding someone in another community by name (N1, @beanpool/core find-by-name.ts) ──
+
+/** Whether people in other communities can find me by name: my community's switch, the same on every device. */
+export async function findMeOn(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'signal'>): Promise<boolean> {
+    return (await answerOf(await signedGet(ctx.nodeUrl, '/api/find/me', ctx.identity as BeanPoolIdentity, ctx.signal)))?.findable === true;
+}
+
+/** The switch on (my community is handed my card, signed now) or off; what it is now. Throws OutsideMailError. */
+export async function setFindMe(ctx: OutsideMailContext, on: boolean): Promise<boolean> {
+    const card = on ? await myAddressCard(ctx) : null;
+    if (on && !card) throw new OutsideMailError(503, t("This community's server knows none of its own names yet, so it can't send to another community."), 'no_home');
+    const answer = await answerOf(await signedPost(ctx.nodeUrl, '/api/find/me', on ? { on, card } : { on }, ctx.identity as BeanPoolIdentity, ctx.signal));
+    return answer?.findable === true;
+}
+
+/** The card of whoever uses `name` at the community at `home`, or null for the one "nobody". Throws OutsideMailError with my server's words. */
+export async function findByName(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'signal'>, home: string, name: string): Promise<AddressCard | null> {
+    const answer = await answerOf(await signedPost(ctx.nodeUrl, '/api/find/name', { home, name }, ctx.identity as BeanPoolIdentity, ctx.signal));
+    return answer?.found === true && addressCardVerifies(answer.card) ? answer.card : null;
 }
 
 async function envelopeFor(ctx: OutsideMailContext, fields: Omit<RelayEnvelopeFields, 'senderKey' | 'senderHome' | 'payloadHash'>, payload: string): Promise<RelayEnvelope> {

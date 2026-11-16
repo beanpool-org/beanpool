@@ -3,7 +3,7 @@ slug: the-pulse
 title: The Pulse
 summary: What your neighbours make and share elsewhere, in one feed.
 help: Links your neighbours made or shared elsewhere, in one feed. Tap one to open it.
-related: home, learn, your-channels, reporting, the-bean
+related: home, learn, local-knowledge, your-channels, reporting, the-bean
 ---
 
 ## What it is
@@ -15,7 +15,7 @@ It is on **Home** too, as the **The Pulse** card, when a neighbour has shared so
 The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do.
 
 - **Neighbours:** posts from members' channels. The buttons along the top pick a subject, like Food & growing or Repair & reuse. **All** shows everything.
-- **Learn** (phone app): videos about how BeanPool works. See "The Learn lane". In the web app they are in the feed, and **How it works** along the top shows only them.
+- **How it works:** videos about how BeanPool works. See "How it works videos". On the phone they have their own lane; in the web app they are in the feed too, and **How it works** along the top shows only them.
 
 Pull down to refresh. In the web app, tap 🔄 at the top instead.
 

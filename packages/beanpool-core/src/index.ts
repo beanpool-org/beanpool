@@ -112,6 +112,8 @@ export * from './group-guest-steps.js';
 export * from './group-guest-chat.js';
 export * from './group-guest-mail.js';
 export * from './outside-devices.js';
+// Finding someone in another community by their exact name, when they said yes (N1).
+export * from './find-by-name.js';
 export * from './cleartext-address.js';
 export * from './public-ipv4.js';
 export * from './claim-proof.js';

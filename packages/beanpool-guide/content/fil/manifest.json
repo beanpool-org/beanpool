@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "Ang ibinabahagi ng kapitbahay, mga video sa Alamin, at pagdaragdag ng sariling mga channel.",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "Ang ibinabahagi ng kapitbahay, ang mga video na Paano ito gumagana, at pagdaragdag ng sariling mga channel.",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "Mga Desisyon at botohan, pinagsasaluhang munggo, iyong mga grupo, mga negosyo at mga tagapangalaga. Narito rin ang mga poll at event; mahahanap ang mga ito sa Merkado.",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "Mga Desisyon at botohan, pinagsasaluhang munggo, iyong mga grupo, mga negosyo at mga tagapangalaga, at Lokal na kaalaman sa Alamin. Narito rin ang mga poll at event; mahahanap ang mga ito sa Merkado.",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "Seksyon ng Alamin",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "Video: Paano ito gumagana",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "Maikling mga video tungkol sa BeanPool, at ang mga pahina ng gabay na kasama ng mga ito.",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "Paghiling sa isang tao na bayaran ka ng munggo para sa isang bagay. Hindi nagbabayad nang kusa ang singil; ang tao ang pipili kung magbabayad. Sa ngayon, puwedeng sumama ang singil sa isang imbitasyon.",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "Lokal na kaalaman",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "Ang Alamin, ang istante ng komunidad mo ng mga bagay na mahalagang malaman: paghahanap ng pahina, pagmumungkahi, pagpapanatiling tama, at kung paano sinusuri ng may-ari o admin ang bawat isa.",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

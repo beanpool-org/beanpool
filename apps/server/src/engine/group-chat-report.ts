@@ -10,7 +10,14 @@
 // photo reads "could not be verified", never as the author's words.
 //
 // Who may report a line: whoever may read it, by the chat's own bar (groupChatRole + groupLineForReader, as its words and
-// its photo are served). Anything else, and any line that is no sealed member's line, answers as an id nobody has.
+// its photo are served). Anything else, and any line that is no sealed member's or guest's line, answers as an id nobody has.
+//
+// A guest's line (a guest from another community, engine/group-guests.ts; joint design §2.4, cross-chat design §4.2
+// "Reports"): the report goes to THIS server's moderators, as any line's does (the group lives here; they can remove the line
+// or the guest), and it is filed with `target_home`, the guest's home, and `told`, so a complaint also goes to that home
+// (engine/relay-complaint.ts, as a report of an outside line's does). The complaint never names the reporter; it carries
+// the line's words as this server opens them with the key handed over, only when they verify as the guest's own
+// (guestLineComplaint), when it is told, never when the report is filed.
 //
 // A voice line (engine/voice-lines.ts) is reported as a photo line is: the same key opens its voice part, named `voice` in
 // its seal and signature, and the moderators hear it. Its part is kept past VOICE_SERVER_KEEP_DAYS while a report on it is
@@ -58,6 +65,8 @@ export interface GroupLineReport {
 export interface CheckedGroupLineReport {
     messageId: string;
     authorPubkey: string;
+    /** A guest author's home (group_guests), so the report is filed with a complaint to it; null for a member's line. */
+    authorHome: string | null;
     reason: string;
     disclosure: GroupLineDisclosure;
 }
@@ -111,10 +120,14 @@ export function checkGroupLineReport(groupId: string, reporter: string, body: { 
     if (!line || line.system_type || (line.type !== 'text' && line.type !== 'image' && line.type !== VOICE_LINE_TYPE) || !isGroupEncryptedNonce(line.nonce)) throw notFound();
     const epoch = epochIn(metadataOf(line.metadata));
     if (epoch === null || !groupLineForReader(line.metadata, fromEpochOf(groupId, reporter))) throw notFound();
-    if (!line.author_pubkey || !db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(line.author_pubkey)) throw notFound();
+    if (!line.author_pubkey) throw notFound();
+    // A member's line, or a line of this group's guest (whatever their state now: a removed guest's lines stay reportable).
+    const member = !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(line.author_pubkey);
+    const guestHome = member ? null : (db.prepare('SELECT home FROM group_guests WHERE group_id = ? AND guest_key = ?').pluck().get(groupId, line.author_pubkey) as string | undefined) ?? null;
+    if (!member && !guestHome) throw notFound();
     if (line.author_pubkey === reporter) throw new GroupLineReportError(400, 'own_message', GROUP_LINE_REPORT_OWN);
     if (disclosure.epoch !== epoch) throw new GroupLineReportError(400, 'disclosure_epoch', GROUP_LINE_REPORT_EPOCH);
-    return { messageId: id, authorPubkey: line.author_pubkey, reason, disclosure };
+    return { messageId: id, authorPubkey: line.author_pubkey, authorHome: guestHome, reason, disclosure };
 }
 
 function reportOfRow(r: any): GroupLineReport {
@@ -144,16 +157,45 @@ export function changeGroupLineReportReason(reportId: string, reason: string): G
     return reportOfRow(db.prepare('SELECT id, reporter_pubkey, target_pubkey, target_message_id, reason, created_at, status FROM abuse_reports WHERE id = ?').get(reportId));
 }
 
-/** File a checked report: one row naming the line, its author and the key handed over. Null for a key that is no member's. */
-export function submitGroupLineReport(reporter: string, checked: CheckedGroupLineReport): GroupLineReport | null {
+/**
+ * File a checked report: one row naming the line, its author and the key handed over; a guest's line also its home
+ * (`target_home`) and the complaint's state (`told`, queued: engine/relay-complaint.ts tellHomeOf sends it). Null for a key
+ * that is no member's.
+ */
+export function submitGroupLineReport(reporter: string, checked: CheckedGroupLineReport, now = Date.now()): GroupLineReport | null {
     if (!isNodeMember(db, reporter)) return null;
     const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
+    const createdAt = new Date(now).toISOString();
     const reason = checked.reason.slice(0, 500);
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, reporter, checked.authorPubkey, checked.messageId,
-        JSON.stringify({ epoch: checked.disclosure.epoch, mk: checked.disclosure.mk }), reason, createdAt);
+    const told = checked.authorHome ? { told: { state: 'queued', tries: 0, next: now, id: crypto.randomUUID() } } : {};
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_home, target_message_id, disclosure, reason, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporter, checked.authorPubkey, checked.authorHome, checked.messageId,
+        JSON.stringify({ epoch: checked.disclosure.epoch, mk: checked.disclosure.mk, ...told }), reason, createdAt);
     return { id, reporterPubkey: reporter, targetPubkey: checked.authorPubkey, targetMessageId: checked.messageId, reason, createdAt, status: 'pending' };
+}
+
+/**
+ * What the complaint about a reported guest's line carries (engine/relay-complaint.ts): the line's id (its item's id at the
+ * guest's home, group-guests.ts takeGuestItem), when this server stored it, and its words as the key handed over opens
+ * them, signed by the guest it names. Null when they don't verify as that guest's (a wrong key, a line taken down since):
+ * nothing is told that this server's moderators couldn't read as theirs.
+ */
+export function guestLineComplaint(reportId: string): { itemId: string; at: number; words: string } | null {
+    const r = db.prepare(`SELECT ar.target_pubkey, ar.target_message_id, ar.disclosure, m.conversation_id, m.ciphertext, m.nonce, m.metadata, m.edited_at, m.timestamp, m.type
+        FROM abuse_reports ar JOIN messages m ON m.id = ar.target_message_id AND m.author_pubkey = ar.target_pubkey
+        WHERE ar.id = ? AND ar.target_home IS NOT NULL`).get(reportId) as any;
+    if (!r || r.type === 'removed' || !isGroupEncryptedNonce(r.nonce)) return null;
+    let disclosure: GroupLineDisclosure | null = null;
+    try { disclosure = disclosureOf(JSON.parse(r.disclosure ?? '')); } catch { disclosure = null; }
+    const meta = metadataOf(r.metadata);
+    const epoch = epochIn(meta);
+    if (!disclosure || epoch === null || disclosure.epoch !== epoch) return null;
+    const replyToId = typeof meta.replyToId === 'string' && meta.replyToId ? meta.replyToId : null;
+    const text = opened({ ciphertext: r.ciphertext, nonce: r.nonce }, {
+        groupId: r.conversation_id, epoch, senderPubHex: r.target_pubkey, messageId: r.target_message_id, part: r.edited_at ? 'edit' : 'body', replyToId,
+    }, new Uint8Array(Buffer.from(disclosure.mk, 'base64')));
+    const at = Date.parse(r.timestamp);
+    return text === null || !Number.isSafeInteger(at) ? null : { itemId: r.target_message_id, at, words: text };
 }
 
 /** A reported message as the moderators read it: only what its key opens, each part verified or not. */

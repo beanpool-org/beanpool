@@ -1482,6 +1482,8 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     };
     if (pathname === '/api/local/admin/app-addresses') return ok(APP_ADDRESSES_FIXTURE);
     if (pathname === '/api/local/admin/app-addresses/check') return ok({ ...APP_ADDRESSES_FIXTURE, checking: false });
+    // Make main (several addresses S6): the report, as the server answers it.
+    if (pathname === '/api/local/admin/app-addresses/main') return ok(APP_ADDRESSES_FIXTURE);
     if (pathname === '/api/local/admin/app-addresses/remove') return ok({ addresses: [], unconfirmed: [], heldBack: [], unboundSignaturesUntil: null, unboundSignaturesAccepted: false });
 
     // ---- connectors ----

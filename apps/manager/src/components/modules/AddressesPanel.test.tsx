@@ -3,8 +3,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ADDRESS_SCREEN_WORDS } from '@beanpool/core';
 import {
-    AddressesPanel, answersText, appsTodayText, canBecomeMain, cleanSubdomain, formatRelativeTime, formatTime, offersMakeMain, pointsAtText, tunnelStateOf,
+    AddressesPanel, answersText, appsTodayText, cleanSubdomain, formatRelativeTime, formatTime, offersMakeMain, pointsAtText, tunnelStateOf,
 } from './AddressesPanel';
+
+/** Answer the question the screen asks first (Make main, Add an address: several-addresses §8) with `label`. */
+async function answer(label: string) {
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: label }));
+}
 import type { NodeProfile } from '../../lib/profiles';
 
 const mockActiveNode: NodeProfile = {
@@ -38,6 +43,7 @@ const mockReport = {
             source: 'owner' as const,
             today: 3,
             busiestDay: 5,
+            mainRefusal: '203.0.113.5 is a number, and this community has a name. A number stops working when the server changes, so a name stays the main address.',
             reach: {
                 answers: 'tls' as const,
                 dns: null,
@@ -68,6 +74,7 @@ const mockReport = {
             source: 'registrar' as const,
             today: 0,
             busiestDay: 0,
+            mainRefusal: 'pending.beanpool.org has no route yet (waiting for approval, or paused). It can be made main once it is live.',
             reach: {
                 answers: 'silence' as const,
                 dns: { outcome: 'no-such-name' as const, a: [], aaaa: [], cname: [] },
@@ -83,6 +90,7 @@ const mockReport = {
             source: 'registrar' as const,
             today: 0,
             busiestDay: 0,
+            mainRefusal: 'stopped.beanpool.org has no route yet (waiting for approval, or paused). It can be made main once it is live.',
             reach: {
                 answers: 'silence' as const,
                 dns: { outcome: 'no-such-name' as const, a: [], aaaa: [], cname: [] },
@@ -114,6 +122,7 @@ const mockReport = {
             former: true,
             today: 2,
             busiestDay: 4,
+            mainRefusal: "mullum.beanpool.org is not an address this community sends people to (a former or lost name), so it can't be the main one.",
             reach: {
                 answers: 'silence' as const,
                 dns: { outcome: 'no-such-name' as const, a: [], aaaa: [], cname: [] },
@@ -223,13 +232,16 @@ describe('AddressesPanel Component (S2)', () => {
         // Main address does NOT have "Make main"
         expect(screen.queryByTestId('make-main-btn-byron.beanpool.org')).not.toBeInTheDocument();
 
-        // Another BeanPool name DOES have "Make main"
-        expect(screen.getByTestId('make-main-btn-pending.beanpool.org')).toBeInTheDocument();
-        expect(screen.getByTestId('make-main-btn-mullum.beanpool.org')).toBeInTheDocument();
+        // Several addresses S6 (design §2.1, decided 16 Nov): any kind can be main, so an own domain beside a BeanPool main
+        // has it, and so does a live BeanPool name. (Before S6 the server could not make an own domain main over a name, and
+        // this test pinned it absent.)
+        expect(screen.getByTestId('make-main-btn-byron.example.org')).toBeInTheDocument();
+        expect(screen.getByTestId('make-main-btn-fresh.beanpool.org')).toBeInTheDocument();
 
-        // An own address does not while a BeanPool name is main: the server would refuse it
+        // What the server says it would refuse is not offered: a number beside a name, a name with no route yet, a former name.
         expect(screen.queryByTestId('make-main-btn-203.0.113.5')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('make-main-btn-byron.example.org')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('make-main-btn-pending.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('make-main-btn-mullum.beanpool.org')).not.toBeInTheDocument();
     });
 
     it('Add an address section folds in the three choices and displays recovery reminder on BeanPool name choice', async () => {
@@ -351,48 +363,16 @@ describe('AddressesPanel Component (S2)', () => {
         expect(screen.getByText(/No addresses configured yet\./)).toBeInTheDocument();
     });
 
-    it('handleMakeMain reports approval-pending without false success when claim is pending', async () => {
-        vi.spyOn(global, 'fetch').mockImplementation((url) => {
-            const urlStr = String(url);
-            if (urlStr.includes('/api/local/admin/app-addresses')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(mockReport) } as Response);
-            }
-            if (urlStr.includes('/api/local/admin/public-address/claim')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, status: 'pending' }) } as Response);
-            }
-            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
-        });
-
+    // Several addresses S6: Make main no longer claims a name (design §2.1: it is the one action that moves the main, through
+    // /app-addresses/main), so the claim's "awaiting approval" and "still being made" answers can't come from it any more.
+    // A name with no route yet has no Make main at all (the server's mainRefusal); a claim's answers are Add an address's.
+    it('a name with no route yet offers no Make main, and nothing is claimed from a row', async () => {
+        const { posts } = stubNode(mockReport);
         render(<AddressesPanel activeNode={mockActiveNode} />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('make-main-btn-pending.beanpool.org')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByTestId('make-main-btn-pending.beanpool.org'));
-
-        await waitFor(() => {
-            expect(screen.getByText(/Requested pending\.beanpool\.org, awaiting approval by the BeanPool project\./)).toBeInTheDocument();
-        });
-        expect(screen.queryByText(/pending\.beanpool\.org is now the main address\./)).not.toBeInTheDocument();
-    });
-
-    it('a name still being made is not said to wait for approval', async () => {
-        vi.spyOn(global, 'fetch').mockImplementation((url) => {
-            const urlStr = String(url);
-            if (urlStr.includes('/api/local/admin/app-addresses')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(mockReport) } as Response);
-            }
-            if (urlStr.includes('/api/local/admin/public-address/claim')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, status: 'pending', reason: 'provisioning' }) } as Response);
-            }
-            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
-        });
-        render(<AddressesPanel activeNode={mockActiveNode} />);
-        await waitFor(() => { expect(screen.getByTestId('make-main-btn-pending.beanpool.org')).toBeInTheDocument(); });
-        fireEvent.click(screen.getByTestId('make-main-btn-pending.beanpool.org'));
-        await waitFor(() => { expect(screen.getByText(/pending\.beanpool\.org is not the main address yet/)).toBeInTheDocument(); });
-        expect(screen.queryByText(/awaiting approval by the BeanPool project/)).not.toBeInTheDocument();
+        await screen.findByTestId('address-row-pending.beanpool.org');
+        expect(screen.queryByTestId('make-main-btn-pending.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.getByTestId('make-main-btn-fresh.beanpool.org')).toBeInTheDocument();
+        expect(posts).toHaveLength(0);
     });
 
     it('Release is not offered on a name the project stopped: the node would refuse it once a code is spent', async () => {
@@ -551,16 +531,17 @@ describe('Addresses: every owner control is on the screen (#2738)', () => {
     it('a change above reads the panels below again, and one below reads the list above again', async () => {
         const { reads } = stubNode(mockReport, {
             '/public-address/status': () => [200, LIVE],
-            '/public-address/claim': () => [200, { success: true, status: 'live', hostname: 'pending.beanpool.org' }],
+            '/app-addresses/main': () => [200, mockReport],
             '/public-address/offline': () => [200, { success: true, status: 'none' }],
         });
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        const makeMain = await screen.findByTestId('make-main-btn-mullum.beanpool.org');
+        const makeMain = await screen.findByTestId('make-main-btn-byron.example.org');
         await screen.findByRole('button', { name: /Take offline/ });
         const statusReads = () => reads.filter((u) => u.includes('/public-address/status')).length;
         const listReads = () => reads.filter((u) => /\/app-addresses(\?|$)/.test(u)).length;
         const [statusBefore, listBefore] = [statusReads(), listReads()];
         fireEvent.click(makeMain);
+        await answer('Make main');
         await waitFor(() => expect(statusReads()).toBeGreaterThan(statusBefore));
         const listAfterClaim = listReads();
         expect(listAfterClaim).toBeGreaterThan(listBefore);
@@ -797,78 +778,57 @@ describe('Addresses: Check now says only what came back (#2738)', () => {
 describe('Addresses: Make main and Add an address (#2738)', () => {
     beforeEach(() => vi.restoreAllMocks());
 
-    it('Make main on a name sends the name alone, so the claim keeps what the server holds', async () => {
-        const { posts } = stubNode(mockReport, { '/public-address/claim': () => [200, { success: true, status: 'live' }] });
+    // Several addresses S6: Make main is the one route that moves the main (design §2.1), for every kind; it no longer claims
+    // a name (the two claim tests it replaces pinned { name, mode } and the claim's not-live answers). A refusal is the
+    // server's words, never success (AddressesPanel.make-main.test.tsx holds the whole table).
+    it('Make main sends the address alone to the one route that moves the main, after the question', async () => {
+        const { posts } = stubNode(mockReport, { '/app-addresses/main': () => [200, mockReport] });
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        fireEvent.click(await screen.findByTestId('make-main-btn-mullum.beanpool.org'));
+        fireEvent.click(await screen.findByTestId('make-main-btn-fresh.beanpool.org'));
+        expect(posts).toHaveLength(0);
+        await answer('Make main');
         await waitFor(() => expect(posts).toHaveLength(1));
-        expect(posts[0].body).toEqual({ name: 'mullum', mode: 'tunnel' });
-        expect(await screen.findByText('mullum.beanpool.org is now the main address.')).toBeInTheDocument();
+        expect(posts[0]).toEqual({ path: '/app-addresses/main', body: { address: 'fresh.beanpool.org' } });
+        expect(await screen.findByText('fresh.beanpool.org is now the main address.')).toBeInTheDocument();
     });
 
-    // A claim stores what it is answered (routes/public-address.ts), so a heal refused has moved this server to the paused name
-    // and the panel below with it. Saying only "is not the main address" left that out (#2738 finding 2).
-    it('Make main never says main for an answer that is not live, and says this server has moved to it', async () => {
-        stubNode(mockReport, { '/public-address/claim': () => [200, { success: true, status: 'paused' }] });
-        const { unmount } = render(<AddressesPanel activeNode={mockActiveNode} />);
-        fireEvent.click(await screen.findByTestId('make-main-btn-mullum.beanpool.org'));
-        const said = await screen.findByTestId('addresses-action-message');
-        expect(said).toHaveTextContent('mullum.beanpool.org is not the main address yet: the address service says paused. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at byron.beanpool.org.');
-        expect(screen.queryByText(/is now the main address/)).toBeNull();
-        unmount();
-
-        // No main address to name: nothing is made up.
-        stubNode({ ...mockReport, primaryAddress: null, addresses: [mockReport.addresses[6]] }, { '/public-address/claim': () => [200, { success: true, status: 'paused' }] });
-        render(<AddressesPanel activeNode={mockActiveNode} />);
-        fireEvent.click(await screen.findByTestId('make-main-btn-mullum.beanpool.org'));
-        const alone = await screen.findByTestId('addresses-action-message');
-        expect(alone).toHaveTextContent('is not the main address yet');
-        expect(alone).not.toHaveTextContent('Members still reach');
-    });
-
-    it('Make main is not offered where it can only be refused, or would store a stopped name', async () => {
+    it('Make main is not offered where it can only be refused: the server says so of the row', async () => {
         const row = (over: Record<string, unknown>) => ({ address: 'other.beanpool.org', source: 'registrar' as const, today: 0, busiestDay: 0, ...over }) as Parameters<typeof offersMakeMain>[0];
-        const reach = (step: string) => ({ ...mockReport.addresses[0].reach, step }) as NonNullable<Parameters<typeof offersMakeMain>[0]['reach']>;
         expect(offersMakeMain(row({}), 'byron.beanpool.org')).toBe(true);
-        // A pause this server asks back by itself: there Make main is the heal.
-        expect(offersMakeMain(row({ reach: reach('paused') }), 'byron.beanpool.org')).toBe(true);
-        // Blocked or paused by the project, by the check's step or, for a former name or a stale check, by the record.
-        expect(offersMakeMain(row({ reach: reach('stopped') }), 'byron.beanpool.org')).toBe(false);
-        expect(offersMakeMain(row({ stopped: true, former: true, reach: reach('no-longer-ours') }), 'byron.beanpool.org')).toBe(false);
-        expect(offersMakeMain(row({ stopped: true }), 'byron.beanpool.org')).toBe(false);
-        // Hard-coded: held by nobody's key here, set by hand, a BeanPool name or not.
-        expect(offersMakeMain(row({ source: 'env' }), 'byron.beanpool.org')).toBe(false);
-        expect(offersMakeMain(row({ source: 'public-address', hardCoded: true }), 'byron.beanpool.org')).toBe(false);
-        expect(offersMakeMain(row({ source: 'env', address: 'coop.example.net' }), 'beans.example.org')).toBe(false);
-        // Another key holds it: 409 "name taken", after the code. Released stays: there Make main is the take-back.
-        expect(offersMakeMain(row({ standing: { state: 'at-risk', registrarSays: 'other' } }), 'byron.beanpool.org')).toBe(false);
-        expect(offersMakeMain(row({ standing: { state: 'at-risk', registrarSays: 'released' } }), 'byron.beanpool.org')).toBe(true);
-        // What the server can't do stays out too.
-        expect(offersMakeMain(row({ address: '203.0.113.5', source: 'owner' }), 'byron.beanpool.org')).toBe(false);
+        // A name with no route (paused, stopped, waiting), another key's name, a number beside a name: the server's word
+        // (mainAddressRefusal; another key's name while the record still says live since S6 round 2: test-address-list 6b).
+        expect(offersMakeMain(row({ mainRefusal: 'other.beanpool.org has no route yet (waiting for approval, or paused). It can be made main once it is live.' }), 'byron.beanpool.org')).toBe(false);
+        // Neither a former nor a lost name is on the list members' phones follow.
+        expect(offersMakeMain(row({ former: true }), 'byron.beanpool.org')).toBe(false);
+        expect(offersMakeMain(row({ lost: true, former: true }), 'byron.beanpool.org')).toBe(false);
+        // Several addresses S6: a hand-set name may be main (design §2.1); before S6 these rows pinned false, as no claim of
+        // them is held and Make main was a claim.
+        expect(offersMakeMain(row({ source: 'env' }), 'byron.beanpool.org')).toBe(true);
+        expect(offersMakeMain(row({ source: 'public-address', hardCoded: true }), 'byron.beanpool.org')).toBe(true);
+        expect(offersMakeMain(row({ source: 'owner', address: '203.0.113.5' }), '203.0.113.9')).toBe(true);
+        // The main itself never.
+        expect(offersMakeMain(row({}), 'other.beanpool.org')).toBe(false);
     });
 
-    it('on the screen: a stopped row and a hard-coded row have no Make main, an automatically paused row keeps it', async () => {
-        const paused = { ...mockReport.addresses[3], address: 'paused.beanpool.org', reach: { ...mockReport.addresses[3].reach, step: 'paused' as const, nextStep: '' } };
+    // Several addresses S6: a paused name has no route, so the server refuses it as main (before S6 Make main on it was the
+    // claim that heals, and this test pinned it present; the server asks a paused name back by itself, as its row says). A
+    // hand-set name may be main (design §2.1), so the hard-coded row now has it.
+    it('on the screen: a stopped row and a paused row have no Make main, a hard-coded row has it', async () => {
+        const noRoute = (a: string) => `${a} has no route yet (waiting for approval, or paused). It can be made main once it is live.`;
+        const paused = { ...mockReport.addresses[3], address: 'paused.beanpool.org', mainRefusal: noRoute('paused.beanpool.org'), reach: { ...mockReport.addresses[3].reach, step: 'paused' as const, nextStep: '' } };
         const env = { address: 'hard-coded.beanpool.org', source: 'env' as const, today: 1, busiestDay: 1 };
         stubNode({ ...mockReport, addresses: [...mockReport.addresses, paused, env] });
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        expect(await screen.findByTestId('make-main-btn-paused.beanpool.org')).toBeInTheDocument();
+        expect(await screen.findByTestId('make-main-btn-hard-coded.beanpool.org')).toBeInTheDocument();
+        expect(screen.queryByTestId('make-main-btn-paused.beanpool.org')).not.toBeInTheDocument();
         expect(screen.queryByTestId('make-main-btn-stopped.beanpool.org')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('make-main-btn-hard-coded.beanpool.org')).not.toBeInTheDocument();
         expect(within(screen.getByTestId('address-row-paused.beanpool.org')).getByTestId('next-step-text')).toHaveTextContent('Paused by the address service: something else answered at this name. Your server asks for it back by itself.');
         expect(within(screen.getByTestId('address-row-stopped.beanpool.org')).getByTestId('next-step-text')).toHaveTextContent('Stopped by the address service. Ask the BeanPool project.');
     });
 
-    it('offers Make main only where the server can do it', async () => {
-        expect(canBecomeMain('other.beanpool.org', 'byron.beanpool.org')).toBe(true);
-        expect(canBecomeMain('203.0.113.5', 'byron.beanpool.org')).toBe(false);
-        expect(canBecomeMain('beans.example.org', 'byron.beanpool.org')).toBe(false);
-        expect(canBecomeMain('203.0.113.5', 'beans.example.org')).toBe(false);
-        expect(canBecomeMain('beans.example.org', '203.0.113.5')).toBe(true);
-        expect(canBecomeMain('coop.example.net', 'beans.example.org')).toBe(true);
-        expect(canBecomeMain('203.0.113.9', '203.0.113.5')).toBe(true);
-        expect(canBecomeMain('203.0.113.5', null)).toBe(true);
-    });
+    // Several addresses S6: what the server can make main is the server's word on each row (mainRefusal, from the same
+    // mainAddressRefusal /main answers with: test-rename-main-name section 9), so the manager's own guess (canBecomeMain: an own
+    // address never over a BeanPool name) is gone with the rule it copied.
 
     it('a double tap on Make main or Remove sends one request, and every row waits while it runs', async () => {
         const posts: string[] = [];
@@ -884,8 +844,9 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
             return u.includes('/app-addresses') ? json(mockReport) : json({ logs: [] });
         });
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        const makeMain = await screen.findByTestId('make-main-btn-mullum.beanpool.org');
+        const makeMain = await screen.findByTestId('make-main-btn-byron.example.org');
         fireEvent.click(makeMain);
+        await answer('Make main');
         fireEvent.click(makeMain);
         await waitFor(() => expect(posts).toHaveLength(1));
         expect(makeMain).toBeDisabled();
@@ -984,24 +945,30 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         expect(dialog).toHaveTextContent("It is this community's address now. After this, new members are sent to another of its addresses, if it has one. This community stops advertising");
     });
 
-    it('a name already released has no Release to spend a code on; Make main stays, as the take-back', async () => {
+    // Several addresses S6: a released name is off the list members' phones follow, so the server refuses it as main and the
+    // row has no Make main (before S6 Make main on it was the claim that takes it back, and this test pinned it present).
+    // Taking it back is a claim: Add an address, a free BeanPool name.
+    it('a name already released has no Release to spend a code on, and no Make main: taking it back is Add an address', async () => {
         const released = {
             ...mockReport.addresses[6],
             standing: { state: 'at-risk', registrarSays: 'released', releasedOn: '2026-10-20T10:00:00Z', acceptedUntil: '2026-11-19T10:00:00Z', leadsHere: false, lostSince: null, why: null, checkedAt },
         };
         stubNode({ ...mockReport, addresses: [mockReport.addresses[0], released] });
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        expect(await screen.findByTestId('make-main-btn-mullum.beanpool.org')).toBeInTheDocument();
+        await screen.findByTestId('address-row-mullum.beanpool.org');
+        expect(screen.queryByTestId('make-main-btn-mullum.beanpool.org')).not.toBeInTheDocument();
         expect(screen.queryByTestId('release-btn-mullum.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.getByTestId('addresses-add-address-btn')).toBeInTheDocument();
     });
 
     it('a result is brought into view, and a failure is an alert', async () => {
         const scroll = vi.fn();
         Element.prototype.scrollIntoView = scroll;
-        stubNode(mockReport, { '/public-address/claim': () => [500, { error: 'The address service failed.' }] });
+        stubNode(mockReport, { '/app-addresses/main': () => [500, { error: 'The server could not change the main address.' }] });
         render(<AddressesPanel activeNode={mockActiveNode} />);
-        fireEvent.click(await screen.findByTestId('make-main-btn-mullum.beanpool.org'));
-        expect(await screen.findByRole('alert')).toHaveTextContent('The address service failed.');
+        fireEvent.click(await screen.findByTestId('make-main-btn-byron.example.org'));
+        await answer('Make main');
+        expect(await screen.findByRole('alert')).toHaveTextContent('The server could not change the main address.');
         // The scroll is a useEffect: it runs on a turn after the commit findByRole saw, and a spent scheduler slice puts this line between them.
         await waitFor(() => expect(scroll).toHaveBeenCalled());
         delete (Element.prototype as Partial<Element>).scrollIntoView;
@@ -1046,6 +1013,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         // Preview updates automatically
         expect(screen.getByText('https://byron-bay.beanpool.org')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /Go public · Claim Web Address/i }));
+        await answer('Add it');
         await waitFor(() => {
             expect(posts).toHaveLength(1);
             expect(posts[0].body.name).toBe('byron-bay');
@@ -1078,6 +1046,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         expect(screen.getByLabelText(/Community \/ Pool Name/i)).toHaveValue('Byron Shire');
         fireEvent.change(screen.getByLabelText(/Subdomain Prefix/i), { target: { value: 'newbyron' } });
         fireEvent.click(screen.getByRole('button', { name: /Go public/ }));
+        await answer('Add it');
         await waitFor(() => expect(posts).toHaveLength(1));
         expect(posts[0].body).toMatchObject({ name: 'newbyron', contact: 'held@example.org', communityName: 'Byron Shire' });
         // Pending is not live: no success words.
@@ -1095,6 +1064,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         fireEvent.change(screen.getByLabelText(/Operator Contact/i), { target: { value: '   ' } });
         fireEvent.change(screen.getByLabelText(/Subdomain Prefix/i), { target: { value: 'newbyron' } });
         fireEvent.click(screen.getByRole('button', { name: /Go public/ }));
+        await answer('Add it');
         await waitFor(() => expect(posts).toHaveLength(1));
         expect(posts[0].body).toHaveProperty('contact', '');
     });

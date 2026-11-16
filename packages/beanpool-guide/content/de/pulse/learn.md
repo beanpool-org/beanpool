@@ -1,32 +1,31 @@
 ---
 slug: learn
-title: Die Lernspur
+title: So funktioniert's: Videos
 summary: Kurze Videos über BeanPool und die passenden Seiten aus dem Guide.
-related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: 166271998bd0833a
+related: the-pulse, the-bean, how-it-works, your-channels, local-knowledge
+source-hash: 82b7f80c056f15e8
 ---
 
-## Was darin enthalten ist
+## Was drin ist
 
-Öffne auf dem Smartphone den **Puls** und tippe auf **Lernen**. Öffne in der Web-App den Pulse und tippe oben auf **So funktioniert's**. Die Spur enthält:
+Öffne den **Puls** und tippe oben auf **So funktioniert's**, auf dem Telefon und in der Web-App. Dort liegen Videos von BeanPool darüber, wie es funktioniert.
 
-- Videos von BeanPool darüber, wie es funktioniert;
-- die **Tägliche Reflexion**, ein kurzer Gedanke, der jeden Morgen wechselt. Tippe darauf, um die Tagesreflexion zu öffnen.
+Das ist nicht **Lernen**, die eigenen Seiten deiner Community mit Wissenswertem über den Ort, an dem du lebst: siehe „Ortswissen“.
 
-Mitglieder können zu „Lernen“ auch eigene Anleitungs-Kanäle hinzufügen, indem sie beim Hinzufügen eines Kanals das Thema **So funktioniert's** wählen. Diese Videos stammen von den Mitgliedern selbst, nicht von BeanPool: Prüfe, wer ein Video eingestellt hat, bevor du seinen Ratschlägen folgst.
+Auch Mitglieder können hier eigene Anleitungskanäle hinzufügen, indem sie beim Hinzufügen eines Kanals das Thema **So funktioniert's** wählen. Diese Videos stammen von den Mitgliedern, nicht von BeanPool: Prüfe, wer ein Video eingestellt hat, bevor du seinem Rat folgst.
 
-## Videos sind eine Ergänzung
+## Videos sind ein Extra
 
-Alles, was du benötigst, steht in diesem Guide. Die Videos sind für diejenigen da, die lieber zuschauen.
+Alles, was du brauchst, steht in diesem Guide. Die Videos sind für den Fall da, dass du lieber zuschaust.
 
-Tippe auf dem Smartphone in der Lernspur auf das Bild eines Videos, und es wird direkt in der Karte abgespielt. Vor dem Antippen wird nichts von YouTube geladen. In der Web-App öffnet das Antippen eines Videos dieses in einem neuen Tab auf YouTube. Siehe „Der Puls“.
+Tippe auf dem Telefon unter **So funktioniert's** auf das Bild eines Videos, dann wird es direkt in der Karte abgespielt. Von YouTube wird nichts geladen, bis du tippst. In der Web-App öffnet ein Tipp auf ein Video es in einem neuen Tab auf YouTube. Siehe „Der Puls“.
 
-Wenn BeanPool ein Video für eine Seite des Guides erstellt hat und dieses in der Lernspur deiner Community vorhanden ist, zeigt die Seite ganz oben **Ansehen:** und den Namen des Videos. Tippe darauf, um das Video auf YouTube zu öffnen. Wenn es kein Video für diese Seite gibt oder du offline bist, wird der Link schlicht nicht angezeigt.
+Wenn BeanPool ein Video zu einer Guide-Seite gemacht hat und es im Puls deiner Community unter **So funktioniert's** liegt, zeigt die Seite oben **Ansehen:** und den Namen des Videos. Tippe darauf, um das Video auf YouTube zu öffnen. Gibt es für die Seite kein Video oder bist du offline, erscheint der Link einfach nicht.
 
-Nur die eigenen Videos von BeanPool erscheinen jemals auf einer Seite des Guides. Ein Video, das ein Mitglied zu „Lernen“ hinzufügt, wird dort niemals angezeigt, unabhängig von seinem Titel.
+Auf einer Guide-Seite erscheinen nur BeanPools eigene Videos. Ein Video, das ein Mitglied unter **So funktioniert's** hinzufügt, erscheint dort nie, egal wie es heißt.
 
-## Warum ein Video eventuell nicht angezeigt wird
+## Warum ein Video nicht erscheint
 
-- Dein Smartphone ist offline oder kann den Server deiner Community nicht erreichen.
-- Ein neues Video von BeanPool erscheint erst auf den Guide-Seiten, nachdem der Server deiner Community aktualisiert wurde.
-- Für diese Seite existiert noch kein Video.
+- Dein Telefon ist offline oder erreicht den Server deiner Community nicht.
+- Ein neues BeanPool-Video erscheint erst auf Guide-Seiten, wenn der Server deiner Community aktualisiert wurde.
+- Für diese Seite gibt es noch kein Video.

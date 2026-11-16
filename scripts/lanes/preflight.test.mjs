@@ -592,11 +592,11 @@ test('draft budget table: every part of every draft plans within DRAFT_PART_SECS
       ['apps/server/src/routes/forum.ts', [A_ROUTE]], ['apps/server/src/db/schema.sql', [A_TABLE]]]),          'shortest run, rest named'],
     ['3152d378 #3054 (real)',                                          merged('3152d378 #3054'),                 'shortest run, rest named'],
     ['ac05e75b #3055 (real)',                                          merged('ac05e75b #3055'),                 'shortest run, rest named'],
-    // Its ~150 changed web and phone test files and the table suites take the 200 s before any suite: all named.
-    ['8fa35ae0 #3033 (real)',                                          merged('8fa35ae0 #3033'),                 'all named'],
+    // Its ~150 changed web and phone test files and the table suites take the 200 s first (17 Nov: no suite fits).
+    ['8fa35ae0 #3033 (real)',                                          merged('8fa35ae0 #3033'),                 'budgeted'],
     ['every script in the tree (scripts-syntax, script-tests)',        new Map(scripts.map(f => [f, ['']])),     'none'],
     ['all of these at once, and package.json', new Map([...allSuites, ...Object.keys(BIG).flatMap(k => [...merged(k)]),
-      ...scripts.map(f => [f, ['']]), ['package.json', ['']]]),                                                  'all named'],
+      ...scripts.map(f => [f, ['']]), ['package.json', ['']]]),                                                  'budgeted'],
   ];
   assert.deepEqual(ROWS.filter(r => r[0].endsWith('(real)')).map(r => r[0].replace(' (real)', '')), Object.keys(BIG));
   assert.ok(scripts.length > 100, `${scripts.length} scripts`);
@@ -617,9 +617,13 @@ test('draft budget table: every part of every draft plans within DRAFT_PART_SECS
       // These rows exercise the budget: run whole, their suites alone would plan past it (#3054's 4850 s, before).
       const alone = serverRunsEst(RUNS.filter(r => want.includes(r.name) && !elsewhere.includes(r.name)), DURATIONS);
       assert.ok(alone > DRAFT_PLAN_SECS && left.length > 0, `${at}: the suites alone plan ${alone} s, so some are left`);
-      if (suites === 'all named') assert.equal(ran.length, 0, at);
-      else {
+      // 'budgeted': how many run depends on what the vitest steps took first; 'shortest run' rows have no vitest step.
+      if (suites === 'shortest run, rest named') {
+        assert.ok(!steps.some(s => s.name.startsWith('vitest:')), `${at}: no vitest step takes the budget first`);
         assert.ok(ran.length > 0, `${at}: the shortest still run`);
+      }
+      if (!ran.length) assert.match(step(steps, 'server:changed').why, /^no server suite this diff changes fits; left to the full run/, at);
+      else {
         const longest = Math.max(...ran.map(n => serverRunsEst(RUNS.filter(r => r.name === n), DURATIONS)));
         const shortestLeft = Math.min(...left.map(n => serverRunsEst(RUNS.filter(r => r.name === n), DURATIONS)));
         assert.ok(longest <= shortestLeft, `${at}: shortest first (ran up to ${longest} s, left from ${shortestLeft} s)`);

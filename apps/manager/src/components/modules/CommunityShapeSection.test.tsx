@@ -630,3 +630,46 @@ describe("CommunityShapeSection — where members' copies go (vault rethink VR2)
         await waitFor(() => expect(screen.getByTestId('shape-audit-log')).toHaveTextContent("Where members' copies go: BeanPool's key vault → Nowhere"));
     });
 });
+
+// Learn K9 (DESIGN-local-knowledge-fable.md §2.9): the owners' "Local knowledge (Learn)" setting, the server's `knowledge`
+// switch, no longer set by the server's kind alone. On a local community by default, off on the global one; no lock.
+describe('CommunityShapeSection — Local knowledge (Learn)', () => {
+    const learn = (value: boolean) => ({ knowledge: { value, configured: value, source: 'profile' as const, lock: null } });
+
+    it('the row is drawn where the server has the setting, with its value and no control for an admin', async () => {
+        mockShapeApi(makeDefaultShape(learn(true)));
+        render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-knowledge')).toHaveTextContent('On'));
+        expect(screen.getByText('Local knowledge (Learn)')).toBeInTheDocument();
+        expect(screen.queryByRole('checkbox', { name: 'Learn on' })).toBeNull();
+    });
+
+    it('an owner switches Learn off: what it does is said first, and exactly { knowledge: false } is saved', async () => {
+        const fetchMock = mockShapeApi(makeDefaultShape(learn(true)));
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-knowledge')).toHaveTextContent('On'));
+        fireEvent.click(screen.getByTestId('shape-expand-knowledge'));
+        const box = screen.getByRole('checkbox', { name: 'Learn on' });
+        expect(box).toBeChecked();
+        fireEvent.click(box);
+        expect(screen.getByTestId('shape-consequence')).toHaveTextContent(
+            'Learn disappears from both apps. Its pages and the suggestions waiting are kept, and come back when it is turned on again.');
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
+        const postCall = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
+        expect(JSON.parse(postCall![1].body).changes).toEqual({ knowledge: false });
+    });
+
+    it('turned on (the global community\'s owners may too), the line says what members get', () => {
+        const shape = makeDefaultShape(learn(false));
+        expect(getConsequenceSentence('knowledge', true, shape)).toBe(
+            'Members read and suggest pages of things worth knowing about this place, in both apps. An owner or admin checks each page first.');
+    });
+
+    it('a server from before the setting draws no Learn row', async () => {
+        mockShapeApi(makeDefaultShape());
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-decisions')).toHaveTextContent('On'));
+        expect(screen.queryByTestId('shape-val-knowledge')).toBeNull();
+    });
+});

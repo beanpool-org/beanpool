@@ -219,8 +219,9 @@ export interface ProfileSwitches {
      *  every /api/knowledge route answers, and a member's read of the posts may name the type. Off (the global community,
      *  which is not a place and whose moderators can't know a town's facts): every /api/knowledge route is 404 `feature_off`
      *  (routes/profile-feature-gate.ts), and no read of the posts gives one, asked or not; the apps preview Learn from
-     *  Example Valley where `showcase` is on. Set by the server's kind in this build (KIND_ONLY_SWITCHES); the owners'
-     *  override under How this community works comes with the Settings slice. */
+     *  Example Valley where `showcase` is on. The owners' setting under How this community works ("Local knowledge (Learn)",
+     *  config/community-shape-write.ts) is this switch's override, either way, with no lock: off, every page and waiting
+     *  suggestion is kept for when it is on again. */
     knowledge: boolean;
     /** Bills (engine/bills.ts; DESIGN-getting-paid-fable.md §4): a member, or an enterprise by a keeper, sends a member a
      *  request to pay that never pays itself. On wherever Beans are on (a local community); off where they are off (the

@@ -74,8 +74,8 @@ describe('the kinds', () => {
         expect(isPushNoticeKind('community.knock-answer')).toBe(false);
     });
 
-    it('the forum has four kinds of its own (slice F5), each opening the Chat tab, each sentence its own, naming nothing', () => {
-        const forum = ['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer'] as const;
+    it('the forum has five kinds of its own (slice F5; F9 the Ask for a Learn page), each opening the Chat tab, each sentence its own, naming nothing', () => {
+        const forum = ['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer', 'forum.learn-ask'] as const;
         for (const kind of forum) {
             expect(isPushNoticeKind(kind)).toBe(true);
             expect(PUSH_NOTICE_KINDS[kind].tab).toBe('chats');
@@ -84,6 +84,7 @@ describe('the kinds', () => {
         expect(new Set(forum.map((k) => PUSH_NOTICE_KINDS[k].body)).size).toBe(forum.length);
         expect(pushNoticeWords('forum.reply')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'There is a new reply in a topic you follow.' });
         expect(pushNoticeWords('forum.mention').body).toBe('You were mentioned in the forum.');
+        expect(pushNoticeWords('forum.learn-ask').body).toBe('You were asked to make your answer a Learn page.');
     });
 
     it("a neighbour's Need is a kind of its own, landing on the Market, that names nobody and no listing (cold start N3)", () => {

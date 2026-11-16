@@ -557,6 +557,14 @@ export function initSchema() {
         try { db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column}`).run(); } catch { }
     }
 
+    // Born with "Turn into a Learn page" (forum slice F9; DESIGN-forums-fable.md §3, §10.3, §20): two empty columns, NULL on every
+    // row that is there, so no suggestion names an answer and every link stays a chip. Additions, not conversion code, as F8's
+    // above: nothing is read, filled in or rewritten. A file from before Learn or the forum finds no table and does nothing;
+    // schema.sql below makes the tables whole. On a fresh install each finds its column.
+    for (const [table, column] of [['knowledge_drafts', 'from_forum_post_id TEXT'], ['forum_links', 'post_id TEXT']]) {
+        try { db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column}`).run(); } catch { }
+    }
+
     // Born with the public forum's search-engine rule (slice F7, Q2): a topic moved out of "Introduce yourself" is never listed.
     // One column, as schema.sql has it, 0 on every row that is there (SQLite gives a column added with a constant default that
     // value at once): an addition, as F8's above; nothing is read, filled in or rewritten, and a topic still in that section is

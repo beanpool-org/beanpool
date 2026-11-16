@@ -3230,7 +3230,10 @@ CREATE TABLE IF NOT EXISTS knowledge_drafts (
     result_post_id TEXT,
     created_at     TEXT NOT NULL,
     -- The replication watermark (a plain table): db.ts stamps every write.
-    updated_at     TEXT
+    updated_at     TEXT,
+    -- "Turn into a Learn page" (forum slice F9, DESIGN-forums-fable.md §10.3): the forum answer a member's suggestion came from,
+    -- their own, live when sent; NULL for any other. Approval links the page to that answer (engine/forum-learn.ts).
+    from_forum_post_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_member ON knowledge_drafts (member_pubkey, created_at);
 CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_state ON knowledge_drafts (state, created_at);
@@ -3451,6 +3454,9 @@ CREATE TABLE IF NOT EXISTS forum_links (
     target_id  TEXT NOT NULL CHECK (length(target_id) BETWEEN 1 AND 128),
     created_at TEXT NOT NULL,
     updated_at TEXT,
+    -- A Learn page made from an answer in the topic (slice F9, §10.3): that answer's id, so it reads "Now a Learn page"; written
+    -- only when the page is made, never a chip of the topic's writer and never counted in their 3. NULL for every chip.
+    post_id    TEXT,
     PRIMARY KEY (topic_id, kind, target_id)
 );
 -- The forum's search (slice F6, engine/forum-search.ts; design §3 "a search index", §8, §16): one row per post, keyed by the

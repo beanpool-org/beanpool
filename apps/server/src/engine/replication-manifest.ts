@@ -581,7 +581,7 @@ export const TABLES: Record<string, TableEntry> = {
     // and every delete (answered, taken back, 30 days after, the member gone) goes with a tombstone, so it leaves the standby too.
     // An older importer drops the suggestions waiting, their photos and taps: after a take-over from its copy their members
     // see none waiting and send them again; a page already approved is a post, copied whatever the importer.
-    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang free_tags about note fix_base state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
+    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang free_tags about note fix_base state answered_at answered_by reason reason_words result_post_id created_at updated_at from_forum_post_id'),
     knowledge_draft_photos: plain('draft_id order_num photo_data bytes updated_at'),
     knowledge_helped: plain('post_id member_pubkey counted at updated_at'),
     // The forum (engine/forum.ts, DESIGN-forums-fable.md §3, §16, slice F1): sections, topics, posts and their photos (in the
@@ -624,7 +624,7 @@ export const TABLES: Record<string, TableEntry> = {
     forum_follows: plain('topic_id member_pubkey state last_read created_at updated_at'),
     // What a topic links (slice F8: a community Decision; F9 the other kinds): a promoted standby shows the same chips; a removal
     // goes with its tombstone. Format 16 with the section's group above, so no older importer is sent it.
-    forum_links: plain('topic_id kind target_id created_at updated_at'),
+    forum_links: plain('topic_id kind target_id created_at updated_at post_id'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the

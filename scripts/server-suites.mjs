@@ -650,6 +650,9 @@ export const SUITES = [
     // What a forum topic links (slice F9): (group, listing, event, Need, Learn page) x (live, hidden, removed, private) x every
     // kind of reader in one table -> shown as they could already see it, else a placeholder; the topics that link one thing.
     'test-forum-links',
+    // Turn an answer into a Learn page (slice F9's Learn step): (writer, another member, a moderator, an owner, the assistant) x
+    // (live, hidden, removed, a group's section) x (Ask, suggest, publish, approve) in one table; the Ask's bell row under the bell's rules.
+    'test-forum-learn',
     // The community label on the worldwide forum (slice F10): the note on a member's own community, the check on a public forum,
     // the three-way switch x every kind of note in one table, lapses and unlisting at each read, a standby, a re-key, no server asked.
     'test-membership-note',

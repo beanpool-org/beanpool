@@ -455,7 +455,7 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
         // the Forum side's.
         const pane: Record<string, 'Messages' | 'Groups' | 'Forum'> = {
             'chat.message': 'Messages', 'chat.group': 'Groups', 'chat.mention': 'Groups', 'group.lead': 'Groups',
-            'forum.reply': 'Forum', 'forum.mention': 'Forum', 'forum.first-look': 'Forum', 'forum.first-look-answer': 'Forum',
+            'forum.reply': 'Forum', 'forum.mention': 'Forum', 'forum.first-look': 'Forum', 'forum.first-look-answer': 'Forum', 'forum.learn-ask': 'Forum',
         };
         const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
         expect(chatKinds.sort()).toEqual(Object.keys(pane).sort());

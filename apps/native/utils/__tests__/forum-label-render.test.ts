@@ -7,6 +7,9 @@
  * - The choices: Don't show · each of the member's other communities on this phone · I'm waiting to join one. One tap
  *   applies; the chosen one is ticked; "Others see: Ana · Hillside" says what the forum now draws (core forumWriterLine).
  * - A community chosen elsewhere (the web) that this phone doesn't keep is still shown, chosen.
+ * - A community whose record has no server key yet, once picked, is the one ticked on this visit and every later one (the
+ *   stand-in keeps the pick as utils/forum-label.ts does; forum-label-kept.test.ts runs the real one).
+ * - A note that ran out: the ticked chip can be chosen again, which asks a fresh note ("Choose it again to renew it").
  * - A refusal is said in its own words and changes nothing; why a chosen community isn't shown is said in the design's words.
  * - Colours from the theme's tokens, both looks; every choice is at least 48 dp tall.
  */
@@ -49,12 +52,24 @@ const forum = vi.hoisted(() => ({
     state: null as unknown,
     mine: [] as Array<{ address: string; name: string; key: string | null }>,
     chosen: [] as unknown[],
-    answer: null as null | ((choice: any) => unknown),
+    answer: null as null | ((choice: any) => any),
+    /** What utils/forum-label.ts keeps of the community picked: its address and the forum's key for it. */
+    kept: null as null | { address: string; key: string },
 }));
 vi.mock('../forum-label', () => ({
     readForumLabel: vi.fn(async () => forum.state),
-    otherCommunities: vi.fn(async () => forum.mine),
-    setForumLabel: vi.fn(async (choice: unknown) => { forum.chosen.push(choice); return forum.answer!(choice); }),
+    // As the phone's own: a record with no server key carries the forum's key when it is the one picked here.
+    otherCommunities: vi.fn(async () => forum.mine.map((c) => (!c.key && forum.kept?.address === c.address ? { ...c, key: forum.kept.key } : c))),
+    setForumLabel: vi.fn(async (choice: any) => {
+        forum.chosen.push(choice);
+        const done = forum.answer!(choice);
+        if (done.ok) {
+            // The forum holds it now, and the phone keeps what was picked.
+            forum.state = done.state;
+            forum.kept = choice.show === 'community' && done.state.community ? { address: choice.address, key: done.state.community.key } : null;
+        }
+        return done;
+    }),
 }));
 
 import { ForumLabelRow } from '../../components/forum/ForumLabelRow';
@@ -85,13 +100,15 @@ beforeEach(() => {
     forum.state = none;
     forum.mine = [{ address: 'https://hillside.example', name: 'Hillside', key: HILLSIDE }, { address: 'https://lakeside.example', name: 'Lakeside', key: null }];
     forum.chosen = [];
+    forum.kept = null;
     forum.answer = (choice) => (choice.show === 'community' ? { ok: true, state: atHillside } : { ok: true, state: { ...none, show: choice.show, label: choice.show === 'waiting' ? { kind: 'waiting' } : null } });
 });
-afterEach(() => {
+function undraw(): void {
     act(() => root?.unmount());
     root = null;
     host?.remove();
-});
+}
+afterEach(undraw);
 
 describe.each([['light', false, lightColors], ['dark', true, darkColors]] as const)('the row in the %s look', (_name, dark, colors) => {
     beforeEach(() => { look.dark = dark; });
@@ -148,12 +165,17 @@ describe('what the forum already holds', () => {
         expect(forum.chosen).toEqual([]);
     });
 
-    it('a community whose server key this phone doesn\'t know yet: picked, it is the one ticked, never drawn twice', async () => {
+    it('a community whose server key this phone doesn\'t know yet: picked, it is the one ticked, never drawn twice, on this visit and the next', async () => {
         forum.mine = [{ address: 'https://hillside.example', name: 'Hillside', key: null }];
         await draw();
         await tap(radios()[1]);
         expect(forum.chosen).toEqual([{ show: 'community', address: 'https://hillside.example' }]);
         expect(radios().map((r) => r.textContent)).toEqual(['Don’t show', '✓Hillside', 'I’m waiting to join one']);
+        // Settings closed and opened again: a new row, nothing of the last one's state.
+        undraw();
+        await draw();
+        expect(radios().map((r) => r.textContent)).toEqual(['Don’t show', '✓Hillside', 'I’m waiting to join one']);
+        expect(host.querySelector('[data-testid="forum-label-shown"]')?.textContent).toBe('Others see: Ana · Hillside');
     });
 
     it('a note that ran out: chosen still, the design\'s words, no line', async () => {
@@ -162,6 +184,23 @@ describe('what the forum already holds', () => {
         expect(chosenText()).toEqual(['✓Hillside']);
         expect(host.textContent).toContain('Your community’s note has run out, so its name isn’t shown. Choose it again to renew it.');
         expect(host.querySelector('[data-testid="forum-label-shown"]')).toBeNull();
+    });
+
+    it('a note that ran out: the ticked community, tapped, asks a fresh one, and the line is back', async () => {
+        forum.state = { ...atHillside, label: null, why: 'expired' };
+        await draw();
+        await tap(radios()[1]);
+        expect(forum.chosen).toEqual([{ show: 'community', address: 'https://hillside.example' }]);
+        expect(chosenText()).toEqual(['✓Hillside']);
+        expect(host.textContent).not.toContain('Choose it again to renew it.');
+        expect(host.querySelector('[data-testid="forum-label-shown"]')?.textContent).toBe('Others see: Ana · Hillside');
+    });
+
+    it('a ticked community whose note is current asks nothing when tapped', async () => {
+        forum.state = atHillside;
+        await draw();
+        await tap(radios()[1]);
+        expect(forum.chosen).toEqual([]);
     });
 
     it('no other community on this phone: says so, with Don\'t show and waiting still there', async () => {

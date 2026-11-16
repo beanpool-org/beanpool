@@ -6,9 +6,15 @@
  *   the worldwide one in front, by name, in one tap each. The note is asked of that community at the address the phone uses
  *   for it (community-index.ts), signed by the member's key (node-post.ts signedGet).
  * - **The choice** goes to the community in front, the worldwide forum, signed (db.ts signedRequestWithMethod).
+ * - **What was picked** is kept, as the web keeps it: the forum's directory key for the community, beside the record key the
+ *   community is kept under (storage-keys.ts FORUM_LABEL_PICK_STORE_KEY). A record S4 hasn't given a server key yet is
+ *   still the one ticked on the next visit, never drawn twice, and its note is still renewed.
  * - **Renewing** finds the community by the forum's own key for it: the record whose server key is that directory key
- *   (community-index.ts communityRecordByKey). None on this phone, and Settings says the note ran out until it is picked
- *   again. Asked at most once an app run, when the forum is opened and says it is public.
+ *   (community-index.ts communityRecordByKey), else the one kept as picked, at the address the phone uses for it now. None,
+ *   and Settings says the note ran out until it is picked again. Asked at most once an app run, when the forum is opened
+ *   and says it is public.
+ * - **The language.** The note request goes to another community; the fetch wrapper (node-request-signing.ts) names the
+ *   member's language on it, as on every request to a community's API, so its refusal comes back in it.
  */
 import {
     FORUM_LABEL_PATHS, chooseForumLabel, readForumLabelState, renewForumLabel,
@@ -20,7 +26,8 @@ import { signedGet } from './node-post';
 import { loadIdentity } from './identity';
 import { getSavedNodes } from './nodes';
 import { communityName } from './community-name';
-import { communityRecordByKey, communityRecordOf, sameCommunityRecord } from './community-index';
+import { communityKeyOf, communityRecordByKey, communityRecordOf, sameCommunityRecord, usingOf } from './community-index';
+import { FORUM_LABEL_PICK_STORE_KEY } from './storage-keys';
 
 const ASK_MS = 12_000;
 
@@ -60,17 +67,55 @@ export async function readForumLabel(): Promise<ForumLabelState | null> {
     return got?.status === 200 ? readForumLabelState(got.body) : null;
 }
 
-/** The member's choice, made (core chooseForumLabel). */
-export function setForumLabel(choice: ForumLabelChoice): Promise<ForumLabelResult> {
-    return chooseForumLabel(deps, choice);
+/** The community picked on this phone, as the forum named it: its directory key, and the record key it is kept under. */
+interface KeptPick { key: string; community: string }
+
+/** The pick kept for this phone's key; null when none, or another key's. */
+async function keptPick(): Promise<KeptPick | null> {
+    const [identity, raw] = await Promise.all([loadIdentity().catch(() => null), AsyncStorage.getItem(FORUM_LABEL_PICK_STORE_KEY).catch(() => null)]);
+    try {
+        const kept = JSON.parse(raw ?? 'null') as { member?: unknown; key?: unknown; community?: unknown } | null;
+        return identity?.publicKey && kept?.member === identity.publicKey && typeof kept.key === 'string' && kept.key
+            && typeof kept.community === 'string' && kept.community ? { key: kept.key, community: kept.community } : null;
+    } catch {
+        return null;
+    }
 }
 
-/** The member's other communities on this phone: every saved one but the community in front. */
+/** Keeps what the forum now holds as picked here (a community: its key and record), else nothing. */
+async function keepPick(state: ForumLabelState, address: string | null): Promise<void> {
+    const identity = await loadIdentity().catch(() => null);
+    try {
+        if (identity?.publicKey && state.show === 'community' && state.community && address) {
+            await AsyncStorage.setItem(FORUM_LABEL_PICK_STORE_KEY, JSON.stringify({ member: identity.publicKey, key: state.community.key, community: communityKeyOf(address) }));
+        } else {
+            await AsyncStorage.removeItem(FORUM_LABEL_PICK_STORE_KEY);
+        }
+    } catch { /* kept for the tick and renewing only: lost, and Settings says the note ran out until it is picked again */ }
+}
+
+/** The member's choice, made (core chooseForumLabel), and what was picked kept for the next visit and renewing. */
+export async function setForumLabel(choice: ForumLabelChoice): Promise<ForumLabelResult> {
+    const done = await chooseForumLabel(deps, choice);
+    if (done.ok) await keepPick(done.state, choice.show === 'community' ? choice.address : null);
+    return done;
+}
+
+/**
+ * The member's other communities on this phone: every saved one but the community in front. Its `key` is the server key
+ * its record proved, else the forum's key for it when it is the one picked here.
+ */
 export async function otherCommunities(): Promise<PhoneCommunity[]> {
-    const [nodes, anchor] = await Promise.all([getSavedNodes().catch(() => []), AsyncStorage.getItem('beanpool_anchor_url').catch(() => null)]);
+    const [nodes, anchor, kept] = await Promise.all([
+        getSavedNodes().catch(() => []), AsyncStorage.getItem('beanpool_anchor_url').catch(() => null), keptPick(),
+    ]);
     return nodes
         .filter((n) => !anchor || !sameCommunityRecord(n.url, anchor))
-        .map((n) => ({ address: n.url, name: communityName(n), key: communityRecordOf(n.url)?.peerId ?? null }));
+        .map((n) => ({
+            address: n.url,
+            name: communityName(n),
+            key: communityRecordOf(n.url)?.peerId ?? (kept && kept.community === communityKeyOf(n.url) ? kept.key : null),
+        }));
 }
 
 let renewedThisRun = false;
@@ -79,6 +124,6 @@ let renewedThisRun = false;
 export async function renewForumLabelOnce(): Promise<void> {
     if (renewedThisRun) return;
     renewedThisRun = true;
-    const state = await readForumLabel();
-    await renewForumLabel(deps, state, (key) => communityRecordByKey(key)?.using ?? null).catch(() => null);
+    const [state, kept] = await Promise.all([readForumLabel(), keptPick()]);
+    await renewForumLabel(deps, state, (key) => communityRecordByKey(key)?.using ?? (kept?.key === key ? usingOf(kept.community) : null)).catch(() => null);
 }

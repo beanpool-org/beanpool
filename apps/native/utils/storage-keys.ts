@@ -64,6 +64,14 @@ export const QUESTIONS_OPENED_STORE_KEY = 'beanpool_questions_opened';
 /** A town typed in "Find your community" (utils/typed-place.ts): where the member lives, roughly. Sign Out wipes it. */
 export const TYPED_PLACE_STORE_KEY = 'beanpool_find_typed_place';
 
+/**
+ * The community this phone last picked for "Beside my name on the worldwide forum" (utils/forum-label.ts): `{ member, key,
+ * community }`, the forum's directory key for it beside the record key it is kept under (community-index.ts communityKeyOf),
+ * so Settings ticks it and the note is renewed at its `using` on any later visit, when its record has no server key yet.
+ * Names the member: Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const FORUM_LABEL_PICK_STORE_KEY = 'beanpool_forum_label_at';
+
 /** The member's one profile copy (utils/canonical-profile.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage). */
 export const CANONICAL_PROFILE_STORE_KEY = 'beanpool_canonical_profile';
 

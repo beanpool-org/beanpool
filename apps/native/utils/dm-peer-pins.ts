@@ -45,15 +45,11 @@ export interface DmPeerOffer {
     /** What the node says happened (slice 3: a verified re-key date). Only ever wording for the banner. */
     nodeSays?: { rekeyedAt: string };
     /**
-     * Offered by first sight on this thread's own lines (§3.4 amendment, rules 3-4: a restored phone, or a DM the update
-     * met with two keys in its rows), not by a sync against a pin: the banner opens with the restored-phone sentence.
+     * A pause first sight made on this thread's own lines with no single key listed (rule 3 against a listing of several
+     * keys, or none): only ever on an offer naming nobody (DESIGN-dm-key-signal-model §2.4, §2.6). An offer naming a key is
+     * never first sight's: first sight takes that key itself.
      */
     firstSight?: true;
-    /**
-     * A first-sight pause the re-seed after the member's reset made (§3.4 amendment 7 §1): the banner opens with the reset's
-     * sentence in the restored-phone sentence's place.
-     */
-    afterReset?: true;
     /**
      * A first-sight pause born with no key to offer (rule 3 against a listing of several keys, or none; N1 of the 15 Oct
      * words design): nothing was ever offered. It clears when every listing names the pinned key alone, which is what
@@ -265,8 +261,7 @@ function pinOf(raw: unknown): DmPinEntry | null {
         const says = o.nodeSays as Record<string, unknown> | undefined;
         const rekeyedAt = says ? rekeyDateOf(says.rekeyedAt) : undefined;
         if (rekeyedAt) offered.nodeSays = { rekeyedAt };
-        if (o.firstSight === true) offered.firstSight = true;
-        if (o.afterReset === true) offered.afterReset = true;
+        if (o.firstSight === true && offered.peer === null) offered.firstSight = true;
         if (o.keyless === true && offered.firstSight && offered.peer === null) offered.keyless = true;
         pin.offered = offered;
     }
@@ -402,7 +397,7 @@ export function pinsWithCarried(here: string | null, carried: string, now: strin
  */
 const PIN_FORMAT_NAMES = new Set([
     'pins', 'offered', 'heard', 'nodeSays',
-    'peer', 'since', 'by', 'former', 'checked', 'at', 'firstSight', 'afterReset', 'keyless', 'rekeyedAt', 'tryKeys',
+    'peer', 'since', 'by', 'former', 'checked', 'at', 'firstSight', 'keyless', 'rekeyedAt', 'tryKeys',
     'unplaced', 'listed', 'stale', 'heldLost', 'reset', 'verified', 'changedAt',
 ]);
 
@@ -892,20 +887,15 @@ function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: str
 /**
  * The re-seed after the member's reset (§3.4 amendment 7 §1), for one DM whose rows name one other key, `rowsKey`: the
  * rows are this build's since the update (the listing's key for an unchecked pin, a rule-5 record, a mark), never the
- * phone's history, so `verdict` (the thread's lines, judged with `rowsKey` as the listed one) decides, as first sight:
- * rule 2 pins it checked; rules 3-4 pin the lines' key checked with `rowsKey` offered, a first-sight pause marked
- * `afterReset`; rule 5 keeps the record, `listed` = `rowsKey`; rule 1 (no line) pins `rowsKey` UNCHECKED, judged at its
- * first send as any new DM is. True when the pins changed.
+ * phone's history, so `verdict` (the thread's lines, judged with `rowsKey` as the listed one) decides, as first sight
+ * does (DESIGN-dm-key-signal-model §2.4): rule 2 pins it checked; rules 3-4 pin `rowsKey` checked, the lines' key kept as
+ * former, with one notice; rule 5 pins `rowsKey` checked with no notice; rule 1 (no line) pins `rowsKey` UNCHECKED,
+ * judged at its first send as any new DM is. True when the pins changed.
  */
 export function applyResetVerdict(pins: DmPeerPins, conversationId: string, verdict: SightVerdict, rowsKey: string, now: string): boolean {
     const id = dmPinId(conversationId);
     if (!isPinnableId(id) || ownPin(pins, id)) return false;
-    return resized(pins, id, () => {
-        if (!judged(pins, id, verdict, rowsKey, undefined, now)) return false;
-        const pin = ownPin(pins, id);
-        if (pin && !isUnplacedSight(pin) && pin.offered?.firstSight) pin.offered.afterReset = true;
-        return true;
-    });
+    return resized(pins, id, () => judged(pins, id, verdict, rowsKey, undefined, now));
 }
 
 /**
@@ -1000,7 +990,6 @@ function applyDmListingsTo(pin: DmPeerPin, named: string[][], one: string | null
     if (rekeyedAt) pin.offered.nodeSays = { rekeyedAt };
     // A first-sight pause offering nobody keeps its flags; an offer naming a key never carries them (§2.6).
     if (one === null && pause?.firstSight) pin.offered.firstSight = true;
-    if (one === null && pause?.afterReset) pin.offered.afterReset = true;
     if (one === null && pause?.keyless) pin.offered.keyless = true;
     return true;
 }
@@ -1114,21 +1103,15 @@ export function removeVerified(pins: DmPeerPins, conversationId: string, now: st
 
 /**
  * The member's "Continue with the new key" (slice 2, pick 1): the key on offer becomes the pinned key, `by: 'member'`,
- * and the key before it goes first in `former`, so the old lines still open (pick 3). The offer, the first-sight verdict
- * and what the listing said go with it: the member decided. Only the key on offer moves a pin, from a sync or a
- * first-sight pause alike (§3.4 amendment, rules 3-4). A rule-5 record (heldLost too) continues to the one key its listing
- * names, `listed` (the 15 Oct words design, D1): pinned `by: 'member'` with no `former`, since no key was ever placed,
- * so the lines that didn't open stay that way. Any other key, an offer of several keys (peer null), a rule-5 record that
- * lists no single key, a pin with no offer, or a DM with nothing kept: nothing changes. True when it changed.
+ * and the key before it goes first in `former`, so the old lines still open (pick 3). The offer and what the listing said
+ * go with it: the member decided. Only the key on offer moves a pin; under Signal's model that is a verified person's
+ * (DESIGN-dm-key-signal-model §2.5), since any other pin follows a one-key listing by itself and a rule-5 record becomes a
+ * pin on it (restDmEntry). Any other key, an offer of several keys (peer null), a rule-5 record, a pin with no offer, or a
+ * DM with nothing kept: nothing changes. True when it changed.
  */
 export function acceptOffer(pins: DmPeerPins, conversationId: string, peer: string, now: string): boolean {
     const id = dmPinId(conversationId);
     const key = pinKeyOf(peer);
-    const sight = dmSightFor(pins, id);
-    if (isUnplacedSight(sight)) {
-        if (!key || sight.listed !== key || !isPinnableId(id)) return false;
-        return resized(pins, id, () => setPin(pins, id, { peer: key, since: now, by: 'member' }));
-    }
     const pin = dmPinFor(pins, id);
     if (!key || !pin?.offered || pin.offered.peer !== key) return false;
     // Newest first, the oldest dropped past FORMER_MAX (§3.4 amendment 6): its lines then read "couldn't be verified".

@@ -32,26 +32,14 @@ export function rekeyedOnText(iso?: string | null): string | null {
 
 export interface DmKeyChangeCopyInput {
     peerName?: string | null;
-    /** The new key's code (utils/key-code.ts), or null when there is no one key to continue with. */
+    /**
+     * The new key's code (utils/key-code.ts), or null when there is no one key to continue with. Under Signal's model a
+     * code is only ever a verified person's new key (DESIGN-dm-key-signal-model §2.3): first sight, a rule-5 record and a
+     * person not marked verified all take a single listed key by themselves, so no other card names a key.
+     */
     code: string | null;
-    /**
-     * The first-sight case (§3.4 amendment, rules 3-4): this phone is checking the chat from the start (after a restore,
-     * or an update meeting a DM with two keys in its rows), and the earlier messages came from another key than the one
-     * on offer.
-     */
-    firstSight: boolean;
-    /**
-     * The first-sight pause was made by the re-seed after the member reset this community's chat memory (§3.4 amendment 7
-     * §1): the banner opens with the reset's sentence in the restored-phone sentence's place.
-     */
-    afterReset?: boolean;
     /** The date the node says the account was re-keyed (slice 3), when it says so. */
     rekeyedAt?: string;
-    /**
-     * First sight found lines it couldn't place (rule 5; 15 Oct words design, D1): `code` is the key the listing names,
-     * and Continue keeps the lines that didn't open as they are, so the body says so.
-     */
-    unplaced?: boolean;
     /** The member marked this person verified (DESIGN-dm-key-signal-model §4): the card opens with "You marked … as verified". */
     verified?: boolean;
 }
@@ -67,23 +55,15 @@ export interface DmKeyChangeCopy {
     notNowLabel: string;
 }
 
-/** The first-sight banner's opening sentence (design §3.4 amendment), true after a restore and after an update alike. */
-export const DM_FIRST_SIGHT_LEAD = word('This phone is checking this chat from the start, as it does after you restore it or update the app.');
-
-/** The opening sentence when the member's reset of this community's chat memory made the pause (§3.4 amendment 7 §1). */
-export const DM_RESET_LEAD = word("This community's chat memory was reset, so this phone is checking this chat from the start.");
-
-const LEADS = { firstSight: DM_FIRST_SIGHT_LEAD, reset: DM_RESET_LEAD } as const;
-
 /** The banner's words. Every sentence is whole, with a twin for when the name is unknown (D4). */
-export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeyedAt, unplaced, verified }: DmKeyChangeCopyInput): DmKeyChangeCopy {
+export function dmKeyChangeCopy({ peerName, code, rekeyedAt, verified }: DmKeyChangeCopyInput): DmKeyChangeCopy {
     const name = nameOf(peerName);
     const title = name ? t('The key behind "{name}" changed.', { name }) : t('The key behind this chat changed.');
     const on = rekeyedOnText(rekeyedAt);
     const dateLine = on ? t('This community says the account was re-keyed on {on}.', { on }) : null;
     if (!code) {
-        // A pause offering no key, or a rule-5 record whose listing names no single key: several, or none (D2 (c)). It
-        // promises nothing about when it lifts.
+        // A pause offering no key, or a rule-5 record: no single key listed, several or none (D2 (c)). It promises nothing
+        // about when it lifts.
         return {
             title,
             body: name
@@ -92,31 +72,17 @@ export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeye
             dateLine, confirm: null, continueLabel: null, notNowLabel: t('Not now'),
         };
     }
-    // The first-sight case opens with the amendment's sentence, worded so it is true after an update too (P17), not only
-    // after a restore. Each sentence is translated whole; the lead and the rest are joined with one space.
+    // A person the member marked verified (Signal's model): the one change that still stops, and the card says why. Each
+    // sentence is translated whole; they are joined with one space.
     const said: string[] = [];
-    if (unplaced) {
-        // Rule 5 with one listed key (D1 (b)): no lead, since no key was placed; what stays unopened is said before Continue.
+    if (verified) {
         said.push(name
-            ? t("This phone can't match this chat to one key. What you can read here may not be from {name}, and the messages it couldn't open stay that way. Anything you send now would go to the key this community lists for {name}. Check with {name} first, in person or on a call: their key code should be", { name })
-            : t("This phone can't match this chat to one key. What you can read here may not be from the other person, and the messages it couldn't open stay that way. Anything you send now would go to the key this community lists for them. Check with them first, in person or on a call: their key code should be"));
-    } else if (firstSight) {
-        if (afterReset) said.push(t(LEADS.reset));
-        else said.push(t(LEADS.firstSight));
-        said.push(name
-            ? t('The earlier messages here came from a different key than the one this community now gives for {name}. Anything you send now would go to the new key. Check with {name} first, in person or on a call: their key code should be', { name })
-            : t('The earlier messages here came from a different key than the one this community now gives for the other person. Anything you send now would go to the new key. Check with them first, in person or on a call: their key code should be'));
-    } else {
-        // A person the member marked verified (Signal's model): the only ordinary change that still stops, and the card says why.
-        if (verified) {
-            said.push(name
-                ? t('You marked {name} as verified, so this phone is asking before it sends to a new key.', { name })
-                : t('You marked this person as verified, so this phone is asking before it sends to a new key.'));
-        }
-        said.push(name
-            ? t('Anything you send now would go to the new key. If {name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be', { name })
-            : t('Anything you send now would go to the new key. If the other person got a new phone and re-keyed, check with them first, in person or on a call: their key code should be'));
+            ? t('You marked {name} as verified, so this phone is asking before it sends to a new key.', { name })
+            : t('You marked this person as verified, so this phone is asking before it sends to a new key.'));
     }
+    said.push(name
+        ? t('Anything you send now would go to the new key. If {name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be', { name })
+        : t('Anything you send now would go to the new key. If the other person got a new phone and re-keyed, check with them first, in person or on a call: their key code should be'));
     return {
         title, body: said.join(' '), dateLine,
         confirm: name

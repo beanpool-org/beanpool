@@ -6575,12 +6575,10 @@ export interface DmKeyChange {
      */
     offeredPeer: string | null;
     /**
-     * True when first sight on this thread's own lines made the pause (§3.4 amendment, rules 3-4: a restored phone, or
-     * a DM the update met with two keys in its rows), not a sync against a pin this phone already had.
+     * True when first sight on this thread's own lines made the pause, or for a rule-5 record: only ever with no single key
+     * listed (`offeredPeer` null), since first sight takes a single listed key itself (DESIGN-dm-key-signal-model §2.4).
      */
     firstSight: boolean;
-    /** True when that first-sight pause came from the re-seed after the member's reset (§3.4 amendment 7 §1): the banner says so. */
-    afterReset?: boolean;
     /** The member marked this person verified (DESIGN-dm-key-signal-model §4): the card opens with "You marked … as verified". */
     verified?: boolean;
     /** When the node says the account was re-keyed (slice 3). Only ever wording for the banner, never a reason to accept (pick 4). */
@@ -6592,9 +6590,9 @@ export interface DmKeyChange {
      */
     name?: string | null;
     /**
-     * First sight found lines it couldn't place (rule 5 of the §3.4 amendment; heldLost too): no key is pinned, and
-     * `offeredPeer` is the one key the listing names, or null (15 Oct words design, D1). Continue pins it with no former
-     * key, so the lines that didn't open stay that way, and the banner says so.
+     * First sight found lines it couldn't place (rule 5 of the §3.4 amendment; heldLost too) and no single key is listed:
+     * no key is pinned, `offeredPeer` is null, and the box says so (DM_UNPLACED_LINE). A record whose listing names one key
+     * is never a change: it becomes a pin on that key (restDmEntry, §2.3 row 5).
      */
     unplaced?: true;
 }
@@ -6619,7 +6617,6 @@ export async function getDmKeyChange(conversationId: string): Promise<DmKeyChang
     if (!ctx.keyChanged || !ctx.offered) return null;
     const name = (await callsignOfKey(ctx.peerEdPubHex)) ?? (await callsignOfKey(ctx.offered.peer));
     const change: DmKeyChange = { offeredPeer: ctx.offered.peer, firstSight: !!ctx.offered.firstSight, name };
-    if (ctx.offered.afterReset) change.afterReset = true;
     if (ctx.verified) change.verified = true;
     if (ctx.offered.nodeSays?.rekeyedAt) change.rekeyedAt = ctx.offered.nodeSays.rekeyedAt;
     return change;
@@ -6685,9 +6682,11 @@ export async function removeDmPeerVerification(conversationId: string): Promise<
 }
 
 /**
- * A rule-5 record's banner (15 Oct words design, D1), read after the 'check' judgement left no key pinned: the key its
- * listing names (or null), named by that key's member row, else the rows' other key's. Reads only: nothing is written
- * from here. Null for anything that isn't a DM with a rule-5 record.
+ * A rule-5 record's banner (15 Oct words design, D2), read after the 'check' judgement left no key pinned: no single key
+ * to continue with, named by the rows' other key's member row. Read as the resting rule would leave it, as the Inbox tag
+ * is (dmEntryWaitsForMember): a record whose listing names one key is no pause, since it becomes a pin on that key
+ * (DESIGN-dm-key-signal-model §2.3 row 5). Reads only: nothing is written from here. Null for anything that isn't a DM
+ * with a rule-5 record waiting for the member.
  */
 async function unplacedKeyChange(conversationId: string): Promise<DmKeyChange | null> {
     const me = (await loadIdentity())?.publicKey;
@@ -6696,12 +6695,11 @@ async function unplacedKeyChange(conversationId: string): Promise<DmKeyChange | 
     const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
     if (!conv || conv.type !== 'dm') return null;
     const entry = dmSightFor(await dmPins.read(me, database), conversationId);
-    if (!isUnplacedSight(entry)) return null;
-    const listed = pinKeyOf(entry.listed);
+    if (!isUnplacedSight(entry) || !dmEntryWaitsForMember(entry)) return null;
     const parts = await database.getAllAsync<any>('SELECT public_key FROM conversation_participants WHERE conversation_id = ?', [conversationId]).catch(() => []);
     const others = parts.map((p: any) => p.public_key).filter((pk: string) => pk && pk !== me);
-    const name = (await callsignOfKey(listed)) ?? (others.length === 1 ? await callsignOfKey(others[0]) : null);
-    const change: DmKeyChange = { offeredPeer: listed, firstSight: true, unplaced: true, name };
+    const name = others.length === 1 ? await callsignOfKey(others[0]) : null;
+    const change: DmKeyChange = { offeredPeer: null, firstSight: true, unplaced: true, name };
     if (entry.heard?.rekeyedAt) change.rekeyedAt = entry.heard.rekeyedAt;
     return change;
 }
@@ -6713,9 +6711,8 @@ async function unplacedKeyChange(conversationId: string): Promise<DmKeyChange | 
  *
  * Refuses (false, nothing written) unless `expectedPeer` is still the key on offer when the tap's turn comes in the pins'
  * queue: a sync that offers a third key, or clears the offer, between the banner and the tap moves nothing. A rule-5
- * record continues the same way to the one key its listing names (15 Oct words design, D1), with nothing kept as former,
- * and only while that key is still the one listed at the tap's turn. What the node says about a re-key never moves a pin
- * here (pick 4); only this call does. Throws DmPinStoreError when the pins can't be read or written.
+ * record offers no key, so nothing continues from one. What the node says about a re-key never moves a pin here (pick 4);
+ * only this call does. Throws DmPinStoreError when the pins can't be read or written.
  *
  * Through the pins' one queue (#1873 review, finding 4): the sync, first sight and the refresh write there too, so no
  * writer's older copy can be written over the member's choice, and the in-memory copy every send reads is the one changed.

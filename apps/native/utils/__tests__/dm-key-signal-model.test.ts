@@ -13,7 +13,8 @@ import { describe, it, expect } from 'vitest';
 import {
     applyDmListings, applySightVerdict, acceptOffer, markVerified, removeVerified, restDmEntry, judgeFirstSight, dmSightFor, dmPinFor,
     dmOpenPeers, isUnplacedSight, isVerifiedPin, dmEntryRestless, dmEntryWaitsForMember, readDmPeerPins, writeDmPeerPins, pinsWithCarried,
-    createDmPinBook, markHeldLost, CHANGED_AT_MAX, FORMER_MAX, type DmPeerPins, type DmPeerPin, type DmHeard, type SightVerdict,
+    createDmPinBook, markHeldLost, applyResetVerdict, pinAtFirstSight, settleFirstSight, pinKeyOf,
+    CHANGED_AT_MAX, FORMER_MAX, type DmPeerPins, type DmPeerPin, type DmHeard, type SightVerdict,
 } from '../dm-peer-pins';
 import { dmPeerPinsStoreKey } from '../storage-keys';
 
@@ -414,4 +415,89 @@ describe('the table can fail: each mutant dies at its own row (§6)', () => {
             expect(failed).toBe(true);
         });
     }
+});
+
+// S2 (DESIGN-dm-key-signal-model §7): the dead words, flags and branch went only because S1 left no way to reach them. This
+// walks EVERY state the pure writers reach from nothing (day zero: no pin stored by an older build), each writer with each
+// argument shape, and holds the two facts the removal rests on in every one of them, as written and as read back (pinOf):
+//  (a) no offer naming a key carries first sight's flags (`firstSight`; `afterReset` is gone from the format): only an
+//      offer naming nobody is first sight's, and its card is the "no single key" one, so the restored-phone, reset and
+//      first-sight openings had nothing left to open;
+//  (b) no rule-5 record names a key: `listed` is null, so getDmKeyChange's rule-5 card offers no key, and Continue's
+//      rule-5 branch (acceptOffer) had nothing left to continue to.
+describe('S2: what S1 left unreachable stays unreachable (every state the writers reach from nothing)', () => {
+    const LISTINGS: string[][][] = [[[K1]], [[K2]], [[K1, K2]], [[K2, PUPPET]], [[K2], [PUPPET]], [[K1], [K2]]];
+    const VERDICTS: SightVerdict[] = [{ rule: 1 }, { rule: 2, pin: K1, offer: false }, { rule: 3, pin: X, offer: true }, { rule: 4, pin: X, offer: true }, { rule: 5 }];
+    const OPS: Array<[string, (p: DmPeerPins) => unknown]> = [
+        ...LISTINGS.map((l): [string, (p: DmPeerPins) => unknown] => [`listings ${JSON.stringify(l)}`, (p) => applyDmListings(p, D0, l, LATER)]),
+        ['listings [[K2]] with a re-key date', (p) => applyDmListings(p, D0, [[K2]], LATER, { rekeyedAt: REKEYED })],
+        ...VERDICTS.flatMap((v) => ([K1, K2, null] as Array<string | null>).map((listed): [string, (p: DmPeerPins) => unknown] =>
+            [`verdict ${v.rule} listed ${listed?.slice(0, 2) ?? 'none'}`, (p) => applySightVerdict(p, D0, v, listed, undefined, LATER)])),
+        ...VERDICTS.map((v): [string, (p: DmPeerPins) => unknown] => [`reset verdict ${v.rule}`, (p) => applyResetVerdict(p, D0, v, K2, LATER)]),
+        ['heldLost mark', (p) => markHeldLost(p, [D0], LATER)],
+        ['first sight K2', (p) => pinAtFirstSight(p, D0, K2, LATER)],
+        ['a send settles', (p) => settleFirstSight(p, D0)],
+        ['resting rule', (p) => restDmEntry(p, D0, LATER)],
+        ['mark K1', (p) => markVerified(p, D0, K1, LATER)],
+        ['mark K2', (p) => markVerified(p, D0, K2, LATER)],
+        ['remove the mark', (p) => removeVerified(p, D0, LATER)],
+        ['continue to K1', (p) => acceptOffer(p, D0, K1, LATER)],
+        ['continue to K2', (p) => acceptOffer(p, D0, K2, LATER)],
+    ];
+    const deadShapes = (p: DmPeerPins): string[] => Object.entries(p).flatMap(([id, e]) => {
+        if (isUnplacedSight(e)) return pinKeyOf(e.listed) ? [`${id}: a rule-5 record naming a key`] : [];
+        const o = (e as DmPeerPin).offered as (Record<string, unknown> & { peer: string | null }) | undefined;
+        if (!o) return [];
+        const bad: string[] = [];
+        if (o.peer !== null && o.firstSight) bad.push(`${id}: an offer naming a key with firstSight`);
+        if ('afterReset' in o) bad.push(`${id}: afterReset`);
+        return bad;
+    });
+
+    it('from nothing, five writes deep: no offer naming a key is first sight\'s, and no rule-5 record names a key', async () => {
+        const seen = new Map<string, string>([['{}', 'nothing']]);
+        let frontier: Array<[string, string]> = [['{}', 'nothing']];
+        for (let depth = 0; depth < 5; depth++) {
+            const next: Array<[string, string]> = [];
+            for (const [state, path] of frontier) {
+                for (const [what, op] of OPS) {
+                    const p = JSON.parse(state) as DmPeerPins;
+                    op(p);
+                    const after = JSON.stringify(p);
+                    const via = `${path} → ${what}`;
+                    expect(deadShapes(p), via).toEqual([]);
+                    if (!seen.has(after)) { seen.set(after, via); next.push([after, via]); }
+                }
+            }
+            frontier = next;
+        }
+        // The walk covers what the table's rows name: a verified pause, a keyless pause, a moved pin, a rule-5 record, a mark.
+        const states = [...seen.keys()].map((s) => JSON.parse(s) as DmPeerPins);
+        const kinds = new Set(states.map((p) => {
+            const e = p[D0];
+            if (!e) return 'nothing';
+            if (isUnplacedSight(e)) return e.heldLost ? 'heldLost' : 'rule-5';
+            const pin = e as DmPeerPin;
+            return [pin.offered ? (pin.offered.peer ? 'offers a key' : 'offers nobody') : 'no offer', isVerifiedPin(pin) ? 'verified' : 'not verified', pin.by].join(', ');
+        }));
+        for (const k of ['nothing', 'rule-5', 'heldLost', 'offers a key, verified, member', 'offers a key, verified, first-seen', 'offers nobody, verified, first-seen',
+            'offers nobody, not verified, first-seen', 'no offer, not verified, listing', 'no offer, verified, member']) expect(kinds.has(k), k).toBe(true);
+        expect(seen.size).toBeGreaterThan(40);
+        // Read back as the store reads it (pinOf), and carried into another community's copy (pinsWithCarried): still none.
+        for (const p of states) expect(deadShapes(await REAL.readBack(p))).toEqual([]);
+        const values = states.map((p) => JSON.stringify({ pins: p }));
+        for (const here of values) for (const carried of values) {
+            const out = pinsWithCarried(here, carried, LATER);
+            if (out) expect(deadShapes((JSON.parse(out) as { pins: DmPeerPins }).pins)).toEqual([]);
+        }
+    });
+
+    it('Continue has no rule-5 branch left: a record, with a key or without, is never continued from (its key comes by the resting rule)', () => {
+        for (const listed of [K2, null]) {
+            const p: DmPeerPins = { [D0]: { unplaced: true, since: NOW, listed } };
+            for (const k of [K1, K2, PUPPET]) expect(acceptOffer(p, D0, k, LATER)).toBe(false);
+            expect(dmSightFor(p, D0)).toEqual({ unplaced: true, since: NOW, listed });
+            expect(dmEntryWaitsForMember(dmSightFor(p, D0))).toBe(listed === null);
+        }
+    });
 });

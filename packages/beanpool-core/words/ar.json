@@ -2922,13 +2922,13 @@
     "many": "كل الـ {count} مقابل {n} فاصوليا. وبالواحدة يبلغ المجموع {total}.",
     "other": "كل الـ {count} مقابل {n} فاصوليا. وبالواحدة يبلغ المجموع {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "zero": "بالواحدة، {count} تبلغ {n} فاصوليا. يجب أن يكون سعر الكل أقل.",
-    "one": "بالواحدة، {count} تبلغ {n} فاصوليا. يجب أن يكون سعر الكل أقل.",
-    "two": "بالواحدة، {count} تبلغ {n} فاصوليا. يجب أن يكون سعر الكل أقل.",
-    "few": "بالواحدة، {count} تبلغ {n} فاصوليا. يجب أن يكون سعر الكل أقل.",
-    "many": "بالواحدة، {count} تبلغ {n} فاصوليا. يجب أن يكون سعر الكل أقل.",
-    "other": "بالواحدة، {count} تبلغ {n} فاصوليا. يجب أن يكون سعر الكل أقل."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "zero": "بالواحدة، {count} تبلغ {n} فاصوليا. لا يمكن أن يكون سعر الكل أكثر من ذلك.",
+    "one": "بالواحدة، {count} تبلغ {n} فاصوليا. لا يمكن أن يكون سعر الكل أكثر من ذلك.",
+    "two": "بالواحدة، {count} تبلغ {n} فاصوليا. لا يمكن أن يكون سعر الكل أكثر من ذلك.",
+    "few": "بالواحدة، {count} تبلغ {n} فاصوليا. لا يمكن أن يكون سعر الكل أكثر من ذلك.",
+    "many": "بالواحدة، {count} تبلغ {n} فاصوليا. لا يمكن أن يكون سعر الكل أكثر من ذلك.",
+    "other": "بالواحدة، {count} تبلغ {n} فاصوليا. لا يمكن أن يكون سعر الكل أكثر من ذلك."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "zero": "1.5% يذهب إلى المجتمع. تستلم {n} فاصوليا عن كل قطعة.",

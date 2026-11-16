@@ -2402,8 +2402,8 @@
   "All {count} for {n} Beans. One by one they come to {total}.|All {count} for {n} Beans. One by one they come to {total}.": {
     "other": "全部 {count} 個共 {n} 顆豆子。逐個買則合計 {total}。"
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "other": "逐個買，{count} 個合計 {n} 顆豆子。全部一起的價格必須更低。"
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "other": "逐個買，{count} 個合計 {n} 顆豆子。全部一起的價格不能更高。"
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "other": "1.5% 歸社群。每個你將收到 {n} 顆豆子。"

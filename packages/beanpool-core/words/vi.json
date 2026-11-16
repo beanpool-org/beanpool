@@ -2402,8 +2402,8 @@
   "All {count} for {n} Beans. One by one they come to {total}.|All {count} for {n} Beans. One by one they come to {total}.": {
     "other": "Cả {count} cái giá {n} đậu. Mua lẻ từng cái thì thành {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "other": "Mua lẻ, {count} cái thành {n} đậu. Giá cho tất cả phải thấp hơn."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "other": "Mua lẻ, {count} cái thành {n} đậu. Giá cho tất cả không được cao hơn."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "other": "1.5% dành cho cộng đồng. Bạn nhận {n} đậu cho mỗi cái."

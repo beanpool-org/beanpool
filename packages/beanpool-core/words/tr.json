@@ -2506,9 +2506,9 @@
     "one": "{count} adedin tamamı {n} fasulye. Tek tek {total} tutar.",
     "other": "{count} adedin tamamı {n} fasulye. Tek tek {total} tutar."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "Tek tek {count} adet {n} fasulye eder. Hepsi için fiyat bundan düşük olmalı.",
-    "other": "Tek tek {count} adet {n} fasulye eder. Hepsi için fiyat bundan düşük olmalı."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "Tek tek {count} adet {n} fasulye eder. Hepsi için fiyat bundan yüksek olamaz.",
+    "other": "Tek tek {count} adet {n} fasulye eder. Hepsi için fiyat bundan yüksek olamaz."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% topluluğa gider. Her biri için {n} fasulye alırsın.",

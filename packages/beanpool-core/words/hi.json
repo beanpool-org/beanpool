@@ -2506,9 +2506,9 @@
     "one": "सभी {count} के लिए {n} फली। एक-एक करके कुल {total} बनते हैं।",
     "other": "सभी {count} के लिए {n} फलियाँ। एक-एक करके कुल {total} बनते हैं।"
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "एक-एक करके {count} की {n} फली बनती है। सभी की कीमत इससे कम होनी चाहिए।",
-    "other": "एक-एक करके {count} की {n} फलियाँ बनती हैं। सभी की कीमत इससे कम होनी चाहिए।"
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "एक-एक करके {count} की {n} फली बनती है। सभी की कीमत इससे ज़्यादा नहीं हो सकती।",
+    "other": "एक-एक करके {count} की {n} फलियाँ बनती हैं। सभी की कीमत इससे ज़्यादा नहीं हो सकती।"
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% समुदाय को जाता है। आपको हर एक पर {n} फली मिलती है।",

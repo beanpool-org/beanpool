@@ -2506,9 +2506,9 @@
     "one": "Tous les {count} pour {n} haricot. À l'unité, cela fait {total}.",
     "other": "Tous les {count} pour {n} haricots. À l'unité, cela fait {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "À l'unité, {count} font {n} haricot. Le prix pour le tout doit être inférieur.",
-    "other": "À l'unité, {count} font {n} haricots. Le prix pour le tout doit être inférieur."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "À l'unité, {count} font {n} haricot. Le prix pour le tout ne peut pas être supérieur.",
+    "other": "À l'unité, {count} font {n} haricots. Le prix pour le tout ne peut pas être supérieur."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% va à la communauté. Vous recevez {n} haricot pour chacun.",

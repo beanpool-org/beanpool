@@ -2506,9 +2506,9 @@
     "one": "എല്ലാ {count} എണ്ണവും {n} പയറിന്. ഒന്നൊന്നായി വാങ്ങിയാൽ {total} ആകും.",
     "other": "എല്ലാ {count} എണ്ണവും {n} പയറിന്. ഒന്നൊന്നായി വാങ്ങിയാൽ {total} ആകും."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "ഒന്നൊന്നായി {count} എണ്ണത്തിന് {n} പയർ ആകും. എല്ലാത്തിനുമുള്ള വില ഇതിലും കുറവായിരിക്കണം.",
-    "other": "ഒന്നൊന്നായി {count} എണ്ണത്തിന് {n} പയർ ആകും. എല്ലാത്തിനുമുള്ള വില ഇതിലും കുറവായിരിക്കണം."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "ഒന്നൊന്നായി {count} എണ്ണത്തിന് {n} പയർ ആകും. എല്ലാത്തിനുമുള്ള വില ഇതിലും കൂടുതലാകാൻ പാടില്ല.",
+    "other": "ഒന്നൊന്നായി {count} എണ്ണത്തിന് {n} പയർ ആകും. എല്ലാത്തിനുമുള്ള വില ഇതിലും കൂടുതലാകാൻ പാടില്ല."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% കമ്മ്യൂണിറ്റിക്ക് പോകുന്നു. ഓരോന്നിനും നിങ്ങൾക്ക് {n} പയർ ലഭിക്കും.",

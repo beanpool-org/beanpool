@@ -2506,9 +2506,9 @@
     "one": "Όλα τα {count} για {n} φασόλι. Ένα-ένα, το σύνολο είναι {total}.",
     "other": "Όλα τα {count} για {n} φασόλια. Ένα-ένα, το σύνολο είναι {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "Ένα-ένα, τα {count} κάνουν {n} φασόλι. Η τιμή για όλα πρέπει να είναι χαμηλότερη.",
-    "other": "Ένα-ένα, τα {count} κάνουν {n} φασόλια. Η τιμή για όλα πρέπει να είναι χαμηλότερη."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "Ένα-ένα, τα {count} κάνουν {n} φασόλι. Η τιμή για όλα δεν μπορεί να είναι υψηλότερη.",
+    "other": "Ένα-ένα, τα {count} κάνουν {n} φασόλια. Η τιμή για όλα δεν μπορεί να είναι υψηλότερη."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "Το 1.5% πηγαίνει στην κοινότητα. Λαμβάνετε {n} φασόλι για κάθε κομμάτι.",

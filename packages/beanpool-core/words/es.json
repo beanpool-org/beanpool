@@ -2506,9 +2506,9 @@
     "one": "Todos los {count} por {n} frijol. De uno en uno suman {total}.",
     "other": "Todos los {count} por {n} frijoles. De uno en uno suman {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "De uno en uno, {count} suman {n} frijol. El precio por todos tiene que ser menor.",
-    "other": "De uno en uno, {count} suman {n} frijoles. El precio por todos tiene que ser menor."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "De uno en uno, {count} suman {n} frijol. El precio por todos no puede ser mayor.",
+    "other": "De uno en uno, {count} suman {n} frijoles. El precio por todos no puede ser mayor."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "El 1.5% va a la comunidad. Recibes {n} frijol por cada uno.",

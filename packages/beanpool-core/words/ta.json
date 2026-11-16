@@ -2506,9 +2506,9 @@
     "one": "எல்லா {count}-க்கும் {n} பயறு. ஒவ்வொன்றாக வாங்கினால் {total} ஆகும்.",
     "other": "எல்லா {count}-க்கும் {n} பயறுகள். ஒவ்வொன்றாக வாங்கினால் {total} ஆகும்."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "ஒவ்வொன்றாக {count}-க்கு {n} பயறு ஆகும். எல்லாவற்றுக்குமான விலை இதைவிடக் குறைவாக இருக்க வேண்டும்.",
-    "other": "ஒவ்வொன்றாக {count}-க்கு {n} பயறுகள் ஆகும். எல்லாவற்றுக்குமான விலை இதைவிடக் குறைவாக இருக்க வேண்டும்."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "ஒவ்வொன்றாக {count}-க்கு {n} பயறு ஆகும். எல்லாவற்றுக்குமான விலை இதைவிட அதிகமாக இருக்கக் கூடாது.",
+    "other": "ஒவ்வொன்றாக {count}-க்கு {n} பயறுகள் ஆகும். எல்லாவற்றுக்குமான விலை இதைவிட அதிகமாக இருக்கக் கூடாது."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% சமூகத்துக்குச் செல்கிறது. ஒவ்வொன்றுக்கும் உங்களுக்கு {n} பயறு கிடைக்கும்.",

@@ -2402,8 +2402,8 @@
   "All {count} for {n} Beans. One by one they come to {total}.|All {count} for {n} Beans. One by one they come to {total}.": {
     "other": "{count}つすべてで{n}豆。1つずつだと{total}になります。"
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "other": "1つずつだと、{count}つで{n}豆になります。全部まとめての価格は、これより低くしてください。"
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "other": "1つずつだと、{count}つで{n}豆になります。全部まとめての価格は、これより高くできません。"
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "other": "1.5%はコミュニティへ。1つにつき、あなたは{n}豆を受け取ります。"

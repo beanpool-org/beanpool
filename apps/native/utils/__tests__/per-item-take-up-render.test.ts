@@ -227,6 +227,29 @@ describe("the buyer's box (§2.2): how many, or all of them", () => {
         expect(host.textContent).not.toContain('TRUST COMMITMENT (HOURS)');
     });
 
+    // (price for all against 20 × 300 = 6,000 one by one) -> the saving line under "All 20 for …". The same price as one by one
+    // is allowed (Marty 16 Nov) and shows no saving: never "0 less than one by one" (red if the line is drawn for a 0 saving).
+    for (const [name, lot_price_c, label, saving] of [
+        ['saving > 0', 550000, 'All 20 for 5,500 Beans', '500 less than one by one'],
+        ['saving 0', 600000, 'All 20 for 6,000 Beans', null],
+    ] as const) {
+        it(`the second choice, ${name}: ${saving ?? 'no saving line'}`, async () => {
+            await open({ ...PANELS, lot_price_c });
+            await tap('post-take-up');
+            expect(q('each-all')?.textContent).toBe(`${label}${saving ?? ''}`);
+            expect(host.textContent?.includes('less than one by one')).toBe(saving !== null);
+        });
+    }
+
+    it('all 10 for 100 at 10 each (the same): Confirm sends all 10 at exactly 100 (red if expect_c is not the price for all)', async () => {
+        await open({ ...PANELS, price_c: 1000, units_left: 10, lot_units: 10, lot_price_c: 10000 });
+        await tap('post-take-up');
+        await tap('each-all');
+        expect(q('each-total')?.textContent).toBe('All 10 for 100 Beans');
+        await tap('each-confirm-btn');
+        expect(said.accept.at(-1)).toEqual(['p-panels', ME.publicKey, 10, undefined, { itemOption: 'lot', expect_c: 10000 }]);
+    });
+
     it('3 of them: the total and what Rob receives, and Confirm sends 3 at exactly 900 (red if expect_c is not the total shown)', async () => {
         await open(PANELS);
         await tap('post-take-up');

@@ -5,7 +5,7 @@
  *
  * The boundary is this server, never the assistant's process. In order, every request to /mcp:
  *   1. the owner switch "Allow AI assistants" (local config `aiAssistantsAllowed`, on unless an owner turned it off): off → 404;
- *   2. `Origin` absent or this node's own public address, else 403 (a web page cannot drive it from a browser);
+ *   2. `Origin` absent or one of this community's own addresses (isOwnOrigin), else 403 (a web page cannot drive it from a browser);
  *   3. POST only: GET (no server push in v1) and DELETE (no session to end) → 405; no other method is a route here, so the
  *      router answers PUT and PATCH 405 itself and the CORS layer answers OPTIONS 204, switch on or off, before any of this;
  *   4. a bearer that is an automation token of the `agent` scope or an OAuth access token this node issued (agent/oauth.ts,
@@ -31,7 +31,7 @@ import { looksLikeOAuthAccessToken, noteOAuthGrantUse, verifyAccessToken } from 
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { directoryName, getMember } from '../state-engine.js';
-import { mainPublicUrl } from '../engine/own-addresses.js';
+import { listedUrls, mainPublicUrl, normalizeAddress, publishedAddresses } from '../engine/own-addresses.js';
 import { getVersion } from '../version.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
@@ -62,7 +62,7 @@ function jsonRpcError(ctx: any, status: number, message: string, code = -32000):
     ctx.body = { jsonrpc: '2.0', error: { code, message }, id: null };
 }
 
-/** This node's own origin (its public address), or null when it has none: then only a request with no Origin passes. */
+/** This node's own origin (its main address), or null when it has none: then only a request with no Origin passes. */
 export function ownOrigin(): string | null {
     const url = mainPublicUrl();
     if (!url) return null;
@@ -70,7 +70,27 @@ export function ownOrigin(): string | null {
 }
 
 /**
- * The address the welcome names, and the OAuth issuer: the public one, else the host the assistant reached (a LAN or
+ * Whether a request's Origin is this community's own: its main address's, or, once it has one, any other address on its
+ * list (own-addresses.ts listedUrls), so a change of main never refuses a page at an address that still works (design
+ * several-addresses §2.1). A node with no public address takes none (ownOrigin).
+ */
+export function isOwnOrigin(origin: string): boolean {
+    const own = ownOrigin();
+    if (!own) return false;
+    return origin === own || listedUrls().some((u) => { try { return new URL(u).origin === origin; } catch { return false; } });
+}
+
+/** The host[:port] a request reached. X-Forwarded-Host is believed only from our own proxy (nodeUrlFor). */
+function reachedHost(ctx: any): string {
+    const socket = ctx.req?.socket;
+    return socket && !isTrustedProxy(socket.remoteAddress)
+        ? String(ctx.req.headers?.[':authority'] || ctx.req.headers?.host || '').split(',')[0].trim()
+        : String(ctx.host || '');
+}
+const HOST_SHAPE = /^[a-z0-9.\-:[\]]{1,255}$/i;
+
+/**
+ * The address the welcome names, and Settings' connector address: the main one, else the host the assistant reached (a LAN or
  * bare-IP node can name itself no other way). X-Forwarded-Host is believed only from our own proxy (client-ip.ts
  * isTrustedProxy: loopback, this machine's private subnets, TRUSTED_PROXIES), as X-Forwarded-For is; Koa's ctx.host
  * under app.proxy would take it from anyone (#1881 review, finding 6).
@@ -78,11 +98,28 @@ export function ownOrigin(): string | null {
 export function nodeUrlFor(ctx: any): string {
     const pub = mainPublicUrl();
     if (pub) return pub.replace(/\/+$/, '');
-    const socket = ctx.req?.socket;
-    const host = socket && !isTrustedProxy(socket.remoteAddress)
-        ? String(ctx.req.headers?.[':authority'] || ctx.req.headers?.host || '').split(',')[0].trim()
-        : String(ctx.host || '');
-    return /^[a-z0-9.\-:[\]]{1,255}$/i.test(host) ? `https://${host}` : 'this server';
+    const host = reachedHost(ctx);
+    return HOST_SHAPE.test(host) ? `https://${host}` : 'this server';
+}
+
+/**
+ * The OAuth issuer and resource (agent/oauth-route.ts), and where /mcp's 401 sends a client to sign in: the address the
+ * request reached when it is one of this community's listed addresses (publishedAddresses: the Host header is checked
+ * against the list, never trusted alone), else nodeUrlFor. So the metadata at each listed address names that address
+ * (RFC 8414 §3.3, RFC 9728 §3.3), and an assistant connected while another address was main keeps working there: a change
+ * of main never forces a reconnect (several-addresses S1, review 4580901344). The main reached keeps the main's own URL,
+ * its port as the resolver gave it.
+ */
+export function servedUrlFor(ctx: any): string {
+    const main = nodeUrlFor(ctx);
+    const pub = mainPublicUrl();
+    const reached = reachedHost(ctx);
+    if (!pub || !HOST_SHAPE.test(reached)) return main;
+    let at: URL, mainUrl: URL;
+    try { at = new URL(`https://${reached}`); mainUrl = new URL(pub); } catch { return main; }
+    const host = normalizeAddress(at.hostname);
+    if (!host || !publishedAddresses().includes(host) || host === normalizeAddress(mainUrl.hostname)) return main;
+    return `https://${at.host}`;
 }
 
 // ── A refused request's line ──
@@ -296,7 +333,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         }
         // 2. A browser page from anywhere else never drives it (DNS rebinding, a malicious site).
         const origin = ctx.get('origin');
-        if (origin && origin !== ownOrigin()) {
+        if (origin && !isOwnOrigin(origin)) {
             jsonRpcError(ctx, 403, 'This endpoint does not answer web pages from other sites');
             return;
         }
@@ -311,7 +348,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         if (!check.ok) {
             if (check.status === 401) {
                 // Where an OAuth client learns to sign in (RFC 9728 §5.1); a token client reads only the error.
-                const metadata = `${nodeUrlFor(ctx)}/.well-known/oauth-protected-resource${MCP_PATH}`;
+                const metadata = `${servedUrlFor(ctx)}/.well-known/oauth-protected-resource${MCP_PATH}`;
                 ctx.set('WWW-Authenticate', `Bearer realm="beanpool", error="invalid_token", resource_metadata="${metadata}", scope="agent"`);
             }
             const from = logAddressTag(clientLimiterKey(ctx));

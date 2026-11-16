@@ -235,27 +235,43 @@ export function isLostAddress(host: string): boolean {
 
 /**
  * The owner's main address (node_config `mainAddress`, Settings → Addresses → Make main; design
- * scratch/fable-design/DESIGN-several-addresses-fable.md §2.1), while it may be main: published with a route
- * (reachableAddresses), and a bare number only while the community has no name to send anyone to (a number does not
- * outlive its server). Null when the owner never chose, or chose an address that is not one any more: then primaryAddress
- * keeps today's rule, so a community that never chose behaves as it always did.
+ * scratch/fable-design/DESIGN-several-addresses-fable.md §2.1), while it may be main (mainAddressRefusal says why not):
+ * published with a route (reachableAddresses), answering from outside while the community has any address that does,
+ * and a bare number only while the community has no name to send anyone to (a number does not outlive its server). Null
+ * when the owner never chose, or chose an address that can't be main now: then primaryAddress keeps today's rule, so a
+ * community that never chose behaves as it always did, and a home-network main chosen before the community had a name
+ * gives way to the name the moment it has one.
  */
 export function chosenMainAddress(): string | null {
     const chosen = normalizeAddress(getNodeConfig().mainAddress);
-    if (!chosen) return null;
-    const reachable = reachableAddresses();
-    if (!reachable.includes(chosen)) return null;
-    if (isIpLiteral(chosen) && reachable.some(isInternetName)) return null;
-    return chosen;
+    return chosen && !notMainNow(chosen, reachableAddresses()) ? chosen : null;
 }
 
 /** A name, not a number, that people outside the home network can reach: what a bare number never stands above. */
 const isInternetName = (a: string) => !isIpLiteral(a) && reachableFromInternet(a);
 
 /**
+ * Why `host`, one of `reachable`, can't be main beside the others, or null. The main answers from outside (design §2.1):
+ * a home-network address (`.local`, `.lan`, `.home.arpa`, a one-word name, 192.168.x, 10.x, fc00::/7) is main only while
+ * the community has nothing the Internet can reach, and a number only while it has no name.
+ */
+function notMainNow(host: string, reachable: readonly string[]): string | null {
+    if (!reachable.includes(host)) return `${host} has no route yet (waiting for approval, or paused). It can be made main once it is live.`;
+    if (!reachableFromInternet(host) && reachable.some(reachableFromInternet)) {
+        return `${host} can't be reached from outside its own network (a home network's name or number). The main address must work from anywhere, and this community has an address that does.`;
+    }
+    if (isIpLiteral(host) && reachable.some(isInternetName)) {
+        return `${host} is a number, and this community has a name. A number stops working when the server changes, so a name stays the main address.`;
+    }
+    return null;
+}
+
+/**
  * Why `host` can't be made main now, in words for the owner, or null when it can (routes/app-addresses.ts /main). Any
- * published address with a route may be: a beanpool.org name, an own domain, a hand-set name, and a bare number while the
- * community has no name. Never a former, lost or loopback name (none is published), nor a name still waiting for approval.
+ * published address with a route that answers from outside may be: a beanpool.org name, an own domain, a hand-set name,
+ * and a bare number while the community has no name. A home-network address only while the community has nothing the
+ * Internet can reach (lights-out refuses /main itself). Never a former, lost or loopback name (none is published), nor a
+ * name still waiting for approval.
  */
 export function mainAddressRefusal(host: string): string | null {
     if (!publishedAddresses().includes(host)) {
@@ -263,12 +279,7 @@ export function mainAddressRefusal(host: string): string | null {
             ? `${host} is not an address this community sends people to (a former or lost name), so it can't be the main one.`
             : `${host} is not one of this community's addresses. Add it first, then make it the main one.`;
     }
-    const reachable = reachableAddresses();
-    if (!reachable.includes(host)) return `${host} has no route yet (waiting for approval, or paused). It can be made main once it is live.`;
-    if (isIpLiteral(host) && reachable.some(isInternetName)) {
-        return `${host} is a number, and this community has a name. A number stops working when the server changes, so a name stays the main address.`;
-    }
-    return null;
+    return notMainNow(host, reachableAddresses());
 }
 
 /**
@@ -297,6 +308,21 @@ export function mainPublicUrl(): string | null {
 }
 
 /**
+ * Every address on the list (publishedAddresses) as a URL, for the doors that must keep answering at each one: the OAuth
+ * resource an assistant may name and the Origin /mcp takes (agent/mcp-route.ts, agent/oauth-route.ts). A change of main
+ * changes which address is named, never which addresses work (several-addresses S1, review 4580901344). The resolver's
+ * URL keeps its port for its host, and mainPublicUrl's for the main; every other address is https://<host>.
+ */
+export function listedUrls(): string[] {
+    const ported = new Map<string, string>();
+    for (const url of [mainPublicUrl(), resolvePublicNodeUrl(PUBLIC_URL_RULES.community)]) {
+        const host = url ? normalizeAddress(url.replace(/^https?:\/\//, '').replace(/\/+$/, '')) : null;
+        if (url && host && !ported.has(host)) ported.set(host, url.replace(/\/+$/, ''));
+    }
+    return publishedAddresses().map((a) => ported.get(a) ?? `https://${a}`);
+}
+
+/**
  * Where this community lives now, for `/api/community/info`, Settings and every reader of "where it lives"
  * (mainPublicUrl): the owner's main address while it may be main (chosenMainAddress). Otherwise as before an owner chose
  * (lost-name L4, design scratch/registrar/DESIGN-lost-name-audience-opus.md §4.2): its current registrar name while the
@@ -309,8 +335,14 @@ export function mainPublicUrl(): string | null {
  * review 4305346684).
  */
 export function primaryAddress(): string | null {
-    const chosen = chosenMainAddress();
-    if (chosen) return chosen;
+    return chosenMainAddress() ?? defaultMainAddress();
+}
+
+/**
+ * Where the community lives by today's rule, before any owner's choice (primaryAddress above): the live registrar name,
+ * else the first reachable name, a name before a number. What a claim replaces (keepReplacedAddress) whatever the main.
+ */
+function defaultMainAddress(): string | null {
     const published = publishedAddresses();
     const live = registrarNames().find((r) => r.role === 'current' && r.status === 'live' && published.includes(r.address));
     if (live) return live.address;
@@ -319,15 +351,17 @@ export function primaryAddress(): string | null {
 }
 
 /**
- * A claim of `claimed` answered: the address it replaces, where the community lived until now (primaryAddress), goes on the
- * owner-confirmed list (3). So a name this node published is never un-published by a claim, and it travels in the take-over
- * envelope to a standby that has no CF_RECORD_NAME of it (design §2). Called before the claim is recorded and stored, while
- * primaryAddress still says the old address; a name that was only waiting or paused is not primaryAddress, and is not
- * copied. Past MAX_OWNER_ADDRESSES too: that bounds what a Settings session or `beanpool claim` adds, and this keeps a name
- * the community already goes by. Returns the address replaced, or null when the claim replaces none.
+ * A claim of `claimed` answered: the address it replaces goes on the owner-confirmed list (3). That is where the community
+ * lived until now by today's rule (defaultMainAddress: the live registrar name the claim makes former), never the owner's
+ * chosen main, which a claim does not move and which is listed already (several-addresses §2.1, "adding an address only
+ * adds"; review 4580901426). So a name this node published is never un-published by a claim, and it travels in the
+ * take-over envelope to a standby that has no CF_RECORD_NAME of it (design §2). Called before the claim is recorded and
+ * stored, while the old name is still the live one; a name that was only waiting or paused is not, and is not copied. Past
+ * MAX_OWNER_ADDRESSES too: that bounds what a Settings session or `beanpool claim` adds, and this keeps a name the
+ * community already goes by. Returns the address replaced, or null when the claim replaces none.
  */
 export function keepReplacedAddress(claimed: string): string | null {
-    const replaced = primaryAddress();
+    const replaced = defaultMainAddress();
     if (!replaced || replaced === claimed) return null;
     const owned = ownerConfirmedAddresses();
     if (!owned.includes(replaced)) {

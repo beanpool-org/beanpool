@@ -31,7 +31,7 @@ import { recordRegistrarAnswer, registrarHostOf, registrarNames, REGISTRAR_ZONE 
 import { dropAddressRequest, nameAskedFor, replacesLiveOwnAddress, storeOwnAddress } from '../services/public-address-agent.js';
 import { claimReplacesAddress, claimTakesTunnelDark, forgetAddressNotice } from '../services/address-notice.js';
 import { isPublicIpv4Host, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
-import { dropReleasedAddress, primaryAddress, publishedAddresses, publishedBesides } from '../engine/own-addresses.js';
+import { chosenMainAddress, dropReleasedAddress, primaryAddress, publishedAddresses, publishedBesides } from '../engine/own-addresses.js';
 import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
 import { isAddressLabel } from '../address-request.js';
 import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
@@ -169,7 +169,8 @@ const foldName = (n: unknown): string => String(n ?? '').trim().replace(/\.$/, '
  * public-address agent asks for, the owner's pending Settings pick (a claim that got no answer here, still their latest
  * choice, which the connector or Settings' status read may store at any moment: #1583 review r4176051848), or the name the
  * community lives at now (primaryAddress), which a former name is while the stored one waits for approval or after Take
- * offline: Release would end the only way in with no word to anyone, where Take offline tells the members.
+ * offline: Release would end the only way in with no word to anyone, where Take offline tells the members. The owner's
+ * chosen main (Make main) says the way out: another address made main first (several-addresses S1, review 4580901426).
  */
 function notReleasable(name: string): string | null {
     const host = `${name}.${REGISTRAR_ZONE}`;
@@ -180,6 +181,7 @@ function notReleasable(name: string): string | null {
     if (turnedAwayList().some((e) => e.why === 'unanswered' && foldName(e.name) === name)) {
         return `${host} is the name you chose last; another pick or Take offline replaces it.`;
     }
+    if (chosenMainAddress() === host) return `${host} is the main address. Make another address main first, then release it.`;
     if (primaryAddress() === host) return `${host} is where members reach this community now. It can be released once another name is live.`;
     return null;
 }

@@ -28,7 +28,8 @@
  *      once chosen, every reader of "where it lives" names it (primaryAddress and /api/community/info, which invites and
  *      share links carry; the directory push; the search canonical; the community card; the assistant's origin, welcome
  *      and addressHost; the home other servers know it by), its port kept; a choice that may not be main (not published,
- *      a number beside a name, a name waiting for approval) moves none of them
+ *      a number beside a name, a name waiting for approval, a home-network address beside one the Internet can reach)
+ *      moves none of them; a home-network address may be main only while the community has nothing the Internet reaches
  *
  * Other code that reads the address for another purpose, and is NOT this resolver's caller (left as it was):
  *   - routes/messaging.ts (a relayed message's `senderNodeUrl`): CF_RECORD_NAME, else the community's name squashed
@@ -423,8 +424,27 @@ async function main(): Promise<void> {
         assert(chosenMainAddress() === null && primaryAddress() !== REG, `a main with no route (the current registrar name not live) is not the main (${show(chosenMainAddress())}, ${show(primaryAddress())})`);
 
         // A number may be main while the community has no name.
-        choose('203.0.113.5', TABLE.find((r) => r.name === "this server's own IP address")!, ['203.0.113.5']);
+        const ownIp = TABLE.find((r) => r.name === "this server's own IP address")!;
+        choose('203.0.113.5', ownIp, ['203.0.113.5']);
         assert(chosenMainAddress() === '203.0.113.5' && primaryAddress() === '203.0.113.5', `a number is main while there is no name (${show(primaryAddress())})`);
+
+        // The main answers from outside (design §2.1): an address on the home network is never main while the community has
+        // one the Internet can reach (review 4580901278). Beside a live registrar name, every reader stays on the name.
+        for (const home of ['nas.local', 'beans.lan', 'beans.home', 'beans.home.arpa', 'beans', '192.168.1.20', '10.0.0.5', '[fd00::1]']) {
+            choose(home, named, [OWN, home]);
+            assert(publishedAddresses().includes(home) && chosenMainAddress() === null && show(await readers()) === show(at(REG)),
+                `a home-network address (${home}) as the main beside a live name moves no reader (${show(chosenMainAddress())}, ${show(await readers())})`);
+        }
+        // Beside the server's public number too: a home-network number never stands above a public one.
+        choose('192.168.1.20', ownIp, ['203.0.113.5', '192.168.1.20']);
+        assert(chosenMainAddress() === null && primaryAddress() === '203.0.113.5' && show(await readers()) === show(at('203.0.113.5')),
+            `a home-network number as the main beside the public number moves no reader (${show(chosenMainAddress())}, ${show(await readers())})`);
+        // With nothing the Internet can reach, a home-network address may be main: it is the only way in.
+        choose('nas.local', TABLE.find((r) => r.name === 'nothing set')!, ['beans.lan', 'nas.local']);
+        assert(chosenMainAddress() === 'nas.local' && primaryAddress() === 'nas.local', `a home-network address is main while the community has nothing the Internet can reach (${show(primaryAddress())})`);
+        // Chosen then, it stops being main the moment an internet address is listed: the name wins, as before a choice.
+        choose('nas.local', named, ['beans.lan', 'nas.local']);
+        assert(chosenMainAddress() === null && primaryAddress() === REG, `a home-network main chosen before the community had a name gives way to the name (${show(primaryAddress())})`);
         updateNodeConfig({ ownerAddresses: [], mainAddress: null } as any);
         forgetOwnAddresses();
     }

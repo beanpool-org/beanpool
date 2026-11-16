@@ -954,6 +954,12 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
     publicAddress: { kind: 'takeover-bundle', reason: 'the web address, with its tunnel token' },
     ownerAddresses: { kind: 'takeover-bundle', reason: 'app addresses an owner confirmed' },
     registrarNames: { kind: 'takeover-bundle', reason: 'every registrar name this key held' },
+    mainAddress: {
+        kind: 'community', gap: 'G5',
+        reason: "the owner's main address (Make main): the community's choice, which a promoted standby should keep while the address "
+            + 'still leads to it (chosenMainAddress takes it only from its own list with a route). The take-over envelope carries it from '
+            + 'several-addresses S2 (DESIGN-several-addresses-fable.md §6); until then a promoted standby works the main out by today\'s rule',
+    },
 };
 
 /** The entry for a node_config key, exact match first, then the longest prefix. */

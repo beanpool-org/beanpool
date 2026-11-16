@@ -280,7 +280,7 @@ lane_model(){ # ROLE BACKEND → model id. Per-run env override first, then this
   v=${v//[[:space:]]/}
   if [ -z "$v" ]; then
     case "$be:$role" in
-      agy:build|agy:review) v=gemini-3.8-flash-high;;
+      agy:build|agy:review) v=gemini-4-hydrogen-high;;
       claude:build)         v=claude-opus-5;;
       claude:review)        v=claude-sonnet-5-5;;
       claude:decide)        v=claude-fable-5-1;;

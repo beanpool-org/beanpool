@@ -63,7 +63,7 @@ show
 check "stage returned 0"                         [ "$rc" = 0 ]
 check "STAGE_OK=1, STAGE_IDLEKILL=0"             [ "$STAGE_OK:$STAGE_IDLEKILL" = 1:0 ]
 check "agy ran once"                             [ "$(calls agy.calls '^run')" = 1 ]
-check "explicit model gemini-3.8-flash-high, --print-timeout 60m, stream-json" grep -q "model=gemini-3.8-flash-high timeout=60m format=stream-json" "$FAKE_STATE/agy.calls"
+check "explicit model gemini-4-hydrogen-high, --print-timeout 60m, stream-json" grep -q "model=gemini-4-hydrogen-high timeout=60m format=stream-json" "$FAKE_STATE/agy.calls"
 check "ran inside the lane worktree with the agy rules and WT_INT appended" grep -q "cwd=$LANE_WT rules=yes wtint=yes" "$FAKE_STATE/agy.calls"
 check "no quota wait"                            not_logged "waiting for agy"
 

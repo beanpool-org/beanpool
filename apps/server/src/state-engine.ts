@@ -8921,7 +8921,15 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     // transaction so nothing it wrote alongside stays either.
     if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
     const was = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(publicKey) as { status: string | null } | undefined)?.status;
+    // A retired empty duplicate is out of the member directory (withoutRetired) while it stays 'disabled'.
+    const wasRetired = was === 'disabled' && !!db.prepare('SELECT 1 FROM retired_accounts WHERE member_pubkey = ?').get(publicKey);
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    // Back in the member directory (GET /api/members) from a removal (a reinstate vote) or a retire (Bring back): the card
+    // moved for every phone that dropped it at a whole read, so a phone's delta read (joined_at or profile_updated_at after
+    // its cursor) must carry the row, as a node role's change does (node-roles.ts noteRoleChanged). Neither moved.
+    if (status !== 'pruned' && (was === 'pruned' || (wasRetired && status !== 'disabled'))) {
+        db.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(new Date().toISOString(), publicKey);
+    }
     // Into or out of 'pruned', the key leaves or rejoins every group chat roster they hold a row in (isNodeMember; a
     // prune keeps the group rows, so a reinstate vote brings the key back): stale, and the roster to the guests' homes.
     // A pause ('disabled') changes no roster: the account keeps every membership and its key while it lasts.

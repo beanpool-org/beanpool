@@ -28,6 +28,9 @@ let n = 0;
 const notice = (kind: string, data: unknown) => ({ id: `notice-${++n}-abcdefgh`, host: HOST, group: GROUP, kind, data, receivedAt: NOW });
 const invite = (by = ana) => notice('invite', { name: 'Seed Library', invitedBy: { key: by.pk, name: by.name } });
 const uuid = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+let fresh = 900;
+/** A new item id, as io.newId makes one. */
+const freshId = () => uuid(++fresh);
 
 /** An epoch made by `maker` over `recipients`, as the host sends it: no group id, only Gus's wrap. */
 function epochNotice(epoch: number, maker = ana, recipients = [ana.pk, ben.pk, gus.pk]) {
@@ -150,11 +153,14 @@ describe('a server page applied to the chats', () => {
         expect(guestSealEpoch(chats[ID])).toBeNull();
         const step = guestEpochDue(chats[ID], gus.pk);
         expect(step).toMatchObject({ send: 'group-epoch', epoch: 4, reason: 'join', recipients: [ana.pk, ben.pk, gus.pk].sort() });
-        const made = makeGuestEpochFor(chats[ID], step!, gus.pk, gus.seedHex, NOW);
+        const made = makeGuestEpochFor(chats[ID], step!, gus.pk, gus.seedHex, NOW, uuid(6));
         expect(JSON.parse(made.payload).epoch).toMatchObject({ epoch: 4, reason: 'join', subject: gus.pk, createdBy: gus.pk });
         chats = { ...chats, [ID]: made.chat };
         // Never a second epoch for the same number in the next round.
         expect(guestEpochDue(chats[ID], gus.pk)).toBeNull();
+        // My epoch seals nothing until the host has taken it (round 2, finding 4); then my line goes under it.
+        expect(guestSealEpoch(chats[ID])).toBeNull();
+        ({ chats } = applyGuestTicks(chats, [{ itemId: uuid(6), kind: 'group-epoch', host: HOST, group: GROUP, state: 'sent', refused: null, at: NOW }], NOW, freshId));
         // My line goes under my epoch, as members open lines (sender = me, signed inside the seal), under the item's own id.
         const seal = guestSealEpoch(chats[ID])!;
         expect(seal.epoch).toBe(4);
@@ -195,7 +201,8 @@ describe('a server page applied to the chats', () => {
     it('a removal closes the chat, keys gone, and nothing after it passes; a withdrawn invitation leaves no chat', () => {
         let chats = chatWith('in');
         const e5 = epochNotice(5);
-        ({ chats } = applyGuestMail(chats, { items: [notice('epoch', { record: e5.record, wraps: e5.wraps }), notice('removed', { why: 'group-closed' })] }, ctx()));
+        // The host says `closed` (engine/group-guests.ts: the group closed, or its owners switched guests off).
+        ({ chats } = applyGuestMail(chats, { items: [notice('epoch', { record: e5.record, wraps: e5.wraps }), notice('removed', { why: 'closed' })] }, ctx()));
         expect(chats[ID]).toMatchObject({ state: 'removed', why: 'group-closed', keys: {} });
         ({ chats } = applyGuestMail(chats, { items: [lineNotice(uuid(4), 'after', 5, e5.made.groupKey)] }, ctx()));
         expect(chats[ID].lines).toEqual([]);
@@ -261,7 +268,7 @@ describe("what became of my lines (my server's ticks)", () => {
         ['refused', 'group-refused', 'failed'],
         ['refused', 'epoch-stale', 'waiting'],
     ])('%s / %s -> %s', (state, refused, want) => {
-        const { chats } = applyGuestTicks(withMine('sending'), tick(state, refused), NOW);
+        const { chats } = applyGuestTicks(withMine('sending'), tick(state, refused), NOW, freshId);
         expect(chats[ID].lines[0].state).toBe(want);
         if (want === 'waiting') expect(chats[ID].lines[0].item).toBeNull();
         if (want === 'failed') expect(chats[ID].lines[0].note).toBeTruthy();
@@ -269,14 +276,14 @@ describe("what became of my lines (my server's ticks)", () => {
     it('a line refused for its epoch lets the next epoch be made, even when no tick for my epoch ever came', () => {
         const chats = withMine('sending');
         chats[ID].epochSent = 4;
-        const out = applyGuestTicks(chats, tick('refused', 'epoch-stale'), NOW).chats[ID];
+        const out = applyGuestTicks(chats, tick('refused', 'epoch-stale'), NOW, freshId).chats[ID];
         expect(out.lines[0].state).toBe('waiting');
         expect(out.epochSent).toBeNull();
     });
     it('a refused epoch can be made again', () => {
         const chats = chatWith('in');
         chats[ID].epochSent = 4;
-        expect(applyGuestTicks(chats, tick('refused', 'epoch-stale', 'group-epoch'), NOW).chats[ID].epochSent).toBeNull();
+        expect(applyGuestTicks(chats, tick('refused', 'epoch-stale', 'group-epoch'), NOW, freshId).chats[ID].epochSent).toBeNull();
     });
     it('a waiting line makes an epoch due when the roster says it is stale; with nothing waiting and a key here, none is', () => {
         const chats = chatWith('in');
@@ -285,5 +292,171 @@ describe("what became of my lines (my server's ticks)", () => {
         expect(guestEpochDue(chats[ID], gus.pk)).toBeNull();
         chats[ID].lines.push({ id: uuid(10), author: gus.pk, text: 'w', at: NOW, state: 'waiting' });
         expect(guestEpochDue(chats[ID], gus.pk)).toMatchObject({ epoch: 5, reason: 'rotate' });
+    });
+});
+
+// ── Round 2 (#3246): the four rules of the file's header, each as a table ───────────────────────
+
+describe('IDENTITY: a line is named by the key that signed it (signed-by x author column -> shown / refused)', () => {
+    const e6 = epochNotice(6);
+    const keyed = () => applyGuestMail(chatWith('in'), { items: [notice('roster', rosterData({ current: 6, stale: false, record: e6.record, wraps: e6.wraps }))] }, ctx()).chats;
+    type Row = { signer: ReturnType<typeof person>; author: string; sender?: string; type?: string; epoch?: number };
+    function signed(id: string, o: Row, groupKey = e6.made.groupKey) {
+        const epoch = o.epoch ?? 6;
+        const sealed = sealGroupLine('the words', { myEdPrivHex: o.signer.seedHex, groupKey, groupId: GROUP, epoch, messageId: id });
+        const metadata: Record<string, unknown> = { epoch };
+        if (o.sender !== undefined) metadata.sender = o.sender;
+        return notice('line', { id, author: o.author, ciphertext: sealed.ciphertext, nonce: sealed.nonce, type: o.type ?? 'text', metadata, timestamp: '2026-11-16T09:40:00.000Z' });
+    }
+    const rows: Array<[string, Row, 'shown' | 'refused', string | null]> = [
+        ['same: signed by Ana, author Ana, sender Ana', { signer: ana, author: ana.pk, sender: ana.pk }, 'shown', ana.pk],
+        ['same, no sender named: signed by Ana, author Ana', { signer: ana, author: ana.pk }, 'shown', ana.pk],
+        ['same: signed by me, author me (my line as the host sends it on)', { signer: gus, author: gus.pk, sender: gus.pk }, 'shown', gus.pk],
+        ['different: signed by a stray key named as sender, author Ana (the review probe)', { signer: stray, author: ana.pk, sender: stray.pk }, 'refused', null],
+        ['different: signed by a stray key named as sender, author me', { signer: stray, author: gus.pk, sender: stray.pk }, 'refused', null],
+        ['different: signed by Ana named as sender, author Ben', { signer: ana, author: ben.pk, sender: ana.pk }, 'refused', null],
+        ['different: a sender that is not a key, author Ana', { signer: ana, author: ana.pk, sender: 'not-a-key' }, 'refused', null],
+        ['unknown: signed by a key the line names nowhere, author and sender Ana', { signer: stray, author: ana.pk, sender: ana.pk }, 'refused', null],
+        ['unknown: signed by a key the line names nowhere, author and sender me', { signer: stray, author: gus.pk, sender: gus.pk }, 'refused', null],
+        ['unknown: no sender named, author Ana, signed by a stray key', { signer: stray, author: ana.pk }, 'refused', null],
+        ['photo, same: signed by Ana', { signer: ana, author: ana.pk, sender: ana.pk, type: 'image' }, 'shown', ana.pk],
+        ['photo, different: signed by a stray key, author Ana', { signer: stray, author: ana.pk, sender: stray.pk, type: 'image' }, 'refused', null],
+        ['voice, unknown: author and sender Ana, signed by a stray key', { signer: stray, author: ana.pk, sender: ana.pk, type: 'voice' }, 'refused', null],
+        ['a signer the roster does not name, named alike everywhere: shown under a short key, never a name', { signer: stray, author: stray.pk, sender: stray.pk }, 'shown', stray.pk],
+    ];
+    it.each(rows)('%s -> %s', (_name, o, want, by) => {
+        const id = freshId();
+        const { chats } = applyGuestMail(keyed(), { items: [signed(id, o)] }, ctx());
+        const line = chats[ID].lines.find((l) => l.id === id);
+        // Refused is refused: never shown, and never kept waiting for a key either.
+        expect(chats[ID].held.some((h) => h.id === id)).toBe(false);
+        if (want === 'refused') return expect(line).toBeUndefined();
+        expect(line!.author).toBe(by);
+        expect(line!.text).toBe(o.type && o.type !== 'text' ? "A photo or voice message: it doesn't show here yet." : 'the words');
+        const name = guestChatAuthorName(chats[ID], line!.author);
+        expect(name).toBe(by === ana.pk ? 'Ana' : by === gus.pk ? 'Gus · hillside.example · guest' : by!.slice(0, 8));
+    });
+    it("a line held for its key is refused when the key comes, if it doesn't open as its sender's", () => {
+        const e7 = epochNotice(7);
+        const id = freshId();
+        let chats = keyed();
+        ({ chats } = applyGuestMail(chats, { items: [signed(id, { signer: stray, author: ana.pk, sender: ana.pk, epoch: 7 }, e7.made.groupKey)] }, ctx()));
+        expect(chats[ID].held.map((h) => h.id)).toEqual([id]);
+        ({ chats } = applyGuestMail(chats, { items: [notice('epoch', { record: e7.record, wraps: e7.wraps })] }, ctx()));
+        expect(chats[ID].held).toEqual([]);
+        expect(chats[ID].lines.some((l) => l.id === id)).toBe(false);
+    });
+});
+
+describe('IDS: a re-send after a refusal goes under a fresh item id (refusal x re-send)', () => {
+    const mine = () => {
+        const chats = chatWith('in');
+        chats[ID].lines.push({ id: uuid(40), author: gus.pk, text: 'mine', at: NOW, state: 'sending', item: '{"x":1}' });
+        return chats;
+    };
+    const refusal = (refused: string) => [{ itemId: uuid(40), kind: 'group-line', host: HOST, group: GROUP, state: 'refused', refused, at: NOW }];
+    it.each([
+        ['epoch-stale', 'waiting', 'a new id: it is sealed again under the next epoch'],
+        ['group-refused', 'failed', 'the same id: it is not sent again'],
+        ['refused', 'failed', 'the same id: it is not sent again'],
+    ])('refused %s -> %s, %s', (refused, want) => {
+        const { chats } = applyGuestTicks(mine(), refusal(refused), NOW, freshId);
+        const line = chats[ID].lines[0];
+        expect(line.state).toBe(want);
+        if (want !== 'waiting') return expect(line.id).toBe(uuid(40));
+        expect(line.id).not.toBe(uuid(40));
+        expect(line.id).toMatch(/^[0-9a-f-]{36}$/);
+        expect(line.item).toBeNull();
+        // The same refusal heard again (the post's answer, then the round's tick) moves nothing further.
+        const again = applyGuestTicks(chats, refusal(refused), NOW, freshId);
+        expect(again.changed).toBe(false);
+        expect(again.chats[ID].lines[0].id).toBe(line.id);
+    });
+});
+
+describe('EPOCH: a line is sealed only under an epoch the host has taken (my epoch x line -> sealed / waiting)', () => {
+    const MINE = uuid(50);
+    const made = (): GuestChats => {
+        let chats = chatWith('in');
+        ({ chats } = applyGuestMail(chats, { groups: [{ host: HOST, group: GROUP, state: 'in', roster: rosterData({ current: 3, stale: true }), rosterAt: NOW }] }, ctx()));
+        chats[ID].lines.push({ id: uuid(51), author: gus.pk, text: 'waits', at: NOW, state: 'waiting' });
+        const step = guestEpochDue(chats[ID], gus.pk)!;
+        return { ...chats, [ID]: makeGuestEpochFor(chats[ID], step, gus.pk, gus.seedHex, NOW, MINE).chat };
+    };
+    const epochTick = (state: string, refused: string | null, itemId = MINE) => [{ itemId, kind: 'group-epoch', host: HOST, group: GROUP, state, refused, at: NOW }];
+    it.each([
+        ['made, no answer yet', null, 'waiting'],
+        ['queued at my server (the host not reached)', epochTick('queued', null), 'waiting'],
+        ['taken by the host', epochTick('sent', null), 'sealed'],
+        ['refused by the host (one made at the same time won)', epochTick('refused', 'epoch-stale'), 'waiting'],
+        ['failed (a day of no answer)', epochTick('failed', null), 'waiting'],
+    ])('%s -> the line %s', (_name, ticks, want) => {
+        const chats = ticks ? applyGuestTicks(made(), ticks, NOW, freshId).chats : made();
+        const seal = guestSealEpoch(chats[ID]);
+        if (want === 'sealed') {
+            expect(seal?.epoch).toBe(4);
+            expect(chats[ID].ownEpoch).toBeNull();
+            return;
+        }
+        expect(seal).toBeNull();
+        if (ticks && ticks[0].state !== 'queued') {
+            // Refused or failed: its key goes for good, and another epoch may be made for the line that waits.
+            expect(chats[ID].ownEpoch).toBeNull();
+            expect(chats[ID].keys).toEqual({});
+            expect(guestEpochDue(chats[ID], gus.pk)).toMatchObject({ epoch: 4 });
+        } else {
+            // On its way: no second one.
+            expect(chats[ID].ownEpoch).toMatchObject({ epoch: 4, itemId: MINE });
+            expect(guestEpochDue(chats[ID], gus.pk)).toBeNull();
+        }
+    });
+    it('a tick for another epoch item of mine changes nothing about the one on its way', () => {
+        for (const other of [epochTick('sent', null, uuid(52)), epochTick('refused', 'epoch-stale', uuid(52))]) {
+            const out = applyGuestTicks(made(), other, NOW, freshId);
+            expect(out.changed).toBe(false);
+            expect(guestSealEpoch(out.chats[ID])).toBeNull();
+            expect(out.chats[ID].ownEpoch).toMatchObject({ itemId: MINE });
+        }
+    });
+});
+
+describe('STATE: what this device shows follows what my server lists now (server link x what is held here -> shown / cleared)', () => {
+    const page = (state: string) => ({
+        groups: state === 'declined' || state === 'left' ? [] : [{ host: HOST, group: GROUP, state, roster: state === 'in' ? rosterData(null) : null, rosterAt: NOW }],
+    });
+    const local = (state: GuestChat['state']): GuestChats => {
+        const chats = chatWith(state);
+        if (state === 'in') chats[ID].keys = { 3: 'AAAA' };
+        return chats;
+    };
+    const rows: Array<[GuestChat['state'], string, GuestChat['state'] | 'cleared']> = [
+        ['invited', 'invited', 'invited'],
+        ['invited', 'in', 'in'],
+        ['invited', 'declined', 'cleared'],
+        ['invited', 'left', 'cleared'],
+        ['invited', 'removed', 'cleared'],
+        ['joining', 'declined', 'cleared'],
+        ['joining', 'left', 'cleared'],
+        ['in', 'in', 'in'],
+        ['in', 'left', 'left'],
+        ['in', 'removed', 'removed'],
+        ['declined', 'declined', 'declined'],
+        ['left', 'left', 'left'],
+        ['removed', 'removed', 'removed'],
+    ];
+    it.each(rows)('held here %s, my server says %s -> %s', (mine, theirs, want) => {
+        const { chats } = applyGuestMail(local(mine), page(theirs), ctx());
+        if (want === 'cleared') return expect(chats[ID]).toBeUndefined();
+        expect(chats[ID].state).toBe(want);
+        if (want === 'left' || want === 'removed') expect(chats[ID].keys).toEqual({});
+        expect(guestChatListed(chats[ID])).toBe(want !== 'invited' && want !== 'declined');
+    });
+    it('an invitation fetched with a page that no longer lists it is never shown', () => {
+        const { chats, confirm } = applyGuestMail({}, { items: [invite()], groups: [] }, ctx());
+        expect(chats).toEqual({});
+        expect(confirm).toHaveLength(1);
+    });
+    it('a page with no list of groups changes nothing here', () => {
+        expect(applyGuestMail(local('invited'), { items: [] }, ctx()).chats[ID].state).toBe('invited');
     });
 });

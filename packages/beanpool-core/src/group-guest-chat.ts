@@ -20,6 +20,19 @@
  *
  * **What a guest sees** ({@link guestAccess}): the chat (read and write) and the names in it, nothing else of the group or
  * its community: no section, no post, no poll, no members list beyond the names in the chat. A removed guest's chat closes.
+ *
+ * Four rules hold for every line and every chat (#3246 round 2):
+ *   - **Lines**: a line is named by the key that signed it, never by a server's field. A line whose `author` column names
+ *     someone other than its `metadata.sender`, or that doesn't open as its sender's under its epoch's key, is refused:
+ *     never shown, never anyone's (the members' rule, line-display design §4). Its name, its label and whether it is mine
+ *     all come from that key.
+ *   - **Ids**: my line goes under one item id, and my server and the host each count an id once. A line refused
+ *     `epoch-stale` is sealed again under a new id ({@link applyGuestTicks}); a line my server never answered goes again
+ *     under the same one (my server answers an id it has with that item's state).
+ *   - **State**: what this device shows for an invitation or a chat follows what my server lists now. An invitation it no
+ *     longer lists (answered on another device, withdrawn) is gone from here; a chat it no longer lists was left there.
+ *   - **Epochs**: my line is sealed only under an epoch the host has taken: one it sent (a roster, an epoch notice), or my
+ *     own once my server says the host took it ({@link GuestOwnEpoch}). While my own is queued or refused, the line waits.
  */
 import {
     openGroupLine, openMyGroupKey, sealGroupLine, type GroupEpochRecord, type GroupServedWrap,
@@ -43,7 +56,7 @@ export type GuestLineState = 'waiting' | 'sending' | 'queued' | 'sent' | 'failed
 
 export interface GuestLine {
     id: string;
-    /** The writer's key. */
+    /** The key that signed the line (mine for my own): never a server's author field (the file's header, "Lines"). */
     author: string;
     text: string;
     /** When it was written (the host's time for theirs, this device's for mine), ms. */
@@ -83,10 +96,15 @@ export interface GuestChat {
     state: GuestChatState;
     /** The host's latest roster for this guest (the names in the chat and the current epoch), or null before one came. */
     roster: GuestRoster | null;
-    /** Opened epoch keys, base64, by epoch number. */
+    /**
+     * Epoch keys the host has, base64, by epoch number: opened from its roster or an epoch notice, or my own once the host
+     * took it. A line is sealed only under one of these.
+     */
     keys: Record<string, string>;
-    /** The epoch number this device last sent a `group-epoch` for, so a round doesn't send a second for it. */
+    /** The epoch number this device last made a `group-epoch` for that wasn't refused, so a round doesn't make a second for it. */
     epochSent: number | null;
+    /** My own epoch on its way, until my server says what the host did with it; absent or null when none is. */
+    ownEpoch?: GuestOwnEpoch | null;
     lines: GuestLine[];
     held: GuestHeldLine[];
     /** Why the chat closed, when the host said: removed by a convenor, or the group closed. */
@@ -95,6 +113,14 @@ export interface GuestChat {
     inviteId?: string;
     updatedAt: number;
 }
+
+/**
+ * An epoch made on this device, on its way to the host. Its key seals nothing until the host takes it: `sending` (posted,
+ * no answer yet: its signed item kept, posted again under the same id), then `queued` (my server has it, the host not
+ * reached yet). The host took it (`sent`): the key joins {@link GuestChat.keys}. Refused or failed: it goes, and the next
+ * round may make another.
+ */
+export interface GuestOwnEpoch { epoch: number; key: string; itemId: string; state: 'sending' | 'queued'; item: string | null }
 
 /** Every guest chat this account has on this device, by id. */
 export type GuestChats = Record<string, GuestChat>;
@@ -207,7 +233,7 @@ function unb64(s: string): Uint8Array {
 function newChat(host: string, group: string, now: number): GuestChat {
     return {
         id: guestChatId(host, group), host, group, name: '', invitedBy: null, state: 'invited', roster: null, keys: {}, epochSent: null,
-        lines: [], held: [], why: null, updatedAt: now,
+        ownEpoch: null, lines: [], held: [], why: null, updatedAt: now,
     };
 }
 
@@ -225,18 +251,23 @@ function openKey(group: string, record: unknown, wraps: unknown, me: string, myE
     }
 }
 
-/** A line notice's words, opened with the key of its epoch; null when the key isn't here or it doesn't open as its sender's. */
-function openHeld(chat: GuestChat, h: GuestHeldLine): GuestLine | null {
+/**
+ * A held line opened with the key of its epoch (the file's header, "Lines"): the line, named by the key that signed it, or
+ * `refused` when it doesn't open as its sender's (its words, a photo's or a voice message's too, are sealed as part 'body'
+ * and signed by its sender), or null while its epoch's key isn't here.
+ */
+function openHeld(chat: GuestChat, h: GuestHeldLine): GuestLine | 'refused' | null {
+    // A server's author field naming someone other than the signer: refused, whoever's key opens it.
+    if (h.sender !== h.author) return 'refused';
     const key = chat.keys[String(h.epoch)];
     if (!key) return null;
-    if (h.type !== 'text') return { id: h.id, author: h.author, text: t(GUEST_CHAT_WORDS.photoNotHere), at: h.at };
     try {
         const opened = openGroupLine({ ciphertext: h.ciphertext, nonce: h.nonce }, {
             groupId: chat.group, epoch: h.epoch, senderPubHex: h.sender, messageId: h.id, part: 'body', replyToId: h.replyToId,
         }, unb64(key));
-        return { id: h.id, author: h.author, text: opened.text, at: h.at };
+        return { id: h.id, author: h.sender, text: h.type === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere), at: h.at };
     } catch {
-        return null;
+        return 'refused';
     }
 }
 
@@ -247,7 +278,9 @@ function heldOf(data: unknown): GuestHeldLine | null {
     const meta = isObject(data.metadata) ? data.metadata : {};
     const epoch = meta.epoch;
     if (!Number.isSafeInteger(epoch) || (epoch as number) < 1) return null;
-    const sender = typeof meta.sender === 'string' && KEY_HEX.test(meta.sender) ? meta.sender : data.author;
+    // The signer the line names; with none named, its author column (and it must open as theirs). Anything named that
+    // isn't a key is kept as named, so it never opens (openHeld refuses it).
+    const sender = meta.sender === undefined || meta.sender === null ? data.author : String(meta.sender);
     const at = Date.parse(String(data.timestamp ?? ''));
     return {
         id: data.id, author: data.author, sender, epoch: epoch as number, ciphertext: data.ciphertext, nonce: data.nonce,
@@ -261,6 +294,7 @@ function openWhatCan(chat: GuestChat): void {
     const still: GuestHeldLine[] = [];
     for (const h of chat.held) {
         const line = openHeld(chat, h);
+        if (line === 'refused') continue;
         if (!line) { still.push(h); continue; }
         if (!chat.lines.some((l) => l.id === line.id)) chat.lines.push(line);
     }
@@ -314,12 +348,14 @@ export function applyGuestMail(before: GuestChats, page: { items?: unknown; grou
         const c = chat!;
         c.updatedAt = ctx.now;
         if (n.kind === 'removed') {
-            const why = isObject(n.data) && n.data.why === 'group-closed' ? 'group-closed' : 'removed';
+            // The host says `closed` when the group closed, or its owners switched guests off (engine/group-guests.ts).
+            const why = isObject(n.data) && n.data.why === 'closed' ? 'group-closed' : 'removed';
             if (c.state === 'invited') { delete chats[id]; continue; }
             c.state = 'removed';
             c.why = why;
             c.keys = {};
             c.held = [];
+            c.ownEpoch = null;
             continue;
         }
         if (n.kind === 'roster') {
@@ -343,15 +379,20 @@ export function applyGuestMail(before: GuestChats, page: { items?: unknown; grou
  * Where the server says I stand with each group it lists (invited, joining, in, removed) moves my chats there: the server
  * is the authority on that, the device only remembers. A group it lists that this device has no chat for (a new device, an
  * invitation confirmed on another) gets one, from its roster; an invitation it lists with no notice here waits as one.
+ * The server lists every link it has but a declined or left one, on every page: an invitation (or a yes on its way) it
+ * doesn't list was answered on another device or withdrawn, and goes from here; a chat I was in that it doesn't list I
+ * left on another device, and it closes (the file's header, "State").
  */
 function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailContext): boolean {
     if (!Array.isArray(groups)) return false;
     let changed = false;
+    const listed = new Set<string>();
     for (const l of groups as GuestLink[]) {
         if (!isObject(l) || typeof l.host !== 'string' || typeof l.group !== 'string') continue;
+        const id = guestChatId(l.host, l.group);
         const state = l.state;
         if (state !== 'invited' && state !== 'joining' && state !== 'in' && state !== 'removed') continue;
-        const id = guestChatId(l.host, l.group);
+        listed.add(id);
         let chat = chats[id];
         if (!chat) {
             // A removal for a chat this device never had: nothing to show.
@@ -364,9 +405,11 @@ function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailConte
         // My no (or leave) stands while my server still lists the invitation: the host hasn't taken it yet, and it never
         // comes back as one. A new invitation comes as its own notice.
         if ((chat.state === 'declined' || chat.state === 'left') && (state === 'invited' || state === 'joining')) continue;
+        // Removed from a chat this device knew only as an invitation (accepted on another): nothing of it to show here.
+        if (chat.state === 'invited' && state === 'removed') { delete chats[id]; changed = true; continue; }
         if (chat.state !== state && !(chat.state === 'joining' && state === 'invited' && chat.updatedAt > ctx.now - 60_000)) {
             // `joining` here and `invited` there: my yes not taken yet. Kept a minute (the send in flight), then the server's word.
-            if (state === 'removed') { chat.keys = {}; chat.held = []; chat.why = chat.why ?? 'removed'; }
+            if (state === 'removed') { chat.keys = {}; chat.held = []; chat.ownEpoch = null; chat.why = chat.why ?? 'removed'; }
             chat.state = state;
             chat.updatedAt = ctx.now;
             changed = true;
@@ -378,11 +421,27 @@ function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailConte
             changed = true;
         }
     }
+    for (const [id, chat] of Object.entries(chats)) {
+        if (listed.has(id)) continue;
+        if (chat.state === 'invited' || chat.state === 'joining') {
+            delete chats[id];
+            changed = true;
+        } else if (chat.state === 'in') {
+            Object.assign(chat, { state: 'left', keys: {}, held: [], ownEpoch: null, updatedAt: ctx.now });
+            changed = true;
+        }
+    }
     return changed;
 }
 
-/** What became of my items: each line's state moves on, a refused epoch or line goes back to wait for the next roster. */
-export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number): { chats: GuestChats; changed: boolean } {
+/**
+ * What became of my items (the file's header, "Ids" and "Epochs"). My own epoch: the host took it (`sent`), so its key
+ * joins the keys lines are sealed under; my server has it (`queued`), so it still waits; refused or failed, it goes and
+ * another may be made. A tick for an epoch of mine that isn't the one on its way now is old news and changes nothing.
+ * Each line's state moves on; a line refused for its epoch waits again under a NEW id from `newId` (my server and the
+ * host each count the old one as used), to be sealed under the next epoch.
+ */
+export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number, newId: () => string): { chats: GuestChats; changed: boolean } {
     const chats = structuredCloneChats(before);
     let changed = false;
     if (!Array.isArray(ticks)) return { chats, changed };
@@ -390,7 +449,10 @@ export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number)
         if (!isObject(tk) || typeof tk.host !== 'string' || typeof tk.group !== 'string') continue;
         const chat = chats[guestChatId(tk.host, tk.group)];
         if (!chat) continue;
-        if (tk.kind === 'group-epoch' && tk.refused) { chat.epochSent = null; changed = true; continue; }
+        if (tk.kind === 'group-epoch') {
+            changed = applyOwnEpochTick(chat, tk, now) || changed;
+            continue;
+        }
         if (tk.kind !== 'group-line') continue;
         const line = chat.lines.find((l) => l.id === tk.itemId && l.state);
         if (!line) continue;
@@ -398,8 +460,12 @@ export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number)
             : tk.refused || tk.state === 'refused' ? 'failed'
             : tk.state === 'queued' ? 'queued' : tk.state === 'sent' ? 'sent' : tk.state === 'failed' ? 'failed' : null;
         if (!next || next === line.state) continue;
-        // Refused for its epoch: the next epoch may be made, whether or not a tick for my last one ever came.
-        if (next === 'waiting') chat.epochSent = null;
+        if (next === 'waiting') {
+            // Refused for its epoch: the next epoch may be made (unless mine is on its way), whether or not a tick for my
+            // last one ever came; the line goes again under a new id.
+            if (!chat.ownEpoch) chat.epochSent = null;
+            line.id = newId();
+        }
         line.state = next;
         line.item = next === 'waiting' ? null : line.item;
         line.note = next === 'failed' ? (tk.refused ? t(GUEST_CHAT_WORDS.refused) : t(GUEST_CHAT_WORDS.notReached)) : null;
@@ -407,6 +473,29 @@ export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number)
         changed = true;
     }
     return { chats, changed };
+}
+
+/** One tick for an epoch of mine, applied to the chat (applyGuestTicks); whether it changed anything. */
+function applyOwnEpochTick(chat: GuestChat, tk: GuestSentTick, now: number): boolean {
+    const own = chat.ownEpoch ?? null;
+    if (own && own.itemId !== tk.itemId) return false;
+    if (tk.refused || tk.state === 'refused' || tk.state === 'failed') {
+        if (!own && chat.epochSent === null) return false;
+        Object.assign(chat, { ownEpoch: null, epochSent: null, updatedAt: now });
+        return true;
+    }
+    if (!own) return false;
+    if (tk.state === 'sent') {
+        chat.keys = { ...chat.keys, [String(own.epoch)]: own.key };
+        Object.assign(chat, { ownEpoch: null, updatedAt: now });
+        openWhatCan(chat);
+        return true;
+    }
+    if (tk.state === 'queued' && own.state !== 'queued') {
+        chat.ownEpoch = { ...own, state: 'queued', item: null };
+        return true;
+    }
+    return false;
 }
 
 function structuredCloneChats(c: GuestChats): GuestChats {
@@ -444,10 +533,10 @@ export function guestLeavePayload(): string {
 /**
  * What a guest's device sends next for a chat, from its latest roster: an epoch (the newcomer makes theirs, or a stale one
  * needs the next before a waiting line can go), or nothing. An epoch only when one is needed for me: I have no key yet, or a
- * line of mine waits; never a second for the same number.
+ * line of mine waits; never a second for the same number, nor while one of mine is on its way.
  */
 export function guestEpochDue(chat: GuestChat, me: string): Extract<ReturnType<typeof guestEpochStep>, { send: 'group-epoch' }> | null {
-    if (chat.state !== 'in' || !chat.roster) return null;
+    if (chat.state !== 'in' || !chat.roster || chat.ownEpoch) return null;
     const step = guestEpochStep(chat.roster, me, { joining: Object.keys(chat.keys).length === 0 });
     if (step.send !== 'group-epoch' || chat.epochSent === step.epoch) return null;
     const needed = Object.keys(chat.keys).length === 0 || chat.lines.some((l) => l.state === 'waiting');
@@ -455,22 +544,26 @@ export function guestEpochDue(chat: GuestChat, me: string): Extract<ReturnType<t
 }
 
 /**
- * The epoch made for a step: its `group-epoch` payload, and the chat with the new key kept under its number (the host may
- * refuse it for one made at the same time; the roster after that brings the key it took).
+ * The epoch made for a step, to go as item `itemId`: its `group-epoch` payload, and the chat with it on its way
+ * ({@link GuestOwnEpoch}, `sending`). Its key seals nothing yet: the host may refuse it for one made at the same time (the
+ * roster after that brings the key it took), and only a tick saying it took it puts the key with the others.
  */
-export function makeGuestEpochFor(chat: GuestChat, step: NonNullable<ReturnType<typeof guestEpochDue>>, me: string, myEdPrivHex: string, now: number): { payload: string; chat: GuestChat } {
+export function makeGuestEpochFor(chat: GuestChat, step: NonNullable<ReturnType<typeof guestEpochDue>>, me: string, myEdPrivHex: string, now: number, itemId: string): { payload: string; chat: GuestChat } {
     const { payload, groupKey } = makeGuestEpoch(step, chat.group, me, myEdPrivHex, new Date(now).toISOString());
-    return { payload, chat: { ...chat, keys: { ...chat.keys, [String(step.epoch)]: b64(groupKey) }, epochSent: step.epoch, updatedAt: now } };
+    const ownEpoch: GuestOwnEpoch = { epoch: step.epoch, key: b64(groupKey), itemId, state: 'sending', item: null };
+    return { payload, chat: { ...chat, ownEpoch, epochSent: step.epoch, updatedAt: now } };
 }
 
-/** The epoch my lines go under now: the roster's current one when it is not stale and its key is here; else null. */
+/**
+ * The epoch my lines go under now: the newest whose key is here (every key here is one the host has: the file's header,
+ * "Epochs"), unless the host's roster says a newer one is current or that one is stale; else null (the line waits).
+ */
 export function guestSealEpoch(chat: GuestChat): { epoch: number; key: Uint8Array } | null {
     if (chat.state !== 'in') return null;
     const e = chat.roster?.epoch;
-    // After my own epoch the host's roster may lag: the newest key here is the one the host has just taken from me.
+    // After my own epoch the host's roster may lag: the newest key here is then the one the host has just taken from me.
     const numbers = Object.keys(chat.keys).map(Number).filter((n) => Number.isSafeInteger(n)).sort((a, b) => b - a);
-    const current = e && !e.stale ? e.current : null;
-    const epoch = current !== null && chat.keys[String(current)] ? current : chat.epochSent !== null && chat.keys[String(chat.epochSent)] ? chat.epochSent : numbers[0];
+    const epoch = numbers[0];
     if (epoch === undefined || !chat.keys[String(epoch)]) return null;
     // Behind the host's, or the stale one itself: the line waits for the next epoch (guestEpochDue makes it).
     if (e && (e.current > epoch || (e.stale && e.current === epoch))) return null;

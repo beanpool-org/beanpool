@@ -1,7 +1,7 @@
 ---
 slug: communities
 title: More than one community
-summary: Belong to several communities with one account, switch between them, how your phone follows your community to a new address, and see what the global community shows you.
+summary: Belong to several communities with one account, switch between them, follow your community to a new address, and see what the global community shows you.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar, notifications
 ---
 

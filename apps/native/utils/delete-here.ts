@@ -36,6 +36,7 @@ import { markAlertsOn } from './push-alerts-off';
 import { communityAddress, dropFromRecord } from './push-registrations';
 import { clearPendingProfileChange } from './pending-profile-sync';
 import { takeOffSavedList } from './nodes';
+import { addressSpelling, sameCommunityRecord } from './community-index';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { disconnectFromVault, hasVault, vaultCopyKnown, VaultError } from './vault';
 
@@ -283,9 +284,10 @@ export function deleteFailedLine(reason: string, hasWords: boolean): string {
  * - `here` comes off the push record. Its node dropped the key's push tokens with the account, so the phone never
  *   asks it again (push-registrations.ts `dropFromRecord`). Its alerts choice goes too, so a rejoin starts from the default.
  * - Its cached copy goes (community-cache.ts, which closes the open copy first).
- * - The phone is set to `next`, then `here` leaves the saved list, with its record (nodes.ts `takeOffSavedList`), and
- *   the guest markers. In that order: the saved list, read through nodes.ts `getSavedNodes`, puts the community the
- *   phone is set to back into it.
+ * - The phone is set to `next`, then `here` leaves the guest markers and, last of all, the saved list with its record
+ *   (nodes.ts `takeOffSavedList`). In that order: the saved list, read through nodes.ts `getSavedNodes`, puts the
+ *   community the phone is set to back into it; and what is kept under the record (the profile change, the tool data)
+ *   goes while the record still keys it.
  * - Its tool data (photos, reminders, settings) goes, notifying Home only once the anchor is at `next` so a card's
  *   re-read never reopens or re-creates the deleted community.
  * - A profile change still waiting to reach it goes (pending-profile-sync.ts); one waiting for another community stays.
@@ -307,13 +309,13 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
     }
     await storage.setItem(ANCHOR_STORE_KEY, next);
 
+    // A row of the community left, in any capitals (the record is forgotten by its spelling, case folded), or at any
+    // address its record holds (S4).
     const hereAddress = communityAddress(here);
-    const isHere = (url: unknown) => communityAddress(url) === hereAddress;
-    try {
-        await takeOffSavedList(here, isHere, storage);
-    } catch (e) {
-        console.warn('[Account] The community left could not be taken off the saved list', e);
-    }
+    const isHere = (url: unknown) => {
+        const address = communityAddress(url);
+        return (!!address && !!hereAddress && addressSpelling(address) === addressSpelling(hereAddress)) || sameCommunityRecord(url, here);
+    };
     try {
         const raw = await storage.getItem(GUEST_NODES_STORE_KEY);
         const parsed: unknown = raw ? JSON.parse(raw) : [];
@@ -333,6 +335,12 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
         await removeCommunityToolData(here);
     } catch (e) {
         console.warn('[Account] The tool data of the community left could not be removed', e);
+    }
+    // Last: the profile change and the tool data above are kept under the community's record, so it goes after them.
+    try {
+        await takeOffSavedList(here, isHere, storage);
+    } catch (e) {
+        console.warn('[Account] The community left could not be taken off the saved list', e);
     }
 }
 

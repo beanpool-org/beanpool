@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { archetypeIsAfter, archetypeIsNewer, CALLSIGN_LINK_CODE } from '@beanpool/core';
 import { plainOriginOf } from './node-url';
 import { communityKeyOf } from './community-index';
+import { communityRecordsReady } from './community-record';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_REFUSAL_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from './storage-keys';
 
 /**
@@ -109,6 +110,8 @@ const refusalKeyOf = (community: string | null | undefined) => keyOf(community, 
 const archetypeKeyOf = (community: string | null | undefined) => keyOf(community, PENDING_ARCHETYPE_STORE_PREFIX);
 
 async function readEntry(key: string, storage: PendingProfileStorage): Promise<PendingProfileChange | null> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         const parsed: unknown = JSON.parse((await storage.getItem(key)) ?? 'null');
         if (!parsed || typeof parsed !== 'object' || typeof (parsed as PendingProfileChange).publicKey !== 'string') return null;

@@ -70,6 +70,7 @@ import { word } from '@beanpool/core';
 import {
     GroupLineReportError, checkGroupLineReport, submitGroupLineReport,
 } from '../engine/group-chat-report.js';
+import { tellHomeOf } from '../engine/relay-complaint.js';
 import { fileMessageReport } from './message-report.js';
 import { logger } from '../logger.js';
 
@@ -831,7 +832,8 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     // may read now, as its words and its photo are served (groupChatRole + groupLineForReader), and any other answers as an
     // id nobody has, a group they are not in included. The node keeps the key with the report and opens nothing here: the
     // moderators' view opens that one line (routes/admin.ts, engine/group-chat-report.ts). One report per reporter per
-    // message (routes/message-report.ts).
+    // message (routes/message-report.ts). A guest's line (a guest from another community): filed here the same, and a
+    // complaint goes to the guest's home (engine/relay-complaint.ts tellHomeOf; the minute timer tries again).
     router.post('/api/groups/:id/chat/report', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
@@ -844,7 +846,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: e.message, code: e.code };
             return;
         }
-        fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => submitGroupLineReport(actor, checked));
+        let filed: string | null = null;
+        fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => {
+            const report = submitGroupLineReport(actor, checked);
+            filed = report?.id ?? null;
+            return report;
+        });
+        // Told after the answer is decided, before it goes, as a report of an outside line is (routes/relay.ts).
+        if (filed && checked.authorHome) await tellHomeOf(filed);
     });
 
     router.post('/api/groups/:id/chat/remove', async (ctx) => {

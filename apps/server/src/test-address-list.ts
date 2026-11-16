@@ -28,7 +28,9 @@
  *     files and a process per boot: the nightly backup restored onto a fresh machine after the lost server signed a newer
  *     list; the same after a past take-over, from a database-only backup (never a lower epoch); a roll-back through the real
  *     rollBackTo (the notice carries the number signed before it); and a clock far behind (on the same machine the notice
- *     still puts it past; on a fresh machine it falls back to the kept seq + 1 and the boot logs why).
+ *     still puts it past; on a fresh machine it falls back to the kept seq + 1, marked, and the boot logs why; once the
+ *     clock is set right the next look numbers the list from the clock, above the lost server's; a wrong clock that only
+ *     ticks past the mark keeps the mark, so setting it right later still does; the mark goes 30 days of clock after it).
  *  8. The table: (restart, change, no change, restore, restore on a fresh machine, roll-back, take-over) taken two at a
  *     time after a change since the backup -> every list signed is at or above every one signed before it, strictly above
  *     each with other content; no bump for no change or a restart; a take-over's epoch above every epoch before it.
@@ -60,7 +62,7 @@ import { privateKeyFromRaw, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
     ADDRESS_LIST_PATH, ADDRESS_PROOF_PATH, checkAddressList, chooseAddressList, compareAddressNumbers, newAddressProofNonce,
-    verifyAddressProof, type SignedAddressList,
+    sameAddressListContent, verifyAddressProof, type SignedAddressList,
 } from '@beanpool/core';
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -202,6 +204,9 @@ async function specChild(spec: Spec): Promise<void> {
         const then = await al.signedAddressList();
         out.then = then.ok ? then.signed : then;
     }
+    // The clock-behind mark (address-list.ts renumberAddressListAfterSwap) as the database holds it, read before a roll-back
+    // (which closes the database).
+    out.owed = (se.getNodeConfig() as any).addressListFloorOwed ?? null;
     if (spec.rollBackTo) {
         const backup = await import('./routes/backup.js');
         await backup.rollBackTo(rp.resolveRestorePoint(spec.rollBackTo)!, spec.rollBackTo, null);
@@ -695,6 +700,46 @@ async function main(): Promise<void> {
                 && /behind the address list's number/.test(fBehind?.output ?? ''),
                 `restored onto a fresh machine with the clock far behind, it falls back to the kept seq + 1 (${num(L0)} → ${num(fR)}), above all the backup kept, and the boot logs that the clock is behind `
                 + `(the module comment's limit: the lost server's noon list ${num(L1)} can outrank it until the clock is right)`);
+            // 7d, then: the clock set right. Without the mark nothing would renumber (no change of content), and the lost
+            // server's noon list would outrank this one for good, with phones keeping (epoch, seq) from S4 on.
+            assert(fBehind?.owed === fR?.list?.seq, `the fall-back is marked at the seq it fell back to (${show(fBehind?.owed)})`);
+            const fRight = runSpec(freshBehind, { clock: T0 + 14 * HOUR });
+            const fRR = fRight?.signed as SignedAddressList;
+            assert(fRR?.list && L1?.list && fR?.list && compareAddressNumbers(fRR.list, L1.list) === 1 && fRR.list.seq === floorAt(T0 + 14 * HOUR)
+                && sameAddressListContent(fRR.list, fR.list) && phoneTakes(fRR, L1) === 'replace newer' && fRight?.owed === fR.list.seq,
+                `the clock set right, the next look numbers the list from the clock, content unchanged (${num(fR)} → ${num(fRR)}), above the lost server's noon list ${num(L1)} (${phoneTakes(fRR, L1)}); the mark holds (${show(fRight?.owed)})`);
+            const fSoon = runSpec(freshBehind, { clock: T0 + 14 * HOUR + 5 * 60_000 });
+            const fLater = runSpec(freshBehind, { clock: T0 + 15 * HOUR });
+            assert(fSoon?.signed?.list?.seq === fRR?.list?.seq && fLater?.signed?.list?.seq === floorAt(T0 + 15 * HOUR) && fLater?.owed === fR?.list?.seq,
+                `while the mark holds the list follows the clock 10 minutes at a time, never more often: 5 minutes on it stays (${num(fSoon?.signed)}), an hour on it is numbered from the clock (${num(fLater?.signed)})`);
+            const ends = (fR?.list?.seq ?? 0) + 30 * 24 * 3600;
+            const msAtFloor = (seq: number) => Date.UTC(2026, 0, 1) + seq * 1000;
+            const fEnd = runSpec(freshBehind, { clock: msAtFloor(ends) + 60_000 });
+            const fAfter = runSpec(freshBehind, { clock: msAtFloor(ends) + 2 * HOUR });
+            assert(fEnd?.owed === null && fEnd?.signed?.list?.seq === floorAt(msAtFloor(ends) + 60_000) && fAfter?.signed?.list?.seq === fEnd?.signed?.list?.seq
+                && fAfter?.owed === null && /30 days of this clock since the restore/.test(fEnd?.output ?? ''),
+                `30 days of clock past the number it fell back to, the mark goes with one last number from the clock (${num(fEnd?.signed)}), and with no change the number stays from then (${num(fAfter?.signed)})`);
+
+            // 7e. The deciding review's case (PR #3236, address-list.ts:232): the clock is wrong by a fixed 2 days and ticks.
+            // Passing the mark must not clear it, or setting the clock right a day later renumbers nothing and the lost
+            // server's noon list outranks this one for good.
+            const freshTicking = path.join(work, 'fresh-ticking');
+            restoreOntoFreshMachine(lost, nightly, freshTicking);
+            const twoDaysBehind = T0 + 13 * HOUR - 48 * HOUR;
+            const tBack = runSpec(freshTicking, { clock: twoDaysBehind, boot: true });
+            const tR = tBack?.signed as SignedAddressList;
+            assert(tR?.list && L0?.list && tR.list.seq === L0.list.seq + 1 && tBack?.owed === tR.list.seq,
+                `restored with the clock 2 days behind: kept seq + 1 (${num(tR)}), marked (${show(tBack?.owed)})`);
+            const tPassed = runSpec(freshTicking, { clock: twoDaysBehind + 36 * HOUR });
+            const tP = tPassed?.signed as SignedAddressList;
+            assert(tP?.list && L1?.list && tR?.list && tP.list.seq === floorAt(twoDaysBehind + 36 * HOUR) && compareAddressNumbers(tP.list, L1.list) === -1
+                && tPassed?.owed === tR.list.seq,
+                `the wrong clock ticks past the mark: numbered from it (${num(tP)}), still below the lost server's noon list ${num(L1)}, and the mark holds (${show(tPassed?.owed)})`);
+            const tRight = runSpec(freshTicking, { clock: T0 + 13 * HOUR + 36 * HOUR });
+            const tRR = tRight?.signed as SignedAddressList;
+            assert(tRR?.list && L1?.list && tR?.list && compareAddressNumbers(tRR.list, L1.list) === 1 && phoneTakes(tRR, L1) === 'replace newer'
+                && sameAddressListContent(tRR.list, tR.list),
+                `the clock set right a day and a half later: the next look numbers the list above the lost server's noon list (${num(tRR)} over ${num(L1)}; ${phoneTakes(tRR, L1)}), content unchanged`);
         } finally {
             fs.rmSync(work, { recursive: true, force: true });
         }

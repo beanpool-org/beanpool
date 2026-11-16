@@ -39,9 +39,6 @@ function sourceFiles(): string[] {
 const EXCEPTIONS: Record<string, string> = {
     // Where it is defined.
     'utils/nodes.ts': 'removeSavedNode itself',
-    // The community moved: the same node may answer at both addresses, and a DELETE at the old one would take the row the
-    // new one needs (acceptAddressFollow carries the alerts choice instead).
-    'utils/address-follow.ts': 'a move, not a goodbye',
 };
 
 describe('a community taken off the phone is told first', () => {
@@ -73,9 +70,10 @@ describe('a community taken off the phone is told first', () => {
         expect(service).toMatch(/retryPushRegistrations\(\): Promise<void> \{\s*return registerWhereMissing\(/);
     });
 
-    it('an address move sends no DELETE and keeps the alerts choice', () => {
-        const follow = removers.find((r) => r.file === 'utils/address-follow.ts')!.src;
-        expect(follow).toMatch(/\bcarryAlertsOff\s*\(/);
-        expect(follow).not.toMatch(/forgetCommunityPush|unregisterPushTokenAt|stopPushAlertsAt/);
+    it('an address move sends no DELETE, takes no row off, and keeps the alerts choice (address-verify.ts, addresses S4)', () => {
+        // The same server answers at both addresses: a DELETE at the old one would take the row the new one needs.
+        const verify = code(fs.readFileSync(path.join(NATIVE, 'utils/address-verify.ts'), 'utf8'));
+        expect(verify).toMatch(/\bcarryAlertsOff\s*\(/);
+        expect(verify).not.toMatch(/forgetCommunityPush|unregisterPushTokenAt|stopPushAlertsAt|removeSavedNode/);
     });
 });

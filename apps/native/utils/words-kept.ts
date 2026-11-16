@@ -15,6 +15,7 @@ import { signedPost } from './node-post';
 import { finishOneWayBack, putAwayRecord, readOneWayBack } from './one-way-back';
 import { oneWayBackStoreKey, wordsKeptOwedStoreKey } from './storage-keys';
 import { communityKeyOf } from './community-index';
+import { communityRecordsReady } from './community-record';
 import type { BeanPoolIdentity } from './identity';
 
 /** Whether two addresses are one community: compared by the name each is kept under (community-index.ts). */
@@ -39,6 +40,8 @@ async function send(url: string, identity: BeanPoolIdentity): Promise<boolean> {
  * told. Never throws.
  */
 export async function keepWords(url: string | null, identity: BeanPoolIdentity, now: number = Date.now()): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         if (await readOneWayBack(identity.publicKey)) await finishOneWayBack(identity.publicKey, 'checked');
         else if (url) await AsyncStorage.setItem(oneWayBackStoreKey(identity.publicKey), JSON.stringify({ ...putAwayRecord(url, now), done: 'checked' }));
@@ -55,6 +58,8 @@ export async function keepWords(url: string | null, identity: BeanPoolIdentity, 
 
 /** A say-so that didn't land, sent again for this community (Home's landing). True when nothing is owed any more. */
 export async function resendWordsKept(url: string, identity: BeanPoolIdentity): Promise<boolean> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     let owed: string | null = null;
     try {
         owed = await AsyncStorage.getItem(wordsKeptOwedStoreKey(identity.publicKey));

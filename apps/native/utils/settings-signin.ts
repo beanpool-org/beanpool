@@ -22,9 +22,13 @@ import type { BeanPoolIdentity } from './identity';
 import { requireDeviceUnlock } from './node-admin';
 import { signPairing } from './member-statements';
 import { buildSignedHeaders } from './crypto';
+import { plainOriginOf } from './node-url';
+import { heldAddress, type ProveAtScan } from './pair-device-target';
+import { communityRecordOf, type CommunityRecord } from './community-index';
 
 export type ScanResult =
-    | { kind: 'ok'; qr: SettingsSigninQr }
+    /** `prove`: the community's key is known, so the code's address proves at the scan (pair-device-target.ts provedAtScan). */
+    | { kind: 'ok'; qr: SettingsSigninQr; prove?: ProveAtScan }
     | { kind: 'wrong-node'; scannedHost: string; appHost: string }
     | { kind: 'not-signin' }
     | { kind: 'malformed' }
@@ -35,15 +39,24 @@ function host(url: string): string {
     return o ? o.replace(/^https?:\/\//, '') : url;
 }
 
-/** Is this a sign-in code for the node this app is on? */
-export function readSigninScan(text: unknown, appNodeUrl: string | null): ScanResult {
+/**
+ * Is this a sign-in code for the community this app is on? Its address, or another its own signed list names (addresses
+ * S5, §3.6: the phone's own spelling of it, from the list it keeps, is where the approval goes). `prove` says the screen
+ * must prove the address at the scan before anything is asked or signed.
+ */
+export function readSigninScan(text: unknown, appNodeUrl: string | null, recordOf: (address: string) => CommunityRecord | null = communityRecordOf): ScanResult {
     const parsed = parseSettingsSigninQr(text);
     if (!parsed.ok) return { kind: parsed.reason };
     if (!appNodeUrl) return { kind: 'no-node' };
+    const own = plainOriginOf(appNodeUrl);
     if (!isSameNode(parsed.nodeUrl, appNodeUrl)) {
-        return { kind: 'wrong-node', scannedHost: host(parsed.nodeUrl), appHost: host(appNodeUrl) };
+        const scanned = plainOriginOf(parsed.nodeUrl);
+        const held = scanned && own ? heldAddress(scanned, [own], recordOf) : null;
+        if (!held) return { kind: 'wrong-node', scannedHost: host(parsed.nodeUrl), appHost: host(appNodeUrl) };
+        return { kind: 'ok', qr: { nodeUrl: held.origin, pairingId: parsed.pairingId, shortCode: parsed.shortCode }, ...(held.prove ? { prove: held.prove } : {}) };
     }
-    return { kind: 'ok', qr: { nodeUrl: parsed.nodeUrl, pairingId: parsed.pairingId, shortCode: parsed.shortCode } };
+    const prove = own ? heldAddress(own, [own], recordOf)?.prove : undefined;
+    return { kind: 'ok', qr: { nodeUrl: parsed.nodeUrl, pairingId: parsed.pairingId, shortCode: parsed.shortCode }, ...(prove ? { prove } : {}) };
 }
 
 export function scanProblemMessage(r: Exclude<ScanResult, { kind: 'ok' }>): { title: string; message: string } {

@@ -39,7 +39,9 @@ import { palette } from '../constants/colors';
 import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
-import { isAppCommunity, pairingRequestUrls, readPairingCode, refusalJoin, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
+import { isAppCommunity, pairingRequestUrls, provedAtScan, readPairingCode, refusalJoin, scanProofRefusal, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
+import { proofAt } from '../utils/address-verify';
+import { communityRecordsReady } from '../utils/community-record';
 import { pairingAccountLabel, pairingPayload } from '../utils/pair-device-payload';
 import { getMemberProfile } from '../utils/db';
 import { getSavedNodes } from '../utils/nodes';
@@ -400,9 +402,12 @@ export default function PairDeviceScreen() {
         // a server that skips the digits. Said at once, and nothing is sent.
         const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
         const saved = (await getSavedNodes().catch(() => [])).map((n) => n.url);
+        // Any address of one of the phone's communities (its signed list, kept in the record: addresses S5), proved again
+        // here when the community's key is known: one that answers as something else, or not at all, is sent nothing.
+        await communityRecordsReady();
+        const target = await provedAtScan(transferTarget(parsed.nodeUrl, anchor, saved), (address, peerId) => proofAt(address, peerId));
         // A newer code came while this one was being read: its sheet, not this one's.
         if (seq !== readSeqRef.current) return;
-        const target = transferTarget(parsed.nodeUrl, anchor, saved);
         setErrorMessage(target.kind === 'ok' ? null : targetRefusal(target));
         setScannedData({ ...parsed, target, source });
     }
@@ -416,6 +421,9 @@ export default function PairDeviceScreen() {
 
     function targetRefusal(target: Exclude<TransferTarget, { kind: 'ok' }>): string {
         if (target.kind === 'no-node') return t('Connect to your community first.');
+        // The scan's own proof (addresses S5): the address the code names is one of the community's, but it didn't answer
+        // as the community just now.
+        if (target.kind === 'replaced' || target.kind === 'not-answering') return scanProofRefusal(target);
         // The way through: the other device at this phone's own community. For global's code only, also this phone
         // joining global first (refusalJoin, the button below). Never "join {host}" for any other server: that join would
         // make the next scan of the same code send the account to it (the deciding review of #2025, B1). Never the

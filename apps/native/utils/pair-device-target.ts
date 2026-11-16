@@ -21,9 +21,21 @@
  * (the emulator's `http://10.0.2.2:3000`, a LAN dev node) can't use this flow: a dev page's QR is refused as
  * unreadable, and one naming no server says "Connect to your community first.". Every live node is https; the 12
  * words still work anywhere. The screen relies on this: it keeps no cleartext check of its own.
+ *
+ * Several addresses (addresses S5, scratch/fable-design/DESIGN-several-addresses-fable.md §3.6). A code that names any
+ * address of one of the phone's communities is accepted: an address string for string as a saved one (as before), or one
+ * the community's own signed list names, as the phone keeps it in the community's record (utils/community-index.ts). Rule 2
+ * stands: the account goes to the phone's own spelling of that address (the saved origin, or the list's entry), never the
+ * scanned text. And the address is proved again at the scan (provedAtScan): when the community's key is known, the address
+ * must sign the phone's fresh question with it, at a take-over count no lower than the phone has seen, before anything is
+ * sent. One that answers as something else, or an older server, gets nothing ('replaced'); one that doesn't answer gets
+ * nothing yet ('not-answering'). A community whose server can't say who it is (no key: an older server) keeps today's rule.
  */
+import { addressOf, t } from '@beanpool/core';
 import { plainOriginOf } from './node-url';
 import { GLOBAL_NODE_URL } from './global-node-url';
+import { communityRecordOf, sameCommunityRecord, type CommunityRecord } from './community-index';
+import type { AddressAnswer } from './address-decide';
 
 export interface PairingQr {
     sessionId: string;
@@ -89,13 +101,23 @@ export function readPairingCode(raw: unknown, source: 'camera' | 'link'): Pairin
     return source === 'link' || isUnreadablePairingQr(raw) ? { kind: 'unreadable' } : { kind: 'ignore' };
 }
 
+/** The key an address must prove with at the scan, and the highest take-over count the phone has seen for it. */
+export interface ProveAtScan { peerId: string; epoch: number }
+
 export type TransferTarget =
-    /** `nodeUrl`: the phone's own saved address for that server, in its canonical origin. Where the account goes. */
-    | { kind: 'ok'; nodeUrl: string }
+    /**
+     * `nodeUrl`: the phone's own address for that server (a saved origin, or its community's listed address), in its
+     * canonical origin. Where the account goes. `prove`: the community's key is known, so the address proves at the scan.
+     */
+    | { kind: 'ok'; nodeUrl: string; prove?: ProveAtScan }
     /** The QR names a server this phone does not use. `appHost`: the one it is on, to name in the refusal. */
     | { kind: 'foreign'; scannedHost: string; appHost: string | null }
     /** No server in the QR and none on the phone. */
-    | { kind: 'no-node' };
+    | { kind: 'no-node' }
+    /** The address answered the scan's question as something else (another key, an older server, not on its list). */
+    | { kind: 'replaced'; scannedHost: string }
+    /** The address gave the scan's question no answer: nothing sent yet. */
+    | { kind: 'not-answering'; scannedHost: string };
 
 /** The phone's server as it is sent to: an https address the phone saved, in its canonical origin. */
 function knownOrigin(url: string | null | undefined): string | null {
@@ -103,28 +125,88 @@ function knownOrigin(url: string | null | undefined): string | null {
     return origin && origin.startsWith('https://') ? origin : null;
 }
 
+/** What a record says must be proved at the scan: its key and count, once known (a keyless record proves nothing). */
+function proveOf(record: CommunityRecord | null): { prove?: ProveAtScan } {
+    return record?.peerId ? { prove: { peerId: record.peerId, epoch: record.epoch ?? 0 } } : {};
+}
+
+/** The addresses `record`'s own signed list names, in canonical https origins: none unless the list is the record's key's. */
+function listedOrigins(record: CommunityRecord | null): string[] {
+    const list = record?.list?.list;
+    if (!record?.peerId || !list || list.peerId !== record.peerId || !Array.isArray(list.addresses)) return [];
+    return list.addresses.map((a) => knownOrigin(`https://${a}`)).filter((o): o is string => o !== null);
+}
+
+/**
+ * The phone's own spelling of `scanned` (a canonical https origin) when it is an address of one of `communities` (the
+ * community in use and the saved ones): the saved origin itself, string for string, else an address that community's own
+ * list names. Null for an address the phone doesn't hold.
+ */
+export function heldAddress(
+    scanned: string, communities: readonly (string | null | undefined)[], recordOf: (address: string) => CommunityRecord | null = communityRecordOf,
+): { origin: string; prove?: ProveAtScan } | null {
+    const own = communities.map(knownOrigin).filter((o): o is string => o !== null);
+    const exact = own.find((o) => o === scanned);
+    if (exact) return { origin: exact, ...proveOf(recordOf(exact)) };
+    for (const o of own) {
+        const record = recordOf(o);
+        const listed = listedOrigins(record).find((l) => l === scanned);
+        if (listed) return { origin: listed, ...proveOf(record) };
+    }
+    return null;
+}
+
 /**
  * @param scannedNodeUrl the QR's `node=` from parsePairingQr; empty means "this phone's community"
  * @param appNodeUrl the community this phone is on (`beanpool_anchor_url`)
  * @param savedNodeUrls the phone's saved communities (utils/nodes getSavedNodes)
  */
-export function transferTarget(scannedNodeUrl: string, appNodeUrl: string | null, savedNodeUrls: readonly string[]): TransferTarget {
+export function transferTarget(
+    scannedNodeUrl: string, appNodeUrl: string | null, savedNodeUrls: readonly string[],
+    recordOf: (address: string) => CommunityRecord | null = communityRecordOf,
+): TransferTarget {
     const own = knownOrigin(appNodeUrl);
-    if (!scannedNodeUrl) return own ? { kind: 'ok', nodeUrl: own } : { kind: 'no-node' };
+    if (!scannedNodeUrl) return own ? { kind: 'ok', nodeUrl: own, ...proveOf(recordOf(own)) } : { kind: 'no-node' };
     const scanned = CANONICAL_HTTPS_ORIGIN.test(scannedNodeUrl) ? scannedNodeUrl.replace(/\/$/, '') : null;
-    // Equal strings: the QR's canonical spelling is exactly the saved server's canonical origin. No other spelling of
-    // it (a port of 443, upper case, another IP form) is the same server here.
-    const match = scanned ? [own, ...savedNodeUrls.map(knownOrigin)].find((o) => o !== null && o === scanned) : undefined;
-    if (match) return { kind: 'ok', nodeUrl: match };
+    // Equal strings: the QR's canonical spelling is exactly the saved server's canonical origin, or an address its
+    // community's own list names. No other spelling of it (a port of 443, upper case, another IP form) is the same server.
+    const held = scanned ? heldAddress(scanned, [own, ...savedNodeUrls], recordOf) : null;
+    if (held) return { kind: 'ok', nodeUrl: held.origin, ...(held.prove ? { prove: held.prove } : {}) };
     return { kind: 'foreign', scannedHost: scanned ? scanned.slice('https://'.length) : '', appHost: own ? own.slice('https://'.length) : null };
 }
 
 /**
+ * The scan's own proof (§3.6: "the address is proved again at the scan"). An 'ok' target whose community's key is known
+ * stays 'ok' only when its address signs a fresh question with that key at a take-over count no lower than the phone's;
+ * `prove` asks it (utils/address-verify.ts proofAt, the round's own ask). Any other target is returned as it is.
+ */
+export async function provedAtScan(
+    target: TransferTarget, prove: (address: string, peerId: string) => Promise<AddressAnswer>,
+): Promise<TransferTarget> {
+    if (target.kind !== 'ok' || !target.prove) return target;
+    const scannedHost = target.nodeUrl.slice('https://'.length);
+    const address = addressOf(target.nodeUrl);
+    const answer: AddressAnswer = address ? await prove(address, target.prove.peerId).catch(() => ({ kind: 'silent' as const })) : { kind: 'other-key', why: 'no address' };
+    if (answer.kind === 'silent') return { kind: 'not-answering', scannedHost };
+    if (answer.kind === 'proved' && answer.epoch >= target.prove.epoch) return target;
+    return { kind: 'replaced', scannedHost };
+}
+
+/** What a code whose address didn't pass the scan's proof says, the same on both scanners (Link a device, Settings sign-in). */
+export function scanProofRefusal(target: { kind: 'replaced' | 'not-answering'; scannedHost: string }): string {
+    return target.kind === 'replaced'
+        ? t('{host} no longer answers as your community, so nothing was sent. Make a new code at your community\'s main address and scan that one.', { host: target.scannedHost })
+        : t('{host} isn\'t answering right now, so nothing was sent. Try again in a moment.', { host: target.scannedHost });
+}
+
+/**
  * Is `target` the community this phone is on (`beanpool_anchor_url`)? The member rows on the phone are that one's, so only
- * then does its member record give the account's name there (pair-device-payload.ts).
+ * then does its member record give the account's name there (pair-device-payload.ts). Any address of it counts.
  */
 export function isAppCommunity(target: TransferTarget | undefined, appNodeUrl: string | null): boolean {
-    return target?.kind === 'ok' && target.nodeUrl === knownOrigin(appNodeUrl);
+    if (target?.kind !== 'ok') return false;
+    const own = knownOrigin(appNodeUrl);
+    return target.nodeUrl === own || (!!own && sameCommunityRecord(target.nodeUrl, own));
 }
 
 /** Every address the screen sends to for one pairing: built from the matched saved origin and the session id only. */

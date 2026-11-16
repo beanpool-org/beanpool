@@ -16,6 +16,9 @@ import { useTheme } from './ThemeContext';
 import { palette } from '../constants/colors';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
+import { provedAtScan, scanProofRefusal } from '../utils/pair-device-target';
+import { proofAt } from '../utils/address-verify';
+import { communityRecordsReady } from '../utils/community-record';
 import {
     readSigninScan, scanProblemMessage, lookupPairing, approveComputerSignin, declineComputerSignin, formatShortCode,
     SIGNIN_QUESTION, SIGNIN_WARNING, AGENT_QUESTION, AGENT_WARNING,
@@ -69,11 +72,21 @@ export default function SettingsSigninScreen() {
         locked.current = true;
         setChecking(true);
         const appNode = await getAnchorUrl();
+        await communityRecordsReady();
         const scan = readSigninScan(data, appNode);
         if (scan.kind !== 'ok') {
             const m = scanProblemMessage(scan);
             problem(keyLineWords(m.title), keyLineWords(m.message));
             return;
+        }
+        // The code's address proves at the scan when the community's key is known (addresses S5): an address that answers
+        // as something else, or not at all, is asked nothing and signed nothing.
+        if (scan.prove) {
+            const proved = await provedAtScan({ kind: 'ok', nodeUrl: scan.qr.nodeUrl, prove: scan.prove }, (address, peerId) => proofAt(address, peerId));
+            if (proved.kind === 'replaced' || proved.kind === 'not-answering') {
+                problem(t('Nothing was sent'), scanProofRefusal(proved));
+                return;
+            }
         }
         const look = await lookupPairing(scan.qr, identity);
         if (look.kind !== 'ok') {

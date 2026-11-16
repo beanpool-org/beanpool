@@ -23,6 +23,8 @@
  * write, the move, the rows following) reads the anchor again immediately before it. Once the member has moved, nothing
  * goes and the round keeps only what it learned about the addresses, moving nothing; a copy, saved row or record that
  * holds the anchor never goes; and an address another record holds is never written into this one (records never cross).
+ * Those steps run under the one move lock the member's switch holds (community-move-lock.ts, S5), so a switch started but
+ * not yet written finishes before any of them, and is then seen.
  *
  * Who the community is. A record with no key takes it from the first read: the key the phone kept from its first
  * statement at that address (address-follow.ts keepCommunityIdentity), else the list the address serves over TLS, as a
@@ -38,7 +40,8 @@
  * address is not used.
  *
  * Not here (later slices, named in the PR): the banner and the stop when the address in use answers as something else and
- * there is nowhere proved to go (§3.5: `refuse` is recorded, nothing more yet); links, codes and the directory (S5); the
+ * there is nowhere proved to go (§3.5: `refuse` is recorded, nothing more yet); links, codes and the directory (S5: they
+ * read the records this writes, and a code's address is proved at the scan with proofAt below); the
  * worldwide community (followableOrigin leaves it out), an http address (no key on a home network) and the hall (its own
  * check and number) are never verified here.
  */
@@ -155,10 +158,26 @@ export function answerToProof(
 }
 
 /** One proof asked of `address` for the community's key, as decide reads it. */
-async function prove(address: string, peerId: string, deps: VerifyDeps): Promise<AddressAnswer> {
+async function prove(address: string, peerId: string, deps: Pick<VerifyDeps, 'get' | 'nonce'>): Promise<AddressAnswer> {
     const nonce = deps.nonce();
     const answer = await deps.get(addressProofUrl(address, nonce)).catch(() => null);
     return answerToProof(answer, { peerId, for: address, nonce });
+}
+
+/**
+ * One fresh proof of `address` for the community key `peerId`, asked and read as a round asks it: the scan's own proof
+ * (pair-device-target.ts provedAtScan, addresses S5 §3.6). Writes nothing. Never throws.
+ */
+export async function proofAt(address: string, peerId: string, injected?: Pick<VerifyDeps, 'get' | 'nonce'>): Promise<AddressAnswer> {
+    try {
+        const deps = injected ?? await (async () => {
+            const Crypto = await import('expo-crypto');
+            return { get: getJson, nonce: () => Array.from(Crypto.getRandomBytes(16), (b) => b.toString(16).padStart(2, '0')).join('') };
+        })();
+        return await prove(address, peerId, deps);
+    } catch {
+        return { kind: 'silent' };
+    }
 }
 
 /** This run's last ask of each address: when, how many in a row gave no answer, and whether it answered. */

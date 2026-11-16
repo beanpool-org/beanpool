@@ -12,7 +12,9 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { isUnreadablePairingQr, pairingRequestUrls, parsePairingQr, transferTarget } from '../pair-device-target';
+import { isAppCommunity, isUnreadablePairingQr, pairingRequestUrls, parsePairingQr, provedAtScan, transferTarget } from '../pair-device-target';
+import { communityRecordOf, resetCommunityIndexForTests, setCommunityIndex, type CommunityRecord } from '../community-index';
+import type { AddressAnswer } from '../address-decide';
 
 const SESSION = 'a1'.repeat(16);
 const PUB = 'b2'.repeat(32);
@@ -188,7 +190,8 @@ describe('pair-device: the rule is wired in (the screen cannot be rendered here,
         expect(scan).toContain("await readCode(result.data, 'camera');");
         expect(scan).toContain('const read = readPairingCode(data, source);');
         expect(scan).toContain('const parsed = read.qr;');
-        expect(scan).toContain('const target = transferTarget(parsed.nodeUrl, anchor, saved);');
+        // Against its community and its saved ones, any address their own lists name, and proved again at the scan (S5).
+        expect(scan).toContain('const target = await provedAtScan(transferTarget(parsed.nodeUrl, anchor, saved), (address, peerId) => proofAt(address, peerId));');
         expect(scan).toContain("await AsyncStorage.getItem('beanpool_anchor_url')");
         expect(scan).toContain('await getSavedNodes()');
         expect(pair()).not.toContain('parsePairingUri');
@@ -245,5 +248,108 @@ describe('pair-device: the rule is wired in (the screen cannot be rendered here,
 
     it('the Confirm button shows only for a server this phone uses', () => {
         expect(pair()).toMatch(/\{scannedData\?\.target\?\.kind === 'ok' && \(\s*<Pressable\s+style=\{\[styles\.confirmBtn/);
+    });
+});
+
+/**
+ * Addresses S5 (scratch/fable-design/DESIGN-several-addresses-fable.md §3.6): a pairing code that names any address of one
+ * of the phone's communities is accepted. The account still goes only to an address the phone itself holds (its own
+ * spelling, from its saved rows or the community's signed list it keeps), never the scanned text, and the address is
+ * proved again at the scan: an address that answers as something else, or not at all, gets nothing.
+ *
+ * The table: code kind (names the address in use, the main, another proved address, a listed address not yet proved, an
+ * address no longer listed, a stranger's, or none) x address state at the scan (proves, answers as something else or an
+ * older server, not answering) x the phone's community record (with its key and list; with no key, an older server) ->
+ * where the account goes.
+ */
+describe('S5: a code at any address of one of the phone\'s communities (pair-device-target table)', () => {
+    const USING = 'https://riverside.example';
+    const MAIN = 'https://coop.example.org';
+    const OTHER = 'https://ourtown.example.net';
+    const LISTED = 'https://new.example.net';
+    const DROPPED = 'https://lapsed.example.com';
+    const STRANGER = 'https://stranger.example';
+    const PEER = '12D3KooWRiverside';
+    const signedList = { list: { v: 1, peerId: PEER, communityId: 'c1', epoch: 2, seq: 14, main: 'coop.example.org', addresses: ['riverside.example', 'coop.example.org', 'ourtown.example.net', 'new.example.net'], spares: [] }, sig: 'x' };
+    /** The phone's record: met at DROPPED, now using USING, with the key and the list (proved: USING, MAIN, OTHER). */
+    const keyed: CommunityRecord = {
+        v: 1, id: DROPPED, using: USING, peerId: PEER, communityId: 'c1', epoch: 2,
+        proved: { [USING]: { at: 1, epoch: 2 }, [MAIN]: { at: 1, epoch: 2 }, [OTHER]: { at: 1, epoch: 2 } }, refused: { [DROPPED]: { at: 1, why: 'status 421' } },
+        list: signedList as unknown as CommunityRecord['list'],
+    };
+    /** An older server: no key, no list; only its own address. */
+    const keyless: CommunityRecord = { v: 1, id: USING, using: USING, proved: {}, refused: {} };
+
+    type Code = 'the address in use' | 'the main' | 'another proved address' | 'a listed address not yet proved' | 'an address no longer listed' | 'a stranger\'s address' | 'no address';
+    const CODE: Record<Code, string> = {
+        'the address in use': USING, 'the main': MAIN, 'another proved address': OTHER, 'a listed address not yet proved': LISTED,
+        'an address no longer listed': DROPPED, 'a stranger\'s address': STRANGER, 'no address': '',
+    };
+    type State = 'proves' | 'answers as something else' | 'proves at an older take-over count' | 'not answering';
+    const ANSWER: Record<State, AddressAnswer> = {
+        proves: { kind: 'proved', epoch: 2, seq: 14 }, 'answers as something else': { kind: 'other-key', why: 'status 421' },
+        'proves at an older take-over count': { kind: 'proved', epoch: 1, seq: 30 }, 'not answering': { kind: 'silent' },
+    };
+
+    async function whereFor(code: Code, state: State, record: CommunityRecord): Promise<{ to: string; asked: string[] }> {
+        setCommunityIndex([record]);
+        const asked: string[] = [];
+        const first = transferTarget(CODE[code], USING, [USING], communityRecordOf);
+        const target = await provedAtScan(first, async (address, peerId) => { asked.push(`${address} ${peerId}`); return ANSWER[state]; });
+        resetCommunityIndexForTests();
+        return { to: target.kind === 'ok' ? target.nodeUrl : target.kind, asked };
+    }
+
+    const rows: Array<[Code, State, 'keyed' | 'keyless', string]> = [];
+    for (const code of Object.keys(CODE) as Code[]) {
+        for (const state of Object.keys(ANSWER) as State[]) {
+            const address = CODE[code];
+            // With the key and the list: the code's address, in the phone's own spelling, when the list names it (or no
+            // address: the address in use), proved at the scan; else nothing goes.
+            const listed = address === '' || [USING, MAIN, OTHER, LISTED].includes(address);
+            const keyedTo = !listed ? 'foreign'
+                : state === 'proves' ? (address || USING)
+                    : state === 'not answering' ? 'not-answering' : 'replaced';
+            rows.push([code, state, 'keyed', keyedTo]);
+            // An older server (no key): today's rule, the saved address only, string for string, with nothing to prove.
+            rows.push([code, state, 'keyless', address === '' || address === USING ? USING : 'foreign']);
+        }
+    }
+
+    for (const [code, state, kind, to] of rows) {
+        it(`${code}, ${state}, a record ${kind === 'keyed' ? 'with its key and list' : 'with no key (an older server)'} -> ${to}`, async () => {
+            const got = await whereFor(code, state, kind === 'keyed' ? keyed : keyless);
+            expect(got.to).toBe(to);
+            // Proved at the scan exactly when the record has the key and the code names one of its listed addresses, and
+            // only that address, with the record's key: never the scanned text, never a stranger.
+            const proves = kind === 'keyed' && to !== 'foreign';
+            expect(got.asked).toEqual(proves ? [`${(CODE[code] || USING).slice('https://'.length)} ${PEER}`] : []);
+        });
+    }
+
+    it('the account goes to the phone\'s own spelling of the address, from the list it keeps: the scanned text is only compared', () => {
+        setCommunityIndex([keyed]);
+        const target = transferTarget(`${OTHER}/`, USING, [USING], communityRecordOf);
+        resetCommunityIndexForTests();
+        expect(target).toEqual({ kind: 'ok', nodeUrl: OTHER, prove: { peerId: PEER, epoch: 2 } });
+        expect(pairingRequestUrls(target as Extract<typeof target, { kind: 'ok' }>, SESSION).transfer).toBe(`${OTHER}/api/pair/transfer`);
+    });
+
+    it('another saved community\'s other address goes to that community, and is not the community in front', () => {
+        const hilltop: CommunityRecord = { ...keyed, id: 'https://hilltop.example', using: 'https://hilltop.example', peerId: 'peer-h', proved: {}, refused: {},
+            list: { ...signedList, list: { ...signedList.list, peerId: 'peer-h', main: 'hilltop.example', addresses: ['hilltop.example', 'hill.example.org'] } } as unknown as CommunityRecord['list'] };
+        setCommunityIndex([keyless, hilltop]);
+        const target = transferTarget('https://hill.example.org', USING, [USING, 'https://hilltop.example'], communityRecordOf);
+        expect(target).toEqual({ kind: 'ok', nodeUrl: 'https://hill.example.org', prove: { peerId: 'peer-h', epoch: 2 } });
+        expect(isAppCommunity(target, USING)).toBe(false);
+        setCommunityIndex([keyed]);
+        expect(isAppCommunity(transferTarget(MAIN, USING, [USING], communityRecordOf), USING)).toBe(true);
+        resetCommunityIndexForTests();
+    });
+
+    it('a list kept under another key than the record\'s names nothing: a code there is refused', () => {
+        setCommunityIndex([{ ...keyed, list: { ...signedList, list: { ...signedList.list, peerId: 'someone-else' } } as unknown as CommunityRecord['list'] }]);
+        expect(transferTarget(MAIN, USING, [USING], communityRecordOf).kind).toBe('foreign');
+        resetCommunityIndexForTests();
     });
 });

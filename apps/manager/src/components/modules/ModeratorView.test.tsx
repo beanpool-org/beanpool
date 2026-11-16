@@ -4,6 +4,7 @@ import { App } from '../../App';
 import { ModeratorView } from './ModeratorView';
 import { sectionTargetFor } from '../../lib/key-session';
 import { setKeySessionCsrfToken, type ListedReport } from '../../lib/node-client';
+import { POST_ON_HOLD_WORDS } from '../../lib/post-on-hold-words';
 
 /**
  * A moderator's Settings: Reports and nothing else (Marty's decision, 2026-09-19).
@@ -265,6 +266,29 @@ describe('ModeratorView report actions', () => {
             fireEvent.change(within(again).getByRole('combobox'), { target: { value: 'spam' } });
             await act(async () => { fireEvent.click(within(again).getByRole('button', { name: 'Remove it' })); });
             expect(posted('/reports/r-forum/action')[0].body).toMatchObject({ deletePost: true, reasonCategory: 'spam' });
+        } finally {
+            REPORTS.splice(-1, 1);
+        }
+    });
+
+    it('says a forum post on hold is on hold, not hidden while moderators look, and that dismissing does not bring it back', async () => {
+        const held: ListedReport = {
+            id: 'r-forum-held', reason: 'Child safety', createdAt: '2026-11-14T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',
+            postId: null, pulseItem: null, targetForumPostId: 'fp-2', postOnHold: true,
+            forumPost: { id: 'fp-2', topicId: 'ft-2', topicTitle: 'Taken down by an assistant', number: 1, words: 'Words', writerName: 'Oscar', hidden: true, removed: false, onHold: true },
+        };
+        REPORTS.push(held);
+        try {
+            mockNode();
+            await act(async () => {
+                render(<ModeratorView nodeUrl="https://riverside.example.org" communityName="Riverside" onLogout={() => {}} />);
+            });
+            await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(4));
+            const card = screen.getAllByTestId('moderator-report')[3];
+            expect(within(card).getByText(/Forum topic by Oscar · on hold/)).toBeInTheDocument();
+            expect(within(card).queryByText(/hidden while moderators look/)).toBeNull();
+            expect(within(card).getByTestId('post-on-hold')).toHaveTextContent(POST_ON_HOLD_WORDS);
+            expect(within(card).queryByRole('button', { name: /keep the post/ })).toBeNull();
         } finally {
             REPORTS.splice(-1, 1);
         }

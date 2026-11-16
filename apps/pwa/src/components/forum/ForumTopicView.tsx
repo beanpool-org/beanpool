@@ -227,7 +227,7 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
     function byline(post: ForumPost) {
         return (
             <div className="flex items-center gap-2 min-w-0 text-xs" style={{ color: 'var(--text-muted)' }}>
-                <button type="button" onClick={() => onOpenProfile?.(post.writer.publicKey)} className="font-bold truncate min-h-[44px] text-left" style={{ color: 'var(--text-primary)' }}>{name(post)}</button>
+                <button type="button" onClick={() => onOpenProfile?.(post.writer.publicKey)} className="font-bold min-w-0 min-h-[44px] text-left" style={{ color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{name(post)}</button>
                 <span className="shrink-0">· {timeAgo(Math.max(0, Date.now() - Date.parse(post.createdAt)))}</span>
                 {post.editedAt && <span className="shrink-0" aria-hidden="true">·</span>}
                 {post.editedAt && <span className="shrink-0">{t(TOPIC_WORDS.edited)}</span>}

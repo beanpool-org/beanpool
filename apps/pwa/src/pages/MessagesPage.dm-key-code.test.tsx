@@ -10,7 +10,7 @@
  * - The web stores nothing about keys: opening the menu, showing the code and closing it write nothing to localStorage,
  *   sessionStorage or IndexedDB.
  */
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import React from 'react';
@@ -151,7 +151,8 @@ describe('web DM: ⋮ → Key code (read only)', () => {
         expect(within(dialog).getByText(line)).toBeInTheDocument();
         expectNoVerifiedState(dialog, line);
         // Focus went to the new heading, not to the page behind.
-        expect(document.activeElement).toBe(within(dialog).getByRole('heading', { name: 'Key code' }));
+        const heading = within(dialog).getByRole('heading', { name: 'Key code' });
+        await waitFor(() => expect(document.activeElement).toBe(heading));
     });
 
     it('the unknown-name twins when the chat has no name for the other person', async () => {

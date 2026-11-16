@@ -145,9 +145,11 @@ export async function openFormerWithWords(typed: string | readonly string[], acc
     const seedHex = bytesToHex(old.seed);
     old.seed.fill(0);
     if (old.publicKey === account.publicKey.toLowerCase()) return { kind: 'not_the_key' };
-    const { found, answered } = await findFormerCopies(account, deps);
+    const { found, answered, silent } = await findFormerCopies(account, deps);
     if (!answered) return { kind: 'no_answer' };
-    if (found.length === 0) return { kind: 'none' };
+    // "None kept" only when every community answered: one that didn't (or answered a server error) may keep the copy, as
+    // "Delete it" counts it (#3170 round 2).
+    if (found.length === 0) return silent.length > 0 ? { kind: 'no_answer' } : { kind: 'none' };
     const lists: ContactsList[] = [];
     const opened: string[] = [];
     for (const f of found) {

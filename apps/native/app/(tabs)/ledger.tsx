@@ -57,6 +57,8 @@ import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } fr
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { getCreditGiftOffer, giveCreditLine, type CreditGiftOffer } from '../../utils/credit-gift';
 import { CreditSeenByGivers } from '../../components/CreditSeenByGivers';
+import { fetchCardByKey } from '../../utils/members-lookup';
+import { sendPrefill, takeSendRequest, type SendPrefill, type SendRequest } from '../../utils/send-handoff';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -242,6 +244,11 @@ export default function LedgerScreen() {
     }, [sendSuccess]);
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
+    // Send asked for by another page of this app (Learn's "Thank {name}", K8): handed over in memory (utils/send-handoff.ts),
+    // never read from the route, which a link from outside the app can fill. Taken at focus; opened once the figures are read.
+    const [sendAsk, setSendAsk] = useState<SendRequest | null>(null);
+    // Whether the member's own figures have been read (getBalance answered), so Send's gate reads them, not the empty start.
+    const [balanceRead, setBalanceRead] = useState(false);
     // The Credit line tab beside Beans on Send (slice G1, utils/credit-gift.ts): the node's answer at each load, never a
     // copy; null (or not offered) is no tab. `sendKind`: which tab the form is on. Never read in preview (loadData,
     // openSend and handleGift return first there), and never drawn there (giftTab).
@@ -482,7 +489,8 @@ export default function LedgerScreen() {
             // (sync_data_updated), and no answer at all means the line couldn't be read.
             getBalance(identity.publicKey).then(latest((answer: any) => {
                 setBalanceState(answer);
-                if (answer?.lineKnown !== false) { setBalanceUnread(false); return; }
+                // Only real figures count as read: with none on this phone yet, Send's gate would read zeros as "first trade".
+                if (answer?.lineKnown !== false) { setBalanceRead(true); setBalanceUnread(false); return; }
                 refreshBalanceFromServer(key)
                     .then(latest((read: unknown) => setBalanceUnread(read === null)))
                     .catch(() => latest(setBalanceUnread)(true));
@@ -545,6 +553,8 @@ export default function LedgerScreen() {
     useFocusEffect(
         React.useCallback(() => {
             loadData(); loadMembers();
+            const asked = takeSendRequest();
+            if (asked) setSendAsk(asked);
             const s1 = DeviceEventEmitter.addListener('transaction_completed', loadData);
             const s2 = DeviceEventEmitter.addListener('sync_data_updated', loadData);
             const s3 = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => setBlocked(new Set(Array.isArray(list) ? list : [])));
@@ -607,22 +617,26 @@ export default function LedgerScreen() {
 
     // Open the Send flow from anywhere (Levels hero or Wallet). Surfaces the form in the Wallet tab. With Beans locked
     // and part of the credit line to give, it opens on the Credit line tab.
+    /** Why Beans can't go yet, in today's words: the first trade, else a positive balance. */
+    const sayCantSendYet = () => {
+        if (earned <= 0) {
+            Alert.alert(
+                t('First trade required'),
+                t('Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.'),
+                [{ text: t('OK') }]
+            );
+        } else {
+            Alert.alert(
+                t('Positive balance required'),
+                t('You can only send beans you currently hold — direct sends require a positive balance.'),
+                [{ text: t('OK') }]
+            );
+        }
+    };
     const openSend = async () => {
         if (preview) { setSheetOpen(true); return; }
         if (!canSend && !giftOpen) {
-            if (earned <= 0) {
-                Alert.alert(
-                    t('First trade required'),
-                    t('Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.'),
-                    [{ text: t('OK') }]
-                );
-            } else {
-                Alert.alert(
-                    t('Positive balance required'),
-                    t('You can only send beans you currently hold — direct sends require a positive balance.'),
-                    [{ text: t('OK') }]
-                );
-            }
+            sayCantSendYet();
             return;
         }
         const url = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -637,6 +651,46 @@ export default function LedgerScreen() {
         setShowSend(true);
         getCreditGiftOffer().then(setGiftOffer).catch(() => {});
     };
+
+    /**
+     * Send asked for by another page of this app with a recipient and a note (Learn's "🫘 Thank {name}", K8;
+     * DESIGN-local-knowledge-fable.md §3.7): the Beans form with both filled in, each changeable, once the member's figures are
+     * read. The recipient is named only as this community's member list names them, by key (the phone's copy, else their card
+     * read from the node by key): a key the list doesn't hold opens no form. A member who can't send Beans yet reads today's
+     * words and no form. Nothing else about sending changes.
+     */
+    const openSendFor = ({ to, note }: SendPrefill) => {
+        if (!canSend) { sayCantSendYet(); return; }
+        setSendTo(to);
+        setSendMemo(note);
+        setSendAmount('');
+        loadMembers();
+        setActiveTab('financials');
+        setSendError(null); setSendSuccess(false);
+        setSendKind('beans');
+        setShowSend(true);
+        getCreditGiftOffer().then(setGiftOffer).catch(() => {});
+    };
+    /** The request as the member list names its recipient (and that list, for the form's name); null when it holds no such member. */
+    const fromMemberList = async (ask: SendRequest): Promise<SendPrefill | null> => {
+        const me = identity?.publicKey;
+        let held = await getAllCommunityMembers().catch(() => [] as { publicKey: string; callsign: string }[]);
+        let prefill = sendPrefill(ask, held, me);
+        if (!prefill && ask.to !== me && (await fetchCardByKey(ask.to)) === 'fetched') {
+            held = await getAllCommunityMembers().catch(() => []);
+            prefill = sendPrefill(ask, held, me);
+        }
+        if (prefill) setMembers(held.filter(m => m.publicKey !== me));
+        return prefill;
+    };
+    React.useEffect(() => {
+        if (!sendAsk || beansMode === undefined || (!preview && !balanceRead)) return;
+        const ask = sendAsk;
+        setSendAsk(null);
+        if (preview) { setSheetOpen(true); return; }
+        if (!identity?.publicKey || ask.to === identity.publicKey) return;
+        fromMemberList(ask).then((prefill) => { if (prefill) openSendFor(prefill); }).catch(() => {});
+    }, [sendAsk, beansMode, preview, balanceRead]);
 
     // Trust calculations (value-based)
     const earned = balanceState.earnedCredit_c || 0;   // from the saturating value curve (hundredths)

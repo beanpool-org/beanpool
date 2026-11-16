@@ -975,7 +975,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 }
                 return c;
             });
-            settleChatListSends(filtered, askMark);
+            // An answer older than one already shown is dropped whole: its list, requests and open chat are all older.
+            if (!settleChatListSends(filtered, askMark)) return;
             setConversations(filtered);
             // The requests waiting for this member, apart (lib/dm-requests.ts): direct chats only, never from someone
             // blocked here. Where requests are off the list has none, and there is no Requests pill.

@@ -8335,6 +8335,10 @@ export function actionReport(
                 const reporters = closeOpenReportsOnForumPost(report.target_forum_post_id);
                 if (wasOpen) reporters.push(report.reporter_pubkey);
                 forumTakedown = { removal, reporters };
+            } else if (removal && !removal.wasUp && wasOpen) {
+                // Removed already (its writer did, or a moderator before): this report's reporter hears it was removed, as a listing's
+                // does on the same call (removePostByAdmin), and nobody else is told anything (slice F2b round 2).
+                forumTakedown = { removal, reporters: [report.reporter_pubkey] };
             }
         }
 

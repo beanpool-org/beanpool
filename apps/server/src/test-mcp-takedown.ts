@@ -35,6 +35,11 @@
  *      nothing changed. Then: hidden at once from members, its report closed but a Child safety one, its writer and reporter told;
  *      a report dismissed in the hold changes nothing; an admin's one at a time; Settings lists it; a person's Put back, a
  *      moderator's restore, and a stolen day's undo restore it; final at 7 days; the owners' daily limit; the waiting list fenced.
+ *  12. The reporter's words, closed as a class (F2b round 2): one table, (a listing / a forum topic / a forum reply / a member's / a chat
+ *      line's report) x (dismiss, take down, put back, suggest dismissing, suggest removing, suggest restoring, each suggestion approved
+ *      from its card) x (the post live, on hold, hidden by reports, removed) = 84 cells: what the reporter hears matches what happened
+ *      to the post ("kept" only of a post that is up), the post ends where it should, and every suggestion is approvable or refused up
+ *      front in words. A dismissal on a forum post on hold doesn't count against its reporter as kept.
  *
  * Run: SERVER_SUITES_ONLY=test-mcp-takedown TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -64,13 +69,14 @@ import { issueAutomationToken } from './automation-tokens.js';
 import { db } from './db/db.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { forgetTakedownsOf, sweepTakedowns, takedownsToday, TAKEDOWN } from './engine/agent-takedowns.js';
-import { hideTally, muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
+import { forumHideTally, hideTally, muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
 import { reportedPostGoneBody, reportedPostKeptBody, reportedPostRemovedBody } from './engine/moderation-notices.js';
 import { forumTopic } from './engine/forum.js';
 import { sweepForumTakedowns } from './engine/forum-takedowns.js';
 import { rollDueSeries } from './engine/event-series-roll.js';
 import { resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
 import { OWNER_TAKEDOWN_TOOLS } from './agent/owner-takedowns.js';
+import { resetSuggestions } from './agent/suggestions.js';
 import type { AgentGrant, ToolResult } from './agent/tools.js';
 import { getNodeRole, setNodeRole } from './config/node-role.js';
 
@@ -1389,6 +1395,185 @@ async function main(): Promise<void> {
         // A member deleting their account leaves the forum record too.
         forgetTakedownsOf(sam.pub);
         assert(!db.prepare('SELECT 1 FROM agent_forum_takedowns WHERE forum_post_id IN (SELECT id FROM forum_posts WHERE writer_pubkey = ?)').get(sam.pub), 'their forum posts leave the record');
+
+        // ── 12. The reporter's words, closed as a class (F2b round 2) ──
+        // For every report target kind × every action a person or an assistant takes × every state of the post, the reporter hears
+        // what happened to the post, and every suggestion the assistant can file has an Approve on its card or is refused up front.
+        // A listing's line is the rule each forum line must match: dismissing on a takedown on hold says "no longer up", never "kept".
+        {
+        resetAgentLimits();
+        setAgentPostsPerDay(1000);
+        type Kind = 'listing' | 'forumTopic' | 'forumReply' | 'member' | 'groupLine';
+        type Act = 'dismiss' | 'takeDown' | 'putBack' | 'suggestDismiss' | 'suggestRemove' | 'suggestRestore';
+        type State = 'live' | 'held' | 'hidden' | 'removed';
+        type Words = 'kept' | 'gone' | 'removed' | 'none';
+        type Card = 'none' | 'refused' | 'approve';
+        const KINDS: Kind[] = ['listing', 'forumTopic', 'forumReply', 'member', 'groupLine'];
+        const ACTS: Act[] = ['dismiss', 'takeDown', 'putBack', 'suggestDismiss', 'suggestRemove', 'suggestRestore'];
+        const STATES: State[] = ['live', 'held', 'hidden', 'removed'];
+        const hasPost = (k: Kind) => k === 'listing' || k === 'forumTopic' || k === 'forumReply';
+        const KEEP = 'Dismiss this report (keep the post)', PLAIN = 'Dismiss this report';
+        const modS = ownerSessionHeaders(moderator.pub);
+        let wseq = 0;
+        const fresh = (who: string): string => { const k = keypair(); addMember(k, `${who} ${++wseq}`); return k.pub; };
+
+        /** What the post is now, read from its row: the same four words as the states. */
+        const stateOf = (k: Kind, id: string | null): State | 'none' => {
+            if (!id) return 'none';
+            if (k === 'listing') {
+                const p = row(id);
+                if (!p || p.active !== 1 || p.status === 'cancelled') return 'removed';
+                return p.hidden_by_reports_at && p.removed_by_moderator_at ? 'held' : p.hidden_by_reports_at ? 'hidden' : 'live';
+            }
+            const f = fpost(id);
+            if (!f || f.removed_by) return 'removed';
+            return f.taken_down_at && f.hidden_by_reports_at ? 'held' : f.hidden_by_reports_at ? 'hidden' : 'live';
+        };
+        const wordsOf = (reporter: string): { words: Words; n: number } => {
+            const told = noticesOf(reporter);
+            const last = told.at(-1)?.body;
+            const words: Words = !last ? 'none' : last === reportedPostKeptBody() ? 'kept' : last === reportedPostGoneBody() ? 'gone' : last === reportedPostRemovedBody() ? 'removed' : 'none';
+            return { words: last && words === 'none' ? ('odd' as Words) : words, n: told.length };
+        };
+
+        /** One cell's post in its state, and an open report on it by a reporter who has heard nothing yet. */
+        const setUp = async (k: Kind, s: State): Promise<{ postId: string | null; reportId: string; reporter: string; title: string }> => {
+            const reporter = fresh('Table reporter');
+            if (k === 'member' || k === 'groupLine') {
+                const id = crypto.randomUUID(), about = fresh('Table subject');
+                db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, reason, status) VALUES (?, ?, ?, ?, ?, 'pending')`)
+                    .run(id, reporter, about, k === 'groupLine' ? `gm-${crypto.randomBytes(8).toString('hex')}` : null, 'Spam or scam');
+                return { postId: null, reportId: id, reporter, title: '' };
+            }
+            const writer = fresh('Table writer');
+            const title = `Table ${k} ${s} ${wseq}`;
+            let postId: string;
+            if (k === 'listing') {
+                postId = post(title, writer);
+                if (s === 'held') await fo.callTool({ name: 'take_down', arguments: { post_id: postId, reason: 'spam', why: WHY } });
+                if (s === 'hidden') db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(nowIso(), postId);
+                if (s === 'removed') db.prepare("UPDATE posts SET active = 0, status = 'cancelled' WHERE id = ?").run(postId);
+            } else {
+                const made = ftopic(talk, writer, title);
+                postId = k === 'forumTopic' ? made.opening : freply(made.topicId, writer);
+                if (s === 'held') await fo.callTool({ name: 'forum_take_down', arguments: { post_id: postId, reason: 'spam', why: WHY } });
+                if (s === 'hidden') db.prepare('UPDATE forum_posts SET hidden_by_reports_at = ? WHERE id = ?').run(nowIso(), postId);
+                if (s === 'removed') {
+                    db.prepare("UPDATE forum_posts SET words = '', removed_by = 'writer', removed_at = ? WHERE id = ?").run(nowIso(), postId);
+                    if (k === 'forumTopic') db.prepare("UPDATE forum_topics SET title = '', closed_at = ?, closed_by = 'writer' WHERE id = ?").run(nowIso(), made.topicId);
+                }
+            }
+            if (stateOf(k, postId) !== s) throw new Error(`set up ${k} ${s}: the post is ${stateOf(k, postId)}`);
+            const reportId = k === 'listing' ? report(postId, reporter) : freport(postId, reporter);
+            return { postId, reportId, reporter, title: s === 'removed' && k === 'forumTopic' ? '' : title };
+        };
+
+        interface Expect { words: Words; after: State | 'none'; card: Card; asks?: string }
+        const expected = (k: Kind, act: Act, s: State): Expect => {
+            const st: State | 'none' = hasPost(k) ? s : 'none';
+            const up = st === 'live' || st === 'hidden';
+            // A dismissal: a post that is up stays up (a hide only reports made is lifted, its reports no longer adding up); a takedown
+            // on hold or a removed post is no longer up, and the reporter hears that, never "kept".
+            const dismissed: Expect = { words: !hasPost(k) ? 'none' : up ? 'kept' : 'gone', after: !hasPost(k) ? 'none' : up ? 'live' : st, card: 'none' };
+            const unchanged: Expect = { words: 'none', after: st, card: 'none' };
+            switch (act) {
+                case 'dismiss': return dismissed;
+                case 'takeDown': return hasPost(k) && up ? { words: 'removed', after: 'held', card: 'none' } : unchanged;
+                case 'putBack': return { words: 'none', after: st === 'held' ? 'live' : st, card: 'none' };
+                case 'suggestDismiss': return { ...dismissed, card: 'approve', asks: hasPost(k) && up ? KEEP : PLAIN };
+                // Approving runs the moderators' own removal (reports/:id/action), a forum post's as a listing's; a post removed already
+                // is still removed, and its reporter hears so.
+                case 'suggestRemove': return hasPost(k) ? { words: 'removed', after: 'removed', card: 'approve', asks: 'Remove what was reported' } : { ...unchanged, card: 'refused' };
+                // A listing hidden by reports or on hold is restored by posts/:id/restore; a forum post never by a suggestion (§6).
+                case 'suggestRestore': return k === 'listing' && (st === 'hidden' || st === 'held')
+                    ? { words: 'kept', after: 'live', card: 'approve', asks: 'Restore the post hidden by reports' } : { ...unchanged, card: 'refused' };
+            }
+        };
+
+        interface Got { words: Words; told: number; after: State | 'none'; card: Card; asks?: string; note: string }
+        const perform = async (k: Kind, act: Act, s: State): Promise<Got> => {
+            resetAgentLimits();
+            resetSuggestions();
+            const c = await setUp(k, s);
+            let card: Card = 'none', asks: string | undefined, note = '';
+            if (act === 'dismiss') {
+                const r = await call('POST', `/api/local/admin/reports/${c.reportId}/dismiss`, { headers: modS, body: {} });
+                note = `dismiss ${r.status}`;
+            } else if (act === 'takeDown') {
+                const r = await fo.callTool({ name: hasPost(k) && k !== 'listing' ? 'forum_take_down' : 'take_down', arguments: { report_id: c.reportId, reason: 'spam', why: WHY } });
+                note = r.isError ? `refused: ${errorText(r).slice(0, 60)}` : 'taken';
+            } else if (act === 'putBack') {
+                const r = await call('POST', `${PATH}/put-back`, { headers: session, body: { postId: c.postId ?? `no-post-${c.reportId}` } });
+                note = `put back ${r.status}`;
+            } else {
+                const kind = act === 'suggestDismiss' ? 'dismiss_report' : act === 'suggestRemove' ? 'remove_reported' : 'restore_post';
+                const r = await fo.callTool({ name: 'suggest_action', arguments: { kind, report_id: c.reportId, reason: 'The table asks' } });
+                if (r.isError === true) {
+                    const one = Array.isArray(r.content) && r.content.length === 1 && errorText(r).trim().length > 0 && !r.structuredContent;
+                    card = one ? 'refused' : 'none';
+                    note = `refused: ${errorText(r).slice(0, 70)}`;
+                } else {
+                    const cards: any[] = (await call('GET', '/api/local/admin/agent/suggestions', { headers: session })).body?.suggestions ?? [];
+                    const mine = cards.find((x) => x.report?.id === c.reportId);
+                    asks = mine?.asks;
+                    const toolAsks = structured(r)?.asks;
+                    if (toolAsks !== asks) note += `the tool said "${toolAsks}", the card "${asks}"; `;
+                    if (hasPost(k) && mine?.report?.targetKind !== (k === 'listing' ? 'post' : 'forum_post')) note += `the card reads it as ${mine?.report?.targetKind}; `;
+                    if (hasPost(k) && k !== 'listing' && c.title && mine?.report?.title !== c.title) note += `the card's title is ${mine?.report?.title}; `;
+                    if (hasPost(k) && mine?.report?.postOnHold !== (s === 'held')) note += `the card's hold flag is ${mine?.report?.postOnHold}; `;
+                    if (!mine?.approve) {
+                        card = 'none';
+                        note += 'filed with no Approve';
+                    } else {
+                        const ok = await call(mine.approve.method, mine.approve.path, { headers: session, body: mine.approve.body });
+                        card = ok.status === 200 ? 'approve' : 'none';
+                        note += `approve ${ok.status} ${ok.status === 200 ? '' : ok.text.slice(0, 80)}`;
+                    }
+                }
+            }
+            const { words, n } = wordsOf(c.reporter);
+            return { words, told: n, after: stateOf(k, c.postId), card, asks, note };
+        };
+
+        const misses: string[] = [];
+        let cells = 0;
+        for (const k of KINDS) {
+            for (const act of ACTS) {
+                for (const s of hasPost(k) ? STATES : ['live' as State]) {
+                    cells++;
+                    const cell = `${k} × ${act} × ${hasPost(k) ? s : '-'}`;
+                    let got: Got;
+                    try { got = await perform(k, act, s); } catch (e: any) { misses.push(`${cell}: threw ${e?.message}`); continue; }
+                    const want = expected(k, act, s);
+                    const wrong: string[] = [];
+                    if (got.words !== want.words) wrong.push(`reporter heard ${got.words}, not ${want.words}`);
+                    if (got.told > 1) wrong.push(`reporter was told ${got.told} times`);
+                    if (got.after !== want.after) wrong.push(`post is ${got.after}, not ${want.after}`);
+                    if (got.card !== want.card) wrong.push(`card ${got.card}, not ${want.card}`);
+                    if (want.asks !== undefined && got.asks !== want.asks) wrong.push(`card asks "${got.asks}", not "${want.asks}"`);
+                    // Whatever the table says, "kept" is only ever said of a post that is up.
+                    if (got.words === 'kept' && got.after !== 'live' && got.after !== 'hidden') wrong.push(`"kept" said of a post that is ${got.after}`);
+                    if (wrong.length || /; |the card|the tool/.test(got.note)) misses.push(`${cell}: ${wrong.join(', ')} [${got.note}]`);
+                }
+            }
+        }
+        assert(cells === 84 && misses.length === 0,
+            `the reporter's words, every kind × every action × every state: ${cells} cells (3 post kinds × 6 actions × 4 states, and a member's and a chat line's report × 6), each told what happened and each suggestion approvable or refused${misses.length ? ` (${misses.length} wrong: ${misses.slice(0, 6).join(' | ')})` : ''}`);
+        // Nor does a dismissal on a forum post on hold count against its reporter as one the moderators kept, as a listing's doesn't
+        // (§6c): three of them, and the reporter still counts towards hiding the next forum post they report.
+        const overruledInForum = circleOf('Forum Overruled');
+        for (let i = 0; i < 3; i++) {
+            const t = ftopic(talk, fresh('Held writer'), `Held thrice ${i}`);
+            await fo.callTool({ name: 'forum_take_down', arguments: { topic_id: t.topicId, reason: 'spam', why: WHY } });
+            dismissReport(freport(t.opening, overruledInForum.pub, 'Child safety'));
+        }
+        const nextForum = ftopic(talk, fresh('Next writer'), 'Reported next in the forum');
+        freport(nextForum.opening, overruledInForum.pub);
+        const nextForumTally = forumHideTally(nextForum.opening);
+        assert(nextForumTally.circles.length === 1 && noticesOf(overruledInForum.pub).filter(n => n.body === reportedPostGoneBody()).length === 3,
+            `a forum post on hold isn't a post kept: three dismissed, each "no longer up", and the reporter still counts (${JSON.stringify(nextForumTally.circles.length)})`);
+        setAgentPostsPerDay(100);
+        }
         }
 
         // ── 10. No Bean moved ────────────────────────────────────────────────────────────────────────

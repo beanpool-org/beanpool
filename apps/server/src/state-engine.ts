@@ -773,6 +773,12 @@ export interface NodeConfig {
      * answer deletes an entry. Carried in the take-over envelope beside `ownerAddresses`.
      */
     registrarNames?: RegistrarName[];
+    /**
+     * The owner's main address (Settings → Addresses → Make main; engine/own-addresses.ts chosenMainAddress, design
+     * scratch/fable-design/DESIGN-several-addresses-fable.md §2.1): one of the published addresses, of any kind. Unset (or
+     * one that is no longer an address) leaves the main worked out as before an owner chose.
+     */
+    mainAddress?: string | null;
 }
 
 // Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
@@ -9914,6 +9920,7 @@ export function getNodeConfig(): NodeConfig {
         publicAddress: config.publicAddress ?? null,
         ...(Array.isArray(config.ownerAddresses) ? { ownerAddresses: config.ownerAddresses.filter((a: unknown) => typeof a === 'string') } : {}),
         ...(Array.isArray(config.registrarNames) ? { registrarNames: config.registrarNames } : {}),
+        ...(typeof config.mainAddress === 'string' ? { mainAddress: config.mainAddress } : {}),
     };
 
     if (migrated) {

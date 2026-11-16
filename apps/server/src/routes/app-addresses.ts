@@ -223,7 +223,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         const alsoPublic = isOwnPublicAddress(pa) && normalizeAddress(pa.hostname) === address;
         // The main address removed: the owner's choice goes with it (the main is then worked out as before a choice), so
         // the address added again later is not main again without Make main.
-        const wasMain = normalizeAddress((getNodeConfig() as any).mainAddress) === address;
+        const wasMain = normalizeAddress(getNodeConfig().mainAddress) === address;
         updateNodeConfig({
             ownerAddresses: current.filter((a) => a !== address), ...(alsoPublic ? { publicAddress: null } : {}), ...(wasMain ? { mainAddress: null } : {}),
         } as any);

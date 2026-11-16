@@ -964,42 +964,45 @@ async function main(): Promise<void> {
     {
         // From (c): the new name is main, the old one listed beside it. The owner adds an own domain, from the phone.
         const OLD = 'oldvale.beanpool.org';
+        const NAMED = primaryAddress()!;   // the name (c) claimed, read from the community itself
+        assert(/\.beanpool\.org$/.test(NAMED) && NAMED !== OLD, `(9) from (c), a beanpool.org name is main (${NAMED})`);
         const n0 = notices().length;
         const added = await post(ADD, phone(), { address: DOMAIN });
         assert(added.status === 200 && added.json?.addresses?.some((a: any) => a.address === DOMAIN), `(9) the owner adds ${DOMAIN} (${added.status} ${show(added.json?.error)})`);
-        assert(onlyAt(BYRON), `(9) adding an address only adds: the main stays (${show(surfaces())})`);
+        assert(onlyAt(NAMED), `(9) adding an address only adds: the main stays (${show(surfaces())})`);
         const toDomain = await post(MAIN, phone(), { address: DOMAIN });
         assert(toDomain.status === 200 && stored().mainAddress === DOMAIN, `(9) Make main on the own domain (${toDomain.status} ${show(toDomain.json?.error)})`);
         assert(onlyAt(DOMAIN), `(9) every surface says the domain, over a live beanpool.org name (${show(surfaces())}; on main the name always won)`);
-        for (const h of [DOMAIN, BYRON, OLD]) assert((await signedFor(h)).status === 200, `(9) a signature for ${h} passes (no 421 at any listed address)`);
+        for (const h of [DOMAIN, NAMED, OLD]) assert((await signedFor(h)).status === 200, `(9) a signature for ${h} passes (no 421 at any listed address)`);
         const i1 = await info();
-        assert(i1.primaryAddress === DOMAIN && [DOMAIN, BYRON, OLD].every((h) => i1.addresses?.includes(h)), `(9) info: the domain main, every address still listed (${show(i1)})`);
+        assert(i1.primaryAddress === DOMAIN && [DOMAIN, NAMED, OLD].every((h) => i1.addresses?.includes(h)), `(9) info: the domain main, every address still listed (${show(i1)})`);
         assert(notices().length === n0 + 1, `(9) the members are told once (${show(notices().slice(n0))})`);
         const again = await post(MAIN, phone(), { address: DOMAIN });
         assert(again.status === 200 && notices().length === n0 + 1, `(9) the same main again tells nobody twice (${again.status}, ${notices().length - n0})`);
-        const back = await post(MAIN, phone(), { address: BYRON });
-        assert(back.status === 200 && onlyAt(BYRON), `(9) and back: Make main on the name, every surface follows (${back.status}, ${show(surfaces())})`);
-        for (const h of [DOMAIN, BYRON, OLD]) assert((await signedFor(h)).status === 200, `(9) after the way back, a signature for ${h} still passes`);
+        const back = await post(MAIN, phone(), { address: NAMED });
+        assert(back.status === 200 && onlyAt(NAMED), `(9) and back: Make main on the name, every surface follows (${back.status}, ${show(surfaces())})`);
+        for (const h of [DOMAIN, NAMED, OLD]) assert((await signedFor(h)).status === 200, `(9) after the way back, a signature for ${h} still passes`);
         assert(notices().length === n0 + 2, `(9) told once more, for the way back (${notices().length - n0})`);
 
         // What can't be main is refused in words, and nothing moves.
         const notListed = await post(MAIN, phone(), { address: 'elsewhere.example.org' });
-        assert(notListed.status === 409 && /not one of this community's addresses/.test(notListed.json?.error ?? '') && onlyAt(BYRON),
+        assert(notListed.status === 409 && /not one of this community's addresses/.test(notListed.json?.error ?? '') && onlyAt(NAMED),
             `(9) an address not on the list can't be main (${notListed.status} ${show(notListed.json)})`);
         await post(ADD, phone(), { address: IP });
         const number = await post(MAIN, phone(), { address: IP });
-        assert(number.status === 409 && /number/.test(number.json?.error ?? '') && onlyAt(BYRON), `(9) a number beside a name can't be main (${number.status} ${show(number.json)})`);
+        assert(number.status === 409 && /number/.test(number.json?.error ?? '') && onlyAt(NAMED), `(9) a number beside a name can't be main (${number.status} ${show(number.json)})`);
         await post(REMOVE, phone(), { address: IP });
 
         // Removing the main address clears the choice: added back later, it is not main without Make main.
         await post(MAIN, phone(), { address: DOMAIN });
         const gone = await post(REMOVE, phone(), { address: DOMAIN });
-        assert(gone.status === 200 && !stored().mainAddress && onlyAt(BYRON), `(9) removing the main address clears the choice; the name is main again (${gone.status}, ${show(surfaces())})`);
+        assert(gone.status === 200 && !stored().mainAddress && onlyAt(NAMED), `(9) removing the main address clears the choice; the name is main again (${gone.status}, ${show(surfaces())})`);
         await post(ADD, phone(), { address: DOMAIN });
-        assert(onlyAt(BYRON), `(9) added again, the domain is not main without Make main (${show(surfaces())})`);
+        assert(onlyAt(NAMED), `(9) added again, the domain is not main without Make main (${show(surfaces())})`);
     }
     {
         // The table: who may add an address, change the main one, or remove one.
+        const NAMED = primaryAddress()!;
         const adminSeed = new Uint8Array(crypto.randomBytes(32));
         const adminKey = Buffer.from(ed25519.getPublicKey(adminSeed)).toString('hex');
         seedGenesisMember(adminKey, 'Ada');
@@ -1024,7 +1027,7 @@ async function main(): Promise<void> {
         const WHO: Who[] = ['owner (phone)', 'owner (computer)', 'admin', 'member', 'visitor', 'standby owner (phone)'];
         const ACTS = [
             { act: 'add an address', route: ADD, body: { address: SPARE }, ready: async () => { await post(REMOVE, phone(), { address: SPARE }); } },
-            { act: 'Make main', route: MAIN, body: { address: DOMAIN }, ready: async () => { await post(MAIN, phone(), { address: BYRON }); } },
+            { act: 'Make main', route: MAIN, body: { address: DOMAIN }, ready: async () => { await post(MAIN, phone(), { address: NAMED }); } },
             { act: 'remove an address', route: REMOVE, body: { address: SPARE }, ready: async () => { await post(ADD, phone(), { address: SPARE }); } },
         ];
         // allowed, or the words a refusal must hold.

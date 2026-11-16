@@ -241,7 +241,7 @@ export function isLostAddress(host: string): boolean {
  * keeps today's rule, so a community that never chose behaves as it always did.
  */
 export function chosenMainAddress(): string | null {
-    const chosen = normalizeAddress((getNodeConfig() as any).mainAddress);
+    const chosen = normalizeAddress(getNodeConfig().mainAddress);
     if (!chosen) return null;
     const reachable = reachableAddresses();
     if (!reachable.includes(chosen)) return null;
@@ -277,7 +277,7 @@ export function mainAddressRefusal(host: string): string | null {
  */
 export function setMainAddress(host: string): string | null {
     const before = primaryAddress();
-    updateNodeConfig({ mainAddress: host } as any);
+    updateNodeConfig({ mainAddress: host });
     forgetOwnAddresses();
     return before;
 }

@@ -370,6 +370,7 @@ export const SUITES = [
     'test-registrar-notices',
     'test-public-url-callers',
     'test-rename-main-name',
+    'test-address-list',
     'test-own-address',
     'test-read-auth-default',
     'test-privacy-defaults',

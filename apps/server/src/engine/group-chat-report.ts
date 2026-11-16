@@ -28,7 +28,7 @@ import { db } from '../db/db.js';
 import { isNodeMember } from '@beanpool/engine';
 import { isGroupEncryptedNonce, openGroupLineWithMessageKey, openGroupVoiceWithMessageKey, word, VOICE_MIME, type GroupLineBinding, type GroupLinePart } from '@beanpool/core';
 import { VOICE_LINE_TYPE } from './voice-lines.js';
-import { GROUP_THREAD_TYPE, groupChatRole, groupLineForReader } from './group-thread.js';
+import { GROUP_THREAD_TYPE, groupChatRole, groupLineAuthorName, groupLineForReader } from './group-thread.js';
 import { fromEpochOf } from './group-keys.js';
 import { attachmentDataOfAsync, type AttachmentRow } from '../storage/image-columns.js';
 import { getImageStore } from '../storage/image-store.js';
@@ -253,7 +253,8 @@ export async function openReportedGroupLine(reportId: string): Promise<ReportedG
     const view: ReportedGroupLine = {
         id: report.target_message_id, groupId: m?.conversation_id ?? null, groupName: m?.group_name ?? null,
         sentAt: m?.timestamp ?? null, editedAt: m?.edited_at ?? null,
-        authorPubkey: m?.author_pubkey ?? null, authorCallsign: m?.author_callsign ?? null,
+        // A guest of the group by core's guest line, as the chat serves their lines (group-thread.ts groupLineAuthorName).
+        authorPubkey: m?.author_pubkey ?? null, authorCallsign: m?.author_pubkey && m?.conversation_id ? groupLineAuthorName(m.conversation_id, m.author_pubkey, m.author_callsign) : m?.author_callsign ?? null,
         signer: null, words: { state: 'gone', by: null }, photo: null, voice: null,
     };
     const meta = metadataOf(m?.metadata);

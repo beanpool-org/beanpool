@@ -469,6 +469,7 @@ import {
     syncGroupThreadMembership,
     postGroupSystemLine,
     callsignOf,
+    groupLineAuthorName,
     getGroupThread as getGroupThreadEngine,
     postGroupThreadMessage as postGroupThreadMessageEngine,
     removeGroupThreadMessage as removeGroupThreadMessageEngine,
@@ -7964,6 +7965,10 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         const complaint = typeof r.reporter_pubkey === 'string' && r.reporter_pubkey.startsWith(COMPLAINT_REPORTER)
             ? { from: r.reporter_pubkey.slice(COMPLAINT_REPORTER.length) } : null;
         const forumPost = r.target_forum_post_id ? reportedForumPost(r.target_forum_post_id) : null;
+        // A group chat line's report names its author as the chat serves the line (group-thread.ts groupLineAuthorName): a
+        // member by name, a guest of that group in any state by core's guest line, never "@" and a short key for a guest.
+        const groupLine = !!r.target_message_id && !r.disclosure_kind && !complaint && !!r.gm_group_id;
+        const lineAuthor = groupLine && r.target_pubkey ? groupLineAuthorName(r.gm_group_id, r.target_pubkey, r.target_callsign) : null;
         return {
         // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
         // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
@@ -7983,7 +7988,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
             ? (r.pulse_owner_callsign || `@${r.pulse_owner_pubkey.substring(0, 8)}`)
             : r.post_row_id
             ? (r.post_author_callsign || (r.post_author_pubkey ? `@${r.post_author_pubkey.substring(0, 8)}` : 'Unknown Member'))
-            : (r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member')),
+            : (lineAuthor || r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member')),
         postTitle: r.post_title || null,
         title: r.post_title || null,
         // The reported post, for a moderation list (fields added; the ones above are unchanged for old callers).

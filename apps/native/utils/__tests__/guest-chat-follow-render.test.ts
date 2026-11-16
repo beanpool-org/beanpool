@@ -67,6 +67,8 @@ vi.mock('react-native', async () => {
     });
     return {
         Platform: { OS: 'android' },
+        // The screen's keyboard offset reads the window (components/useScreenKeyboardOffset.ts; 0 on Android).
+        useWindowDimensions: () => ({ width: 320, height: 521, scale: 1.5, fontScale: FONT }),
         View: el('div'), Text: el('span'), Pressable: el('div'), TextInput: el('textarea'), FlatList,
         StyleSheet: { create: (s: any) => s, hairlineWidth: 1 },
         DeviceEventEmitter: {

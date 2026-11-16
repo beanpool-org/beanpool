@@ -16,7 +16,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 // Ben's phone takes them through its real sync and shows them through getMessages, over the phone's real schema in an
 // in-memory SQLite (node:sqlite), as deleted-account-lines.test.ts does. The node is a stand-in that answers as the real
 // one does and then does, to the stored lines, what its operator could. The real node keeping a line's id, author,
-// ciphertext and nonce verbatim is checked over HTTPS in apps/server (test-dm-never-plaintext, test-dm-line-relay).
+// ciphertext and nonce verbatim is checked over HTTPS in apps/server (test-dm-never-plaintext; a line from another community, held as it came, in test-relay-mail).
 
 const h = vi.hoisted(() => ({
     cacheDir: '',

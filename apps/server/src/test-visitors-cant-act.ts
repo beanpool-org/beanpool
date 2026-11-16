@@ -69,8 +69,9 @@
  *  7. The global profile: three visitors' rows a week old are refused a report as a key with no row is, and hide
  *     nothing (three members of a week hide it); a place watch is refused as a key with no row is. A visitor changes its
  *     own lines in its own DM there too, and a line of any other DM is answered 403 members_only, as for a key with no row.
- *  8. Federation: a member of another community, relayed by a peer (federation-protocol.ts relay_message's own calls),
- *     still opens a DM with a member here and writes in it, as a visitor's row.
+ *  8. Federation: a member of another community, by the engine calls the old peer relay made (relay_message, deleted in
+ *     X7; no route makes them now), still opens a DM with a member here and writes in it, as a visitor's row: the
+ *     visitor gate is at the routes, not in the engine.
  *  9. A Settings sign-in by phone: a visitor's signed "No" is refused as a key with no row's is, and ends nothing.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-visitors-cant-act.ts
@@ -1447,7 +1448,7 @@ async function main(): Promise<void> {
     // ── 8. Federation ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 8. A member of another community, relayed by a peer, still writes to a member here');
     {
-        // federation-protocol.ts relay_message, call for call: the sender becomes a visitor's row, then opens the DM and writes.
+        // The deleted relay_message's calls, call for call (X7): the sender becomes a visitor's row, then opens the DM and writes.
         const remote = keypair('RemoteVA');
         registerVisitor(remote.pk, 'Remote Rita', 'https://peer.example.org');
         const conv = createConversation('dm', [remote.pk, carol.pk], remote.pk);

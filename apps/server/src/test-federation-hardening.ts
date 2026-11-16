@@ -4,25 +4,24 @@
  *   FED-05  a stranger (no connector) who sends 64 KB on a handshake stream and keeps it open is aborted within 6 s,
  *           and so is one who sends a few bytes and goes quiet; the Buffer memory they pinned comes back. Over real
  *           libp2p nodes on 127.0.0.1, configured as p2p.ts configures them. A genuine handshake still works.
- *   FED-02  a new relayed sender's home is the relaying peer's (our connector's public URL), never the payload's; a
- *           sender whose row already names a home keeps it, and the line is stored. M5: a visitor's row with no home
- *           takes the relaying peer's. A local member is still refused.
- *   M3      the same binding for a cross-node buyer in handlePurchaseRequest; the settlement records the asking peer.
+ *   M3      a cross-node buyer's home is the asking peer's (our connector's public URL), never the payload's, in
+ *           handlePurchaseRequest; a buyer whose row already names a home keeps it; the settlement records the asking peer.
  *   B1      (the #2039 review) honest peers the first binding turned away, all served:
- *           7b/7c a member of two communities (one key on every node), known here from B's board, writes and buys
- *                 through A; 7d her own community B still relays for her
- *           10a/10b the operator corrects a peer's public URL: its members' next line and purchase still go through
- *           a peer's refusal of a relayed line is logged by relayLineToPeer (the send route's relay), with the line's
- *           id and the reason and never its text; a stored line logs nothing. The same when the request, and the close
- *           of its write side, are both in before the peer's handler reads (`late`: the reader used to miss that close,
- *           time out at 5 s and reset the stream, so the line was lost; red on main fa076db5, CI run 43470982789)
- *   FED-09  a relayed line longer than the send route's 64 KB is refused with words, and not stored.
+ *           7c  a member of two communities (one key on every node), known here from B's board, buys through A
+ *           10b the operator corrects a peer's public URL: its members' next purchase still goes through
+ *           over real libp2p, a configured peer's member lookup is answered, and so when the request, and the close of
+ *           its write side, are both in before this node's handler reads (`late`: the reader used to miss that close,
+ *           time out at 5 s and reset the stream, so the answer was lost; red on main fa076db5, CI run 43470982789)
  *   FED-03  a reservation whose reserved_until has passed holds no headroom.
  *   FED-01  writeVisitorRow never stamps a home on a local member.
- *   FED-06  (run `peers-off`, ENABLE_PEER_CONNECTORS unset) a configured peer's verify_member, relay_message,
- *           list_listings and settle_purchase are refused, nothing stored; settle_receipt_status is still answered.
- *           Over real libp2p, the node's handshake answer no longer calls it active (N3), and the relaying node logs
- *           the refusal (N2), late or not. The plain run holds the controls: a configured peer's answer says active.
+ *   FED-06  (run `peers-off`, ENABLE_PEER_CONNECTORS unset) a configured peer's verify_member, list_listings and
+ *           settle_purchase are refused, nothing stored; settle_receipt_status is still answered. Over real libp2p, the
+ *           node's handshake answer no longer calls it active (N3), and a peer's member lookup hears the refusal (N2),
+ *           late or not. The plain run holds the controls: a configured peer's answer says active.
+ *   X7      relay_message, the old libp2p relay of a member's line (deleted, with the send route's relay branch: a line
+ *           between communities goes through the mailbox), is answered exactly as an action nobody knows, in both runs,
+ *           and stores nothing: no line, no visitor's row. Its hardening cases (FED-02, M5, A2-28, B1 7b/7d/10a, N2's
+ *           relayed line, FED-09) and test-dm-line-relay's moved to the mailbox: test-relay-mail 2a, 5e, 9b, 11a, 13i, 20.
  *
  * FED-10 (/api/federation/links members-only) is measured through the real middleware in test-federation-link (5a0, 5a)
  * and test-read-auth-default.
@@ -121,25 +120,37 @@ async function main(): Promise<void> {
     }
     const linesBy = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE author_pubkey = ?').get(pk) as { n: number }).n;
     const homeOf = (pk: string) => (db.prepare('SELECT home_node_url FROM members WHERE public_key = ?').get(pk) as any)?.home_node_url ?? null;
-    const relay = (peerId: string, sender: string, extra: object = {}) => ask(peerId, {
-        action: 'relay_message', id: crypto.randomUUID(), senderPublicKey: sender, senderCallsign: null,
-        recipientPublicKey: carol, ...lockedDm(), ...extra,
-    });
+    /**
+     * X7: relay_message, deleted, against an action nobody knows, from the same configured peer: both answers, and what the
+     * relay used to write for its sender (a line, a visitor's row with a home).
+     */
+    async function deletedRelay(peerId: string): Promise<{ old: any; unknown: any; lines: number; home: string | null; row: boolean }> {
+        const sender = keyOf();
+        const line = { senderPublicKey: sender, senderCallsign: 'Remote Rita', senderNodeUrl: HOME_A, recipientPublicKey: carol, ...lockedDm() };
+        const old = await ask(peerId, { action: 'relay_message', id: crypto.randomUUID(), ...line });
+        const unknown = await ask(peerId, { action: 'no_such_action_x7', id: crypto.randomUUID(), ...line });
+        const row = !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(sender);
+        return { old, unknown, lines: linesBy(sender), home: homeOf(sender), row };
+    }
+    const answersAsUnknown = (d: Awaited<ReturnType<typeof deletedRelay>>) =>
+        d.unknown?.error === 'Unknown action' && JSON.stringify(d.old) === JSON.stringify(d.unknown) && d.lines === 0 && d.home === null && !d.row;
 
     /**
      * A configured peer (a connector here) talking to this node over real libp2p, both in this process: the answer to
-     * its handshake, and for each line what relayLineToPeer (the send route's relay) logs for it.
+     * its handshake, and to each member lookup it makes (federatedVerifyMember, through the same stream reader every
+     * action of the peer protocol reads with).
      *
      * A `late` exchange is one whose request, and the close of its write side, have both reached this node before its
      * handler starts reading. libp2p starts a handler only after its own work on the new stream (protocol negotiation,
      * a peer-store write), and on a busy machine the request lands in that gap: main fa076db5's CI run 43470982789 (and
-     * runs on 3 and 10 Nov) logged "Failed to relay line <id> to Peer F: The stream has been reset" here, because the
-     * reader missed the close it waits for, gave up at its 5 s timeout and reset the stream. Here the handler is held
-     * until the close has arrived, so that order happens every time instead of on a slow CI box.
+     * runs on 3 and 10 Nov) logged "Failed to relay line <id> to Peer F: The stream has been reset" here (that relay is
+     * deleted since, X7), because the reader missed the close it waits for, gave up at its 5 s timeout and reset the
+     * stream. Here the handler is held until the close has arrived, so that order happens every time instead of on a
+     * slow CI box.
      */
-    type Exchange = { lineId: string; sender: string; ciphertext: string; logged: string[] };
-    async function asConfiguredPeer(lines: { to: string; late?: boolean }[]): Promise<{
-        hs: any; hsLate: any; relays: Exchange[]; noHelper: boolean;
+    type Exchange = { publicKey: string; answer: any; error: string | null };
+    async function asConfiguredPeer(lookups: { publicKey: string; late?: boolean }[]): Promise<{
+        hs: any; hsLate: any; lookups: Exchange[];
     }> {
         const here = await p2pNode();
         let late = false;
@@ -161,32 +172,20 @@ async function main(): Promise<void> {
         late = true;
         // Caught, so a reset fails its rows instead of ending the run.
         const hsLate = await sendHandshake(peer, here.peerId).catch((e: any) => ({ error: String(e?.message || e) }));
-        const relays: Exchange[] = [];
-        // A function, so a run against code without it fails its rows instead of throwing.
-        const relayLineToPeer = (fp as any).relayLineToPeer;
-        const noHelper = typeof relayLineToPeer !== 'function';
-        for (const { to, late: lateLine } of noHelper ? [] : lines) {
-            late = lateLine === true;
-            const lineId = crypto.randomUUID();
-            const sender = keyOf();
-            const line = lockedDm();
-            const logged: string[] = [];
-            const warn = console.warn;
-            console.warn = (...args: any[]) => { logged.push(args.map(String).join(' ')); };
+        const answers: Exchange[] = [];
+        for (const { publicKey, late: lateLookup } of lookups) {
+            late = lateLookup === true;
+            // Caught, so a reset stream fails its rows instead of ending the run.
             try {
-                await relayLineToPeer(peer, here.peerId, 'Peer F', { id: lineId, senderPublicKey: sender, recipientPublicKey: to, ...line });
-            } finally {
-                console.warn = warn;
+                answers.push({ publicKey, answer: await fp.federatedVerifyMember(peer, here.peerId, publicKey), error: null });
+            } catch (e: any) {
+                answers.push({ publicKey, answer: null, error: String(e?.message || e) });
             }
-            relays.push({ lineId, sender, ciphertext: line.ciphertext, logged });
         }
         await peer.stop();
         await here.stop();
-        return { hs, hsLate, relays, noHelper };
+        return { hs, hsLate, lookups: answers };
     }
-    /** The relaying side's line for a refusal, as relayLineToPeer writes it. */
-    const refusalLine = (r: { lineId: string; logged: string[] } | undefined) =>
-        r?.logged.find(l => l.includes('refused relayed line') && l.includes(r.lineId));
 
     // A string, so a run against code without these refusals cannot pass on undefined === undefined.
     const isOff = (r: any): boolean => typeof fp.PEERS_OFF_ERROR === 'string' && r?.error === fp.PEERS_OFF_ERROR;
@@ -195,9 +194,9 @@ async function main(): Promise<void> {
         const rita = keyOf();
         const lookup = await ask(A, { action: 'verify_member', publicKey: carol });
         assert(isOff(lookup) && lookup.isMember === undefined, `verify_member is refused (got ${JSON.stringify(lookup)})`);
-        const r = await relay(A, rita);
-        assert(isOff(r) && linesBy(rita) === 0 && homeOf(rita) === null,
-            `relay_message is refused and nothing is stored (got ${JSON.stringify(r)}, lines ${linesBy(rita)})`);
+        const gone = await deletedRelay(A);
+        assert(answersAsUnknown(gone),
+            `X7: relay_message, deleted, is answered exactly as an action nobody knows, and stores nothing (got ${JSON.stringify(gone)})`);
         const listings = await ask(A, { action: 'list_listings' });
         assert(isOff(listings) && listings.listings === undefined, `list_listings is refused (got ${JSON.stringify(listings)})`);
         const buy = await ask(A, { action: 'settle_purchase', key: 'k-off', buyerPublicKey: rita, sellerPublicKey: sam, amount_c: hc(1) });
@@ -208,17 +207,17 @@ async function main(): Promise<void> {
             `settle_receipt_status is still answered, as under FEDERATION_SETTLEMENT (got ${JSON.stringify(status)})`);
 
         console.log('\n=== N3 / N2: over real libp2p, a peers-off node says so, and its refusal is heard ===\n');
-        const off = await asConfiguredPeer([{ to: carol }, { to: carol, late: true }]);
+        const off = await asConfiguredPeer([{ publicKey: carol }, { publicKey: carol, late: true }]);
         assert(off.hs.mutualTrust === true && off.hs.remoteActive === false,
             `a configured peer's handshake to it: still trusted, but not active (got ${JSON.stringify(off.hs)})`);
         assert(off.hsLate?.mutualTrust === true && off.hsLate?.remoteActive === false,
             `the same answer when the handshake is wholly in before this node reads it (got ${JSON.stringify(off.hsLate)})`);
-        const heard = refusalLine(off.relays[0]);
-        assert(!off.noHelper && !!heard && heard.includes(fp.PEERS_OFF_ERROR) && !heard.includes(off.relays[0].ciphertext),
-            `the relaying node logs the refusal with the line's id and the reason, never its text (got ${off.noHelper ? 'no relayLineToPeer' : JSON.stringify(off.relays[0]?.logged)})`);
-        const heardLate = refusalLine(off.relays[1]);
-        assert(!off.noHelper && !!heardLate && heardLate.includes(fp.PEERS_OFF_ERROR) && !heardLate.includes(off.relays[1].ciphertext),
-            `and so for a line wholly in before this node reads it: the refusal, not a reset stream (got ${off.noHelper ? 'no relayLineToPeer' : JSON.stringify(off.relays[1]?.logged)})`);
+        const heard = off.lookups[0];
+        assert(!heard.error && isOff(heard.answer) && heard.answer.isMember === undefined,
+            `a configured peer's member lookup hears the refusal (got ${JSON.stringify(heard)})`);
+        const heardLate = off.lookups[1];
+        assert(!heardLate.error && isOff(heardLate.answer) && heardLate.answer.isMember === undefined,
+            `and so for a lookup wholly in before this node reads it: the refusal, not a reset stream (got ${JSON.stringify(heardLate)})`);
 
         console.log(`\n${passed}/${run} passed`);
         process.exit(passed === run ? 0 : 1);
@@ -266,30 +265,13 @@ async function main(): Promise<void> {
     await stranger.stop();
     await victim.stop();
 
-    // ── FED-02 / M5 ─────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n=== FED-02: a relayed sender\'s home is the relaying peer\'s ===\n');
-    const alice = keyOf();
-    const genuine = await relay(B, alice, { senderNodeUrl: HOME_B });
-    assert(genuine?.success === true && homeOf(alice) === HOME_B, `peer B relays Alice's line; her home is B (got ${JSON.stringify(genuine)}, ${homeOf(alice)})`);
-    const linesBefore = linesBy(alice);
-    const viaA = await relay(A, alice, { senderNodeUrl: HOME_A });
-    assert(viaA?.success === true && linesBy(alice) === linesBefore + 1 && homeOf(alice) === HOME_B,
-        `peer A's relay for Alice is stored, and her home is unchanged (B) (got ${JSON.stringify(viaA)}, lines ${linesBefore} → ${linesBy(alice)}, ${homeOf(alice)})`);
-
-    const bob = keyOf();
-    const claimed = await relay(A, bob, { senderNodeUrl: HOME_B });
-    assert(claimed?.success === true && homeOf(bob) === HOME_A,
-        `a new sender relayed by A gets A's home, not the payload's senderNodeUrl (got ${homeOf(bob)})`);
-
-    const eve = keyOf();
-    writeVisitorRow(eve, 'Eve');   // a visitor's row a local DM made: no home
-    const eveRelay = await relay(A, eve);
-    assert(eveRelay?.success === true && homeOf(eve) === HOME_A,
-        `M5: a visitor's row with no home takes the relaying peer's (got ${JSON.stringify(eveRelay)}, ${homeOf(eve)})`);
-
-    const asLocal = await relay(A, sam);
-    assert(asLocal?.error === 'Sender impersonates a local member' && linesBy(sam) === 0,
-        `a local member as sender is still refused (got ${JSON.stringify(asLocal)})`);
+    // ── X7 ──────────────────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n=== X7: the deleted relay_message, with peer connectors on ===\n');
+    const goneOn = await deletedRelay(A);
+    assert(answersAsUnknown(goneOn),
+        `relay_message from a configured peer is answered exactly as an action nobody knows, and stores nothing: no line, no visitor's row (got ${JSON.stringify(goneOn)})`);
+    const asSam = await ask(A, { action: 'relay_message', id: crypto.randomUUID(), senderPublicKey: sam, recipientPublicKey: carol, ...lockedDm() });
+    assert(asSam?.error === 'Unknown action' && linesBy(sam) === 0, `and so when it names a local member as its sender (got ${JSON.stringify(asSam)})`);
 
     // ── M3 ──────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n=== M3: a cross-node buyer\'s home is the asking peer\'s ===\n');
@@ -299,6 +281,9 @@ async function main(): Promise<void> {
     const buy = (key: string, peerId: string, buyer: string, amount: number, buyerHomeNode: string | null = null) =>
         handlePurchaseRequest({ key, peerId, buyerPublicKey: buyer, buyerCallsign: 'Buyer', buyerHomeNode, sellerPublicKey: sam, postId: null, amount_c: hc(amount) });
     const settledHome = (key: string) => (db.prepare('SELECT buyer_home_node FROM settlements WHERE key = ?').get(key) as any)?.buyer_home_node ?? null;
+    const alice = keyOf();
+    writeVisitorRow(alice, 'Alice', HOME_B);   // a member of B, known here (as B's board would make her row)
+    assert(homeOf(alice) === HOME_B, `setup: Alice's row here says home B (got ${homeOf(alice)})`);
     const aliceViaA = buy('m3-alice', A, alice, 1, HOME_B);
     assert(aliceViaA.accepted === true && homeOf(alice) === HOME_B && settledHome('m3-alice') === HOME_A,
         `peer A buying for Alice (home B) is accepted; her home is unchanged; the settlement names A (got ${JSON.stringify(aliceViaA)}, row ${homeOf(alice)}, settlement ${settledHome('m3-alice')})`);
@@ -316,15 +301,9 @@ async function main(): Promise<void> {
     const ada = keyOf();
     const board = cacheRemoteListings(B, HOME_B, [{ id: 'ada-piano', type: 'offer', title: 'Piano lessons', price_c: hc(6), authorPublicKey: ada, authorCallsign: 'Ada' }]);
     assert(board.cached === 1 && homeOf(ada) === HOME_B, `setup: Ada's row here says home B, from B's board (got ${JSON.stringify(board)}, ${homeOf(ada)})`);
-    const adaLinesBefore = linesBy(ada);
-    const adaViaA = await relay(A, ada);
-    assert(adaViaA?.success === true && linesBy(ada) === adaLinesBefore + 1 && homeOf(ada) === HOME_B,
-        `7b. Ada, a member of A too, writes to Carol through A: stored, her home still B (got ${JSON.stringify(adaViaA)}, ${homeOf(ada)})`);
     const adaBuys = buy('b1-ada', A, ada, 3, HOME_A);
     assert(adaBuys.accepted === true && settledHome('b1-ada') === HOME_A && homeOf(ada) === HOME_B,
         `7c. Ada buys from Sam through A (A pays): accepted, the settlement names A (got ${JSON.stringify(adaBuys)}, settlement ${settledHome('b1-ada')})`);
-    const adaViaB = await relay(B, ada);
-    assert(adaViaB?.success === true, `7d. and her own community B still relays for her (got ${JSON.stringify(adaViaB)})`);
 
     console.log('\n=== B1 (#2039 review) 10: the operator corrects a peer\'s public URL ===\n');
     const C = await newPeerId();
@@ -333,46 +312,26 @@ async function main(): Promise<void> {
     cm.addConnector(ADDR_C, 'peer', 'Peer C', HOME_C);
     cm.setConnectorCreditCap(ADDR_C, hc(100));
     const yara = keyOf();
-    const yaraFirst = await relay(C, yara, { senderNodeUrl: HOME_C });   // as C's node sends it (main took the payload's)
-    assert(yaraFirst?.success === true && homeOf(yara) === HOME_C, `setup: Yara, a member of C, writes; her home is C's first URL (got ${homeOf(yara)})`);
+    const yaraFirst = buy('b1-yara-first', C, yara, 1, HOME_C);
+    assert(yaraFirst.accepted === true && homeOf(yara) === HOME_C, `setup: Yara, a member of C, buys through C; her home is C's first URL (got ${JSON.stringify(yaraFirst)}, ${homeOf(yara)})`);
     cm.addConnector(ADDR_C, 'peer', 'Peer C', HOME_C_NAMED);   // the operator's correction, as the connector route makes it
-    const yaraLinesBefore = linesBy(yara);
-    const yaraAgain = await relay(C, yara);
-    assert(yaraAgain?.success === true && linesBy(yara) === yaraLinesBefore + 1,
-        `10a. after the URL edit, Yara's next line through C is stored (got ${JSON.stringify(yaraAgain)})`);
     const yaraBuys = buy('b1-yara', C, yara, 1, HOME_C_NAMED);
     assert(yaraBuys.accepted === true && settledHome('b1-yara') === HOME_C_NAMED,
         `10b. and C's purchase for her is accepted, under C's corrected URL (got ${JSON.stringify(yaraBuys)}, settlement ${settledHome('b1-yara')})`);
 
-    console.log('\n=== B1 (#2039 review): a peer\'s refusal of a relayed line is logged ===\n');
+    console.log('\n=== Over real libp2p: a configured peer\'s member lookups, late or not ===\n');
     const nobody = keyOf();
-    const configured = await asConfiguredPeer([{ to: nobody }, { to: carol }, { to: nobody, late: true }, { to: carol, late: true }]);
-    const refused = configured.relays[0];
-    const refusedLine = refusalLine(refused);
-    assert(!configured.noHelper && !!refusedLine && refusedLine.includes('Recipient not found on this node') && !refusedLine.includes(refused.ciphertext),
-        `a line the peer refuses is logged with its id and the peer's reason, never its text (got ${configured.noHelper ? 'no relayLineToPeer' : JSON.stringify(refused?.logged)})`);
-    const stored = configured.relays[1];
-    assert(!configured.noHelper && !!stored && !stored.logged.some(l => l.includes(stored.lineId)),
-        `a line the peer stores logs nothing (got ${JSON.stringify(stored?.logged)})`);
+    const configured = await asConfiguredPeer([{ publicKey: nobody }, { publicKey: carol }, { publicKey: nobody, late: true }, { publicKey: carol, late: true }]);
+    const [noOne, isCarol, noOneLate, isCarolLate] = configured.lookups;
+    assert(!noOne.error && noOne.answer?.isMember === false && !isCarol.error && isCarol.answer?.isMember === true && isCarol.answer.callsign === 'Carol',
+        `a configured peer asks after a key nobody here holds, and after Carol: no, and yes, Carol (got ${JSON.stringify([noOne, isCarol])})`);
     assert(configured.hs.mutualTrust === true && configured.hs.remoteActive === true,
         `control for N3: with peer connectors on, a configured peer's handshake answer says active (got ${JSON.stringify(configured.hs)})`);
-    // The same three, when the request is wholly in (and its write side closed) before this node's handler reads it.
-    const refusedLate = configured.relays[2];
-    const refusedLateLine = refusalLine(refusedLate);
-    assert(!configured.noHelper && !!refusedLateLine && refusedLateLine.includes('Recipient not found on this node') && !refusedLateLine.includes(refusedLate.ciphertext),
-        `a refused line wholly in before the peer reads it: still its id and the peer's reason, not a reset stream (got ${configured.noHelper ? 'no relayLineToPeer' : JSON.stringify(refusedLate?.logged)})`);
-    const storedLate = configured.relays[3];
-    assert(!configured.noHelper && !!storedLate && !storedLate.logged.some(l => l.includes(storedLate.lineId)) && linesBy(storedLate.sender) === 1,
-        `a line wholly in before the peer reads it is stored, and logs nothing (got ${JSON.stringify(storedLate?.logged)}, lines ${storedLate ? linesBy(storedLate.sender) : '-'})`);
+    // The same, when the request is wholly in (and its write side closed) before this node's handler reads it.
+    assert(!noOneLate.error && noOneLate.answer?.isMember === false && !isCarolLate.error && isCarolLate.answer?.isMember === true,
+        `lookups wholly in before this node reads them: answered, not a reset stream (got ${JSON.stringify([noOneLate, isCarolLate])})`);
     assert(configured.hsLate?.mutualTrust === true && configured.hsLate?.remoteActive === true,
         `and a handshake wholly in before the peer reads it is answered as active (got ${JSON.stringify(configured.hsLate)})`);
-
-    // ── FED-09 ──────────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n=== FED-09: a relayed line takes the send route\'s 64 KB ===\n');
-    const long = keyOf();
-    const tooLong = await relay(A, long, lockedDm(70 * 1024));
-    assert(typeof tooLong?.error === 'string' && /too long/i.test(tooLong.error) && linesBy(long) === 0,
-        `a 70 KB relayed line is answered with the refusal, no row (got ${JSON.stringify(tooLong).slice(0, 160)})`);
 
     // ── FED-03 ──────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n=== FED-03: a lapsed reservation holds no headroom ===\n');

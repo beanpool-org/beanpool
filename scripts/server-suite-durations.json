@@ -114,7 +114,6 @@
  "test-distance-search-perf": 84.4,
  "test-dm-former-keys-readers": 5.1,
  "test-dm-former-keys-readers(readauth-off)": 7.8,
- "test-dm-line-relay": 1.8,
  "test-dm-never-plaintext": 19,
  "test-dm-request-cancel": 8.6,
  "test-dm-requests": 18.1,

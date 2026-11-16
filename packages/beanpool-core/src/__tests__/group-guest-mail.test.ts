@@ -228,10 +228,10 @@ describe('round 2 (#3246): the round against a home that counts each item id onc
     });
 
     it.each([
-        ['queued (the host not reached yet)', { state: 'queued' }, 'waiting', 0],
-        ['taken by the host', { state: 'sent' }, 'sent', 1],
-        ['refused by the host', { state: 'refused', refused: 'epoch-stale' }, 'waiting', 0],
-    ] as Array<[string, Answer, string, number]>)('EPOCH: my join epoch %s -> my line is %s (%s sent)', async (_name, epochAnswer, want, linesPosted) => {
+        ['queued (the host not reached yet)', 'waiting', 0, { state: 'queued' }],
+        ['taken by the host', 'sent', 1, { state: 'sent' }],
+        ['refused by the host', 'waiting', 0, { state: 'refused', refused: 'epoch-stale' }],
+    ] as Array<[string, string, number, Answer]>)('EPOCH: my join epoch %s -> my line is %s (%s line items posted)', async (_name, want, linesPosted, epochAnswer) => {
         const f = await guestIn();
         f.answerWith((i) => (i.envelope.kind === 'group-epoch' ? epochAnswer : { state: 'sent' }));
         await syncGuestMail(f.io);

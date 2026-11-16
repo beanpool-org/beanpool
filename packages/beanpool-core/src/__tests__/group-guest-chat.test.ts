@@ -308,23 +308,23 @@ describe('IDENTITY: a line is named by the key that signed it (signed-by x autho
         if (o.sender !== undefined) metadata.sender = o.sender;
         return notice('line', { id, author: o.author, ciphertext: sealed.ciphertext, nonce: sealed.nonce, type: o.type ?? 'text', metadata, timestamp: '2026-11-16T09:40:00.000Z' });
     }
-    const rows: Array<[string, Row, 'shown' | 'refused', string | null]> = [
-        ['same: signed by Ana, author Ana, sender Ana', { signer: ana, author: ana.pk, sender: ana.pk }, 'shown', ana.pk],
-        ['same, no sender named: signed by Ana, author Ana', { signer: ana, author: ana.pk }, 'shown', ana.pk],
-        ['same: signed by me, author me (my line as the host sends it on)', { signer: gus, author: gus.pk, sender: gus.pk }, 'shown', gus.pk],
-        ['different: signed by a stray key named as sender, author Ana (the review probe)', { signer: stray, author: ana.pk, sender: stray.pk }, 'refused', null],
-        ['different: signed by a stray key named as sender, author me', { signer: stray, author: gus.pk, sender: stray.pk }, 'refused', null],
-        ['different: signed by Ana named as sender, author Ben', { signer: ana, author: ben.pk, sender: ana.pk }, 'refused', null],
-        ['different: a sender that is not a key, author Ana', { signer: ana, author: ana.pk, sender: 'not-a-key' }, 'refused', null],
-        ['unknown: signed by a key the line names nowhere, author and sender Ana', { signer: stray, author: ana.pk, sender: ana.pk }, 'refused', null],
-        ['unknown: signed by a key the line names nowhere, author and sender me', { signer: stray, author: gus.pk, sender: gus.pk }, 'refused', null],
-        ['unknown: no sender named, author Ana, signed by a stray key', { signer: stray, author: ana.pk }, 'refused', null],
-        ['photo, same: signed by Ana', { signer: ana, author: ana.pk, sender: ana.pk, type: 'image' }, 'shown', ana.pk],
-        ['photo, different: signed by a stray key, author Ana', { signer: stray, author: ana.pk, sender: stray.pk, type: 'image' }, 'refused', null],
-        ['voice, unknown: author and sender Ana, signed by a stray key', { signer: stray, author: ana.pk, sender: ana.pk, type: 'voice' }, 'refused', null],
-        ['a signer the roster does not name, named alike everywhere: shown under a short key, never a name', { signer: stray, author: stray.pk, sender: stray.pk }, 'shown', stray.pk],
+    const rows: Array<[string, 'shown' | 'refused', Row, string | null]> = [
+        ['same: signed by Ana, author Ana, sender Ana', 'shown', { signer: ana, author: ana.pk, sender: ana.pk }, ana.pk],
+        ['same, no sender named: signed by Ana, author Ana', 'shown', { signer: ana, author: ana.pk }, ana.pk],
+        ['same: signed by me, author me (my line as the host sends it on)', 'shown', { signer: gus, author: gus.pk, sender: gus.pk }, gus.pk],
+        ['different: signed by a stray key named as sender, author Ana (the review probe)', 'refused', { signer: stray, author: ana.pk, sender: stray.pk }, null],
+        ['different: signed by a stray key named as sender, author me', 'refused', { signer: stray, author: gus.pk, sender: stray.pk }, null],
+        ['different: signed by Ana named as sender, author Ben', 'refused', { signer: ana, author: ben.pk, sender: ana.pk }, null],
+        ['different: a sender that is not a key, author Ana', 'refused', { signer: ana, author: ana.pk, sender: 'not-a-key' }, null],
+        ['unknown: signed by a key the line names nowhere, author and sender Ana', 'refused', { signer: stray, author: ana.pk, sender: ana.pk }, null],
+        ['unknown: signed by a key the line names nowhere, author and sender me', 'refused', { signer: stray, author: gus.pk, sender: gus.pk }, null],
+        ['unknown: no sender named, author Ana, signed by a stray key', 'refused', { signer: stray, author: ana.pk }, null],
+        ['photo, same: signed by Ana', 'shown', { signer: ana, author: ana.pk, sender: ana.pk, type: 'image' }, ana.pk],
+        ['photo, different: signed by a stray key, author Ana', 'refused', { signer: stray, author: ana.pk, sender: stray.pk, type: 'image' }, null],
+        ['voice, unknown: author and sender Ana, signed by a stray key', 'refused', { signer: stray, author: ana.pk, sender: ana.pk, type: 'voice' }, null],
+        ['a signer the roster does not name, named alike everywhere: shown under a short key, never a name', 'shown', { signer: stray, author: stray.pk, sender: stray.pk }, stray.pk],
     ];
-    it.each(rows)('%s -> %s', (_name, o, want, by) => {
+    it.each(rows)('%s -> %s', (_name, want, o, by) => {
         const id = freshId();
         const { chats } = applyGuestMail(keyed(), { items: [signed(id, o)] }, ctx());
         const line = chats[ID].lines.find((l) => l.id === id);
@@ -385,12 +385,12 @@ describe('EPOCH: a line is sealed only under an epoch the host has taken (my epo
     };
     const epochTick = (state: string, refused: string | null, itemId = MINE) => [{ itemId, kind: 'group-epoch', host: HOST, group: GROUP, state, refused, at: NOW }];
     it.each([
-        ['made, no answer yet', null, 'waiting'],
-        ['queued at my server (the host not reached)', epochTick('queued', null), 'waiting'],
-        ['taken by the host', epochTick('sent', null), 'sealed'],
-        ['refused by the host (one made at the same time won)', epochTick('refused', 'epoch-stale'), 'waiting'],
-        ['failed (a day of no answer)', epochTick('failed', null), 'waiting'],
-    ])('%s -> the line %s', (_name, ticks, want) => {
+        ['made, no answer yet', 'waiting', null],
+        ['queued at my server (the host not reached)', 'waiting', epochTick('queued', null)],
+        ['taken by the host', 'sealed', epochTick('sent', null)],
+        ['refused by the host (one made at the same time won)', 'waiting', epochTick('refused', 'epoch-stale')],
+        ['failed (a day of no answer)', 'waiting', epochTick('failed', null)],
+    ])('%s -> the line %s', (_name, want, ticks) => {
         const chats = ticks ? applyGuestTicks(made(), ticks, NOW, freshId).chats : made();
         const seal = guestSealEpoch(chats[ID]);
         if (want === 'sealed') {

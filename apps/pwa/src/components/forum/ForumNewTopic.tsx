@@ -3,11 +3,14 @@
  * start in: "News from BeanPool" is the owners' and admins'), a title, the words, a place in words (optional, never a map
  * point) and photos. A new member reads under the button that a moderator looks first, with the measured wait; their photos
  * go only there. On a public forum the sheet that anyone on the web can read it comes first, once.
+ * - **Link** (slice F9): up to FORUM_LIMITS.topicLinks of the member's groups, listings and events, linked once the topic is
+ *   up (each through the node, which decides again). Not offered to a first topic that waits for a look: it is no topic yet.
  */
 import { useState } from 'react';
 import { FORUM_LIMITS, currentLanguage, forumSectionName, t, tn, word, wordn } from '@beanpool/core';
-import { markForumTold, startForumTopic, type ForumFront, type ForumWaiting } from '../../lib/forum';
+import { linkForumThing, markForumTold, startForumTopic, type ForumFront, type ForumWaiting } from '../../lib/forum';
 import { ForumPhotoAttach, ForumToldSheet } from './ForumBits';
+import { ForumLinkSheet, LINK_WORDS, type LinkPick } from './ForumLinks';
 
 export const NEW_TOPIC_WORDS = {
     heading: word('New topic'),
@@ -28,8 +31,8 @@ const field = 'w-full min-h-[44px] rounded-lg px-3 py-2 text-[0.95rem]';
 const fieldStyle = { background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' } as const;
 
 /** `onTold`: the member agreed to the public forum's sheet; the page marks its front told, so the topic they open asks no more. */
-export function ForumNewTopic({ front, sectionId, usuallyWithinHours, staff, onPosted, onCancel, onTold }: {
-    front: ForumFront; sectionId: string | null; usuallyWithinHours: number | null; staff: boolean;
+export function ForumNewTopic({ front, me, sectionId, usuallyWithinHours, staff, onPosted, onCancel, onTold }: {
+    front: ForumFront; me: string; sectionId: string | null; usuallyWithinHours: number | null; staff: boolean;
     onPosted: (out: { topicId: string } | { waiting: ForumWaiting }) => void; onCancel: () => void; onTold: () => void;
 }) {
     const open = front.sections.filter((s) => !s.archived && (s.starts === 'members' || staff));
@@ -41,6 +44,9 @@ export function ForumNewTopic({ front, sectionId, usuallyWithinHours, staff, onP
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [telling, setTelling] = useState(false);
+    const [picks, setPicks] = useState<LinkPick[]>([]);
+    const [picking, setPicking] = useState(false);
+    const linksOk = !front.firstTopicWaits;
     const photosOk = front.linksOn || front.firstTopicWaits;
     const ready = !!section && title.trim().length > 0 && words.trim().length > 0 && Array.from(words.trim()).length <= FORUM_LIMITS.opening;
 
@@ -52,6 +58,10 @@ export function ForumNewTopic({ front, sectionId, usuallyWithinHours, staff, onP
         setError(null);
         try {
             const out = await startForumTopic({ sectionId: section, title: title.trim(), words: words.trim(), place: place.trim() || undefined, lang: currentLanguage(), photos: photosOk ? photos : [] });
+            // Its links, in the order picked, once it is a topic: one the node refuses is left off (the topic shows what holds).
+            if (!('waiting' in out) && linksOk) {
+                for (const pick of picks) await linkForumThing(out.topic.id, pick.kind, pick.id).catch(() => {});
+            }
             onPosted('waiting' in out ? out : { topicId: out.topic.id });
         } catch (e) {
             setError((e as Error)?.message || t('Couldn’t save this in the forum.'));
@@ -83,6 +93,18 @@ export function ForumNewTopic({ front, sectionId, usuallyWithinHours, staff, onP
                 <span className="text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{t(NEW_TOPIC_WORDS.placeHint)}</span>
             </label>
             {photosOk && <div className="flex flex-wrap items-end gap-2"><ForumPhotoAttach photos={photos} onChange={setPhotos} disabled={busy} /></div>}
+            {linksOk && (
+                <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => setPicking(true)} disabled={busy} data-testid="forum-new-link" className="min-h-[44px] px-4 rounded-lg font-semibold disabled:opacity-50"
+                        style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}><span aria-hidden="true">🔗 </span>{t(LINK_WORDS.link)}</button>
+                    {picks.map((p) => <span key={`${p.kind}:${p.id}`} className="text-sm min-w-0" style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{p.title}</span>)}
+                </div>
+            )}
+            {picking && (
+                <ForumLinkSheet me={me} linked={picks} room={FORUM_LIMITS.topicLinks - picks.length} onClose={() => setPicking(false)}
+                    onPick={async (pick) => setPicks((ps) => (ps.some((x) => x.kind === pick.kind && x.id === pick.id) ? ps : [...ps, pick]).slice(0, FORUM_LIMITS.topicLinks))}
+                    onTakeOff={async (pick) => setPicks((ps) => ps.filter((x) => !(x.kind === pick.kind && x.id === pick.id)))} />
+            )}
             {error && <p role="alert" className="m-0 text-sm" style={{ color: 'var(--bp-ink-danger)' }}>{error}</p>}
             <div className="flex flex-wrap gap-2 justify-end">
                 <button type="button" onClick={onCancel} className="min-h-[44px] px-4 rounded-lg font-semibold" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}>{t(NEW_TOPIC_WORDS.cancel)}</button>

@@ -27,7 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, LOCAL_GUIDE_WORDS, formatCount, isKnowledgeTopic,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, LOCAL_GUIDE_WORDS, formatCount, forumOn, isKnowledgeTopic,
     knowledgeThankNote, knowledgeThankOffered, pinLive, t, tn, upperCase, type KnowledgeFront,
     type KnowledgeRow, type KnowledgeTopicPage,
 } from '@beanpool/core';
@@ -40,6 +40,8 @@ import {
     safeSourceUrl, searchLearn, showsLearn, sourceHost, suggestLearn, suggestLearnFix, topicEmoji, topicLabel, useChecksLearn, useLearn, type LearnPost,
 } from '../lib/learn';
 import { LearnForm } from '../components/LearnForm';
+import { ForumLinkedTopics, LINK_WORDS } from '../components/forum/ForumLinks';
+import { useCommunityInfo } from '../lib/features';
 import { PostTagChips } from '../components/PostTagChips';
 import { LearnMine } from '../components/LearnMine';
 import { LearnCheckList, LearnCheckOne } from '../components/LearnCheck';
@@ -198,6 +200,8 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
     const { ready, mode } = useLearn();
     const preview = mode === 'preview';
     const open = ready && showsLearn(mode);
+    // "From the forum" (forum slice F9): the topics that link a page, where this community's forum is on.
+    const forumHere = forumOn(useCommunityInfo()?.features);
 
     const [view, setView] = useState<View>(() => viewFor(target));
     // A page or screen a door opened straight (a link, a bell line) leaves Learn on Back; one opened from a list returns to it.
@@ -318,6 +322,7 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
         return (
             <Shell>
                 <PageView id={pageId} preview={preview} identity={identity} samplePosts={samplePosts} onBack={closePage} onOpenProfile={onOpenProfile} onThank={onThank}
+                    onOpenTopic={forumHere && onNavigate ? (topicId) => onNavigate('forum-topic', topicId) : undefined}
                     onTag={(tag) => { setPageIsEntry(false); setView({ topic: null, words: tag, pageId: null, screen: 'list' }); }} />
             </Shell>
         );
@@ -541,9 +546,11 @@ function TopicView({ topic, more, failed, onTopicAgain, moreFailed, moreLoading,
 
 // ── One page, whole ──────────────────────────────────────────────────────────────────────
 
-function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, onTag, onThank }: {
+function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, onTag, onThank, onOpenTopic }: {
     id: string; preview: boolean; identity: BeanPoolIdentity | null; samplePosts: () => LearnPost[]; onBack: () => void; onOpenProfile: (pubkey: string) => void;
     onThank?: (send: LearnThank) => void;
+    /** "From the forum": a topic that links this page opens there (forum slice F9); absent where the forum is off. */
+    onOpenTopic?: (topicId: string) => void;
     /** A tag on the page tapped: Learn searches for it (Learn's tags). */
     onTag: (tag: string) => void;
 }) {
@@ -673,6 +680,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                 <div dir="auto" lang={k.lang ?? undefined} data-testid="learn-post-body" className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-nature-900 dark:text-nature-50">{post.description}</div>
                 {k.place && <p dir="auto" data-testid="learn-post-place" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{t('Where: {place}', { place: k.place })}</p>}
                 <PostTagChips tags={[]} freeTags={post.freeTags} onPick={NO_LIBRARY_TAG} onPickFree={onTag} freeTagLabel={(tag) => t(KNOWLEDGE_TAG_WORDS.searchFor, { tag })} />
+                {!preview && identity && onOpenTopic && <ForumLinkedTopics kind="learn" id={post.id} heading={t(LINK_WORDS.fromForum)} onOpenTopic={onOpenTopic} />}
 
                 {photos.length > 0 && (
                     <div data-testid="learn-post-photos" className="flex flex-col gap-2">

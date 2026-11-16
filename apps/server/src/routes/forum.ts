@@ -9,8 +9,9 @@
  *        ETag, so an unchanged list answers 304)
  *   GET  /api/forum/topics/:id?after=<n>    → { topic, posts: [post], next }   (30 posts after number n) | 404 `not_found`
  *   GET  /api/forum/posts/:id/photos/:n     → the photo's bytes | 404
- *   GET  /api/forum/search?q&offset         → { hits: [hit], next }   (slice F6, engine/forum-search.ts: every word found, newest
- *        first, 20 a page; never a removed, hidden or waiting post, an archived section's, or a blocked writer's) 400 `no_words`
+ *   GET  /api/forum/search?q&offset&section → { hits: [hit], next }   (slice F6, engine/forum-search.ts: every word found, newest
+ *        first, 20 a page, in one section where `section` names it (slice F9, a door's search); never a removed, hidden or
+ *        waiting post, an archived section's, or a blocked writer's) 400 `no_words`
  *        or `too_long`; 429 `searches_per_day` with Retry-After (100 in any 24 hours). A hit: { topicId, sectionId, title,
  *        postId, number, writer, createdAt, excerpt }
  * An active member, on the main server (a standby 503 `standby`), not muted (403 `moderation_muted`):
@@ -55,7 +56,8 @@
  *        section (409 `section_polls`); the ordinary poll (2 to 4 answers, its lengths, one open a member), voted and read by
  *        the polls' own routes; a group's section's is the group's poll
  *   POST /api/forum/topics/:id/decision     { decisionId: id | null } → { topic }   its writer or an owner or admin (403
- *        `not_yours`); 404 `decision_not_found`; 404 `decisions_off` where Decisions are off
+ *        `not_yours`); 404 `decision_not_found`; 404 `decisions_off` where Decisions are off; 409 `topic_links` for a new chip
+ *        where the topic already links three other things (slice F9)
  * Links (slice F9, engine/forum-links.ts): a link never shows its reader anything they could not already see.
  *   POST /api/forum/topics/:id/links        { kind: 'group' | 'listing' | 'event' | 'learn', targetId, on? } → { topic }
  *        the topic's writer links one of their groups, one of their listings (Make this a Need), an event or a Learn page
@@ -250,8 +252,11 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     // A member's search (slice F6): counted against their day's searches once the words are good, so a refusal costs none.
     router.get('/api/forum/search', (ctx) => {
         const offset = whole(ctx.query.offset, 0, FORUM_SEARCH_OFFSET_MAX);
-        if (offset === null || Array.isArray(ctx.query.q)) return answer(ctx, 400, 'q is one text; offset a whole number.', 'bad_request');
-        read(ctx, (key) => searchForum(key, ctx.query.q ?? '', offset));
+        const section = ctx.query.section;
+        if (offset === null || Array.isArray(ctx.query.q) || (section !== undefined && (typeof section !== 'string' || section.length > 128))) {
+            return answer(ctx, 400, 'q is one text; offset a whole number; section one id.', 'bad_request');
+        }
+        read(ctx, (key) => searchForum(key, ctx.query.q ?? '', offset, Date.now(), section || null));
     });
 
     router.get('/api/forum/posts/:id/photos/:n', (ctx) => {

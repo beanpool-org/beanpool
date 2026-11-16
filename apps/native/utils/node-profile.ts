@@ -126,6 +126,18 @@ export interface NodeFeatures {
      */
     outsideMessages?: boolean;
     /**
+     * A convenor may invite someone from another community into a group's chat (apps/server config/node-profile.ts, said
+     * only where `groupGuests` and `outsideMessages` are both on). Kept so a screen that offers the invitation can read it;
+     * a node that doesn't say takes no guests.
+     */
+    groupGuests?: boolean;
+    /**
+     * Whether this community keeps members' locked contact lists (apps/server config/contact-copies.ts, the owner's choice
+     * under How this community works; in `features` on the community's info and a member's answer, after the profile's own
+     * switches: config/features-for.ts ReaderFeatures). A node that doesn't say is from before the choice.
+     */
+    contacts?: boolean;
+    /**
      * The community tells a member when a neighbour posts a Need in a category they starred (`market.asked`, cold start N3;
      * core askedPushOn). The What are you into? card says so and Settings → Notifications shows its switch only then: a
      * node that doesn't say (the worldwide one, Beans off, a node from before it) sends no such push and takes no switch.
@@ -188,6 +200,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
     'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumPublic', 'forumNotices', 'outsideMessages', 'bills',
+    'groupGuests', 'contacts',
 ];
 
 export interface NodeProfile {

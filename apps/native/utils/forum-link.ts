@@ -8,8 +8,10 @@
  * community.
  *   - a visitor there (a guest, its forum public): the visitors' topic (app/forum-public/[id].tsx), or the visitors' Forum tab;
  *   - a member there: the members' topic (app/forum/[id].tsx), or the Chat tab's Forum side;
- *   - anyone else (a member of another community, a phone signed out and not looking around, a link that names nothing this
- *     phone may read): nothing new, as an unusable peek: the app opens as from its icon (cold) or stays where it is (warm).
+ *   - anyone else (a member of another community, a phone signed out and not looking around, a phone halfway through a join
+ *     wizard, a link that names nothing this phone may read): nothing new, as an unusable peek: the app opens as from its icon
+ *     (cold) or stays where it is (warm). A half-done wizard leaves a key and no guest mark, which would read as a member: it
+ *     is nothing new first, as the global community's link treats it (utils/global-link.ts).
  * So the forum a link opens is always the community it named, never a different community's. No address is ours alone: the
  * rule compares the link's community with the one in use, so a self-hosted worldwide community's pages work the same.
  *
@@ -40,8 +42,8 @@ const isLinkTopic = (id: string) => isForumTopicId(id) && id.startsWith('ft-');
 /** How this phone reads the community in use: a visitor there, a member there, or neither. */
 export type ForumReader = 'visitor' | 'member' | 'elsewhere';
 
-/** The phone as the router reads it for a forum link. */
-export interface ForumPhone { anchor: string | null; reader: ForumReader }
+/** The phone as the router reads it for a forum link: the community in use, how it reads it, and whether a join wizard is half done. */
+export interface ForumPhone { anchor: string | null; reader: ForumReader; wizardPending: boolean }
 
 /**
  * A community's address as a forum link names it, and as the phone keeps the community in use, in one spelling: http(s), a
@@ -80,11 +82,11 @@ export function forumLinkFromSystemPath(path: unknown): ForumLink | null {
 
 /**
  * Where a forum link goes for the phone as it is ({@link ForumPhone}): the named community's forum only when it is the
- * community in use, as a visitor's or a member's; else nothing new ('/' on a cold start, null warm).
+ * community in use, as a visitor's or a member's, and no join wizard is half done; else nothing new ('/' on a cold start, null warm).
  */
 export function forumLinkRoute(link: ForumLink | null, phone: ForumPhone, initial: boolean): string | null {
     const nothing = initial ? '/' : null;
-    if (!link || forumOrigin(phone.anchor) !== link.origin) return nothing;
+    if (!link || phone.wizardPending || forumOrigin(phone.anchor) !== link.origin) return nothing;
     const topic = link.topic ? encodeURIComponent(link.topic) : null;
     if (phone.reader === 'visitor') return topic ? `/forum-public/${topic}` : VISITOR_FORUM_TAB;
     if (phone.reader === 'member') return topic ? `/forum/${topic}` : MEMBER_FORUM_LIST;

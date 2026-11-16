@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from './ThemeContext';
@@ -362,7 +363,7 @@ export default function BeanPoolSheet() {
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
                 {/* The global community's link opens this sheet for a member (utils/global-link.ts), on a cold start too. */}
-                <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                <Pressable onPress={() => leaveScreen(router, 'beanpool')} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
                 <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">{BEANPOOL_NAME}</Text>

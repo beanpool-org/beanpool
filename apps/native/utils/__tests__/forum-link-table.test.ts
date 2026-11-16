@@ -3,8 +3,8 @@
  * for the forum (apps/server forum-public-pages.ts forumPageDoors: the front and a section page `beanpool://forum?node=<origin>`,
  * a topic page `…&topic=<id>`), in every spelling a system hands over, with a missing, malformed or other community's node and
  * an unknown or malformed topic, and the forum screens' own paths, x every reader (a visitor on the community, a member there,
- * a member of another community, a phone signed out, a visitor in a private preview, a visitor on a local community), cold and
- * warm -> the screen opened. The invariant: a forum opens only for the community the link names, and only when it is the one in
+ * a member of another community, a phone signed out, a visitor in a private preview, a visitor on a local community, a phone
+ * halfway through a join wizard: a key and no guest mark, round 3), cold and warm -> the screen opened. The invariant: a forum opens only for the community the link names, and only when it is the one in
  * use; anything else opens nothing new. Never a different community's forum.
  *
  * Before this round the link fell through app/+native-intent.ts to the visitors' tab at /forum, whose member branch sent a
@@ -25,11 +25,13 @@ const phone = vi.hoisted(() => ({
     guest: false,
     forumPublic: false,
     identity: null as null | { publicKey: string },
+    wizard: false,
 }));
 vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => phone.anchor) }));
 vi.mock('../nodes', () => ({ isGuestNode: vi.fn(async () => phone.guest) }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => phone.identity) }));
 vi.mock('../forum-public', () => ({ visitorForumHere: vi.fn(async () => phone.guest && phone.forumPublic) }));
+vi.mock('../onboarding-state', () => ({ getPendingOnboarding: vi.fn(async () => (phone.wizard ? { step: 'profile' } : null)) }));
 
 import { redirectSystemPath, routeForumLink } from '../../app/+native-intent';
 import {
@@ -46,15 +48,20 @@ const KEY = { publicKey: 'ab'.repeat(16) };
 const pageLink = (origin: string, topic: string | null) =>
     `beanpool://forum?node=${encodeURIComponent(origin)}${topic ? `&topic=${encodeURIComponent(topic)}` : ''}`;
 
-type Reader = 'visitor' | 'visitor-with-key' | 'member' | 'member-elsewhere' | 'signed-out' | 'preview-visitor' | 'local-visitor';
+type Reader = 'visitor' | 'visitor-with-key' | 'member' | 'member-elsewhere' | 'signed-out' | 'preview-visitor' | 'local-visitor'
+    | 'wizard-half-done' | 'visitor-wizard-half-done';
 const READERS: Record<Reader, typeof phone> = {
-    'visitor': { anchor: WORLD, guest: true, forumPublic: true, identity: null },
-    'visitor-with-key': { anchor: WORLD, guest: true, forumPublic: true, identity: KEY },
-    'member': { anchor: WORLD, guest: false, forumPublic: true, identity: KEY },
-    'member-elsewhere': { anchor: OTHER, guest: false, forumPublic: false, identity: KEY },
-    'signed-out': { anchor: null, guest: false, forumPublic: false, identity: null },
-    'preview-visitor': { anchor: WORLD, guest: true, forumPublic: false, identity: null },
-    'local-visitor': { anchor: OTHER, guest: true, forumPublic: false, identity: KEY },
+    'visitor': { anchor: WORLD, guest: true, forumPublic: true, identity: null, wizard: false },
+    'visitor-with-key': { anchor: WORLD, guest: true, forumPublic: true, identity: KEY, wizard: false },
+    'member': { anchor: WORLD, guest: false, forumPublic: true, identity: KEY, wizard: false },
+    'member-elsewhere': { anchor: OTHER, guest: false, forumPublic: false, identity: KEY, wizard: false },
+    'signed-out': { anchor: null, guest: false, forumPublic: false, identity: null, wizard: false },
+    'preview-visitor': { anchor: WORLD, guest: true, forumPublic: false, identity: null, wizard: false },
+    'local-visitor': { anchor: OTHER, guest: true, forumPublic: false, identity: KEY, wizard: false },
+    // Halfway through a join wizard for the community in use (review note on 424fb857): a key and no guest mark, which reads
+    // as a member; and a visitor there who has started to join. Nothing new for either, as the global link does.
+    'wizard-half-done': { anchor: WORLD, guest: false, forumPublic: true, identity: KEY, wizard: true },
+    'visitor-wizard-half-done': { anchor: WORLD, guest: true, forumPublic: true, identity: KEY, wizard: true },
 };
 
 /** What a link names when it is usable: the front or a section (no topic), or a topic. Null: it names nothing. */
@@ -105,7 +112,7 @@ const named = (link: string) => forumLinkFromSystemPath(link)?.origin ?? null;
 function expected(link: string, names: Names, reader: Reader, initial: boolean): string | null {
     const nothing = initial ? '/' : null;
     const at = READERS[reader];
-    if (names === null || named(link) !== forumOrigin(at.anchor)) return nothing;
+    if (names === null || at.wizard || named(link) !== forumOrigin(at.anchor)) return nothing;
     const topic = forumLinkFromSystemPath(link)!.topic;
     // As the phone reads the community in use: a guest whose forum anyone may read is a visitor; a key and no guest mark, a member.
     if (at.guest && at.forumPublic) return names === 'topic' ? `/forum-public/${topic}` : VISITOR_FORUM_TAB;
@@ -186,11 +193,25 @@ describe('the forum\'s links x every reader -> the screen opened, never a differ
 
     it('the pure rule agrees: only the community in use, as the phone reads it', () => {
         const link = { origin: WORLD, topic: TOPIC };
-        expect(forumLinkRoute(link, { anchor: `${WORLD}/`, reader: 'visitor' }, false)).toBe(`/forum-public/${TOPIC}`);
-        expect(forumLinkRoute(link, { anchor: OTHER, reader: 'visitor' }, false)).toBeNull();
-        expect(forumLinkRoute(link, { anchor: OTHER, reader: 'member' }, false)).toBeNull();
-        expect(forumLinkRoute(link, { anchor: null, reader: 'member' }, true)).toBe('/');
-        expect(forumLinkRoute(link, { anchor: WORLD, reader: 'elsewhere' }, true)).toBe('/');
+        expect(forumLinkRoute(link, { anchor: `${WORLD}/`, reader: 'visitor', wizardPending: false }, false)).toBe(`/forum-public/${TOPIC}`);
+        expect(forumLinkRoute(link, { anchor: OTHER, reader: 'visitor', wizardPending: false }, false)).toBeNull();
+        expect(forumLinkRoute(link, { anchor: OTHER, reader: 'member', wizardPending: false }, false)).toBeNull();
+        expect(forumLinkRoute(link, { anchor: null, reader: 'member', wizardPending: false }, true)).toBe('/');
+        expect(forumLinkRoute(link, { anchor: WORLD, reader: 'elsewhere', wizardPending: false }, true)).toBe('/');
+        expect(forumLinkRoute(link, { anchor: WORLD, reader: 'member', wizardPending: false }, false)).toBe(`/forum/${TOPIC}`);
+    });
+
+    it('a phone halfway through a join wizard (a key, no guest mark: it reads as a member) gets nothing new, cold or warm', async () => {
+        const link = { origin: WORLD, topic: TOPIC };
+        expect(forumLinkRoute(link, { anchor: WORLD, reader: 'member', wizardPending: true }, true)).toBe('/');
+        expect(forumLinkRoute(link, { anchor: WORLD, reader: 'member', wizardPending: true }, false)).toBeNull();
+        expect(forumLinkRoute({ origin: WORLD, topic: null }, { anchor: WORLD, reader: 'visitor', wizardPending: true }, false)).toBeNull();
+        // Through the router, as the phone is read: the wizard's record is what decides, not the key.
+        Object.assign(phone, READERS['wizard-half-done']);
+        expect(await redirectSystemPath({ path: pageLink(WORLD, TOPIC), initial: true })).toBe('/');
+        expect(await redirectSystemPath({ path: pageLink(WORLD, TOPIC), initial: false })).toBeNull();
+        Object.assign(phone, { wizard: false });
+        expect(await redirectSystemPath({ path: pageLink(WORLD, TOPIC), initial: false })).toBe(`/forum/${TOPIC}`);
     });
 });
 

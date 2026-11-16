@@ -19,6 +19,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     KNOWLEDGE_NAMES, isKnowledgeTopic, t, type KnowledgeRow,
@@ -145,7 +146,7 @@ export default function LearnScreen() {
         return answer && answer.words === words ? answer.rows : learnSearch(pages, words).rows;
     }, [words, answer, pages]);
 
-    const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)' as any); };
+    const leave = () => leaveScreen(router, 'learn');
     const open = (id: string) => {
         if (preview) { setSheet(true); return; }
         router.push({ pathname: '/post/[id]', params: { id, kind: 'knowledge' } });

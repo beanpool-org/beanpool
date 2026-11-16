@@ -4,6 +4,7 @@ import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from './ThemeContext';
@@ -115,14 +116,12 @@ function DoorHeader({ title, onBack, backEnabled }: { title: string; onBack: () 
 }
 
 function backOrHome() {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)');
+    leaveScreen(router, 'join-open-door');
 }
 
 /** Out of the door with nowhere to go back to: home for an account, the first screen for a phone with none. */
 function backOrStart(kind: 'existing' | 'new' | null) {
-    if (router.canGoBack()) router.back();
-    else router.replace(kind === 'new' ? '/welcome' : '/(tabs)');
+    leaveScreen(router, 'join-open-door', kind === 'new' ? { fallback: '/welcome' } : {});
 }
 
 /**

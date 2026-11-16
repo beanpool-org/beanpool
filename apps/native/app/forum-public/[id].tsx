@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import { leaveScreen } from '../../utils/leave-screen';
 import { forumSectionName, publicWriterLine, t, timeAgo, type ForumPublicTopicPage } from '@beanpool/core';
 import { getPublicTopic } from '../../utils/forum-public';
 import { ForumWords } from '../../components/forum/ForumBits';
@@ -44,7 +45,7 @@ export default function ForumPublicTopicScreen() {
         <SafeAreaView style={styles.page} edges={['top']} testID="forum-visitor-topic">
             <View style={styles.head}>
                 <Pressable accessibilityRole="button" accessibilityLabel={t(TOPIC_WORDS.back)} testID="forum-visitor-back"
-                    onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/visitor-forum'))} style={styles.iconBtn}>
+                    onPress={() => leaveScreen(router, 'forum-public/[id]')} style={styles.iconBtn}>
                     <Text style={styles.heading}>‹</Text>
                 </Pressable>
                 <Text style={styles.headWords} numberOfLines={1}>{page?.section ? forumSectionName(page.section) : ''}</Text>

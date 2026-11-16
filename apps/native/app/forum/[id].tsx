@@ -23,6 +23,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import { leaveScreen } from '../../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { FORUM_LIMITS, currentLanguage, forumSectionName, t, timeAgo } from '@beanpool/core';
@@ -90,7 +91,8 @@ export default function ForumTopicScreen() {
     const leaveGone = useCallback(async (words: string) => {
         gone.current = true;
         await forgetForumTopic(topicId);
-        if (shown.current) { noteForumBack({ kind: 'gone', words }); router.back(); }
+        // Back to the list the line shows on; on a cold start (a forum link) nothing is under this screen: the Forum side itself.
+        if (shown.current) { noteForumBack({ kind: 'gone', words }); leaveScreen(router, 'forum/[id]'); }
     }, [topicId]);
 
     /** Reads the posts after number `from` afresh, on through post `upTo` (or the topic's end), 30 a read. */
@@ -303,7 +305,7 @@ export default function ForumTopicScreen() {
         <SafeAreaView style={styles.page} edges={['top']} testID="forum-topic">
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
                 <View style={styles.head}>
-                    <Pressable accessibilityRole="button" accessibilityLabel={t(TOPIC_WORDS.back)} testID="forum-back" onPress={() => router.back()} style={styles.iconBtn}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={t(TOPIC_WORDS.back)} testID="forum-back" onPress={() => leaveScreen(router, 'forum/[id]')} style={styles.iconBtn}>
                         <MaterialCommunityIcons name="chevron-left" size={28} color={colors.text.body} />
                     </Pressable>
                     <Text style={styles.headWords} numberOfLines={2}>{section ? forumSectionName(section) : ''}</Text>

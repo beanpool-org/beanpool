@@ -4,6 +4,7 @@ import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -302,7 +303,7 @@ export default function CommunityCardScreen() {
         }
     };
 
-    const leave = () => (router.canGoBack() ? router.back() : router.replace('/'));
+    const leave = () => leaveScreen(router, 'community-card');
     const welcome = (mode: 'create' | 'member') => router.replace({ pathname: '/welcome', params: { mode } });
 
     /** The request's form: the same for an account and for none (whose key Send writes first). */

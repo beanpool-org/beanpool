@@ -19,6 +19,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { StatusBar } from 'expo-status-bar';
 import { createPairInKey, openPairingPayloadOnPhone, t } from '@beanpool/core';
 import { useStyles, useTheme } from './ThemeContext';
@@ -216,8 +217,7 @@ export default function PairInScreen() {
 
     const leave = () => {
         cancelRelay();
-        if (router.canGoBack()) router.back();
-        else router.replace('/welcome');
+        leaveScreen(router, 'pair-in');
     };
     const again = () => { cancelRelay(); offering.current = false; setStep({ kind: 'start' }); };
 

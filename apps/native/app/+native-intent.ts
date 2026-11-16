@@ -75,19 +75,22 @@ export async function routeDoorLink(
 /**
  * What a forum link needs to know about the phone (utils/forum-link.ts): the community in use, and whether the phone reads it
  * as a visitor (a guest there whose forum anyone may read: utils/forum-public.ts visitorForumHere) or as a member (a key, and
- * not a guest there). Read from the phone only, when such a link arrives; the modules load then, not with the router.
+ * not a guest there), and whether a join wizard is half done (utils/onboarding-state.ts: its key and no guest mark would read as
+ * a member's). Read from the phone only, when such a link arrives; the modules load then, not with the router.
  */
 async function phoneAtForumLink(): Promise<ForumPhone> {
-    const [{ anchorUrl }, { isGuestNode }, { loadIdentity }, { visitorForumHere }] = await Promise.all([
+    const [{ anchorUrl }, { isGuestNode }, { loadIdentity }, { visitorForumHere }, { getPendingOnboarding }] = await Promise.all([
         import('../utils/node-post'),
         import('../utils/nodes'),
         import('../utils/identity'),
         import('../utils/forum-public'),
+        import('../utils/onboarding-state'),
     ]);
+    const wizardPending = !!(await getPendingOnboarding());
     const anchor = await anchorUrl();
-    if (!anchor) return { anchor: null, reader: 'elsewhere' };
-    if (await isGuestNode(anchor)) return { anchor, reader: (await visitorForumHere()) ? 'visitor' : 'elsewhere' };
-    return { anchor, reader: (await loadIdentity().catch(() => null)) ? 'member' : 'elsewhere' };
+    if (!anchor) return { anchor: null, reader: 'elsewhere', wizardPending };
+    if (await isGuestNode(anchor)) return { anchor, reader: (await visitorForumHere()) ? 'visitor' : 'elsewhere', wizardPending };
+    return { anchor, reader: (await loadIdentity().catch(() => null)) ? 'member' : 'elsewhere', wizardPending };
 }
 
 /**

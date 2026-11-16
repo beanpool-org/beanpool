@@ -41,7 +41,7 @@ import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
 import { claimAddress, addressStatus, healAddress, isPublicIpv4 } from './registrar-client.js';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
-import { forgetOwnAddresses, ownerConfirmedAddresses, MAX_OWNER_ADDRESSES } from '../engine/own-addresses.js';
+import { forgetOwnAddresses, ownerAddressEntries, ownerConfirmedAddresses, MAX_OWNER_ADDRESSES } from '../engine/own-addresses.js';
 import { isIpLiteral, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
 import { runAcmeTickSoon } from './acme/schedule.js';
 import { getGlobalCommunityUrl } from '../config/global-community.js';
@@ -195,7 +195,7 @@ export function storeOwnAddress(input: string, by: string): OwnAddressResult {
     const owned = ownerConfirmedAddresses();
     const { same, replace } = asCommunityAddress(host, kind);
     const update: Record<string, unknown> = {};
-    if (!owned.includes(host)) update.ownerAddresses = [...owned, host];
+    if (!owned.includes(host)) update.ownerAddresses = [...ownerAddressEntries(), host];
     if (replace) update.publicAddress = { mode: kind, hostname: host, status: 'live', since: new Date().toISOString() };
     const changed = Object.keys(update).length > 0;
     if (changed) {

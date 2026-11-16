@@ -115,7 +115,7 @@ import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
 import { addressListAfterTakeover, readAddressListRecord } from './address-list.js';
 import {
-    addressListContent, BEANPOOL_ZONE, forgetOwnAddresses, isLoopbackHost, normalizeAddress, ownerConfirmedAddresses, publishedAddresses,
+    BEANPOOL_ZONE, forgetOwnAddresses, isLoopbackHost, ownAddressSpellings, ownerAddressEntries, withOwnerAddresses,
 } from '../engine/own-addresses.js';
 import { addressOf } from '@beanpool/core';
 import {
@@ -894,6 +894,53 @@ function bundleEpoch(bundle: TakeoverBundle): number {
 // what was here (a standby makes none, so usually: it goes).
 const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE, STANDBY_MAIN_FILE, VAPID_KEY_FILE];
 
+/**
+ * The `public-address` step's writes to node_config: the web address to install (`pa`) and every address the keys carry,
+ * so the promoted server goes by the main server's addresses. Returns the step's line after the web address. Exported for
+ * test-address-list's take-over table, which runs it on a real envelope.
+ *
+ * - The app addresses an owner confirmed there (engine/own-addresses.ts) come too, so members' apps that reach the
+ *   community at one of them keep working. A bundle sealed before they travelled keeps this standby's own.
+ * - So do the registrar names the main server's key held (engine/registrar-names.ts), former ones included: members' apps
+ *   that still use one are accepted here as they were there. Read (and bounded) as any stored record is. A bundle sealed
+ *   before they travelled keeps this standby's own, and the stored address's name.
+ * - The owner's main address and the number of the last address list signed (several addresses S2, design §6): the
+ *   promoted server names the same main while it leads here (chosenMainAddress checks its own list), and numbers its first
+ *   list after the carried one, one take-over past both its epoch and the keys' (addressListAfterTakeover: never a tie with
+ *   the server it replaces, #3232 round 2). Each only when the keys carry it.
+ * - The owner's spares (several addresses S8, design §6): a spare that is this standby's own address, in the one spelling
+ *   (core addressOf, port included) this server went by before this step (ownAddressSpellings), is now where the community
+ *   lives: it joins the confirmed addresses EXACTLY as the owner named it, port included (withOwnerAddresses), so the
+ *   signed list names it in that spelling and a phone holding the old list's spare finds it there (core takeSpare). A
+ *   spare naming this server's host at another port is not where this server answers, and stays a spare. The rest stay
+ *   spares. Computed from the bundle and this server's own addresses, so running the step again writes the same.
+ */
+export function takeOverAddresses(bundle: TakeoverBundle, pa: unknown): string {
+    const owned = Array.isArray(bundle.ownerAddresses) ? bundle.ownerAddresses.filter((a): a is string => typeof a === 'string') : null;
+    const names = Array.isArray(bundle.registrarNames) ? parseRegistrarNames(bundle.registrarNames) : null;
+    const main = 'mainAddress' in bundle ? (typeof bundle.mainAddress === 'string' ? bundle.mainAddress : null) : undefined;
+    const carried = 'addressList' in bundle ? readAddressListRecord(bundle.addressList) : null;
+    const list = carried ? addressListAfterTakeover(carried, bundleEpoch(bundle)) : null;
+    const carriedSpares = Array.isArray(bundle.addressSpares) ? bundle.addressSpares.filter((a): a is string => typeof a === 'string') : null;
+    const ownBefore = new Set(ownAddressSpellings());
+    const ownSpares = (carriedSpares ?? []).filter((s) => {
+        const a = addressOf(s);
+        return a !== null && ownBefore.has(a);
+    });
+    const promoted = ownSpares.map((s) => addressOf(s)!);
+    const ownedNow = owned || promoted.length ? withOwnerAddresses(owned ?? ownerAddressEntries(), promoted) : null;
+    updateNodeConfig({
+        publicAddress: (pa ?? null) as any, ...(ownedNow ? { ownerAddresses: ownedNow } : {}), ...(names ? { registrarNames: names } : {}),
+        ...(main !== undefined ? { mainAddress: main } : {}), ...(list ? { addressList: list } : {}),
+        ...(carriedSpares ? { addressSpares: carriedSpares.filter((s) => !ownSpares.includes(s)) } : {}),
+    } as any);
+    forgetOwnAddresses();
+    return (owned && owned.length ? `; confirmed app address(es) ${owned.join(', ')}` : '')
+        + (names && names.length ? `; registrar name(s) ${names.map((n) => n.role === 'former' ? `${n.address} (former)` : n.address).join(', ')}` : '')
+        + (main ? `; main address ${main}` : '') + (carried && list ? `; address list number ${carried.epoch}.${carried.seq}, going on at epoch ${list.epoch}` : '')
+        + (promoted.length ? `; this server's own spare(s) ${promoted.join(', ')} now listed as address(es)` : '');
+}
+
 function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined {
     const bundle = plan.bundle;
     switch (step) {
@@ -970,45 +1017,9 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         }
         case 'public-address': {
             const pa: any = plan.publicAddress;
-            // The app addresses an owner confirmed there (engine/own-addresses.ts) come too, so members' apps that
-            // reach the community at one of them keep working. A bundle sealed before they travelled keeps this
-            // standby's own.
-            const owned = Array.isArray(bundle.ownerAddresses) ? bundle.ownerAddresses.filter((a) => typeof a === 'string') : null;
-            // So do the registrar names the main server's key held (engine/registrar-names.ts), former ones included:
-            // members' apps that still use one are accepted here as they were there. Read (and bounded) as any stored
-            // record is. A bundle sealed before they travelled keeps this standby's own, and the stored address's name.
-            const names = Array.isArray(bundle.registrarNames) ? parseRegistrarNames(bundle.registrarNames) : null;
-            // The owner's main address and the number of the last address list signed (several addresses S2, design §6): the
-            // promoted server names the same main while it leads here (chosenMainAddress checks its own list), and numbers its
-            // first list after the carried one, one take-over past both its epoch and the keys' (addressListAfterTakeover:
-            // never a tie with the server it replaces, #3232 round 2). Each only when the keys carry it.
-            const main = 'mainAddress' in bundle ? (typeof bundle.mainAddress === 'string' ? bundle.mainAddress : null) : undefined;
-            const carried = 'addressList' in bundle ? readAddressListRecord(bundle.addressList) : null;
-            const list = carried ? addressListAfterTakeover(carried, bundleEpoch(bundle)) : null;
-            // The owner's spares (several addresses S8, design §6): a spare that is this standby's own address (one it went by
-            // before this step) is now where the community lives, so it joins the confirmed addresses and the signed list names
-            // it: phones that find nothing listed answering prove it at this higher take-over count and go there. The rest stay
-            // spares. Computed from the bundle and this server's own names, so running the step again keeps the same.
-            const carriedSpares = Array.isArray(bundle.addressSpares) ? bundle.addressSpares.filter((a) => typeof a === 'string') : null;
-            const ownBefore = new Set<string>([...(addressListContent()?.addresses ?? []), ...publishedAddresses()]);
-            const ownSpares = (carriedSpares ?? []).filter((s) => {
-                const a = addressOf(s);
-                return !!a && (ownBefore.has(a) || ownBefore.has(normalizeAddress(a.replace(/:\d+$/, '')) ?? ''));
-            });
-            const ownSpareHosts = ownSpares.map((s) => normalizeAddress(s.replace(/:\d+$/, ''))).filter((h): h is string => !!h);
-            const ownedNow = owned || ownSpareHosts.length ? [...new Set([...(owned ?? ownerConfirmedAddresses()), ...ownSpareHosts])] : null;
-            updateNodeConfig({
-                publicAddress: pa ?? null, ...(ownedNow ? { ownerAddresses: ownedNow } : {}), ...(names ? { registrarNames: names } : {}),
-                ...(main !== undefined ? { mainAddress: main } : {}), ...(list ? { addressList: list } : {}),
-                ...(carriedSpares ? { addressSpares: carriedSpares.filter((s) => !ownSpares.includes(s)) } : {}),
-            } as any);
-            forgetOwnAddresses();
+            const extra = takeOverAddresses(bundle, pa ?? null);
             j.result.publicAddress = pa ? (pa.hostname || pa.name || null) : null;
             j.result.tunnel = plan.tunnel;
-            const extra = (owned && owned.length ? `; confirmed app address(es) ${owned.join(', ')}` : '')
-                + (names && names.length ? `; registrar name(s) ${names.map((n) => n.role === 'former' ? `${n.address} (former)` : n.address).join(', ')}` : '')
-                + (main ? `; main address ${main}` : '') + (carried && list ? `; address list number ${carried.epoch}.${carried.seq}, going on at epoch ${list.epoch}` : '')
-                + (ownSpares.length ? `; this server's own spare(s) ${ownSpares.join(', ')} now listed as address(es)` : '');
             return (pa ? `${pa.hostname || pa.name}; ${plan.tunnel.message}` : 'no web address from the registrar') + extra;
         }
         case 'profile': {

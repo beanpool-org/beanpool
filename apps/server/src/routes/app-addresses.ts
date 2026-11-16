@@ -68,7 +68,7 @@ import { getNodeConfig, isOwnPublicAddress, updateNodeConfig } from '../state-en
 import { ADDRESS_SPARES_MAX, addressOf, isListableAddress } from '@beanpool/core';
 import {
     addressSpares, configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress,
-    ownerConfirmedAddresses, primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
+    ownerAddressEntries, ownerConfirmedAddresses, primaryAddress, setMainAddress, withoutOwnerAddress, MAX_OWNER_ADDRESSES,
 } from '../engine/own-addresses.js';
 import { tellMembersOfNewMain } from '../services/address-notice.js';
 import { currentAddressList, tickAddressList } from '../services/address-list.js';
@@ -217,7 +217,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
                 return;
             }
             if (!(await requireFreshProof(ctx, bodyOf(ctx).code, `add ${address}`))) return;
-            updateNodeConfig({ ownerAddresses: [...current, address] });
+            updateNodeConfig({ ownerAddresses: [...ownerAddressEntries(), address] });
             forgetOwnAddresses();
             logger.security('AUTH', `App address confirmed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
         }
@@ -251,7 +251,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         // the address added again later is not main again without Make main.
         const wasMain = normalizeAddress(getNodeConfig().mainAddress) === address;
         updateNodeConfig({
-            ownerAddresses: current.filter((a) => a !== address), ...(alsoPublic ? { publicAddress: null } : {}), ...(wasMain ? { mainAddress: null } : {}),
+            ownerAddresses: withoutOwnerAddress(ownerAddressEntries(), address), ...(alsoPublic ? { publicAddress: null } : {}), ...(wasMain ? { mainAddress: null } : {}),
         } as any);
         forgetOwnAddresses();
         logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
@@ -323,8 +323,10 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
                 ctx.body = appAddressesReport(ctx.query.host);
                 return;
             }
-            const host = normalizeAddress(address.replace(/:\d+$/, ''));
-            if (configuredAddresses().some((a) => a.address === address || a.address === host)) {
+            // Its host (core's audienceOf, the form a signature names), whatever its port: one of this community's own
+            // names at any port is never a spare.
+            const host = normalizeAddress(address);
+            if (configuredAddresses().some((a) => a.address === host)) {
                 ctx.status = 409;
                 ctx.body = { code: 'own_address', error: `${address} is already one of this community's addresses. A spare is another server's address: a standby's.` };
                 return;

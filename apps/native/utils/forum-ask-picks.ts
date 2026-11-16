@@ -73,7 +73,8 @@ export function useForumAskPicks(formKey: string | null, identity: BeanPoolIdent
         if (!formKey || !signer) return;
         let alive = true;
         void (async () => {
-            if (!(await onWorldwide())) return;
+            // A form closed while the phone read where it is asks the worldwide community nothing.
+            if (!(await onWorldwide()) || !alive) return;
             const list = await readMyForumPosts(signer);
             if (alive && list) setOffered({ key: signer.publicKey, list });
         })();

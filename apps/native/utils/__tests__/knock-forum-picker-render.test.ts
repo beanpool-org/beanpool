@@ -260,6 +260,16 @@ describe('nothing is drawn, and nothing sent, unless the list reads', () => {
         expect(sent()).not.toHaveProperty('forumPosts');
     });
 
+    it('a form closed before the phone knew where it is: the worldwide community is asked nothing', async () => {
+        root = createRoot(host);
+        // Opened and closed at once: both renders (and the effect's start and its clean-up) before the anchor read settles.
+        act(() => { root!.render(createElement(Form, { formKey: 'riverside', identity: ASHA })); });
+        act(() => { root!.render(createElement(Form, { formKey: null, identity: ASHA })); });
+        await settle();
+        expect(asked).toEqual([]);
+        expect(host.querySelector('[data-testid="picker"]')).toBeNull();
+    });
+
     it('no account (a key drafted for the request), or no form open: the worldwide community is asked nothing', async () => {
         await draw('riverside', null);
         expect(host.querySelector('[data-testid="picker"]')).toBeNull();

@@ -279,7 +279,21 @@ let swapReady = false;
 // cadence; a whole copy taken over deltas that never came waits for the next routine one too, and the retention resync
 // RESYNC_RETRY_MS (pullOnce).
 let wholeRetryAt = 0;
-let resyncRetryAt = 0;
+// The force-resync's and first copy's wait (resyncRetryAt): when the last refused one began it, and how photosRetryWait
+// drew it when its listing photos could not all be fetched; and when the last failed retention resync began its own. Its
+// end is worked out at each read, from RESYNC_RETRY_MS as it reads then. No deployment sets BACKUP_RESYNC_RETRY_MS (the
+// compose file's list doesn't carry it), so that is the hour it always was; a suite sets it while it runs, to hold a wait
+// open across its steps however slow the machine is, and then to end it (test-standby-refusal-keeps-copy).
+let resyncWaitFrom = 0;
+let resyncWaitPhotos: { n: number; draw: number } | null = null;
+let retentionWaitFrom = 0;
+/** When the next force-resync or first copy may be asked for (N2); 0, or a time gone by: now. */
+function resyncRetryAt(): number {
+    const base = resyncRetryMs();
+    const copy = resyncWaitFrom === 0 ? 0
+        : resyncWaitFrom + (resyncWaitPhotos ? photosRetryWait(base, resyncWaitPhotos.n, resyncWaitPhotos.draw) : base);
+    return Math.max(copy, retentionWaitFrom === 0 ? 0 : retentionWaitFrom + base);
+}
 // Whole copies in a row whose pages came and whose listing photos' objects could not all be fetched (photosRetryWait).
 let photoFailuresInRow = 0;
 // The listing photos (`post_id|order_num`) those copies failed at, since a whole copy last landed. A copy that fails at one
@@ -1085,7 +1099,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // The objects a failed delta fetched are named by this one's rows now, or are the sweep's again. Those a failed
             // whole copy fetched stay kept while it waits for its next.
             const nowMs = Date.now();
-            if (resyncRetryAt <= nowMs && wholeRetryAt <= nowMs) releaseFetchedObjects();
+            if (resyncRetryAt() <= nowMs && wholeRetryAt <= nowMs) releaseFetchedObjects();
             // The main server's deletions this delta left out: the rows they remove are still here. One force-resync, the
             // held kind, mends it, under the same six-hour limit as the one a whole copy that didn't match asks for.
             if (leftOut.includes('tombstones')) {
@@ -1155,7 +1169,12 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             const draw = Math.random();
             const wait = (base: number) => (photosFailed ? photosRetryWait(base, photoFailuresInRow, draw) : base);
             wholeRetryAt = now + wait(getReconcileMs() || resyncRetryMs());
-            if (fresh || !hadCursor) resyncRetryAt = now + wait(resyncRetryMs());
+            // The same wait as now + wait(RESYNC_RETRY_MS), worked out at each read (resyncRetryAt), and in place of any before it.
+            if (fresh || !hadCursor) {
+                resyncWaitFrom = now;
+                resyncWaitPhotos = photosFailed ? { n: photoFailuresInRow, draw } : null;
+                retentionWaitFrom = 0;
+            }
         }
         // So does one taken over deltas that never came (the main server answering 503 or 500, a page it no longer has, or
         // a request timing out): asked for again on the next tick, it would be every tick's pull, and no delta would land
@@ -1167,7 +1186,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         // The retention resync waits RESYNC_RETRY_MS after any failure, a copy that never came too. Asked for on the next
         // tick instead, it would be every tick's pull, and no delta would ever land. Deltas carry on meanwhile; the record
         // keeps it owed (nextMode). Never sooner than the wait its photos set (above).
-        if (why === 'retention') resyncRetryAt = Math.max(resyncRetryAt, Date.now() + resyncRetryMs());
+        if (why === 'retention') retentionWaitFrom = Date.now();
         // F5 of the standby review: the objects a pull fetched before it failed, kept from the orphan sweep until the next is
         // due and has had a copy's longest to bring its pages (COPY_MAX_MS), whose staging database then names them. The
         // sweep's hour of grace alone ends as the hour's wait for a first copy or a force-resync does, and the next would
@@ -1175,7 +1194,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         // fails at every tick for as long as it can't. A pull that failed before it fetched anything moves on the time of
         // those kept: its next is due later than theirs was (stager.ts keepFetchedObjects).
         const nextAt = isDelta ? Date.now() + getPullMs()
-            : Math.max(Date.now(), fresh || !hadCursor || why === 'retention' ? resyncRetryAt : wholeRetryAt);
+            : Math.max(Date.now(), fresh || !hadCursor || why === 'retention' ? resyncRetryAt() : wholeRetryAt);
         keepFetchedObjects(fetchStartedAt, nextAt + COPY_MAX_MS + KEEP_FETCHED_MARGIN_MS, photos.stored ?? 0);
         const msg = e?.name === 'AbortError' ? `timeout after ${FETCH_TIMEOUT_MS}ms` : (e?.message || String(e));
         // What the wait is for, for Settings (getBackupStatus copyWait).
@@ -1196,9 +1215,9 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
                 ? ` (${photoFailuresInRow} in a row whose listing photos could not all be fetched: each waits about twice as long as the one before, at most ${inWords(copyRetryMaxMs())})`
                 : '';
             const next = why === 'retention'
-                ? `no force-resync asked for before ${new Date(resyncRetryAt).toISOString()}${longer}; deltas meanwhile`
+                ? `no force-resync asked for before ${new Date(resyncRetryAt()).toISOString()}${longer}; deltas meanwhile`
                 : came && !isDelta
-                ? `no ${fresh || !hadCursor ? 'force-resync or first copy' : 'whole copy'} asked for before ${new Date(fresh || !hadCursor ? resyncRetryAt : wholeRetryAt).toISOString()}${longer}`
+                ? `no ${fresh || !hadCursor ? 'force-resync or first copy' : 'whole copy'} asked for before ${new Date(fresh || !hadCursor ? resyncRetryAt() : wholeRetryAt).toISOString()}${longer}`
                 : wholeNeverCame
                 ? `no whole copy asked for before ${new Date(wholeRetryAt).toISOString()}; deltas meanwhile`
                 : 'will retry in interval';
@@ -1544,7 +1563,7 @@ function nextMode(): PullMode | ResyncKind | Wait {
     const now = Date.now();
     // A force-resync, or a first copy, refused at its import in the last RESYNC_RETRY_MS (N2), or a retention resync that
     // failed in it at any stage (pullOnce): none asked for until then.
-    const resyncWaits = now < resyncRetryAt;
+    const resyncWaits = now < resyncRetryAt();
     // A copy an older importer made, or none yet (engine/sync.ts REPLICA_FORMAT): one force-resync, first, since no whole
     // copy repairs a row the old importer got wrong (it skips every row whose stamp hasn't moved). A new standby's first
     // pull is this one too, which also clears whatever its own boot seeded. Asked for until one lands (it records the
@@ -1687,7 +1706,7 @@ export function pullNow(): Promise<{ ok: boolean; error?: string; staged?: boole
     restoreFromDatabase();
     const next = nextMode();
     if (next === 'wait') {
-        const until = Math.max(resyncRetryAt, deltaTooBig ? wholeRetryAt : 0);
+        const until = Math.max(resyncRetryAt(), deltaTooBig ? wholeRetryAt : 0);
         const waiting = copyWaitNow(Date.now());
         return Promise.resolve({ ok: false, error: `${waiting ? waiting.waitingOn : "This standby's last copy came and was not taken."} The next is asked for at ${new Date(until).toISOString()}.` });
     }
@@ -1894,7 +1913,7 @@ export interface CopyWait {
 function copyWaitNow(now: number): CopyWait | null {
     const w = lastCopyWait;
     if (!w) return null;
-    const until = w.kind === 'whole' ? wholeRetryAt : resyncRetryAt;
+    const until = w.kind === 'whole' ? wholeRetryAt : resyncRetryAt();
     if (!(until > now)) return null;
     const kept = fetchedObjectsKept(now);
     const what = w.kind === 'first' ? "This standby's first copy"
@@ -1933,6 +1952,7 @@ export function getBackupStatus(): {
 } {
     restoreCadence();
     const now = Date.now();
+    const resyncAt = resyncRetryAt();
     return {
         // How many pages the last whole copy took, and a whole copy made ready to swap in at the restart under way.
         lastWholePages,
@@ -1943,7 +1963,7 @@ export function getBackupStatus(): {
         lastPullMode,
         // After a refused copy (N2): no whole copy, or no force-resync or first copy, before these; null when none waits.
         wholeRetryAt: wholeRetryAt > now ? wholeRetryAt : null,
-        resyncRetryAt: resyncRetryAt > now ? resyncRetryAt : null,
+        resyncRetryAt: resyncAt > now ? resyncAt : null,
         copyWait: getNodeRole() === 'backup' ? copyWaitNow(now) : null,
         running: pullTimer !== null,
         consistency: lastConsistency,

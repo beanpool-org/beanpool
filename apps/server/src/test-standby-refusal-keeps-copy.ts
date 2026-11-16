@@ -77,9 +77,15 @@ const PW_STANDBY = 'Refusal-Keeps-Standby-Pw-9082!';
 /** S's row cap, scaled down from 250,000 as test-dos-caps scales it. */
 const CAP = 150;
 const FLOOD = 160;
-/** The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. Long enough
- *  that §6's two pulls and §7's pull, two snapshots and next pull all finish inside it on a slow runner (3 s was tight). */
-const RETRY_MS = 8000;
+/**
+ * The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS, an hour in production): a day, so the
+ * steps that must come inside it (§6's next pull, §7's next pull, §11's two deltas) do however slow the runner is. A
+ * fixed few seconds was a race each time (3 s, then 8 s: §11's second delta once fell due as another re-seed). The puller
+ * works the wait's end out at each read, so the steps that wait it out set it to RETRY_SHORT_MS for themselves alone
+ * (afterRetryTime).
+ */
+const RETRY_MS = 86_400_000;
+const RETRY_SHORT_MS = 1000;
 /** The tables hashed on S, row for row, to show a refused copy changed nothing. */
 const HASHED = [
     'members', 'member_preferences', 'accounts', 'transactions', 'marketplace_transactions', 'posts', 'post_photos', 'projects',
@@ -133,6 +139,8 @@ async function child(): Promise<void> {
         },
         /** The routine whole copy's interval, live (services/backup-puller.ts reads it at every pull). */
         'set-reconcile-ms': async (a: { ms: number }) => { process.env.BACKUP_RECONCILE_EVERY_MS = String(a.ms); return true; },
+        /** The wait after a refused force-resync or first copy, live, the one under way included (backup-puller.ts resyncRetryAt). */
+        'set-retry-ms': async (a: { ms: number }) => { process.env.BACKUP_RESYNC_RETRY_MS = String(a.ms); return true; },
         /** One pull of the kind the loop makes next; `whole` asks the routine whole copy. */
         pull: async (a: { whole?: boolean }) => {
             const { pullNow, getBackupStatus } = await import('./services/backup-puller.js');
@@ -486,6 +494,20 @@ async function main(): Promise<void> {
             }
             return p;
         };
+        /**
+         * `step` once the retry wait `on` is in has passed. The wait is a day (RETRY_MS), so every step inside it stays
+         * inside; for this step alone it is RETRY_SHORT_MS, which has gone by since the refusal that began it once
+         * RETRY_SHORT_MS + 300 ms have, however fast or slow the runner; then a day again. Each step it runs here either
+         * restarts the standby (a whole copy swapped in) or is refused anew and begins a new wait, so a day again never
+         * reopens a wait that had ended.
+         */
+        const afterRetryTime = async <T>(on: NodeProc, step: () => Promise<T>): Promise<T> => {
+            await on.send('set-retry-ms', { ms: RETRY_SHORT_MS });
+            await sleep(RETRY_SHORT_MS + 300);
+            const out = await step();
+            await on.send('set-retry-ms', { ms: RETRY_MS });
+            return out;
+        };
         // A key no replication manifest entry classifies, planted on S: the stager refuses every whole copy over it (it can't
         // tell whether S keeps it of its own), and no delta reads it. Before P2 a flood of members past the row cap refused
         // these copies; nothing refuses a copy for its size now, so this is what makes one refused.
@@ -641,9 +663,8 @@ async function main(): Promise<void> {
         const servedF = await main.send('whole-copies', { since: tf });
         assert(f1.ok === false && f1.mode === 'resync' && f2.ok === false && servedF === 0,
             `a new standby's first copy is refused, and its next pull waits instead of asking M for another (${JSON.stringify({ first: f1, next: f2, served: servedF })}; before: a whole copy every pull)`);
-        await sleep(RETRY_MS + 300);
         const tf3 = Date.now();
-        const f3 = await fresh.send('pull', {});
+        const f3 = await afterRetryTime(fresh, () => fresh.send('pull', {}));
         const servedF3 = await main.send('whole-copies', { since: tf3 });
         assert(f3.mode === 'resync' && servedF3 === 1, `after the retry time it asks again (${JSON.stringify({ pull: f3, served: servedF3 })})`);
         refused.push(...(await fresh.send('fetches')).blocked);
@@ -662,16 +683,14 @@ async function main(): Promise<void> {
             `S keeps everything, its old format record and its cursor (differences ${first(snapDiff(s7a, s7))}; format ${s7.format}; before: every row cleared, no format, cursor '')`);
         const next7 = await standby.send('pull', {});
         assert(next7.mode === 'delta', `the next pull is a delta from the cursor it kept, not another re-seed (${JSON.stringify(next7)})`);
-        await sleep(RETRY_MS + 300);
-        const again7 = await standby.send('pull', {});
+        const again7 = await afterRetryTime(standby, () => standby.send('pull', {}));
         assert(again7.mode === 'resync' && again7.ok === false, `after the retry time the re-seed is asked for again (${JSON.stringify(again7)})`);
 
         // ── 8. The key gone ──
         console.log('\n— 8. the key gone: the re-seed lands, exact —');
         await unplantUnclassified(standby);
         await main.send('unflood');
-        await sleep(RETRY_MS + 300);
-        const land8 = await pullAndSwap({});
+        const land8 = await afterRetryTime(standby, () => pullAndSwap({}));
         const s8: Snap = await standby.send('snapshot', { tables: HASHED });
         const m8: Snap = await main.send('snapshot', { tables: HASHED });
         const r8 = await standby.send('record');
@@ -771,8 +790,7 @@ async function main(): Promise<void> {
             `7 Beans planted on M's ledger come in a delta, which the ledger check refuses: S's total stays ${s11c.ledgerSum} (${JSON.stringify(mint11)}; total ${s11d.ledgerSum}; before: taken as a seed, unchecked, and S's total went up 7)`);
         await main.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c - 700 WHERE public_key = ?', args: [ann.pk] });
         await unplantUnclassified(standby);
-        await sleep(RETRY_MS + 300);
-        const land11 = await pullAndSwap({});
+        const land11 = await afterRetryTime(standby, () => pullAndSwap({}));
         const s11e: Snap = await standby.send('snapshot', { tables: HASHED });
         // A main persist between the standby's landing and M's snapshot advances COMMONS_POOL's
         // last_updated_at; the copies still match because the refusal suite compares the Commons

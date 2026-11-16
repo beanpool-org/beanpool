@@ -77,6 +77,7 @@ import { marked, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/fe
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import type { ComposerDraft } from '../tools/builder';
+import { linkForumThing } from '../lib/forum';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import { marketPinMatchesFilter, visibleEventPins as filterEventPins, mapFiltersActive, type MapTypeFilter, type MapFilterState } from '@beanpool/core';
 import { MAP_CATEGORY_CHIPS, MAP_EVENT_WINDOWS, MAP_TYPE_PILLS, mapCategoryChipLabel } from '../lib/map-filters';
@@ -427,6 +428,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [composerShop, setComposerShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [composerInShop, setComposerInShop] = useState(false);
     const cancelDraftShopRef = useRef<(() => void) | null>(null);
+    // Make this a Need (forum slice F9): the topic the draft came from, so the listing it makes is linked there once posted.
+    // Held only from that draft to its post: any other way the composer opens or closes lets go of it.
+    const draftTopicRef = useRef<string | null>(null);
     const [posting, setPosting] = useState(false);
     // The node refused the post for a new account's limit or a moderation pause (G3): its own words, shown in the
     // form above the button, and the limits card for a limit. Cleared when the form closes.
@@ -625,6 +629,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         ]);
         if (!postRulesFor((info?.features as { beans?: unknown } | undefined)?.beans !== false).profilePhoto) status.missingAvatar = false;
         if (status.missingName || status.missingAvatar) {
+            draftTopicRef.current = null;
             setProfileGateMsg(postGateSentence(status));
             return;
         }
@@ -648,6 +653,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // Auto-open post form when navigated from marketplace or groups
     useEffect(() => {
         if (openNewPost) {
+            draftTopicRef.current = null;
             onOpenNewPostHandled?.();
             if (initialGroupId) {
                 setAudienceScope('group');
@@ -664,6 +670,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     useEffect(() => {
         if (!openDraft) return;
         onDraftOpened?.();
+        draftTopicRef.current = openDraft.forumTopicId ?? null;
         resetEventForm();
         setNewPostType(openDraft.type);
         setNewPostTitle(openDraft.title);
@@ -1207,6 +1214,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     }
 
     function closeEventForm() {
+        draftTopicRef.current = null;
         setNewPostTitle('');
         setNewPostDescription('');
         setNewPostPhotos([]);
@@ -1471,6 +1479,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 }
             }
         }
+        let afterPost: (() => void) | null = null;
         try {
             const made = await createMarketplacePost({
                 type: newPostType,
@@ -1494,6 +1503,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
             });
             if (alsoOnGlobal && made?.post && identity) void showEventOnGlobal(made.post, identity, takesQuestions).catch(() => {});
+            // Made from a forum topic (Make this a Need): linked there, and the member is back on the topic, its chip showing.
+            const fromTopic = draftTopicRef.current;
+            draftTopicRef.current = null;
+            if (fromTopic && made?.post?.id) {
+                const linked = await linkForumThing(fromTopic, 'listing', made.post.id).then(() => true, (e) => { showPostError(e, t('Your Need is posted, but it couldn’t be linked to the topic.')); return false; });
+                if (linked) afterPost = () => onNavigate?.('forum-topic', fromTopic);
+            }
             setAlsoOnGlobal(false);
             setNewPostTitle('');
             setNewPostDescription('');
@@ -1524,7 +1540,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setShowNewPost(false);
             setShowPricingGuide(false);
             refreshPosts();
-            if (onNavigate) onNavigate('marketplace', 'deals_active');
+            if (afterPost) afterPost();
+            else if (onNavigate) onNavigate('marketplace', 'deals_active');
         } catch (e: any) {
             // No rollback, as on the phone: closing "the shop" here could delete one the member opened elsewhere meanwhile.
             showPostError(e, t('Failed to create post. Are you offline?'));
@@ -2024,6 +2041,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 centredRef.current = true;
                 mapRef.current?.setView([copy.lat, copy.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 15));
             }
+            draftTopicRef.current = null;
             setShowNewPost(true);
         })();
         // `posts` is only a fallback for an offline fetch; it is deliberately not a dependency here, because
@@ -2094,6 +2112,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 centredRef.current = true;
                 mapRef.current?.setView([form.lat, form.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 15));
             }
+            draftTopicRef.current = null;
             setShowNewPost(true);
         })();
     }, [editEventPostId, onEditEventHandled]);
@@ -2729,6 +2748,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <div className="flex justify-between items-center mb-4">
                     <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">{eventEdit ? t('Edit Event') : eventIsCopy ? t('Copy Event') : t('New Post')}</span>
                     <button onClick={() => {
+                        draftTopicRef.current = null;
                         setShowNewPost(false);
                         setShowPricingGuide(false);
                         setPostApproximate(false);

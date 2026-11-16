@@ -174,6 +174,8 @@ export interface ComposerDraft {
     shop?: boolean;
     /** The tool's photos for an Offer, as the composer keeps them (JPEG data URLs at 800 px); absent when it has none. */
     photos?: string[];
+    /** Make this a Need (forum slice F9): the topic the listing it makes is linked to, once posted; absent from a tool's draft. */
+    forumTopicId?: string;
 }
 
 /** The composer keeps at most this many photos. */

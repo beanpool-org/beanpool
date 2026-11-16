@@ -63,6 +63,7 @@ import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
 import { KNOWLEDGE_NAMES, dealsNeedingMe, forumDoorOfSearch, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { takeKeptLinkedTopic } from './lib/forum-public';
+import type { ForumDoor } from './pages/ForumPage';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -316,7 +317,10 @@ export function App() {
     const [openChatForum, setOpenChatForum] = useState(false);
     // And the topic it opens on: a door to one topic (`/app?forumTopic=<id>`, or the one a visitor kept at Join to reply; slice F7).
     const [openForumTopic, setOpenForumTopic] = useState<string | null>(null);
-    useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); } }, [activeTab]);
+    // A door into the forum from elsewhere in the app (slice F9): a topic a listing, a group or a Learn page names, or the
+    // "Start a community near you" section searched for a town. A new object each time, so the same door opens twice.
+    const [forumDoor, setForumDoor] = useState<ForumDoor | null>(null);
+    useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); setForumDoor(null); } }, [activeTab]);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     // The deal a door named with its listing (Home, the header's needs-you icons): the listing opens at that deal (deals S4).
     const [openMarketTxId, setOpenMarketTxId] = useState<string | null>(null);
@@ -661,6 +665,19 @@ export function App() {
             setSettingsGuidePage(contextId ?? null);
             setSettingsInitialMode('guide');
             setShowSettings(true);
+            return;
+        }
+        // A forum door (slice F9): `forum-topic` + a topic's id ("Talked about in the forum", "Topics about this group", "From the
+        // forum"), `forum-section` + a section's id (a group's own Topics row), or `forum-start-community` + a town, maybe '' (a
+        // circle's card, the Find card): that section, searched for it.
+        if (tab === 'forum-topic' || tab === 'forum-section' || tab === 'forum-start-community') {
+            setOpenGroup(null);
+            closePagesOver();
+            setShowSettings(false);
+            setActiveTab('messages');
+            setChatNavNonce(n => n + 1);
+            setOpenChatForum(true);
+            setForumDoor(tab === 'forum-topic' ? { topic: contextId ?? null } : tab === 'forum-section' ? { section: contextId ?? '', q: '' } : { starter: 'start-community', q: contextId ?? '' });
             return;
         }
         // A forum notice (components/NeedsYouIcons.tsx goToNoticeTarget): the Chat tab on its Forum side.
@@ -1594,6 +1611,8 @@ export function App() {
                                     homeNonce={chatHomeNonce}
                                     openForum={openChatForum}
                                     openForumTopic={openForumTopic}
+                                    openForumDoor={forumDoor}
+                                    onComposer={openComposerFromTool}
                                     onForumOpened={() => setOpenChatForum(false)}
                                     onConversationOpened={() => setOpenConversationId(null)}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
@@ -1643,6 +1662,7 @@ export function App() {
                             onClose={() => setOpenGroup(null)}
                             myPubkey={identity?.publicKey}
                             identity={identity}
+                            onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                         />
                     )}
                     {openGroupVotes && (

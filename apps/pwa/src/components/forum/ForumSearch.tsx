@@ -11,7 +11,7 @@
  *   and the list is back.
  * - **Kept for the page's life** (lib/forum.ts keptSearch): back from a hit, the same hits show without asking again.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { forumSectionName, t, timeAgo, word } from '@beanpool/core';
 import { forgetForumSearch, keptSearch, searchForum, type ForumSearchAnswer, type ForumSearchHit, type ForumSection } from '../../lib/forum';
 import { TOPIC_WORDS } from './ForumTopicView';
@@ -27,10 +27,11 @@ export const SEARCH_WORDS = {
 
 /**
  * `onOpen`: a hit was tapped; open topic `topicId` at post `number`. `onShowing`: whether hits (or "nothing found") replace
- * the topic list now.
+ * the topic list now. `searchFor`: words a door asked for (slice F9, "See who is talking about starting one ›"), searched
+ * once when it comes: the member's own tap, so one of their searches.
  */
-export function ForumSearch({ sections, onOpen, onShowing }: {
-    sections: ForumSection[]; onOpen: (topicId: string, number: number) => void; onShowing: (showing: boolean) => void;
+export function ForumSearch({ sections, searchFor = null, onOpen, onShowing }: {
+    sections: ForumSection[]; searchFor?: { q: string } | null; onOpen: (topicId: string, number: number) => void; onShowing: (showing: boolean) => void;
 }) {
     const [answer, setAnswer] = useState<ForumSearchAnswer | null>(() => keptSearch());
     const [typed, setTyped] = useState(() => keptSearch()?.q ?? '');
@@ -38,8 +39,15 @@ export function ForumSearch({ sections, onOpen, onShowing }: {
     const [failed, setFailed] = useState<string | null>(null);
     const box = useRef<HTMLInputElement>(null);
 
-    async function ask(offset = 0) {
-        const q = offset ? answer?.q ?? '' : typed.trim();
+    useEffect(() => {
+        // Already this page's search (back from one of its hits, the door's object still held): drawn from the kept copy.
+        if (!searchFor || keptSearch()?.q === searchFor.q) return;
+        setTyped(searchFor.q);
+        void ask(0, searchFor.q);
+    }, [searchFor]);
+
+    async function ask(offset = 0, words?: string) {
+        const q = offset ? answer?.q ?? '' : (words ?? typed).trim();
         if (!q && !offset) box.current?.focus();
         if (!q || busy) return;
         setBusy(true);

@@ -11,16 +11,29 @@
  * - Every write is signed by the member's key (lib/api.ts request); the node decides who may do what, and its refusal comes
  *   back in the member's language with its `code`.
  */
-import { FORUM_LIMITS, type ForumFollow, type ForumSectionStarts } from '@beanpool/core';
+import { FORUM_LIMITS, type ForumFollow, type ForumLink, type ForumLinkKind, type ForumSectionStarts } from '@beanpool/core';
 import { request, signedFetch } from './api';
 
-export interface ForumSection { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean }
+export interface ForumSection {
+    id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean;
+    /** The group whose own section it is (slice F8); only its members and the moderators get it at all. */
+    group?: { id: string; name: string } | null;
+}
 export interface ForumWriter { publicKey: string; name: string }
 export interface ForumTopic {
     id: string; sectionId: string; title: string; writer: ForumWriter; place: string | null; lang: string | null; replyCount: number;
     lastActivityAt: string; createdAt: string; pinned: boolean; closed: string | null; removed: boolean; hidden: boolean;
     follow: ForumFollow | null; unread: boolean;
+    /** The Decision chip (slice F8): counted with the links, three a topic in all. */
+    decision?: { id: string; title: string; status: string } | null;
+    /**
+     * What it links (slice F9), in a topic's own read only, each exactly as the node answered this reader: shown with its
+     * title, or a placeholder holding its kind alone. The page draws only this, never a title kept or made up for a placeholder.
+     */
+    links?: ForumLink[];
 }
+/** A topic that links one thing (GET /api/forum/linked): "Talked about in the forum", "Topics about this group". */
+export interface ForumLinkedTopic { id: string; sectionId: string; title: string; replyCount: number; lastActivityAt: string }
 export interface ForumPost {
     id: string; topicId: string; number: number; writer: ForumWriter; words: string; quotes: number | null; lang: string | null;
     createdAt: string; editedAt: string | null; removed: string | null; photos: number; hidden: boolean; linksOn: boolean;
@@ -163,6 +176,36 @@ export async function replyInForum(topicId: string, input: { words: string; quot
     if (input.photos?.length) body.photos = input.photos;
     const { post } = await request<{ post: ForumPost }>('POST', `/api/forum/topics/${encodeURIComponent(topicId)}/replies`, body);
     return post;
+}
+
+/**
+ * The topic's writer links one thing to it (slice F9: one of their groups, their listings, an event), or its writer, an owner
+ * or an admin takes one off (`on` false). Answers the topic as the node now reads it for this member, links and all.
+ */
+export async function linkForumThing(topicId: string, kind: ForumLinkKind, targetId: string, on = true): Promise<ForumTopic> {
+    const { topic } = await request<{ topic: ForumTopic }>('POST', `/api/forum/topics/${encodeURIComponent(topicId)}/links`, on ? { kind, targetId } : { kind, targetId, on: false });
+    const page = kept.topics.get(topicId);
+    if (page) kept.topics.set(topicId, { ...page, topic });
+    return topic;
+}
+
+/**
+ * The topics this member may read that link one thing (slice F9), newest activity first, at most 10: the node answers [] for
+ * anything they may not see, so the page shows nothing then. Never kept: each listing, group or Learn page asks afresh.
+ */
+export async function forumLinkedTopics(kind: ForumLinkKind, id: string): Promise<ForumLinkedTopic[]> {
+    const { topics } = await request<{ topics: ForumLinkedTopic[] }>('GET', `/api/forum/linked?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`);
+    return Array.isArray(topics) ? topics : [];
+}
+
+/**
+ * The section that is this group's own (slice F8), as the node's front answers this member (only the group's members and the
+ * moderators get it at all), or null: the group's sheet shows its Topics row by it (slice F9). Not kept: the page's front is
+ * the forum's own.
+ */
+export async function forumSectionOfGroup(groupId: string): Promise<string | null> {
+    const front = await request<ForumFront>('GET', '/api/forum');
+    return front.sections?.find((s) => s.group?.id === groupId && !s.archived)?.id ?? null;
 }
 
 /** The member read that anyone on the web can read this forum with their name (a public forum's first post waits on it). */

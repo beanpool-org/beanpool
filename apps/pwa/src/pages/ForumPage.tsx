@@ -14,6 +14,8 @@
  *   reads "while the page is open"; nothing is written to the browser's storage).
  * - **Older nodes and errors:** the forum's routes answer `feature_off` where the owners switched it off; the page says the
  *   node's words, with Try again.
+ * - **Doors from elsewhere** (slice F9, `door`): a topic a listing, a group or a Learn page names; or a starter section (on the
+ *   worldwide community, "Start a community near you"), searched for a town where one is given.
  */
 import { useEffect, useRef, useState } from 'react';
 import { forumSectionName, t, timeAgo, tn, word, wordn } from '@beanpool/core';
@@ -25,6 +27,10 @@ import { ForumTopicView, TOPIC_WORDS } from '../components/forum/ForumTopicView'
 import { ForumNewTopic } from '../components/forum/ForumNewTopic';
 import { ForumFirstLooks } from '../components/forum/ForumFirstLooks';
 import { ForumSearch } from '../components/forum/ForumSearch';
+import type { ComposerDraft } from '../tools/builder';
+
+/** A door into the forum from elsewhere (slice F9): a topic, or a section (by its id, or a starter's) with words to search for. */
+export type ForumDoor = { topic: string | null } | { section: string; q: string } | { starter: string; q: string };
 
 export const FORUM_WORDS = {
     allSections: word('All sections'),
@@ -51,14 +57,30 @@ type View = { kind: 'list' } | { kind: 'topic'; id: string; at?: number } | { ki
  * `topicId`: the topic it opens on (a door to one topic, slice F7). `homeNonce`: changes each time the member chooses Chat in the
  * menu while the Forum shows (ChatTabPage): its topic list, even when a door opened it on a topic.
  */
-export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
-    me: string; onOpenProfile?: (pubkey: string) => void; topicId?: string | null; homeNonce?: number;
+export function ForumPage({ me, onOpenProfile, topicId = null, door = null, homeNonce, onNavigate, onMakeNeed }: {
+    me: string; onOpenProfile?: (pubkey: string) => void; topicId?: string | null; door?: ForumDoor | null; homeNonce?: number;
+    onNavigate?: (tab: string, contextId?: string) => void; onMakeNeed?: (draft: ComposerDraft) => void;
 }) {
     // Before any kept copy is read: another account in this tab never sees the last one's forum, not even for a moment.
     keepForumFor(me);
-    const [view, setView] = useState<View>(() => (topicId ? { kind: 'topic', id: topicId } : { kind: 'list' }));
+    const doorTopic = door && 'topic' in door ? door.topic : null;
+    const [view, setView] = useState<View>(() => (topicId || doorTopic ? { kind: 'topic', id: (topicId || doorTopic)! } : { kind: 'list' }));
     // A door to one topic (slice F7) while the Forum is already open: that topic.
     useEffect(() => { if (topicId) setView({ kind: 'topic', id: topicId }); }, [topicId]);
+    // A door from elsewhere (slice F9): its topic, or the list on its section (once the front names it) searched for its words.
+    const [wantStarter, setWantStarter] = useState<string | null>(null);
+    const [searchFor, setSearchFor] = useState<{ q: string } | null>(null);
+    useEffect(() => {
+        if (!door) return;
+        setGone(null);
+        if ('topic' in door) {
+            if (door.topic) setView({ kind: 'topic', id: door.topic });
+            return;
+        }
+        setView({ kind: 'list' });
+        if ('section' in door) setSection(door.section || null); else setWantStarter(door.starter);
+        if (door.q.trim()) setSearchFor({ q: door.q.trim() });
+    }, [door]);
     const [front, setFront] = useState<ForumFront | null>(() => keptFront());
     const [section, setSection] = useState<string | null>(null);
     const [list, setList] = useState(() => keptList(null));
@@ -104,6 +126,13 @@ export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
         if (view.kind === 'list') void loadList(0);
     }, [section, view.kind]);
 
+    useEffect(() => {
+        const found = wantStarter ? front?.sections.find((s) => s.starter === wantStarter && !s.archived) : undefined;
+        if (!found) return;
+        setSection(found.id);
+        setWantStarter(null);
+    }, [front, wantStarter]);
+
     const toList = () => setView({ kind: 'list' });
     const homeSeen = useRef(homeNonce);
     useEffect(() => {
@@ -116,14 +145,14 @@ export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
     const told = () => setFront((f) => (f ? { ...f, told: true } : f));
     if (view.kind === 'topic') {
         return (
-            <ForumTopicView topicId={view.id} at={view.at} front={front} me={me} onBack={toList} onTold={told} onOpenProfile={onOpenProfile}
-                onGone={(words) => { setGone(words); toList(); }} />
+            <ForumTopicView topicId={view.id} at={view.at} front={front} me={me} staff={staff} onBack={toList} onTold={told} onOpenProfile={onOpenProfile}
+                onGone={(words) => { setGone(words); toList(); }} onNavigate={onNavigate} onMakeNeed={onMakeNeed} />
         );
     }
     if (view.kind === 'firstLooks') return <ForumFirstLooks front={front} onBack={toList} />;
     if (view.kind === 'new' && front) {
         return (
-            <ForumNewTopic front={front} sectionId={section} usuallyWithinHours={mine?.usuallyWithinHours ?? null} staff={staff} onCancel={toList} onTold={told}
+            <ForumNewTopic front={front} me={me} sectionId={section} usuallyWithinHours={mine?.usuallyWithinHours ?? null} staff={staff} onCancel={toList} onTold={told}
                 onPosted={(out) => {
                     if ('topicId' in out) setView({ kind: 'topic', id: out.topicId });
                     else { setSent(true); toList(); }
@@ -154,7 +183,7 @@ export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
                 )}
             </div>
 
-            <ForumSearch sections={sections} onShowing={setSearching} onOpen={(id, at) => open({ kind: 'topic', id, at })} />
+            <ForumSearch sections={sections} searchFor={searchFor} onShowing={setSearching} onOpen={(id, at) => open({ kind: 'topic', id, at })} />
 
             {failed && (
                 <div className="flex flex-col items-start gap-2">

@@ -67,6 +67,9 @@ import {
 import { guestEpochStep, makeGuestEpoch, openGuestEpochKey, readGuestRoster, type GuestRoster, type GuestRosterWrap } from './group-guest-steps.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+// Imported, never the global: a browser has no Buffer, and neither has Hermes on the phone (WALK 3, 16 Nov: every guest round
+// in the web app stopped at "Buffer is not defined" once the roster came, so a guest never read or sent a line).
+import { Buffer } from 'buffer';
 import { nameLine } from './name-line.js';
 import { t, word } from './words.js';
 

@@ -75,7 +75,7 @@ async function fetchAfterHold(base: string, holdMs: number): Promise<Outcome> {
 /**
  * C: a client in its own process, with a keep-alive agent (it keeps the socket and never reads the Keep-Alive hint):
  * an answer, then KA - 500 ms idle, then its next request on the same socket. KA - 1000 ms after its answer it tells
- * this process, which holds its loop 2,500 ms from there, as another request's synchronous work would: across the
+ * this process, which holds its loop 3,000 ms from there, as another request's synchronous work would: across the
  * close (Node's timer is due about KA + 1000 ms after the answer), with the client's request arriving inside it. The
  * hold runs in the message's callback, an I/O callback as a request's work is; held inside a timer's callback instead,
  * the loop's clock would still read the start of the hold and the close would wait for the next turn.
@@ -107,7 +107,7 @@ async function keptSocketDuringBusyServer(url: string): Promise<Outcome> {
     return new Promise<Outcome>((resolve, reject) => {
         const giveUp = setTimeout(() => { child.kill(); reject(new Error('the client never answered')); }, KA + 20_000);
         child.on('message', (m: any) => {
-            if (m === 'busy now') { hold(2_500); return; }
+            if (m === 'busy now') { hold(3_000); return; }
             clearTimeout(giveUp);
             resolve(m as Outcome);
         });
@@ -160,7 +160,10 @@ async function main(): Promise<void> {
             assert(b.status === 200, `${l.name} B. fetch, the loop held ${KA + 2_000} ms: answered (${show(b)}; this fetch, undici ${process.versions.undici}, ${b.reused ? 'reused' : 'opened a new socket instead of'} the held one)`);
         }
 
-        const c = await keptSocketDuringBusyServer(`${l.base}${PATH}`);
+        // An attempt counts when the request rode the held-over socket (or failed): a client running so late that its
+        // request went after the close was made rides a new socket, and proves nothing either way. At most three.
+        let c = await keptSocketDuringBusyServer(`${l.base}${PATH}`);
+        for (let i = 1; i < 3 && c.err === null && c.reused === false; i++) c = await keptSocketDuringBusyServer(`${l.base}${PATH}`);
         assert(c.status === 200 && c.reused === true,
             `${l.name} C. a client in another process keeping its socket, its request reaching the server while its loop is busy across the close: answered on the same socket (${show(c)})`);
 

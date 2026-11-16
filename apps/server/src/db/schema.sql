@@ -3230,7 +3230,10 @@ CREATE TABLE IF NOT EXISTS knowledge_drafts (
     result_post_id TEXT,
     created_at     TEXT NOT NULL,
     -- The replication watermark (a plain table): db.ts stamps every write.
-    updated_at     TEXT
+    updated_at     TEXT,
+    -- "Turn into a Learn page" (forum slice F9, DESIGN-forums-fable.md §10.3): the forum answer a member's suggestion came from,
+    -- their own, live when sent; NULL for any other. Approval links the page to that answer (engine/forum-learn.ts).
+    from_forum_post_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_member ON knowledge_drafts (member_pubkey, created_at);
 CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_state ON knowledge_drafts (state, created_at);
@@ -3451,6 +3454,9 @@ CREATE TABLE IF NOT EXISTS forum_links (
     target_id  TEXT NOT NULL CHECK (length(target_id) BETWEEN 1 AND 128),
     created_at TEXT NOT NULL,
     updated_at TEXT,
+    -- A Learn page made from an answer in the topic (slice F9, §10.3): that answer's id, so it reads "Now a Learn page"; written
+    -- only when the page is made, never a chip of the topic's writer and never counted in their 3. NULL for every chip.
+    post_id    TEXT,
     PRIMARY KEY (topic_id, kind, target_id)
 );
 -- The forum's search (slice F6, engine/forum-search.ts; design §3 "a search index", §8, §16): one row per post, keyed by the
@@ -3989,13 +3995,13 @@ CREATE INDEX IF NOT EXISTS idx_peek_tickets_expires ON peek_tickets(expires_at);
 --
 -- relay_mail: an item another community's server brought for a member here, held sealed until the member's devices confirm
 -- they have it (relay_mail_got), then deleted; 30 days at most. `envelope` is the sender's signed relay envelope as it came (@beanpool/core
--- relay-envelope.ts); `payload` the sealed line or delete as it came. A blob's sealed bytes are a file of their own under
+-- relay-envelope.ts); `payload` the sealed line, delete, edit or reaction as it came (X6 added the last two kinds). A blob's sealed bytes are a file of their own under
 -- <data>/relay-mail/in/ (never in the image store, so never in a backup's objects), `payload` NULL. `bytes` counts the
 -- payload either way, for the caps.
 CREATE TABLE IF NOT EXISTS relay_mail (
     sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
     item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
-    kind        TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete')),
+    kind        TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction')),
     recipient   TEXT NOT NULL CHECK (length(recipient) = 64),
     sender_home TEXT NOT NULL CHECK (length(sender_home) BETWEEN 1 AND 260),
     envelope    TEXT NOT NULL CHECK (length(envelope) <= 2000),
@@ -4053,7 +4059,7 @@ CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_at ON relay_mail_seen(seen_at);
 CREATE TABLE IF NOT EXISTS relay_outbox (
     sender_key     TEXT NOT NULL CHECK (length(sender_key) = 64),
     item_id        TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
-    kind           TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'receipt')),
+    kind           TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction', 'receipt')),
     recipient      TEXT NOT NULL CHECK (length(recipient) = 64),
     recipient_home TEXT NOT NULL CHECK (length(recipient_home) BETWEEN 1 AND 260),
     state          TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'delivered', 'failed', 'expired')),

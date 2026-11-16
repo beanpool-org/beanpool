@@ -99,10 +99,12 @@ function oldCopy(): void {
     sql.prepare("INSERT INTO outside_meta (k, v) VALUES ('door', 'open')").run();
     // A receipt still owed for a line this phone has: its sender's server deleted the line, so only this row remembers it.
     sql.prepare("INSERT INTO outside_receipts (id, me, peer_key, peer_home, owed_at) VALUES ('ol1', ?, ?, 'a.example', 1)").run(ME, ANA);
+    // Ana's reaction to that line (X6): kept on this phone only, with its line.
+    sql.prepare("INSERT INTO outside_changes (chat_id, line_id, author, kind, item_id, at, emoji) VALUES ('o1', 'ol1', ?, 'dm-reaction', 'oc1', 2, '👍')").run(ANA);
 }
 
 /** The tables that are not a copy of the node's: never cleared by a schema number, only by the account leaving. */
-const KEPT_TABLES = ['tool_docs', 'group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers', 'outside_chats', 'outside_lines', 'outside_meta', 'outside_receipts'];
+const KEPT_TABLES = ['tool_docs', 'group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers', 'outside_chats', 'outside_lines', 'outside_meta', 'outside_receipts', 'outside_changes'];
 
 /**
  * Columns that older builds added to an open copy one ALTER TABLE at a time (audit C2), now in the schema itself: a copy

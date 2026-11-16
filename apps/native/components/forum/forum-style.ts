@@ -54,6 +54,9 @@ export function forumStyleSpec(colors: AppColors) {
         menuText: { fontSize: 16, fontWeight: '600', color: colors.text.body },
         menuDanger: { fontSize: 16, fontWeight: '600', color: colors.feedback.danger.fg },
         placeholder: { color: colors.text.muted },
+        // What a topic links (slice F9): a shown link is a card to tap; one the reader can't see is a dashed outline, nothing to tap.
+        linkChip: { minHeight: 48, maxWidth: '100%', flexShrink: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, gap: 2, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong },
+        linkHidden: { minHeight: 40, borderRadius: 20, paddingHorizontal: 14, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border.strong },
     } satisfies Record<string, ViewStyle | TextStyle | ImageStyle>;
 }
 

@@ -1,7 +1,8 @@
 /**
  * The mailbox between communities, through the real middleware (messages across communities X2: scratch/fable-design/
  * DESIGN-cross-chat-voice-fable.md §3.2, §3.3, §3.5, §7, §11 row X2; DESIGN-forums-messaging-joint-fable.md §3.1:
- * "X2 handles four item kinds (line, blob, delete, receipt) and answers every other kind 202 and drops it").
+ * "X2 handles four item kinds (line, blob, delete, receipt) and answers every other kind 202 and drops it"; X6 adds an edit
+ * and a reaction, held as a line is).
  *
  * Two communities in one process, as test-federation-hardening has its peer beside the node: the node under test is
  * b.example (BEANPOOL_ADDRESSES, its own node key), the real server with its real routes, door and database. The other
@@ -47,6 +48,10 @@
  *      for herself is served (B1 7b); a line over the cap is refused with words, nothing spent (FED-09); a refusal inside
  *      the other server's 202 is logged with its reason, never the line (N2); POST /api/federation/relay-message answers
  *      exactly as a made-up route beside it does
+ *  21  edits, reactions and deletes across (X6): one table over (kind: edit, reaction add, reaction change, reaction
+ *      remove, delete for everyone) x (sender: the writer, the other person, a third key, a forged envelope) x (state: the
+ *      line held, fetched, already deleted, blocked, request not yet accepted): each waits as a line does, the device
+ *      judges it with core's one rule, and it is applied, refused or dropped; a forged one is refused at the door
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-relay-mail.ts
  */
@@ -62,9 +67,10 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, buildNodeRequestHeaders, checkRelayItem, nodeRequestSignatureVerifies,
-    parseNodeRequestHeader, readNodeKeyDocument, relayPayloadHash, signNodeKeyDocument, signRelayEnvelope, type RelayItem,
-    type RelayItemKind,
+    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, buildNodeRequestHeaders, checkRelayItem, gateOutsideItem, nodeRequestSignatureVerifies,
+    openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineShown, parseNodeRequestHeader, readNodeKeyDocument,
+    relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideChange, sealOutsideLine, signNodeKeyDocument,
+    signRelayEnvelope, type OutsideChange, type RelayEnvelope, type RelayItem, type RelayItemKind,
 } from '@beanpool/core';
 import { signedHeaders } from './signed-request-test-helper.js';
 
@@ -105,6 +111,7 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { __useNodeKeyFetchForTests } = await import('./engine/node-signature.js');
     const { applyShapeChanges } = await import('./config/community-shape-write.js');
+    const { getGatewayConfig, updateGatewayConfig } = await import('./config/local-config.js');
     const mail = await import('./engine/relay-mail.js');
     const outbox = await import('./engine/relay-outbox.js');
     const { TABLES: REPLICATION_TABLES } = await import('./engine/replication-manifest.js');
@@ -842,6 +849,135 @@ async function main(): Promise<void> {
     assert(answerOf(oldUnsigned) === answerOf(madeUpUnsigned) && answerOf(oldSigned) === answerOf(madeUpSigned) && answerOf(oldByMember) === answerOf(madeUpByMember)
         && (!peersOn || madeUpByMember.status === 404) && linesAfter20 === linesBefore20 && rowsFor(`SELECT COUNT(*) AS n FROM members WHERE public_key IN (${inList})`) === 0,
         `20f. POST /api/federation/relay-message, unsigned, signed by a.example's server and signed by Dot, is answered exactly as a made-up route beside it (${[oldUnsigned, oldSigned, oldByMember].map((a) => a.status).join(', ')} vs ${[madeUpUnsigned, madeUpSigned, madeUpByMember].map((a) => a.status).join(', ')}; Dot's ${answerOf(oldByMember).slice(0, 100)}; peer connectors ${peersOn ? 'on, so the router answers her' : 'off'}), and nothing is stored`);
+
+    // ── 21. Edits, reactions and deletes across (X6) ──────────────────────────────────────
+    // One table over (kind: edit, reaction add, reaction change, reaction remove, delete for everyone) x (sender: the line's
+    // writer, the other person, a third key, a forged envelope) x (state: the line still held here, fetched, already deleted,
+    // its sender blocked, the request not yet accepted on the device). Each row runs through the real middleware: the change
+    // comes in a.example's (or c.example's) signed request, waits for the member, and their device fetches it, opens it with
+    // core, judges it with core's one rule (outsideChangeVerdict, both apps') and confirms it, as the apps' rounds do. Out
+    // of it: applied, refused (not the sender's to make), dropped (past the gate, a deleted line, or a blocked sender's, which
+    // never waits), or refused at the door (a forged envelope: nothing stored). Then how the line reads.
+    console.log('\n21. Edits, reactions and deletes across (X6): one table, every case');
+    type X6Kind = 'edit' | 'reaction add' | 'reaction change' | 'reaction remove' | 'delete';
+    type X6Sender = 'writer' | 'other person' | 'third key' | 'forged';
+    type X6State = 'line held' | 'fetched' | 'already deleted' | 'blocked' | 'request';
+    const X6_KINDS: X6Kind[] = ['edit', 'reaction add', 'reaction change', 'reaction remove', 'delete'];
+    const X6_SENDERS: X6Sender[] = ['writer', 'other person', 'third key', 'forged'];
+    const X6_STATES: X6State[] = ['line held', 'fetched', 'already deleted', 'blocked', 'request'];
+    const coreKind = (k: X6Kind): 'dm-edit' | 'dm-reaction' | 'dm-delete' => (k === 'edit' ? 'dm-edit' : k === 'delete' ? 'dm-delete' : 'dm-reaction');
+    /** The rule in words: forged never gets in; a blocked sender's never waits; a request takes no change; a line elsewhere, or not theirs to edit or delete, refuses; a deleted line takes nothing more. */
+    const x6Expected = (kind: X6Kind, sender: X6Sender, state: X6State): 'applied' | 'refused' | 'dropped' | 'refused at the door' => {
+        if (sender === 'forged') return 'refused at the door';
+        if (state === 'blocked' || state === 'request') return 'dropped';
+        if (sender === 'third key') return 'refused';
+        if (state === 'already deleted') return 'dropped';
+        if (sender === 'other person' && (kind === 'edit' || kind === 'delete')) return 'refused';
+        return 'applied';
+    };
+    // The table makes some 600 requests from one address in a few seconds: the gateway's minute limiter (its own suites:
+    // test-dos-hardening, test-gateway-config) is set aside for it, as test-copy-door does, and put back after.
+    const gatewayBefore = getGatewayConfig();
+    updateGatewayConfig({ rateLimiting: { ...gatewayBefore.rateLimiting, enabled: false } });
+    let x6Row = 0;
+    for (const kind of X6_KINDS) for (const sender of X6_SENDERS) for (const state of X6_STATES) {
+        x6Row++;
+        const want = x6Expected(kind, sender, state);
+        const member = keys(), writer = keys(), third = keys(), phone = device();
+        addLocal(member, `X6 ${x6Row}`);
+        const me = { key: member.key, edPrivHex: Buffer.from(member.seed).toString('hex') };
+        const hexOf = (k: Keys) => Buffer.from(k.seed).toString('hex');
+        // The device, as both apps keep it: chats by id and state, lines, and the changes it applied.
+        const chats = new Map<string, 'open' | 'request'>();
+        const lines = new Map<string, { chatId: string; author: string; text: string }>();
+        const applied: OutsideChange[] = [];
+        const outcomes = new Map<string, string>();
+        const chatWith = (k: Keys) => relayConversationId(member.key, k.key);
+        chats.set(chatWith(writer), state === 'request' && sender !== 'third key' ? 'request' : 'open');
+        chats.set(chatWith(third), state === 'request' && sender === 'third key' ? 'request' : 'open');
+        async function round(): Promise<void> {
+            const page = await asMember(member, 'GET', `/api/mail?device=${phone}`);
+            const done: string[] = [];
+            for (const h of page.body?.items ?? []) {
+                const env = h.envelope as RelayEnvelope;
+                done.push(env.itemId);
+                if (!relayEnvelopeVerifies(env) || relayPayloadHash(h.payload) !== env.payloadHash) { outcomes.set(env.itemId, 'dropped'); continue; }
+                const chatId = relayConversationId(member.key, env.senderKey);
+                const st = chats.get(chatId);
+                const gate = gateOutsideItem({ kind: env.kind, chat: st ? { state: st, theirLines: [...lines.values()].filter((l) => l.chatId === chatId && l.author === env.senderKey).length } : null, doorOpen: true, blocked: false });
+                if (env.kind === 'dm-line') {
+                    if (gate === 'drop') continue;
+                    const opened = openOutsideLine(h.payload, env, me);
+                    lines.set(opened.messageId, { chatId, author: env.senderKey, text: opened.text });
+                    continue;
+                }
+                let change: OutsideChange;
+                try { change = openOutsideChange(h.payload, env, me); } catch { outcomes.set(env.itemId, 'dropped'); continue; }
+                const line = lines.get(change.lineId);
+                const verdict = outsideChangeVerdict({ change, gate, chatId, line: line ? { ...line, deleted: outsideLineShown({ id: change.lineId, ...line }, applied, member.key).deleted } : null });
+                outcomes.set(env.itemId, verdict === 'apply' ? 'applied' : verdict === 'refuse' ? 'refused' : 'dropped');
+                if (verdict === 'apply') applied.push(change);
+            }
+            if (done.length) await asMember(member, 'POST', '/api/mail/confirm', { ids: done, device: phone });
+        }
+        /** A change from `from` at `home` (signed by `signer`, its own key unless forged) to the member, naming line `lineId`. */
+        async function change(from: Keys, home: string, k: 'dm-edit' | 'dm-reaction' | 'dm-delete', lineId: string, extra: { text?: string; emoji?: string }, signer = from): Promise<RelayItem> {
+            const itemId = crypto.randomUUID();
+            const payload = sealOutsideChange({ kind: k, lineId, ...extra, myEdPrivHex: hexOf(from), myKey: from.key, peerKey: member.key, itemId });
+            const envelope = await signRelayEnvelope({ kind: k, itemId, senderKey: from.key, senderHome: home, recipient: member.key, recipientHome: 'b.example', at: Date.now(), payloadHash: relayPayloadHash(payload) }, signerOf(signer.seed));
+            return { envelope, payload };
+        }
+        const via = (home: string) => (home === 'c.example' ? viaC : undefined);
+        // The line: the writer's to the member, or (the other person) the member's own, kept on the device as theirs.
+        const lineId = crypto.randomUUID();
+        if (sender === 'other person') {
+            lines.set(lineId, { chatId: chatWith(writer), author: member.key, text: 'Original words' });
+        } else {
+            const payload = sealOutsideLine({ text: 'Original words', name: 'Wren', myEdPrivHex: hexOf(writer), myKey: writer.key, peerKey: member.key, messageId: lineId });
+            const env = await signRelayEnvelope({ kind: 'dm-line', itemId: lineId, senderKey: writer.key, senderHome: 'a.example', recipient: member.key, recipientHome: 'b.example', at: Date.now(), payloadHash: relayPayloadHash(payload) }, signerOf(writer.seed));
+            await bring([{ envelope: env, payload }]);
+        }
+        if (state !== 'line held') await round();
+        // Who makes the change, and from where; the forged one names the writer but is signed by the third key.
+        const [maker, makerHome] = sender === 'third key' ? [third, 'c.example'] : [writer, 'a.example'];
+        const lineAuthor = sender === 'other person' ? member : writer;
+        if (state === 'already deleted') {
+            if (lineAuthor === member) applied.push({ kind: 'dm-delete', itemId: crypto.randomUUID(), lineId, author: member.key, at: Date.now() });
+            else { await bring([await change(writer, 'a.example', 'dm-delete', lineId, {})]); await round(); }
+        }
+        // A reaction to change or take back: the maker's 👍 first (their honest own, for the forged row too).
+        if (kind === 'reaction change' || kind === 'reaction remove') {
+            await bring([await change(maker, makerHome, 'dm-reaction', lineId, { emoji: '👍' })], via(makerHome));
+            await round();
+        }
+        if (state === 'blocked') db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey) VALUES (?, ?)').run(member.key, maker.key);
+        const extra = kind === 'edit' ? { text: 'Edited words' } : kind === 'reaction add' || kind === 'reaction remove' ? { emoji: kind === 'reaction add' ? '👍' : '' } : kind === 'reaction change' ? { emoji: '❤️' } : {};
+        const it20 = await change(maker, makerHome, coreKind(kind), lineId, extra, sender === 'forged' ? third : maker);
+        const brought = await bring([it20], via(makerHome));
+        const id20 = it20.envelope.itemId;
+        const heldNow = heldCount('item_id = ? AND recipient = ?', id20, member.key) === 1;
+        await round();
+        let got: string;
+        if (brought.status !== 202) got = `answered ${brought.status} ${brought.body?.code ?? ''}`;
+        else if (brought.body?.items?.[0]?.refused) got = 'refused at the door';
+        else if (!heldNow) got = 'dropped';
+        else got = outcomes.get(id20) ?? 'never fetched';
+        const gone = heldCount('item_id = ? AND recipient = ?', id20, member.key) === 0;
+        // How the line reads now, on the member's device.
+        const line = lines.get(lineId);
+        const shown = line ? outsideLineShown({ id: lineId, ...line }, applied, member.key) : null;
+        const priorStands = (kind === 'reaction change' || kind === 'reaction remove') && sender !== 'third key' && (state === 'line held' || state === 'fetched' || state === 'blocked');
+        const wantShown = state === 'already deleted' ? { text: '', edited: false, deleted: true, reactions: [] as Array<{ emoji: string; count: number; mine: boolean }> }
+            : want !== 'applied' ? { text: 'Original words', edited: false, deleted: false, reactions: priorStands ? [{ emoji: '👍', count: 1, mine: false }] : [] }
+                : kind === 'edit' ? { text: 'Edited words', edited: true, deleted: false, reactions: [] }
+                    : kind === 'delete' ? { text: '', edited: false, deleted: true, reactions: [] }
+                        : { text: 'Original words', edited: false, deleted: false, reactions: kind === 'reaction remove' ? [] : [{ emoji: kind === 'reaction add' ? '👍' : '❤️', count: 1, mine: false }] };
+        assert(got === want && gone && JSON.stringify(shown) === JSON.stringify(wantShown),
+            `21.${x6Row} ${kind}, from ${sender}, ${state}: ${want}; nothing left waiting; the line reads ${wantShown.deleted ? 'deleted' : JSON.stringify(wantShown.text)}${wantShown.reactions.length ? ` ${wantShown.reactions.map((r) => r.emoji).join('')}` : ''} (got ${got}, ${gone ? 'gone' : 'still held'}, ${JSON.stringify(shown)})`);
+        // Each row's items out of the hourly count from a.example and c.example (kept as seen: a replay still dies on them).
+        db.prepare('UPDATE relay_mail_seen SET seen_at = seen_at - 3700000 WHERE seen_at > ?').run(Date.now() - 3_600_000);
+    }
+    updateGatewayConfig({ rateLimiting: gatewayBefore.rateLimiting });
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -632,6 +632,7 @@ describe('no string from a push, nor a forged target from an answer, reaches the
             'forum.mention': '/(tabs)/chats?view=forum',
             'forum.first-look': '/(tabs)/chats?view=forum',
             'forum.first-look-answer': '/(tabs)/chats?view=forum',
+            'forum.learn-ask': '/(tabs)/chats?view=forum',
         };
         // Every kind the core sends to the Chat tab is one of those eight.
         const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
@@ -649,6 +650,8 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         for (const kind of ['forum.reply', 'forum.mention'] as const) expect(noticeRoute(kind, topic), kind).toBe('/(tabs)/chats?view=forum');
         expect(noticeRoute('forum.first-look', { kind: 'forum_first_look_waiting', waitingId: POST_ID, screen: 'forum_first_looks' })).toBe('/(tabs)/chats?view=forum');
         expect(noticeRoute('forum.first-look-answer', { kind: 'forum_first_look_answered', outcome: 'ok', topicId: POST_ID, screen: 'forum_topic' })).toBe('/(tabs)/chats?view=forum');
+        // An owner's or admin's ask to make an answer a Learn page (slice F9): the topic, as the node names it.
+        expect(noticeRoute('forum.learn-ask', { ...topic, from: CHAT_ID })).toBe('/(tabs)/chats?view=forum');
         // A kind this build doesn't know, naming a forum place: the Forum, with Open in the bell.
         expect(noticeRoute(null, topic)).toBe('/(tabs)/chats?view=forum');
         expect(noticeHasDestination(null, { screen: 'forum_first_looks' })).toBe(true);

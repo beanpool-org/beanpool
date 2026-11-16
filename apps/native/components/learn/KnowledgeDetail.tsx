@@ -41,6 +41,7 @@ import { LEARN_LINES, monthYear, topicOf } from './learn-lines';
 import { LEARN_KEEP, pageActions } from './learn-keep';
 import { learnRefusal } from './learn-write';
 import { useLearnWriter } from './useLearnWriter';
+import { ForumLinkedTopics } from '../forum/ForumLinks';
 
 /**
  * Whether a source's address may be opened: http or https, a host, no user name or password (the node's own rule for a join
@@ -296,6 +297,8 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                         <Text style={styles.toolText}>{t(KNOWLEDGE_THANK.button, { name: page.authorCallsign ?? '' })}</Text>
                     </Pressable>
                 ) : null}
+                {/* The forum's topics that link this page (forum slice F9, "From the forum"): only those this member may read. */}
+                <ForumLinkedTopics kind="learn" id={page.id} />
                 <Text style={styles.standing}>{t(LEARN_LINES.standing)}</Text>
                 {(() => {
                     const n = helped?.n ?? page.knowledge?.helped ?? 0;

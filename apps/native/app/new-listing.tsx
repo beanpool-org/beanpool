@@ -11,6 +11,10 @@
  *
  * Leaving it (✕, the chooser closed, a poll or event done, "Not now", Back) takes the member back to where they were.
  *
+ * `?fromTopic=` (Make this a Need, forum slice F9 part 3; utils/forum-need.ts): the Need form opens with that topic's title and
+ * words, and once posted the Need is linked to the topic and the member is back on it. An unfinished post still asks first:
+ * Continue keeps that post and links nothing; Start fresh takes the topic's words.
+ *
  * It draws nothing until its chooser or form opens, so it must never be left on top with nothing shown (Rob, iOS, 9 Nov: the
  * Market stopped taking taps and scrolls). Two rules in utils/screen-presented.ts keep that true: nothing is presented on top
  * of this screen until its own presentation has finished (iOS refuses a Modal asked for mid-presentation, and React Native
@@ -26,6 +30,8 @@ import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MapAreaRing } from '../components/MapAreaRing';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
+import { linkPostedNeed, noteNeedLinked, takeNeedSeed, type NeedSeed } from '../utils/forum-need';
+import { LINK_WORDS } from '../components/forum/forum-words';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { StackActions, useRoute } from '@react-navigation/native';
 import {
@@ -254,7 +260,10 @@ export default function NewListingScreen() {
 
     const { identity } = useIdentity();
     const insets = useSafeAreaInsets();
-    const params = useLocalSearchParams<{ newPost?: string }>();
+    const params = useLocalSearchParams<{ newPost?: string; fromTopic?: string }>();
+    // Make this a Need: the topic's title and words, taken once (utils/forum-need.ts); null once an unfinished post is continued.
+    const needSeed = useRef<NeedSeed | null | undefined>(undefined);
+    if (needSeed.current === undefined) needSeed.current = takeNeedSeed(params.fromTopic);
     const navigation = useNavigation();
     const route = useRoute();
     /** The pin map, shown while "Drop a pin" is on. */
@@ -514,8 +523,8 @@ export default function NewListingScreen() {
                             { text: t('Cancel'), style: 'cancel', onPress: leave },
                             // Start fresh honours the type just chosen in the chooser; Continue keeps the
                             // draft's own type, because that is the post the member asked to go back to.
-                            { text: t('Start fresh'), style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); if (type) setPostType(type); setShowNewPost(true); } },
-                            { text: t('Continue'), onPress: () => { restoreDraft(d); setShowNewPost(true); } },
+                            { text: t('Start fresh'), style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); freshForm(type); setShowNewPost(true); } },
+                            { text: t('Continue'), onPress: () => { needSeed.current = null; restoreDraft(d); setShowNewPost(true); } },
                         ],
                         { cancelable: true, onDismiss: leave }
                     );
@@ -523,8 +532,15 @@ export default function NewListingScreen() {
                 }
             }
         } catch { /* fall through to a blank composer */ }
-        if (type) setPostType(type);
+        freshForm(type);
         setShowNewPost(true);
+    };
+
+    /** A fresh form: the type asked for, with the topic's title and words when Make this a Need opened it. */
+    const freshForm = (type?: 'offer' | 'need') => {
+        if (type) setPostType(type);
+        const seed = needSeed.current;
+        if (seed) { setPostTitle(seed.title); setPostDescription(seed.words); }
     };
 
     /**
@@ -683,8 +699,9 @@ export default function NewListingScreen() {
 
         setPosting(true);
         try {
+            const newId = Crypto.randomUUID();
             const made = await createPost({
-                id: Crypto.randomUUID(),
+                id: newId,
                 type: postType,
                 category: postCategory,
                 title: postTitle.trim(),
@@ -707,6 +724,19 @@ export default function NewListingScreen() {
             });
             if (alsoOnGlobal && made?.post) void showEventOnGlobal(made.post, identity, takesQuestions).catch(() => {});
             clearDraft();
+            const seed = needSeed.current;
+            if (seed) {
+                // Made from a topic: linked to it (the listing stands whatever the answer), then back to the topic, read again.
+                const refused = await linkPostedNeed(seed.topicId, made?.post?.id ?? newId);
+                noteNeedLinked(seed.topicId);
+                if (refused !== null) Alert.alert(t(LINK_WORDS.needNotLinked), refused || undefined);
+                resetNewPost();
+                setShowNewPost(false);
+                setPosting(false);
+                // Back to the topic as every other way out of this screen goes (leave: a covered copy takes itself out instead).
+                leave();
+                return;
+            }
             setTimeout(() => {
                 resetNewPost();
                 setShowNewPost(false);

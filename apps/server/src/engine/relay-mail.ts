@@ -41,8 +41,10 @@
  * stale, so none outlives the ids kept against it. A guest's group item refused here keeps its refusal as long as its id
  * (relay_mail_refused), and its server bringing it again hears that refusal, never "received" (G2 round 2).
  *
- * **Never copied.** The five tables are `local` (engine/replication-manifest.ts), and every snapshot and backup file is
- * made without them (forgetRelayMailInCopy, from services/address-retention.ts). The files are never in the image store.
+ * **Never copied.** This file's tables, `relay_mail`, `relay_mail_seen`, `relay_mail_refused`, `relay_mail_devices` and
+ * `relay_mail_got`, are `local` (engine/replication-manifest.ts), as are the outbox's and the group guests' mail beside them,
+ * and every snapshot and backup file is made with all of them emptied (RELAY_MAIL_TABLES, engine/relay-mail-tables.ts:
+ * forgetRelayMailInCopy, from services/address-retention.ts). The files are never in the image store.
  */
 import fs from 'node:fs';
 import path from 'node:path';

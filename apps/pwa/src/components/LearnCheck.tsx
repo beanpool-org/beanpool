@@ -15,6 +15,11 @@
  * Learn's tags (16 Nov 2026): a suggestion shows its tags under its place; a fix's changed tags are a part like its words, "Now"
  * beside "Suggested" (`freeTagsChanged`, the node's apart from `changed`), marked amber when the page's own changed under it
  * (`freeTagsPageChanged`); "Edit first" opens on them and sends them.
+ *
+ * Pictures (Damo's ask; Marty, 16 Nov 2026: "Yes, through the upload link only, the checker approves it"): a suggestion's
+ * pictures, a member's or ones an assistant uploaded, each show with Remove photo (and Keep this photo once removed) before
+ * Approve. Approve sends back only the kept ones, so only those are published; "Edit first" opens on the kept ones. Nothing a
+ * draft brings shows to members until this screen approves it.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -32,6 +37,7 @@ const MUTED = 'text-nature-600 dark:text-nature-300';
 const TOPIC_CHIP = `${CHIP} bg-bp-chip-learn-tint text-bp-chip-learn-ink`;
 const BUTTON = 'w-full min-h-[48px] rounded-xl px-4 py-2.5 font-bold disabled:opacity-60 disabled:cursor-not-allowed';
 const SECOND = `${BUTTON} border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white`;
+const SMALL = 'self-start min-h-[44px] px-3 rounded-lg text-sm font-bold border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white';
 
 function Failed({ onAgain }: { onAgain: () => void }) {
     return (
@@ -153,6 +159,8 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
     const [words, setWords] = useState('');
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<string | null>(null);
+    /** The pictures the checker removed, by their place in the draft: Approve and "Edit first" leave them out. */
+    const [removed, setRemoved] = useState<number[]>([]);
     useEffect(() => {
         let live = true;
         setDraft(undefined);
@@ -170,6 +178,10 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
     const byAssistant = d.assistant !== null;
     const fix = d.kind === 'fix';
     const mayApprove = !d.needsSourcesTicked || ticked;
+    // Only a picture shown here can be kept: Approve publishes what the checker saw and kept, nothing else.
+    const shownPhoto = (src: string) => src.startsWith('data:image/');
+    const keptPhotos = d.photos.filter((src, i) => shownPhoto(src) && !removed.includes(i));
+    const toggle = (i: number) => setRemoved((was) => (was.includes(i) ? was.filter((x) => x !== i) : [...was, i]));
     const act = async (go: () => Promise<unknown>, said: string) => {
         if (busy) return;
         setBusy(true);
@@ -187,7 +199,7 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
     if (editing) {
         return (
             <LearnForm use="approve" keepPhotosOnly={!byAssistant}
-                initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: d.photos, freeTags: d.freeTags ?? [] }}
+                initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: keptPhotos, freeTags: d.freeTags ?? [] }}
                 onEdited={onEdited} approvesFix={fix}
                 onSend={async (edits) => {
                     await approveLearnDraft(d.id, { edits, lang: d.lang, checkedSources: d.needsSourcesTicked, fix });
@@ -221,9 +233,22 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
                 </section>
             )}
             {d.photos.length > 0 && (
-                <div className="flex flex-col gap-2">
-                    {d.photos.map((src, i) => (src.startsWith('data:image/') ? <img key={i} src={src} alt="" className="w-full aspect-[4/3] object-cover rounded-xl" /> : null))}
-                </div>
+                <section data-testid="learn-check-photos" className="flex flex-col gap-2">
+                    <p className={`m-0 text-xs ${MUTED}`}>{t('Approve adds only the photos you keep. Keep one only if it is the writer’s own, never a picture from the web.')}</p>
+                    {d.photos.map((src, i) => {
+                        if (!shownPhoto(src)) return null;
+                        const out = removed.includes(i);
+                        return (
+                            <figure key={i} data-testid="learn-check-photo" data-kept={out ? 'false' : 'true'} className="m-0 flex flex-col gap-1">
+                                <img src={src} alt={t('Photo {n}', { n: i + 1 })} className={`w-full aspect-[4/3] object-cover rounded-xl ${out ? 'opacity-40' : ''}`} />
+                                {out && <p className={`m-0 text-xs ${MUTED}`}>{t('Left out: Approve won’t add it.')}</p>}
+                                <button type="button" data-testid="learn-check-photo-toggle" aria-pressed={out} disabled={busy} onClick={() => toggle(i)} className={SMALL}>
+                                    {out ? t('Keep this photo') : t('Remove photo')}
+                                </button>
+                            </figure>
+                        );
+                    })}
+                </section>
             )}
             {d.sources.length > 0 && (
                 <section data-testid="learn-check-sources" className={PAGE_BOX}>
@@ -289,7 +314,11 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
                     <p className={`m-0 text-xs ${MUTED}`}>{fix ? t('Approving changes the page now.') : t('Approving adds it to Learn and announces it in the Pulse.')}</p>
                     {refusal && <p role="alert" className="m-0 text-sm font-bold text-red-700 dark:text-red-300">{refusal}</p>}
                     <button type="button" data-testid="learn-check-approve" disabled={!mayApprove || busy}
-                        onClick={() => void act(() => approveLearnDraft(d.id, { checkedSources: d.needsSourcesTicked }), fix ? t('Approved. The page shows the fix now.') : t('Approved. It is in Learn.'))}
+                        onClick={() => void act(() => approveLearnDraft(d.id, {
+                            checkedSources: d.needsSourcesTicked,
+                            // The kept pictures, sent back so only those are published (a fix brings none).
+                            ...(!fix && d.photos.length > 0 ? { photos: keptPhotos } : {}),
+                        }), fix ? t('Approved. The page shows the fix now.') : t('Approved. It is in Learn.'))}
                         className={`${BUTTON} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on`}>{t('Approve')}</button>
                     <button type="button" data-testid="learn-check-edit" disabled={!mayApprove || busy} onClick={() => onEditing(true)} className={SECOND}>{t('Edit first')}</button>
                     <button type="button" data-testid="learn-check-not" disabled={busy} onClick={() => setMode('no')} className={SECOND}>{t('Not this one')}</button>

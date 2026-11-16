@@ -431,6 +431,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // Make this a Need (forum slice F9): the topic the draft came from, so the listing it makes is linked there once posted.
     // Held only from that draft to its post: any other way the composer opens or closes lets go of it.
     const draftTopicRef = useRef<string | null>(null);
+    // One-shot (round 2, #3252 finding 1): every way the composer closes lets go of the topic, here in one place: the ✕, a
+    // Poll or an Event posted from the topic's draft, a refusal's close. The listing's own post reads it before it closes.
+    // Declared above the openDraft effect, so on a first render with a draft this clears first and the draft's topic stays.
+    useEffect(() => { if (!showNewPost) draftTopicRef.current = null; }, [showNewPost]);
     const [posting, setPosting] = useState(false);
     // The node refused the post for a new account's limit or a moderation pause (G3): its own words, shown in the
     // form above the button, and the limits card for a limit. Cleared when the form closes.

@@ -9,8 +9,11 @@
  *   No title is kept from elsewhere or made up for a placeholder, and the topics that link a thing are whatever the node
  *   answered for it (nothing for a thing the reader may not see).
  * - **"Posted as a Need ›"** is a Need the topic's writer made (Make this a Need, §10.2): `listingType === 'need' && byWriter`.
- * - **What may be linked** (§10.4): one of the writer's groups, their listings, or an event of theirs; at most
- *   FORUM_LIMITS.topicLinks things a topic, the Decision chip counted. The node decides again and says why in its refusal.
+ * - **What may be linked** (§10.4; the node's rule, engine/forum.ts linkForumTarget): one of the writer's groups, their
+ *   listings, or an event they may open; the sheet offers the events they host (the Market's read of their own posts, events
+ *   asked for by name: a list without `types` holds none) and the ones they said they're going to or interested in
+ *   (/api/events/mine: RSVPs only, and a host has no RSVP row), each once. At most FORUM_LIMITS.topicLinks things a topic,
+ *   the Decision chip counted. The node decides again and says why in its refusal.
  */
 import { useEffect, useState, type ReactPortal } from 'react';
 import { createPortal } from 'react-dom';
@@ -37,7 +40,8 @@ export const LINK_WORDS = {
     nothing: word('Nothing of yours to link yet: a group you are in, a listing or an event.'),
     linkedNow: word('Linked now'),
     takeOff: word('Take off'),
-    takeOffNamed: word('Take “{title}” off this topic'),
+    /** Take off's accessible name: its visible words first, so a voice user's "Take off" finds it (WCAG 2.5.3). */
+    takeOffNamed: word('Take off “{title}”'),
     full: word('A topic can link at most {n} things. Take one off first.'),
     loading: word('Loading…'),
     failed: word('Couldn’t load what you can link. Check your connection and try again.'),
@@ -109,18 +113,26 @@ export function ForumLinkChips({ links, onOpen }: { links: ForumLink[] | undefin
 /** Something the member could link, as the Link sheet lists it. */
 export interface LinkPick { kind: ForumLinkKind; id: string; title: string }
 
-/** The member's own groups (active ones: the node takes no other), listings and events: what §10.4 lets them link. */
-async function linkablesOf(me: string): Promise<{ groups: LinkPick[]; listings: LinkPick[]; events: LinkPick[] }> {
-    const [groups, listings, events] = await Promise.all([
+/**
+ * The member's own groups (active ones: the node takes no other), listings and events: what §10.4 lets them link. Events:
+ * those they host first (their own posts of type event), then those they RSVP'd to, one row an event.
+ */
+export async function linkablesOf(me: string): Promise<{ groups: LinkPick[]; listings: LinkPick[]; events: LinkPick[] }> {
+    const [groups, listings, hosted, going] = await Promise.all([
         // The node lists only active memberships; a closed group reads as nobody's, so it is not offered.
         getYourGroups().then((r) => (r.items ?? []).filter((g) => g.kind === 'group' && !g.readOnly)),
         getMarketplacePosts({ author: me, limit: 50 }),
+        getMarketplacePosts({ author: me, types: 'event', limit: 50 }),
         getMyEvents(),
     ]);
+    const events: LinkPick[] = [];
+    const add = (id: string, title: string) => { if (!events.some((e) => e.id === id)) events.push({ kind: 'event', id, title }); };
+    hosted.filter((p) => p.type === 'event' && p.authorPublicKey === me).forEach((p) => add(p.id, p.title));
+    going.forEach((e) => add(e.postId, e.title));
     return {
         groups: groups.map((g) => ({ kind: 'group', id: g.id, title: g.name })),
         listings: listings.filter((p) => (p.type === 'offer' || p.type === 'need') && p.authorPublicKey === me).map((p) => ({ kind: 'listing', id: p.id, title: p.title })),
-        events: events.map((e) => ({ kind: 'event', id: e.postId, title: e.title })),
+        events,
     };
 }
 

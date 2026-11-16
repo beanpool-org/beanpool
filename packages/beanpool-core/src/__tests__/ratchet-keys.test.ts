@@ -56,6 +56,17 @@ describe('src/ratchet.ts: key erasure', () => {
         ).toThrow(expect.objectContaining({ reason: 'session-mismatch' }));
     });
 
+    it('Bob refuses a start from an identity key other than the one he expects, and takes the one he does', () => {
+        const p = new Pair(ratchet, 'expected-identity');
+        p.send('A', 'a0', 'hello');
+        const bob = p as unknown as { bobIdentity: { secret: Uint8Array }; bobOneTime: { secret: Uint8Array } };
+        const args = { myIdentitySecret: bob.bobIdentity.secret, myOneTimeSecret: bob.bobOneTime.secret, message: p.sent.get('a0')!.message.body };
+        const someoneElse = ratchet.ratchetKeyPair(p.rng).public;
+        expect(() => ratchet.startInboundRatchet({ ...args, theirIdentityKey: someoneElse })).toThrow(expect.objectContaining({ reason: 'session-mismatch' }));
+        const aliceKey = p.state.A!.sessionKeys.identityKey;
+        expect(new TextDecoder().decode(ratchet.startInboundRatchet({ ...args, theirIdentityKey: aliceKey }).plaintext)).toBe('hello');
+    });
+
     it('a stored state goes out and back unchanged, and works after', () => {
         const p = new Pair(ratchet, 'store');
         p.send('A', 'a0', 'one');

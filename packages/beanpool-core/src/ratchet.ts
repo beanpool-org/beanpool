@@ -5,13 +5,14 @@
  *
  * Written from two public specifications, never from anyone's code:
  *   [DR]  "The Double Ratchet Algorithm", Trevor Perrin and Moxie Marlinspike, Signal, revision 1, 2016-11-20 (public domain).
- *         The algorithm: §2.2 the symmetric-key ratchet, §2.3/§3.5 the Diffie-Hellman ratchet, §2.6/§3.5 skipped message keys
- *         and MAX_SKIP, §3.5 "if an exception is raised ... discard any changes to the state", §4 the security notes on
- *         deleting keys and on stored skipped keys, §5.2 the recommended primitives.
+ *         The algorithm: "Symmetric-key ratchet" and "Diffie-Hellman ratchet" (§2), "Out-of-order messages" (§2) and MAX_SKIP,
+ *         §3.4 "Encrypting messages", §3.5 "Decrypting messages" (TrySkippedMessageKeys, SkipMessageKeys, DHRatchet, and "if
+ *         an exception is raised ... discard any changes to the state"), §5.2 "Recommended cryptographic algorithms", and the
+ *         security considerations "Deletion of skipped message keys" and "Deferring new ratchet key generation" (what Olm does).
  *   [OLM] "Olm: A Cryptographic Ratchet", version 1, Matrix.org (docs/olm.md in matrix-org/olm; Apache-2.0). Olm IS a Double
  *         Ratchet that fixes every choice [DR] leaves open, so it is the one we follow byte for byte: §"Initial setup" (the
  *         triple Diffie-Hellman start), §"Advancing the root key", §"Advancing the chain key", §"Creating a message key",
- *         §"Sending messages", §"Receiving messages", §"The Olm Message format" and §"Olm Authentication".
+ *         §"Sending messages", §"Receiving messages" and §"The Olm Message Format" (normal and pre-key messages, the MAC).
  * Why Olm's concrete choices and not our own: [DR] gives no test vectors and leaves the KDFs, the cipher and the header to the
  * implementer; [OLM] fixes all of them, and vodozemac (Apache-2.0, an independent, audited implementation of Olm) can then check
  * this file byte for byte (vectors/ratchet-vodozemac.json, written by oracles/vodozemac-ratchet; vodozemac is a test oracle only,
@@ -26,7 +27,7 @@
  *     ratchet key; there is none).
  *   - The decoder is strict: the fields in [OLM]'s order, each once, keys of 32 bytes, shortest varints, nothing unknown.
  *
- * What a stolen state reveals ([DR] §4 "Deletion of skipped message keys" and the Olm header having no "previous chain length"):
+ * What a stolen state reveals ([DR] "Deletion of skipped message keys"; the Olm header has no "previous chain length"):
  * every used message key, every chain key we have moved past and every ratchet secret we have used is gone from the returned
  * state, so earlier messages can't be read from it. What it still holds, by design: up to RATCHET_MAX_SKIPPED_KEYS keys of
  * messages that were skipped and never arrived, and the chain keys of up to RATCHET_MAX_RECEIVING_CHAINS receiving chains, which
@@ -45,7 +46,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { Buffer } from 'buffer';
 
-/** [OLM] §"The Olm Message format": the version byte of a pre-key message, and of a normal message with the 8-byte MAC. */
+/** [OLM] §"The Olm Message Format": the version byte of a pre-key message, and of a normal message with the 8-byte MAC. */
 export const RATCHET_WIRE_VERSION = 3;
 /** vodozemac's version 2: a normal message with the whole 32-byte MAC says so with version byte 4 (pre-key messages stay 3). */
 export const RATCHET_WIRE_VERSION_FULL_MAC = 4;
@@ -58,7 +59,7 @@ export const RATCHET_MAX_RECEIVING_CHAINS = 5;
 /** [OLM] chain indexes are 32-bit. A sending chain never passes this. */
 export const RATCHET_MAX_INDEX = 0xffff_ffff;
 
-/** [OLM] §"Olm Authentication": the MAC is truncated to 8 bytes; vodozemac's version 2 keeps all 32. Fixed per session. */
+/** [OLM] §"The Olm Message Format": the MAC is truncated to 8 bytes; vodozemac's version 2 keeps all 32. Fixed per session. */
 export type RatchetMacBytes = 8 | 32;
 
 const KEY_LEN = 32;
@@ -195,7 +196,7 @@ function messageKeys(messageKey: Uint8Array): { aesKey: Uint8Array; macKey: Uint
     return { aesKey: out.slice(0, 32), macKey: out.slice(32, 64), iv: out.slice(64, 80) };
 }
 
-/** The Olm session id: SHA-256(I_A ‖ E_A ‖ E_B). Both sides compute the same one; a pre-key message names it by its keys. */
+/** Olm's session id (as vodozemac computes it): SHA-256(I_A ‖ E_A ‖ E_B). Both sides compute the same one. */
 export function ratchetSessionId(keys: RatchetSessionKeys): Uint8Array {
     return sha256(concatBytes(keys.identityKey, keys.baseKey, keys.oneTimeKey));
 }
@@ -245,19 +246,26 @@ export function startOutboundRatchet(args: {
 /**
  * Bob's side, from Alice's first pre-key message: his identity secret and the secret of the one-time key she used. Returns his
  * session and her first message's plaintext. The caller deletes that one-time key once this returns ([OLM] §"Initial setup":
- * a one-time key is used once); a message that doesn't open throws and starts nothing.
+ * a one-time key is used once); a message that doesn't open throws and starts nothing. The start proves the sender holds the
+ * identity key the message names, not who that is: pass the key you expect (from their address card) as theirIdentityKey, or
+ * check state.sessionKeys.identityKey yourself before showing a word.
  */
 export function startInboundRatchet(args: {
     myIdentitySecret: Uint8Array;
     myOneTimeSecret: Uint8Array;
     message: Uint8Array;
+    theirIdentityKey?: Uint8Array;
     macBytes?: RatchetMacBytes;
 }): { state: RatchetState; plaintext: Uint8Array } {
     const macBytes = macLength(args.macBytes);
     keyLength(args.myIdentitySecret);
     keyLength(args.myOneTimeSecret);
+    if (args.theirIdentityKey) keyLength(args.theirIdentityKey);
     const pre = decodePreKeyMessage(args.message);
-    if (!equalBytes(pre.sessionKeys.oneTimeKey, x25519.getPublicKey(args.myOneTimeSecret))) {
+    if (
+        !equalBytes(pre.sessionKeys.oneTimeKey, x25519.getPublicKey(args.myOneTimeSecret)) ||
+        (args.theirIdentityKey && !equalBytes(pre.sessionKeys.identityKey, args.theirIdentityKey))
+    ) {
         throw new RatchetRefusedError('session-mismatch');
     }
     const inner = decodeNormalMessage(pre.message, macBytes);
@@ -397,7 +405,7 @@ export function ratchetDecrypt(state: RatchetState, message: RatchetMessage): { 
     return { state: next, plaintext };
 }
 
-/** [OLM] §"Olm Authentication": check the MAC over the version byte and the fields, then decrypt ([DR] §5.2: MAC first). */
+/** [OLM] §"Receiving messages" and §"The Olm Message Format": check the MAC over the version byte and the fields, then decrypt. */
 function open(messageKey: Uint8Array, wire: RatchetWireMessage): Uint8Array {
     const keys = messageKeys(messageKey);
     const expected = hmac(sha256, keys.macKey, wire.authenticated).slice(0, wire.mac.length);
@@ -411,7 +419,7 @@ function open(messageKey: Uint8Array, wire: RatchetWireMessage): Uint8Array {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The wire: [OLM] §"The Olm Message format". A key-value list after the version byte: the key's top bits are the field
+// The wire: [OLM] §"The Olm Message Format". A key-value list after the version byte: the key's top bits are the field
 // number, its low 3 bits the type (0 an integer, 2 a length-prefixed string); integers are base-128 varints.
 
 function normalVersion(macBytes: RatchetMacBytes): number {

@@ -324,7 +324,7 @@ export function runRow(api: RatchetApi, row: Row, macBytes: Ratchet.RatchetMacBy
 export interface Transcript {
     macBytes: Ratchet.RatchetMacBytes;
     bob: { identitySecret: string; identityKey: string; oneTimeSecret: string; oneTimeKey: string };
-    alice: { rootKey: string; ratchetSecret: string; chainKey: string; chainIndex: number; identityKey: string; baseKey: string; oneTimeKey: string };
+    alice: { rootKey: string; ratchetSecret: string; chainKey: string; chainIndex: number; identityKey: string; baseKey: string; oneTimeKey: string; sessionId: string };
     events: Array<
         | { op: 'send'; who: 'alice' | 'bob'; id: string; plaintext: string; type: 'prekey' | 'normal'; body: string; ratchetSecret: string }
         | { op: 'recv'; who: 'alice' | 'bob'; id: string; ok: true; plaintext: string }
@@ -385,9 +385,16 @@ export function replayVodozemac(api: RatchetApi, t: Transcript): number {
         try {
             if (e.who === 'bob' && bob === null) {
                 // The start, from Bob's identity secret, his one-time secret and Alice's first pre-key message alone.
-                const started = api.startInboundRatchet({ myIdentitySecret: unb64(t.bob.identitySecret), myOneTimeSecret: unb64(t.bob.oneTimeSecret), message: message.body, macBytes: t.macBytes });
-                // Our triple Diffie-Hellman agrees with vodozemac Alice's R_0.
+                const started = api.startInboundRatchet({
+                    myIdentitySecret: unb64(t.bob.identitySecret),
+                    myOneTimeSecret: unb64(t.bob.oneTimeSecret),
+                    theirIdentityKey: unb64(t.alice.identityKey),
+                    message: message.body,
+                    macBytes: t.macBytes,
+                });
+                // Our triple Diffie-Hellman agrees with vodozemac Alice's R_0, and both sides name the session as vodozemac does.
                 expect(b64(started.state.rootKey), `${label}: R_0`).toBe(t.alice.rootKey);
+                for (const s of [started.state, alice]) expect(b64(api.ratchetSessionId(s.sessionKeys)).replace(/=+$/, ''), `${label}: session id`).toBe(t.alice.sessionId);
                 bob = started.state;
                 plaintext = started.plaintext;
             } else {

@@ -53,6 +53,7 @@ fn transcript(config: SessionConfig, mac_bytes: u8) -> Value {
         "identityKey": b(&bytes(&ap["session_keys"]["identity_key"])),
         "baseKey": b(&bytes(&ap["session_keys"]["base_key"])),
         "oneTimeKey": b(&bytes(&ap["session_keys"]["one_time_key"])),
+        "sessionId": alice_session.session_id(),
     });
 
     let mut alice = Side { session: Some(alice_session), sent: vec![] };

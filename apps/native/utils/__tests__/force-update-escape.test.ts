@@ -220,16 +220,18 @@ describe('every way a member moves the phone to another community tells the upda
     const sites: Array<[string, RegExp]> = [
         // The sheet's switch moves through reconnect.ts switchPhoneTo (the one move lock, addresses S5), pinned below.
         ['utils/use-communities.ts', /assertPlainNodeAddress\(url\);[^]*?await switchPhoneTo\(url\);/],
-        ['app/(tabs)/settings.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', targetUrl\);\s*await initDB\(\);\s*communitySwitched\(\);/],
-        ['app/(tabs)/settings.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', finalAnchorUrl\);\s*communitySwitched\(\);/],
+        // Settings' saved-community Switch is the one switch too (addresses S5 round 2); Add & Connect closes, writes and opens
+        // in one move (utils/community-move-lock.ts), then says so.
+        ['app/(tabs)/settings.tsx', /await switchPhoneTo\(targetUrl\);/],
+        ['app/(tabs)/settings.tsx', /await writeCommunityAddress\(held, finalAnchorUrl\);\s*await initDB\(\);\s*\}\);\s*communitySwitched\(\);/],
         // A plain switch writes the address and opens the new copy; a follow (carryFrom) has the carry write it once the copy is there.
-        ['utils/reconnect.ts', /\} else \{\s*await closeDB\(\);\s*await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/],
-        ['utils/reconnect.ts', /carryCommunityCopy\(carryFrom, url, \(\) => AsyncStorage\.setItem\('beanpool_anchor_url', url\)\)\);\s*\} else \{/],
+        ['utils/reconnect.ts', /\} else \{\s*await closeDB\(\);\s*await writeCommunityAddress\(held, url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/],
+        ['utils/reconnect.ts', /carryCommunityCopy\(carryFrom, url, \(\) => writeCommunityAddress\(held, url\)\)\);\s*\} else \{/],
         ['utils/join-another-community.ts', /communitySwitched\(\);\s*await deps\.clearGuestNode\(targetUrl\)/],
         ['utils/delete-here.ts', /await leaveThisCommunity\(plan\.here, plan\.next\.url\);\s*const \{ initDB \} = await import\('\.\/db'\);\s*await initDB\(\);\s*communitySwitched\(\);/],
         ['utils/account-leaves-phone.ts', /await releaseAccountFromPhone\(account, AsyncStorage, \{ keepDmMemoryOf \}\);\s*await wipeIdentity\(\);\s*communitySwitched\(\);/],
         ['utils/account-leaves-phone.ts', /await removeEveryCommunityCopy\(await communitiesOnThisPhone\(\)\);\s*await wipeIdentity\(\);\s*communitySwitched\(\);/],
-        ['utils/update-block-escape.ts', /await deps\.initDB\(\);\s*communitySwitched\(\);/],
+        ['utils/update-block-escape.ts', /await deps\.initDB\(\);\s*\}\);\s*communitySwitched\(\);/],
     ];
     for (const [file, pin] of sites) {
         it(`${file}: ${pin.source.slice(0, 60)}…`, () => {

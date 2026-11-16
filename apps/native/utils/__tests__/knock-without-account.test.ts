@@ -400,7 +400,7 @@ describe('the welcome screen joins a yes through the invite step, and Safety Bac
         const landed = handleCreate.indexOf('setInviteRedeemed(true);\n                undoCommunity = false;');
         expect(landed).toBeGreaterThan(-1);
         const caught = handleCreate.slice(handleCreate.indexOf('} catch (err: any) {'));
-        expect(caught).toMatch(/if \(undoCommunity\) \{\s*await AsyncStorage\.removeItem\('beanpool_anchor_url'\)\.catch\(\(\) => \{\}\);[\s\S]*communitySwitched\(\);/);
+        expect(caught).toMatch(/if \(undoCommunity\) \{\s*await moveCommunityAddress\(null\)\.catch\(\(\) => \{\}\);[\s\S]*communitySwitched\(\);/);
     });
 
     it('a yes is joined by the invite step\'s own Next, with this phone\'s key: no join of its own', () => {

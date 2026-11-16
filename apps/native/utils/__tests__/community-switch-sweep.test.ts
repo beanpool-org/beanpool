@@ -42,17 +42,28 @@ function sourceFiles(): string[] {
 
 interface Write { file: string; line: number; text: string }
 
-/** Every setItem / removeItem of the anchor: by its name, or through a constant that holds it. */
+/** The module that holds the one writer: it writes for its callers, who announce (community-address-writer.test.ts). */
+const LOCK_MODULE = 'utils/community-move-lock.ts';
+
+/**
+ * Every write or removal of the anchor. Since addresses S5 round 2 one function writes it (community-move-lock.ts
+ * writeCommunityAddress, and moveCommunityAddress, the write alone in its own move), and community-address-writer.test.ts
+ * fails on any other write: so each call of the writer from outside its module is a write, and a setItem / removeItem of
+ * the anchor anywhere else is counted too (that test fails on it as well).
+ */
 function anchorWrites(): Write[] {
     const writes: Write[] = [];
     for (const full of sourceFiles()) {
+        const rel = path.relative(NATIVE, full);
+        if (rel === LOCK_MODULE) continue;
         const src = code(fs.readFileSync(full, 'utf8'));
         const constants = [...src.matchAll(/const\s+(\w+)\s*=\s*'beanpool_anchor_url'/g)].map((m) => m[1]);
         const names = ["'beanpool_anchor_url'", ...constants];
         const lines = src.split('\n');
         lines.forEach((text, i) => {
-            if (names.some((n) => new RegExp(`\\b(setItem|removeItem)\\(\\s*${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(text))) {
-                writes.push({ file: path.relative(NATIVE, full), line: i + 1, text: text.trim() });
+            const direct = names.some((n) => new RegExp(`\\b(setItem|removeItem)\\(\\s*${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(text));
+            if (direct || /\b(writeCommunityAddress|moveCommunityAddress)\(/.test(text)) {
+                writes.push({ file: rel, line: i + 1, text: text.trim() });
             }
         });
     }
@@ -106,7 +117,7 @@ describe('every write or removal of the phone\'s community announces it', () => 
         const verify = code(fs.readFileSync(path.join(NATIVE, 'utils/address-verify.ts'), 'utf8'));
         // It writes no community address of its own: the sweep finds no write of it there.
         expect(writes.filter(w => w.file === 'utils/address-verify.ts')).toEqual([]);
-        expect(verify).not.toMatch(/setItem\(\s*ANCHOR_STORE_KEY|setItem\('beanpool_anchor_url'/);
+        expect(verify).not.toMatch(/setItem\(\s*ANCHOR_STORE_KEY|setItem\('beanpool_anchor_url'|writeCommunityAddress\(|moveCommunityAddress\(/);
         // Its one move is the one it is handed, by default switchPhoneTo with no copy carried (the file is the record's).
         expect([...verify.matchAll(/deps\.moveTo\(/g)]).toHaveLength(1);
         expect(verify).toMatch(/await deps\.moveTo\(anchor, to, held\);/);
@@ -115,13 +126,13 @@ describe('every write or removal of the phone\'s community announces it', () => 
         expect(verify).not.toMatch(/carryCommunityCopy|carryFrom/);
         // switchPhoneTo writes the address and announces it (found by the sweep, and in this order).
         const reconnect = code(fs.readFileSync(path.join(NATIVE, 'utils/reconnect.ts'), 'utf8'));
-        expect(reconnect).toMatch(/await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/);
+        expect(reconnect).toMatch(/await writeCommunityAddress\(held, url\);\s*\}\s*await initDB\(\);\s*communitySwitched\(\);/);
         expect(writes.some(w => w.file === 'utils/reconnect.ts')).toBe(true);
     });
 
     it('the exceptions: discovery writes a community only in a development build', () => {
         const sync = code(fs.readFileSync(path.join(NATIVE, 'services/pillar-sync.ts'), 'utf8'));
-        const discover = sync.slice(sync.indexOf('async function discoverAnchor'), sync.indexOf("await AsyncStorage.setItem('beanpool_anchor_url', winningUrl)"));
+        const discover = sync.slice(sync.indexOf('async function discoverAnchor'), sync.indexOf('await moveCommunityAddress(winningUrl)'));
         // Before the write: a saved community returns early, and every candidate is pushed inside `if (__DEV__)`.
         expect(discover).toMatch(/if \(savedAnchor\) \{[\s\S]*?return savedAnchor;/);
         const pushes = [...discover.matchAll(/candidates\.push\(/g)].length;

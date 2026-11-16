@@ -358,7 +358,7 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
             ': await createIdentity(callsign.trim());',
             'if (knockMade) undoKnockRecord = () => (joinRecord ? setPendingOnboarding(joinRecord) : clearPendingOnboarding());',
             'if (!storedIdentity || knockMade) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);',
-            "await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);",
+            "await moveCommunityAddress(nodeUrl);",
             'const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey) || knockMade;',
             'await redeemInvite(parsedCode, identity.callsign, identity, { timeoutMs: NEXT_REQUEST_TIMEOUT_MS });',
             'undoCommunity = false;',
@@ -369,20 +369,21 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
 
     it('sets the community in two places only: into the app on a spent invite, and after the record', () => {
         const s = handleCreate();
-        expect(s.match(/AsyncStorage\.setItem\('beanpool_anchor_url', nodeUrl\)/g)).toHaveLength(2);
+        // Through the one writer (utils/community-move-lock.ts), inside the move lock.
+        expect(s.match(/moveCommunityAddress\(nodeUrl\)/g)).toHaveLength(2);
         const enterApp = slice(s, "if (spent === 'enterApp' && storedIdentity) {", 'return;');
-        expect(enterApp).toContain("await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);");
+        expect(enterApp).toContain("await moveCommunityAddress(nodeUrl);");
         // Whichever key the record is written for, it is written before the community.
         const recorded = s.indexOf('await recordJoinKeyMade(');
         expect(recorded).toBeGreaterThan(s.indexOf(enterApp) + enterApp.length);
-        expect(s.indexOf("await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);", s.indexOf(enterApp) + enterApp.length)).toBeGreaterThan(recorded);
+        expect(s.indexOf("await moveCommunityAddress(nodeUrl);", s.indexOf(enterApp) + enterApp.length)).toBeGreaterThan(recorded);
     });
 
     it("a redeem that doesn't land takes the community off first, then puts the record back", () => {
         const caught = slice(handleCreate(), '} catch (err: any) {', 'if (err instanceof StoredKeyUnreadableError)');
         const undo = slice(caught, 'if (undoCommunity) {', '\n                }');
         inOrder(undo, [
-            "await AsyncStorage.removeItem('beanpool_anchor_url')",
+            "await moveCommunityAddress(null)",
             'communitySwitched();',
             'if (undoKnockRecord) await undoKnockRecord();',
         ]);

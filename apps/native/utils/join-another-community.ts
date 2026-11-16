@@ -102,10 +102,9 @@ export async function joinAnotherCommunity(
     try {
         ({ alreadyMember } = await deps.redeemInvite(opts.code, opts.identity.callsign || 'Unknown', opts.identity));
     } catch (err) {
-        const back = opts.returnUrl && isPlainNodeAddress(opts.returnUrl) ? opts.returnUrl : null;
         await whileCommunityMoves(async (held) => {
             await deps.closeDB();
-            await writeCommunityAddress(held, back);
+            await writeCommunityAddress(held, opts.returnUrl && isPlainNodeAddress(opts.returnUrl) ? opts.returnUrl : null);
             await deps.initDB();
         });
         // Back where it was, or on no community: the update screen asks again (utils/community-switch.ts).

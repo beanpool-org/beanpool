@@ -238,6 +238,9 @@ export interface RestoreNotice {
     by?: 'owner' | 'shell';
     /** A restore: the take-over count the file's keys carried (0 for none), for lights-out (services/lights-out.ts). */
     epoch?: number;
+    /** The address list the server before the swap last signed, content and number (services/address-list.ts
+     *  addressListForNotice), so the next boot numbers past it. Absent or null when it had none. */
+    addressList?: unknown;
 }
 
 /**
@@ -264,6 +267,9 @@ export interface RestoreNoticeDeps {
     log: (message: string) => void;
     /** A restore's notice, kept by this server for lights-out (services/lights-out.ts noteRestoredCopy). Never a roll-back's. */
     remember?: (notice: RestoreNotice) => void;
+    /** Every notice, a restore's or a roll-back's, readable or not (null): the database was swapped, so the signed address
+     *  list's number is raised past it (services/address-list.ts renumberAddressListAfterSwap). Before the file goes. */
+    renumber?: (notice: RestoreNotice | null) => void;
 }
 
 /** Each notice a restore or roll-back left: the announcement and the log line, once. Returns how many. Never throws. */
@@ -280,6 +286,11 @@ export function deliverRestoreNotices(deps: RestoreNoticeDeps, dir = dataDir()):
         try {
             notice = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
         } catch { /* told below as unreadable */ }
+        // The address list's number before the file goes: a crash after it raises it again at the next boot, which only
+        // raises it more. Any notice says the database was swapped, an unreadable one too.
+        if (deps.renumber) {
+            try { deps.renumber(notice && typeof notice === 'object' ? notice : null); } catch { /* never blocks the boot */ }
+        }
         // Gone before it is announced: a crash between the two loses one announcement, never repeats one.
         try { fs.unlinkSync(path.join(dir, f)); } catch { /* already gone */ }
         if (!notice || (notice.kind !== 'restore' && notice.kind !== 'roll-back')) {

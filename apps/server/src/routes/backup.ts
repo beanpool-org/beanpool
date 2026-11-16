@@ -60,6 +60,7 @@ import {
     takeRestorePoint, leaveRestoreNotice, listRestorePoints, resolveRestorePoint, restorePointServerFiles, restorePointImagesDir,
     RestorePointError, RESTORE_POINT_DB, RESTORE_POINT_SERVER_TAR, RESTORE_POINT_SERVER_FILES, type RestorePointInfo,
 } from '../services/restore-points.js';
+import { addressListForNotice } from '../services/address-list.js';
 import { writeFileAtomic } from '../write-file-atomic.js';
 import { noteSecurityEvent, actingAs, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { countUnopenable, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from '../services/recovery-seal-key.js';
@@ -486,6 +487,9 @@ export async function restoreFromTar(
     // anything is replaced, while the database is still open (design case 18 §3.3). No room, no restore: one that
     // cannot be written throws RestorePointError, the caller refuses in words, and nothing below runs.
     const point = takeRestorePoint('restore');
+    // The address list this server last signed, read while its database is open: the notice carries it, so the restored
+    // server's first list outranks it (services/address-list.ts renumberAddressListAfterSwap).
+    const addressList = addressListForNotice();
 
     // Close current DB connection safely before overwriting, and any copy's snapshot being served from it, and the
     // change probe a standby's pulls open: `db` must be the last connection, so its close folds state.db-wal in and
@@ -540,7 +544,7 @@ export async function restoreFromTar(
     cleanupRestoreTemp();
     // Everyone is told at the next boot, on the database now in place (services/restore-points.ts), and the log keeps it.
     // `epoch`: the take-over count the file's keys carried, which lights-out raises past at the hall (services/lights-out.ts).
-    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader?.createdAt ?? null, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner', epoch: bundle ? Number(bundle.identityEpoch) || 0 : 0 });
+    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader?.createdAt ?? null, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner', epoch: bundle ? Number(bundle.identityEpoch) || 0 : 0, addressList });
     console.log(`[Restore] A backup made ${sealedHeader?.createdAt ?? '(unlocked, date unknown)'} was restored by an owner; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
 
     // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished. The shell's
@@ -671,6 +675,8 @@ export async function rollBackTo(pointDir: string, name: string, restartAfterMs:
 
     // Its own point first: a roll-back can be rolled back.
     const point = takeRestorePoint('roll-back');
+    // As a restore: the address list last signed, while the database is open, for the notice.
+    const addressList = addressListForNotice();
 
     closeOpenCopies('a roll-back replaces state.db');
     closeDbDataVersionProbe();
@@ -692,7 +698,7 @@ export async function rollBackTo(pointDir: string, name: string, restartAfterMs:
         }
     }
     cleanupRestoreTemp();
-    leaveRestoreNotice({ kind: 'roll-back', at: new Date().toISOString(), madeAt: takenAt, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner' });
+    leaveRestoreNotice({ kind: 'roll-back', at: new Date().toISOString(), madeAt: takenAt, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner', addressList });
     console.log(`[Restore] An owner rolled this server back to restore point ${name}; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
     if (restartAfterMs !== null) restartSoon(restartAfterMs, 'Roll-back done, rebooting node...');
     return {

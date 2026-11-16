@@ -158,6 +158,7 @@ import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
 import { createWebPushRoutes } from './routes/web-push.js';
 import { createNodeKeyRoutes } from './routes/node-key.js';
+import { createAddressListRoutes } from './routes/address-list.js';
 import { createRelayRoutes } from './routes/relay.js';
 import { sweepRelayMail } from './engine/relay-mail.js';
 import { retryRelayOutbox, sweepRelayOutbox } from './engine/relay-outbox.js';
@@ -403,6 +404,10 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
     '/api/web-push/key',             // web push (W1): the node's public web push key, which a browser subscribes with (routes/web-push.ts)
     '/api/node/key',                 // the server's key document, which another community's server checks this one's requests with (routes/node-key.ts)
+    // One community, several addresses (S2, routes/address-list.ts): the community's addresses signed with the server key, and
+    // the proof that an address answers as that key right now. A phone asks both before it has an account; nothing about anyone.
+    '/api/node/addresses',
+    '/api/node/proof',
     '/api/home',                     // Home in one read: public only with the visitors' view on, and then the visitors' subset (HOME_READ_EXACT)
     // The worldwide community's forum for anyone on the web (slice F7, routes/forum-public.ts): sections and the newest topics,
     // only posts whose writer is known, a name and words. Anywhere the forum is not public, 404 feature_off (profile-feature-gate.ts).
@@ -561,8 +566,14 @@ const SIGNED_KNOCK_HEADERS = 'Content-Type, x-signature, x-public-key, x-timesta
  */
 export const HEALTH_CORS_PATH = '/api/community/health';
 const HEALTH_CORS_METHODS = 'GET, HEAD';
+/**
+ * The reads opened as the health read is: GET and HEAD alone, `*`, no credential, no request header. The health read, and the
+ * community's signed address list and its proof (several addresses S2, design §4: the web app at one of the community's
+ * addresses checks the main one before it shows the line that names it). Each is public and names nobody.
+ */
+export const PUBLIC_CORS_READS: ReadonlySet<string> = new Set([HEALTH_CORS_PATH, '/api/node/addresses', '/api/node/proof']);
 function isHealthCorsRead(ctx: { method: string; path: string }): boolean {
-    return ctx.path === HEALTH_CORS_PATH && (ctx.method === 'GET' || ctx.method === 'HEAD' || ctx.method === 'OPTIONS');
+    return PUBLIC_CORS_READS.has(ctx.path) && (ctx.method === 'GET' || ctx.method === 'HEAD' || ctx.method === 'OPTIONS');
 }
 
 /** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
@@ -2143,6 +2154,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAppleReturnRoutes(),
         // This server's key, and the check another community's server can make of its signed requests (routes/node-key.ts).
         createNodeKeyRoutes(),
+        // The community's signed address list and the proof for one address (several addresses S2, routes/address-list.ts).
+        createAddressListRoutes(),
         createRelayRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),

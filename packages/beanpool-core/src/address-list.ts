@@ -31,8 +31,8 @@
  * signed.
  *
  * **The order** is `(epoch, seq)`: `epoch` is the take-over count, so a take-over's list beats every list from before it
- * whatever its counter; `seq` goes up by one whenever the list's content changes. A phone keeps the highest it has read
- * and takes nothing lower ({@link chooseAddressList}).
+ * whatever its counter; `seq` goes up whenever the list's content changes (a server may skip numbers, never go back). A
+ * phone keeps the highest it has read and takes nothing lower ({@link chooseAddressList}).
  *
  * **The proof**, `GET /api/node/proof?for=<address>&nonce=<32 hex>` at every address:
  *

@@ -955,10 +955,16 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
     ownerAddresses: { kind: 'takeover-bundle', reason: 'app addresses an owner confirmed' },
     registrarNames: { kind: 'takeover-bundle', reason: 'every registrar name this key held' },
     mainAddress: {
-        kind: 'community', gap: 'G5',
-        reason: "the owner's main address (Make main): the community's choice, which a promoted standby should keep while the address "
-            + 'still leads to it (chosenMainAddress takes it only from its own list with a route). The take-over envelope carries it from '
-            + 'several-addresses S2 (DESIGN-several-addresses-fable.md §6); until then a promoted standby works the main out by today\'s rule',
+        kind: 'takeover-bundle',
+        reason: "the owner's main address (Make main): the community's choice, which a promoted standby keeps while the address still "
+            + 'leads to it (chosenMainAddress takes it only from its own list with a route); carried in the take-over envelope '
+            + '(several-addresses S2, DESIGN-several-addresses-fable.md §6)',
+    },
+    addressList: {
+        kind: 'takeover-bundle',
+        reason: 'the address list this server last signed, content and number (services/address-list.ts), carried in the take-over '
+            + 'envelope so a promoted server numbers its first list after it',
+        differsByDesign: "a take-over raises the list's epoch: the promoted server's first list is signed at the bundle's epoch + 1",
     },
 };
 

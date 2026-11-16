@@ -15,7 +15,8 @@
  *   4. Nothing else is opened: every route the node serves, preflighted from an unlisted origin with its own method, gets an
  *      allowance only where it is listed by route and method below: the three signed knock routes, the web push key and
  *      subscription an applicant's web app reads and gives (global yes Y2), a member's note from their own community (forums
- *      F10), and the health read; and real unsigned GETs of
+ *      F10), the community's signed address list and an address's proof (several addresses S2: opened as the health read
+ *      is, GET and HEAD alone, `*`, no credential), and the health read; and real unsigned GETs of
  *      the health read's neighbours (info, card, version, config, known rule, Home, the node's status) carry none.
  *   5. An origin the operator lists keeps its own rule on the health read: its origin back, with credentials.
  *
@@ -109,6 +110,22 @@ async function main(): Promise<void> {
     const prePost = await preflight(HEALTH, 'POST', WEB);
     assert(!lower(header(prePost, 'access-control-allow-methods')).includes('post'), `its preflight never allows a POST (ACAM ${header(prePost, 'access-control-allow-methods')})`);
 
+    // ── 3b. the address list and its proof are opened as the health read is ──
+    console.log('\n── 3b. the address list and its proof (several addresses S2) ──');
+    for (const p of ['/api/node/addresses', `/api/node/proof?for=elsewhere.example&nonce=${'0'.repeat(32)}`]) {
+        const route = p.split('?')[0];
+        const r = await call('GET', p, { Origin: WEB });
+        assert(header(r, 'access-control-allow-origin') === '*' && header(r, 'access-control-allow-credentials') === null,
+            `GET ${route} from another origin: readable, never with credentials (${r.status}, ACAO ${header(r, 'access-control-allow-origin')})`);
+        const pr = await preflight(route, 'GET', WEB, 'x-signature, authorization');
+        const m = lower(header(pr, 'access-control-allow-methods'));
+        assert(pr.status === 204 && m.includes('get') && m.includes('head') && !m.some(x => ['post', 'put', 'patch', 'delete'].includes(x))
+            && header(pr, 'access-control-allow-headers') === null && header(pr, 'access-control-allow-credentials') === null,
+            `its preflight allows GET and HEAD alone, no request header, no credentials (ACAM ${header(pr, 'access-control-allow-methods')})`);
+        const w = await call('POST', route, { Origin: WEB, 'Content-Type': 'text/plain' });
+        assert(header(w, 'access-control-allow-origin') === null, `a POST to ${route} from another origin gets no allowance (${w.status})`);
+    }
+
     // ── 4. nothing else is opened ──
     console.log('\n── 4. nothing else is opened ──');
     const app = https.getKoaApp();
@@ -130,6 +147,9 @@ async function main(): Promise<void> {
         // "Show my community on global" (forums F10, routes/membership-note.ts): the worldwide community's web app asks the
         // member's own community for its note, signed by the member's key, no cookie, the answer only for the signer.
         'GET /api/membership/note',
+        // The community's signed address list and an address's proof (several addresses S2, routes/address-list.ts): the web app
+        // at one of the community's addresses checks the main one. Opened as the health read is (PUBLIC_CORS_READS).
+        'GET /api/node/addresses', 'GET /api/node/proof',
     ];
     const opened: string[] = [];
     const unexpected: string[] = [];
@@ -147,7 +167,7 @@ async function main(): Promise<void> {
     assert(opened.includes(`GET ${HEALTH}`), `the health read is the one new opening (${opened.join(', ')})`);
     assert(unexpected.length === 0, `no other route answers an unlisted origin's preflight with an allowance${unexpected.length ? `: ${unexpected.join(', ')}` : ''}`);
     assert(JSON.stringify([...opened].sort()) === JSON.stringify([...OPEN].sort()),
-        `exactly the eight openings, by route and method: the health read, the three signed knock routes, the web push key and subscription, a member's note (${opened.join(', ')})`);
+        `exactly the ten openings, by route and method: the health read, the three signed knock routes, the web push key and subscription, a member's note, the address list and its proof (${opened.join(', ')})`);
 
     const neighbours = ['/api/community/info', '/api/community/card', '/api/community/known-rule', '/api/version', '/api/node/config', '/api/home', '/api/local/status', '/api/community/health/extra', '/api/community/healthz'];
     for (const p of neighbours) {

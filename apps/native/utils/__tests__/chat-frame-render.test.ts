@@ -538,6 +538,78 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
     });
 });
 
+/**
+ * The Chat tab's own tap while it shows goes back to the chat list (WhatsApp's; Marty, 16 Nov: "clicking on chat in menu should
+ * take you back to the main chat menu - not just need the tiny back arrow"). On the phone a chat, an outside chat, an event chat
+ * and a forum topic are screens of their own over the tabs (app/chat, app/outside-chat, app/forum: the tab bar is out of sight
+ * there, their back arrow is the way out), so what the tap can find open is inside the tab: Message requests. The side and the
+ * pane the member picked stay, as the web's Chat in the menu keeps its side and its filter chip.
+ *
+ *   where the tab is            x  the Chat tab tapped  ->  shows
+ */
+describe('the Chat tab tapped while it shows: the chat list', () => {
+    const ROSA_ASKS = { count: 1, conversations: [{ id: 'req-rosa', peerCallsign: 'Rosa', participants: [ME.publicKey, 'rosa-key'], request: { state: 'pending', from: 'rosa-key', at: iso(now - 60_000) } }] };
+    const requestsPane = () => host.querySelector('[data-testid="message-requests"]');
+    const requestsRow = () => host.querySelector('[data-testid="message-requests-row"]');
+    const onTheChatList = (where: string) => {
+        expect(requestsPane(), where).toBeNull();
+        expect(search(), where).not.toBeNull();
+        expect(host.textContent, where).toContain('Kofi');
+        expect(radio('Messages')?.getAttribute('aria-selected'), where).toBe('true');
+    };
+    const PLACES: Array<{ where: string; go: () => Promise<void>; then: (where: string) => void }> = [
+        { where: 'the chat list', go: async () => {}, then: onTheChatList },
+        {
+            where: 'Message requests',
+            go: async () => {
+                await click(requestsRow(), 'the Message requests row');
+                expect(requestsPane(), 'requests open').not.toBeNull();
+            },
+            then: (where) => { onTheChatList(where); expect(requestsRow(), where).not.toBeNull(); },
+        },
+        {
+            where: 'Groups', go: () => click(radio('Groups'), 'Groups'),
+            then: (where) => { expect(radio('Groups')?.getAttribute('aria-selected'), where).toBe('true'); expect(selected(tabs()), where).toEqual(['true', 'false']); },
+        },
+        {
+            where: 'the Forum', go: () => click(side('Forum'), 'Forum'),
+            then: (where) => { expect(selected(tabs()), where).toEqual(['false', 'true']); expect(forumPane(), where).not.toBeNull(); },
+        },
+    ];
+    for (const place of PLACES) {
+        it(`from ${place.where}`, async () => {
+            rememberProfile(WITH_FORUM);
+            net.answer = community({ getMessageRequests: ROSA_ASKS });
+            await renderIn('en');
+            await place.go();
+            await tapTab();
+            place.then(place.where);
+            // A second tap changes nothing more.
+            await tapTab();
+            place.then(`${place.where}, tapped again`);
+        });
+    }
+
+    it('where the forum is off too: Message requests closes to the chat list', async () => {
+        rememberProfile(LOCAL);
+        net.answer = community({ getMessageRequests: ROSA_ASKS });
+        await renderIn('en');
+        await click(requestsRow(), 'the Message requests row');
+        expect(requestsPane()).not.toBeNull();
+        await tapTab();
+        onTheChatList('forum off');
+    });
+
+    it('a way in that names Requests still opens them (the header\'s icon), after a tap', async () => {
+        rememberProfile(WITH_FORUM);
+        net.answer = community({ getMessageRequests: ROSA_ASKS });
+        await renderIn('en');
+        await tapTab();
+        await pushChat({ filter: 'requests' });
+        expect(requestsPane()).not.toBeNull();
+    });
+});
+
 describe('the Chat tab where the forum is off: the title "Chat", as before', () => {
     const cases: Array<[string, Record<string, unknown>]> = [
         ['switched off by its owners', { ...LOCAL, forum: false }],

@@ -358,8 +358,8 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
         await act(async () => { fireEvent.click(menuBtn); });
         expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-        // Click Back to messages
-        const backBtn = screen.getByRole('button', { name: 'Back to messages' });
+        // Click Back to chats
+        const backBtn = screen.getByRole('button', { name: 'Back to chats' });
         await act(async () => { fireEvent.click(backBtn); });
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });

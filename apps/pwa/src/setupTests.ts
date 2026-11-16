@@ -1,5 +1,12 @@
 import '@testing-library/jest-dom';
 import { configure } from '@testing-library/react';
+import { beforeEach } from 'vitest';
+import { forgetDraftsForTests } from './lib/chat-drafts';
+
+// A chat's unsent words are kept in memory for the page's life (lib/chat-drafts.ts), and a test's unmount keeps them: each test
+// starts with none, so words left in one test's box never show in the next one's. Before each test, as the last one's cleanup
+// (its unmount) has kept them by then.
+beforeEach(() => { forgetDraftsForTests(); });
 
 /**
  * The budget every `findBy*` and `waitFor` in this suite gets before it gives up.

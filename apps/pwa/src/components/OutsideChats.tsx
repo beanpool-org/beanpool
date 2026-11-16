@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_WRITES_STAY_THERE, t } from '@beanpool/core';
 import { blockUser } from '../lib/blocklist';
+import { draftKey, draftSent, useKeptDraft } from '../lib/chat-drafts';
 import {
     OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, ring, sendFromBox, syncOutsideMailNow,
 } from '../lib/outside-mail';
@@ -111,6 +112,9 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     const [chat, setChat] = useState<OutsideChat | null | undefined>(undefined);
     const [lines, setLines] = useState<OutsideLine[]>([]);
     const [text, setText] = useState('');
+    // Words left unsent here wait in the box while the page is open (lib/chat-drafts.ts): Back, or Chat in the menu, keeps them.
+    const boxKey = draftKey(me, 'outside', chatId);
+    useKeptDraft(boxKey, text, setText);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const alive = useRef(true);
@@ -141,15 +145,18 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     const send = async () => {
         const words = text.trim();
         if (!words || busy || !chat) return;
+        // This chat's key, taken now: the member may have left it when the line is kept (lib/chat-drafts.ts draftSent).
+        const sentFrom = boxKey;
         setBusy(true);
         setNote(null);
         try {
             const ctx = await outsideContext();
             if (!ctx) return;
             // The box empties once the line is kept here (it shows at once, Sending…), never before; words typed meanwhile stay.
+            // By the key taken at Send: the member may have left, or opened this chat again, by then.
             const { kept, error } = await sendFromBox(ctx, chat.id, words, OUTSIDE_SEND_MS, () => {
-                setText((now) => (now.trim() === words ? '' : now));
-                void load();
+                draftSent(sentFrom, words);
+                if (alive.current) void load();
             });
             if (error && alive.current) setNote(outsideErrorWords(error, kept));
             await load();

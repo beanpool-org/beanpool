@@ -201,7 +201,14 @@ export default function ChatsScreen() {
     // search field is in use.
     const qr = useQuickReturn({ pinned: showOptions || searchFocused, resetKey: `${side}:${talkView}` });
     const listRef = useRef<FlatList>(null);
-    useTabRetapScrollTop(listRef, qr.show);
+    // The tab's own tap while Chat shows (WhatsApp's): back to the chat list at its top, on the side and pane the member
+    // picked (Marty, 16 Nov: "clicking on chat in menu should take you back to the main chat menu"). Message requests is the
+    // one view inside the tab that covers the list; a chat, an outside chat and a forum topic are screens of their own over
+    // the tabs (app/chat, app/outside-chat, app/forum), with the tab bar out of sight, so their back arrow is the way out.
+    useTabRetapScrollTop(listRef, () => {
+        qr.show();
+        setMessagesFilter('all');
+    });
     const createGroup = useCreateGroupFlow();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({

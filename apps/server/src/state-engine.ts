@@ -64,6 +64,7 @@ import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, ensureChildSafetyFn, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
+import { closeGroupGuests } from './engine/group-guests.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { dropKnowledgeOf } from './engine/knowledge-drafts.js';
@@ -11643,6 +11644,8 @@ export function closeGroupByVote(groupId: string, decisionId: string): ReturnTyp
     const cancelled = cancelClosedGroupPosts(groupId);
     db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId);
     afterClosingCircle(groupId);
+    // Its guests from other communities are removed and their homes told (engine/group-guests.ts closeGroupGuests).
+    closeGroupGuests(groupId);
     return cancelled;
 }
 

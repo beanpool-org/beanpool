@@ -13,19 +13,27 @@
  *   in    their home brings their signed items to POST /api/relay/mail (engine/relay-mail.ts), addressed `group:<id>` here.
  *         Each passed core's envelope checks there first (its form, the home rule, for here, its payload, the signature), so
  *         a guest's line with a bad envelope is refused before it reaches this file. Then (takeGuestItem):
- *           group-invite  their answer to an invitation: `{"v":1,"answer":"yes"}` goes `in`, `"no"` goes `left`
+ *           group-invite  their answer to an invitation: `{"v":1,"answer":"yes"}` goes `in`, `"no"` goes `left`;
+ *                         a no from a guest already `in` is their leave (their home showed the invitation again after a
+ *                         take-over or a day of lost answers, and they said no: #3217 round 3), a yes from one `in` received
  *           group-leave   they leave: `left`
  *           group-line    a sealed line, as a member posts one (engine/group-thread.ts postGroupThreadMessage), under the
- *                         current epoch: stored as theirs, then fanned out
+ *                         current epoch: stored as theirs, UNDER ITS ITEM'S ID (a payload naming another id is refused), so
+ *                         a report of it names the one item their home sent (group-chat-report.ts, relay-complaint.ts),
+ *                         then fanned out
  *           group-epoch   a key epoch they made (on joining, or a rotation): stored as a member's is (engine/group-keys.ts)
- *         An item from anyone who is not that group's guest in that state, from another home than the one invited, or with
- *         the owners' switch off is dropped and answered as received, as the mailbox drops (nothing tells a server who is in
- *         a group here). An in-guest's line refused for its epoch answers `epoch-stale`, any other refusal of theirs
+ *         An item from anyone who is not that group's guest in that state, from another home than the one invited, from a
+ *         home the owners blocked (connector-manager.ts isServerBlocked), to a group its members closed, or with the owners'
+ *         switch off is dropped and answered as received, as the mailbox drops (nothing tells a server who is in a group
+ *         here). An in-guest's line refused for its epoch answers `epoch-stale`, any other refusal of theirs
  *         `group-refused`: they are in the group, so that tells them nothing new.
  *   out   this server tells each guest's home in a request it signs (engine/node-key.ts), to POST /api/relay/group there
  *         (GROUP_GUEST_PATH), queued in group_guest_outbox and tried again with backoff for a day. ONE request per community
  *         for each thing told, naming the guests there in it, never one per guest: an invitation, the roster at every
- *         change of it, each new line, each new epoch (with only that home's guests' wraps), a removal. Each home is sent
+ *         change of it, each new line, each line edited or taken down (`edit`: its author's edit or delete, a convenor's
+ *         removal), each new epoch (with only that home's guests' wraps), a removal. Never to a home the owners blocked
+ *         (cross-chat design §4.2 "Caps"): nothing is queued for it, and what was queued before the block is dropped
+ *         unsent. Each home is sent
  *         to on its own (flushGuestOutbox): one that doesn't answer holds up no other, and a row queued while its home is
  *         being sent to goes as soon as that send ends. QUEUE ORDER: for each home, rows go out strictly oldest first,
  *         always (an invitation, a removal and a roster carry no time, so the home can't put them back in order). A new
@@ -56,7 +64,11 @@
  * stale, or opens the current key from the wraps and sends the line again under it.
  *
  * **Caps** (design §4.2): GROUP_GUESTS_MAX invited or in a group; GUEST_MEDIA_BYTES_DAY of photos and voice a day for each
- * guest at this server (members keep their own budget).
+ * guest at this server (members keep their own budget); no invitation to, and no fan-out to, a server the owners blocked.
+ *
+ * **A group its members close** (state-engine.ts closeGroupByVote, the one writer of group_closures) takes its guests out
+ * in the same transaction (closeGroupGuests): every guest invited or in is `removed` and their home told (`why:
+ * 'group-closed'`), so the home's link goes `removed` too. A closed group takes no invitation and nothing from a guest.
  *
  * **The owners' switch** (`groupGuests`, config/node-profile.ts; guests ride the mailbox, so `outsideMessages` too). Off:
  * no invitation is made or taken and nothing from a guest goes in; every guest invited or in is removed and their home
@@ -71,7 +83,8 @@ import { addressCardVerifies, word, type RelayItem } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { getNodeRole } from '../config/node-role.js';
-import { isNodeMember, postGuestGroupLine } from '../state-engine.js';
+import { GROUP_CLOSED, groupClosedAt, isNodeMember, postGuestGroupLine } from '../state-engine.js';
+import { isServerBlocked } from '../connector-manager.js';
 import { callsignOf, groupChatRole, loadGroupForThread } from './group-thread.js';
 import { GroupKeyError, currentGroupEpoch, groupKeyRoster, markGroupEpochStale, storeGroupEpoch } from './group-keys.js';
 import { isOwnNodeHome, ownNodeHome } from './node-key.js';
@@ -134,6 +147,7 @@ export const GUEST_CARD_ERROR = word("That address card can't be read, or it was
 export const GUEST_CONVENOR_ERROR = word('Only a convenor can invite or remove guests.');
 export const GUEST_NOT_FOUND_ERROR = word('That person is not a guest in this group.');
 export const GUEST_NO_HOME_ERROR = word("This community's server knows none of its own names yet, so it can't reach another community.");
+export const GUEST_SERVER_BLOCKED_ERROR = word("This community's owners have blocked that person's community.");
 
 export class GroupGuestError extends Error {
     constructor(readonly status: 400 | 403 | 404 | 409 | 503, readonly code: string, message: string) {
@@ -200,6 +214,8 @@ export function inviteGroupGuest(groupId: string, actor: string, card: unknown):
     assertConvenor(groupId, actor);
     if (!addressCardVerifies(card)) throw new GroupGuestError(400, 'bad_card', GUEST_CARD_ERROR);
     if (isOwnNodeHome(card.home) || isNodeMember(card.key)) throw new GroupGuestError(400, 'is_member', GUEST_IS_MEMBER_ERROR);
+    if (isServerBlocked(card.home)) throw new GroupGuestError(403, 'server_blocked', GUEST_SERVER_BLOCKED_ERROR);
+    if (groupClosedAt(groupId)) throw new GroupGuestError(403, 'group_closed', GROUP_CLOSED);
     if (!ownNodeHome()) throw new GroupGuestError(503, 'no_home', GUEST_NO_HOME_ERROR);
     const view = db.transaction((): GuestView => {
         const had = guestRow(groupId, card.key);
@@ -267,6 +283,24 @@ export function closeGuestsIfSwitchedOff(): number {
     return rows.length;
 }
 
+/**
+ * A group its members closed (state-engine.ts closeGroupByVote, inside its transaction): every guest invited or in is
+ * `removed`, and each home told in one request naming its guests there (`why: 'group-closed'`), so the home's link goes
+ * `removed` as at a convenor's Remove. The row stays, as every guest row does (a state moves); nothing more goes to or comes
+ * from them (takeGuestItem drops what a closed group's guest brings, inviteGroupGuest refuses). How many were removed.
+ */
+export function closeGroupGuests(groupId: string): number {
+    const rows = db.prepare("SELECT * FROM group_guests WHERE group_id = ? AND state IN ('invited', 'in')").all(groupId) as GuestRow[];
+    const byHome = new Map<string, string[]>();
+    for (const r of rows) {
+        setState(groupId, r.guest_key, 'removed');
+        byHome.set(r.home, [...(byHome.get(r.home) ?? []), r.guest_key]);
+    }
+    for (const [home, keys] of byHome) queueToHome(groupId, home, keys, 'removed', { why: 'group-closed' });
+    if (rows.length) flushSoon();
+    return rows.length;
+}
+
 // ── What a guest's home brings ─────────────────────────────────────────────────────────────
 
 /** What takeGuestItem answers for one item: null (received, said of everything else) or a refusal an in-guest may hear. */
@@ -298,15 +332,20 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
     if (!GUEST_ITEM_KINDS.has(env.kind) || !env.recipient.startsWith('group:') || !groupGuestsOn()) return null;
     const groupId = env.recipient.slice('group:'.length);
     const row = guestRow(groupId, env.senderKey);
-    if (!row || row.home !== env.senderHome) return null;
+    if (!row || row.home !== env.senderHome || isServerBlocked(row.home)) return null;
     try {
         loadGroupForThread(groupId);
     } catch {
         return null;
     }
+    if (groupClosedAt(groupId)) return null;
     const payload = parsePayload(item.payload);
     if (env.kind === 'group-invite') {
-        if (row.state !== 'invited' || payload?.v !== 1 || (payload.answer !== 'yes' && payload.answer !== 'no')) return null;
+        if (payload?.v !== 1 || (payload.answer !== 'yes' && payload.answer !== 'no')) return null;
+        // A no from a guest who is in: their home showed the invitation again (a take-over, or a day of lost answers) and
+        // they said no, so the home has them `declined`: taken as their leave, never kept in a roster they can't leave.
+        if (row.state === 'in' && payload.answer === 'no') return takeGuestLeave(groupId, row);
+        if (row.state !== 'invited') return null;
         // Their yes puts them in the roster: markGroupEpochStale sends it to every guest's home, theirs too (queueGroupRoster).
         db.transaction(() => {
             setState(groupId, row.guest_key, payload.answer === 'yes' ? 'in' : 'left');
@@ -317,12 +356,7 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
     }
     if (env.kind === 'group-leave') {
         if (row.state !== 'in' && row.state !== 'invited') return null;
-        db.transaction(() => {
-            setState(groupId, row.guest_key, 'left');
-            if (row.state === 'in') markGroupEpochStale(groupId);
-        })();
-        flushSoon();
-        return null;
+        return takeGuestLeave(groupId, row);
     }
     if (row.state !== 'in') return null;
     if (!payload) return 'group-refused';
@@ -331,11 +365,13 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
         const att = payload.attachment as { data?: unknown } | undefined;
         const bytes = att && typeof att.data === 'string' ? Buffer.byteLength(att.data, 'base64') : 0;
         if (bytes > 0 && guestMediaBytesToday(row.guest_key, now) + bytes > GUEST_MEDIA_BYTES_DAY) return 'group-refused';
+        // Stored under its item's id: the one id their home's record of it has (relay-complaint.ts receiveComplaint).
+        if (payload.clientId !== undefined && payload.clientId !== env.itemId) return 'group-refused';
         try {
             postGuestGroupLine(groupId, row.guest_key, {
                 ciphertext: payload.ciphertext as string, nonce: payload.nonce as string, metadata: payload.metadata,
                 type: payload.type, attachment: payload.attachment,
-            }, typeof payload.clientId === 'string' ? payload.clientId : undefined);
+            }, env.itemId);
         } catch (e) {
             refusal = e instanceof GroupKeyError && EPOCH_CODES.has(e.code) ? 'epoch-stale' : 'group-refused';
         }
@@ -355,9 +391,19 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
     return refusal;
 }
 
+/** A guest leaves (their leave, or a no once in): `left`; out of the roster when they were in, so the epoch goes stale. */
+function takeGuestLeave(groupId: string, row: GuestRow): null {
+    db.transaction(() => {
+        setState(groupId, row.guest_key, 'left');
+        if (row.state === 'in') markGroupEpochStale(groupId);
+    })();
+    flushSoon();
+    return null;
+}
+
 // ── What this server tells the guests' homes ───────────────────────────────────────────────
 
-type NoticeKind = 'invite' | 'roster' | 'line' | 'epoch' | 'removed';
+type NoticeKind = 'invite' | 'roster' | 'line' | 'edit' | 'epoch' | 'removed';
 
 /**
  * One request's body to one home: what it is, the group here, and the guests there it is for. It goes at the back of that
@@ -370,7 +416,7 @@ type NoticeKind = 'invite' | 'roster' | 'line' | 'epoch' | 'removed';
  */
 function queueToHome(groupId: string, home: string, guests: string[], kind: NoticeKind, data: unknown): void {
     const host = ownNodeHome();
-    if (!host || !guests.length || getNodeRole() === 'backup') return;
+    if (!host || !guests.length || getNodeRole() === 'backup' || isServerBlocked(home)) return;
     const body = JSON.stringify({ v: 1, kind, group: groupId, host, guests: [...guests].sort(), data });
     if (kind === 'roster') db.prepare("DELETE FROM group_guest_outbox WHERE group_id = ? AND home = ? AND kind = 'roster'").run(groupId, home);
     const now = Date.now();
@@ -466,6 +512,27 @@ export function fanOutGroupLine(groupId: string, messageId: string, author: stri
 }
 
 /**
+ * A line of the chat edited, or taken down (its author's delete, a convenor's removal: engine/group-thread.ts
+ * broadcastGroupChatUpdate, as members hear it): one `edit` request to each home with guests in, the line's author's
+ * included. An edit carries the line as members now read it (sealed again under the line's own epoch); a line taken down
+ * carries only its id and who took it down, as its tombstone says (`author` or `convenor`), never its words.
+ */
+export function fanOutGroupLineChange(groupId: string, messageId: string): void {
+    if (!groupGuestsOn()) return;
+    const homes = guestHomes(groupId);
+    if (!homes.size) return;
+    const row = db.prepare('SELECT id, author_pubkey, ciphertext, nonce, type, metadata, edited_at FROM messages WHERE id = ? AND conversation_id = ?')
+        .get(messageId, groupId) as { id: string; author_pubkey: string; ciphertext: string; nonce: string; type: string; metadata: string | null; edited_at: string | null } | undefined;
+    if (!row || row.type === 'system') return;
+    const meta = parsePayload(row.metadata ?? '') ?? {};
+    const data = row.type === 'removed'
+        ? { id: row.id, action: 'removed', by: meta.removedBy === row.author_pubkey ? 'author' : 'convenor' }
+        : { id: row.id, action: 'edited', author: row.author_pubkey, ciphertext: row.ciphertext, nonce: row.nonce, metadata: meta, editedAt: row.edited_at };
+    for (const [home, keys] of homes) queueToHome(groupId, home, keys, 'edit', data);
+    flushSoon();
+}
+
+/**
  * A new key epoch of a group (engine/group-keys.ts storeGroupEpoch, inside the caller's transaction): one request to each
  * home with guests in, carrying the record and only the wraps for that home's guests.
  */
@@ -519,7 +586,7 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
  * send, so none waits out a backoff its home has ended. A 2xx, or an answer that says it will never be taken (400, 404,
  * 413), and the row goes; anything else and ALL the home's rows wait one backoff, by time (nextFanoutTry: the step moves on
  * only when the oldest row's wait has passed), until GUEST_FANOUT_QUEUE_MS, then a row goes. A 2xx starts the steps over.
- * With guests switched off, only removals go.
+ * With guests switched off, only removals go; to a home the owners blocked, nothing goes.
  */
 async function sendToHome(home: string): Promise<number> {
     let handled = 0;
@@ -530,12 +597,14 @@ async function sendToHome(home: string): Promise<number> {
             .all(home) as OutboxRow[];
         if (!queue.length) return handled;
         const on = groupGuestsOn();
+        const blocked = isServerBlocked(home);
         const still = db.prepare('SELECT 1 FROM group_guest_outbox WHERE id = ?');
         for (const r of queue) {
             // A row withdrawn while this send ran (a newer roster replaced it, or it aged out) never goes.
             if (!still.get(r.id)) continue;
             handled++;
-            if (!on && r.kind !== 'removed') { drop.run(r.id); continue; }
+            // A home the owners blocked since its rows were queued gets none of them.
+            if (blocked || (!on && r.kind !== 'removed')) { drop.run(r.id); continue; }
             const status = await forwardSigned(url, r.body);
             const at = fanoutNow();
             const taken = status >= 200 && status < 300;

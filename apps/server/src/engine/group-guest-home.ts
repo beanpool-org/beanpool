@@ -7,14 +7,15 @@
  *   in    the host brings what it tells this member's devices in a request it signs, to POST /api/relay/group
  *         (receiveGroupNotice): `{ v: 1, kind, group, host, guests, data }`, one request per community naming that
  *         community's guests, never one per guest. Kinds: an invitation, the roster (the names in the chat and the current
- *         epoch), a line, an epoch, a removal. Each named guest gets the notice when, and only when:
+ *         epoch), a line, a line edited or taken down (`edit`), an epoch, a removal (`why`: a convenor's Remove, the owners'
+ *         switch, or the group closed). Each named guest gets the notice when, and only when:
  *           - the request's signer is the host it names (the node signature door, engine/node-signature.ts, proved who);
  *           - the guest is a member here who reads as one;
  *           - an invitation: it is not waiting already (counted once per host and group: a repeat holds nothing), they are
  *             not joining or in that group, have not blocked who invited them, it carries at most GROUP_INVITE_MAX_CHARS,
  *             and they have at most GROUP_INVITES_WAITING invitations waiting (GROUP_INVITES_WAITING_PER_HOST from one host);
  *           - anything else: they ANSWERED that host for that group: `in` (group_guest_links), or `joining` (their yes
- *             still queued here, group_guest_sent) for a roster, a line or an epoch; for a removal also `invited` (the
+ *             still queued here, group_guest_sent) for a roster, a line, an edit or an epoch; for a removal also `invited` (the
  *             invitation withdrawn: the link goes, so a host nobody answered keeps no row here). A host nobody here
  *             answered brings nothing but invitations.
  *         Two allowances per member, neither reachable by another host's notices (mayHold): what came unanswered (each
@@ -78,7 +79,7 @@ import { logger } from '../logger.js';
 const DAY_MS = 24 * 60 * 60_000;
 /** The path a group's host brings notices to (engine/node-signature.ts NODE_SIGNED_PATHS; the host's GROUP_GUEST_PATH). */
 export const GROUP_NOTICE_PATH = '/api/relay/group';
-export const GROUP_NOTICE_KINDS = ['invite', 'roster', 'line', 'epoch', 'removed'] as const;
+export const GROUP_NOTICE_KINDS = ['invite', 'roster', 'line', 'edit', 'epoch', 'removed'] as const;
 export type GroupNoticeKind = (typeof GROUP_NOTICE_KINDS)[number];
 /** Invitations waiting for one member here, and from one host (a request each, as a stranger's message request is). */
 export const GROUP_INVITES_WAITING = 20;
@@ -237,6 +238,7 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
             if (!mayHold(member, n.host, true, body.length)) return true;
             break;
         case 'line':
+        case 'edit':
         case 'epoch':
             if (!answered || !mayHold(member, n.host, true, body.length)) return false;
             break;

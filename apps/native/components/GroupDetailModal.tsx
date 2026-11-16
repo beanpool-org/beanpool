@@ -33,6 +33,7 @@ import { MemberAvatar } from './MemberAvatar';
 import { AvatarPickerSheet } from './AvatarPickerSheet';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupInvitedList } from './GroupInvitedList';
+import { GroupGuestsList } from './GroupGuestsList';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { Sentence } from './Sentence';
 import { buildRosterView, rosterHeading } from '../utils/group-roster';
@@ -1017,6 +1018,10 @@ export function GroupDetailModal({
                                 reloadKey={rosterReads}
                                 onChanged={() => { if (onMembershipChanged) onMembershipChanged(); }}
                             />
+                        )}
+                        {/* Guests from other communities in the group's chat (G2); a convenor adds one by their card. */}
+                        {isMember && !rosterRefused && !closed && (
+                            <GroupGuestsList groupId={groupData.id} isConvenor={isConvenor} reloadKey={rosterReads} />
                         )}
 
                         <View style={styles.actionArea}>

@@ -507,6 +507,11 @@ export function outsideMessagesOn(features: NodeFeatures | null | undefined): bo
     return features?.outsideMessages === true;
 }
 
+/** Whether a convenor here may invite someone from another community into a group's chat (absent = off). */
+export function groupGuestsOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.groupGuests === true && features?.outsideMessages === true;
+}
+
 export function onlineEventsOn(features: NodeFeatures | null | undefined): boolean {
     return features?.onlineEvents === true;
 }

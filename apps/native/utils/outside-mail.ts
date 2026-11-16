@@ -112,7 +112,7 @@ function refusalWords(e: OutsideMailError): string {
 /** A server's code, not words: one lower-case token (`rate_limited`, `not_a_member`). */
 const CODE_ONLY = /^[a-z0-9_]+$/;
 
-async function answerOf(res: Response): Promise<any> {
+export async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
     if (!res.ok) {
         // The server's sentence: `message` when it sent one beside a code in `error` (a report's 429: { error: 'rate_limited',

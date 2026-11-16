@@ -14,6 +14,7 @@ import {
 import { GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT, GROUP_LINE_NOT_IN_GROUP, searchShownLines } from './group-line-display';
 import { sealLine, openLine } from './group-chat-crypto';
 import { fakeGroupNode, person } from './group-chat-fake-node.test-support';
+import { applyGuestMail, guestChatId, type GuestChats } from '@beanpool/core';
 
 const G = '7a1d2c3b-4a59-4e68-9d7c-8b9a0f1e2d3c';
 const locked = { encryption: { current: 1, stale: false, fromEpoch: 1 }, messages: [] };
@@ -96,6 +97,50 @@ describe('sealed lines between two members', () => {
         forgetGroupKeys();
         t = await openGroupThread(groupKeyring(node.as(ben.publicKey), ben, G, store), served(), roster);
         expect(groupLineShown(served().messages[0], { locked: true, thread: t, me: ben.publicKey })).toMatchObject({ text: 'Working bee Sunday', name: 'Ana' });
+    });
+});
+
+describe("a member's edit made in this app, on a guest's device in another community (#3246 round 5: the AAD rule)", () => {
+    it("Ana's reply, sent and edited by this app, opens on the guest's device: the edit notice, and a copy fetched after the edit", async () => {
+        const ana = person(true);
+        const gus = person();
+        const node = fakeGroupNode(G, [ana.publicKey]);
+        const store = memoryGroupLockStore();
+        const first = uuid(), reply = uuid();
+        await sendSealedGroupLine(node.as(ana.publicKey), ana, store, { groupId: G, text: 'Working bee Saturday', clientId: first });
+        await sendSealedGroupLine(node.as(ana.publicKey), ana, store, { groupId: G, text: 'I can bring tea', clientId: reply, replyToId: first, after: first });
+        const { epoch, key } = await groupKeyring(node.as(ana.publicKey), ana, G, store).prepareToSeal();
+        const stored = (id: string) => ({ ...node.lines.find((l) => l.id === id)! });
+        const replyBefore = stored(reply);
+        await editSealedGroupLine(node.as(ana.publicKey), ana, store, { groupId: G, messageId: reply, metadata: replyBefore.metadata, text: 'I can bring tea and cake' });
+        const replyAfter = stored(reply);
+        expect(replyAfter.metadata.replyToId).toBe(first);
+
+        // The host's notices (server engine/group-guests.ts: fanOutGroupLine; queueLineChange's edit; copyOfLine's copy with the newest words).
+        const HOST = 'riverside.example';
+        const id = guestChatId(HOST, G);
+        const editedAt = '2026-11-16T09:45:00.000Z';
+        let k = 0;
+        const at = (l: { id: string }) => (l.id === first ? '2026-11-16T09:30:00.000Z' : '2026-11-16T09:31:00.000Z');
+        const lineNotice = (l: ReturnType<typeof stored>, edited?: string) => ({ id: `notice-${++k}`, host: HOST, group: G, kind: 'line', receivedAt: 0, data: {
+            id: l.id, author: l.author, ciphertext: l.ciphertext, nonce: l.nonce, type: l.type ?? 'text', metadata: l.metadata, timestamp: at(l), ...(edited ? { editedAt: edited } : {}),
+        } });
+        const editNotice = (l: ReturnType<typeof stored>) => ({ id: `notice-${++k}`, host: HOST, group: G, kind: 'edit', receivedAt: 0, data: {
+            id: l.id, action: 'edited', author: l.author, ciphertext: l.ciphertext, nonce: l.nonce, metadata: l.metadata, editedAt,
+        } });
+        // The guest's device, in the chat with this epoch's key (as the host's roster or epoch notice opens it there).
+        const device = (): GuestChats => ({ [id]: {
+            id, host: HOST, group: G, name: 'Seed Library', invitedBy: null, state: 'in', roster: null, keys: { [String(epoch)]: Buffer.from(key).toString('base64') },
+            epochSent: null, lines: [], held: [], why: null, updatedAt: 0,
+        } });
+        const shows = (pages: unknown[][]) => {
+            let chats = device();
+            for (const items of pages) chats = applyGuestMail(chats, { items }, { me: gus.publicKey, myEdPrivHex: gus.privateKey, blocked: () => false, now: 0 }).chats;
+            return chats[id].lines.map((l) => l.text);
+        };
+        expect(shows([[lineNotice(stored(first)), lineNotice(replyBefore)]])).toEqual(['Working bee Saturday', 'I can bring tea']);
+        expect(shows([[lineNotice(stored(first)), lineNotice(replyBefore)], [editNotice(replyAfter)]])).toEqual(['Working bee Saturday', 'I can bring tea and cake']);
+        expect(shows([[lineNotice(stored(first)), lineNotice(replyAfter, editedAt)]])).toEqual(['Working bee Saturday', 'I can bring tea and cake']);
     });
 });
 

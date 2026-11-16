@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "邻居分享的内容、“学习”视频以及添加你自己的频道。",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "邻居分享的内容、“运作方式”视频以及添加你自己的频道。",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "决策与投票、共享豆子、群组、企业与管理者。投票与活动也在其中；你也可以在市集中找到它们。",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "决策与投票、共享豆子、群组、企业与管理者，以及“学习”里的本地知识。投票与活动也在其中；你也可以在市集中找到它们。",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "“学习”板块",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "运作方式视频",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "关于 BeanPool 的短视频以及对应的指南页面。",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "请某人为某件事向你支付豆子。付款请求不会自动支付，是否支付由对方决定。目前，付款请求可以随邀请一起发出。",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "本地知识",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "“学习”是你的社区里值得了解的事的小书架：怎么找到一页、怎么建议一页、怎么保持准确，以及所有者或管理员如何逐页核对。",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

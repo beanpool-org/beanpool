@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { archetypeIsAfter, archetypeIsNewer, CALLSIGN_LINK_CODE } from '@beanpool/core';
 import { plainOriginOf } from './node-url';
+import { communityKeyOf } from './community-index';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_REFUSAL_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from './storage-keys';
 
 /**
@@ -92,9 +93,12 @@ const OLDER_AVATAR = 'pending_profile_avatar';
 /** The community open on the phone (db.ts getDb opens its copy). */
 const OPEN_COMMUNITY = 'beanpool_anchor_url';
 
-/** The key of `community`'s entry, or null for an address that isn't plain (node-url.ts): it is no community's. */
+/**
+ * The key of `community`'s entry, or null for an address that isn't plain (node-url.ts): it is no community's. Kept under
+ * the community's record (community-index.ts `communityKeyOf`), as every store kept per community is.
+ */
 function keyOf(community: string | null | undefined, prefix = PENDING_PROFILE_STORE_PREFIX): string | null {
-    const origin = plainOriginOf(community);
+    const origin = plainOriginOf(typeof community === 'string' ? communityKeyOf(community) : community);
     return origin ? `${prefix}${origin}` : null;
 }
 

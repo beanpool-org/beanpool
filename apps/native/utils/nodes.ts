@@ -4,6 +4,8 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { assertPlainNodeAddress, isPlainNodeAddress, plainOriginOf } from './node-url';
 import { clearPendingProfileChange } from './pending-profile-sync';
+import { communityKeyOf } from './community-index';
+import { forgetCommunityRecord, keepCommunityRecord } from './community-record';
 
 export interface SavedNode {
     url: string;
@@ -49,18 +51,63 @@ export async function addSavedNode(url: string, alias?: string, currencyType?: '
         if (currencyValue) existing.currencyValue = currencyValue;
     }
     await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
+    // The first contact makes the community's record (community-record.ts), as an app start does for a saved one.
+    await keepCommunityRecord(url);
+}
+
+/** What the saved list is read and written through: the phone's storage, or a caller's (delete-here.ts takes one). */
+export interface SavedListStorage {
+    getItem(key: string): Promise<string | null>;
+    setItem(key: string, value: string): Promise<void>;
 }
 
 /**
- * Take `url` off the phone's list of communities. A profile change still waiting to reach it goes with it
- * (pending-profile-sync.ts): it is no longer the phone's to send. A community followed to its new address carried
- * its change there first (address-follow.ts). A community that goes for good is told to drop this phone's push token
- * first: call this from inside account-leaves-phone.ts `forgetCommunityPush`.
+ * The one way a community comes off the phone's saved list: the rows `isGone` picks by their address go, and the record
+ * (community-record.ts) of each goes with it, and the record of `address` itself, so a record never stays on the phone
+ * after its row. By default the rows saved at exactly `address` go; Delete here and the update block's Leave pick by
+ * their own spelling rule. Nothing else writes the list to take a row off (utils/__tests__/saved-list-writes.test.ts);
+ * the whole list goes only as an account leaves the phone, with every record (account-leaves-phone.ts forgetCommunities).
+ *
+ * A list that can't be read is left as it is, and `address`'s record still goes (a row still saved gets a record again at
+ * the next app start, as any saved row without one does: community-record.ts). Throws when the list can't be written;
+ * the records go all the same.
+ */
+export async function takeOffSavedList(
+    address: string,
+    isGone: (url: unknown) => boolean = (url) => url === address,
+    storage: SavedListStorage = AsyncStorage,
+): Promise<void> {
+    const gone = new Set<string>([address]);
+    try {
+        let rows: unknown;
+        try {
+            const raw = await storage.getItem(SAVED_NODES_STORE_KEY);
+            rows = raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            console.warn('[nodes] The saved list could not be read; it is left as it is', e);
+            return;
+        }
+        if (!Array.isArray(rows)) return;
+        const kept = rows.filter((row) => {
+            const url: unknown = row && typeof row === 'object' ? (row as { url?: unknown }).url : undefined;
+            if (!isGone(url)) return true;
+            if (typeof url === 'string') gone.add(url);
+            return false;
+        });
+        if (kept.length !== rows.length) await storage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(kept));
+    } finally {
+        for (const url of gone) await forgetCommunityRecord(url, storage);
+    }
+}
+
+/**
+ * Take `url` off the phone's list of communities, with its record ({@link takeOffSavedList}). A profile change still
+ * waiting to reach it goes with it (pending-profile-sync.ts): it is no longer the phone's to send. A community followed
+ * to its new address carried its change there first (address-follow.ts). A community that goes for good is told to drop
+ * this phone's push token first: call this from inside account-leaves-phone.ts `forgetCommunityPush`.
  */
 export async function removeSavedNode(url: string) {
-    let nodes = await getSavedNodes();
-    nodes = nodes.filter(n => n.url !== url);
-    await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
+    await takeOffSavedList(url);
     await clearPendingProfileChange(url);
 }
 
@@ -80,10 +127,14 @@ const NO_COMMUNITY_DATABASE = 'beanpool.db';
  * is which. An address that isn't plain (it is never a community's) is hashed as written, apart from every origin.
  *
  * A phone's files under the old names move to these once, before any is opened (utils/cache-file-migration.ts).
- * e.g. "https://mullum.beanpool.org" -> "community_mullum.beanpool.org_<32 hex>.db"
+ * e.g. "https://riverside.example" -> "community_riverside.example_<32 hex>.db"
+ *
+ * The file goes through the community's record (utils/community-index.ts `communityKeyOf`): it is named from the address
+ * the record was made at, so an address the record proved as another of its own (slice S4) opens the same file.
  */
-export function getDatabaseFilenameForNode(url: string | null): string {
-    if (!url) return NO_COMMUNITY_DATABASE;
+export function getDatabaseFilenameForNode(address: string | null): string {
+    if (!address) return NO_COMMUNITY_DATABASE;
+    const url = communityKeyOf(address);
     const origin = plainOriginOf(url);
     const host = origin ? origin.replace(/^[a-z]+:\/\//, '').replace(/:\d+$/, '') : 'unplain';
     const readable = host.replace(/[^a-z0-9.-]/g, '_').slice(0, 40);

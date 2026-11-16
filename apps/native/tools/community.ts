@@ -8,11 +8,13 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { plainOriginOf } from '../utils/node-url';
+import { communityKeyOf } from '../utils/community-index';
 
 /** A filesystem-safe, identifier-safe tag for `url`'s community. */
 export function communityKey(url: string | null | undefined): string {
     if (!url) return 'local';
-    const origin = plainOriginOf(url);
+    // Kept under the community's record (utils/community-index.ts), as its SQLite file is.
+    const origin = plainOriginOf(communityKeyOf(url));
     const host = origin ? origin.replace(/^[a-z]+:\/\//, '').replace(/:\d+$/, '') : 'unplain';
     const readable = host.replace(/[^a-z0-9.-]/g, '_').slice(0, 32);
     const hash = bytesToHex(sha256(utf8ToBytes(origin ?? `unplain:${url}`))).slice(0, 16);

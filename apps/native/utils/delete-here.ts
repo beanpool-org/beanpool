@@ -35,6 +35,7 @@ import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 import { markAlertsOn } from './push-alerts-off';
 import { communityAddress, dropFromRecord } from './push-registrations';
 import { clearPendingProfileChange } from './pending-profile-sync';
+import { takeOffSavedList } from './nodes';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { disconnectFromVault, hasVault, vaultCopyKnown, VaultError } from './vault';
 
@@ -282,8 +283,9 @@ export function deleteFailedLine(reason: string, hasWords: boolean): string {
  * - `here` comes off the push record. Its node dropped the key's push tokens with the account, so the phone never
  *   asks it again (push-registrations.ts `dropFromRecord`). Its alerts choice goes too, so a rejoin starts from the default.
  * - Its cached copy goes (community-cache.ts, which closes the open copy first).
- * - The phone is set to `next`, then `here` leaves the saved list and the guest markers. In that order: the saved list,
- *   read through nodes.ts `getSavedNodes`, puts the community the phone is set to back into it.
+ * - The phone is set to `next`, then `here` leaves the saved list, with its record (nodes.ts `takeOffSavedList`), and
+ *   the guest markers. In that order: the saved list, read through nodes.ts `getSavedNodes`, puts the community the
+ *   phone is set to back into it.
  * - Its tool data (photos, reminders, settings) goes, notifying Home only once the anchor is at `next` so a card's
  *   re-read never reopens or re-creates the deleted community.
  * - A profile change still waiting to reach it goes (pending-profile-sync.ts); one waiting for another community stays.
@@ -308,12 +310,7 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
     const hereAddress = communityAddress(here);
     const isHere = (url: unknown) => communityAddress(url) === hereAddress;
     try {
-        const raw = await storage.getItem(SAVED_NODES_STORE_KEY);
-        const parsed: unknown = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(parsed)) {
-            const kept = parsed.filter((n) => !(n && typeof n === 'object' && isHere((n as { url?: unknown }).url)));
-            await storage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(kept));
-        }
+        await takeOffSavedList(here, isHere, storage);
     } catch (e) {
         console.warn('[Account] The community left could not be taken off the saved list', e);
     }

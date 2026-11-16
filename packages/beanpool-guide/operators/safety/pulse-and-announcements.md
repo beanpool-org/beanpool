@@ -15,7 +15,7 @@ An announcement goes to every member at once: to anyone with the app open, and a
 
 ## The Pulse
 
-The Pulse shows what members share from their own channels (videos, feeds and so on), plus the Learn videos. Only members can see the Pulse feed. Someone who has not joined is told it is for members.
+The Pulse shows what members share from their own channels (videos, feeds and so on), plus BeanPool's How it works videos. Only members can see the Pulse feed. Someone who has not joined is told it is for members.
 
 - Members add their own channels, and can hide or delete their own items.
 - The server checks each channel every **5 minutes** and keeps the newest **20** items from each.

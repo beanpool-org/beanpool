@@ -1877,18 +1877,23 @@ async function main(): Promise<void> {
 
     // 20e. An account with years of lines (#3233 round 2 note): 5,000 lines in a group with a guest, the last 500 still queued
     // for the guest's home, which is down. Deleting the account takes every line down in one read of the queue and one
-    // request per TAKEDOWN_IDS_MAX lines to that home, never one a line, inside the time budget.
-    {
-        const p = await row19('Order purge');
+    // request per TAKEDOWN_IDS_MAX lines to that home, never one a line. The time budget is a ratio to a baseline measured in
+    // the same run, in the same loop (scripts/flake-patterns.mjs fixed-ms-bound): a tenth of the lines with a tenth queued.
+    // One rule for many lines grows with the lines (about 10 times); one request a line, each reading the queue, grows with
+    // the lines times the queue (about 100 times: 22,182 ms on main against 127 ms here).
+    const RATIO20 = 30;
+    const purges20: Array<{ n: number; ms: number }> = [];
+    for (const [N, QUEUED] of [[500, 50], [5000, 500]] as const) {
+        const p = await row19(`Order purge ${N}`);
         refusing.add('a.example');
-        const N = 5000, QUEUED = 500, BUDGET_MS = 4000;
         const ids: string[] = [];
         const put = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, 'group-xc20p-v1:n', 'text', ?, ?)`);
+        const base = Date.now();
         db.transaction(() => {
             for (let i = 0; i < N; i++) {
                 const id = crypto.randomUUID();
                 ids.push(id);
-                put.run(id, p.g, p.m.pk, crypto.randomBytes(48).toString('base64'), JSON.stringify({ epoch: 1 }), new Date(Date.now() - (N - i) * 60_000).toISOString());
+                put.run(id, p.g, p.m.pk, crypto.randomBytes(48).toString('base64'), JSON.stringify({ epoch: 1 }), new Date(base - (N - i) * 60_000).toISOString());
             }
         })();
         db.transaction(() => { for (const id of ids.slice(-QUEUED)) guests.fanOutGroupLine(p.g, id, p.m.pk); })();
@@ -1897,7 +1902,7 @@ async function main(): Promise<void> {
         const t0 = performance.now();
         let purged: { ok: boolean } | null = null;
         try { purged = purgeMemberSelf(p.m.pk); } catch { purged = null; }
-        const ms = Math.round(performance.now() - t0);
+        purges20.push({ n: N, ms: performance.now() - t0 });
         const rows = rowsOf19(p.g);
         const takedowns = rows.filter((r) => r.kind === 'edit').map((r) => JSON.parse(r.body));
         const named = takedowns.flatMap((b) => (Array.isArray(b.data?.ids) ? b.data.ids : [b.data?.id]));
@@ -1906,14 +1911,19 @@ async function main(): Promise<void> {
         assert(p.ok && purged?.ok === true && queuedLines === QUEUED && rows.filter((r) => r.kind === 'line').length === 0,
             `20e. an account with ${N} lines deleted: none of the ${QUEUED} still queued goes (queued ${queuedLines}, left ${rows.filter((r) => r.kind === 'line').length})`);
         assert(takedowns.length === want && named.length === N && new Set(named).size === N && ids.every((id) => named.includes(id)) && each,
-            `20e. its ${N} lines go to the guest's home in ${want} requests of at most ${guests?.TAKEDOWN_IDS_MAX} ids, each line named once, by its author, words none (got ${takedowns.length} requests naming ${named.length})`);
-        assert(purged?.ok === true && ms < BUDGET_MS, `20e. the deletion, its ${N} takedowns included, inside ${BUDGET_MS} ms (took ${ms} ms)`);
+            `20e. its ${N} lines go to the guest's home in ${want} request(s) of at most ${guests?.TAKEDOWN_IDS_MAX} ids, each line named once, by its author, words none (got ${takedowns.length} requests naming ${named.length})`);
         refusing.delete('a.example');
         const nP = outs.length;
         await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
         await settle();
         const went = sentTo20(p.g, nP).filter((b) => b.kind === 'edit').length;
-        assert(went === want && rowsOf19(p.g).length === 0, `20e. once the home answers, the ${want} requests go and nothing is left (went ${went}, left ${rowsOf19(p.g).length})`);
+        assert(went === want && rowsOf19(p.g).length === 0, `20e. ${N} lines: once the home answers, the ${want} request(s) go and nothing is left (went ${went}, left ${rowsOf19(p.g).length})`);
+    }
+    {
+        const [small, big] = purges20;
+        const ratio = big.ms / Math.max(small.ms, 1);
+        assert(purges20.length === 2 && ratio <= RATIO20,
+            `20e. the ${big.n}-line deletion takes at most ${RATIO20} times the ${small.n}-line one in this run: it grows with the lines, not with the lines times the queue (${Math.round(big.ms)} ms against ${Math.round(small.ms)} ms, ${ratio.toFixed(1)} times)`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

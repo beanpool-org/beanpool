@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { PEEK_WORDS as W, formatDate, t, tn, word, type PeekShare } from '@beanpool/core';
@@ -72,7 +73,7 @@ export default function SharedOutsideScreen() {
         ]);
     };
 
-    const leave = () => (router.canGoBack() ? router.back() : router.replace('/'));
+    const leave = () => leaveScreen(router, 'shared-outside');
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style="light" />

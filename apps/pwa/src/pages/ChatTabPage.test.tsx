@@ -135,6 +135,21 @@ describe('the Chat tab where the forum is on', () => {
         expect(seen.props.at(-1)).not.toHaveProperty('onForumOpened');
     });
 
+    it('a door to one topic (slice F7), then Chat chosen in the menu: the Forum is handed the topic and each new homeNonce (#3223)', () => {
+        forumSeen.props.length = 0;
+        const opened = vi.fn();
+        const { rerender } = render(<ChatTabPage identity={ME} navNonce={1} homeNonce={0} openForum openForumTopic="ft-3" onForumOpened={opened} />);
+        expect(selected()).toEqual(['false', 'true']);
+        expect(forumSeen.props.at(-1)).toMatchObject({ topicId: 'ft-3', homeNonce: 0 });
+        // App clears the flag, keeps the topic while the tab shows; the menu's Chat hands the Forum a new count (it goes to its list).
+        rerender(<ChatTabPage identity={ME} navNonce={1} homeNonce={1} openForum={false} openForumTopic="ft-3" onForumOpened={opened} />);
+        expect(selected()).toEqual(['false', 'true']);
+        expect(forumSeen.props.at(-1)).toMatchObject({ topicId: 'ft-3', homeNonce: 1 });
+        // MessagesPage is handed the count (its own list) but never the forum's topic.
+        expect(seen.props.at(-1)).toMatchObject({ homeNonce: 1 });
+        expect(seen.props.at(-1)).not.toHaveProperty('openForumTopic');
+    });
+
     it('in the pseudo-locale: both names and the switch\'s spoken name came through t()', async () => {
         await act(async () => { await showIn('xx'); });
         render(<ChatTabPage identity={ME} />);

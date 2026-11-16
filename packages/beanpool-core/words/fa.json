@@ -2716,6 +2716,9 @@
   "Refresh your {provider} copy": "تازه‌سازی نسخهٔ {provider} شما",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} تازه شد. ورود با آن این حساب را برمی‌گرداند، بدون نیاز به تایپ چیزی.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "تازه‌سازی {provider} ممکن نشد، پس چیزی تغییر نکرد. یک دقیقهٔ دیگر دوباره امتحان کنید.",
+  "From the forum": "از انجمن",
+  "Join to reply": "برای پاسخ دادن بپیوندید",
+  "No topics here yet. Join to start the first one.": "هنوز موضوعی اینجا نیست. بپیوندید و اولین را شروع کنید.",
   "Type a tag": "یک برچسب بنویسید",
   "Tags help people find this page in Learn. Everyone can see them.": "برچسب‌ها به دیگران کمک می‌کنند این صفحه را در یادگیری پیدا کنند. همه آن‌ها را می‌بینند.",
   "Search Learn for {tag}": "جست‌وجوی {tag} در یادگیری"

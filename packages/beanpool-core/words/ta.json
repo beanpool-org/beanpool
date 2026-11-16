@@ -2716,6 +2716,9 @@
   "Refresh your {provider} copy": "உங்கள் {provider} நகலைப் புதுப்பி",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} புதுப்பிக்கப்பட்டது. இதைக் கொண்டு உள்நுழைந்தால், எதையும் தட்டச்சு செய்யாமல் இந்தக் கணக்கு திரும்ப வரும்.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider}-ஐப் புதுப்பிக்க முடியவில்லை, எனவே எதுவும் மாறவில்லை. ஒரு நிமிடம் கழித்து மீண்டும் முயலவும்.",
+  "From the forum": "மன்றத்திலிருந்து",
+  "Join to reply": "பதிலளிக்க இணையவும்",
+  "No topics here yet. Join to start the first one.": "இங்கு இன்னும் தலைப்புகள் இல்லை. முதல் தலைப்பைத் தொடங்க இணையவும்.",
   "Type a tag": "ஒரு குறிச்சொல்லை எழுதுக",
   "Tags help people find this page in Learn. Everyone can see them.": "கற்றுக்கொள் பகுதியில் இந்தப் பக்கத்தைக் கண்டுபிடிக்கக் குறிச்சொற்கள் உதவுகின்றன. அவற்றை எல்லோரும் பார்க்கலாம்.",
   "Search Learn for {tag}": "கற்றுக்கொள் பகுதியில் {tag} தேடுக"

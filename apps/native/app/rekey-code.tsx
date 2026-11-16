@@ -20,6 +20,7 @@ import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export { ErrorBoundary };
@@ -443,7 +444,7 @@ export default function RekeyCodeScreen() {
     const bringingBack = params.bringBack === '1' || isBringBackCode(code) || phase === 'holding';
     const header = (
         <View style={styles.header}>
-            <Pressable style={styles.backButton} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Back')}>
+            <Pressable style={styles.backButton} onPress={() => leaveScreen(router, 'rekey-code')} accessibilityRole="button" accessibilityLabel={t('Back')}>
                 <MaterialCommunityIcons name="arrow-left" size={24} color={colors.brand.primary} />
             </Pressable>
             <Text style={styles.headerTitle} numberOfLines={2}>{upperCase(bringingBack ? t('Ways back') : t('Re-key code'), lang)}</Text>

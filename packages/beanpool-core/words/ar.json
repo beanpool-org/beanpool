@@ -3188,6 +3188,9 @@
   "Refresh your {provider} copy": "حدّث نسختك لـ {provider}",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "تم تحديث {provider}. تسجيل الدخول به يعيد هذا الحساب، دون كتابة أي شيء.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "تعذّر تحديث {provider}، لذا لم يتغير شيء. حاول مرة أخرى بعد دقيقة.",
+  "From the forum": "من المنتدى",
+  "Join to reply": "انضم لترد",
+  "No topics here yet. Join to start the first one.": "لا مواضيع هنا بعد. انضم لتبدأ أول موضوع.",
   "Type a tag": "اكتب وسمًا",
   "Tags help people find this page in Learn. Everyone can see them.": "تساعد الوسوم الناس على إيجاد هذه الصفحة في تعلم. يمكن للجميع رؤيتها.",
   "Search Learn for {tag}": "ابحث في تعلم عن {tag}"

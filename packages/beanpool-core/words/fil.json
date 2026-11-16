@@ -2716,6 +2716,9 @@
   "Refresh your {provider} copy": "I-refresh ang kopya mo para sa {provider}",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "Na-refresh na ang {provider}. Ang pag-sign in gamit ito ay nagbabalik ng account na ito, nang walang kailangang i-type.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Hindi na-refresh ang {provider}, kaya walang nabago. Subukang muli pagkalipas ng isang minuto.",
+  "From the forum": "Mula sa forum",
+  "Join to reply": "Sumali para sumagot",
+  "No topics here yet. Join to start the first one.": "Wala pang paksa rito. Sumali para simulan ang una.",
   "Type a tag": "Mag-type ng tag",
   "Tags help people find this page in Learn. Everyone can see them.": "Tinutulungan ng mga tag ang mga tao na mahanap ang pahinang ito sa Alamin. Nakikita ito ng lahat.",
   "Search Learn for {tag}": "Hanapin ang {tag} sa Alamin"

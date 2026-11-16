@@ -51,9 +51,10 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
-const nav = vi.hoisted(() => ({ pushed: [] as unknown[], back: 0, params: { id: 't1' } as Record<string, string> }));
+// `under`: whether a screen sits under the topic (opened from the list: yes; opened first by a forum link on a cold start: no).
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[], back: 0, under: true, params: { id: 't1' } as Record<string, string> }));
 vi.mock('expo-router', () => ({
-    router: { push: (to: unknown) => { nav.pushed.push(to); }, back: () => { nav.back += 1; }, replace: (to: unknown) => { nav.pushed.push(to); } },
+    router: { push: (to: unknown) => { nav.pushed.push(to); }, back: () => { nav.back += 1; }, replace: (to: unknown) => { nav.pushed.push(to); }, canGoBack: () => nav.under },
     useLocalSearchParams: () => nav.params,
     useFocusEffect: (effect: () => void | (() => void)) => { useEffect(() => effect(), [effect]); },
 }));
@@ -243,6 +244,7 @@ beforeEach(() => {
     document.body.innerHTML = '';
     nav.pushed = [];
     nav.back = 0;
+    nav.under = true;
     nav.params = { id: 't1' };
     Object.assign(node, { offline: false, refused: null, front: FRONT, list: LIST, topic: TOPIC, kept: { front: null, list: null, topic: null }, mine: null, search: null, draft: null, replyFails: false });
     picker.next = null;
@@ -520,6 +522,32 @@ describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
         expect(nav.back).toBe(1);
         await act(async () => { lastRoot!.unmount(); });
         expect(vi.mocked(forum.keepForumDraft).mock.calls.filter(([, d]) => d !== null)).toEqual([]);
+    });
+
+    // Opened first (a member's forum link on a cold start, round 3 of #3228): nothing is under the topic. Its ‹ and its "topic
+    // gone" exit land on the Chat tab's Forum side, where the line shows; a bare back did nothing there (fails on 424fb857).
+    it('opened first: the ‹ lands on the Forum side, not nowhere', async () => {
+        nav.under = false;
+        const host = await render(set, ForumTopicScreen);
+        await press(byId(host, 'forum-back'));
+        expect(nav.back).toBe(0);
+        expect(nav.pushed).toEqual(['/(tabs)/chats?view=forum']);
+    });
+    it('opened first, the topic gone: the line and the Forum side, not an empty topic', async () => {
+        nav.under = false;
+        node.kept.topic = TOPIC;
+        const forum = await import('../forum');
+        vi.mocked(forum.getForumTopic).mockRejectedValueOnce(gone());
+        await render(set, ForumTopicScreen);
+        expect(forum.noteForumBack).toHaveBeenCalledWith({ kind: 'gone', words: 'That topic isn’t here any more.' });
+        expect(nav.back).toBe(0);
+        expect(nav.pushed).toEqual(['/(tabs)/chats?view=forum']);
+    });
+    it('opened from the list: the ‹ goes back to it', async () => {
+        const host = await render(set, ForumTopicScreen);
+        await press(byId(host, 'forum-back'));
+        expect(nav.back).toBe(1);
+        expect(nav.pushed).toEqual([]);
     });
 });
 

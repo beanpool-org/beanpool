@@ -2716,6 +2716,9 @@
   "Refresh your {provider} copy": "Ανανέωση του αντιγράφου σας για {provider}",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "Το {provider} ανανεώθηκε. Η σύνδεση με αυτό επαναφέρει αυτόν τον λογαριασμό, χωρίς να πληκτρολογήσετε τίποτα.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Δεν ήταν δυνατή η ανανέωση του {provider}, οπότε δεν άλλαξε τίποτα. Δοκιμάστε ξανά σε ένα λεπτό.",
+  "From the forum": "Από το φόρουμ",
+  "Join to reply": "Γίνε μέλος για να απαντήσεις",
+  "No topics here yet. Join to start the first one.": "Δεν υπάρχουν ακόμα θέματα εδώ. Γίνε μέλος για να ξεκινήσεις το πρώτο.",
   "Type a tag": "Γράψτε μια ετικέτα",
   "Tags help people find this page in Learn. Everyone can see them.": "Οι ετικέτες βοηθούν τους άλλους να βρουν αυτή τη σελίδα στη Μάθηση. Τις βλέπουν όλοι.",
   "Search Learn for {tag}": "Αναζήτηση στη Μάθηση για {tag}"

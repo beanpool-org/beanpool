@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchNodeProfile, getCachedNodeProfile, nodeProfileIsFresh } from './node-profile';
 import { copiesRuleSeenStoreKey } from './storage-keys';
 import { communityKeyOf } from './community-index';
+import { communityRecordsReady } from './community-record';
 import { signInCopiesAt, type RecoveryCopiesRule, type SignInCopies } from './vault-config';
 
 /** How long a connect waits for the community's answer before it goes by the kept one. */
@@ -34,6 +35,8 @@ function communityKey(url: string): string {
 
 /** The rule `url` said, as this phone kept it; null when it never heard one there. No network. Never throws. */
 export async function knownCopiesRule(url: string | null | undefined): Promise<RecoveryCopiesRule | null> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     if (!url) return null;
     try {
         return (await getCachedNodeProfile(url))?.recoveryCopies ?? null;
@@ -87,6 +90,8 @@ async function seenRules(publicKey: string): Promise<Record<string, RecoveryCopi
 
 /** This account has seen `rule` at `url`: the card for it is put away, and the next change shows it again. */
 export async function copiesRuleSeen(publicKey: string, url: string, rule: RecoveryCopiesRule): Promise<void> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     try {
         const all = await seenRules(publicKey);
         all[communityKey(url)] = rule;
@@ -111,6 +116,8 @@ export interface CopiesRuleChange {
  * a card, and a change that doesn't move where this phone's copies go is remembered without one too. Never throws.
  */
 export async function copiesRuleChange(publicKey: string, url: string | null | undefined): Promise<CopiesRuleChange | null> {
+    // Kept under the community's record (S4 may have followed it): the records load first.
+    await communityRecordsReady();
     if (!url) return null;
     const rule = await knownCopiesRule(url);
     if (!rule) return null;

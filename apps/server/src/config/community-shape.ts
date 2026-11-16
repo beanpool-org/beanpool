@@ -154,6 +154,10 @@ export interface ShapeSettings {
     decisions: ShapeSetting<boolean>;
     /** The forum (engine/forum.ts; Marty Q3, 14 Nov 2026): on from the start, members only; an owner may switch it off. */
     forum: ShapeSetting<boolean>;
+    /** Local knowledge, read in Learn (engine/knowledge.ts; DESIGN-local-knowledge-fable.md §2.9): on for a local community,
+     *  off for the global one; an owner may switch it either way. Off, Learn leaves both apps and its pages and waiting
+     *  suggestions are kept. No lock. */
+    knowledge: ShapeSetting<boolean>;
     /** Messages from other communities (engine/relay-mail.ts, X2): on by default; off, nothing from outside is taken and no
      *  member here sends out. No lock. */
     outsideMessages: ShapeSetting<boolean>;
@@ -240,8 +244,6 @@ export interface Shape {
 export const KIND_ONLY_SWITCHES = [
     'distanceSortDefault', 'directoryMirror', 'exampleListings', 'announceJoins', 'announceProfiles', 'nearbyListings',
     'membersOnDemand', 'showcase', 'openMembership', 'retention',
-    // Local knowledge (Learn): the server's kind sets it in this build; the owners' setting comes with the Settings slice.
-    'knowledge',
     // Anyone on the web can read the forum (the global community): a local community's forum is for its members.
     'forumPublic',
     // A new member's first topic waits for a moderator's look (the global community); the owners' setting comes later.
@@ -265,6 +267,7 @@ export const SHAPE_SWITCH_PLACES: Readonly<Record<ProfileSwitch | 'dmRequests', 
     dmRequests: 'dmRequests',
     decisions: 'decisions',
     forum: 'forum',
+    knowledge: 'knowledge',
     outsideMessages: 'outsideMessages',
     groupGuests: 'groupGuests',
     shareOutside: 'shareOutside',
@@ -588,6 +591,7 @@ export function readShape(): Shape {
         ...(dmRequests ? { dmRequests } : {}),
         decisions: plain('decisions'),
         forum: plain('forum'),
+        knowledge: plain('knowledge'),
         outsideMessages: plain('outsideMessages'),
         groupGuests: plain('groupGuests'),
         shareOutside: {

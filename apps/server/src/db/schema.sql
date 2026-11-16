@@ -1383,6 +1383,27 @@ CREATE TABLE IF NOT EXISTS agent_takedown_posts (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_post ON agent_takedown_posts(post_id);
 CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_held ON agent_takedown_posts(takedown_id) WHERE put_back_at IS NULL AND final_at IS NULL;
+-- What an assistant took down in the forum (slice F2b, engine/forum-takedowns.ts): one row per forum post (an opening post is its
+-- topic), one post a call. This server's own record, as agent_takedowns is (a standby never copies it; the hold travels in
+-- forum_posts.taken_down_at). `hidden_before`: its hide from before (NULL: it was up); `reports_closed`: the report ids (JSON) the
+-- takedown closed, for Put back. `why`: the assistant's own words, cleaned, read only in Settings.
+CREATE TABLE IF NOT EXISTS agent_forum_takedowns (
+    id TEXT PRIMARY KEY,
+    forum_post_id TEXT NOT NULL,
+    grant_id TEXT NOT NULL,
+    grant_name TEXT NOT NULL,
+    member_pubkey TEXT NOT NULL,
+    at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (reason IN ('spam', 'offensive', 'misleading', 'unsafe', 'rules')),
+    why TEXT NOT NULL DEFAULT '',
+    via TEXT NOT NULL CHECK (via IN ('ids', 'reports')),
+    hidden_before TEXT,
+    reports_closed TEXT NOT NULL DEFAULT '[]',
+    put_back_at TEXT,
+    final_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_forum_takedowns_post ON agent_forum_takedowns(forum_post_id);
+CREATE INDEX IF NOT EXISTS idx_agent_forum_takedowns_grant_at ON agent_forum_takedowns(grant_id, at);
 
 -- 14d. The communities directory as this node last fetched it (global profile G5, services/directory-mirror.ts).
 --
@@ -3305,7 +3326,11 @@ CREATE TABLE IF NOT EXISTS forum_posts (
     -- Hidden while the moderators look (slice F2, engine/forum-moderation.ts): reporters in enough independent circles, or a
     -- moderator's clean-up of a burst. Its writer and the moderators still read it; everyone else reads "Hidden while
     -- moderators look" in a reply's place, and nothing of a topic whose opening post it is.
-    hidden_by_reports_at TEXT
+    hidden_by_reports_at TEXT,
+    -- An owner's or an admin's AI assistant took it down (slice F2b, engine/forum-takedowns.ts): set with a hide, and while the
+    -- post is not removed, a takedown on hold, which a dismissed report, a burst's undo or a new report never brings back; Put
+    -- back clears it, and the 7-day sweep removes the post. It travels with the row, so the hold holds on a standby that took over.
+    taken_down_at TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_forum_posts_number ON forum_posts (topic_id, number);
 CREATE INDEX IF NOT EXISTS idx_forum_posts_writer ON forum_posts (writer_pubkey, created_at);
@@ -4063,8 +4088,8 @@ CREATE TABLE IF NOT EXISTS group_guests (
 CREATE INDEX IF NOT EXISTS idx_group_guests_state ON group_guests(group_id, state);
 
 -- group_guest_outbox: what this server, hosting a group, still has to tell another community's server about its guests there
--- (engine/group-guests.ts): one row is one signed request to one home (a line, an epoch, the roster, an invitation, a
--- removal), naming that home's guests in the group: never one per guest. Tried at once, then again with backoff for 24
+-- (engine/group-guests.ts): one row is one signed request to one home (a line, a line edited or taken down, an epoch, the
+-- roster, an invitation, a removal), naming that home's guests in the group: never one per guest. Tried at once, then again with backoff for 24
 -- hours; gone at the first 2xx. Each home is sent to on its own, so one that doesn't answer holds up no other. A roster
 -- still waiting is replaced by the newer one (only the latest names count). This server's own (`local`): never copied to a
 -- standby, and a promoted standby starts with none: what was waiting is still in the group's chat, which the next line's
@@ -4073,7 +4098,7 @@ CREATE TABLE IF NOT EXISTS group_guest_outbox (
     id          TEXT PRIMARY KEY,
     group_id    TEXT NOT NULL,
     home        TEXT NOT NULL CHECK (length(home) BETWEEN 1 AND 260),
-    kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'epoch', 'removed')),
+    kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'edit', 'epoch', 'removed')),
     body        TEXT NOT NULL CHECK (length(body) <= 1900000),
     attempts    INTEGER NOT NULL DEFAULT 0,
     next_try_at INTEGER NOT NULL,
@@ -4108,18 +4133,18 @@ CREATE TABLE IF NOT EXISTS group_guest_links (
     PRIMARY KEY (member, host, group_id)
 );
 
--- group_guest_mail: what a host brought for a member here (an invitation, the roster, a line, an epoch, a removal), held
--- for their devices as the mailbox holds a line (relay_mail_devices lists them): each device fetches what it has not
--- confirmed, and a row goes once every device listed has it (group_guest_mail_got), or after 30 days. `body` is what the
+-- group_guest_mail: what a host brought for a member here (an invitation, the roster, a line, a line edited or taken down,
+-- an epoch, a removal), held for their devices as the mailbox holds a line (relay_mail_devices lists them): each device
+-- fetches what it has not confirmed, and a row goes once every device listed has it (group_guest_mail_got), or after 30 days. `body` is what the
 -- host sent, with only this member's own wrap. `answered` is 1 for what came under a link the member answered (a roster,
--- a line, an epoch, the removal of one), 0 for an invitation or its withdrawal: each counts against its own allowance
+-- a line, an edit, an epoch, the removal of one), 0 for an invitation or its withdrawal: each counts against its own allowance
 -- (engine/group-guest-home.ts mayHold). Like the mailbox's tables, this server's own (`local`): never in a copy.
 CREATE TABLE IF NOT EXISTS group_guest_mail (
     id          TEXT PRIMARY KEY CHECK (length(id) BETWEEN 8 AND 64),
     member      TEXT NOT NULL CHECK (length(member) = 64),
     host        TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
     group_id    TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
-    kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'epoch', 'removed')),
+    kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'edit', 'epoch', 'removed')),
     body        TEXT NOT NULL CHECK (length(body) <= 1900000),
     bytes       INTEGER NOT NULL CHECK (bytes >= 0),
     answered    INTEGER NOT NULL CHECK (answered IN (0, 1)),

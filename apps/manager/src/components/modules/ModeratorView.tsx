@@ -216,10 +216,11 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
     const isOpen = report.outcome === 'open';
     const hasPost = !!report.postId;
     const pulse = report.pulseItem ?? null;
-    // A forum post's report (the forum's slice F2): removed through the report as a listing is, restored on its own.
+    // A forum post's report (the forum's slice F2): removed through the report as a listing is, restored on its own. Restore is
+    // drawn from the node's answer for this moderator (`restorable`): never on a post on hold, which only an owner or admin puts back.
     const forum = report.forumPost ?? null;
     const canRemovePost = isOpen && ((hasPost && !report.postRemoved) || (!!forum && !forum.removed));
-    const canRestoreForum = !!forum && forum.hidden && !forum.removed;
+    const canRestoreForum = !!forum && report.restorable === true;
     const canRemovePulse = isOpen && !!pulse && !pulse.removed;
 
     const run = async (label: string, fn: () => Promise<unknown>) => {
@@ -273,10 +274,11 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
             ) : forum ? (
                 <div className="space-y-1" data-testid="reported-forum-post">
                     <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
-                        {forum.number === 1 ? 'Forum topic' : 'Forum reply'}{forum.writerName ? ` by ${forum.writerName}` : ''}{forum.hidden ? ' · hidden while moderators look' : ''}{forum.removed ? ' · already down' : ''}
+                        {forum.number === 1 ? 'Forum topic' : 'Forum reply'}{forum.writerName ? ` by ${forum.writerName}` : ''}{forum.onHold ? ' · on hold' : forum.hidden ? ' · hidden while moderators look' : ''}{forum.removed ? ' · already down' : ''}
                     </p>
                     <p className="text-base font-bold text-white m-0">{forum.topicTitle || 'A removed topic'}</p>
                     {forum.words && <p className="text-sm text-nature-200 m-0 whitespace-pre-line">{forum.words}</p>}
+                    {isOpen && forum.onHold && <p className="text-sm font-semibold text-nature-100 m-0" data-testid="post-on-hold">{POST_ON_HOLD_WORDS}</p>}
                 </div>
             ) : hasPost ? (
                 <div className="space-y-1">

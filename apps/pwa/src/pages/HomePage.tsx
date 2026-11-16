@@ -42,6 +42,7 @@ import { useKnockStatuses } from '../lib/use-knock-statuses';
 import { YesJoin } from '../components/YesJoin';
 import { TellMeCard } from '../components/TellMeCard';
 import { readWebPushPin, stopTellingMeAtHome, tellMeAtHome } from '../lib/web-push';
+import { holdInView } from '../lib/hold-in-view';
 import { noteYesAnswers } from '../lib/yes-bell';
 import { forgetHandedOver, handedOverHere } from '../lib/handoff';
 import { isPhoneBrowser } from '../lib/global-entry';
@@ -1429,13 +1430,19 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     }, [knocks, knockStatuses, cancelledKnocks, joinedKnocks, publicKey]);
 
     // The row a click on a notice came for (global yes Y2): once the community's answer is read and the row is drawn, into
-    // view, and its Join in focus when it is a yes. A row this browser doesn't hold never comes, and nothing happens.
+    // view, and its Join in focus when it is a yes. A row this browser doesn't hold never comes, and nothing happens. It is
+    // held in view while the page settles (lib/hold-in-view.ts): a card drawn above it later, App's "Your account is new",
+    // pushed it off a 320 px screen in the walk of 16 Nov 2026.
+    const releaseLanding = useRef<(() => void) | null>(null);
+    useEffect(() => () => releaseLanding.current?.(), []);
     useEffect(() => {
         if (!knockRow || knockStatuses[knockRow] === undefined) return;
         const row = Array.from(document.querySelectorAll<HTMLElement>('[data-knock-row]')).find(el => el.dataset.knockRow === knockRow);
         if (!row) return;
         try { row.scrollIntoView({ block: 'center' }); } catch { /* an old browser: the row is still on the card */ }
         row.querySelector<HTMLElement>('[data-knock-join] button')?.focus();
+        releaseLanding.current?.();
+        releaseLanding.current = holdInView(row, { block: 'center' });
         onKnockRowSeen?.();
         // `answer`: the Find card is drawn once Home's read is in, which can come after the community's answer.
     }, [knockRow, knockStatuses, knocks, answer, onKnockRowSeen]);

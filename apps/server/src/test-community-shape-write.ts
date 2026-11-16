@@ -347,6 +347,21 @@ async function main(): Promise<void> {
     assert(isDeepStrictEqual(toldEach(nMark), [[SENT('reported posts stay up until a moderator looks.'), SENT('repeat offenders are no longer muted automatically.')].join('\n')]),
         'and when they go off again');
 
+    // Local knowledge (Learn): the owners switch it off and on; members are told, nothing is locked, and back on is the default again.
+    mark = logMark(); nMark = noticeMark();
+    const learnOff = await change({ knowledge: false });
+    assert(learnOff.status === 200 && !('knowledge' in np.getNodeFeatures()) && np.getConfiguredSwitches().knowledge === false
+        && rowOf(OVERRIDE_PREFIX + 'knowledge') !== null && learnOff.body.shape.settings.knowledge.value === false
+        && learnOff.body.shape.settings.knowledge.source === 'owner' && !learnOff.body.shape.kindOnly.some((k: { id: string }) => k.id === 'knowledge'),
+        `Learn off: gone from features, the override written, the shape reads it as the owners' (${show(learnOff)})`);
+    assert(isDeepStrictEqual(linesSince(mark).map((l) => `${l.setting}:${l.old_value}>${l.new_value}`), ['knowledge:on>off']), 'one line in the log');
+    assert(isDeepStrictEqual(toldEach(nMark), [SENT('Learn is off. Its pages are kept for when it is on again.')]), 'members are told Learn is off');
+    nMark = noticeMark();
+    const learnOn = await change({ knowledge: true });
+    assert(learnOn.status === 200 && np.getNodeFeatures().knowledge === true && rowOf(OVERRIDE_PREFIX + 'knowledge') === null
+        && readShape().settings.knowledge.source === 'profile', `Learn on again: the kind's default, no override left (${show(learnOn)})`);
+    assert(isDeepStrictEqual(toldEach(nMark), [SENT('Learn is on, with pages of things worth knowing about your community.')]), 'members are told Learn is on');
+
     // The directory: written, logged, alerted, and no member told.
     mark = logMark(); nMark = noticeMark(); aMark = alerts.length;
     const dir = await change({ listed: false, shareLocation: false, shareMemberCount: false, sharePhone: true, shareHealth: false, shareEmail: false });

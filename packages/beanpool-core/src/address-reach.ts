@@ -135,6 +135,18 @@ export const ADDRESS_SCREEN_WORDS = {
     notMainYetMembersAt: word('{address} is not the main address yet: the address service says {status}. This server has moved to it and keeps asking for it, so the panel below now shows it. Members still reach this community at {current}.'),
     /** What an admin reads where an owner is told to press Add an address, which is an owner's. */
     noAddressOwnerAdds: word('No public address currently assigned. An owner of this community can add one.'),
+    /** Make main, asked first (several-addresses §8): the one action that moves the main address. */
+    makeMainTitle: word('Make {address} the main address?'),
+    makeMainQuestion: word("New members, invites, the directory and search engines are sent there. Members' phones follow by themselves, usually within a day. Every other address keeps working. People on the web stay where they are and are shown the new address."),
+    makeMainDone: word('{address} is now the main address.'),
+    /** Add an address, asked first (several-addresses §7, §8): every listed address is a door to guard. */
+    addQuestion: word("Members' phones will trust {address} as this community once it answers with this server's key, and people can sign in on the web there. Only add an address you control."),
+    addConfirm: word('Add it'),
+    cancel: word('Cancel'),
+    /** Under an own-domain main: the BeanPool name stays as the way back. */
+    wayBack: word('Keep {address} as well: it is the way back if the domain ever lapses.'),
+    /** What members' phones follow: the server's signed list, as it stands. */
+    followLine: wordn("Members' phones follow this list: {n} address, main {address}.", "Members' phones follow this list: {n} addresses, main {address}."),
 } as const;
 
 /** The next step's sentence. `minutes`: how long ago a `new-name` was made. */

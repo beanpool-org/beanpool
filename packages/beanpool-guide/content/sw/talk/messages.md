@@ -24,7 +24,7 @@ Kwenye programu ya wavuti hili ni kichupo cha **Gumzo**. Huorodhesha mazungumzo 
 ## Kuanzisha gumzo
 
 - Kutoka kwenye wasifu: fungua wasifu wake na uguse **Tuma ujumbe**. Unaweza pia kumwongeza kama rafiki hapo.
-- Kutoka **Gumzo**: gusa kitufe cha penseli, kisha mpate mtu huyo kwa jina. Kwenye jumuiya ya kimataifa, Ujumbe Mpya huorodhesha watu uliyofanya nao makubaliano na marafiki zako. Ili kumpata mtu mwingine yeyote, andika angalau herufi 2 za jina lao.
+- Kutoka **Gumzo**: gusa kitufe cha penseli, kisha mpate mtu huyo kwa jina. Kwenye jumuiya ya kimataifa, Ujumbe Mpya huorodhesha watu uliyofanya nao makubaliano na marafiki zako. Ili kumpata mtu mwingine yeyote, andika angalau herufi 2 za jina lao. Ili kumwandikia mtu aliye wa jumuiya nyingine, tazama "Watu wa jumuiya nyingine".
 - Kutoka kwenye orodha ya wanachama: **Gumzo**, kisha **Watu**, na uguse 💬 kando ya jina la mwanachama katika **Jumuiya** au **Marafiki**.
 - Kutoka kwenye chapisho: gusa **Ujumbe** na jina la mtu.
 

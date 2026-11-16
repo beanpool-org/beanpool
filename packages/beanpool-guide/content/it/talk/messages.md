@@ -24,7 +24,7 @@ Nella web app questa è la scheda **Chat**. Elenca tutte le tue chat, comprese q
 ## Avviare una chat
 
 - Da un profilo: apri il suo profilo e tocca **Invia messaggio**. Lì puoi anche aggiungere la persona come amica.
-- Da **Parla**: tocca il pulsante con la matita, poi trova la persona per nome. Nella comunità globale, Nuovo messaggio elenca le persone con cui hai fatto scambi e i tuoi amici. Per trovare chiunque altro, digita almeno 2 lettere del suo nome.
+- Da **Parla**: tocca il pulsante con la matita, poi trova la persona per nome. Nella comunità globale, Nuovo messaggio elenca le persone con cui hai fatto scambi e i tuoi amici. Per trovare chiunque altro, digita almeno 2 lettere del suo nome. Per scrivere a qualcuno che appartiene a un'altra comunità, vedi "Persone di altre comunità".
 - Dall'elenco dei membri: **Parla**, poi **Persone**, e tocca 💬 accanto al nome di un membro in **Comunità** o **Amici**.
 - Da un annuncio: tocca **Messaggio** e il nome della persona.
 

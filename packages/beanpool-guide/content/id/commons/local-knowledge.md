@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Pengetahuan lokal
 summary: Belajar, rak komunitasmu berisi hal-hal yang layak diketahui: menemukan halaman, mengusulkannya, menjaganya tetap benar, dan cara pemilik atau admin memeriksa tiap halaman.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## Apa itu
@@ -45,6 +45,14 @@ Setiap halaman diakhiri dengan baris yang sama: "Pengetahuan lokal ditulis oleh 
 ## Ini membantu
 
 Jika sebuah halaman membantumu, ketuk **👍 Ini membantu**. Ketuk lagi untuk membatalkannya. Halaman menampilkan berapa banyak anggota yang terbantu, seperti **Membantu 12**, dan tidak pernah siapa. Kamu tidak bisa mengetuknya di halamanmu sendiri.
+
+## Pemandu lokal
+
+Anggota yang menulis 3 halaman yang kini ada di Belajar, masing-masing sudah membantu setidaknya 3 anggota, menampilkan **🗺️ Pemandu lokal**: di baris **Ditulis oleh** pada halaman-halamannya, dan di profilnya. Halaman yang disusun bersama asisten AI tidak dihitung. Tanda ini hilang lagi jika halaman-halamannya hilang, atau jika Belajar dimatikan. Ini hanya ucapan terima kasih: tidak memberi Kacang dan tidak membuat siapa pun bisa melakukan lebih banyak.
+
+## Berterima kasih kepada penulis
+
+Di bawah halaman yang ditulis orang lain, ketuk tombol dengan namanya, seperti **🫘 Berterima kasih ke Ada**. Tombol itu membuka formulir biasa di Buku kas untuk mengirim Kacang, dengan penulis sudah dipilih dan catatan seperti **Terima kasih untuk “Bus ke kota”** sudah terisi. Ubah jumlah atau catatannya, lalu kirim seperti hadiah lain dari Kacangmu sendiri. Tidak ada orang lain yang membayar apa pun. Tombol ini hanya muncul jika komunitasmu menggunakan Kacang, dan tidak muncul di halaman yang disusun bersama asisten AI. Lihat "Mengirim hadiah".
 
 ## Mengusulkan halaman
 

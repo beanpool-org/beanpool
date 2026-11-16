@@ -71,7 +71,7 @@ L'Accueil n'affiche que les cartes qui ont quelque chose à vous dire, dans votr
 - **Développez votre communauté :** vous permet d'inviter de nouveaux membres après votre première Offre, là où les invitations sont activées. Pas sur la communauté globale. Sur le téléphone, là où seuls les administrateurs invitent, elle ne s'affiche que pour un propriétaire ou un administrateur. Dans l'application web, elle ne s'y affiche pas du tout.
 - **Votre communauté :** la dernière carte, intitulée du nom de votre communauté (**La communauté mondiale** sur la communauté globale). Elle indique le nombre de membres et les échanges ce mois-ci ; sur la communauté globale, les membres et le nombre de communautés répertoriées. Elle comprend **Ajouter une carte** et **Modifier l'accueil**. Cette carte reste en bas et ne peut être déplacée ni retirée.
 
-Sur le téléphone, lorsque votre téléphone est passé de lui-même à une autre adresse de votre communauté, une ligne au-dessus de toutes celles-ci le signale, une seule fois : voir « Si votre communauté change d'adresse » dans « Plusieurs communautés ».
+Sur le téléphone, lorsque votre téléphone est passé de lui-même à une autre adresse de votre communauté, une ligne au-dessus de toutes celles-ci le signale, une seule fois (mais pas quand il revient à l'adresse principale) : voir « Si votre communauté change d'adresse » dans « Plusieurs communautés ».
 
 ## Le menu « … »
 

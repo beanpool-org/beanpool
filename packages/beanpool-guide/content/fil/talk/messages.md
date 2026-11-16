@@ -24,7 +24,7 @@ Sa web app ito ang tab na **Usapan**. Inililista nito ang lahat ng iyong mga cha
 ## Pagsisimula ng chat
 
 - Mula sa isang profile: buksan ang kanilang profile at i-tap ang **Mensahe**. Maaari mo rin silang idagdag bilang kaibigan doon.
-- Mula sa **Usapan**: i-tap ang button na lapis, pagkatapos ay hanapin ang tao ayon sa pangalan. Sa pandaigdigang komunidad, inililista ng Bagong Mensahe ang mga taong nakatransaksyon mo at ang iyong mga kaibigan. Upang makahanap ng sinumang iba pa, mag-type ng hindi bababa sa 2 titik ng kanilang pangalan.
+- Mula sa **Usapan**: i-tap ang button na lapis, pagkatapos ay hanapin ang tao ayon sa pangalan. Sa pandaigdigang komunidad, inililista ng Bagong Mensahe ang mga taong nakatransaksyon mo at ang iyong mga kaibigan. Upang makahanap ng sinumang iba pa, mag-type ng hindi bababa sa 2 titik ng kanilang pangalan. Upang sumulat sa isang taong kabilang sa ibang komunidad, tingnan ang "Mga tao mula sa ibang komunidad".
 - Mula sa listahan ng mga miyembro: **Usapan**, pagkatapos ay **Mga Tao**, at i-tap ang 💬 sa tabi ng pangalan ng miyembro sa **Komunidad** o **Mga kaibigan**.
 - Mula sa isang post: i-tap ang **Mensahe** at ang pangalan ng tao.
 

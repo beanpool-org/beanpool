@@ -71,7 +71,7 @@ O Início mostra apenas os cartões que têm algo a dizer a você, na sua própr
 - **Faça sua comunidade crescer:** permite convidar novos membros após sua primeira Oferta, onde os convites estiverem ativos. Não disponível na comunidade global. No celular, onde apenas administradores convidam, ele aparece apenas para o proprietário ou administradores. No aplicativo web, ele não aparece lá de forma alguma.
 - **Sua comunidade:** o último cartão, com o nome da sua comunidade (**A comunidade mundial** na comunidade global). Mostra o número de membros e as trocas neste mês; na comunidade global, os membros e quantas comunidades estão listadas. Tem **Adicionar um cartão** e **Editar início**. Este cartão permanece na parte inferior e não pode ser movido nem removido.
 
-No celular, quando seu celular passou sozinho para outro endereço da sua comunidade, uma linha acima de todos estes avisa, uma única vez: consulte "Se sua comunidade mudar de endereço" em "Mais de uma comunidade".
+No celular, quando seu celular passou sozinho para outro endereço da sua comunidade, uma linha acima de todos estes avisa, uma única vez (mas não quando ele volta para o endereço principal): consulte "Se sua comunidade mudar de endereço" em "Mais de uma comunidade".
 
 ## O menu "…"
 

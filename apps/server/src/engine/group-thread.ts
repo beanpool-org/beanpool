@@ -60,7 +60,10 @@ export function guestLineName(groupId: string, key: string): string | null {
  * The name a line in a group's chat is served under: a member here by their name; else a guest of this group (invited, in,
  * left or removed: their line stays) by core's guest line (guestLineName); else none, and the reader shows a short key.
  * Every place that serves a group line names its author here: the chat's read, a new line, a retried line, a changed line,
- * the chats list's last line (your-groups.ts) and a reported line as the moderators open it (group-chat-report.ts). WALK 3 phone (17 Nov 2026): a guest's line was served under "2b3be71a",
+ * the chats list's last line (your-groups.ts, and Home's Groups card from it), a new line's push and the bell's notice of it,
+ * a reported line as the moderators open it (group-chat-report.ts) and the moderators' report queue (state-engine.ts
+ * getReports, which the owner's assistant reads too). test-group-guests 14c is the table: every author x every one of these.
+ * WALK 3 phone (17 Nov 2026): a guest's line was served under "2b3be71a",
  * so the members' Groups list read "2b3be71a: 🔒 Message", and once the guest left, the chat named their lines
  * "2b3be71a · no longer in this group" (the phone names a signer outside its roster by the name the node serves).
  */
@@ -600,10 +603,10 @@ export function postGroupThreadMessage(
     // After the answer, never inside it: the push skips anyone who has blocked the author (state-engine.ts
     // dispatchPushNotification), and their badge count's work in the answer would make a line's answer faster when
     // someone in the group has blocked its author, which would tell them (#1403 review).
-    // A guest is named by core's guest line, never by the name on their card alone (guestLineName).
-    const senderName = opts.guest
-        ? guestLineName(groupId, authorPubkey) ?? nameLine({ kind: 'guest', name: authorPubkey.slice(0, 8) })
-        : sender?.callsign || 'A member';
+    // Named as the line itself is served (groupLineAuthorName): a guest by core's guest line, never by the name on their
+    // card alone. With no name, a guest's push still says "guest", and a member's "A member".
+    const senderName = groupLineAuthorName(groupId, authorPubkey, sender?.callsign)
+        ?? (opts.guest ? nameLine({ kind: 'guest', name: authorPubkey.slice(0, 8) }) : 'A member');
     setImmediate(() => {
         try { pushGroupMessage(cb, group, authorPubkey, senderName, mentions); }
         catch (e: any) { console.warn('[Push] A group line push failed:', e?.message ?? e); }

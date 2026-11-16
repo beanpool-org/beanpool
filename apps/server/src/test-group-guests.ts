@@ -877,6 +877,99 @@ async function main(): Promise<void> {
     const nameMisses = nameRows.filter(([, g, k, member, want]) => groupLineAuthorName(g, k, member) !== want).map(([label]) => label);
     assert(stateOf(S, oz) === 'left' && nameMisses.length === 0, `14b-6. groupLineAuthorName, one rule for every caller (misses: ${nameMisses.join(', ') || 'none'})`);
 
+    // ── 14c. Close the class: every author of a group line x every place this server serves its name ──
+    // #3275 round 2: a member by their name; a guest of the group in any state by core's guest line; anyone else by no
+    // name, and each place's own stand-in (a short key, "@" and a short key, or none). One table: each author's line is the
+    // chat's newest when it is read (the Groups list and Home's Groups card carry only that one), and a convenor's removal
+    // of it goes last, as it ends the line. The push and the bell for a guest's new line are 14's rows 'line' and 'line
+    // mentioning a member'; a line from a guest who is not in is refused before it is stored (4, 6, 7).
+    console.log('\n14c. Close the class: every author of a group line x every place this server serves its name');
+    const { ensureGroupThread, syncGroupThreadMembership } = await import('./engine/group-thread.js');
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+    const { AGENT_TOOLS } = await import('./agent/tools.js');
+    const K = createGroup({ name: 'Bike Kitchen', joinPolicy: 'open', createdBy: ana.pk }).id;
+    const mo = addLocal('Mo');
+    for (const who of [jo, ben, mo]) {
+        db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'active', 1)`).run(K, who.pk);
+    }
+    ensureGroupThread(K);
+    for (const who of [ana, jo, ben, mo]) syncGroupThreadMembership(K, who.pk);
+    const at14c = new Date().toISOString();
+    const listGuest14c = (who: Id, home: string, state: 'invited' | 'in' | 'left' | 'removed', name = who.name) => db.prepare(
+        `INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(K, who.pk, home, name, state, ana.pk, at14c, at14c);
+    const inAna = newId('Ana'), una = newId('Una'), ro = newId('Ro'), ed = newId('Ed'), nobody = newId('Nobody');
+    listGuest14c(inAna, 'a.example', 'in');
+    listGuest14c(una, 'c.example', 'left');
+    listGuest14c(ro, 'a.example', 'removed');
+    listGuest14c(ed, 'c.example', 'invited');   // in once, left, and invited again: the lines from when they were in stay
+    listGuest14c(mo, 'a.example', 'left', 'Ana');   // a member here on this group's guest list whose card said "Ana"
+    const authors14c: Array<{ who: string; key: string; name: string | null }> = [
+        { who: 'a member', key: ben.pk, name: 'Ben' },
+        { who: 'a member who is also on the group\'s guest list (their name here wins)', key: mo.pk, name: 'Mo' },
+        { who: 'a guest in, whose card says a member\'s name', key: inAna.pk, name: 'Ana · a.example · guest' },
+        { who: 'a guest who left', key: una.pk, name: 'Una · c.example · guest' },
+        { who: 'a removed guest', key: ro.pk, name: 'Ro · a.example · guest' },
+        { who: 'a guest invited again', key: ed.pk, name: 'Ed · c.example · guest' },
+        { who: 'a guest of another group', key: gus.pk, name: null },
+        { who: 'a key nobody here knows', key: nobody.pk, name: null },
+    ];
+    db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'home.layout', ?)
+                ON CONFLICT(public_key, pref_key) DO UPDATE SET pref_value = excluded.pref_value`)
+        .run(jo.pk, JSON.stringify({ v: 2, cards: [{ id: 'chat-k14c', type: 'chat', settings: { conversationId: K, kind: 'group', name: 'Bike Kitchen' } }], dismissed: {}, updatedAt: at14c }));
+    const admin14c = ownerTokenHeaders('admin');
+    const adminGet = async (p: string) => (await (await fetch(`${BASE}${p}`, { headers: admin14c })).json().catch(() => null)) as any;
+    const reportGet = AGENT_TOOLS.find((t) => t.name === 'report_get');
+    const short = (k: string) => k.slice(0, 8);
+    interface Line14c { id: string; at: string; report: string }
+    const paths14c: Array<{ where: string; unnamed: (key: string) => string | null; read: (l: Line14c) => Promise<unknown> }> = [
+        { where: 'the chat as a member reads it', unnamed: short,
+            read: async (l) => ((await call('GET', jo, `/api/groups/${K}/chat`)).body?.messages ?? []).find((m: any) => m.id === l.id)?.authorCallsign },
+        { where: 'the Groups list (its last line)', unnamed: short, read: async (l) => {
+            const row = ((await call('GET', jo, '/api/your-groups')).body?.items ?? []).find((i: any) => i.conversationId === K);
+            return row?.lastMessage?.id === l.id ? row.lastMessage.authorCallsign : `another line (${row?.lastMessage?.id})`;
+        } },
+        { where: 'Home\'s Groups card (its last line)', unnamed: short, read: async (l) => {
+            const g = ((await call('GET', jo, '/api/home?cards=groups')).body?.cards?.groups?.items ?? []).find((i: any) => i.id === K);
+            return g?.last?.at === l.at ? g.last.who : `another line (${g?.last?.at})`;
+        } },
+        { where: 'Home\'s chat card pinned to the group', unnamed: short,
+            read: async (l) => ((await call('GET', jo, '/api/home?cards=chat-k14c')).body?.cards?.['chat-k14c']?.lines ?? []).find((m: any) => m.id === l.id)?.who },
+        { where: 'a report of it, as the moderators open it', unnamed: () => null,
+            read: async (l) => (await adminGet(`/api/local/admin/reports/${l.report}/message`))?.message?.authorCallsign },
+        { where: 'the moderators\' report queue', unnamed: (k) => `@${short(k)}`,
+            read: async (l) => ((await adminGet('/api/local/admin/reports?status=all&limit=500'))?.reports ?? []).find((r: any) => r.id === l.report)?.targetCallsign },
+        { where: 'the owner\'s assistant reading the report', unnamed: (k) => `@${short(k)}`, read: async (l) => {
+            const got: any = await reportGet?.run({} as any, { report_id: l.report }, 'b14c');
+            return got?.result?.report?.authorCallsign?.text?.split('\n')[1];
+        } },
+        // Last: the line is a tombstone after it, as every member hears it (broadcastGroupChatUpdate) and as an edit's is.
+        { where: 'a convenor\'s removal (the changed line every member hears)', unnamed: short,
+            read: async (l) => (await call('POST', ana, `/api/groups/${K}/chat/remove`, { messageId: l.id })).body?.message?.authorCallsign },
+    ];
+    const reports14c: string[] = [];
+    const base14c = Date.now();
+    for (const [i, a] of authors14c.entries()) {
+        const line: Line14c = { id: crypto.randomUUID(), at: new Date(base14c + (i + 1) * 1000).toISOString(), report: crypto.randomUUID() };
+        db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, 'text', NULL, ?)`)
+            .run(line.id, K, a.key, Buffer.from('a line').toString('base64'), `${'0'.repeat(24)}`, line.at);
+        db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at) VALUES (?, ?, ?, ?, ?, 'Spam or scam', ?)`)
+            .run(line.report, jo.pk, a.key, line.id, JSON.stringify({ epoch: 1, mk: Buffer.alloc(32).toString('base64') }), line.at);
+        reports14c.push(line.report);
+        const misses: string[] = [];
+        for (const p of paths14c) {
+            const want = a.name ?? p.unnamed(a.key);
+            const got = await p.read(line);
+            if (got !== want) misses.push(`${p.where}: ${JSON.stringify(got)}`);
+        }
+        assert(misses.length === 0, `14c. ${a.who}: every place serves ${JSON.stringify(a.name ?? 'no name, only its own stand-in')} (${misses.length} of ${paths14c.length} miss${misses.length ? `: ${misses.join('; ')}` : ''})`);
+    }
+    // Nothing of this table reaches the sections after it: the guest rows, the reports and Jo's Home go.
+    db.prepare('DELETE FROM group_guests WHERE group_id = ?').run(K);
+    db.prepare('DELETE FROM abuse_reports WHERE id IN (SELECT value FROM json_each(?))').run(JSON.stringify(reports14c));
+    db.prepare(`DELETE FROM member_preferences WHERE public_key = ? AND pref_key = 'home.layout'`).run(jo.pk);
+    await settle();
+
     // ── 15. Each home on its own ────────────────────────────────────────────────────────────
     console.log('\n15. One community that doesn\'t answer holds up no other; a row queued during a send goes when it ends');
     let openC: () => void = () => {};

@@ -121,6 +121,9 @@ import {
     forgetTakedownsOf, hasOpenChildSafetyReport, hasPendingDeal, markTakedownFinal, putBackTakedowns as putBackTakedownsEngine, setTakedownRemoval, takeDownPosts as takeDownPostsEngine,
     type PutBackResult, type PutBackScope, type TakeDownInput, type TakeDownResult,
 } from './engine/agent-takedowns.js';
+import {
+    putBackForumTakedowns, setForumTakedownRemoval, takeDownForumPost as takeDownForumPostEngine, type ForumTakeDownInput, type ForumTakeDownResult,
+} from './engine/forum-takedowns.js';
 import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
@@ -800,6 +803,7 @@ export function initStateEngine(): void {
     // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
     // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
     setTakedownRemoval(makeTakedownFinal);
+    setForumTakedownRemoval(makeForumTakedownFinal);
     pollWordsGoWithThePoll();
     // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
     // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
@@ -8129,9 +8133,19 @@ export function takeDownPosts(input: TakeDownInput): TakeDownResult {
     return takeDownPostsEngine(moderationNoticeCb, input);
 }
 
-/** A person puts an assistant's takedowns back (engine/agent-takedowns.ts). */
+/** An owner's or an admin's AI assistant takes one forum post down (engine/forum-takedowns.ts, slice F2b). */
+export function takeDownForumPost(input: ForumTakeDownInput): ForumTakeDownResult {
+    return takeDownForumPostEngine(moderationNoticeCb, input);
+}
+
+/**
+ * A person puts an assistant's takedowns back (engine/agent-takedowns.ts), the forum's with them (engine/forum-takedowns.ts): a post
+ * id is a listing's or a forum post's, a call's id either kind's, and "since a time" both, so a stolen token's day is one tap.
+ */
 export function putBackTakedowns(scope: PutBackScope): PutBackResult {
-    return putBackTakedownsEngine(moderationNoticeCb, scope);
+    const listings = putBackTakedownsEngine(moderationNoticeCb, scope);
+    const forum = putBackForumTakedowns(moderationNoticeCb, scope);
+    return { back: [...listings.back, ...forum.back], stillHidden: [...listings.stillHidden, ...forum.stillHidden], gone: listings.gone + forum.gone };
 }
 
 /**
@@ -9149,6 +9163,26 @@ function makeTakedownFinal(postId: string): boolean {
     const ended = !!end && Date.parse(end) <= Date.now();
     if (!before || !adminDeletePostEngine(broadcast, postId, undefined, undefined, ended ? undefined : dispatchPushNotification)) return false;
     notifyPostTakedown(moderationNoticeCb, { ...before, wasLive: false }, closeOpenReportsOnPost(postId));
+    return true;
+}
+
+/**
+ * What makes an assistant's forum takedown final (engine/forum-takedowns.ts sweepForumTakedowns): a moderator's removal, its words
+ * and photos gone. Its writer heard at the takedown, so nothing more; a report filed while it was hidden closes, and its reporter
+ * hears it was removed. It counts towards the mute now, the hold being over (G3's rule, as a moderator's removal counts).
+ */
+function makeForumTakedownFinal(postId: string): boolean {
+    const removal = forumRemovalOf(postId);
+    if (!removal) return false;
+    let reporters: string[] = [];
+    const done = db.transaction(() => {
+        if (!removeForumPostAsModerator(postId)) return false;
+        reporters = closeOpenReportsOnForumPost(postId);
+        return true;
+    })();
+    if (!done) return false;
+    tellForumRemoval(moderationNoticeCb, { ...removal, wasUp: false }, reporters, null);
+    evaluateAutoMute(moderationNoticeCb, removal.row.writer_pubkey);
     return true;
 }
 

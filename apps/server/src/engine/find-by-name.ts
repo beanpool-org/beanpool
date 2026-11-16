@@ -23,10 +23,13 @@
  * every look-up takes the same steps in the same order, whatever is found (FIND_STEPS; the suite reads them back):
  * count it against the asker (FIND_BY_NAME_PER_DAY, by origin and key) and against the asking server (FIND_PER_ORIGIN_DAY),
  * the one indexed read by the name rule, the member check, the block check, the card check (a placeholder card of the
- * same shape when nothing was found). Only then the answer: the card when every one of them says yes, else
- * FIND_NOBODY_BODY in its exact bytes, for no such member, one who didn't say yes, one who blocked the asker, one who left
- * or was removed, the asker themselves, and an asker or a server past its day. Nothing found or typed is ever logged:
- * no log line names a name, a key or a community.
+ * same shape, its signature checked too, when nothing was found), the owner's switch. Only then the answer: the card when
+ * every one of them says yes, else FIND_NOBODY_BODY in its exact bytes, for no such member, one who didn't say yes, one who
+ * blocked the asker, one who left or was removed, the asker themselves, and an asker or a server past its day. This file
+ * writes no log line at all: nothing found or typed, no key, no name, no community.
+ *
+ * The card's home is the one its owner signed (a community answers at more than one name); the asker's app shows it as it
+ * is, as for a scanned card.
  *
  * The day's counts are kept in this process, by UTC day, at most COUNTERS_MAX keys (a key past that counts as over:
  * shut, never open). A restart forgets them.
@@ -53,7 +56,7 @@ export const FIND_PER_ORIGIN_DAY = 200;
 /** The most keys counted in a day; a new one past it counts as over. */
 export const COUNTERS_MAX = 100_000;
 /** The steps every answer takes, in order (the suite checks each look-up took exactly these). */
-export const FIND_STEPS = ['count-asker', 'count-origin', 'read-name', 'check-member', 'check-block', 'check-card'] as const;
+export const FIND_STEPS = ['count-asker', 'count-origin', 'read-name', 'check-member', 'check-block', 'check-card', 'check-switch'] as const;
 
 export const FIND_BAD_CARD = word("Your card doesn't match your name here. Open your card again and try once more.");
 
@@ -224,15 +227,22 @@ export async function answerFind(origin: string, body: unknown, now = Date.now()
         LIMIT 1
     `).get(FIND_BY_NAME_PREF, foldName(String(b.name).trim()), foldName(name)) as { key: string; callsign: string | null; card: string | null } | undefined;
     const key = row?.key ?? NOBODY_KEY;
+    // From here every check runs whatever came before (no && between them): the same work for every answer.
     steps.push('check-member');
-    const member = isNodeMember(key) && readsAsMember(key);
+    const memberHere = isNodeMember(key);
+    const readsHere = readsAsMember(key);
     steps.push('check-block');
     const blocked = hasBlocked(key, asker);
     steps.push('check-card');
     const kept = parseCard(row?.card);
     const card = kept ?? await placeholderCard();
-    const cardGood = addressCardVerifies(card) && card.key === key && isOwnNodeHome(card.home) && sameName(card.name, row?.callsign ?? '');
+    const signed = addressCardVerifies(card);
+    const homeHere = isOwnNodeHome(card.home);
+    const nameHere = sameName(card.name, row?.callsign ?? '');
+    steps.push('check-switch');
+    const outsideOn = outsideMessagesOn();
     lastSteps = steps;
-    const found = askerWithin && originWithin && outsideMessagesOn() && !!row && !!kept && member && !blocked && key !== asker && cardGood;
+    const found = [askerWithin, originWithin, outsideOn, !!row, !!kept, memberHere, readsHere, !blocked, key !== asker, signed, card.key === key, homeHere, nameHere]
+        .every(Boolean);
     return { status: 200, body: found ? JSON.stringify({ v: 1, card: { v: 1, key: card.key, home: card.home, name: card.name, sig: card.sig } }) : FIND_NOBODY_BODY };
 }

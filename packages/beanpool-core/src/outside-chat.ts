@@ -440,6 +440,20 @@ export function outsideReceiptPayload(itemIds: readonly string[]): string {
 /** A chat's standing on a device: a request waiting for the member, open (either side may write), or declined. */
 export type OutsideChatState = 'request' | 'open' | 'declined';
 
+/** What a tap on a line offers: see {@link outsideLineActions}. */
+export interface OutsideLineActions { react: boolean; edit: boolean; remove: boolean; report: boolean }
+
+/**
+ * What a tap on a line of a chat with someone in another community offers, one rule for both apps (X6; design §3.5). Only what
+ * changes the chat needs it open: the reactions on a line not deleted, and Edit and Delete on a line of mine. Report message is
+ * offered on every line of theirs not deleted, in every state of the chat: a request's Report is the one the R1 rule counts, and
+ * a chat declined (or left so by a block) can still be reported.
+ */
+export function outsideLineActions(state: OutsideChatState, line: { mine: boolean; deleted: boolean }): OutsideLineActions {
+    const open = state === 'open' && !line.deleted;
+    return { react: open, edit: open && line.mine, remove: open && line.mine, report: !line.mine && !line.deleted };
+}
+
 /** What the gate makes of an item arriving from someone in another community: a line, a request, a change to a line, or nothing. */
 export type OutsideGateVerdict = 'line' | 'request' | 'change' | 'drop';
 

@@ -181,7 +181,10 @@ vi.mock('../node-post', () => ({
     signedGet: (origin: string) => knockReads.answers.get(origin)?.() ?? new Promise(() => {}), signedPost: () => new Promise(() => {}),
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
-vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
+vi.mock('../blocklist', () => ({
+    getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated',
+    blockUser: async (key: string) => { outside.blocked.push(key); return true; },
+}));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
 vi.mock('../member-statements', () => ({ makeOfflineTicket: () => new Promise(() => {}) }));
 const membership = vi.hoisted(() => ({ isMember: true }));
@@ -227,7 +230,10 @@ vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
  * Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts): none unless a test puts some. The
  * tab lists them through the real outside-mail.ts chatsShown; `blocked`, the keys this account blocked.
  */
-const outside = vi.hoisted(() => ({ chats: [] as any[], blocked: [] as string[], chat: null as any, lines: [] as any[], changes: [] as any[], sent: [] as any[] }));
+const outside = vi.hoisted(() => ({
+    chats: [] as any[], blocked: [] as string[], chat: null as any, lines: [] as any[], changes: [] as any[], sent: [] as any[],
+    reported: [] as Array<{ lineId: string; reason: string }>, decided: [] as string[],
+}));
 vi.mock('../outside-chat-live', () => ({
     OUTSIDE_CHATS_UPDATED: 'outside_chats_updated',
     OUTSIDE_SEND_MS: 10_000,
@@ -235,7 +241,10 @@ vi.mock('../outside-chat-live', () => ({
     syncOutsideMailNow: async () => null,
     outsideContext: async () => ({
         identity: { publicKey: 'me-key' },
-        store: { chats: async () => outside.chats, chat: async () => outside.chat, lines: async () => outside.lines, changes: async () => outside.changes },
+        store: {
+            chats: async () => outside.chats, chat: async () => outside.chat, lines: async () => outside.lines, changes: async () => outside.changes,
+            decide: async (_me: string, _id: string, state: string) => { outside.decided.push(state); },
+        },
         isBlocked: async (key: string) => outside.blocked.includes(key),
     }),
 }));
@@ -243,6 +252,8 @@ vi.mock('../outside-chat-live', () => ({
 vi.mock('../outside-mail', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../outside-mail')>()),
     sendOutsideChange: async (_ctx: unknown, chatId: string, c: unknown) => { outside.sent.push({ chatId, ...(c as object) }); },
+    // A report of their line (X5) as the screen makes it: recorded here; what it sends is outside-mail.test.ts's.
+    reportOutsideLine: async (_ctx: unknown, lineId: string, reason: string) => { outside.reported.push({ lineId, reason }); },
 }));
 import ChatsScreen from '../../app/(tabs)/chats';
 import OutsideChatScreen from '../../app/outside-chat/[id]';
@@ -300,6 +311,8 @@ beforeEach(() => {
     outside.lines = [];
     outside.changes = [];
     outside.sent = [];
+    outside.reported = [];
+    outside.decided = [];
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -936,11 +949,66 @@ describe('an outside chat: changes to lines (X6)', () => {
         expect(outside.sent).toHaveLength(1);
     });
 
-    it('a request: tapping its line offers nothing', async () => {
+    it('a request: tapping its line offers Report message and no reactions; the report goes, and blocks its sender (design §3.5)', async () => {
         outside.chat = { ...outside.chat, state: 'request' };
+        outside.lines = [outside.lines[0]];
         outside.changes = [];
         await draw();
         await click(byTest('outside-line-theirs')[0]);
-        expect(byTest('outside-line-actions')).toHaveLength(0);
+        expect(byTest('outside-line-report')).toHaveLength(1);
+        expect(host.querySelectorAll('[aria-label^="React with"]')).toHaveLength(0);
+        await click(byTest('outside-line-report')[0]);
+        const sheet = host.querySelector('[data-modal="true"]') as HTMLElement;
+        expect(sheet.textContent).toContain('Reporting a request blocks its sender too.');
+        await click(Array.from(sheet.querySelectorAll('button')).find((b) => b.textContent === 'Spam or scam'));
+        await click(sheet.querySelector('[aria-label="Submit report"]'));
+        expect(outside.reported).toEqual([{ lineId: THEIRS, reason: 'Spam or scam' }]);
+        expect(outside.blocked).toEqual(['sol-key']);
+        expect(outside.decided).toEqual(['declined']);
+        expect(alerts.said).toContain('Reported');
+    });
+
+    /**
+     * The rule, as the screen draws it (core outsideLineActions): every line of theirs not deleted can be reported, in every state
+     * of the chat; only what changes the chat (reactions, Edit, Delete) needs it open. "blocked" is a chat as Block leaves it:
+     * declined, its sender on this account's blocklist.
+     */
+    describe('what a tap on a line offers, in every state of the chat', () => {
+        const states = { request: 'request', open: 'open', declined: 'declined', blocked: 'declined' } as const;
+        const lines = {
+            theirs: { id: THEIRS, author: 'sol-key', changes: [] as any[] },
+            mine: { id: MINE, author: 'me-key', changes: [] as any[] },
+            'theirs, deleted': { id: GONE, author: 'sol-key', changes: [{ kind: 'dm-delete', itemId: 'cccccccc-0000-4000-8000-000000000009', lineId: GONE, author: 'sol-key', at: now }] },
+            'mine, deleted': { id: MINE, author: 'me-key', changes: [{ kind: 'dm-delete', itemId: 'cccccccc-0000-4000-8000-00000000000a', lineId: MINE, author: 'me-key', at: now }] },
+        };
+        const offers = (react: boolean, edit: boolean, remove: boolean, report: boolean) => ({ react, edit, remove, report });
+        const nothing = offers(false, false, false, false);
+        const table: Record<keyof typeof states, Record<keyof typeof lines, ReturnType<typeof offers>>> = {
+            request: { theirs: offers(false, false, false, true), mine: nothing, 'theirs, deleted': nothing, 'mine, deleted': nothing },
+            open: { theirs: offers(true, false, false, true), mine: offers(true, true, true, false), 'theirs, deleted': nothing, 'mine, deleted': nothing },
+            declined: { theirs: offers(false, false, false, true), mine: nothing, 'theirs, deleted': nothing, 'mine, deleted': nothing },
+            blocked: { theirs: offers(false, false, false, true), mine: nothing, 'theirs, deleted': nothing, 'mine, deleted': nothing },
+        };
+        for (const s of Object.keys(states) as Array<keyof typeof states>) {
+            for (const l of Object.keys(lines) as Array<keyof typeof lines>) {
+                it(`${s} chat, ${l} line`, async () => {
+                    const line = lines[l];
+                    outside.chat = { ...outside.chat, state: states[s] };
+                    outside.blocked = s === 'blocked' ? ['sol-key'] : [];
+                    outside.lines = [{ id: line.id, chatId: CHAT, author: line.author, text: 'Bikes at 3', replyTo: null, at: now - 1_000, state: line.author === 'me-key' ? 'delivered' : null, note: null }];
+                    outside.changes = line.changes;
+                    await draw();
+                    await click(byTest(line.author === 'me-key' ? 'outside-line-mine' : 'outside-line-theirs')[0]);
+                    expect({
+                        react: host.querySelectorAll('[aria-label^="React with"]').length === 7,
+                        edit: byTest('outside-line-edit').length === 1,
+                        remove: byTest('outside-line-delete').length === 1,
+                        report: byTest('outside-line-report').length === 1,
+                    }).toEqual(table[s][l]);
+                    if (Object.values(table[s][l]).every((x) => !x)) expect(byTest('outside-line-actions')).toHaveLength(0);
+                    expect(host.querySelectorAll('[aria-label^="React with"]').length % 7).toBe(0);
+                });
+            }
+        }
     });
 });

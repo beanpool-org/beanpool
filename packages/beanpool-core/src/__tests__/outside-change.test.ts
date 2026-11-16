@@ -8,8 +8,8 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
     OUTSIDE_CHANGE_KINDS, OUTSIDE_REACTIONS, OutsideLineNotVerifiedError, gateOutsideItem, openOutsideChange, openOutsideLine,
-    outsideChangeOutcome, outsideChangesKept, outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideLineWords, sealOutsideChange,
-    sealOutsideLine, type OutsideChange, type OutsideChangeKind, type OutsideChangeState,
+    outsideChangeOutcome, outsideChangesKept, outsideChangeVerdict, outsideLineActions, outsideLineReportedWords, outsideLineShown, outsideLineWords,
+    sealOutsideChange, sealOutsideLine, type OutsideChange, type OutsideChangeKind, type OutsideChangeState,
 } from '../outside-chat.js';
 import { relayConversationId, relayPayloadHash, signRelayEnvelope, type RelayEnvelope, type RelayItemKind } from '../relay-envelope.js';
 
@@ -204,5 +204,35 @@ describe('a line in one string: the Chats list, a screen reader and a report rea
         expect(outsideLineReportedWords(line, [], ben.key)).toBe('hi');
         expect(outsideLineReportedWords(line, [edit], ben.key)).toBe('Something else');
         expect(outsideLineReportedWords(line, [edit, del], ben.key)).toBe('Something else');
+    });
+});
+
+describe('what a tap on a line offers: one rule for both apps (outsideLineActions)', () => {
+    // Every line of theirs not deleted can be reported, in every state of the chat; only what changes the chat needs it open.
+    // "blocked" is a chat as Block leaves it: declined, its sender on the blocklist.
+    const states = { request: 'request', open: 'open', declined: 'declined', blocked: 'declined' } as const;
+    const lines = { theirs: { mine: false, deleted: false }, mine: { mine: true, deleted: false }, 'theirs, deleted': { mine: false, deleted: true }, 'mine, deleted': { mine: true, deleted: true } };
+    const none = { react: false, edit: false, remove: false, report: false };
+    const table: Record<keyof typeof states, Record<keyof typeof lines, typeof none>> = {
+        request: { theirs: { ...none, report: true }, mine: none, 'theirs, deleted': none, 'mine, deleted': none },
+        open: { theirs: { ...none, react: true, report: true }, mine: { ...none, react: true, edit: true, remove: true }, 'theirs, deleted': none, 'mine, deleted': none },
+        declined: { theirs: { ...none, report: true }, mine: none, 'theirs, deleted': none, 'mine, deleted': none },
+        blocked: { theirs: { ...none, report: true }, mine: none, 'theirs, deleted': none, 'mine, deleted': none },
+    };
+    for (const [s, state] of Object.entries(states) as Array<[keyof typeof states, (typeof states)[keyof typeof states]]>) {
+        for (const [l, line] of Object.entries(lines) as Array<[keyof typeof lines, (typeof lines)[keyof typeof lines]]>) {
+            it(`${s} chat, ${l} line`, () => expect(outsideLineActions(state, line)).toEqual(table[s][l]));
+        }
+    }
+    it('the invariant, over every case: theirs and not deleted = Report; anything else that shows needs the chat open', () => {
+        for (const state of ['request', 'open', 'declined'] as const) {
+            for (const mine of [false, true]) {
+                for (const deleted of [false, true]) {
+                    const a = outsideLineActions(state, { mine, deleted });
+                    expect(a.report).toBe(!mine && !deleted);
+                    if (a.react || a.edit || a.remove) expect(state === 'open' && !deleted).toBe(true);
+                }
+            }
+        }
     });
 });

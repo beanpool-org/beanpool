@@ -6,7 +6,8 @@
  * Decline and Block, and nothing can be written to it until Accept. The other person's name is the one they gave inside the
  * sealed line or on their card, never checked by this community: shown "name not confirmed here", with their community.
  * In an open chat a tap on a line offers the chat's reactions and, on a line of mine, Edit message and Delete message (X6:
- * each a sealed item of its own, utils/outside-mail.ts sendOutsideChange); on theirs, Report message.
+ * each a sealed item of its own, utils/outside-mail.ts sendOutsideChange). A tap on a line of theirs offers Report message in
+ * every state of the chat, a request's included (design §3.5: Accept, Decline, Report): core outsideLineActions, the web's rule.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, FlatList, DeviceEventEmitter } from 'react-native';
@@ -14,7 +15,9 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineShown, outsideLineWords, t, type OutsideChange, type OutsideChangeKind } from '@beanpool/core';
+import {
+    OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineActions, outsideLineShown, outsideLineWords, t, type OutsideChange, type OutsideChangeKind,
+} from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { blockUser } from '../../utils/blocklist';
@@ -275,34 +278,36 @@ export default function OutsideChatScreen() {
                             // The same rule in one string (core outsideLineWords): what the Chats list shows of it, and a screen reader says.
                             const words = outsideLineWords(item, changes, me ?? '');
                             const mine = item.author === me;
-                            const open = chat.state === 'open' && !shown.deleted;
+                            // Only what changes the chat needs it open; Report message is on every line of theirs not deleted (core's rule).
+                            const can = outsideLineActions(chat.state, { mine, deleted: shown.deleted });
                             const toggle = () => setPicked((p) => (p === item.id ? null : item.id));
                             const body = shown.deleted
                                 ? <Text style={styles.deletedText} testID="outside-line-deleted">{t('This message was deleted')}</Text>
                                 : <Text style={mine ? styles.mineText : styles.theirsText} selectable>{shown.text}</Text>;
                             const myReaction = shown.reactions.find((r) => r.mine)?.emoji ?? null;
-                            const actions = picked === item.id && open && (
+                            const actions = picked === item.id && (can.react || can.edit || can.remove || can.report) && (
                                 <View style={[styles.actionsRow, mine && { alignSelf: 'flex-end' }]} testID="outside-line-actions">
-                                    {OUTSIDE_REACTIONS.map((emoji) => (
+                                    {can.react && OUTSIDE_REACTIONS.map((emoji) => (
                                         <Pressable key={emoji} style={[styles.emojiBtn, myReaction === emoji && styles.emojiMine]} accessibilityRole="button"
                                             accessibilityLabel={t('React with {emoji}', { emoji })} accessibilityState={{ selected: myReaction === emoji }}
                                             onPress={() => void change({ kind: 'dm-reaction', lineId: item.id, emoji: myReaction === emoji ? '' : emoji })}>
                                             <Text style={styles.emoji}>{emoji}</Text>
                                         </Pressable>
                                     ))}
-                                    {mine ? (
-                                        <>
-                                            <Pressable style={styles.reportLine} accessibilityRole="button" testID="outside-line-edit"
-                                                onPress={() => startEditing(item, shown.text)}>
-                                                <MaterialCommunityIcons name="pencil-outline" size={16} color={colors.text.body} />
-                                                <Text style={styles.actionText}>{t('Edit message')}</Text>
-                                            </Pressable>
-                                            <Pressable style={styles.reportLine} accessibilityRole="button" testID="outside-line-delete" onPress={() => removeForEveryone(item)}>
-                                                <MaterialCommunityIcons name="trash-can-outline" size={16} color={colors.feedback.danger.fg} />
-                                                <Text style={styles.danger}>{t('Delete message')}</Text>
-                                            </Pressable>
-                                        </>
-                                    ) : (
+                                    {can.edit && (
+                                        <Pressable style={styles.reportLine} accessibilityRole="button" testID="outside-line-edit"
+                                            onPress={() => startEditing(item, shown.text)}>
+                                            <MaterialCommunityIcons name="pencil-outline" size={16} color={colors.text.body} />
+                                            <Text style={styles.actionText}>{t('Edit message')}</Text>
+                                        </Pressable>
+                                    )}
+                                    {can.remove && (
+                                        <Pressable style={styles.reportLine} accessibilityRole="button" testID="outside-line-delete" onPress={() => removeForEveryone(item)}>
+                                            <MaterialCommunityIcons name="trash-can-outline" size={16} color={colors.feedback.danger.fg} />
+                                            <Text style={styles.danger}>{t('Delete message')}</Text>
+                                        </Pressable>
+                                    )}
+                                    {can.report && (
                                         <Pressable style={styles.reportLine} onPress={() => setReporting(item)} accessibilityRole="button" testID="outside-line-report">
                                             <MaterialCommunityIcons name="flag-outline" size={16} color={colors.feedback.danger.fg} />
                                             <Text style={styles.danger}>{t('Report message')}</Text>
@@ -322,7 +327,7 @@ export default function OutsideChatScreen() {
                             );
                             const edited = shown.edited ? t('edited') : null;
                             if (!mine) {
-                                // Tap a line of theirs for its reactions and Report message under it; the words stay selectable.
+                                // Tap a line of theirs for Report message under it (in any state), and its reactions in an open chat; the words stay selectable.
                                 return (
                                     <View>
                                         <Pressable style={[styles.bubble, styles.theirs]} accessibilityLabel={[words, edited].filter(Boolean).join('. ')}

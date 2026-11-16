@@ -267,27 +267,19 @@ export function dmKeyChangeStyleSpec(colors: AppColors) {
     };
 }
 
-/** The thread's floor under the banner: the list's own padding plus one short message at the member's text size. */
-export function dmThreadFloor(fontScale: number): number {
-    return Math.round(24 + 56 * Math.max(1, fontScale));
-}
-
-/** The banner always shows at least this much (its title and the start of what changed), unless the box needs it. */
-export const DM_KEY_BANNER_FLOOR = 120;
-
 /**
- * How tall the DM screen's key-changed banner may be (#1873 review, finding 7). Worked out from the column under the
- * header as measured (banner + deals strip + thread + the paused box, with the nav bar's inset in the box's padding when
- * the screen is edge-to-edge), never from a share of the window: the box is never cut, the thread keeps dmThreadFloor
- * when there is room for it and the banner's floor, and the banner never takes more than 55% of the column. The banner
- * scrolls inside whatever it gets. Before the column is measured (the first frame), 55% of the window minus the box.
- * A keyboard already up when the pause starts (#1872/#1873 confirmation 2, finding 5) is padding the KeyboardAvoidingView
- * adds inside the measured column, at most the keyboard's height, so it comes off the room like the box.
+ * How tall the DM screen's key-changed card may be: the whole room above the paused box (walk of 17 Nov at 320 dp and
+ * 1.3× text). The room is the column under the header as measured, less the box (everything under the thread: the
+ * paused composer and any banner over it, with the nav bar's inset in its padding when the screen is edge-to-edge), the
+ * deals bar and any keyboard still up. Nothing can be sent while the card is up, so the thread gives way to it: a card
+ * that fits leaves the rest to the thread; one that does not fill the room and scrolls as the page, its cut edge on the
+ * box, so the code, the tick and Continue are never in a small scroll inside the card (DmKeyChangedPane). The cap that
+ * kept a thread floor and 55% of the column (#1873 review, finding 7) left the card 219 dp on a 320 × 569 phone at 1.3×:
+ * its title and part of its body, the rest in a scroll with no hint. Before the column is measured (the first frame),
+ * 55% of the window less the box and the keyboard.
  */
-export function dmKeyBannerMaxHeight(m: { column: number; composer: number; deals: number; fontScale: number; windowHeight: number; keyboard?: number }): number {
+export function dmKeyBannerMaxHeight(m: { column: number; composer: number; deals: number; windowHeight: number; keyboard?: number }): number {
     const keyboard = Math.max(0, m.keyboard ?? 0);
     if (!(m.column > 0) || !(m.composer > 0)) return Math.max(0, Math.round(m.windowHeight * 0.55) - Math.max(0, m.composer) - keyboard);
-    const room = Math.max(0, m.column - m.composer - Math.max(0, m.deals) - keyboard);
-    const wanted = Math.min(room - dmThreadFloor(m.fontScale), Math.round(m.column * 0.55));
-    return Math.max(0, Math.min(room, Math.round(Math.max(wanted, DM_KEY_BANNER_FLOOR))));
+    return Math.max(0, Math.round(m.column - m.composer - Math.max(0, m.deals) - keyboard));
 }

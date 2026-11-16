@@ -18,7 +18,7 @@ import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
-import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
+import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
 import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
 import { ChatImage, dmKeyContextOf } from '../../components/chat/DmChatImage';
 import { dmKeyBannerMaxHeight, dmKeyCodeShowsVerified } from '../../utils/dm-key-change';
@@ -188,9 +188,9 @@ function ChatScreen({ id }: { id: string }) {
     // new key waits, exactly when the key code screen shows it.
     const [peerVerified, setPeerVerified] = useState(false);
     // The banner's height comes from the column under the header as measured (utils/dm-key-change dmKeyBannerMaxHeight):
-    // the paused box is never cut, edge-to-edge too, and the thread keeps one message at the text size on a 320 × 533
-    // phone at 1.3× (#1873 review, findings 3 and 7). It scrolls inside that.
-    const { height: windowHeight, fontScale } = useWindowDimensions();
+    // the paused box is never cut, edge-to-edge too, and the card takes the room above it that it needs; the thread gives
+    // way while nothing can be sent (walk of 17 Nov at 320 dp and 1.3× text).
+    const { height: windowHeight } = useWindowDimensions();
     const [column, setColumn] = useState({ column: 0, composer: 0, deals: 0 });
     const measured = (part: 'composer' | 'deals') => (e: { nativeEvent: { layout: { height: number } } }) => {
         const h = Math.round(e.nativeEvent.layout.height);
@@ -1600,24 +1600,21 @@ function ChatScreen({ id }: { id: string }) {
             </View>
 
             {/* The key behind this DM changed (utils/dm-peer-pins.ts): what changed, the new key's code, and the member's choice.
-                Keyed on the offered key, so a tick given for one code never carries over to another. Its height is the
-                measured column's room once the composer, the deals bar, an open keyboard and a floor for the thread are
-                taken out: at most 55% of the column, at least 120 dp while the room has it (dmKeyBannerMaxHeight). It
-                scrolls inside, so the thread and the paused box keep the rest at 320 dp and 1.3× text. Named from the
-                key's member row, never the conversation id. */}
+                Keyed on the offered key, so a tick given for one code never carries over to another. It takes the room above
+                the paused box that it needs, up to all of it once the box (the composer with any banner over it), the deals
+                bar and a keyboard still up are taken out (dmKeyBannerMaxHeight): nothing can be sent meanwhile, so the thread
+                gives way, and a card taller than that scrolls as the page with its scroll bar shown and the keyboard put away
+                (DmKeyChangedPane; walk of 17 Nov at 320 dp and 1.3× text). Named from the key's member row, never the
+                conversation id. */}
             {keyChange && (
-                <ScrollView
-                    style={{ flexGrow: 0, flexShrink: 1, maxHeight: dmKeyBannerMaxHeight({ ...column, deals: visibleDeals.length ? column.deals : 0, fontScale, windowHeight, keyboard: keyboardHeight }) }}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <DmKeyChangedBanner
-                        key={keyChange.offeredPeer ?? 'none'}
-                        peerName={keyChange.name}
-                        change={keyChange}
-                        onContinue={handleContinueWithNewKey}
-                        onNotNow={() => leaveScreen(router, 'chat/[id]')}
-                    />
-                </ScrollView>
+                <DmKeyChangedPane
+                    key={keyChange.offeredPeer ?? 'none'}
+                    maxHeight={dmKeyBannerMaxHeight({ ...column, deals: visibleDeals.length ? column.deals : 0, windowHeight, keyboard: keyboardHeight })}
+                    peerName={keyChange.name}
+                    change={keyChange}
+                    onContinue={handleContinueWithNewKey}
+                    onNotNow={() => leaveScreen(router, 'chat/[id]')}
+                />
             )}
 
             {/* Pinned active-deals strip — per-deal actions live here (one card per live deal),
@@ -1794,6 +1791,8 @@ function ChatScreen({ id }: { id: string }) {
                     </VoicePlaybackProvider>
                 )}
 
+                {/* The box: everything under the thread, measured whole for the key card's room (dmKeyBannerMaxHeight). */}
+                <View onLayout={measured('composer')}>
                 {editingMessage && (
                     <ChatEditBanner
                         styles={chat}
@@ -1810,7 +1809,6 @@ function ChatScreen({ id }: { id: string }) {
                     return <ChatReplyBanner styles={chat} author={q.author} text={q.text} note={q.note} onCancel={() => setReplyToMessage(null)} />;
                 })()}
 
-                <View onLayout={measured('composer')}>
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
                         <Text style={styles.blockedNoticeText}>

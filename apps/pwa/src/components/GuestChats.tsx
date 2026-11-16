@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-    GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, addressCardFromText, guestAccess, guestChatAuthorName, guestNameLine, guestViewerOf, t,
+    GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, addressCardFromText, guestAccess, guestChatAuthorName, guestClosedWords, guestNameLine, guestViewerOf, t,
     type GuestChat, type GuestLineState,
 } from '@beanpool/core';
 import { outsideErrorWords } from '../lib/outside-mail';
@@ -41,13 +41,6 @@ function stateWords(state: GuestLineState | undefined): string | null {
     }
 }
 
-/** Why a closed chat is closed. */
-function closedWords(chat: Pick<GuestChat, 'state' | 'why'>): string | null {
-    if (chat.state === 'removed') return chat.why === 'group-closed' ? t(W.closed) : t(W.removed);
-    if (chat.state === 'left') return t(W.left);
-    if (chat.state === 'declined') return t(W.declined);
-    return null;
-}
 
 /** The guest chats in this browser, read again at each change, and a round now and every half minute while seen. */
 export function useGuestChats(publicKey: string): GuestChat[] {
@@ -168,7 +161,8 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
     if (chat === undefined) return <div data-testid="guest-chat" />;
     const viewer = chat ? guestViewerOf(chat) : null;
     const canWrite = !!chat && chat.state === 'in' && viewer !== null && guestAccess(viewer, 'chat') === 'shown';
-    const closed = chat ? closedWords(chat) : null;
+    // Why it is closed: core's one sentence for each reason the host gives, the same on the phone.
+    const closed = chat ? guestClosedWords(chat) : null;
     const names = chat?.roster && viewer !== null && guestAccess(viewer, 'roster') === 'shown'
         ? [...chat.roster.members.map((m) => m.name), ...chat.roster.guests.map((g) => guestNameLine(g.name, g.home))].join(', ')
         : null;

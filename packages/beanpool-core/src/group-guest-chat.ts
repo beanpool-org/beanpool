@@ -43,7 +43,16 @@
  *     ({@link GuestChat.refusedEpoch}), and no epoch of mine is made that isn't newer than N. My own epoch refused: none is
  *     made again from the roster it was made from ({@link GuestChat.epochWait}). The host sends its roster after each
  *     refusal; until it comes, my lines wait and nothing new goes out (engine/group-guest-home.ts's header: "a phone
- *     that heard `epoch-stale` waits for the roster").
+ *     that heard `epoch-stale` waits for the roster"). A roster that names the refused epoch as current and not stale
+ *     brings the host's own key for it, and lines go under that key again.
+ *
+ * Two more since round 4:
+ *   - **Notices**: every kind of notice the host sends (engine/group-guests.ts GUEST_NOTICE_KINDS) is applied here, or left
+ *     unconfirmed so it comes again: none is confirmed without being applied ({@link GUEST_NOTICE_KINDS_APPLIED}). A line
+ *     edited or taken down (`edit`) reaches the line wherever this device has it: shown, or waiting for its key
+ *     ({@link applyGuestMail}). A notice dropped by the gate is applied as the gate's rule says (nothing passes there).
+ *   - **Whys**: every reason the host gives for a removal has its own words ({@link guestClosedWords}): a convenor's Remove,
+ *     the group closed by its members, its community's owners turning guests off; never "You were removed" for the other two.
  */
 import {
     openGroupLine, openMyGroupKey, sealGroupLine, type GroupEpochRecord, type GroupServedWrap,
@@ -80,6 +89,12 @@ export interface GuestLine {
     note?: string | null;
     /** Mine, `sending`: the signed item as it was posted, to post again. */
     item?: string | null;
+    /** Theirs: the epoch it was sealed under (an edit of it is sealed again under the same one). */
+    epoch?: number;
+    /** Theirs: `text`, or a photo's or a voice message's type. */
+    type?: string;
+    /** When the words shown were last edited, as the host said it; null or absent when never. */
+    editedAt?: string | null;
 }
 
 /** A line that came under an epoch whose key this device doesn't have yet: kept sealed until it does. */
@@ -93,6 +108,8 @@ export interface GuestHeldLine {
     replyToId: string | null;
     type: string;
     at: number;
+    /** When its words were last edited, as the host said it; null or absent when never. */
+    editedAt?: string | null;
 }
 
 export interface GuestChat {
@@ -120,16 +137,16 @@ export interface GuestChat {
     ownEpoch?: GuestOwnEpoch | null;
     /**
      * The newest epoch the host refused a line of mine under (`epoch-stale`), or null. Nothing is sealed under it or an
-     * older one again, and no epoch of mine is made that isn't newer (the file's header, "Refusals"). Epochs only go up,
-     * so it is never cleared while the chat lasts.
+     * older one again, and no epoch of mine is made that isn't newer (the file's header, "Refusals"), until a roster names
+     * it as current and not stale with my wrap: the key then opened is the host's own for it, and this is cleared.
      */
     refusedEpoch?: number | null;
     /** {@link guestRosterMark} of the roster my last refused epoch was made from: none is made again while the roster is that one. */
     epochWait?: string | null;
     lines: GuestLine[];
     held: GuestHeldLine[];
-    /** Why the chat closed, when the host said: removed by a convenor, or the group closed. */
-    why: 'removed' | 'group-closed' | null;
+    /** Why the chat closed, when the host said (its `why`, read by {@link guestClosedWhyOf}); null when this device never heard one. */
+    why: GuestClosedWhy | null;
     /** The notice that brought this invitation: the same one fetched again (its confirm lost) never opens it again. */
     inviteId?: string;
     updatedAt: number;
@@ -176,15 +193,36 @@ export function guestChatId(host: string, group: string): string {
 
 // ── The request gate ────────────────────────────────────────────────────────────────────────
 
-/** What the gate does with a notice: show an invitation, take it into the chat, or drop it. */
-export type GuestGateVerdict = 'invite' | 'take' | 'drop';
+/**
+ * Every kind of notice the host sends (engine/group-guests.ts GUEST_NOTICE_KINDS) that this device applies. A notice of a
+ * kind not here is left unconfirmed, never confirmed unapplied (the file's header, "Notices"); the guard test reads the
+ * host's list and fails on a kind missing here.
+ */
+export const GUEST_NOTICE_KINDS_APPLIED = ['invite', 'roster', 'line', 'edit', 'epoch', 'removed'] as const;
+/** The changes of a line an `edit` notice says that this device applies: new words, or the line taken down. Any other waits. */
+export const GUEST_EDIT_ACTIONS_APPLIED = ['edited', 'removed'] as const;
+
+/** What the gate does with a notice: show an invitation, take it into the chat, drop it, or leave it unconfirmed (`wait`: a kind or a change this device can't apply). */
+export type GuestGateVerdict = 'invite' | 'take' | 'drop' | 'wait';
 
 /**
  * The gate for one notice (the file's header). `blocked`: whether this account blocked a key. An invitation from someone
  * blocked is dropped; one for a group the guest is already joining or in is a repeat. A removal reaches an invitation
- * (withdrawn), a yes on its way or an in-guest. Anything else passes only once they are joining or in.
+ * (withdrawn), a yes on its way or an in-guest. A line taken down reaches every chat that may show it (joining, in, or
+ * closed since: it only takes away); new words reach a chat joining or in, as a line does. Anything else passes only once
+ * they are joining or in. A kind this device doesn't apply, or an edit's change it doesn't, waits.
  */
 export function gateGuestNotice(chat: Pick<GuestChat, 'state'> | null | undefined, kind: string, data: unknown, blocked: (key: string) => boolean): GuestGateVerdict {
+    if (typeof kind !== 'string') return 'drop';
+    if (!(GUEST_NOTICE_KINDS_APPLIED as readonly string[]).includes(kind)) return 'wait';
+    if (kind === 'edit') {
+        const action = isObject(data) ? data.action : undefined;
+        if (typeof action !== 'string') return 'drop';
+        if (!(GUEST_EDIT_ACTIONS_APPLIED as readonly string[]).includes(action)) return 'wait';
+        if (!chat) return 'drop';
+        if (action === 'removed') return chat.state === 'joining' || chat.state === 'in' || chat.state === 'left' || chat.state === 'removed' ? 'take' : 'drop';
+        return chat.state === 'joining' || chat.state === 'in' ? 'take' : 'drop';
+    }
     if (kind === 'invite') {
         const by = isObject(data) && isObject(data.invitedBy) ? data.invitedBy : null;
         if (!by || typeof by.key !== 'string' || !KEY_HEX.test(by.key) || blocked(by.key)) return 'drop';
@@ -290,7 +328,10 @@ function openHeld(chat: GuestChat, h: GuestHeldLine): GuestLine | 'refused' | nu
         const opened = openGroupLine({ ciphertext: h.ciphertext, nonce: h.nonce }, {
             groupId: chat.group, epoch: h.epoch, senderPubHex: h.sender, messageId: h.id, part: 'body', replyToId: h.replyToId,
         }, unb64(key));
-        return { id: h.id, author: h.sender, text: h.type === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere), at: h.at };
+        return {
+            id: h.id, author: h.sender, text: h.type === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere), at: h.at, epoch: h.epoch, type: h.type,
+            editedAt: h.editedAt ?? null,
+        };
     } catch {
         return 'refused';
     }
@@ -310,8 +351,64 @@ function heldOf(data: unknown): GuestHeldLine | null {
     return {
         id: data.id, author: data.author, sender, epoch: epoch as number, ciphertext: data.ciphertext, nonce: data.nonce,
         replyToId: typeof meta.replyToId === 'string' ? meta.replyToId : null, type: typeof data.type === 'string' ? data.type : 'text',
-        at: Number.isFinite(at) ? at : 0,
+        at: Number.isFinite(at) ? at : 0, editedAt: typeof data.editedAt === 'string' ? data.editedAt : null,
     };
+}
+
+/** Whether an edit's time is newer than the words here: any is when they were never edited; one with no time never beats one with. */
+function newerWords(edit: string | null, here: string | null | undefined): boolean {
+    if (!here) return true;
+    const a = Date.parse(edit ?? '');
+    const b = Date.parse(here);
+    return Number.isFinite(a) && (!Number.isFinite(b) || a > b);
+}
+
+/**
+ * A line changed at the host (an `edit` notice: its author's edit or delete, or a convenor's takedown; engine/group-guests.ts
+ * queueLineChange), applied to whatever this device has of it (the file's header, "Notices"):
+ *   - taken down (`action: 'removed'`): the line goes, shown or waiting for its key, its words and its photo or voice with it;
+ *   - edited (`action: 'edited'`): words newer than the ones here, sealed again by the line's own author under the line's own
+ *     epoch, take their place, on a line shown or one waiting for its key (it opens with them). Words no newer than the ones
+ *     here (an older edit served after the line already carried a newer one), or that don't open as the line's author's,
+ *     change nothing;
+ *   - a line this device hasn't got: nothing to change. My server applies a change to every copy it holds for me before
+ *     it holds the notice (engine/group-guest-home.ts applyToHeldCopies), so a copy fetched later already carries it.
+ */
+function applyLineChange(chat: GuestChat, data: unknown): void {
+    if (!isObject(data) || typeof data.id !== 'string') return;
+    const id = data.id;
+    if (data.action === 'removed') {
+        chat.lines = chat.lines.filter((l) => l.id !== id);
+        chat.held = chat.held.filter((h) => h.id !== id);
+        return;
+    }
+    if (data.action !== 'edited' || typeof data.ciphertext !== 'string' || typeof data.nonce !== 'string' || typeof data.author !== 'string') return;
+    const meta = isObject(data.metadata) ? data.metadata : {};
+    const epoch = meta.epoch;
+    if (!Number.isSafeInteger(epoch)) return;
+    const sender = meta.sender === undefined || meta.sender === null ? data.author : String(meta.sender);
+    const editedAt = typeof data.editedAt === 'string' ? data.editedAt : null;
+    const replyToId = typeof meta.replyToId === 'string' ? meta.replyToId : null;
+    const held = chat.held.find((h) => h.id === id);
+    if (held) {
+        if (held.author !== data.author || held.sender !== sender || held.epoch !== epoch || !newerWords(editedAt, held.editedAt)) return;
+        Object.assign(held, { ciphertext: data.ciphertext, nonce: data.nonce, replyToId, editedAt });
+        return;
+    }
+    const line = chat.lines.find((l) => l.id === id);
+    if (!line || line.author !== data.author || sender !== line.author || !newerWords(editedAt, line.editedAt)) return;
+    if ((line.epoch ?? sealedEpochOf(line)) !== epoch) return;
+    const key = chat.keys[String(epoch)];
+    if (!key) return;
+    try {
+        const opened = openGroupLine({ ciphertext: data.ciphertext, nonce: data.nonce }, {
+            groupId: chat.group, epoch: epoch as number, senderPubHex: line.author, messageId: id, part: 'body', replyToId,
+        }, unb64(key));
+        line.text = (line.type ?? 'text') === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere);
+        line.editedAt = editedAt;
+    } catch {
+        /* not the line's author's words: the line keeps the words it had */
+    }
 }
 
 /** Every held line that opens now goes into the chat; the rest stay held (the newest GUEST_HELD_KEPT). */
@@ -334,14 +431,20 @@ function takeRoster(chat: GuestChat, roster: GuestRoster, ctx: GuestMailContext)
     if (roster.name) chat.name = roster.name;
     const step = guestEpochStep(roster, ctx.me);
     if (step.send === 'group-line') {
-        try { chat.keys[String(step.epoch)] = b64(openGuestEpochKey(step, chat.group, ctx.myEdPrivHex)); } catch { /* not opened: the line waits */ }
+        try {
+            chat.keys[String(step.epoch)] = b64(openGuestEpochKey(step, chat.group, ctx.myEdPrivHex));
+            // The epoch a line of mine was refused under, named current and not stale: the key just opened is the host's
+            // own for it (it replaces any of mine by that number), so lines go under it again (the file's header, "Refusals").
+            if (chat.refusedEpoch === step.epoch) chat.refusedEpoch = null;
+        } catch { /* not opened: the line waits */ }
     }
 }
 
 /**
  * The server's page applied to the chats on this device: the gate first, then each notice taken, then where the server
  * says I stand with each group. Returns the chats (a new object; the old is untouched) and the notice ids to confirm:
- * every one read, taken or dropped (an unconfirmed one would hold the page). The caller confirms only after the chats are
+ * every one applied, taken or dropped by the gate's rule; never one the gate left waiting (a kind, or an edit's change,
+ * this device can't apply: it comes again; the file's header, "Notices"). The caller confirms only after the chats are
  * written.
  */
 export function applyGuestMail(before: GuestChats, page: { items?: unknown; groups?: unknown }, ctx: GuestMailContext): { chats: GuestChats; confirm: string[]; changed: boolean } {
@@ -351,13 +454,15 @@ export function applyGuestMail(before: GuestChats, page: { items?: unknown; grou
     const items = Array.isArray(page.items) ? page.items as GuestNotice[] : [];
     for (const n of items) {
         if (!isObject(n) || typeof n.id !== 'string') continue;
-        confirm.push(n.id);
-        if (typeof n.host !== 'string' || typeof n.group !== 'string') continue;
+        // No group named: nothing it could ever change here.
+        if (typeof n.host !== 'string' || typeof n.group !== 'string') { confirm.push(n.id); continue; }
         const id = guestChatId(n.host, n.group);
         const chat = chats[id];
         // An invitation fetched again because its confirm was lost is the one already answered here, never a new one.
-        if (n.kind === 'invite' && chat?.inviteId === n.id) continue;
+        if (n.kind === 'invite' && chat?.inviteId === n.id) { confirm.push(n.id); continue; }
         const verdict = gateGuestNotice(chat, n.kind, n.data, ctx.blocked);
+        if (verdict === 'wait') continue;
+        confirm.push(n.id);
         if (verdict === 'drop') continue;
         changed = true;
         if (verdict === 'invite') {
@@ -373,8 +478,8 @@ export function applyGuestMail(before: GuestChats, page: { items?: unknown; grou
         const c = chat!;
         c.updatedAt = ctx.now;
         if (n.kind === 'removed') {
-            // The host says `closed` when the group closed, or its owners switched guests off (engine/group-guests.ts).
-            const why = isObject(n.data) && n.data.why === 'closed' ? 'group-closed' : 'removed';
+            // Each reason the host gives keeps its own words (guestClosedWhyOf; the file's header, "Whys").
+            const why = guestClosedWhyOf(isObject(n.data) ? n.data.why : undefined);
             if (c.state === 'invited') { delete chats[id]; continue; }
             c.state = 'removed';
             c.why = why;
@@ -393,6 +498,8 @@ export function applyGuestMail(before: GuestChats, page: { items?: unknown; grou
         } else if (n.kind === 'line') {
             const h = heldOf(n.data);
             if (h && !c.lines.some((l) => l.id === h.id) && !c.held.some((x) => x.id === h.id)) c.held.push(h);
+        } else if (n.kind === 'edit') {
+            applyLineChange(c, n.data);
         }
         openWhatCan(c);
     }
@@ -434,7 +541,8 @@ function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailConte
         if (chat.state === 'invited' && state === 'removed') { delete chats[id]; changed = true; continue; }
         if (chat.state !== state && !(chat.state === 'joining' && state === 'invited' && chat.updatedAt > ctx.now - 60_000)) {
             // `joining` here and `invited` there: my yes not taken yet. Kept a minute (the send in flight), then the server's word.
-            if (state === 'removed') { chat.keys = {}; chat.held = []; chat.ownEpoch = null; chat.why = chat.why ?? 'removed'; }
+            // Removed with no notice heard here (my server may not have held one for me): why stays unknown, never guessed.
+            if (state === 'removed') { chat.keys = {}; chat.held = []; chat.ownEpoch = null; chat.why = chat.why ?? null; }
             chat.state = state;
             chat.updatedAt = ctx.now;
             changed = true;
@@ -490,7 +598,9 @@ export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number,
             // Refused for its epoch: that epoch is written down, so nothing is sealed under it again (the line waits for
             // the roster the host sends after a refusal); the next epoch may be made (unless mine is on its way), whether
             // or not a tick for my last one ever came; the line goes again under a new id.
-            const under = sealedEpochOf(line) ?? guestSealEpoch(chat)?.epoch ?? null;
+            // Only the epoch the refused item itself names: a line with no item kept (one gone `failed`) names none, and the
+            // key here now is never marked refused for it.
+            const under = sealedEpochOf(line);
             if (under !== null && under > (chat.refusedEpoch ?? 0)) chat.refusedEpoch = under;
             if (!chat.ownEpoch) chat.epochSent = null;
             line.id = newId();
@@ -657,6 +767,8 @@ export const GUEST_CHAT_WORDS = Object.freeze({
     joining: word('Joining… The chat opens once the group answers.'),
     removed: word('You were removed from this chat. Nothing more reaches you from it.'),
     closed: word('This group was closed. Nothing more reaches you from it.'),
+    guestsOff: word("This group's community turned off guests from other communities. Nothing more reaches you from it."),
+    chatClosed: word('This chat is closed. Nothing more reaches you from it.'),
     left: word('You left this chat.'),
     declined: word('You declined this invitation.'),
     waiting: word('Waiting for the group'),
@@ -672,6 +784,44 @@ export const GUEST_CHAT_WORDS = Object.freeze({
     readCard: word('Read the card'),
     notACard: word("That isn't an address card, or it was changed after it was made."),
 });
+
+/** Why a guest's chat closed, as this device keeps it: a convenor's Remove, the group closed by its members, or its owners turned guests off. */
+export type GuestClosedWhy = 'removed' | 'group-closed' | 'guests-off';
+
+/**
+ * Every `why` the host's removal says (engine/group-guests.ts: a convenor's Remove `removed`; the members' vote to close
+ * the group, closeGroupGuests, `group-closed`; the owners' switch, closeGuestsIfSwitchedOff, `closed`). The guard test reads
+ * the host's code and fails on one missing here.
+ */
+export const GUEST_REMOVED_WHYS = ['removed', 'group-closed', 'closed'] as const;
+
+/** The host's `why` as this device keeps it; null for one it doesn't know (its chat says only that it is closed). */
+export function guestClosedWhyOf(why: unknown): GuestClosedWhy | null {
+    switch (why) {
+        case 'removed': return 'removed';
+        case 'group-closed': return 'group-closed';
+        case 'closed': return 'guests-off';
+        default: return null;
+    }
+}
+
+/**
+ * Why a guest's chat is closed, in the words both apps show (the file's header, "Whys"); null while it is open or waiting.
+ * Each reason the host gives has its own sentence; a removal whose reason this device never heard says only that it is closed.
+ */
+export function guestClosedWords(chat: Pick<GuestChat, 'state' | 'why'>): string | null {
+    if (chat.state === 'removed') {
+        switch (chat.why) {
+            case 'removed': return t(GUEST_CHAT_WORDS.removed);
+            case 'group-closed': return t(GUEST_CHAT_WORDS.closed);
+            case 'guests-off': return t(GUEST_CHAT_WORDS.guestsOff);
+            default: return t(GUEST_CHAT_WORDS.chatClosed);
+        }
+    }
+    if (chat.state === 'left') return t(GUEST_CHAT_WORDS.left);
+    if (chat.state === 'declined') return t(GUEST_CHAT_WORDS.declined);
+    return null;
+}
 
 /** A guest's name in the chat, as both apps write it: their card's name, their community, "guest" (name-line.ts). */
 export function guestNameLine(name: string, home: string): string {

@@ -313,6 +313,9 @@ export async function syncGuestMail(io: GuestMailIO): Promise<GuestRoundOutcome>
         if (confirm.length) await io.post('/api/mail/group/confirm', { ids: confirm, device });
         notices += confirm.length;
         if (!got.more && !got.sentMore) break;
+        // Nothing confirmed and no ticks to page: the same page would come again (only notices this device leaves
+        // unconfirmed, a kind it can't apply yet: group-guest-chat.ts "Notices").
+        if (!confirm.length && !got.sentMore) break;
     }
     for (const id of Object.keys(await io.load())) {
         try {

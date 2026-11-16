@@ -9,7 +9,10 @@
  * a small scroll inside the card with no hint (walk of 17 Nov, 320 dp at 1.3× text). The bars scroll with the card rather
  * than stand beside it: at 320 × 533 and 1.3× the listing's header, the release bar, the about chip and the box fill the
  * column, so a card beside them had no room, and a bar left out of its sum came off the box (deciding review of 6775428c,
- * finding 1). Without the card the bars stand as they always have.
+ * finding 1). Without the card the bars are a page of their own in the room utils/chat-column-fit gives them (barsRoom): the
+ * column less the box, a keyboard up and one line of the thread. They stand whole while they fit, scroll as a page once they
+ * are taller, and fold away while the room has none (typing on a small phone; walk of 17 Nov, the market DM at 320 dp and
+ * 1.3×: they left the thread 0 dp and pushed the box under the navigation bar, and with the keyboard up behind it).
  *
  * The box can't be typed in while the card is up (ChatComposer disabled), so a keyboard still up when the pause starts is
  * put away: with it up the card had only its title (the same walk). Once, and again when the chat comes back in front with
@@ -17,25 +20,30 @@
  * and a sheet the chat opens over the card (Review, Report) raises its own keyboard in it (the same review, finding 2).
  */
 import React, { useEffect, useRef } from 'react';
-import { ScrollView } from 'react-native';
 import { KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { useIsFocused } from 'expo-router';
 import { DmKeyChangedBanner, type DmKeyChangedBannerProps } from './DmKeyChangedBanner';
+import { CHAT_PAGE_FADE, ChatScrollPage } from './ChatScrollPage';
 
 export interface DmKeyChangedPaneProps {
     /** The key card while the chat is paused for a key change, or null. */
     card: DmKeyChangedBannerProps | null;
     /** The page's room above the paused box, as dmKeyBannerMaxHeight works it out. */
     maxHeight: number;
+    /**
+     * Without the card: the bars' room (utils/chat-column-fit), in which they stand whole, scroll as a page or fold away.
+     * Left out, they stand as they are.
+     */
+    barsRoom?: number;
     /** The bars between the header and the thread: the deals strip, the listing's header, the release bar. */
     children?: React.ReactNode;
 }
 
 /** How far the bottom edge fades on Android while more of the page is below. */
-export const DM_KEY_PANE_FADE = 32;
+export const DM_KEY_PANE_FADE = CHAT_PAGE_FADE;
 
-export function DmKeyChangedPane({ card, maxHeight, children }: DmKeyChangedPaneProps) {
-    if (!card) return <>{children}</>;
+export function DmKeyChangedPane({ card, maxHeight, barsRoom, children }: DmKeyChangedPaneProps) {
+    if (!card) return barsRoom === undefined ? <>{children}</> : <ChatScrollPage testID="chat-bars-page" maxHeight={barsRoom}>{children}</ChatScrollPage>;
     return <KeyCardPage card={card} maxHeight={maxHeight}>{children}</KeyCardPage>;
 }
 
@@ -48,26 +56,10 @@ function KeyCardPage({ card, maxHeight, children }: DmKeyChangedPaneProps & { ca
     useEffect(() => {
         if (inFront && upNow.current) void KeyboardController.dismiss();
     }, [inFront]);
-    // iOS has no lasting scroll bar: show it once when the page opens taller than its room.
-    const scrollRef = useRef<ScrollView>(null);
-    const flashed = useRef(false);
     return (
-        <ScrollView
-            ref={scrollRef}
-            testID="dm-key-pane"
-            style={{ flexGrow: 0, flexShrink: 1, maxHeight }}
-            keyboardShouldPersistTaps="handled"
-            persistentScrollbar
-            fadingEdgeLength={DM_KEY_PANE_FADE}
-            onContentSizeChange={(_w, h) => {
-                if (!flashed.current && h > maxHeight) {
-                    flashed.current = true;
-                    scrollRef.current?.flashScrollIndicators();
-                }
-            }}
-        >
+        <ChatScrollPage testID="dm-key-pane" maxHeight={maxHeight}>
             <DmKeyChangedBanner {...card} />
             {children}
-        </ScrollView>
+        </ChatScrollPage>
     );
 }

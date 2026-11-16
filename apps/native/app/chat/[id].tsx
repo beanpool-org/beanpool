@@ -20,6 +20,8 @@ import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
+import { ChatScrollPage } from '../../components/chat/ChatScrollPage';
+import { chatColumnFit } from '../../utils/chat-column-fit';
 import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
 import { ChatImage, dmKeyContextOf } from '../../components/chat/DmChatImage';
 import { dmKeyBannerMaxHeight, dmKeyCodeShowsVerified } from '../../utils/dm-key-change';
@@ -240,6 +242,15 @@ function ChatScreen({ id }: { id: string }) {
     // A keyboard already up when a pause starts pads the column's KeyboardAvoidingView by up to its height: the banner's
     // cap takes it off the room, so the paused box is never under it (#1872/#1873 confirmation 2, finding 5).
     const keyboardHeight = useKeyboardState(s => (s.isVisible ? s.height : 0));
+    // Without the card, the column shares its room in an order (utils/chat-column-fit): the composer whole, one line of the
+    // thread, the banners over the composer, then the bars, which scroll as a page or fold away while typing on a small
+    // phone (walk of 17 Nov: a market DM at 320 dp and 1.3× left the thread 0 dp and the box under the keyboard). The
+    // banners' page is measured as drawn, so the composer alone is the box less it.
+    const [bannersShown, setBannersShown] = useState(0);
+    const fit = chatColumnFit({
+        column: column.column, box: column.composer, input: Math.max(0, column.composer - bannersShown),
+        windowHeight, keyboard: keyboardHeight, paused: keyChangePending,
+    });
     // Modals get their own native window, and keyboard-controller only hears keyboard
     // events on the main window. If a modal opens while the keyboard is up, the hide
     // happens under the modal's window and the chat stays padded by a phantom keyboard
@@ -1612,11 +1623,14 @@ function ChatScreen({ id }: { id: string }) {
                 keyboard up when the pause starts is put away, once (DmKeyChangedPane; walk of 17 Nov at 320 dp and 1.3× text;
                 deciding review of 6775428c). The column holds nothing else, so nothing new goes between this and the keyboard
                 view: it goes in here. Keyed on the offered key, so a tick given for one code never carries over to another.
-                Named from the key's member row, never the conversation id. */}
+                Named from the key's member row, never the conversation id. Without the card the bars are a page of their own
+                (barsRoom, chatColumnFit): whole while they fit, scrolling once taller, folded away while typing leaves no room,
+                so the box and one line of the thread always have theirs (walk of 17 Nov, the market DM at 320 dp and 1.3×). */}
             <DmKeyChangedPane
                 key={keyChange?.offeredPeer ?? 'none'}
                 card={keyChange ? { peerName: keyChange.name, change: keyChange, onContinue: handleContinueWithNewKey, onNotNow: () => leaveScreen(router, 'chat/[id]') } : null}
                 maxHeight={dmKeyBannerMaxHeight({ ...column, windowHeight, keyboard: keyboardHeight })}
+                barsRoom={fit.bars}
             >
 
             {/* Pinned active-deals strip — per-deal actions live here (one card per live deal),
@@ -1796,8 +1810,11 @@ function ChatScreen({ id }: { id: string }) {
                     </VoicePlaybackProvider>
                 )}
 
-                {/* The box: everything under the thread, measured whole for the key card's room (dmKeyBannerMaxHeight). */}
+                {/* The box: everything under the thread, measured whole for the key card's room (dmKeyBannerMaxHeight). Its
+                    banners (Editing, About, Replying to) are one page in what the composer and one line of the thread leave
+                    (chatColumnFit): they stand whole while they fit and scroll past it, so the composer is never cut. */}
                 <View onLayout={measured('composer')}>
+                <ChatScrollPage testID="chat-box-banners" maxHeight={fit.banners} onLayout={(e) => setBannersShown(Math.round(e.nativeEvent.layout.height))}>
                 {editingMessage && (
                     <ChatEditBanner
                         styles={chat}
@@ -1813,6 +1830,7 @@ function ChatScreen({ id }: { id: string }) {
                     const q = dmQuoteFor(replyToMessage, identity?.publicKey, peerName);
                     return <ChatReplyBanner styles={chat} author={q.author} text={q.text} note={q.note} onCancel={() => setReplyToMessage(null)} />;
                 })()}
+                </ChatScrollPage>
 
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>

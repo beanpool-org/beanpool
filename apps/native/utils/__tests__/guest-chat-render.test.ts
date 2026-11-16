@@ -37,8 +37,11 @@ vi.mock('react-native', async () => {
         if (tag === 'textarea') { attrs.value = value ?? ''; attrs.onChange = (e: any) => onChangeText?.(e.target.value); return h(tag, attrs); }
         return h(tag, attrs, children);
     };
-    const FlatList = (props: any) => h('div', { 'data-testid': 'list' },
-        props.ListHeaderComponent, ...(props.data ?? []).map((item: any, index: number) => h('div', { key: props.keyExtractor(item) }, props.renderItem({ item, index }))));
+    // Drawn in the order a member sees it: an inverted list's footer at the top, then its data from the last item up.
+    const FlatList = (props: any) => {
+        const cells = (props.data ?? []).map((item: any, index: number) => h('div', { key: props.keyExtractor(item) }, props.renderItem({ item, index })));
+        return h('div', { 'data-testid': 'list' }, props.inverted ? props.ListFooterComponent : props.ListHeaderComponent, ...(props.inverted ? cells.reverse() : cells));
+    };
     return {
         Platform: { OS: 'android' },
         View: el('div'), Text: el('span'), Pressable: el('button'), TextInput: el('textarea'), FlatList,

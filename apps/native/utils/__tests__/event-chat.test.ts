@@ -60,9 +60,9 @@ describe('event chat: who is offered it', () => {
     });
 
     it('labels the entry plainly: no going count, which read as unread messages (round 2, B3)', () => {
-        expect(eventChatEntryLabel({ ...event, goingCount: 7 })).toBe('Open event chat');
-        expect(eventChatEntryLabel({ ...event, event_going_count: 0, goingCount: undefined })).toBe('Open event chat');
-        expect(eventChatEntryLabel({ id: 'ev-1' })).toBe('Open event chat');
+        expect(eventChatEntryLabel({ ...event, goingCount: 7 })).toBe('Chat with people going');
+        expect(eventChatEntryLabel({ ...event, event_going_count: 0, goingCount: undefined })).toBe('Chat with people going');
+        expect(eventChatEntryLabel({ id: 'ev-1' })).toBe('Chat with people going');
     });
 });
 

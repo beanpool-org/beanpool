@@ -243,7 +243,7 @@ function findCreate(n: ts.Node, hops = 0, want?: string): ts.ObjectLiteralExpres
  * The forum's (components/forum/forum-style.ts, slice F3) is one table every forum screen reads through `useForumStyles()`, the
  * spec beside it, as the names list's.
  */
-const FOLLOWED_MODULES = new Set(['components/market-card-shell', 'utils/names-list-style', 'components/forum/forum-style']);
+const FOLLOWED_MODULES = new Set(['components/market-card-shell', 'utils/names-list-style', 'components/forum/forum-style', 'utils/dm-key-change']);
 
 /** The object literal a style-spec function returns: `(c) => ({ ... })`, or the first top-level `return { ... }` of its body. */
 function returnedObject(fn: ts.SignatureDeclaration): ts.ObjectLiteralExpression | undefined {

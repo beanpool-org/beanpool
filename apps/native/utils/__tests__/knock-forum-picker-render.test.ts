@@ -103,12 +103,15 @@ function Form({ formKey, identity }: { formKey: string | null; identity: BeanPoo
     picks = useForumAskPicks(formKey, identity);
     return createElement(KnockForumPicker, { picks, testID: 'picker' });
 }
+/** The form as a root renders it (the phone's React types and react-dom's differ, as knock-forum-posts-render.test.ts casts). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const formEl = (formKey: string | null, identity: BeanPoolIdentity | null) => createElement(Form, { formKey, identity }) as any;
 async function settle() {
     for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
 async function draw(formKey: string | null = 'riverside', identity: BeanPoolIdentity | null = ASHA) {
     root = createRoot(host);
-    await act(async () => { root!.render(createElement(Form, { formKey, identity })); });
+    await act(async () => { root!.render(formEl(formKey, identity)); });
     await settle();
 }
 const rowOf = (id: string) => host.querySelector(`[data-testid="picker-${id}"]`) as HTMLElement | null;
@@ -174,7 +177,7 @@ describe('what the request sends, after taps on the picker', () => {
         expect(sent().forumPosts?.map((p) => p.postId)).toEqual([DELETED, 'fp-a1']);
         // Asha closes the form and opens it again (or opens it for another community): the list is read again, without it.
         answer.body = { secret: SECRET, posts: POSTS };
-        await act(async () => { root!.render(createElement(Form, { formKey: 'hilltop', identity: ASHA })); });
+        await act(async () => { root!.render(formEl('hilltop', ASHA)); });
         await settle();
         expect(rowOf(DELETED)).toBeNull();
         expect(sent()).not.toHaveProperty('forumPosts');
@@ -263,8 +266,8 @@ describe('nothing is drawn, and nothing sent, unless the list reads', () => {
     it('a form closed before the phone knew where it is: the worldwide community is asked nothing', async () => {
         root = createRoot(host);
         // Opened and closed at once: both renders (and the effect's start and its clean-up) before the anchor read settles.
-        act(() => { root!.render(createElement(Form, { formKey: 'riverside', identity: ASHA })); });
-        act(() => { root!.render(createElement(Form, { formKey: null, identity: ASHA })); });
+        act(() => { root!.render(formEl('riverside', ASHA)); });
+        act(() => { root!.render(formEl(null, ASHA)); });
         await settle();
         expect(asked).toEqual([]);
         expect(host.querySelector('[data-testid="picker"]')).toBeNull();

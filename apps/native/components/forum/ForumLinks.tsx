@@ -126,7 +126,7 @@ export function ForumLinkPicker({ open, me, linked, onPick, onClose }: {
                         {kind && items?.length === 0 && <Text style={[styles.small, { paddingHorizontal: 16, paddingVertical: 12 }]}>{t(LINK_WORDS.none)}</Text>}
                         {kind && items?.map((c) => {
                             const on = linked.includes(c.id);
-                            return item(on ? `✓ ${c.title}` : c.title, () => onPick(kind, c.id, !on), `forum-link-pick-${c.id}`, on ? `${c.title}. ${t(LINK_WORDS.linked)}` : undefined);
+                            return item(on ? `✓ ${c.title}` : c.title, () => onPick(kind, c.id, !on), `forum-link-pick-${c.id}`, on ? t(LINK_WORDS.linked, { title: c.title }) : undefined);
                         })}
                         {kind ? item(t(LINK_WORDS.back), () => setKind(null), 'forum-link-back') : null}
                         {item(t(TOPIC_WORDS.cancel), onClose, 'forum-link-cancel')}

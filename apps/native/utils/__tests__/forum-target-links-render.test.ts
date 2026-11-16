@@ -295,7 +295,7 @@ describe.each(LOOKS)('the link-kind table in %s (%s)', (_name, set) => {
         expectHoldsSmall(picker());
         await press(byId(host, 'forum-link-kind-group'));
         expect(buttonsIn(picker()).map(words)).toEqual(['✓ Garden crew', 'Seed swap', 'Back', 'Cancel']);
-        expect(byId(host, 'forum-link-pick-g1').getAttribute('aria-label')).toBe('Garden crew. Linked: tap to take it off');
+        expect(byId(host, 'forum-link-pick-g1').getAttribute('aria-label')).toBe('Garden crew: linked. Tap to take it off.');
         const reads = vi.mocked(forum.getForumTopic).mock.calls.length;
         await press(byId(host, 'forum-link-pick-g2'));
         expect(forum.linkForumTarget).toHaveBeenCalledWith('t1', 'group', 'g2', true);

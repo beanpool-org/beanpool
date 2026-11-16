@@ -120,7 +120,7 @@ export const LINK_WORDS = {
     events: word('An event'),
     none: word('Nothing of yours to link here yet.'),
     failed: word('Couldn’t load these. Check your connection and try again.'),
-    linked: word('Linked: tap to take it off'),
+    linked: word('{title}: linked. Tap to take it off.'),
     back: word('Back'),
     /** A link its reader can't see: its kind alone, never more. */
     hidden: {

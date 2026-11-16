@@ -12,9 +12,11 @@ import { Modal, StatusBar, type ModalProps } from 'react-native';
  * camera showed dark icons on black (the review of #3274: rekey-code, claim-community and ScanCodeModal).
  *
  * So the light bar goes on first, then the Modal opens: on `visible`, a light entry is pushed on React Native's status-bar
- * stack (StatusBar.pushStackEntry: the newest entry wins, and its flush to the phone is queued now), and the Modal itself
- * shows on the next tick, after that flush, so the dialog copies light icons. Closing (or unmounting) takes the entry off,
- * so the screen under it reads its own bar again. status-bar-every-screen.test.ts holds every dark Modal in the app to this.
+ * stack (StatusBar.pushStackEntry: the newest entry wins, and its flush to the phone is queued now, on a setImmediate, which is
+ * a microtask in bridgeless React Native), and the Modal itself is asked to show on a microtask queued after that flush: the
+ * flush sends the light style to the phone before React even draws the Modal (React's render is a later task), so the dialog
+ * copies light icons. Closing (or unmounting) takes the entry off, so the screen under it reads its own bar again.
+ * status-bar-every-screen.test.ts holds every dark Modal in the app to this.
  */
 export function LightBarModal({ visible = true, ...props }: ModalProps) {
     const [shown, setShown] = useState(false);
@@ -23,10 +25,11 @@ export function LightBarModal({ visible = true, ...props }: ModalProps) {
             setShown(false);
             return;
         }
+        let live = true;
         const entry = StatusBar.pushStackEntry({ barStyle: 'light-content' });
-        const later = setTimeout(() => setShown(true), 0);
+        queueMicrotask(() => { if (live) setShown(true); });
         return () => {
-            clearTimeout(later);
+            live = false;
             StatusBar.popStackEntry(entry);
         };
     }, [visible]);

@@ -313,12 +313,11 @@ async function main(): Promise<void> {
                 fresh();
                 const sent = count > FORUM_ASK_POSTS ? [...posts, spare] : posts.slice(0, count);
                 const before = { fetched: fetched.length, slow: slowConnections };
-                const t0 = Date.now();
                 const r = await knock(asha, count ? { forumPosts: sent.map(pick), forumSecret: secret } : {});
-                const took = Date.now() - t0;
                 const label = `${state} · ${kind} · ${count}`;
+                // Never waiting on the worldwide forum: no fetch while the request is taken, and no connection to the slow one (a
+                // call to it would hang the request, so it would show here, not as a time).
                 if (fetched.length !== before.fetched || slowConnections !== before.slow) wrong.push(`${label}: the community called out while taking it`);
-                if (took > 3_000) wrong.push(`${label}: took ${took} ms`);
                 const want: Outcome = count > FORUM_ASK_POSTS ? 'refused' : 'accepted';
                 const got: Outcome = r.status === 400 && r.body?.code === 'too_many_forum_posts' ? 'refused' : r.status === 201 ? 'accepted' : 'refused';
                 if (got !== want || (want === 'refused' && rowOf(asha))) { wrong.push(`${label}: ${got}, wanted ${want} (${show(r)})`); continue; }
@@ -366,7 +365,8 @@ async function main(): Promise<void> {
 
     // ── 5. Kept and cleared like the rest ───────────────────────────────────────────────────────
     console.log('\n── 5. the copy, the tidy-up, a prune; a re-key and a deleted account on the worldwide forum ──');
-    assert(TABLES.join_requests.columns.includes('forum_posts') && TABLES.forum_members.columns.includes('proof_secret'), 'the manifest copies both new columns');
+    const columnsOf = (table: string) => ((TABLES as Record<string, { columns?: readonly string[] }>)[table]?.columns ?? []);
+    assert(columnsOf('join_requests').includes('forum_posts') && columnsOf('forum_members').includes('proof_secret'), 'the manifest copies both new columns');
     const copy = await exportSyncState('test-knock-forum-links') as any;
     const carried = (copy.joinRequests ?? []).find((r: any) => r.pubkey === asha.pk);
     assert(carried?.forumPosts === rowOf(asha).forum_posts, 'the copy carries the posts and proofs as the row keeps them');

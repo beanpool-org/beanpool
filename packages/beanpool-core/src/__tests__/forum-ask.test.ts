@@ -2,7 +2,7 @@
  * Forum posts on an Ask to join, in core (slice F11; DESIGN-forums-fable.md §13): the readers both apps use, the addresses,
  * and the admins' check, held to the frozen proof vectors (forum-vectors.ts) so every runtime compares the same bytes.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     FORUM_ASK_CHECK_MS,
     FORUM_ASK_CHECK_WORDS,
@@ -87,10 +87,19 @@ describe("the admins' check", () => {
         expect((await checkKnockForumPost(AT, row, { fetchImpl: async () => { throw new TypeError('Network request failed'); } })).check).toBe('unknown');
         expect((await checkKnockForumPost(AT, row, { fetchImpl: respond(503, {}) })).check).toBe('unknown');
         expect((await checkKnockForumPost(AT, row, { fetchImpl: respond(404, { code: 'not_found' }) })).check).toBe('gone');
-        const started = Date.now();
-        const slow = await checkKnockForumPost(AT, row, { fetchImpl: () => new Promise(() => { /* never answers */ }), timeoutMs: 50 });
-        expect(slow.check).toBe('unknown');
-        expect(Date.now() - started).toBeLessThan(2_000);
+        // Slow: the answer is given at the wait, on the clock the check set, never later (fake timers: no wall-clock bound).
+        vi.useFakeTimers();
+        try {
+            let settled: string | null = null;
+            const slow = checkKnockForumPost(AT, row, { fetchImpl: () => new Promise(() => { /* never answers */ }), timeoutMs: 50 })
+                .then((r) => { settled = r.check; return r; });
+            await vi.advanceTimersByTimeAsync(49);
+            expect(settled).toBeNull();
+            await vi.advanceTimersByTimeAsync(1);
+            expect((await slow).check).toBe('unknown');
+        } finally {
+            vi.useRealTimers();
+        }
         expect(FORUM_ASK_CHECK_MS).toBeGreaterThan(0);
     });
 

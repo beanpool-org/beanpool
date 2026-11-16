@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Maarifa ya eneo
 summary: Jifunze, rafu ya jumuiya yako ya mambo yanayostahili kujulikana: kupata ukurasa, kupendekeza mmoja, kuuweka sahihi, na jinsi mmiliki au msimamizi anavyokagua kila mmoja.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## Ni nini
@@ -45,6 +45,14 @@ Kila ukurasa unaisha na mstari uleule: "Maarifa ya eneo yameandikwa na wanachama
 ## Hii ilisaidia
 
 Kama ukurasa ulikusaidia, gusa **👍 Hii ilisaidia**. Gusa tena ili kuirudisha. Ukurasa unaonyesha wanachama wangapi ulisaidia, kama **Imesaidia 12**, na kamwe si nani. Huwezi kuigusa kwenye ukurasa wako mwenyewe.
+
+## Mwongozaji wa eneo
+
+Mwanachama aliyeandika kurasa 3 ambazo sasa ziko kwenye Jifunze, na kila mmoja umewasaidia angalau wanachama 3, huonyesha **🗺️ Mwongozaji wa eneo**: kwenye mstari wa **Imeandikwa na** wa kurasa zake, na kwenye wasifu wake. Kurasa zilizokusanywa na msaidizi wa AI hazihesabiwi. Huondoka tena ikiwa kurasa zake zitaondoka, au ikiwa Jifunze itazimwa. Ni shukrani tu: haitoi Maharagwe na haimruhusu mtu yeyote kufanya jambo lolote zaidi.
+
+## Kumshukuru mwandishi
+
+Chini ya ukurasa ulioandikwa na mtu mwingine, gusa kitufe chenye jina lake, kama vile **🫘 Mshukuru Ada**. Kinafungua fomu ya kawaida ya Leja ya kutuma Maharagwe, mwandishi akiwa amechaguliwa na maelezo kama **Asante kwa “Basi la kwenda mjini”** yakiwa yamejazwa. Badilisha kiasi au maelezo, kisha uitume kama zawadi yoyote ya Maharagwe yako mwenyewe. Hakuna mtu mwingine anayelipa chochote. Kitufe huonekana tu pale jumuiya yako inapotumia Maharagwe, na si kwenye ukurasa uliokusanywa na msaidizi wa AI. Tazama "Kutuma zawadi".
 
 ## Kupendekeza ukurasa
 

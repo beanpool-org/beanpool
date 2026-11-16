@@ -24,7 +24,7 @@ Trong ứng dụng web, đây là thẻ **Chat**. Thẻ này liệt kê tất c�
 ## Bắt đầu cuộc trò chuyện
 
 - Từ một hồ sơ: mở hồ sơ của họ và nhấn **Nhắn tin**. Bạn cũng có thể kết bạn với họ tại đó.
-- Từ **Chat**: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ.
+- Từ **Chat**: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ. Để viết cho một người thuộc cộng đồng khác, xem "Người ở cộng đồng khác".
 - Từ danh sách thành viên: **Chat**, sau đó chọn **Mọi người**, và nhấn 💬 bên cạnh tên một thành viên trong **Cộng đồng** hoặc **Bạn bè**.
 - Từ một bài đăng: nhấn vào **Nhắn tin** và tên của người đó.
 

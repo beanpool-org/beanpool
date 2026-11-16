@@ -71,7 +71,7 @@ Unaweza pia kubadili katika **Mipangilio**, chini ya **Mfumo**, kisha **Jumuiya 
 
 Jumuiya inaweza kujibu kwenye anwani zaidi ya moja, na wamiliki wake huchagua ipi ni anwani yake kuu.
 
-- **Kwenye simu, hakuna unachohitaji kufanya.** Simu yako hukagua anwani za jumuiya yako yenyewe na huhamia anwani kuu mara inapojibu kwa ufunguo wa jumuiya yako yenyewe. Anwani ambayo simu yako inatumia ikiacha kujibu, simu hutumia anwani nyingine ya jumuiya yako kwa sasa na hurudi mara anwani kuu inapojibu. Nyumbani husema hivyo kwa mstari mmoja, mara moja. Hakuna kingine kinachobadilika: ujumbe wako na kila kitu ambacho simu yako huhifadhi kwa ajili ya jumuiya hubaki pale pale.
+- **Kwenye simu, hakuna unachohitaji kufanya.** Simu yako hukagua anwani za jumuiya yako yenyewe na huhamia anwani kuu mara inapojibu kwa ufunguo wa jumuiya yako yenyewe. Anwani ambayo simu yako inatumia ikiacha kujibu, au isipojibu tena kama jumuiya yako, simu hutumia anwani nyingine iliyojibu kwa ufunguo huo na hurudi mara anwani kuu inapojibu. Nyumbani husema hivyo kwa mstari mmoja, mara moja. Ikiwa hakuna iliyojibu hivyo, simu hubaki pale ilipo. Hakuna kingine kinachobadilika, ikiwemo ujumbe wako.
 - **Kwenye programu ya wavuti,** njia yako ya kuingia ni ya anwani uliyofungua, kwa hiyo programu ya wavuti hubaki hapo na huendelea kufanya kazi. Mstari mtulivu juu hutaja anwani kuu. Gusa **Ifungue huko** ili uende huko, kisha uingie huko kwa **Unganisha kivinjari hiki kutoka kwenye simu yako**, au kwa njia yako ya kuingia au maneno yako 12.
 
 ## Kusahau jumuiya kwenye simu hii

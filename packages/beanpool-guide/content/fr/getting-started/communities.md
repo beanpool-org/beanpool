@@ -71,7 +71,7 @@ Vous pouvez également basculer dans les **Paramètres**, sous **Système**, pui
 
 Une communauté peut répondre à plus d'une adresse, et ses propriétaires choisissent laquelle est son adresse principale.
 
-- **Sur le téléphone, vous n'avez rien à faire.** Votre téléphone vérifie de lui-même les adresses de votre communauté et passe à l'adresse principale dès qu'elle a répondu avec la clé propre à votre communauté. Si l'adresse qu'utilise votre téléphone cesse de répondre, il utilise une autre adresse de votre communauté pour l'instant et revient dès que l'adresse principale répond. L'Accueil le signale en une ligne, une seule fois. Rien d'autre ne change : vos messages et tout ce que votre téléphone garde pour la communauté restent où ils sont.
+- **Sur le téléphone, vous n'avez rien à faire.** Votre téléphone vérifie de lui-même les adresses de votre communauté et passe à l'adresse principale dès qu'elle a répondu avec la clé propre à votre communauté. Si l'adresse qu'utilise votre téléphone cesse de répondre, ou ne répond plus en tant que votre communauté, il utilise une autre adresse qui a répondu avec cette clé et revient dès que l'adresse principale répond. L'Accueil le signale en une ligne, une seule fois. Si aucune ne l'a fait, il reste où il est. Rien d'autre ne change, vos messages non plus.
 - **Dans l'application web,** votre connexion appartient à l'adresse que vous avez ouverte : l'application web reste donc là et continue de fonctionner. Une ligne discrète en haut indique l'adresse principale. Touchez **L'ouvrir là-bas** pour y aller, puis connectez-vous là-bas avec **Lier ce navigateur depuis votre téléphone**, ou avec votre connexion ou vos 12 mots.
 
 ## Oublier une communauté sur ce téléphone

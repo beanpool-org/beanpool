@@ -733,9 +733,8 @@ export default function NewListingScreen() {
                 resetNewPost();
                 setShowNewPost(false);
                 setPosting(false);
-                left.current = true;
-                if (router.canGoBack()) router.back();
-                else router.replace({ pathname: '/forum/[id]', params: { id: seed.topicId } });
+                // Back to the topic as every other way out of this screen goes (leave: a covered copy takes itself out instead).
+                leave();
                 return;
             }
             setTimeout(() => {

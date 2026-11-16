@@ -5,8 +5,8 @@
  * floor's window (320 x 569 dp, text at 1.3x), with the harness of forum-render.test.ts: react-dom in jsdom, React Native's host
  * components as plain tags carrying their styles. The node's answers are fixtures in #3237's shapes (@beanpool/core ForumLink).
  *
- * - **The link-kind table** (the web's table, the same rows): every kind (a group, an Offer, a Need its topic's writer made, a
- *   Need by someone else, an event, a Learn page) shown, and every kind as a placeholder -> the chip's words, where a tap opens,
+ * - **The link-kind table** (#3237's kinds, each shown and each as a placeholder): a group, an Offer, a Need its topic's writer
+ *   made, a Need by someone else, an event, a Learn page, and every kind as a placeholder -> the chip's words, where a tap opens,
  *   and for a placeholder nothing to tap and nothing but its kind.
  * - **The invariant:** a link never shows its reader anything they could not already see. The phone draws exactly the node's
  *   answer: a kept copy's title is gone once the node answers a placeholder, and a thing picked in the Link picker is drawn only

@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Ujumbe, jumbe za sauti, jukwaa, vikundi na soga zao, watu na marafiki, anwani zako za faragha, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Ujumbe, jumbe za sauti, jukwaa, vikundi na soga zao, watu na marafiki, anwani zako za faragha, watu wa jumuiya nyingine, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "Anwani zako za faragha. Wewe tu unaweza kufungua orodha. Leta watu kutoka simuni au faili ya anwani, ongeza mtu kwa mkono, au waalike.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Watu wa jumuiya nyingine",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Mtumie ujumbe mtu aliye wa jumuiya nyingine. Kadi yako ya anwani, swichi zinazowawezesha watu kukufikia, kumpata mtu kwa jina lake kamili, na kile kila jumuiya inachohifadhi.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Onyesha kadi yako ya anwani, au mtafute mtu kwa jina lake kamili ikiwa amekubali. Ujumbe wake wa kwanza ni ombi: wewe ndiye unayechagua kama utaukubali.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

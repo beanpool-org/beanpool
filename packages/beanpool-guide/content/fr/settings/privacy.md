@@ -2,7 +2,7 @@
 slug: privacy
 title: Confidentialité
 summary: Ce que les autres voient de vous et les réglages qui le contrôlent.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Ce que les autres membres voient de vous et les interrupteurs qui le contrôlent.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Les propriétaires et administrateurs qui gèrent le serveur de votre communaut�
 - **Votre zone** (sur la communauté globale) : dans les Paramètres, sous **Votre zone**, consultez la zone que vous avez indiquée, environ 10 km autour d'une ville ou deux coordonnées, ou **Non définie**. **Effacer** la supprime. En dessous, **Où êtes-vous à peu près ?** permet d'en définir une nouvelle avec **Utiliser ma position** ou **Saisissez une ville ou un quartier**, et **Annuler** (dans un navigateur, **← Retour aux Paramètres**) laisse la valeur telle quelle. Seule la zone arrondie est transmise. Les autres membres voient à quelle distance vous vous trouvez, et un sondage que vous créez apparaît dans votre zone. Sans zone définie, vous voyez les annonces les plus récentes du monde entier, et les membres à proximité ne verront pas vos sondages dans leur liste, bien qu'ils puissent toujours les trouver via la recherche. Voir « Votre zone ».
 - **Verrouillage de l'application :** sollicite le verrouillage d'écran de votre téléphone (son code PIN, schéma, mot de passe, empreinte ou visage) à l'ouverture de l'application, ainsi que lorsque vous y revenez après 15 secondes ou plus d'absence. Le verrouillage couvre les écrans et les fenêtres contextuelles de l'application. Sur un iPhone, il ferme également toute page web ouverte par l'application, comme les Paramètres de votre communauté depuis **Gérer**. Il ne peut pas couvrir une page web ouverte par l'application sur un téléphone Android, qui s'ouvre hors de l'application, ni le volet de partage sur l'un ou l'autre téléphone : fermez-les avant de poser votre téléphone. Les Paramètres de votre communauté, ouverts depuis **Gérer**, vous déconnectent après 15 minutes d'inactivité. Tant que le Verrouillage de l'application est activé, l'écran de l'application s'efface dès que vous la quittez, et réapparaît à votre retour. Il nécessite un verrouillage d'écran configuré sur le téléphone : sans lui, il n'a rien à demander.
 - **Canaux :** tout contenu que vous partagez sur le Pouls est affiché avec votre nom, auprès de tous les membres de votre communauté. Voir « Vos canaux ».
+- **Personnes d'autres communautés :** personne d'une autre communauté ne peut vous trouver par votre nom, sauf si vous activez **Les personnes d’autres communautés peuvent me trouver par mon nom**, sous votre carte d'adresse. C'est désactivé tant que vous ne l'activez pas. Même alors, il faut taper votre nom exact : personne ne voit de liste. Voir « Personnes d'autres communautés ».
 
 ## Qui d'autre peut voir des choses
 

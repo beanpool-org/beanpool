@@ -69,12 +69,17 @@ Vous pouvez également basculer dans les **Paramètres**, sous **Système**, pui
 
 ## Lorsque votre communauté déménage vers une nouvelle adresse
 
-Une communauté peut déménager vers une nouvelle adresse : par exemple, depuis le numéro de son serveur (comme 203.0.113.5) vers un nom de domaine. Sur le téléphone, l'Accueil affiche alors une carte en haut : **Cette communauté est aussi accessible à beans.example.org. Utiliser cette adresse à l'avenir ?** Elle ne s'affiche qu'après que votre téléphone a vérifié auprès du serveur de la communauté que la nouvelle adresse correspond bien à la même communauté.
+Une communauté peut répondre à plus d'une adresse : le numéro de son serveur (comme 203.0.113.5), un nom en beanpool.org ou son propre nom de domaine. L'une d'elles est son adresse principale. Ses propriétaires choisissent laquelle.
 
-- Touchez **Utiliser la nouvelle adresse**. Votre téléphone bascule dessus avec ce qu'il conserve pour cette communauté, vos messages inclus, et ouvre de nouveau la communauté, comme lorsque vous changez de communauté.
-- Touchez **Pas maintenant**, et la carte vous le redemandera dans 7 jours. Votre téléphone ne déménage jamais de lui-même.
-- Si la nouvelle adresse répond comme étant une communauté différente, l'application indique **Ce téléphone reste où il est**, et conserve l'adresse qu'il a. Si la vérification ne peut pas être faite, elle indique **Rien n'a changé. Réessayez dans un court instant.**
-- Si l'ancienne adresse a cessé de répondre avant que votre téléphone n'ait connaissance de la nouvelle, rien ne peut indiquer à votre téléphone où est allée la communauté. Demandez la nouvelle adresse à ses propriétaires, puis touchez le haricot, puis **Ajouter une communauté**, et saisissez-la ici.
+Sur le téléphone, vous n'avez rien à faire. Votre téléphone vérifie chaque adresse de votre communauté, environ une fois par heure, et n'en utilise une qu'après qu'elle a répondu avec la clé propre à votre communauté. Ensuite :
+
+- **Lorsque les propriétaires choisissent une nouvelle adresse principale**, votre téléphone y bascule de lui-même, en général dans la journée, avec ce qu'il conserve pour cette communauté, vos messages inclus. L'Accueil affiche une ligne une seule fois, par exemple **Riverside se trouve maintenant à beans.example.org. Ce téléphone l’utilise désormais. Rien d’autre n’a changé.**
+- **Lorsque l'adresse qu'utilise votre téléphone cesse de répondre** pendant environ cinq minutes, ou ne répond pas quand vous ouvrez l'application, votre téléphone passe à l'adresse principale, ou à une autre adresse de la communauté qui répond. L'Accueil indique par exemple **riverside.beanpool.org ne répond pas. Ce téléphone utilise beans.example.org pour l’instant.** Dès que l'adresse principale répond de nouveau, votre téléphone y revient de lui-même.
+- **Lorsqu'une adresse ne répond plus en tant que votre communauté**, votre téléphone cesse aussitôt de l'utiliser et l'indique sur l'Accueil : **riverside.beanpool.org ne répond plus en tant que Riverside. Ce téléphone utilise maintenant beans.example.org.** Une adresse qui répond avec une autre clé n'est jamais utilisée.
+- Votre téléphone n'utilise que des adresses de la liste propre à la communauté.
+- Si l'ancienne adresse a cessé de répondre avant que votre téléphone n'ait connaissance d'une autre, rien ne peut indiquer à votre téléphone où est allée la communauté. Demandez la nouvelle adresse à ses propriétaires, puis touchez le haricot, puis **Ajouter une communauté**, et saisissez-la ici.
+
+Dans l'application web, la connexion d'un navigateur appartient à une seule adresse : elle reste donc où elle est. À une adresse à laquelle la communauté répond encore, une ligne discrète en haut vous indique où se trouve maintenant son adresse principale : **L'adresse principale de cette communauté est désormais ‹adresse›. Cette adresse continue de fonctionner.** Elle ne s'affiche qu'une fois que l'adresse principale a répondu à votre navigateur avec la clé propre à la communauté. Vous pouvez l'ouvrir là-bas, et vous connecter en restaurant votre compte ou en liant votre navigateur depuis votre téléphone.
 
 ## Oublier une communauté sur ce téléphone
 

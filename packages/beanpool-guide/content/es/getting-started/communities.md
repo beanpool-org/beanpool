@@ -69,12 +69,17 @@ También puedes cambiar en **Ajustes**, bajo **Sistema**, luego **Comunidades gu
 
 ## Cuando tu comunidad se muda a una nueva dirección
 
-Una comunidad puede mudarse a una nueva dirección: por ejemplo, del número de su servidor (como 203.0.113.5) a un nombre. En el teléfono, Inicio muestra entonces una tarjeta en la parte superior: **Esta comunidad también está en beans.example.org. ¿Usar esa dirección a partir de ahora?** Se muestra solo después de que tu teléfono haya comprobado con el servidor de la comunidad que la nueva dirección es la misma comunidad.
+Una comunidad puede responder en más de una dirección: el número de su servidor (como 203.0.113.5), un nombre de beanpool.org o su propio dominio. Una de ellas es su dirección principal. Sus propietarios eligen cuál.
 
-- Toca **Usar la nueva dirección**. Tu teléfono se traslada allí con lo que conserva para esa comunidad, incluidos tus mensajes, y abre la comunidad nuevamente, como cuando cambias.
-- Toca **Ahora no**, y la tarjeta vuelve a preguntar en 7 días. Tu teléfono nunca se muda por sí solo.
-- Si la nueva dirección responde como una comunidad diferente, la app dice **Este teléfono se queda donde está** y conserva la dirección que tiene. Si no se puede realizar la comprobación, dice **Nada ha cambiado. Inténtalo de nuevo en un momento.**
-- Si la dirección anterior dejó de responder antes de que tu teléfono supiera de la nueva, nada puede decirle a tu teléfono a dónde fue la comunidad. Pide a sus propietarios la nueva dirección, luego toca el frijol, luego **Añadir una comunidad** y escríbela allí.
+En el teléfono, no tienes que hacer nada. Tu teléfono comprueba cada dirección de tu comunidad, más o menos una vez por hora, y solo usa una después de que haya respondido con la clave propia de tu comunidad. Entonces:
+
+- **Cuando los propietarios eligen una nueva dirección principal**, tu teléfono se traslada allí por sí solo, normalmente en menos de un día, con lo que conserva para esa comunidad, incluidos tus mensajes. Inicio muestra una línea una sola vez, como **Riverside ahora está en beans.example.org. Este teléfono la usa a partir de ahora. Nada más cambió.**
+- **Cuando la dirección que usa tu teléfono deja de responder** durante unos cinco minutos, o no responde cuando abres la app, tu teléfono pasa a la dirección principal, o a otra dirección de la comunidad que responda. Inicio dice, por ejemplo, **riverside.beanpool.org no responde. Por ahora este teléfono usa beans.example.org.** Cuando la dirección principal vuelve a responder, tu teléfono regresa a ella por sí solo.
+- **Cuando una dirección ya no responde como tu comunidad**, tu teléfono deja de usarla de inmediato y lo dice en Inicio: **riverside.beanpool.org ya no responde como Riverside. Este teléfono ahora usa beans.example.org.** Nunca se usa una dirección que responde con otra clave.
+- Tu teléfono solo usa direcciones de la propia lista de la comunidad.
+- Si la dirección anterior dejó de responder antes de que tu teléfono supiera de otra, nada puede decirle a tu teléfono a dónde fue la comunidad. Pide a sus propietarios la nueva dirección, luego toca el frijol, luego **Añadir una comunidad** y escríbela allí.
+
+En la aplicación web, el inicio de sesión de un navegador pertenece a una dirección, así que se queda donde está. En una dirección a la que la comunidad todavía responde, una línea discreta en la parte superior te dice dónde está ahora su dirección principal: **La dirección principal de esta comunidad ahora es ‹dirección›. Esta dirección sigue funcionando.** Solo aparece cuando la dirección principal ya ha respondido a tu navegador con la clave propia de la comunidad. Puedes abrirla allí e iniciar sesión restaurando tu cuenta o vinculando tu navegador desde tu teléfono.
 
 ## Olvidar una comunidad en este teléfono
 

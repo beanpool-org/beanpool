@@ -71,7 +71,7 @@ La Home mostra solo le schede che hanno qualcosa da dirti, nel tuo ordine person
 - **Fai crescere la tua comunità:** ti consente di invitare nuovi membri dopo la tua prima Offerta, dove gli inviti sono attivi. Non presente sulla comunità globale. Sul telefono, dove solo gli amministratori possono invitare, viene mostrata solo a un proprietario o amministratore. Nell'app web non compare affatto lì.
 - **La tua comunità:** l'ultima scheda, intitolata con il nome della tua comunità (**La comunità globale** sulla comunità globale). Mostra il numero dei membri e gli scambi di questo mese; sulla comunità globale, i membri e quante comunità sono elencate. Contiene **Aggiungi una scheda** e **Modifica home**. Questa scheda rimane in fondo e non può essere spostata né rimossa.
 
-Sul telefono, quando la tua comunità si è trasferita a un nuovo indirizzo, una scheda sopra tutte queste chiede se utilizzarlo: vedi "Quando la tua comunità si sposta a un nuovo indirizzo" in "Più di una comunità".
+Sul telefono, quando il telefono si è spostato da solo a un altro indirizzo della tua comunità, una riga sopra tutte queste lo dice, una sola volta: vedi "Quando la tua comunità si sposta a un nuovo indirizzo" in "Più di una comunità".
 
 ## Il menu "…"
 

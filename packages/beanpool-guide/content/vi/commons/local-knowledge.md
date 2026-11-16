@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Tri thức địa phương
 summary: Tìm hiểu, kệ sách của cộng đồng bạn về những điều đáng biết: tìm một trang, đề xuất một trang, giữ cho trang luôn đúng, và cách chủ sở hữu hoặc quản trị viên kiểm tra từng trang.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## Đó là gì
@@ -45,6 +45,14 @@ Mỗi trang kết thúc bằng cùng một dòng: "Tri thức địa phương do
 ## Điều này hữu ích
 
 Nếu một trang đã giúp bạn, nhấn **👍 Điều này hữu ích**. Nhấn lần nữa để rút lại. Trang cho biết nó đã giúp bao nhiêu thành viên, như **Đã giúp 12**, và không bao giờ cho biết là ai. Bạn không thể nhấn nút này ở trang của chính mình.
+
+## Người hướng dẫn địa phương
+
+Một thành viên đã viết 3 trang hiện có trong Tìm hiểu, mỗi trang đã giúp ít nhất 3 thành viên, sẽ có **🗺️ Người hướng dẫn địa phương**: trên dòng **Người viết** của các trang họ viết, và trên hồ sơ của họ. Các trang soạn cùng trợ lý AI không được tính. Danh hiệu này mất đi nếu các trang của họ không còn, hoặc nếu Tìm hiểu bị tắt. Đây chỉ là một lời cảm ơn: nó không mang lại đậu và không cho ai làm thêm điều gì.
+
+## Cảm ơn người viết
+
+Bên dưới một trang do người khác viết, nhấn nút có tên của họ, chẳng hạn **🫘 Cảm ơn Ada**. Nút này mở biểu mẫu gửi đậu thông thường của Sổ cái, với người viết đã được chọn và một ghi chú như **Cảm ơn vì “Xe buýt vào thị trấn”** đã được điền sẵn. Thay đổi số lượng hoặc ghi chú, rồi gửi như bất kỳ món quà nào bằng đậu của chính bạn. Không ai khác phải trả gì. Nút này chỉ hiện ở nơi cộng đồng của bạn dùng đậu, và không hiện trên trang soạn cùng trợ lý AI. Xem "Gửi quà tặng".
 
 ## Đề xuất một trang
 

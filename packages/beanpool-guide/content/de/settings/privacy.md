@@ -2,7 +2,7 @@
 slug: privacy
 title: Privatsphäre
 summary: Was andere über dich sehen können und welche Einstellungen dies steuern.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Was andere Mitglieder über dich sehen können und mit welchen Schaltern du es steuerst.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Die Eigentümer und Admins, die den Server deiner Community betreiben, können w
 - **Deine Gegend** (in der globalen Community): Sieh in den Einstellungen unter **Deine Gegend** die von dir angegebene Gegend, etwa 10 km um einen Ort oder zwei Koordinaten, oder **Nicht festgelegt**. **Löschen** entfernt sie. Darunter legt **Wo bist du ungefähr?** mit **Meinen Standort verwenden** oder **Ort oder Stadtteil eingeben** eine neue Gegend fest, und **Abbrechen** (im Browser: **← Zurück zu Einstellungen**) belässt sie unverändert. Es wird immer nur das gerundete Gebiet übertragen. Andere Mitglieder sehen, wie weit du entfernt bist, und eine von dir erstellte Umfrage wird in deiner Gegend angezeigt. Ohne festgelegte Gegend siehst du die neuesten Einträge weltweit, und Mitglieder in deiner Nähe sehen eine von dir erstellte Umfrage nicht in ihrer Liste, können sie aber über die Suche finden. Siehe „Deine Gegend“.
 - **App-Sperre:** Verlangt die Bildschirmsperre deines Smartphones (PIN, Muster, Passwort, Fingerabdruck oder Gesichtserkennung), wenn die App geöffnet wird und wenn du nach 15 Sekunden oder mehr Abwesenheit zu ihr zurückkehrst. Die Sperre schützt die Bildschirme und Pop-ups der App. Auf einem iPhone schließt sie auch eine von der App geöffnete Webseite, wie etwa die Einstellungen deiner Community über **Verwalten**. Sie kann eine Webseite nicht absichern, die die App auf einem Android-Gerät geöffnet hat, da diese außerhalb der App öffnet, und ebenso wenig das Teilen-Menü auf beiden Systemen: Schließe diese, bevor du dein Smartphone aus der Hand legst. Die über **Verwalten** geöffneten Einstellungen deiner Community melden dich nach 15 Minuten Inaktivität ab. Bei aktivierter App-Sperre wird der Bildschirm beim Verlassen der App leer und kehrt zurück, sobald du wieder da bist. Sie erfordert eine Bildschirmsperre auf dem Smartphone: Ohne diese gibt es nichts, was abgefragt werden könnte.
 - **Kanäle:** Alles, was du im Pulse teilst, wird mit deinem Namen für jedes Mitglied deiner Community angezeigt. Siehe „Eigene Kanäle teilen“.
+- **Menschen aus anderen Communities:** Niemand aus einer anderen Community kann dich über deinen Namen finden, außer du schaltest **Menschen aus anderen Communities können mich über meinen Namen finden** unter deiner Adresskarte ein. Der Schalter ist aus, bis du das tust. Auch dann muss die Person deinen genauen Namen eingeben: Niemand sieht eine Liste. Siehe „Menschen aus anderen Communities“.
 
 ## Wer sonst Dinge sehen kann
 

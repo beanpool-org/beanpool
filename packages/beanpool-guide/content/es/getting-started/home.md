@@ -71,7 +71,7 @@ Inicio muestra únicamente las tarjetas que tienen algo que decirte, en tu propi
 - **Haz crecer tu comunidad:** te permite invitar a nuevos miembros después de tu primera Oferta, donde las invitaciones estén activadas. No en la comunidad global. En el teléfono, donde solo los administradores invitan, se muestra solo para un propietario o administrador. En la app web no se muestra allí en absoluto.
 - **Tu comunidad:** la última tarjeta, titulada con el nombre de tu comunidad (**La comunidad mundial** en la comunidad global). Muestra el recuento de miembros y los intercambios de este mes; en la comunidad global, los miembros y cuántas comunidades están listadas. Tiene **Añadir tarjeta** y **Editar inicio**. Esta tarjeta permanece en la parte inferior y no se puede mover ni quitar.
 
-En el teléfono, cuando tu comunidad se ha mudado a una nueva dirección, una tarjeta por encima de todas estas pregunta si se desea usarla: consulta "Cuando tu comunidad se muda a una nueva dirección" en "Más de una comunidad".
+En el teléfono, cuando tu teléfono se ha trasladado por sí solo a otra dirección de tu comunidad, una línea por encima de todas estas lo dice, una sola vez: consulta "Cuando tu comunidad se muda a una nueva dirección" en "Más de una comunidad".
 
 ## El menú "…"
 

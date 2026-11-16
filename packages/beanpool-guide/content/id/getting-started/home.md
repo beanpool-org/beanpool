@@ -71,7 +71,7 @@ Beranda hanya menampilkan kartu yang memiliki informasi untukmu, dalam urutanmu 
 - **Kembangkan komunitas Anda:** memungkinkanmu mengundang anggota baru setelah Penawaran pertamamu, jika undangan diaktifkan. Tidak ada di komunitas global. Di ponsel, jika hanya admin yang mengundang, kartu ini hanya ditampilkan untuk pemilik atau admin. Di web app, kartu ini tidak ditampilkan sama sekali.
 - **Komunitas Anda:** kartu terakhir, diberi judul sesuai nama komunitasmu (**Komunitas global** di komunitas global). Kartu ini menampilkan jumlah anggota dan transaksi bulan ini; di komunitas global, anggotanya dan berapa banyak komunitas yang terdaftar. Kartu ini memiliki **Tambah kartu** dan **Edit beranda**. Kartu ini selalu berada di bagian bawah dan tidak dapat dipindahkan atau dihapus.
 
-Di ponsel, ketika komunitasmu telah berpindah ke alamat baru, sebuah kartu di atas semua kartu ini akan menanyakan apakah ingin menggunakannya: lihat "When your community moves to a new address" di "More than one community".
+Di ponsel, ketika ponselmu sudah pindah sendiri ke alamat lain komunitasmu, satu baris di atas semua kartu ini memberitahukannya, sekali saja: lihat "Ketika komunitasmu berpindah ke alamat baru" di "Lebih dari satu komunitas".
 
 ## Menu "…"
 

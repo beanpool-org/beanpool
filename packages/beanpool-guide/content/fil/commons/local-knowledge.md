@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Lokal na kaalaman
 summary: Ang Alamin, ang istante ng komunidad mo ng mga bagay na mahalagang malaman: paghahanap ng pahina, pagmumungkahi, pagpapanatiling tama, at kung paano sinusuri ng may-ari o admin ang bawat isa.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## Ano ito
@@ -45,6 +45,14 @@ Nagtatapos ang bawat pahina sa iisang linya: "Isinulat ng mga miyembro ang lokal
 ## Nakatulong ito
 
 Kung nakatulong sa iyo ang isang pahina, i-tap ang **👍 Nakatulong ito**. I-tap ulit para bawiin. Ipinapakita ng pahina kung ilang miyembro ang natulungan nito, tulad ng **Nakatulong sa 12**, at hindi kailanman kung sino. Hindi mo ito maita-tap sa sarili mong pahina.
+
+## Lokal na gabay
+
+Ang miyembrong sumulat ng 3 pahinang nasa Alamin ngayon, na bawat isa ay nakatulong sa hindi bababa sa 3 miyembro, ay nagpapakita ng **🗺️ Lokal na gabay**: sa linyang **Isinulat ni** ng mga pahina niya, at sa profile niya. Hindi binibilang ang mga pahinang binuo kasama ang AI assistant. Nawawala itong muli kung mawala ang mga pahina niya, o kung i-off ang Alamin. Pasasalamat lamang ito: hindi ito nagbibigay ng Munggo at walang sinumang pinapayagan nitong gumawa ng higit pa.
+
+## Pagpapasalamat sa sumulat
+
+Sa ilalim ng pahinang isinulat ng iba, i-tap ang button na may pangalan niya, tulad ng **🫘 Pasalamatan si Ada**. Binubuksan nito ang karaniwang form ng Talaan para magpadala ng Munggo, na napili na ang sumulat at may nakasulat nang tala tulad ng **Salamat sa “Bus papuntang bayan”**. Baguhin ang halaga o ang tala, pagkatapos ay ipadala ito tulad ng anumang regalo mula sa sarili mong Munggo. Walang ibang nagbabayad ng kahit ano. Lumalabas lamang ang button kung saan gumagamit ng Munggo ang komunidad mo, at hindi sa pahinang binuo kasama ang AI assistant. Tingnan ang "Magpadala ng regalo".
 
 ## Pagmumungkahi ng pahina
 

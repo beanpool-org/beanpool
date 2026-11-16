@@ -69,12 +69,17 @@ Maaari ka ring lumipat sa **Mga Setting**, sa ilalim ng **System**, pagkatapos a
 
 ## Kapag lumipat ang iyong komunidad sa bagong address
 
-Maaaring lumipat ang isang komunidad sa bagong address: halimbawa, mula sa numero ng server nito (tulad ng 203.0.113.5) patungo sa isang pangalan. Sa telepono, magpapakita ang Home ng card sa itaas: **This community is also at beans.example.org. Use that address from now on?** Lumalabas lamang ito pagkatapos suriin ng iyong telepono sa server ng komunidad na ang bagong address ay ang parehong komunidad.
+Maaaring sumagot ang isang komunidad sa higit sa isang address: ang numero ng server nito (tulad ng 203.0.113.5), isang pangalang beanpool.org, o ang sarili nitong domain. Isa sa mga ito ang pangunahing address nito. Ang mga may-ari nito ang pumipili kung alin.
 
-- I-tap ang **Gamitin ang bagong address**. Lilipat ang iyong telepono roon kasama ang itinatago nito para sa komunidad na iyon, kasama ang iyong mga mensahe, at bubuksan muli ang komunidad, tulad ng kapag lumilipat ka.
-- I-tap ang **Huwag muna**, at magtatanong muli ang card sa loob ng 7 araw. Hindi kailanman kusang lilipat ang iyong telepono sa sarili nito.
-- Kung sumagot ang bagong address bilang ibang komunidad, sinasabi ng app ang **Mananatili ang teleponong ito kung nasaan ito**, at pinapanatili ang address na mayroon ito. Kung hindi magawa ang pagsusuri, sinasabi nito ang **Walang nagbago. Subukan muli mamaya.**
-- Kung huminto sa pagsagot ang lumang address bago marinig ng iyong telepono ang tungkol sa bago, walang makakapagsabi sa iyong telepono kung saan pumunta ang komunidad. Tanungin ang mga may-ari nito para sa bagong address, pagkatapos ay i-tap ang bean, pagkatapos ay **Magdagdag ng komunidad**, at itipa ito roon.
+Sa telepono, wala kang kailangang gawin. Sinusuri ng iyong telepono ang bawat address ng iyong komunidad, mga isang beses bawat oras, at gumagamit lamang ng isa pagkatapos itong sumagot gamit ang sariling susi ng iyong komunidad. Pagkatapos:
+
+- **Kapag pumili ang mga may-ari ng bagong pangunahing address**, kusang lilipat doon ang iyong telepono, kadalasan sa loob ng isang araw, kasama ang itinatago nito para sa komunidad na iyon, pati ang iyong mga mensahe. Magpapakita ang Home ng isang linya nang isang beses, tulad ng **Nasa beans.example.org na ngayon ang Riverside. Ito na ang gagamitin ng teleponong ito mula ngayon. Walang ibang nagbago.**
+- **Kapag huminto sa pagsagot ang address na ginagamit ng iyong telepono** nang mga limang minuto, o hindi sumasagot kapag binuksan mo ang app, lilipat ang iyong telepono sa pangunahing address, o sa ibang address ng komunidad na sumasagot. Sinasabi ng Home, halimbawa, ang **Hindi sumasagot ang riverside.beanpool.org. Ang beans.example.org muna ang gamit ng teleponong ito.** Kapag sumagot muli ang pangunahing address, kusang babalik doon ang iyong telepono.
+- **Kapag hindi na sumasagot ang isang address bilang iyong komunidad**, agad itong ititigil na gamitin ng iyong telepono at sasabihin ito sa Home: **Hindi na sumasagot ang riverside.beanpool.org bilang Riverside. Ang beans.example.org na ang gamit ng teleponong ito.** Hindi kailanman ginagamit ang address na sumasagot gamit ang ibang susi.
+- Gumagamit lamang ang iyong telepono ng address na nasa sariling listahan ng komunidad.
+- Kung huminto sa pagsagot ang lumang address bago marinig ng iyong telepono ang tungkol sa iba, walang makakapagsabi sa iyong telepono kung saan pumunta ang komunidad. Tanungin ang mga may-ari nito para sa bagong address, pagkatapos ay i-tap ang bean, pagkatapos ay **Magdagdag ng komunidad**, at itipa ito roon.
+
+Sa web app, ang pag-sign in ng isang browser ay para sa iisang address, kaya nananatili ito kung nasaan ito. Sa address na sinasagot pa rin ng komunidad, may tahimik na linya sa itaas na nagsasabi kung nasaan na ang pangunahing address nito: **Ang pangunahing address ng komunidad na ito ngayon ay ‹address›. Patuloy na gagana ang address na ito.** Lumalabas lamang ito kapag sumagot na ang pangunahing address sa iyong browser gamit ang sariling susi ng komunidad. Maaari mo itong buksan doon, at mag-sign in sa pamamagitan ng pag-restore ng iyong account o pag-link ng iyong browser mula sa iyong telepono.
 
 ## Pagkalimot sa isang komunidad sa teleponong ito
 

@@ -69,12 +69,17 @@ Unaweza pia kubadili katika **Mipangilio**, chini ya **Mfumo**, kisha **Jumuiya 
 
 ## Jumuiya yako inapohamia anwani mpya
 
-Jumuiya inaweza kuhamia anwani mpya: kwa mfano, kutoka kwa nambari ya seva yake (kama vile 203.0.113.5) hadi kwa jina. Kwenye simu, Nyumbani basi huonyesha kadi juu: **Jumuiya hii pia ipo kwenye beans.example.org. Je, utumie anwani hiyo kuanzia sasa?** Inaonyesha tu baada ya simu yako kukagua na seva ya jumuiya kuwa anwani mpya ni jumuiya ileile.
+Jumuiya inaweza kujibu kwenye anwani zaidi ya moja: nambari ya seva yake (kama vile 203.0.113.5), jina la beanpool.org, au kikoa chake chenyewe. Mojawapo ni anwani yake kuu. Wamiliki wake huchagua ipi.
 
-- Gusa **Tumia anwani mpya**. Simu yako huhamia huko ikiwa na kile inachoweka kwa ajili ya jumuiya hiyo, ujumbe wako ukiwemo, na kuifungua jumuiya tena, kama vile unapobadili.
-- Gusa **Si sasa**, na kadi huuliza tena baada ya siku 7. Simu yako haihami kamwe yenyewe.
-- Ikiwa anwani mpya inajibu kama jumuiya tofauti, programu inasema **Simu hii inabaki pale ilipo**, na huweka anwani iliyo nayo. Ikiwa ukaguzi hauwezi kufanywa, inasema **Hakuna kilichobadilika. Jaribu tena baada ya muda mfupi.**
-- Ikiwa anwani ya zamani iliacha kujibu kabla simu yako haijasikia kuhusu mpya, hakuna kinachoweza kuiambia simu yako jumuiya ilienda wapi. Waombe wamiliki wake anwani mpya, kisha uguse haragwe, kisha **Ongeza jumuiya**, na uiandike hapo.
+Kwenye simu, huhitaji kufanya chochote. Simu yako hukagua kila anwani ya jumuiya yako, takriban mara moja kila saa, na hutumia anwani tu baada ya kujibu kwa ufunguo wa jumuiya yako yenyewe. Kisha:
+
+- **Wamiliki wanapochagua anwani kuu mpya**, simu yako huhamia huko yenyewe, kwa kawaida ndani ya siku moja, ikiwa na kile inachoweka kwa ajili ya jumuiya hiyo, ujumbe wako ukiwemo. Nyumbani huonyesha mstari mmoja mara moja, kama vile **Riverside sasa iko kwenye beans.example.org. Simu hii inaitumia kuanzia sasa. Hakuna kingine kilichobadilika.**
+- **Anwani ambayo simu yako inatumia inapoacha kujibu** kwa takriban dakika tano, au haijibu unapofungua programu, simu yako huhamia anwani kuu, au anwani nyingine ya jumuiya inayojibu. Nyumbani husema, kwa mfano, **riverside.beanpool.org haijibu. Simu hii inatumia beans.example.org kwa sasa.** Anwani kuu ikijibu tena, simu yako hurudi huko yenyewe.
+- **Anwani isipojibu tena kama jumuiya yako**, simu yako huacha kuitumia mara moja na kusema hivyo kwenye Nyumbani: **riverside.beanpool.org haijibu tena kama Riverside. Simu hii sasa inatumia beans.example.org.** Anwani inayojibu kwa ufunguo mwingine haitumiki kamwe.
+- Simu yako hutumia tu anwani iliyo kwenye orodha ya jumuiya yenyewe.
+- Ikiwa anwani ya zamani iliacha kujibu kabla simu yako haijasikia kuhusu nyingine yoyote, hakuna kinachoweza kuiambia simu yako jumuiya ilienda wapi. Waombe wamiliki wake anwani mpya, kisha uguse haragwe, kisha **Ongeza jumuiya**, na uiandike hapo.
+
+Kwenye programu ya wavuti, kuingia kwa kivinjari ni kwa anwani moja, kwa hiyo kivinjari hubaki pale kilipo. Kwenye anwani ambayo jumuiya bado inaijibu, mstari mtulivu juu unakuambia anwani yake kuu iko wapi sasa: **Anwani kuu ya jumuiya hii sasa ni ‹anwani›. Anwani hii inaendelea kufanya kazi.** Huonekana tu baada ya anwani kuu kujibu kivinjari chako kwa ufunguo wa jumuiya yenyewe. Unaweza kuifungua huko, na kuingia kwa kurejesha akaunti yako au kuunganisha kivinjari chako kutoka kwenye simu yako.
 
 ## Kusahau jumuiya kwenye simu hii
 

@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Savoirs locaux
 summary: Découvrir, l'étagère de votre communauté pour ce qui mérite d'être su : trouver une page, en suggérer une, la garder juste et comment un propriétaire ou un administrateur vérifie chacune.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## De quoi s'agit-il
@@ -45,6 +45,14 @@ Chaque page se termine par la même ligne : « Les savoirs locaux sont écrits p
 ## Ça m'a aidé
 
 Si une page vous a aidé, touchez **👍 Ça m'a aidé**. Touchez-le à nouveau pour le retirer. La page indique combien de membres elle a aidés, comme **A aidé 12**, et jamais lesquels. Vous ne pouvez pas le toucher sur votre propre page.
+
+## Guide local
+
+Un membre qui a écrit 3 pages présentes dans Découvrir, chacune ayant aidé au moins 3 membres, affiche **🗺️ Guide local** : sur la ligne **Écrit par** de ses pages, et sur son profil. Les pages préparées avec un assistant IA ne comptent pas. Il disparaît si ses pages disparaissent, ou si Découvrir est désactivé. Ce n'est qu'un remerciement : il ne donne aucun haricot et ne permet à personne de faire quoi que ce soit de plus.
+
+## Remercier l'auteur
+
+Sous une page écrite par quelqu'un d'autre, touchez le bouton à son nom, comme **🫘 Remercier Ada**. Il ouvre le formulaire habituel du Registre pour envoyer des haricots, avec l'auteur déjà choisi et une note comme **Merci pour « Bus pour la ville »** déjà remplie. Modifiez le montant ou la note, puis envoyez-le comme n'importe quel don de vos propres haricots. Personne d'autre ne paie quoi que ce soit. Le bouton n'apparaît que là où votre communauté utilise des haricots, et pas sur une page préparée avec un assistant IA. Voir « Envoyer un don ».
 
 ## Suggérer une page
 

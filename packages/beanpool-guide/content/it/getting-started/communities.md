@@ -69,12 +69,17 @@ Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Comu
 
 ## Quando la tua comunità si sposta a un nuovo indirizzo
 
-Una comunità può trasferirsi a un nuovo indirizzo: ad esempio, dall'indirizzo IP del suo server (come 203.0.113.5) a un nome di dominio. Sul telefono, la Home mostra allora una scheda in alto: **Questa comunità si trova anche su beans.example.org. Vuoi usare questo indirizzo d'ora in poi?** Compare solo dopo che il telefono ha verificato con il server della comunità che il nuovo indirizzo appartiene alla stessa comunità.
+Una comunità può rispondere a più di un indirizzo: l'indirizzo IP del suo server (come 203.0.113.5), un nome beanpool.org o un suo dominio. Uno di questi è il suo indirizzo principale. Sono i suoi proprietari a scegliere quale.
 
-- Tocca **Usa il nuovo indirizzo**. Il telefono si sposta lì con tutto ciò che conserva per quella comunità, inclusi i tuoi messaggi, e riapre la comunità, esattamente come quando cambi comunità.
-- Tocca **Non ora**, e la scheda lo riproporrà dopo 7 giorni. Il telefono non si sposta mai di propria iniziativa.
-- Se il nuovo indirizzo risponde come una comunità diversa, l'app dice **Questo telefono rimane dove si trova**, e mantiene l'indirizzo attuale. Se il controllo non può essere effettuato, dice **Non è cambiato nulla. Riprova tra poco.**
-- Se il vecchio indirizzo ha smesso di rispondere prima che il telefono venisse a conoscenza di quello nuovo, nulla può comunicare al telefono dove si è trasferita la comunità. Chiedi ai suoi proprietari il nuovo indirizzo, poi tocca il fagiolo, seleziona **Aggiungi una comunità** e digitalo lì.
+Sul telefono, non devi fare nulla. Il telefono controlla ogni indirizzo della tua comunità, circa una volta all'ora, e ne usa uno solo dopo che ha risposto con la chiave della tua comunità. Poi:
+
+- **Quando i proprietari scelgono un nuovo indirizzo principale**, il telefono si sposta lì da solo, di solito entro un giorno, con tutto ciò che conserva per quella comunità, inclusi i tuoi messaggi. La Home mostra una riga una sola volta, come **Riverside ora si trova su beans.example.org. Questo telefono lo usa da ora in poi. Nient'altro è cambiato.**
+- **Quando l'indirizzo che usa il telefono smette di rispondere** per circa cinque minuti, o non risponde quando apri l'app, il telefono passa all'indirizzo principale, o a un altro indirizzo della comunità che risponde. La Home dice, per esempio, **riverside.beanpool.org non risponde. Per ora questo telefono usa beans.example.org.** Quando l'indirizzo principale risponde di nuovo, il telefono ci torna da solo.
+- **Quando un indirizzo non risponde più come la tua comunità**, il telefono smette subito di usarlo e lo dice nella Home: **riverside.beanpool.org non risponde più come Riverside. Ora questo telefono usa beans.example.org.** Un indirizzo che risponde con un'altra chiave non viene mai usato.
+- Il telefono usa solo indirizzi presenti nell'elenco della comunità stessa.
+- Se il vecchio indirizzo ha smesso di rispondere prima che il telefono venisse a conoscenza di un altro, nulla può comunicare al telefono dove si è trasferita la comunità. Chiedi ai suoi proprietari il nuovo indirizzo, poi tocca il fagiolo, seleziona **Aggiungi una comunità** e digitalo lì.
+
+Nell'app web, l'accesso di un browser appartiene a un solo indirizzo, quindi resta dov'è. A un indirizzo a cui la comunità risponde ancora, una riga discreta in alto ti dice dove si trova ora il suo indirizzo principale: **L'indirizzo principale di questa comunità ora è ‹indirizzo›. Questo indirizzo continua a funzionare.** Compare solo dopo che l'indirizzo principale ha risposto al tuo browser con la chiave della comunità. Puoi aprirlo lì, e accedere ripristinando il tuo account o collegando il browser dal telefono.
 
 ## Dimenticare una comunità su questo telefono
 

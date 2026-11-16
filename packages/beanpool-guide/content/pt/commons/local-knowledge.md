@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Conhecimento local
 summary: Aprender, a estante da sua comunidade com o que vale a pena saber: encontrar uma página, sugerir uma, mantê-la correta e como um proprietário ou administrador confere cada uma.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## O que é
@@ -45,6 +45,14 @@ Toda página termina com a mesma linha: "O conhecimento local é escrito por mem
 ## Ajudou
 
 Se uma página ajudou você, toque em **👍 Ajudou**. Toque de novo para desfazer. A página mostra quantos membros ela ajudou, como **Ajudou 12**, e nunca quais. Você não pode tocar nele na sua própria página.
+
+## Guia local
+
+Um membro que escreveu 3 páginas que estão em Aprender agora, e cada uma delas ajudou pelo menos 3 membros, mostra **🗺️ Guia local**: na linha **Escrito por** das suas páginas e no seu perfil. Páginas montadas com um assistente de IA não contam. Ele some se as páginas saírem, ou se Aprender for desligado. É só um agradecimento: não dá feijões e não deixa ninguém fazer nada a mais.
+
+## Agradecendo a quem escreveu
+
+Abaixo de uma página que outra pessoa escreveu, toque no botão com o nome dela, como **🫘 Agradecer a Ada**. Ele abre o formulário normal do Registro para enviar feijões, com quem escreveu já escolhido e uma nota como **Agradeço por “Ônibus para a cidade”** já preenchida. Mude o valor ou a nota e depois envie como qualquer presente dos seus próprios feijões. Ninguém mais paga nada. O botão só aparece onde a sua comunidade usa feijões, e não numa página montada com um assistente de IA. Veja "Enviar um presente".
 
 ## Sugerindo uma página
 

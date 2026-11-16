@@ -2,7 +2,7 @@
 slug: privacy
 title: Privasimu
 summary: Apa yang bisa dilihat orang lain tentangmu, dan pengaturan yang mengaturnya.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Apa yang bisa dilihat anggota lain tentangmu, dan tombol sakelar yang mengaturnya.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Pemilik dan admin yang menjalankan server komunitasmu masih dapat melihat apa ya
 - **Wilayahmu** (di komunitas global): di Pengaturan, di bawah **Wilayahmu**, lihat wilayah yang kamu berikan, sekitar 10 km di sekitar kota atau dua angka koordinat, atau **Belum diatur**. **Hapus** akan menghapusnya. Di bawahnya, **Kira-kira kamu di mana?** mengatur wilayah baru dengan **Pakai lokasiku** atau **Ketik nama kota atau daerah**, dan **Batal** (di browser, **← Kembali ke Pengaturan**) membiarkannya seperti semula. Hanya perkiraan wilayah yang dibulatkan yang pernah dikirim. Anggota lain melihat seberapa jauh jarakmu, dan jajak pendapat yang kamu buat ditampilkan di wilayahmu. Tanpa wilayah, kamu melihat postingan terbaru di seluruh dunia, dan anggota di sekitar tidak akan melihat jajak pendapat yang kamu buat di daftar mereka, meskipun mereka masih dapat menemukannya lewat pencarian. Lihat "Wilayahmu".
 - **Kunci Aplikasi:** meminta kunci layar ponselmu (PIN, pola, kata sandi, sidik jari, atau wajah) saat aplikasi dibuka, dan saat kamu kembali ke aplikasi setelah 15 detik atau lebih meninggalkannya. Kunci ini mencakup layar aplikasi dan jendela pop-up. Pada iPhone, kunci ini juga menutup halaman web yang dibuka aplikasi, seperti Pengaturan komunitasmu dari **Kelola**. Kunci ini tidak dapat mencakup halaman web yang dibuka aplikasi di ponsel Android, yang terbuka di luar aplikasi, atau panel untuk membagikan sesuatu di kedua ponsel: tutup panel tersebut sebelum kamu meletakkan ponselmu. Pengaturan komunitasmu, yang dibuka dari **Kelola**, mengeluarkanmu setelah 15 menit tidak digunakan. Saat Kunci Aplikasi aktif, layar aplikasi menjadi kosong saat kamu meninggalkannya, dan kembali normal saat kamu kembali. Fitur ini memerlukan kunci layar pada ponsel: tanpa kunci layar tidak ada yang dapat dimintanya.
 - **Kanal:** apa pun yang kamu bagikan ke Kabar ditampilkan dengan namamu, kepada semua orang di komunitasmu. Lihat "Membagikan kanalmu".
+- **Orang dari komunitas lain:** tidak ada orang dari komunitas lain yang bisa menemukanmu lewat namamu kecuali kamu mengaktifkan **Orang dari komunitas lain bisa menemukanku lewat nama**, di bawah kartu alamatmu. Sakelar ini nonaktif sampai kamu mengaktifkannya. Bahkan setelah itu, mereka harus mengetik nama persismu: tidak ada yang melihat daftar. Lihat "Orang dari komunitas lain".
 
 ## Siapa lagi yang dapat melihat
 

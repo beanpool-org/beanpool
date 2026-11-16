@@ -69,12 +69,17 @@ Bạn cũng có thể chuyển đổi trong **Cài đặt**, dưới mục **H�
 
 ## Khi cộng đồng của bạn chuyển sang địa chỉ mới
 
-Một cộng đồng có thể chuyển sang một địa chỉ mới: ví dụ, từ số máy chủ của nó (chẳng hạn như 203.0.113.5) sang một tên miền. Trên điện thoại, Trang chủ sau đó sẽ hiển thị một thẻ ở trên cùng: **Cộng đồng này cũng có tại beans.example.org. Sử dụng địa chỉ đó từ bây giờ?** Thẻ chỉ hiển thị sau khi điện thoại của bạn đã kiểm tra với máy chủ của cộng đồng rằng địa chỉ mới thuộc về cùng một cộng đồng.
+Một cộng đồng có thể phản hồi ở nhiều hơn một địa chỉ: số máy chủ của nó (chẳng hạn như 203.0.113.5), một tên beanpool.org, hoặc tên miền riêng của nó. Một trong số đó là địa chỉ chính. Các chủ sở hữu chọn địa chỉ nào.
 
-- Nhấn **Dùng địa chỉ mới**. Điện thoại của bạn sẽ chuyển sang đó cùng với những gì nó lưu giữ cho cộng đồng đó, bao gồm cả tin nhắn của bạn, và mở lại cộng đồng, giống như khi bạn chuyển đổi.
-- Nhấn **Không phải bây giờ**, và thẻ sẽ hỏi lại sau 7 ngày. Điện thoại của bạn không bao giờ tự động chuyển đổi địa chỉ.
-- Nếu địa chỉ mới phản hồi là một cộng đồng khác, ứng dụng sẽ báo **Điện thoại này giữ nguyên vị trí**, và giữ nguyên địa chỉ hiện có. Nếu việc kiểm tra không thể thực hiện được, ứng dụng sẽ báo **Không có gì thay đổi. Hãy thử lại sau một lát.**
-- Nếu địa chỉ cũ ngừng phản hồi trước khi điện thoại của bạn nhận được thông tin về địa chỉ mới, không có cách nào cho điện thoại biết cộng đồng đã chuyển đi đâu. Hãy hỏi các chủ sở hữu của cộng đồng để biết địa chỉ mới, sau đó nhấn vào hạt đậu, chọn **Thêm một cộng đồng**, và nhập địa chỉ đó vào.
+Trên điện thoại, bạn không cần làm gì cả. Điện thoại của bạn kiểm tra từng địa chỉ của cộng đồng, khoảng mỗi giờ một lần, và chỉ dùng một địa chỉ sau khi địa chỉ đó đã phản hồi bằng chính khóa của cộng đồng bạn. Sau đó:
+
+- **Khi các chủ sở hữu chọn một địa chỉ chính mới**, điện thoại của bạn tự chuyển sang đó, thường trong vòng một ngày, cùng với những gì nó lưu giữ cho cộng đồng đó, bao gồm cả tin nhắn của bạn. Trang chủ hiển thị một dòng, một lần, chẳng hạn **Riverside giờ ở địa chỉ beans.example.org. Điện thoại này dùng địa chỉ đó từ bây giờ. Không có gì khác thay đổi.**
+- **Khi địa chỉ mà điện thoại của bạn đang dùng ngừng phản hồi** trong khoảng năm phút, hoặc không phản hồi khi bạn mở ứng dụng, điện thoại của bạn chuyển sang địa chỉ chính, hoặc sang một địa chỉ khác của cộng đồng đang phản hồi. Ví dụ, Trang chủ sẽ ghi **riverside.beanpool.org không phản hồi. Điện thoại này tạm dùng beans.example.org.** Khi địa chỉ chính phản hồi trở lại, điện thoại của bạn tự quay về đó.
+- **Khi một địa chỉ không còn phản hồi với tư cách cộng đồng của bạn**, điện thoại của bạn ngừng dùng địa chỉ đó ngay lập tức và báo trên Trang chủ: **riverside.beanpool.org không còn phản hồi dưới tên Riverside. Điện thoại này giờ dùng beans.example.org.** Một địa chỉ phản hồi bằng khóa khác sẽ không bao giờ được dùng.
+- Điện thoại của bạn chỉ dùng những địa chỉ có trong danh sách riêng của cộng đồng.
+- Nếu địa chỉ cũ ngừng phản hồi trước khi điện thoại của bạn biết đến bất kỳ địa chỉ nào khác, không có cách nào cho điện thoại biết cộng đồng đã chuyển đi đâu. Hãy hỏi các chủ sở hữu của cộng đồng để biết địa chỉ mới, sau đó nhấn vào hạt đậu, chọn **Thêm một cộng đồng**, và nhập địa chỉ đó vào.
+
+Trong ứng dụng web, việc đăng nhập của một trình duyệt gắn với một địa chỉ, nên trình duyệt vẫn ở nguyên địa chỉ đó. Tại một địa chỉ mà cộng đồng vẫn phản hồi, một dòng nhỏ ở trên cùng cho bạn biết địa chỉ chính của cộng đồng giờ ở đâu: **Địa chỉ chính của cộng đồng này hiện là ‹địa chỉ›. Địa chỉ này vẫn tiếp tục hoạt động.** Dòng này chỉ hiện sau khi địa chỉ chính đã phản hồi trình duyệt của bạn bằng chính khóa của cộng đồng. Bạn có thể mở địa chỉ đó, rồi đăng nhập bằng cách khôi phục tài khoản hoặc liên kết trình duyệt từ điện thoại của bạn.
 
 ## Quên một cộng đồng trên điện thoại này
 

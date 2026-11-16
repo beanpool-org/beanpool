@@ -69,12 +69,17 @@ Du kannst auch in den **Einstellungen** unter **System**, dann **Gespeicherte Co
 
 ## Wenn deine Community an eine neue Adresse umzieht
 
-Eine Community kann an eine neue Adresse umziehen: beispielsweise von der Nummer ihres Servers (wie etwa 203.0.113.5) zu einem Namen. Auf dem Telefon zeigt die Startseite dann ganz oben eine Karte an: **Diese Community ist auch unter beans.example.org erreichbar. Diese Adresse ab jetzt nutzen?** Sie erscheint erst, nachdem dein Telefon beim Server der Community überprüft hat, dass die neue Adresse dieselbe Community ist.
+Eine Community kann unter mehr als einer Adresse antworten: unter der Nummer ihres Servers (wie etwa 203.0.113.5), einem beanpool.org-Namen oder ihrer eigenen Domain. Eine davon ist ihre Hauptadresse. Welche, entscheiden ihre Eigentümer.
 
-- Tippe auf **Neue Adresse verwenden**. Dein Telefon wechselt dorthin mit allem, was es für diese Community aufbewahrt, einschließlich deiner Nachrichten, und öffnet die Community erneut, genau wie beim Wechseln.
-- Tippe auf **Nicht jetzt**, und die Karte fragt in 7 Tagen erneut nach. Dein Telefon zieht niemals von selbst um.
-- Wenn die neue Adresse als andere Community antwortet, meldet die App: **Dieses Telefon bleibt wie es ist** und behält die bisherige Adresse. Kann die Überprüfung nicht durchgeführt werden, heißt es: **Es wurde nichts geändert. Bitte versuche es bald erneut.**
-- Wenn die alte Adresse nicht mehr antwortet, bevor dein Telefon von der neuen erfahren hat, kann nichts deinem Telefon mitteilen, wohin die Community gezogen ist. Frage ihre Eigentümer nach der neuen Adresse, tippe dann auf die Bohne, danach auf **Community hinzufügen** und gib sie dort ein.
+Auf dem Telefon musst du nichts tun. Dein Telefon prüft etwa einmal pro Stunde jede Adresse deiner Community und nutzt eine erst, nachdem sie mit dem eigenen Schlüssel deiner Community geantwortet hat. Dann gilt:
+
+- **Wenn die Eigentümer eine neue Hauptadresse wählen**, zieht dein Telefon von selbst dorthin um, meist innerhalb eines Tages, mit allem, was es für diese Community aufbewahrt, einschließlich deiner Nachrichten. Die Startseite zeigt einmal eine Zeile, zum Beispiel **Riverside ist jetzt unter beans.example.org zu finden. Dieses Telefon nutzt ab jetzt diese Adresse. Sonst hat sich nichts geändert.**
+- **Wenn die Adresse, die dein Telefon nutzt, nicht mehr antwortet**, etwa fünf Minuten lang, oder nicht antwortet, wenn du die App öffnest, wechselt dein Telefon zur Hauptadresse oder zu einer anderen Adresse der Community, die antwortet. Die Startseite sagt dann zum Beispiel **riverside.beanpool.org antwortet nicht. Dieses Telefon nutzt vorerst beans.example.org.** Sobald die Hauptadresse wieder antwortet, kehrt dein Telefon von selbst dorthin zurück.
+- **Wenn eine Adresse nicht mehr als deine Community antwortet**, hört dein Telefon sofort auf, sie zu nutzen, und sagt es auf der Startseite: **riverside.beanpool.org antwortet nicht mehr als Riverside. Dieses Telefon nutzt jetzt beans.example.org.** Eine Adresse, die mit einem anderen Schlüssel antwortet, wird nie genutzt.
+- Dein Telefon nutzt nur Adressen, die auf der eigenen Liste der Community stehen.
+- Wenn die alte Adresse nicht mehr antwortet, bevor dein Telefon von einer anderen erfahren hat, kann nichts deinem Telefon mitteilen, wohin die Community gezogen ist. Frage ihre Eigentümer nach der neuen Adresse, tippe dann auf die Bohne, danach auf **Community hinzufügen** und gib sie dort ein.
+
+In der Web-App gehört die Anmeldung eines Browsers zu einer Adresse, also bleibt sie, wo sie ist. Unter einer Adresse, unter der die Community noch antwortet, sagt dir eine unauffällige Zeile oben, wo ihre Hauptadresse jetzt ist: **Die Hauptadresse dieser Gemeinschaft ist jetzt ‹Adresse›. Diese Adresse funktioniert weiterhin.** Sie erscheint erst, wenn die Hauptadresse deinem Browser mit dem eigenen Schlüssel der Community geantwortet hat. Du kannst sie dort öffnen und dich anmelden, indem du dein Konto wiederherstellst oder deinen Browser von deinem Telefon aus verknüpfst.
 
 ## Eine Community auf diesem Telefon vergessen
 

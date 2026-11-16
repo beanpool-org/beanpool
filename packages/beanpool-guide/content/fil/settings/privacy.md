@@ -2,7 +2,7 @@
 slug: privacy
 title: Iyong privacy
 summary: Kung ano ang makikita ng iba tungkol sa iyo, at ang mga setting na kumokontrol dito.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Kung ano ang makikita ng ibang miyembro tungkol sa iyo, at ang mga switch na kumokontrol dito.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Makikita pa rin ng mga may-ari at admin na nagpapatakbo ng server ng iyong komun
 - **Iyong lugar** (sa pandaigdigang komunidad): sa Mga Setting, sa ilalim ng **Iyong lugar**, tingnan ang lugar na ibinigay mo, mga 10 km sa paligid ng isang bayan o dalawang numero, o **Hindi pa naitatakda**. Inaalis ito ng **Burahin**. Sa ilalim nito, itinatakda ng **Saan ka humigit-kumulang?** ang bago gamit ang **Gamitin ang aking lokasyon** o **Mag-type ng bayan o lugar**, at iniiwan ito ng **Kanselahin** (sa browser, **← Bumalik sa Mga Setting**) kung ano ito. Ang bilugan (rounded) na lugar lamang ang ipinapadala kailanman. Nakikita ng ibang mga miyembro kung gaano ka kalayo, at ang isang botohan na iyong ginawa ay ipinapakita sa iyong lugar. Kung wala nito, makikita mo ang mga pinakabagong listing sa buong mundo, at hindi makikita ng mga kalapit na miyembro ang botohan na ginawa mo sa kanilang listahan, bagaman mahahanap pa rin nila ito sa pamamagitan ng paghahanap. Tingnan ang "Iyong lugar".
 - **App Lock:** humihingi ng lock screen ng iyong telepono (ang PIN, pattern, password, fingerprint, o mukha nito) kapag bumubukas ang app, at kapag bumalik ka rito pagkatapos ng 15 segundo o higit pa na paglayo. Sinasaklaw ng lock ang mga screen at pop-up ng app. Sa iPhone isinasara rin nito ang isang web page na binuksan ng app, tulad ng Mga Setting ng iyong komunidad mula sa **Pamahalaan**. Hindi nito masasaklaw ang isang web page na binuksan ng app sa isang Android phone, na nagbubukas sa labas ng app, o ang panel para sa pagbabahagi ng isang bagay sa alinmang telepono: isara ang mga ito bago mo ibaba ang iyong telepono. Ang Mga Setting ng iyong komunidad, na binuksan mula sa **Pamahalaan**, ay nagla-log out sa iyo pagkatapos ng 15 minutong hindi ginagamit. Habang naka-on ang App Lock, nagiging blangko ang app sa pag-alis mo rito, at bumabalik kapag nagbalik ka. Kailangan nito ng lock screen sa telepono: kung wala nito ay walang mahihiling para rito.
 - **Mga Channel:** anumang ibinabahagi mo sa Pulse ay ipinapakita kasama ang iyong pangalan, sa lahat sa iyong komunidad. Tingnan ang "Pagbabahagi ng iyong mga channel".
+- **Mga tao mula sa ibang komunidad:** walang sinuman sa ibang komunidad ang makakahanap sa iyo sa pangalan mo maliban kung i-on mo ang **Maaari akong mahanap sa pangalan ng mga tao mula sa ibang komunidad**, sa ilalim ng iyong address card. Naka-off ito hangga't hindi mo ino-on. Kahit noon, kailangan nilang i-type ang eksaktong pangalan mo: walang nakakakita ng listahan. Tingnan ang "Mga tao mula sa ibang komunidad".
 
 ## Sino pa ang makakakita ng mga bagay
 

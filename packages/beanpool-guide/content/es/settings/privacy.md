@@ -2,7 +2,7 @@
 slug: privacy
 title: Tu privacidad
 summary: Qué pueden ver los demás sobre ti y los ajustes que lo controlan.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Qué pueden ver otros miembros sobre ti y las opciones que lo controlan.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Los propietarios y administradores que gestionan el servidor de tu comunidad aú
 - **Tu zona** (en la comunidad global): en Ajustes, en **Tu zona**, consulta la zona que indicaste, a unos 10 km alrededor de una localidad o dos números, o **Sin definir**. **Borrar** la elimina. Debajo, **¿Más o menos dónde estás?** establece una nueva con **Usar mi ubicación** o **Escribe una localidad o barrio**, y **Cancelar** (en un navegador, **← Volver a Ajustes**) la deja como está. Solo se envía la zona redondeada. Otros miembros ven a qué distancia estás, y una encuesta que crees se muestra en tu zona. Sin una zona definida, ves los anuncios más recientes de todo el mundo, y los miembros cercanos no verán una encuesta que crees en su lista, aunque aún pueden encontrarla buscando. Consulta «Tu zona».
 - **Bloqueo de la app:** solicita el bloqueo de pantalla de tu teléfono (PIN, patrón, contraseña, huella o rostro) cuando se abre la app y cuando vuelves a ella después de 15 segundos o más fuera. El bloqueo cubre las pantallas y ventanas emergentes de la app. En un iPhone también cierra una página web que la app haya abierto, como los Ajustes de tu comunidad desde **Administrar**. No puede cubrir una página web que la app haya abierto en un teléfono Android, la cual se abre fuera de la app, ni el panel para compartir algo en ninguno de los dos teléfonos: ciérralos antes de dejar tu teléfono. Los Ajustes de tu comunidad, abiertos desde **Administrar**, cierran tu sesión tras 15 minutos sin uso. Mientras el Bloqueo de la app está activado, la app se queda en blanco cuando sales de ella y regresa cuando vuelves. Necesita un bloqueo de pantalla en el teléfono: sin uno, no hay nada que pueda solicitar.
 - **Canales:** todo lo que compartes en Pulso se muestra con tu nombre, para todos en tu comunidad. Consulta «Compartir tus canales».
+- **Personas de otras comunidades:** nadie de otra comunidad puede encontrarte por tu nombre a menos que actives **Las personas de otras comunidades pueden encontrarme por mi nombre**, debajo de tu tarjeta de dirección. Está apagado hasta que lo actives. Aun así, tienen que escribir tu nombre exacto: nadie ve una lista. Consulta «Personas de otras comunidades».
 
 ## Quién más puede ver las cosas
 

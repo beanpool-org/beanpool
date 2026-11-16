@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Conoscenze locali
 summary: Impara, lo scaffale della tua comunità con ciò che vale la pena sapere: trovare una pagina, suggerirne una, tenerla giusta e come un proprietario o un admin controlla ognuna.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## Che cos'è
@@ -45,6 +45,14 @@ Ogni pagina finisce con la stessa riga: "Le conoscenze locali sono scritte dai m
 ## Mi è stato utile
 
 Se una pagina ti è stata utile, tocca **👍 Mi è stato utile**. Toccalo di nuovo per ritirarlo. La pagina mostra a quanti membri è stata utile, come **Utile a 12**, e mai a chi. Non puoi toccarlo sulla tua pagina.
+
+## Guida locale
+
+Un membro che ha scritto 3 pagine che ora sono in Impara, ciascuna delle quali è stata utile ad almeno 3 membri, mostra **🗺️ Guida locale**: sulla riga **Scritto da** delle sue pagine e sul suo profilo. Le pagine preparate con un assistente IA non contano. Sparisce se le sue pagine vengono tolte, o se Impara viene disattivato. È solo un ringraziamento: non dà fagioli e non permette a nessuno di fare nulla in più.
+
+## Ringraziare chi l'ha scritta
+
+Sotto una pagina scritta da qualcun altro, tocca il pulsante con il suo nome, come **🫘 Ringrazia Ada**. Si apre il normale modulo del Mastro per inviare fagioli, con chi l'ha scritta già scelto e una nota come **Grazie per “Autobus per il paese”** già compilata. Cambia l'importo o la nota, poi invialo come qualsiasi dono dei tuoi fagioli. Nessun altro paga nulla. Il pulsante compare solo dove la tua comunità usa i fagioli, e non su una pagina preparata con un assistente IA. Vedi "Inviare un dono".
 
 ## Suggerire una pagina
 

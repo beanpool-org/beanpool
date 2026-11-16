@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Tin nhắn, tin nhắn thoại, diễn đàn, nhóm và các đoạn chat của nhóm, mọi người và bạn bè, danh bạ riêng của bạn, chat sự kiện, tắt thông báo, nhắc đến và khóa đã đổi.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Tin nhắn, tin nhắn thoại, diễn đàn, nhóm và các đoạn chat của nhóm, mọi người và bạn bè, danh bạ riêng của bạn, người ở cộng đồng khác, chat sự kiện, tắt thông báo, nhắc đến và khóa đã đổi.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "Danh bạ riêng của bạn. Chỉ bạn mở được danh sách. Đưa người từ điện thoại hoặc tệp danh bạ vào, thêm ai đó thủ công, hoặc mời họ.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Người ở cộng đồng khác",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Nhắn tin cho một người thuộc cộng đồng khác. Thẻ địa chỉ của bạn, các công tắc cho phép người khác liên lạc với bạn, tìm một người theo đúng tên của họ, và mỗi cộng đồng lưu giữ những gì.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Cho xem thẻ địa chỉ của bạn, hoặc tìm một người theo đúng tên nếu họ đã đồng ý. Tin nhắn đầu tiên của họ là một yêu cầu: bạn chọn có chấp nhận hay không.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

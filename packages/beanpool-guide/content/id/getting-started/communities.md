@@ -69,12 +69,17 @@ Kamu juga dapat berpindah di **Pengaturan**, di bawah **Sistem**, lalu **Komunit
 
 ## Ketika komunitasmu berpindah ke alamat baru
 
-Suatu komunitas dapat berpindah ke alamat baru: misalnya, dari nomor servernya (seperti 203.0.113.5) ke sebuah nama. Di ponsel, Beranda kemudian menampilkan kartu di bagian atas: **Komunitas ini juga berada di beans.example.org. Gunakan alamat itu mulai sekarang?** Kartu ini hanya muncul setelah ponselmu memeriksa dengan server komunitas bahwa alamat baru tersebut adalah komunitas yang sama.
+Suatu komunitas bisa menjawab di lebih dari satu alamat: nomor servernya (seperti 203.0.113.5), sebuah nama beanpool.org, atau domainnya sendiri. Salah satunya adalah alamat utamanya. Pemiliknya yang memilih.
 
-- Ketuk **Gunakan alamat baru**. Ponselmu berpindah ke sana bersama apa yang disimpannya untuk komunitas tersebut, termasuk pesan-pesanmu, dan membuka komunitas itu kembali, seperti saat kamu beralih komunitas.
-- Ketuk **Jangan sekarang**, dan kartu akan menanyakannya lagi dalam 7 hari. Ponselmu tidak pernah berpindah sendiri tanpa izin.
-- Jika alamat baru merespons sebagai komunitas yang berbeda, aplikasi bertuliskan **Ponsel ini tetap di posisinya**, dan mempertahankan alamat yang dimilikinya. Jika pemeriksaan tidak dapat dilakukan, aplikasi bertuliskan **Tidak ada yang berubah. Coba lagi sebentar lagi.**
-- Jika alamat lama berhenti merespons sebelum ponselmu mengetahui alamat yang baru, tidak ada yang dapat memberi tahu ponselmu ke mana komunitas itu berpindah. Tanyakan kepada pemiliknya untuk mendapatkan alamat baru, lalu ketuk ikon kacang, lalu **Tambah komunitas**, dan ketikkan alamatnya di sana.
+Di ponsel, kamu tidak perlu melakukan apa pun. Ponselmu memeriksa setiap alamat komunitasmu, kira-kira sekali sejam, dan baru memakai sebuah alamat setelah alamat itu menjawab dengan kunci milik komunitasmu sendiri. Lalu:
+
+- **Ketika pemilik memilih alamat utama baru**, ponselmu pindah ke sana sendiri, biasanya dalam sehari, bersama apa yang disimpannya untuk komunitas itu, termasuk pesan-pesanmu. Beranda menampilkan satu baris, sekali saja, seperti **Riverside sekarang ada di beans.example.org. Ponsel ini memakainya mulai sekarang. Tidak ada hal lain yang berubah.**
+- **Ketika alamat yang dipakai ponselmu berhenti menjawab** selama sekitar lima menit, atau tidak menjawab saat kamu membuka aplikasi, ponselmu pindah ke alamat utama, atau ke alamat lain komunitas itu yang menjawab. Beranda bertuliskan, misalnya, **riverside.beanpool.org tidak menjawab. Ponsel ini memakai beans.example.org untuk sementara.** Begitu alamat utama menjawab lagi, ponselmu kembali ke sana sendiri.
+- **Ketika sebuah alamat tidak lagi menjawab sebagai komunitasmu**, ponselmu langsung berhenti memakainya dan memberi tahu di Beranda: **riverside.beanpool.org tidak lagi menjawab sebagai Riverside. Ponsel ini sekarang memakai beans.example.org.** Alamat yang menjawab dengan kunci lain tidak pernah dipakai.
+- Ponselmu hanya memakai alamat yang ada di daftar milik komunitas itu sendiri.
+- Jika alamat lama berhenti menjawab sebelum ponselmu mengetahui alamat lain, tidak ada yang dapat memberi tahu ponselmu ke mana komunitas itu berpindah. Tanyakan alamat baru kepada pemiliknya, lalu ketuk ikon kacang, lalu **Tambah komunitas**, dan ketikkan alamatnya di sana.
+
+Di aplikasi web, proses masuk di sebuah browser terikat pada satu alamat, jadi browser tetap di alamat itu. Di alamat yang masih dijawab komunitas itu, satu baris kecil di bagian atas memberi tahu di mana alamat utamanya sekarang: **Alamat utama komunitas ini sekarang adalah ‹alamat›. Alamat ini tetap berfungsi.** Baris itu hanya muncul setelah alamat utama menjawab browsermu dengan kunci milik komunitas itu sendiri. Kamu bisa membukanya di sana, lalu masuk dengan memulihkan akunmu atau menautkan browsermu dari ponselmu.
 
 ## Melupakan komunitas di ponsel ini
 

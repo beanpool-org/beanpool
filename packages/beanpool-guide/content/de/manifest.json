@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Nachrichten, Sprachnachrichten, das Forum, Gruppen und deren Chats, Leute und Freunde, deine privaten Kontakte, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Nachrichten, Sprachnachrichten, das Forum, Gruppen und deren Chats, Leute und Freunde, deine privaten Kontakte, Menschen aus anderen Communities, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "Deine privaten Kontakte. Nur du kannst die Liste öffnen. Hole Leute vom Telefon oder aus einer Kontaktdatei, füge jemanden von Hand hinzu oder lade ihn ein.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Menschen aus anderen Communities",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Jemandem schreiben, der zu einer anderen Community gehört. Deine Adresskarte, die Schalter, über die man dich erreichen kann, jemanden über den genauen Namen finden und was jede Community aufbewahrt.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Zeige deine Adresskarte oder finde jemanden über den genauen Namen, wenn er Ja gesagt hat. Seine erste Nachricht ist eine Anfrage: Du wählst, ob du annimmst.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

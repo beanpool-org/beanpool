@@ -20,6 +20,10 @@
  *      scratch/fable-design/DESIGN-several-addresses-fable.md §6): an own domain the owner made main on the main server is
  *      the promoted server's main, and its signed list is the same key's at take-over count 1, which a phone holding the
  *      main server's list takes as newer.
+ *   7. Spares (several addresses S8, design §6): the owner names two standbys' addresses as spares on the main server (the
+ *      envelope is sealed again). The promoted standby lists the one that is its own address as an address (phones that find
+ *      nothing listed answering prove it there at take-over count 1), keeps the other as a spare, and accepts requests
+ *      signed for its own.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-takeover-keeps-app-addresses.ts
  */
@@ -87,6 +91,18 @@ async function child(): Promise<void> {
             const res = await fetch(`${await ownHttps()}/api/node/addresses`);
             const list = await res.json().catch(() => null);
             return { status: res.status, list, envelopeId: (await flushTakeoverChecks()).envelopeId };
+        },
+        spares: async (a: { spares: string[] }) => {
+            const se = await import('./state-engine.js');
+            const { flushTakeoverChecks } = await import('./services/takeover-envelope.js');
+            se.updateNodeConfig({ addressSpares: a.spares });
+            return { envelopeId: (await flushTakeoverChecks()).envelopeId };
+        },
+        // The standby's own address, which it goes by before any take-over (confirmed on it, as an owner of it would).
+        'own-address': async (a: { address: string }) => {
+            const se = await import('./state-engine.js');
+            se.updateNodeConfig({ ownerAddresses: [a.address] });
+            return true;
         },
         list: async () => {
             const res = await fetch(`${await ownHttps()}/api/node/addresses`);
@@ -182,8 +198,10 @@ async function main(): Promise<void> {
         assert(Array.isArray(standbyOwn) && standbyOwn.length === 0, `the standby itself knows none of the main server's names (${JSON.stringify(standbyOwn)})`);
 
         console.log('\n— 3. a second address confirmed on the main server —');
-        const later = await main.send('confirm-address', { address: 'later-confirmed.test' });
-        assert(later.envelopeId && later.envelopeId !== made.envelopeId, 'confirming an address re-seals the take-over envelope');
+        await main.send('confirm-address', { address: 'later-confirmed.test' });
+        const later = await main.send('spares', { spares: ['standby-own.test', 'another-standby.test'] });
+        assert(later.envelopeId && later.envelopeId !== made.envelopeId, 'confirming an address and naming spares re-seal the take-over envelope');
+        await standby.send('own-address', { address: 'standby-own.test' });
         const pull2 = await standby.send('pull');
         assert(pull2.envelope === 'stored' && pull2.held.at(-1) === later.envelopeId, 'and the standby holds the newer copy');
 
@@ -223,6 +241,13 @@ async function main(): Promise<void> {
             `at take-over count 1, its counter going on from the main server's (${made.list.list.epoch}.${made.list.list.seq} → ${pl?.epoch}.${pl?.seq})`);
         const choice = core.chooseAddressList(promoted.body, { peerId: made.list.list.peerId, kept: made.list });
         assert(choice.action === 'replace' && choice.why === 'newer', `a phone holding the main server's list takes the promoted server's as newer (${choice.action} ${(choice as any).why})`);
+
+        console.log('\n— 7. the promoted standby lists its own spare —');
+        assert(pl.addresses.includes('standby-own.test') && JSON.stringify(pl.spares) === JSON.stringify(['another-standby.test']),
+            `its own spare is one of its addresses now, the other stays a spare (${JSON.stringify(pl.addresses)} / ${JSON.stringify(pl.spares)})`);
+        const atSpare = await standby.send('bound', { ownerSeedHex, hosts: ['standby-own.test', 'another-standby.test'] });
+        assert(atSpare['standby-own.test'].status === 200 && atSpare['another-standby.test'].status === 421,
+            `a request signed for its own spare is accepted, one for the other spare is not (${atSpare['standby-own.test'].status}, ${atSpare['another-standby.test'].status})`);
 
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     } catch (e: any) {

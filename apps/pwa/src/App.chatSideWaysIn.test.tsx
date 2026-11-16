@@ -219,6 +219,27 @@ describe('a forum notice lands on the Forum side, from anywhere (slice F5, parit
         await settle();
         landedOnChats('back by the tab\'s button');
     });
+
+    it("after a door to one topic, Chats, then a forum notice: the Forum's list, not the door's old topic (#3228 review)", async () => {
+        node.bell = [FORUM_REPLY];
+        const was = window.location.href;
+        window.history.replaceState(window.history.state, '', '/?forumTopic=ft-3');
+        try {
+            render(<App />);
+            // The door: the Chat tab on the Forum, on its topic (the topic's own view, in place of the forum's list).
+            await screen.findByTestId('forum-topic');
+            await settle();
+            expect(side()).toBe('Forum');
+            expect(screen.queryByTestId('forum-page')).toBeNull();
+            await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Chats' })); });
+            landedOnChats('Chats after the door');
+            await openForumNotice();
+            landedOnForum('the forum notice');
+            expect(screen.queryByTestId('forum-topic')).toBeNull();
+        } finally {
+            window.history.replaceState(window.history.state, '', was);
+        }
+    });
 });
 
 /**

@@ -315,6 +315,7 @@ export function App() {
     // The one arrival that shows the Forum side instead: a forum notice, from the bell or a web push (slice F5).
     const [openChatForum, setOpenChatForum] = useState(false);
     // And the topic it opens on: a door to one topic (`/app?forumTopic=<id>`, or the one a visitor kept at Join to reply; slice F7).
+    // Cleared with the flag once ChatTabPage takes them, so a later forum notice opens the Forum's list (#3228 review).
     const [openForumTopic, setOpenForumTopic] = useState<string | null>(null);
     useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); } }, [activeTab]);
     // Learn's "🫘 Thank {name}" (K8): the Ledger's Send form opens with the writer and the note filled in, taken once.
@@ -1598,7 +1599,7 @@ export function App() {
                                     homeNonce={chatHomeNonce}
                                     openForum={openChatForum}
                                     openForumTopic={openForumTopic}
-                                    onForumOpened={() => setOpenChatForum(false)}
+                                    onForumOpened={() => { setOpenChatForum(false); setOpenForumTopic(null); }}
                                     onConversationOpened={() => setOpenConversationId(null)}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}

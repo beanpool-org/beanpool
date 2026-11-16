@@ -7,7 +7,8 @@
  * hourly while the address in use answers, once a minute while it doesn't), after any switch, and when the app comes back
  * to the front from the background, which counts as an app open (the 2 Nov card's timings).
  *
- * At 320 dp and 1.3× text the sentence wraps; the addresses are never cut.
+ * At 320 dp and 1.3× text the sentence wraps inside Home's 16 dp gutter; the addresses are never cut. A community whose name
+ * the phone never kept is named by the address the member knew it by (the line's `from`).
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text } from 'react-native';
@@ -50,8 +51,10 @@ export function AddressLine({ colors }: { colors: AppColors }) {
                         const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
                         const line = await takeAddressLine(anchor);
                         if (!live || !line) return;
+                        // The community's name as this phone kept it, else the address the member knew it by: never the
+                        // new address, which would read "{address} now lives at {address}".
                         const row = (await getSavedNodes().catch(() => [])).find((n) => n.url === line.to);
-                        setWords(addressLineWords(line, communityName(row ?? { url: line.to })));
+                        setWords(addressLineWords(line, communityName({ alias: row?.alias ?? null, url: line.from })));
                     })
                     .catch(() => {});
             };
@@ -85,5 +88,6 @@ export function AddressLine({ colors }: { colors: AppColors }) {
 }
 
 const styles = StyleSheet.create({
-    line: { fontSize: 15, lineHeight: 21, marginBottom: 12 },
+    // Home's side gutter (the page title's inset, the offline note's margin).
+    line: { fontSize: 15, lineHeight: 21, marginHorizontal: 16, marginBottom: 12 },
 });

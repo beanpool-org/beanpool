@@ -116,6 +116,26 @@ beforeEach(() => {
 });
 
 describe('S4: two addresses, the main changes, the phone follows by itself with one line', () => {
+    it('a copy opened during the move saves the old address again: the rows still end as one, at the new address', async () => {
+        // Measured on the emulator (two-address walk, 16 Nov): the list read [new, old] after the follow until the next app
+        // open. switchPhoneTo closes the copy before it writes the new address, and a copy opened in between (db.ts
+        // openAndMakeCopy) saves the address it read, the old one, again.
+        await phoneAt(`https://${A}`);
+        await round(true);
+        for (const s of Object.values(servers)) s.fields = fields({ seq: 15, main: M });
+        now += 61 * 60 * 1000;
+        const real = deps();
+        await verifyAddressInUse({}, {
+            ...real,
+            moveTo: async (from, to) => {
+                mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([...saved(), { url: from }]));
+                await real.moveTo(from, to);
+            },
+        });
+        expect(mem.get(ANCHOR)).toBe(`https://${M}`);
+        expect(saved()).toEqual([{ url: `https://${M}`, alias: 'Riverside' }]);
+    });
+
     it('learns the key from the first list, proves both, then follows the new main with no tap; nothing is copied', async () => {
         await phoneAt(`https://${A}`);
         const fileBefore = getDatabaseFilenameForNode(`https://${A}`);

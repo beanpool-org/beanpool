@@ -40,7 +40,8 @@ vi.mock('../address-verify', () => ({
     takeAddressLine: vi.fn(async () => { const l = verify.line; verify.line = null; return l; }),
 }));
 vi.mock('../community-switch', () => ({ onCommunitySwitched: vi.fn(() => () => {}) }));
-vi.mock('../nodes', () => ({ getSavedNodes: vi.fn(async () => [{ url: 'https://coop.example.org', alias: 'Riverside Beans and Barter Cooperative' }]) }));
+const saved = vi.hoisted(() => ({ rows: [] as { url: string; alias?: string }[] }));
+vi.mock('../nodes', () => ({ getSavedNodes: vi.fn(async () => saved.rows) }));
 
 import { AddressLine } from '../../components/AddressLine';
 import { lightColors, darkColors, type AppColors } from '../../constants/colors';
@@ -58,6 +59,7 @@ const line = (host: HTMLElement) => host.querySelector('[data-testid="address-li
 beforeEach(() => {
     verify.line = null;
     verify.rounds = 0;
+    saved.rows = [{ url: 'https://coop.example.org', alias: 'Riverside Beans and Barter Cooperative' }];
 });
 
 describe('Home\'s line after a follow, at 320 dp x 1.3', () => {
@@ -78,6 +80,24 @@ describe('Home\'s line after a follow, at 320 dp x 1.3', () => {
         const host = await render();
         expect(line(host)?.textContent).toBe("riverside.example isn't answering. This phone uses coop.example.org for now.");
         expect(host.querySelector('button')).toBeNull();
+    });
+
+    it('a community whose name the phone never kept is named by the address the member knew it by, never by the new one', async () => {
+        // Measured on the emulator (two-address walk, 16 Nov): a row saved with no name made the line read
+        // "two.walk.example now lives at two.walk.example".
+        saved.rows = [{ url: 'https://coop.example.org' }];
+        verify.line = { kind: 'followed', from: 'https://riverside.example', to: 'https://coop.example.org' };
+        expect(line(await render())?.textContent).toBe('riverside.example now lives at coop.example.org. This phone uses it from now on. Nothing else changed.');
+        saved.rows = [];
+        verify.line = { kind: 'followed', from: 'https://riverside.example', to: 'https://coop.example.org' };
+        expect(line(await render())?.textContent).toBe('riverside.example now lives at coop.example.org. This phone uses it from now on. Nothing else changed.');
+    });
+
+    it('sits inside Home\'s side gutter (16 dp, as the page title and the offline note), never against the screen\'s edge', async () => {
+        // Measured on the emulator at 320 dp x 1.3: the line ran from x 0 to 480 px while every card sat 24 px (16 dp) in.
+        verify.line = { kind: 'followed', from: 'https://riverside.example', to: 'https://coop.example.org' };
+        const style = JSON.parse(line(await render())!.getAttribute('data-style')!);
+        expect(style.marginHorizontal).toBe(16);
     });
 
     it('wraps, light and dark: no fixed width or height, no line count, a colour from the tokens', async () => {

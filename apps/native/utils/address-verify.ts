@@ -19,8 +19,9 @@
  * older list or number is never taken (§7).
  *
  * What it does: utils/address-decide.ts decides; here it is written. Proved and refused addresses and the highest count go
- * into the record; a move writes `using`, the saved row follows to it (nodes.ts followSavedRow), then the phone's address
- * (reconnect.ts switchPhoneTo, no carry: the file is the same), and Home shows the one line once (takeAddressLine). A
+ * into the record; a move writes `using`, then the phone's address (reconnect.ts switchPhoneTo, no carry: the file is the
+ * same), then the saved rows follow to it (nodes.ts followSavedRow, last: a copy opened during the move saves the old
+ * address again), and Home shows the one line once (takeAddressLine). A
  * second record of the same community, at an address this one just proved, goes with its copy and row first (Marty's
  * pick 5: the phone keeps the copy it is on; no conversion code); one that holds another key is left alone, and that
  * address is not used.
@@ -275,11 +276,16 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
         };
         return records.map((x) => (x === r ? next : x));
     });
-    if (to) asked.set(decision.to!, { at: now, silent: 0 });
-    await deps.followRow(to ?? anchor).catch((e) => console.warn('[addresses] The saved row could not follow', e));
-    if (to) {
-        console.log(`[addresses] ${from} → ${to} (${decision.action}${decision.line ? `, ${decision.line}` : ''})`);
-        await deps.moveTo(anchor, to);
+    try {
+        if (to) {
+            asked.set(decision.to!, { at: now, silent: 0 });
+            console.log(`[addresses] ${from} → ${to} (${decision.action}${decision.line ? `, ${decision.line}` : ''})`);
+            await deps.moveTo(anchor, to);
+        }
+    } finally {
+        // The rows last: switchPhoneTo closes the copy before it writes the new address, and a copy opened in between saves
+        // the address it read, the old one, again (db.ts openAndMakeCopy; measured on the emulator, 16 Nov).
+        await deps.followRow(to ?? anchor).catch((e) => console.warn('[addresses] The saved row could not follow', e));
     }
 }
 

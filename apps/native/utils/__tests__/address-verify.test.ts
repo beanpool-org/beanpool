@@ -4,7 +4,7 @@
  * keys through core's own code (@beanpool/core address-list.ts, the keys of its shared vectors); the phone's records,
  * saved list and storage are the real modules over an in-memory store. Each attacker case of §7 is named.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 const mem = vi.hoisted(() => new Map<string, string>());
 /** The watchdog sees each write before it lands; a test's switch can land just after one. */
@@ -27,6 +27,31 @@ vi.mock('../db', () => ({
     whileCopyMoves: vi.fn(async (_to: string, move: () => Promise<unknown>) => move()),
 }));
 vi.mock('../community-switch', () => ({ communitySwitched: vi.fn() }));
+// The other member moves (round 2 of #3251): Leave removes the copy of the community left through community-cache.ts, which
+// closes it first, as closeDB above (waiting there for the sync lock); what the modules they load reach on a device, stood in.
+vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => { await copy.closing; }) }));
+vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn(), requestSync: vi.fn(async () => {}) }));
+vi.mock('react-native', () => ({
+    Platform: { OS: 'android' },
+    DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
+}));
+vi.mock('expo-linking', () => ({ addEventListener: vi.fn(() => ({ remove: vi.fn() })), openURL: vi.fn(async () => undefined) }));
+vi.mock('expo-web-browser', () => ({
+    openAuthSessionAsync: vi.fn(), openBrowserAsync: vi.fn(), dismissAuthSession: vi.fn(), dismissBrowser: vi.fn(async () => undefined),
+}));
+vi.mock('expo-apple-authentication', () => ({
+    isAvailableAsync: vi.fn(async () => false), signInAsync: vi.fn(), AppleAuthenticationScope: { EMAIL: 0, FULL_NAME: 1 },
+}));
+vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
+    getItemAsync: vi.fn(async () => null),
+    setItemAsync: vi.fn(async () => {}),
+    deleteItemAsync: vi.fn(async () => {}),
+}));
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
+});
 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
@@ -41,6 +66,7 @@ import {
 import { keepCommunityRecord, loadCommunityRecords, parseCommunityRecords, resetCommunityRecordsForTests } from '../community-record';
 import { followSavedRow, getDatabaseFilenameForNode, takeOffSavedList } from '../nodes';
 import { switchPhoneTo } from '../reconnect';
+import { communityMoveUnderWay } from '../community-move-lock';
 import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const V = createRequire(import.meta.url)('@beanpool/core/vectors/address-list.json');
@@ -527,6 +553,96 @@ describe('S5: a switch started but not yet written (the S4 leftover race; one lo
         await switching;
         expect(mem.get(ANCHOR)).toBe(`https://${C}`);
         expect(saved().map((r) => r.url)).toEqual([`https://${M}`]);
+    });
+});
+
+describe('S5 round 2: EVERY member move against a round in flight (one writer of the address, inside the one move lock)', () => {
+    /** Ticks enough for a round's proofs and record read to finish and reach its first writing step. */
+    const settle = () => new Promise((r) => setTimeout(r, 30));
+    const db = () => import('../db');
+    const identity = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(64), callsign: 'Sam' } as never;
+    /** Lets the copy's close go on (each test's, and in afterEach whatever a failed one left waiting, so the lock is free again). */
+    let release: () => void = () => {};
+    // Loaded before the clock starts: each move then takes the lock at once, before the round reaches its writing steps.
+    beforeAll(async () => {
+        await Promise.all([db(), import('../update-block-escape'), import('../join-another-community'), import('../global-join-existing'), import('../delete-here')]);
+    });
+
+    /** Each member move the phone makes from code that runs here, to the third community (Leave: from the community in front). */
+    const MOVES: Array<[string, () => Promise<unknown>]> = [
+        // The BeanPool sheet, a notice, a link, the hall, a guest visit, and Settings' saved-community Switch.
+        ['the one switch (reconnect.ts switchPhoneTo)', () => switchPhoneTo(`https://${C}`)],
+        ['the update screen\'s "Use another community"', async () => (await import('../update-block-escape')).switchFromUpdateBlock(`https://${C}`)],
+        ['joining another community (an invite, a yes, a directory pick)', async () => {
+            const { closeDB, initDB } = await db();
+            return (await import('../join-another-community')).joinAnotherCommunity({ targetUrl: `https://${C}`, code: 'INVITE', identity, returnUrl: `https://${A}` }, {
+                closeDB, initDB, redeemInvite: async () => ({ success: true, alreadyMember: false, nodeHasPhoto: false }),
+                addSavedNode: async () => {}, clearGuestNode: async () => {}, requestSync: async () => {},
+            });
+        }],
+        ['a door from an account the phone has (enterOpenDoorCommunity)', async () => {
+            const { closeDB, initDB } = await db();
+            return (await import('../global-join-existing')).enterOpenDoorCommunity(`https://${C}`, 'Hilltop', {
+                closeDB, initDB, addSavedNode: async () => {}, clearGuestNode: async () => {}, requestSync: async () => {},
+            });
+        }],
+        ['Leave or Delete while another community keeps the key (delete-here.ts leaveThisCommunity)', async () => {
+            await (await import('../delete-here')).leaveThisCommunity(`https://${A}`, `https://${C}`);
+            await (await db()).initDB();
+        }],
+    ];
+
+    beforeEach(() => vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('No node may be contacted from a test'); })));
+    afterEach(() => { vi.unstubAllGlobals(); release(); copy.closing = null; });
+
+    for (const [name, move] of MOVES) {
+        it(`${name}: waits in the copy's close while the round would follow the new main -> no destructive step, the address written once, inside the lock`, async () => {
+            await phoneAt(`https://${A}`);
+            await round(true);
+            for (const s of Object.values(servers)) s.fields = fields({ seq: 15, main: M });
+            now += 61 * 60_000;
+            const before = recordAt(`https://${A}`);
+            const writes: Array<{ to: string; inMove: boolean }> = [];
+            hooks.after = (key, next) => { if (key === ANCHOR) writes.push({ to: next, inMove: communityMoveUnderWay() }); };
+            copy.closing = new Promise<void>((r) => { release = r; });
+            const moving = move();
+            const checking = verifyAddressInUse({ atOpen: true }, deps());
+            await settle();
+            // The round has its proofs and waits at its first writing step; the move waits in the copy's close.
+            expect(mem.get(ANCHOR)).toBe(`https://${A}`);
+            expect(writes).toEqual([]);
+            release();
+            await Promise.all([moving, checking]);
+
+            expect(mem.get(ANCHOR)).toBe(`https://${C}`);
+            expect(writes).toEqual([{ to: `https://${C}`, inMove: true }]);
+            expect(moves).toEqual([]);
+            expect(dupes).toEqual([]);
+            const after = records().find((r) => r.id === before.id);
+            if (name.startsWith('Leave')) {
+                // The community left is gone, and the round never made a record for it at its new main.
+                expect(after).toBeUndefined();
+                expect(records().some((r) => r.using === `https://${M}`)).toBe(false);
+            } else {
+                expect(after?.using).toBe(before.using);
+                expect(after?.line).toBeUndefined();
+            }
+        });
+    }
+
+    it('the address is written by no one outside a move: a write with no move under way, or after its move ended, throws and writes nothing', async () => {
+        const { writeCommunityAddress, whileCommunityMoves, moveCommunityAddress } = await import('../community-move-lock');
+        mem.set(ANCHOR, `https://${A}`);
+        let kept: Parameters<typeof writeCommunityAddress>[0] | null = null;
+        await whileCommunityMoves(async (held) => { kept = held; });
+        await expect(writeCommunityAddress(kept!, `https://${C}`)).rejects.toThrow(/only inside a community move/);
+        await expect(writeCommunityAddress({} as never, `https://${C}`)).rejects.toThrow(/only inside a community move/);
+        expect(mem.get(ANCHOR)).toBe(`https://${A}`);
+        // Nor an address that isn't plain, inside a move.
+        await expect(moveCommunityAddress('https://evil.example@hilltop.example')).rejects.toThrow();
+        expect(mem.get(ANCHOR)).toBe(`https://${A}`);
+        await moveCommunityAddress(null);
+        expect(mem.has(ANCHOR)).toBe(false);
     });
 });
 

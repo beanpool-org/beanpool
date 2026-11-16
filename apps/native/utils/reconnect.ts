@@ -16,11 +16,10 @@
  * - no answer: nothing is written, and the screen says it couldn't reach it.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertPlainNodeAddress } from './node-url';
 import { membershipAnswerOf } from './membership-answer';
 import { communitySwitched } from './community-switch';
-import { whileCommunityMoves, type CommunityMoveHeld } from './community-move-lock';
+import { whileCommunityMoves, writeCommunityAddress, type CommunityMoveHeld } from './community-move-lock';
 import type { NodeProfile } from './node-profile';
 import type { CopyCarry } from './community-copy-carry';
 
@@ -56,17 +55,17 @@ export async function switchPhoneTo(url: string, carryFrom?: string, held?: Comm
     assertPlainNodeAddress(url);
     // One move at a time, the address check's writing steps included (community-move-lock.ts): from the record to the new
     // address written, inside the lock. `held`: the caller already holds it (the check's own move), so it doesn't wait for itself.
-    if (!held?.held) return whileCommunityMoves((inside) => switchPhoneTo(url, carryFrom, inside));
+    if (!held) return whileCommunityMoves((inside) => switchPhoneTo(url, carryFrom, inside));
     // The community gets its record before the phone is set to it (community-record.ts), as at an app start.
     await (await import('./community-record')).keepCommunityRecord(url);
     const { closeDB, initDB } = await import('./db');
     let carried: CopyCarry | null = null;
     if (carryFrom) {
         const [{ carryCommunityCopy }, { whileCopyMoves }] = await Promise.all([import('./community-copy-carry'), import('./db')]);
-        carried = await whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => AsyncStorage.setItem('beanpool_anchor_url', url)));
+        carried = await whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => writeCommunityAddress(held, url)));
     } else {
         await closeDB();
-        await AsyncStorage.setItem('beanpool_anchor_url', url);
+        await writeCommunityAddress(held, url);
     }
     await initDB();
     // The update screen asks the community now in use (utils/community-switch.ts).

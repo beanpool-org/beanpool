@@ -39,6 +39,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { communitySwitched } from '../../utils/community-switch';
+import { whileCommunityMoves, writeCommunityAddress } from '../../utils/community-move-lock';
 import Constants from 'expo-constants';
 import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
@@ -1419,14 +1420,12 @@ export default function SettingsScreen() {
         }
         setAdvancedLoading(true);
         try {
-            const { closeDB, initDB } = await import('../../utils/db');
-            await closeDB(); 
-            // The database is successfully suspended to Cold Storage.
-            await AsyncStorage.setItem('beanpool_anchor_url', targetUrl);
-            await initDB();
-            // The update screen's block was the community left's (utils/community-switch.ts).
-            communitySwitched();
-            
+            // The one switch (utils/reconnect.ts switchPhoneTo), as the BeanPool sheet's: its own database, the address written
+            // inside the one move lock (utils/community-move-lock.ts), and the update screen asked again for the community now
+            // in use (utils/community-switch.ts).
+            const { switchPhoneTo } = await import('../../utils/reconnect');
+            await switchPhoneTo(targetUrl);
+
             // Hard bounce the Application State Tree via the Welcome resolver
             router.replace('/welcome');
         } catch (e: any) {
@@ -1640,7 +1639,14 @@ export default function SettingsScreen() {
                     return;
                 }
             }
-            await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
+            // A member move (utils/community-move-lock.ts): the copy closed, the address written and the next copy open, in one
+            // move, so the address check never acts on the community this one replaces.
+            const { closeDB, initDB } = await import('../../utils/db');
+            await whileCommunityMoves(async (held) => {
+                await closeDB();
+                await writeCommunityAddress(held, finalAnchorUrl);
+                await initDB();
+            });
             // A switch too: the update screen asks the community now in use at once, whatever fails below
             // (utils/community-switch.ts).
             communitySwitched();
@@ -1670,10 +1676,6 @@ export default function SettingsScreen() {
                     // diverts, so nothing ejects the member while the node is down.
                 }
             }
-
-            const { closeDB, initDB } = await import('../../utils/db');
-            await closeDB();
-            await initDB();
 
             const { requestSync } = await import('../../services/pillar-sync');
             requestSync()

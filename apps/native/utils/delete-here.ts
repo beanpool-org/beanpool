@@ -28,6 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signOutOfThisPhone } from './account-leaves-phone';
 import { communityName } from './community-name';
 import { communitySwitched } from './community-switch';
+import { whileCommunityMoves, writeCommunityAddress } from './community-move-lock';
 import { fetchMembership } from './membership-probe';
 import type { BeanPoolIdentity } from './identity';
 import { PURGE_TIMEOUT_MS, anchorUrl, purgeAccountOnNode } from './node-post';
@@ -301,13 +302,17 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
     await dropFromRecord([here], storage);
     const leftBehind = communityAddress(here);
     if (leftBehind) await markAlertsOn(leftBehind, storage).catch((e) => console.warn('[Push] Could not clear the alerts choice for the community left', e));
-    try {
-        const { removeCommunityCaches } = await import('./community-cache');
-        await removeCommunityCaches([here]);
-    } catch (e) {
-        console.warn('[Account] The cached copy of the community left could not be removed', e);
-    }
-    await storage.setItem(ANCHOR_STORE_KEY, next);
+    // A member move (community-move-lock.ts): the copy of the community left closed and gone, and the address written, in
+    // one move, so the address check never follows the community left, or brings the phone back into it.
+    await whileCommunityMoves(async (held) => {
+        try {
+            const { removeCommunityCaches } = await import('./community-cache');
+            await removeCommunityCaches([here]);
+        } catch (e) {
+            console.warn('[Account] The cached copy of the community left could not be removed', e);
+        }
+        await writeCommunityAddress(held, next, storage);
+    });
 
     // A row of the community left, in any capitals (the record is forgotten by its spelling, case folded), or at any
     // address its record holds (S4).

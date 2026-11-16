@@ -16,11 +16,11 @@
  * (utils/bring-listings.ts). The join only notes the offer, and never waits on it.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 import { signInCopiesAt, type SignInCopies } from './vault-config';
 import { communitySwitched } from './community-switch';
+import { whileCommunityMoves, writeCommunityAddress } from './community-move-lock';
 
 export interface JoinDeps {
     closeDB(): Promise<void>;
@@ -92,17 +92,22 @@ export async function joinAnotherCommunity(
     const targetUrl = opts.targetUrl.replace(/\/+$/, '');
     assertPlainNodeAddress(targetUrl);
     const deps = injected ?? await defaultDeps();
-    await deps.closeDB();
-    await AsyncStorage.setItem('beanpool_anchor_url', targetUrl);
-    await deps.initDB();
+    // A member move (community-move-lock.ts): the copy closed, the address written and the next copy open, in one move.
+    await whileCommunityMoves(async (held) => {
+        await deps.closeDB();
+        await writeCommunityAddress(held, targetUrl);
+        await deps.initDB();
+    });
     let alreadyMember: boolean;
     try {
         ({ alreadyMember } = await deps.redeemInvite(opts.code, opts.identity.callsign || 'Unknown', opts.identity));
     } catch (err) {
-        await deps.closeDB();
-        if (opts.returnUrl && isPlainNodeAddress(opts.returnUrl)) await AsyncStorage.setItem('beanpool_anchor_url', opts.returnUrl);
-        else await AsyncStorage.removeItem('beanpool_anchor_url');
-        await deps.initDB();
+        const back = opts.returnUrl && isPlainNodeAddress(opts.returnUrl) ? opts.returnUrl : null;
+        await whileCommunityMoves(async (held) => {
+            await deps.closeDB();
+            await writeCommunityAddress(held, back);
+            await deps.initDB();
+        });
         // Back where it was, or on no community: the update screen asks again (utils/community-switch.ts).
         communitySwitched();
         throw err;

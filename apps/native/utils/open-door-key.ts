@@ -21,7 +21,6 @@
  * - A key this door made that an invite join took over since (its redeem never finished) never comes off, but its words
  *   are still the member's new ones: the door finishes its join the same way ({@link openDoorKeyIsNew}).
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     commitDoorKey, keepJoinedIdentity, keyForThisPhone, madeByTheDoor, openDoorAt, releaseDoorKey, type JoinKey,
 } from './door-key';
@@ -29,6 +28,7 @@ import type { BeanPoolIdentity } from './identity';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import { doorJoinOut, getPendingOnboarding, keyMadeForThisJoin, setPendingOnboarding } from './onboarding-state';
 import { communitySwitched } from './community-switch';
+import { moveCommunityAddress } from './community-move-lock';
 import { assertPlainNodeAddress } from './node-url';
 import { addSavedNode, clearGuestNode } from './nodes';
 import { startOneWayBack } from './one-way-back';
@@ -97,7 +97,7 @@ export async function finishOpenDoorJoin(
     if (way === 'words') await startOneWayBack(identity.publicKey, url);
     // The door's address came through doorNodeAt on the screen; this is the write's own check.
     assertPlainNodeAddress(url);
-    await AsyncStorage.setItem('beanpool_anchor_url', url);
+    await moveCommunityAddress(url);
     // The update screen asks the community now in use (utils/community-switch.ts).
     communitySwitched();
     await addSavedNode(url, communityName ?? undefined).catch(() => {});

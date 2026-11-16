@@ -57,6 +57,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { appVersionHeaderValue } from '../utils/force-update';
 import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
+import { whileCommunityMoves, writeCommunityAddress } from '../utils/community-move-lock';
 import { linkLanding } from '../utils/community-index';
 import { communityRecordsReady } from '../utils/community-record';
 import { switchPhoneTo } from '../utils/reconnect';
@@ -619,10 +620,13 @@ function RootLayoutNav() {
                                                         try {
                                                             const { forgetCommunityPush } = await import('../utils/account-leaves-phone');
                                                             await forgetCommunityPush(identity, targetOrigin, async () => {
-                                                                await clearDB();
-                                                                // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
-                                                                await forgetSyncCursors();
-                                                                await AsyncStorage.removeItem('beanpool_anchor_url');
+                                                                // A member move (utils/community-move-lock.ts): the copy cleared and the address taken off, in one move.
+                                                                await whileCommunityMoves(async (held) => {
+                                                                    await clearDB();
+                                                                    // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                                                                    await forgetSyncCursors();
+                                                                    await writeCommunityAddress(held, null);
+                                                                });
                                                                 // No community on the phone: the update screen's block comes down.
                                                                 communitySwitched();
                                                                 const { removeSavedNode } = await import('../utils/nodes');

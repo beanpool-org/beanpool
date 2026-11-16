@@ -978,7 +978,8 @@ async function main(): Promise<void> {
     const { issueAutomationToken } = await import('./automation-tokens.js');
     const { fileSuggestion, declineSuggestion, SUGGESTIONS_PER_DAY } = await import('./agent/suggestions.js');
     const olive14c = ownerSessionHeaders(olive.pk);
-    const grants14c = [1, 2, 3].map((n) => issueAutomationToken({ name: `Moderation helper ${n}`, scope: 'agent', expiresAt: Date.now() + 86_400_000, createdBy: olive.pk }));
+    const grantsUntil14c = Date.now() + 86_400_000;   // one clock read for all three: a day on
+    const grants14c = [1, 2, 3].map((n) => issueAutomationToken({ name: `Moderation helper ${n}`, scope: 'agent', expiresAt: grantsUntil14c, createdBy: olive.pk }));
     let suggested14c = 0;
     db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'home.layout', ?)
                 ON CONFLICT(public_key, pref_key) DO UPDATE SET pref_value = excluded.pref_value`)

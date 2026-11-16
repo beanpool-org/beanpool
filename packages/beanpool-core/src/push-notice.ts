@@ -182,6 +182,9 @@ export const PUSH_NOTICE_KINDS = {
     // when a moderator answers it or 30 days pass without a look. Never who answered or why: that is in the bell.
     'forum.first-look': { body: word('A first topic is waiting for a look.'), tab: 'chats' },
     'forum.first-look-answer': { body: word('Your first topic has an answer.'), tab: 'chats' },
+    // To an answer's writer when an owner or admin asks them to make it a Learn page (engine/forum-learn.ts, slice F9, §10.3): a
+    // bell row with the button, sent with no push. The row names who asked and the topic; never the answer's words.
+    'forum.learn-ask': { body: word('An owner or admin asked you to make your answer a Learn page.'), tab: 'chats' },
     'owner.standby': { body: word("Your community's standby server needs you."), tab: 'settings' },
     'owner.alert': { body: word("Your community's server needs you."), tab: 'settings' },
 } as const satisfies Record<string, { body: string; tab: PushNoticeTab }>;

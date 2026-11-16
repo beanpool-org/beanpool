@@ -231,6 +231,11 @@ export interface ForumPost {
     hidden: boolean;
     /** Whether its links are links: a new writer's are plain text (design §5; @beanpool/core forumWordRuns). */
     linksOn: boolean;
+    /**
+     * "Now a Learn page" (slice F9, §10.3; engine/forum-learn.ts): the page made from this answer, as the reader may see it
+     * (forum-links' reader rule: one that shows, where Learn is on); else null, and always null where its words are veiled.
+     */
+    learn: { id: string; title: string } | null;
 }
 
 const groupOf = (id: string | null) => {
@@ -306,18 +311,37 @@ const photoCount = (postId: string) => (db.prepare('SELECT COUNT(*) AS n FROM fo
  * A post as `reader` may read it: a removed one's words and photos are gone; a hidden one's are for its writer and the
  * moderators only. `known` says whose links are links (knownWriters).
  */
-const postOut = (r: PostRow, reader: string, known: Map<string, boolean>, moderator: boolean, writer: (pk: string) => ForumWriter): ForumPost => {
+const postOut = (r: PostRow, reader: string, known: Map<string, boolean>, moderator: boolean, writer: (pk: string) => ForumWriter,
+    learn: Map<string, ForumPost['learn']>): ForumPost => {
     const veiled = !!r.removed_by || (!!r.hidden_by_reports_at && r.writer_pubkey !== reader && !moderator);
     return {
         id: r.id, topicId: r.topic_id, number: r.number, writer: writer(r.writer_pubkey),
         words: veiled ? '' : r.words, quotes: r.quotes, lang: r.lang, createdAt: r.created_at, editedAt: r.edited_at, removed: r.removed_by,
         photos: veiled ? 0 : photoCount(r.id), hidden: !!r.hidden_by_reports_at, linksOn: known.get(r.writer_pubkey) ?? false,
+        learn: veiled ? null : (learn.get(r.id) ?? null),
     };
 };
+/**
+ * The Learn pages made from these posts (forum_links kind 'learn' with the post's id, slice F9), each as `reader` may see it
+ * (forumLinkTarget): one read down the links' key per topic, and only where an answer was ever turned.
+ */
+function learnPagesOf(rows: PostRow[], reader: string): Map<string, ForumPost['learn']> {
+    const out = new Map<string, ForumPost['learn']>();
+    if (rows.length === 0) return out;
+    const links = db.prepare(`SELECT post_id, target_id FROM forum_links WHERE topic_id IN (SELECT value FROM json_each(?)) AND kind = 'learn'
+        AND post_id IS NOT NULL ORDER BY created_at`).all(JSON.stringify([...new Set(rows.map((r) => r.topic_id))])) as { post_id: string; target_id: string }[];
+    for (const l of links) {
+        if (out.has(l.post_id)) continue;
+        const page = forumLinkTarget(reader, 'learn', l.target_id);
+        if (page) out.set(l.post_id, { id: page.id, title: page.title });
+    }
+    return out;
+}
 const postsOut = (rows: PostRow[], reader: string, writer = forumWriters(rows.map((r) => r.writer_pubkey))): ForumPost[] => {
     const known = knownWriters(rows.map((r) => r.writer_pubkey));
     const moderator = isForumModerator(reader);
-    return rows.map((r) => postOut(r, reader, known, moderator, writer));
+    const learn = learnPagesOf(rows, reader);
+    return rows.map((r) => postOut(r, reader, known, moderator, writer, learn));
 };
 const onePostOut = (id: string, reader: string): ForumPost => postsOut([postRow(id)!], reader)[0];
 
@@ -473,6 +497,11 @@ export function forumTopics(reader: string, opts: { sectionId?: string; offset: 
  * group's section they are not in (slice F8). `hiddenOk`: a writer's own post in it is still theirs to edit or remove while it
  * is hidden (ownPost). `anySection`: the writer of a post there may still remove it after leaving the group (removeForumPost).
  */
+/** A topic `reader` may read (visibleTopic), for engine/forum-learn.ts: a 404 as for a topic nobody has, else its row. */
+export function readableForumTopic(reader: string, id: string): { id: string; section_id: string; writer_pubkey: string } {
+    return visibleTopic(reader, id);
+}
+
 function visibleTopic(reader: string, id: string, opts: { hiddenOk?: boolean; anySection?: boolean } = {}): TopicRow {
     const row = db.prepare(`SELECT t.* FROM forum_topics t WHERE t.id = @id AND COALESCE(t.closed_by, '') != 'removed'
         AND ${NOT_BLOCKED('t.writer_pubkey')} AND ${NOT_HIDDEN_TO_READER} ${opts.anySection ? '' : `AND ${sectionReadSql('t.section_id', '@reader')}`}`)
@@ -935,8 +964,9 @@ export function linkForumDecision(member: string, topicId: string, decisionId: u
 
 // ── Links: a group, a listing, an event, a Learn page (slice F9) ──────────────────────────────────────────────────
 
+// The topic's chips: a Learn page made from one of its answers (`post_id`, engine/forum-learn.ts) is that answer's, not a chip.
 const linkRows = (topicId: string, where = '1') =>
-    db.prepare(`SELECT COUNT(*) FROM forum_links WHERE topic_id = ? AND ${where}`).pluck().get(topicId) as number;
+    db.prepare(`SELECT COUNT(*) FROM forum_links WHERE topic_id = ? AND post_id IS NULL AND ${where}`).pluck().get(topicId) as number;
 const tooManyLinks = () => new ForumRefusal(409, 'topic_links', tr('A topic can link at most {n} things. Take one off first.', { n: FORUM_LIMITS.topicLinks }));
 const linkKind = (raw: unknown): ForumLinkKind => {
     if (!isForumLinkKind(raw)) throw new ForumRefusal(400, 'bad_request', "kind is 'group', 'listing', 'event' or 'learn'.");
@@ -960,7 +990,7 @@ export function linkForumTarget(member: string, topicId: string, raw: { kind?: u
     const topic = visibleTopic(member, topicId);
     if (raw.on === false) {
         if (topic.writer_pubkey !== member && !isStaff(member)) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.unlinkNotYours);
-        deletePlainRows('forum_links', 'topic_id = ? AND kind = ? AND target_id = ?', topic.id, kind, targetId);
+        deletePlainRows('forum_links', 'topic_id = ? AND kind = ? AND target_id = ? AND post_id IS NULL', topic.id, kind, targetId);
         return forumTopic(member, topic.id, 0).topic;
     }
     if (topic.writer_pubkey !== member) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.linkWriterOnly);

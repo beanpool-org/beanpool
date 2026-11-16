@@ -617,12 +617,20 @@ describe('NOTICES (round 4): a line edited or taken down at the host (notice x w
         ["new words of Ben's for Ana's line", 'shown', () => edit('his words', T2, { by: ben }), 'first words'],
         ["new words under another epoch than the line's", 'shown', () => edit('elsewhere', T2, { epoch: 7 }), 'first words'],
         ['new words with no time, over words edited at T1', 'edited, older here', () => edit('no time', null), 'older words'],
+        // Held for its key: words that don't open as Ana's never cost the line its own words once the key comes.
+        ['new words signed by a stray key, named as Ana', 'held for its key', () => edit('not hers', T2, { by: stray, author: ana.pk, epoch: 7 }), 'first words'],
     ];
     it.each(rows)('%s · line %s (what it shows: as the row says; confirmed)', (_name, has, make, want) => {
         const n = make(has);
         const { chats, confirm } = applyGuestMail(device(has), { items: [n] }, ctx());
         expect(confirm).toEqual([n.id]);
         expect(shows(chats)).toBe(want);
+    });
+    it('a line held for its key, edited twice, the newer edit served first: the newer words show once the key comes', () => {
+        let chats = device('held for its key');
+        ({ chats } = applyGuestMail(chats, { items: [edit('newest words', T3, { epoch: 7 })] }, ctx()));
+        ({ chats } = applyGuestMail(chats, { items: [edit('older words', T2, { epoch: 7 })] }, ctx()));
+        expect(shows(chats)).toBe('newest words');
     });
     it('a line taken down leaves nothing of it on the device: no words, no sealed copy, no photo', () => {
         for (const has of ['shown', 'held for its key', 'a photo shown'] as Has[]) {

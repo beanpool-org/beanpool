@@ -41,7 +41,6 @@ function stateWords(state: GuestLineState | undefined): string | null {
     }
 }
 
-
 /** The guest chats in this browser, read again at each change, and a round now and every half minute while seen. */
 export function useGuestChats(publicKey: string): GuestChat[] {
     const [chats, setChats] = useState<GuestChat[]>([]);

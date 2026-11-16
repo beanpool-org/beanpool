@@ -110,6 +110,12 @@ export interface GuestHeldLine {
     at: number;
     /** When its words were last edited, as the host said it; null or absent when never. */
     editedAt?: string | null;
+    /**
+     * Newer words from an edit that came while the key wasn't here, kept beside the line's own: once the key comes the line
+     * opens as its sender's first, then shows these if they open as that sender's too (never in place of the line's own,
+     * so words that don't open never cost the line).
+     */
+    edit?: { ciphertext: string; nonce: string; replyToId: string | null; editedAt: string | null } | null;
 }
 
 export interface GuestChat {
@@ -328,12 +334,27 @@ function openHeld(chat: GuestChat, h: GuestHeldLine): GuestLine | 'refused' | nu
         const opened = openGroupLine({ ciphertext: h.ciphertext, nonce: h.nonce }, {
             groupId: chat.group, epoch: h.epoch, senderPubHex: h.sender, messageId: h.id, part: 'body', replyToId: h.replyToId,
         }, unb64(key));
-        return {
+        const line: GuestLine = {
             id: h.id, author: h.sender, text: h.type === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere), at: h.at, epoch: h.epoch, type: h.type,
             editedAt: h.editedAt ?? null,
         };
+        if (h.edit) openEditOnto(line, h.edit, chat.group, h.epoch, key);
+        return line;
     } catch {
         return 'refused';
+    }
+}
+
+/** An edit's words put on a line opened here, when they open as the line's author's under its epoch's key; else the line keeps its own. */
+function openEditOnto(line: GuestLine, edit: NonNullable<GuestHeldLine['edit']>, group: string, epoch: number, key: string): void {
+    try {
+        const opened = openGroupLine({ ciphertext: edit.ciphertext, nonce: edit.nonce }, {
+            groupId: group, epoch, senderPubHex: line.author, messageId: line.id, part: 'body', replyToId: edit.replyToId,
+        }, unb64(key));
+        line.text = (line.type ?? 'text') === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere);
+        line.editedAt = edit.editedAt;
+    } catch {
+        /* not the line's author's words: the line keeps the words it had */
     }
 }
 
@@ -368,9 +389,9 @@ function newerWords(edit: string | null, here: string | null | undefined): boole
  * queueLineChange), applied to whatever this device has of it (the file's header, "Notices"):
  *   - taken down (`action: 'removed'`): the line goes, shown or waiting for its key, its words and its photo or voice with it;
  *   - edited (`action: 'edited'`): words newer than the ones here, sealed again by the line's own author under the line's own
- *     epoch, take their place, on a line shown or one waiting for its key (it opens with them). Words no newer than the ones
- *     here (an older edit served after the line already carried a newer one), or that don't open as the line's author's,
- *     change nothing;
+ *     epoch, take their place on a line shown; on one waiting for its key they are kept beside its own words and shown once
+ *     the key comes (GuestHeldLine.edit). Words no newer than the ones here (an older edit served after the line already
+ *     carried a newer one), or that don't open as the line's author's, change nothing;
  *   - a line this device hasn't got: nothing to change. My server applies a change to every copy it holds for me before
  *     it holds the notice (engine/group-guest-home.ts applyToHeldCopies), so a copy fetched later already carries it.
  */
@@ -390,25 +411,18 @@ function applyLineChange(chat: GuestChat, data: unknown): void {
     const editedAt = typeof data.editedAt === 'string' ? data.editedAt : null;
     const replyToId = typeof meta.replyToId === 'string' ? meta.replyToId : null;
     const held = chat.held.find((h) => h.id === id);
+    const edit = { ciphertext: data.ciphertext, nonce: data.nonce, replyToId, editedAt };
     if (held) {
-        if (held.author !== data.author || held.sender !== sender || held.epoch !== epoch || !newerWords(editedAt, held.editedAt)) return;
-        Object.assign(held, { ciphertext: data.ciphertext, nonce: data.nonce, replyToId, editedAt });
+        // Kept beside the line's own words until its key comes (GuestHeldLine.edit): checked then, as a shown line's is now.
+        if (held.author !== data.author || held.sender !== sender || held.epoch !== epoch || !newerWords(editedAt, held.edit?.editedAt ?? held.editedAt)) return;
+        held.edit = edit;
         return;
     }
     const line = chat.lines.find((l) => l.id === id);
     if (!line || line.author !== data.author || sender !== line.author || !newerWords(editedAt, line.editedAt)) return;
     if ((line.epoch ?? sealedEpochOf(line)) !== epoch) return;
     const key = chat.keys[String(epoch)];
-    if (!key) return;
-    try {
-        const opened = openGroupLine({ ciphertext: data.ciphertext, nonce: data.nonce }, {
-            groupId: chat.group, epoch: epoch as number, senderPubHex: line.author, messageId: id, part: 'body', replyToId,
-        }, unb64(key));
-        line.text = (line.type ?? 'text') === 'text' ? opened.text : t(GUEST_CHAT_WORDS.photoNotHere);
-        line.editedAt = editedAt;
-    } catch {
-        /* not the line's author's words: the line keeps the words it had */
-    }
+    if (key) openEditOnto(line, edit, chat.group, epoch as number, key);
 }
 
 /** Every held line that opens now goes into the chat; the rest stay held (the newest GUEST_HELD_KEPT). */

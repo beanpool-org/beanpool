@@ -177,6 +177,7 @@ export const SUITES = [
     'test-health-cors',
     'test-gateway-config',
     'test-gateway-real-client',
+    'test-client-ip-trust',
     'test-dos-hardening',
     'test-keepalive-idle-close',
     'test-global-server-limits',

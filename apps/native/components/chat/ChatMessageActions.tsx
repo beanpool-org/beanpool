@@ -10,7 +10,7 @@ import { View, Text, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { CHAT_REACTION_EMOJIS, type MessageActions } from '../../utils/chat-actions';
-import type { ChatStyles } from './styles';
+import { CHAT_EMOJI_ROW_OFFSET, type ChatStyles } from './styles';
 import { t } from '@beanpool/core';
 
 interface ActionsProps {
@@ -79,7 +79,7 @@ export function ChatEmojiPicker({ isMe, styles, position, onPick }: PickerProps)
         <View style={[
             styles.reactionPickerContainer,
             isMe ? styles.reactionPickerMe : styles.reactionPickerOther,
-            position === 'bottom' ? { top: undefined, bottom: -45 } : { bottom: undefined, top: -45 },
+            position === 'bottom' ? { top: undefined, bottom: -CHAT_EMOJI_ROW_OFFSET } : { bottom: undefined, top: -CHAT_EMOJI_ROW_OFFSET },
         ]}>
             {CHAT_REACTION_EMOJIS.map(emoji => (
                 <Pressable

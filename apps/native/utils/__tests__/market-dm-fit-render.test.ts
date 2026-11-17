@@ -15,6 +15,8 @@
  * keeps one line (CHAT_THREAD_LINE), or all there is once the composer and the banner are in; the bars and then the About
  * chip give way, the bars' page kept at its end so the deals strip goes first; each page stands whole while it fits and
  * otherwise scrolls in its room, the scroll never hidden, every bar in it reachable; a tall phone keeps everything whole.
+ * With a line's menu open the thread keeps CHAT_MENU_ROOM instead of its line (emulator walk 146: in one line of thread only
+ * Copy showed, Reply and Edit sat above it, and dragging the thread closes the menu).
  * (Yoga's text is an estimate: the owed walk checks pixels.)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -87,7 +89,7 @@ import { ChatScrollPage } from '../../components/chat/ChatScrollPage';
 import { ChatAboutBanner } from '../../components/chat/ChatAbout';
 import { ChatEditBanner, ChatReplyBanner } from '../../components/chat/ChatBanners';
 import { CHAT_INPUT_MAX_HEIGHT, CHAT_INPUT_MIN_HEIGHT, makeChatStyles } from '../../components/chat/styles';
-import { CHAT_PAGE_MIN, CHAT_THREAD_LINE, chatColumnFit, chatFieldCap } from '../chat-column-fit';
+import { CHAT_MENU_ROOM, CHAT_PAGE_MIN, CHAT_THREAD_LINE, chatColumnFit, chatFieldCap } from '../chat-column-fit';
 import { layOut } from './yoga-dom-layout';
 
 let host: HTMLDivElement;
@@ -109,6 +111,11 @@ const PHONES = [
     { name: '320 × 533, 48-dp nav bar', width: 320, column: 397, keyboard: 250, tall: false },
     { name: 'a tall phone, 412 × 915', width: 412, column: 779, keyboard: 300, tall: true },
 ] as const;
+/**
+ * The walk's line and its menu (emulator walk 146, scratch/walks/emulator-146/r1 shot 15, 1.3×): Ben's two-line line (83 dp),
+ * Copy (44) and Report (43) under it, with their gaps.
+ */
+const WALK_LINE_WITH_MENU = 174;
 /** The bars as the walk's dump measured them at 1.3× (shot 31), and at 1× from [id].tsx's styles (a line 1.25× its font). */
 const BARS = {
     deals: { 1: 114, 1.3: 137 },
@@ -129,7 +136,7 @@ const draftField = (fontScale: 1 | 1.3, lines: number) =>
 const composerHeight = (fontScale: 1 | 1.3, kbUp: boolean, lines: number, notice: boolean) =>
     8 + draftField(fontScale, lines) + composerBottom(kbUp) + 1 + (notice ? composerNotice(fontScale) : 0);
 
-interface Row { name: string; bars: Bar[]; about?: boolean; reply?: boolean; edit?: boolean; notice?: boolean; draftLines?: number }
+interface Row { name: string; bars: Bar[]; about?: boolean; reply?: boolean; edit?: boolean; notice?: boolean; draftLines?: number; menu?: boolean }
 const ROWS: Row[] = [
     { name: 'nothing over the thread', bars: [] },
     { name: 'the listing\'s header', bars: ['listing'] },
@@ -151,6 +158,11 @@ const ROWS: Row[] = [
     // The most over the field: the About chip, a line over the box and Replying to (on 320 × 533 with the keyboard up the
     // field is down to its line, and the banner's padding is what is cropped).
     { name: 'the listing\'s header, the About chip, a line over the box and Replying to', bars: ['listing'], about: true, notice: true, reply: true },
+    // A line's menu open (emulator walk 146: in the walk's DM only Copy showed, Reply and Edit were above the thread's line).
+    { name: 'the walk\'s DM and a line\'s menu', bars: ['deals', 'listing', 'release'], about: true, menu: true },
+    { name: 'the walk\'s DM, Replying to and a line\'s menu', bars: ['deals', 'listing', 'release'], about: true, reply: true, menu: true },
+    { name: 'the walk\'s bars, Editing message and a line\'s menu', bars: ['deals', 'listing', 'release'], edit: true, menu: true },
+    { name: 'the listing\'s header and a line\'s menu', bars: ['listing'], menu: true },
 ];
 
 const bannerEls = () => {
@@ -205,7 +217,7 @@ function settle(p: (typeof PHONES)[number], fontScale: 1 | 1.3, row: Row, kbUp: 
     // up, so its room never crops a fraction of it); and the frame ChatComposer measures round its field.
     const measure = { column: 0, box: 0, input: 0, banner: 0 };
     let frame = 0;
-    let fit = chatColumnFit({ ...measure, windowHeight: p.column + 144, keyboard: kb, paused: false });
+    let fit = chatColumnFit({ ...measure, windowHeight: p.column + 144, keyboard: kb, paused: false, menu: !!row.menu });
     let field = draft;
     const q = (id: string) => host.querySelector(`[data-testid="${id}"]`)!;
     let layout!: ReturnType<typeof layOut>;
@@ -230,7 +242,7 @@ function settle(p: (typeof PHONES)[number], fontScale: 1 | 1.3, row: Row, kbUp: 
         const same = next.box === measure.box && next.input === measure.input && next.banner === measure.banner && nextFrame === frame;
         Object.assign(measure, next);
         frame = nextFrame;
-        fit = chatColumnFit({ ...measure, windowHeight: p.column + 144, keyboard: kb, paused: false });
+        fit = chatColumnFit({ ...measure, windowHeight: p.column + 144, keyboard: kb, paused: false, menu: !!row.menu });
         if (same && pass > 0) break;
     }
     const top = (el: Element) => topIn(layout, q('column'), el);
@@ -300,6 +312,9 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the mark
             // The thread keeps one line, or everything left once the composer and the banner are in.
             // (Within half a dp: the screen rounds what its onLayouts read, and Yoga's text heights are fractions.)
             expect(r.thread.height, 'one line of the thread').toBeGreaterThanOrEqual(Math.min(CHAT_THREAD_LINE, above - r.composer - r.banner.height) - 0.5);
+            // With a line's menu open, the room for the line and its menu (or all there is): the bars, then the About chip,
+            // give way to it.
+            if (row.menu) expect(r.thread.height, 'the line and its menu').toBeGreaterThanOrEqual(Math.min(CHAT_MENU_ROOM, above - r.composer - r.banner.height) - 0.5);
             // Nothing overlaps: the bars' page, the thread, the About chip's page, the banner and the composer stack down.
             expect(r.bars.top).toBe(0);
             expect(r.thread.top).toBe(r.bars.height);
@@ -340,9 +355,11 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the mark
             expect(below).toBe(r.bars.content);
             // While the keyboard is down every phone shows the thread more than its one line: the bars give way before it.
             if (!kbUp) expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_THREAD_LINE - 0.5);
-            // A tall phone keeps everything whole while the keyboard is down, as before.
+            // A tall phone keeps everything whole while the keyboard is down, as before; with a line's menu open, the bars
+            // whole as far as the menu's room leaves them (everything at once, Replying to and the About chip with the walk's
+            // bars, gives the deals strip's top).
             if (p.tall && !kbUp) {
-                expect(r.bars.height).toBe(r.bars.content);
+                expect(r.bars.height).toBe(row.menu ? Math.min(r.bars.content, p.column - Math.round(r.box.height) - CHAT_MENU_ROOM) : r.bars.content);
                 if (r.about) expect(r.about.height).toBe(r.about.content);
                 expect(r.field).toBe(r.draft);
             }
@@ -379,6 +396,25 @@ describe('the walk\'s case on the walk\'s phone (320 × 569, 1.3×), the numbers
         expect(r.bars.height).toBe(0);
         expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_THREAD_LINE - 0.5);
     });
+    it('keyboard down, a line\'s menu open (walk 146): the thread holds the walk\'s line and its menu, the bars scroll in what is left at their end, the About chip whole', () => {
+        const r = settle(PHONES[0], 1.3, ROWS.find((x) => x.menu && x.about && !x.reply)!, false);
+        expect(r.thread.height).toBeGreaterThanOrEqual(WALK_LINE_WITH_MENU);
+        expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_MENU_ROOM - 0.5);
+        expect(r.about!.height).toBe(r.about!.content);
+        // 425 dp less the box (the About chip and the composer) less the menu's room: a page of the release bar's end.
+        expect(r.bars.height).toBe(PHONES[0].column - Math.round(r.box.height) - CHAT_MENU_ROOM);
+        expect(r.bars.height).toBeGreaterThanOrEqual(CHAT_PAGE_MIN);
+        expect(r.bars.atEnd).toBeGreaterThan(r.bars.sized);
+        // The menu closed: the bars have their page back, the thread its line.
+        const closed = settle(PHONES[0], 1.3, ROWS[3], false);
+        expect(closed.bars.height).toBe(PHONES[0].column - Math.round(closed.box.height) - CHAT_THREAD_LINE);
+    });
+    it('a tall phone with a line\'s menu open moves nothing: the bars and the About chip stay whole', () => {
+        const r = settle(PHONES[2], 1.3, ROWS.find((x) => x.menu && x.about && !x.reply)!, false);
+        expect(r.bars.height).toBe(r.bars.content);
+        expect(r.about!.height).toBe(r.about!.content);
+        expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_MENU_ROOM);
+    });
     it('320 × 533, a plain DM editing three lines, keyboard up (finding 1): the field gives way to the banner, never under its line', () => {
         const r = settle(PHONES[1], 1.3, ROWS.find((x) => x.edit && x.draftLines === 3 && x.bars.length === 0)!, true);
         const above = PHONES[1].column - PHONES[1].keyboard;
@@ -393,6 +429,11 @@ describe('the walk\'s case on the walk\'s phone (320 × 569, 1.3×), the numbers
 
 describe('the check can fail', () => {
     beforeEach(() => { theme.colors = darkColors; });
+    it('without the menu\'s room (main before walk 146) the walk\'s line and its menu had one line of thread', () => {
+        const r = settle(PHONES[0], 1.3, ROWS[3], false);
+        expect(r.thread.height).toBeLessThan(WALK_LINE_WITH_MENU);
+        expect(r.thread.height).toBeLessThan(CHAT_MENU_ROOM);
+    });
     it('without the rooms (main before this change) the same column cut the box', () => {
         // The bars standing as they are (no barsRoom) and the banners unbounded: the composer ends past the keyboard's top.
         const kb = PHONES[0].keyboard;
@@ -452,8 +493,8 @@ describe('the check can fail', () => {
 
 describe('app/chat/[id].tsx gives the bars, the About chip, the banner and the composer their rooms (chatColumnFit)', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'chat', '[id].tsx'), 'utf8');
-    it('the fit is worked out from the column, the box measured whole, the composer and the banner alone and the keyboard; paused while the key card is up', () => {
-        expect(src).toMatch(/const fit = chatColumnFit\(\{\s*column: column\.column, box: column\.composer, input: inputHeight, banner: bannerHeight,\s*windowHeight, keyboard: keyboardHeight, paused: keyChangePending,\s*\}\);/);
+    it('the fit is worked out from the column, the box measured whole, the composer and the banner alone and the keyboard; paused while the key card is up; the menu\'s room while a line\'s menu or emoji row is open', () => {
+        expect(src).toMatch(/const fit = chatColumnFit\(\{\s*column: column\.column, box: column\.composer, input: inputHeight, banner: bannerHeight,\s*windowHeight, keyboard: keyboardHeight, paused: keyChangePending,\s*menu: !!\(activeMessageActionsId \|\| activeEmojiPickerId\),\s*\}\);/);
     });
     it('the pane takes the bars\' room beside the card\'s, and keeps the bars at their end', () => {
         expect(src).toMatch(/maxHeight=\{dmKeyBannerMaxHeight\(\{ \.\.\.column, windowHeight, keyboard: keyboardHeight \}\)\}\s*barsRoom=\{fit\.bars\}\s*>/);

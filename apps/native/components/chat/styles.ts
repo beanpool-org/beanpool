@@ -15,6 +15,15 @@ export const CHAT_INPUT_MIN_HEIGHT = 40;
 export const CHAT_INPUT_MAX_HEIGHT = 100;
 /** paddingTop + paddingBottom inside the composer: onContentSizeChange reports the text height only. */
 export const CHAT_INPUT_V_PADDING = 16;
+/** The margin over and under each line's row, inside its cell in the thread. */
+export const CHAT_ROW_MARGIN = 2;
+/** How far a line's emoji row is set past its row: over it (top) or, opened near the screen's top, under it (bottom). */
+export const CHAT_EMOJI_ROW_OFFSET = 45;
+/**
+ * How far the emoji row reaches past its line's cell in the thread. It is drawn outside the cell (absolutely positioned), so the
+ * cell's measured height leaves it out; the thread counts it as part of the line's menu (ChatMessageList, chatLineInView).
+ */
+export const CHAT_EMOJI_ROW_PAST_CELL = CHAT_EMOJI_ROW_OFFSET - CHAT_ROW_MARGIN;
 
 export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleSheet.create({
     // Inverted list: the container's TOP edge renders at the visual bottom, so paddingTop is the gap above
@@ -25,7 +34,7 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
     daySeparatorPill: { backgroundColor: colors.chat.daySeparatorBg, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
     daySeparatorText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
 
-    messageRowContainer: { width: '100%', marginVertical: 2, position: 'relative' },
+    messageRowContainer: { width: '100%', marginVertical: CHAT_ROW_MARGIN, position: 'relative' },
     messageRowMe: { alignItems: 'flex-end' },
     messageRowOther: { alignItems: 'flex-start' },
     messageBubble: { maxWidth: '80%', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12 },
@@ -96,7 +105,7 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
     },
 
     reactionPickerContainer: {
-        position: 'absolute', top: -45, backgroundColor: colors.text.body, borderRadius: 24,
+        position: 'absolute', top: -CHAT_EMOJI_ROW_OFFSET, backgroundColor: colors.text.body, borderRadius: 24,
         paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center',
         shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4,
         elevation: 8, zIndex: 100, gap: 10,

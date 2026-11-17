@@ -109,6 +109,9 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const [askLeave, setAskLeave] = useState(false);
+    // The names in the chat show on one line until tapped, as on the phone (emulator walk 17 Nov: two guests' names wrapped
+    // to five lines at 320 dp).
+    const [namesOpen, setNamesOpen] = useState(false);
     const alive = useRef(true);
 
     const load = useCallback(async () => {
@@ -200,7 +203,18 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.2rem', ...wrap }}>{chat.name || t('Group chat')}</h2>
                         <p data-testid="guest-chat-from" style={{ margin: '0.15rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>{chat.host}</p>
-                        {names && <p data-testid="guest-chat-names" style={{ margin: '0.15rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>{names}</p>}
+                        {/* The names in the chat: one line until tapped (then every name, wrapping), a 44 px target; a screen
+                            reader hears them all either way (the button's words are the whole list). */}
+                        {names && (
+                            <button type="button" data-testid="guest-chat-names" aria-expanded={namesOpen} title={names} onClick={() => setNamesOpen((open) => !open)}
+                                style={{
+                                    display: 'block', width: '100%', minHeight: '44px', margin: 0, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
+                                    textAlign: 'left', fontFamily: 'inherit', fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap,
+                                    ...(namesOpen ? {} : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }),
+                                }}>
+                                {names}
+                            </button>
+                        )}
                     </div>
                     {chat.state === 'invited' ? (
                         <div data-testid="guest-invitation" style={{ padding: '0.85rem', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
@@ -224,7 +238,6 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                                 <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)' }}>{t('Kept in this browser only. Your community keeps no copy.')}</p>
                                 <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)' }}>{t(W.newDevice)}</p>
                                 {chat.state === 'joining' && <p data-testid="guest-chat-joining" style={{ margin: '0.4rem 0 0', fontWeight: 600 }}>{t(W.joining)}</p>}
-                                {closed && <p data-testid="guest-chat-closed" style={{ margin: '0.4rem 0 0', fontWeight: 600 }}>{closed}</p>}
                             </div>
                             <div role="log" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 {chat.lines.map((l, i) => {
@@ -248,6 +261,13 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                                     );
                                 })}
                             </div>
+                            {/* Closed: why, under the newest line where the box was, as on the phone (emulator walk 17 Nov: at
+                                the top, above the lines, it was out of view in a long chat). */}
+                            {closed && (
+                                <p data-testid="guest-chat-closed" style={{ margin: 0, padding: '0.75rem 0 0', borderTop: '1px solid var(--border-primary)', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center', ...wrap }}>
+                                    {closed}
+                                </p>
+                            )}
                         </>
                     )}
                     {note && <p role="alert" style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>{note}</p>}

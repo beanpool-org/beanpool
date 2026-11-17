@@ -1775,6 +1775,27 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         expect(pinOf(ana, dm.id).offered).toBeUndefined();
     });
 
+    // Emulator walk 17 Nov (RESULT-walk-emulator-s1-w3.md, row 1): after Ben re-keyed, the chat list's preview of Ana's own last
+    // line read "🔒 Encrypted message" while the thread opened it. The list judged the line under the pin's key alone; the
+    // thread tries the pin's former keys too (getDmKeyContext formerPeers). The list now judges it as the thread does.
+    it('after Ben re-keys, the chat list shows Ana\'s own last line (sealed to his former key) as the thread does', async () => {
+        await phoneOf(ben);
+        await says(ben, dm, 'Shall I cancel the order?');
+        await phoneOf(ana);
+        await says(ana, dm, 'No, keep it');
+        const benNew = person('Ben (new phone)');
+        benRekeys(benNew);
+        await syncMessages(ana.publicKey);
+        // Ben isn't marked verified: the pin follows the listing, his old key kept in former (Signal's model, 16 Nov).
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: benNew.publicKey, former: [ben.publicKey] });
+        expect((await shows(dm)).map((l) => l.text).filter((t) => t !== null && !/key changed/i.test(t))).toEqual(['Shall I cancel the order?', 'No, keep it']);
+        expect(await preview(ana, dm)).toBe('No, keep it');
+        // A line under no key this phone holds for the chat still says what it is.
+        node.lines.push({ ...node.lines[node.lines.length - 1], id: randomUUID(), authorPubkey: puppet.publicKey, timestamp: tick() });
+        await syncMessages(ana.publicKey);
+        expect(await preview(ana, dm)).toBe('🔒 Encrypted message');
+    });
+
     it('P12: reading the banner again ("Not now", or the next poll) writes nothing; "Continue" rewrites the participant rows to [Ana, the new key] and marks the pin the member\'s', async () => {
         await aQuestionAndAnAnswer();
         await phoneOf(ana);

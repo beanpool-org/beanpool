@@ -1402,10 +1402,13 @@ export async function getConversations(myPubkey: string) {
         // the author and id the node stores it under, under this conversation's id or one its metadata names (folded
         // threads), its sender's signature verified. Only words that open are shown as words; a line that doesn't, a row in
         // a member's name that isn't an encrypted line and the admin page's message say what they are. The node's own
-        // notices are formatted below.
+        // notices are formatted below. Tried under the pin's former keys too, as the thread tries them (getDmKeyContext
+        // formerPeers): after a re-key, the member's own last line sealed to the key before reads here as it does there.
+        const previewPin = previewPins ? dmPinFor(previewPins, row.id) : null;
         const lastView = row.lastId && !isNodeReadableChatType(row.convType)
             ? checkDmThread([{ id: row.lastId, authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata, timestamp: row.timestamp }],
-                previewIdentity?.privateKey && previewPins && (dmPinFor(previewPins, row.id)?.peer ?? row.otherPubkey) ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: dmPinFor(previewPins, row.id)?.peer ?? row.otherPubkey } : null, row.id).get(row.lastId)
+                previewIdentity?.privateKey && previewPins && (previewPin?.peer ?? row.otherPubkey) ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: previewPin?.peer ?? row.otherPubkey } : null, row.id,
+                previewPin?.former ?? []).get(row.lastId)
             : undefined;
         // The node's own notice in a DM: said to be one, never shown as the other person's line (formatted below).
         const lastIsDmNotice = !!row.lastId && !isNodeReadableChatType(row.convType)

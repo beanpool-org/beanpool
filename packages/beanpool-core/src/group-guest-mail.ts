@@ -170,6 +170,20 @@ function lineRefused(e: unknown): boolean {
     return status !== null && status >= 400 && status < 500 && ![401, 408, 425, 429].includes(status);
 }
 
+/** My server's words in a refusal a request threw with, or null when it sent none (a bare "HTTP 403"). */
+function refusalWords(e: unknown): string | null {
+    return e instanceof Error && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : null;
+}
+
+/**
+ * My lines still waiting in a chat, failed with my server's words (lineRefused): the epoch they wait for was refused, so
+ * none of them can go as it is (WALK nov17b finding (c): a muted guest's line read "Waiting for the group" for good).
+ */
+function failWaiting(c: GuestChat, me: string, note: string | null): GuestChat | null {
+    if (!c.lines.some((l) => l.author === me && l.state === 'waiting')) return null;
+    return { ...c, lines: c.lines.map((l) => (l.author === me && l.state === 'waiting' ? { ...l, state: 'failed' as const, note, item: null } : l)) };
+}
+
 /**
  * What my leave does once my server refused it. The member already reads "You left this chat.", so a leave never fails
  * where they could see it: it goes until the host has it. Only `not_in_group` stops it (`final`, kept `refused`): my server
@@ -270,8 +284,10 @@ export async function sendGuestLine(io: GuestMailIO, id: string, text: string): 
  * My own epoch, when one is due or on its way with no answer yet (the file's header of group-guest-chat.ts, "Epochs"): a
  * new one made and kept (`sending`, with its signed item) before it goes, or the kept one posted again under its own id (a
  * round that stopped, or another send posting it now: my server answers an id it has with that item's state). My server's
- * answer moves it on (applyGuestTicks); a request that fails lets the next round make another. Returns the chat as it is
- * now, and whether anything was posted.
+ * answer moves it on (applyGuestTicks); a request that fails lets the next round make another. Refused by my server as a
+ * line would be (lineRefused: a mute, guests switched off there, ...), my lines waiting for it fail with my server's words,
+ * as each would at its own send, and none goes later out of its place; the member writes again once they may, and a new
+ * line makes the epoch again. Returns the chat as it is now, and whether anything was posted.
  */
 async function sendOwnEpoch(io: GuestMailIO, id: string, chat: GuestChat): Promise<{ chat: GuestChat | null; posted: boolean }> {
     let epochItem: RelayItem | null = null;
@@ -303,7 +319,13 @@ async function sendOwnEpoch(io: GuestMailIO, id: string, chat: GuestChat): Promi
     try {
         answered = await post(io, [epochItem]);
     } catch (e) {
-        await update(io, id, (c) => (c.ownEpoch?.itemId === itemId ? { ...c, ownEpoch: null, epochSent: null } : null));
+        const refused = lineRefused(e);
+        const note = refusalWords(e);
+        await update(io, id, (c) => {
+            if (c.ownEpoch?.itemId !== itemId) return null;
+            const dropped = { ...c, ownEpoch: null, epochSent: null };
+            return (refused && failWaiting(dropped, io.me, note)) || dropped;
+        });
         throw e;
     }
     const chats = await applyAnswers(io, chat, 'group-epoch', answered.filter((a) => a.itemId === itemId), io.now());
@@ -370,7 +392,7 @@ async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
     } catch (e) {
         // My server said no where the member should see it: those lines will never go as they are.
         if (lineRefused(e)) {
-            const why = e instanceof Error && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : null;
+            const why = refusalWords(e);
             const ids = new Set(go.map((g) => g.envelope.itemId));
             await update(io, id, (c) => ({ ...c, lines: c.lines.map((l) => (ids.has(l.id) && l.state === 'sending' ? { ...l, state: 'failed', note: why, item: null } : l)) }));
         }
@@ -384,7 +406,10 @@ export interface GuestRoundOutcome { notices: number; changed: boolean }
 
 /**
  * One round (the file's header). Throws on a failed request; what was written before it stays written, and what wasn't
- * confirmed is fetched again at the next round.
+ * confirmed is fetched again at the next round. A refusal from my server that is written where the member sees it (a line
+ * or the epoch it waits for, failed with my server's words: lineRefused) is that chat's answer, not the round's: the
+ * round goes on to the next chat's sends (a leave, a line), and every chat's notices were applied before (WALK nov17b
+ * finding (c): a muted guest's every round stopped there).
  */
 export async function syncGuestMail(io: GuestMailIO): Promise<GuestRoundOutcome> {
     const device = await io.device();
@@ -446,6 +471,8 @@ export async function syncGuestMail(io: GuestMailIO): Promise<GuestRoundOutcome>
             changed = (await sendDue(io, id)) || changed;
         } catch (e) {
             if (e instanceof GuestMailNoHome) break;
+            // Written on that chat's lines with my server's words (or a leave that goes again next round): the round goes on.
+            if (lineRefused(e)) { changed = true; continue; }
             throw e;
         }
     }

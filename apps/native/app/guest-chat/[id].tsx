@@ -36,6 +36,9 @@ export default function GuestChatScreen() {
     const [chat, setChat] = useState<GuestChat | null | undefined>(undefined);
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
+    // The names in the chat show on one line until the header is tapped (emulator walk 17 Nov: with two guests they wrapped
+    // to five lines at 320 dp, and with the keyboard up the box went under it).
+    const [namesOpen, setNamesOpen] = useState(false);
     const listRef = useRef<FlatList<GuestLine>>(null);
     // The list is inverted, as every chat's is (components/chat/ChatMessageList): the newest line rests at the bottom, above
     // the box, from the first frame, and stays there as the box grows or the keyboard opens. A line that arrives follows
@@ -129,7 +132,7 @@ export default function GuestChatScreen() {
         container: { flex: 1 },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border.default, gap: 4 },
         backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-        headerText: { flex: 1 },
+        headerText: { flex: 1, minHeight: 44, justifyContent: 'center' },
         name: { fontSize: 17, fontWeight: '700', color: colors.text.body },
         from: { fontSize: 13, color: colors.text.secondary },
         banner: { margin: 12, padding: 12, borderRadius: 12, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, gap: 6 },
@@ -155,6 +158,8 @@ export default function GuestChatScreen() {
         input: { flex: 1, minHeight: 44, maxHeight: 140, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: colors.text.body, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent.fill },
         note: { padding: 16, fontSize: 14, lineHeight: 20, color: colors.text.secondary, textAlign: 'center' },
+        // Where the box was: why the chat is closed, always in view under the newest line.
+        closedBar: { paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border.default, fontSize: 14, lineHeight: 20, fontWeight: '600', color: colors.text.body, textAlign: 'center' },
         leaveBtn: { minHeight: 44, minWidth: 44, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
         leaveText: { color: colors.text.body, fontWeight: '700', fontSize: 14 },
     }));
@@ -177,13 +182,19 @@ export default function GuestChatScreen() {
                     <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Go back')}>
                         <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.body} />
                     </Pressable>
-                    <View style={styles.headerText}>
+                    {/* Tapped, it shows every name in the chat (and one line again); a screen reader hears them all. */}
+                    <Pressable style={styles.headerText} disabled={!names} onPress={() => setNamesOpen((open) => !open)} testID="guest-chat-head"
+                        accessibilityRole={names ? 'button' : undefined} accessibilityState={names ? { expanded: namesOpen } : undefined}
+                        accessibilityLabel={[chat?.name || t('Group chat'), chat?.host, names].filter(Boolean).join(', ')}>
                         <Text style={styles.name} numberOfLines={1}>{chat?.name || t('Group chat')}</Text>
                         {/* The whole community, never cut: a long one wraps. */}
                         {chat && <Text style={styles.from} testID="guest-chat-from">{chat.host}</Text>}
-                        {/* The names in the chat, as a guest may see them (core guestAccess 'roster'): members, then guests. */}
-                        {names && <Text style={styles.from} testID="guest-chat-names">{names}</Text>}
-                    </View>
+                        {/* The names in the chat, as a guest may see them (core guestAccess 'roster'): members, then guests. One
+                            line until the header is tapped, so the thread and the box keep their room above the keyboard. */}
+                        {names && (
+                            <Text style={styles.from} testID="guest-chat-names" numberOfLines={namesOpen ? undefined : 1} accessibilityLabel={names}>{names}</Text>
+                        )}
+                    </Pressable>
                     {/* Leave, while joining or in: asked first. Always in view, whatever the chat has scrolled to. */}
                     {canLeave && (
                         <Pressable style={[styles.leaveBtn, busy && { opacity: 0.6 }]} disabled={busy} onPress={leave} accessibilityRole="button"
@@ -227,7 +238,6 @@ export default function GuestChatScreen() {
                                 <Text style={styles.bannerText}>{t(W.keptHere)}</Text>
                                 <Text style={styles.bannerText}>{t(W.newDevice)}</Text>
                                 {chat.state === 'joining' && <Text style={styles.bannerStrong} testID="guest-chat-joining">{t(W.joining)}</Text>}
-                                {closed && <Text style={styles.bannerStrong} testID="guest-chat-closed">{closed}</Text>}
                             </View>
                         )}
                         renderItem={({ item, index }) => {
@@ -256,6 +266,9 @@ export default function GuestChatScreen() {
                         }}
                     />
                 )}
+                {/* Closed: why, where the box was, so it is in view on the first frame (emulator walk 17 Nov: at the top of the
+                    inverted list, "You left this chat." was cut). */}
+                {closed && <Text style={styles.closedBar} testID="guest-chat-closed">{closed}</Text>}
                 {canWrite && (
                     <View style={styles.composer}>
                         <TextInput

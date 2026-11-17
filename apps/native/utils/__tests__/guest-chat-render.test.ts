@@ -197,9 +197,11 @@ describe("the guest's chat at 320 dp with text at 1.3x", () => {
         expect(host.textContent).toContain('Kept on this phone only. Your community keeps no copy.');
         expect(box(q('guest-chat-input')).minHeight).toBeGreaterThanOrEqual(44);
         expect(box(q('guest-chat-send')).height).toBeGreaterThanOrEqual(44);
-        // The community and the names are never cut: no line limit for a platform to cut at; they wrap.
+        // The community is never cut: no line limit for a platform to cut at; it wraps. The names show on one line until the
+        // header is tapped (emulator walk 17 Nov, below); before the walk this said "never cut" for them too, which let two
+        // guests' names wrap to five lines and push the box under the keyboard.
         expect(q('guest-chat-from')?.getAttribute('data-lines')).toBeNull();
-        expect(q('guest-chat-names')?.getAttribute('data-lines')).toBeNull();
+        expect(q('guest-chat-names')?.getAttribute('data-lines')).toBe('1');
     });
 
     it('an invitation names who invited, the group and its community, with Accept and Decline (44 dp), and nothing of the chat', async () => {
@@ -220,6 +222,51 @@ describe("the guest's chat at 320 dp with text at 1.3x", () => {
         await openChat(chat('declined'));
         expect(q('guest-chat-closed')?.textContent).toBe('You declined this invitation.');
     });
+});
+
+describe('emulator walk 17 Nov: the names line, a writer who left, and why the chat closed, at 320 dp x 1.3', () => {
+    const CY = 'e'.repeat(64);
+    const NAMES = 'Ana, Me · hillside.example · guest, Dax · eastside.example · guest';
+    it('the names line is one line; tapping the header shows every name and tapping again folds it; a screen reader hears them all; a 44 dp target', async () => {
+        await openChat(chat('in'));
+        const head = q('guest-chat-head') as HTMLButtonElement;
+        expect(q('guest-chat-names')?.getAttribute('data-lines')).toBe('1');
+        expect(q('guest-chat-names')?.getAttribute('aria-label')).toBe(NAMES);
+        expect(head.getAttribute('aria-label')).toBe(`Tool Library, riverside.example, ${NAMES}`);
+        expect(box(head).minHeight).toBeGreaterThanOrEqual(44);
+        act(() => head.click());
+        expect(q('guest-chat-names')?.getAttribute('data-lines')).toBeNull();
+        expect(q('guest-chat-names')?.textContent).toBe(NAMES);
+        act(() => (q('guest-chat-head') as HTMLButtonElement).click());
+        expect(q('guest-chat-names')?.getAttribute('data-lines')).toBe('1');
+    });
+    it('a chat whose names a guest may not see: no names line, and the header is no button', async () => {
+        await openChat(chat('removed', { why: 'removed' }));
+        expect(q('guest-chat-names')).toBeNull();
+        expect(q('guest-chat-head')?.getAttribute('data-disabled')).toBe('true');
+    });
+    it.each([
+        ['a fellow guest removed, named by the roster\'s former', { former: { members: [], guests: [{ key: CY, home: 'eastside.example', name: 'Cy', state: 'removed' }] } }, {}, 'Cy · eastside.example · guest'],
+        ['a member who left, named by the roster\'s former', { former: { members: [{ key: CY, name: 'Cy' }], guests: [] } }, {}, 'Cy'],
+        ['a guest a roster named before, kept on the chat', {}, { names: { [CY]: { name: 'Cy', home: 'eastside.example', state: 'out', at: 1 } } }, 'Cy · eastside.example · guest'],
+        ['a key nobody named', {}, {}, 'eeeeeeee'],
+    ] as Array<[string, Record<string, unknown>, Partial<GuestChat>, string]>)('%s: the line reads "%s"', async (_what, roster, extra, name) => {
+        const c = chat('in', extra);
+        c.roster = { ...c.roster!, ...roster };
+        c.lines = [{ id: 'l9', author: CY, text: 'I can bring a wheelbarrow.', at: 1 }];
+        await openChat(c);
+        expect(q('guest-line-author')?.textContent).toBe(name);
+    });
+    it.each([['left', 'You left this chat.'], ['removed', 'You were removed from this chat. Nothing more reaches you from it.']] as Array<[GuestChat['state'], string]>)(
+        'closed (%s): why is under the newest line, where the box was, outside the list', async (state, words) => {
+            await openChat(chat(state, { why: state === 'removed' ? 'removed' : null }));
+            const closed = q('guest-chat-closed');
+            expect(closed?.textContent).toBe(words);
+            expect(q('list')?.contains(closed)).toBe(false);
+            expect(q('guest-chat-input')).toBeNull();
+            // Drawn after the list, as the box is.
+            expect(q('list')!.compareDocumentPosition(closed!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
 });
 
 describe("the group's guests, under its members", () => {

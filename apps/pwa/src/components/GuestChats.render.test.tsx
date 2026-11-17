@@ -34,6 +34,7 @@ vi.mock('../lib/identity', () => ({ loadIdentity: async () => ({ publicKey: ME, 
 vi.mock('../lib/outside-mail', () => ({ outsideErrorWords: () => 'That did not go through.' }));
 
 import { GroupGuestsPanel, GuestChatThread, GuestInvitationCard } from './GuestChats';
+import { outOfView, recordScrolls, stopRecordingScrolls } from '../chat-end-in-view.test-support';
 
 const ID = 'grp-tools@riverside.example';
 function chat(state: GuestChat['state'], extra: Partial<GuestChat> = {}): GuestChat {
@@ -125,7 +126,8 @@ describe("the guest's chat in a 320 px window", () => {
         expect(q('guest-chat-names')?.textContent).toBe('Ana, Me · hillside.example · guest, Dax · eastside.example · guest');
         expect(document.body.textContent).toContain('Kept in this browser only. Your community keeps no copy.');
         for (const id of ['guest-chat-input', 'guest-chat-send']) expect(q(id)!.style.minHeight).toBe('44px');
-        // The box shrinks with the window; the community and the names wrap anywhere rather than run off a 320 px screen.
+        // The box shrinks with the window; the community and the names wrap anywhere rather than run off a 320 px screen. The
+        // names show on one line until tapped (emulator walk 17 Nov, below).
         expect(q('guest-chat-input')!.style.minWidth).toBe('0px');
         for (const id of ['guest-chat-from', 'guest-chat-names']) expect(q(id)!.style.overflowWrap).toBe('anywhere');
     });
@@ -146,6 +148,79 @@ describe("the guest's chat in a 320 px window", () => {
         fireEvent.click(screen.getByTestId('guest-invitation-open'));
         expect(open).toHaveBeenCalled();
         expect(q('guest-invitation-open')!.style.minHeight).toBe('44px');
+    });
+
+    // Emulator walk 17 Nov (the phone's twin is guest-chat-render.test.ts): the names line, a writer who left, why it closed.
+    it('the names line: one line until tapped, then every name, wrapping; tapped again, one line; its words are the whole list; a 44 px target', async () => {
+        await openChat(chat('in'));
+        await waitFor(() => expect(q('guest-chat-names')).not.toBeNull());
+        const names = q('guest-chat-names') as HTMLButtonElement;
+        const NAMES = 'Ana, Me · hillside.example · guest, Dax · eastside.example · guest';
+        expect(names.tagName).toBe('BUTTON');
+        expect(names.textContent).toBe(NAMES);
+        expect([names.style.whiteSpace, names.style.overflow, names.style.textOverflow, names.getAttribute('aria-expanded')]).toEqual(['nowrap', 'hidden', 'ellipsis', 'false']);
+        expect(names.style.minHeight).toBe('44px');
+        fireEvent.click(names);
+        expect([names.style.whiteSpace, names.style.overflow, names.getAttribute('aria-expanded')]).toEqual(['', '', 'true']);
+        fireEvent.click(names);
+        expect(names.style.whiteSpace).toBe('nowrap');
+    });
+
+    it.each([
+        ['a fellow guest removed, named by the roster\'s former', { former: { members: [], guests: [{ key: 'e'.repeat(64), home: 'eastside.example', name: 'Cy', state: 'removed' }] } }, {}, 'Cy · eastside.example · guest'],
+        ['a member who left, named by the roster\'s former', { former: { members: [{ key: 'e'.repeat(64), name: 'Cy' }], guests: [] } }, {}, 'Cy'],
+        ['a guest a roster named before, kept in this browser', {}, { names: { ['e'.repeat(64)]: { name: 'Cy', home: 'eastside.example', state: 'out', at: 1 } } }, 'Cy · eastside.example · guest'],
+        ['a key nobody named', {}, {}, 'eeeeeeee'],
+    ] as Array<[string, Record<string, unknown>, Partial<GuestChat>, string]>)('%s: the line reads "%s"', async (_what, roster, extra, name) => {
+        const c = chat('in', extra);
+        c.roster = { ...c.roster!, ...roster };
+        c.lines = [{ id: 'l9', author: 'e'.repeat(64), text: 'I can bring a wheelbarrow.', at: 1 }];
+        await openChat(c);
+        await waitFor(() => expect(q('guest-line-author')?.textContent).toBe(name));
+    });
+
+    it.each([['left', 'You left this chat.'], ['removed', 'You were removed from this chat. Nothing more reaches you from it.']] as Array<[GuestChat['state'], string]>)(
+        'closed (%s): why is under the newest line, where the box was', async (state, words) => {
+            await openChat(chat(state, { why: state === 'removed' ? 'removed' : null }));
+            await waitFor(() => expect(q('guest-chat-closed')?.textContent).toBe(words));
+            const log = document.querySelector('[role="log"]')!;
+            expect(log.compareDocumentPosition(q('guest-chat-closed')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(q('guest-chat-banner')?.contains(q('guest-chat-closed'))).toBe(false);
+            expect(q('guest-chat-input')).toBeNull();
+        });
+
+    // Deciding review of #3285: the web page never scrolled, so in a long chat why it closed sat under every line, out of view.
+    // Each state -> what must be in view when the chat opens (or changes while open), as the phone's inverted list shows it.
+    describe('opens at its newest line, with what comes after it in view (30 lines)', () => {
+        const many = Array.from({ length: 30 }, (_, i) => ({ id: `m${i}`, author: i % 2 ? ANA : DAX, text: `Line ${i + 1}`, at: i + 1 }));
+        const newest = () => document.querySelector('[role="log"]')?.lastElementChild ?? null;
+        beforeEach(() => recordScrolls());
+        afterEach(() => stopRecordingScrolls());
+        const ROWS: Array<[string, GuestChat['state'], GuestChat['why'], Array<[string, () => Element | null]>]> = [
+            ['in: the newest line and the box', 'in', null, [['the newest line', newest], ['the box', () => q('guest-chat-input')]]],
+            ['removed by a convenor: why', 'removed', 'removed', [['the newest line', newest], ['why it closed', () => q('guest-chat-closed')]]],
+            ['the group closed: why', 'removed', 'group-closed', [['why it closed', () => q('guest-chat-closed')]]],
+            ['guests turned off: why', 'removed', 'guests-off', [['why it closed', () => q('guest-chat-closed')]]],
+            ['removed, no reason heard: why', 'removed', null, [['why it closed', () => q('guest-chat-closed')]]],
+            ['left: why', 'left', null, [['why it closed', () => q('guest-chat-closed')]]],
+        ];
+        it.each(ROWS)('%s', async (_what, state, why, must) => {
+            await openChat(chat(state, { why, lines: many }));
+            await waitFor(() => expect(newest()?.textContent).toContain('Line 30'));
+            await waitFor(() => expect(must.map(([name, el]) => outOfView(el(), name)).filter(Boolean)).toEqual([]));
+        });
+        it('declined, no lines: why', async () => {
+            await openChat(chat('declined', { lines: [] }));
+            await waitFor(() => expect(outOfView(q('guest-chat-closed'), 'why it closed')).toBeNull());
+        });
+        it('removed while it is open: why comes into view, though no line came', async () => {
+            await openChat(chat('in', { lines: many }));
+            await waitFor(() => expect(outOfView(q('guest-chat-input'), 'the box')).toBeNull());
+            live.chats = { [ID]: chat('removed', { why: 'removed', lines: many }) };
+            window.dispatchEvent(new Event('beanpool-guest-chats'));
+            await waitFor(() => expect(q('guest-chat-closed')).not.toBeNull());
+            await waitFor(() => expect(outOfView(q('guest-chat-closed'), 'why it closed')).toBeNull());
+        });
     });
 
     it('joining says so with no box yet; a closed group and a decline each say why', async () => {

@@ -32,16 +32,45 @@ export type GuestRosterEpoch =
     | { current: number; stale: true }
     | { current: number; stale: false; record: GroupEpochRecord; wraps: GuestRosterWrap[] };
 
+/**
+ * The names of people no longer in the chat whose lines a guest there may have (engine/group-guests.ts formerInChat; WALK
+ * nov17b finding (a): a fellow guest who left or was removed was named by a key fragment on a guest's phone). Names only:
+ * none of these keys is one an epoch wraps to, and nothing here ever goes into `members` or `guests`.
+ */
+export interface GuestRosterFormer {
+    /** Members who wrote in the chat and are out of it now (left, taken out, no longer members): their name as the chat names them. */
+    members: Array<{ key: string; name: string }>;
+    /** Guests who wrote in the chat and are out of it now: their card's name, their community, and where they stand at the host (`left`, `removed`, or `invited` again). */
+    guests: Array<{ key: string; home: string; name: string; state: string }>;
+}
+
 /** What the host sends a guest's home at every change of the chat's names (engine/group-guests.ts queueGroupRoster). */
 export interface GuestRoster {
     name: string;
     members: Array<{ key: string; name: string }>;
     guests: Array<{ key: string; home: string; name: string }>;
     epoch: GuestRosterEpoch;
+    /** People no longer in the chat whose lines its guests may have, named (GuestRosterFormer); absent when the host sent none. */
+    former?: GuestRosterFormer;
 }
+
+/** At most this many names of each kind are read from a roster's `former` (the host sends at most ROSTER_FORMER_MAX in all). */
+export const GUEST_ROSTER_FORMER_READ = 200;
 
 const isKeyList = (v: unknown, extra: (o: Record<string, unknown>) => boolean): boolean =>
     Array.isArray(v) && v.every((o) => !!o && typeof o === 'object' && KEY_HEX.test(String((o as { key?: unknown }).key)) && extra(o as Record<string, unknown>));
+
+/** A roster's `former`, read: each name that is one kept, anything else left out (a name never costs the roster). */
+function readFormer(v: unknown): GuestRosterFormer {
+    const o = v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
+    const named = (x: unknown): x is Record<string, string> => !!x && typeof x === 'object'
+        && KEY_HEX.test(String((x as { key?: unknown }).key)) && typeof (x as { name?: unknown }).name === 'string';
+    const members = (Array.isArray(o.members) ? o.members : []).filter(named).slice(0, GUEST_ROSTER_FORMER_READ)
+        .map((m) => ({ key: m.key, name: m.name }));
+    const guests = (Array.isArray(o.guests) ? o.guests : []).filter((g): g is Record<string, string> => named(g) && typeof g.home === 'string' && typeof g.state === 'string')
+        .slice(0, GUEST_ROSTER_FORMER_READ).map((g) => ({ key: g.key, home: g.home, name: g.name, state: g.state }));
+    return { members, guests };
+}
 
 /** A roster as it came (the host's `data`), or null when it is not one. */
 export function readGuestRoster(json: unknown): GuestRoster | null {
@@ -49,13 +78,14 @@ export function readGuestRoster(json: unknown): GuestRoster | null {
     if (!o || typeof o !== 'object' || typeof o.name !== 'string') return null;
     if (!isKeyList(o.members, (m) => typeof m.name === 'string')) return null;
     if (!isKeyList(o.guests, (g) => typeof g.name === 'string' && typeof g.home === 'string')) return null;
+    const base = { ...(o as unknown as GuestRoster), ...(o.former !== undefined ? { former: readFormer(o.former) } : {}) };
     const e = o.epoch as Record<string, unknown> | null | undefined;
-    if (e === null) return { ...(o as unknown as GuestRoster), epoch: null };
+    if (e === null) return { ...base, epoch: null };
     if (!e || typeof e !== 'object' || !Number.isSafeInteger(e.current) || (e.current as number) < 1 || typeof e.stale !== 'boolean') return null;
-    if (e.stale) return { ...(o as unknown as GuestRoster), epoch: { current: e.current as number, stale: true } };
+    if (e.stale) return { ...base, epoch: { current: e.current as number, stale: true } };
     const record = e.record as GroupEpochRecord | undefined;
     if (!record || typeof record !== 'object' || record.epoch !== e.current || !Array.isArray(e.wraps)) return null;
-    return o as unknown as GuestRoster;
+    return base;
 }
 
 /** What a guest's phone sends next, from the latest roster. */

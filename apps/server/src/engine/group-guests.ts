@@ -61,8 +61,9 @@
  * **The roster, at every change** (queueGroupRoster). groupKeyRoster reads three things: active group_members rows, whether
  * each key is a member here (isNodeMember: not pruned, not a key a re-key holds or replaced) and guests `in`. Every write
  * that can change one of them ends in group-keys.ts markGroupEpochStale (directly, or markGroupEpochsStaleFor) or
- * withMembershipEpoch's new epoch, and each calls queueGroupRoster: the names in the chat, members and guests, and the
- * current epoch, to every home with guests in. The paths: a member joins (with or without an epoch), says yes to an
+ * withMembershipEpoch's new epoch, and each calls queueGroupRoster: the names in the chat, members and guests, the names
+ * of people out of it whose lines those guests may have (`former`, names only: formerInChat), and the current epoch, to
+ * every home with guests in. The paths: a member joins (with or without an epoch), says yes to an
  * invitation, is approved, is seated in a circle, leaves, is removed by a convenor or a vote (state-engine.ts,
  * withMembershipEpoch or removeGroupMemberByVote); deletes their account (purgeMemberSelf); is pruned or reinstated, both
  * through setUserStatusRow across 'pruned'; a re-key starts, is cancelled, completes (member-wizards.ts issueRekeyCode,
@@ -113,7 +114,7 @@
  * (guestRowKeptMs), so a home down for days never gets a removal without the invitation queued after it.
  */
 import crypto from 'node:crypto';
-import { addressCardVerifies, word, type RelayItem } from '@beanpool/core';
+import { addressCardVerifies, clipName, word, type RelayItem } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
@@ -589,12 +590,49 @@ function wrapsFor(groupId: string, epoch: number, keys: readonly string[]): Arra
     })));
 }
 
+/** At most this many names of people no longer in the chat go in one roster's `former`: those who wrote last first. */
+export const ROSTER_FORMER_MAX = 100;
+
+/**
+ * The names a home's guests need for lines they may have from people no longer in the chat (a roster's `former`; WALK
+ * nov17b finding (a): on a guest's phone a fellow guest who left or was removed was named by a key fragment, because the
+ * roster named only who is in). Everyone who wrote a line in the chat since `since` (when the first of that home's guests
+ * in now came in: a line goes only to guests in, so an older one never reached them) and is not in the chat now
+ * (`inChat`), by the rule a group line's author is named by (group-thread.ts groupLineAuthorName): a member here by their
+ * name; else a guest of this group by their card's name and home, with where they stand (`left`, `removed`, or `invited`
+ * again); else nobody (an account deleted: its lines are taken down for the guests too). Only names a guest of that home
+ * had a line from, not each guest: one roster goes to every guest of a home, so one who came in after a fellow guest from
+ * there may keep, never shown, the name of someone who wrote and left before they came (no line of theirs reached that
+ * device). A line taken down or a system line names nobody. Names only: none of these keys goes in the roster's
+ * `members` or `guests`, the keys an epoch wraps to. The newest writers first, ROSTER_FORMER_MAX at most.
+ */
+function formerInChat(groupId: string, since: string | undefined, inChat: ReadonlySet<string>): { members: Array<{ key: string; name: string }>; guests: Array<{ key: string; home: string; name: string; state: GuestState }> } {
+    // No guest of that home in (never so for a home a roster goes to): no line reached it, so nobody to name.
+    if (!since) return { members: [], guests: [] };
+    const writers = db.prepare(`SELECT m.author_pubkey AS key, memb.callsign AS callsign, MAX(m.timestamp) AS last FROM messages m
+                                LEFT JOIN members memb ON memb.public_key = m.author_pubkey
+                                WHERE m.conversation_id = ? AND m.timestamp >= ? AND COALESCE(m.type, 'text') NOT IN ('system', 'removed')
+                                GROUP BY m.author_pubkey ORDER BY last DESC, m.author_pubkey`).all(groupId, since) as Array<{ key: string; callsign: string | null }>;
+    const members: Array<{ key: string; name: string }> = [];
+    const guests: Array<{ key: string; home: string; name: string; state: GuestState }> = [];
+    for (const w of writers) {
+        if (members.length + guests.length >= ROSTER_FORMER_MAX) break;
+        if (inChat.has(w.key) || w.key === 'SYSTEM') continue;
+        const name = w.callsign ? clipName(w.callsign) : '';
+        if (name) { members.push({ key: w.key, name }); continue; }
+        const g = guestRow(groupId, w.key);
+        if (g) guests.push({ key: g.guest_key, home: g.home, name: g.name, state: g.state });
+    }
+    return { members, guests };
+}
+
 /**
  * The names in the chat, members (as the chat names them) and guests, and the current epoch, to every home with guests in
  * (or to `onlyHome`, after one of its guests heard epoch-stale). Called at every roster change (group-keys.ts
  * markGroupEpochStale and withMembershipEpoch, inside the change's transaction), so it never throws into it: a roster that
  * can't be made is logged, and the change stands. The epoch carries its record and that home's guests' wraps when it is not
- * stale, so a guest who missed it can open it; a stale one says a new epoch is due, over exactly these keys.
+ * stale, so a guest who missed it can open it; a stale one says a new epoch is due, over exactly these keys. `former` names
+ * the people out of the chat whose lines that home's guests may have (formerInChat): names only, never a key to wrap to.
  */
 export function queueGroupRoster(groupId: string, onlyHome?: string): void {
     try {
@@ -605,6 +643,7 @@ export function queueGroupRoster(groupId: string, onlyHome?: string): void {
         const guests = guestsIn(groupId);
         const guestKeys = new Set(guests.map((g) => g.guest_key));
         const roster = groupKeyRoster(groupId);
+        const inChat = new Set(roster);
         const cur = currentGroupEpoch(groupId, roster);
         const record = cur && !cur.stale ? epochRecord(groupId, cur.epoch) : null;
         const names = {
@@ -617,7 +656,8 @@ export function queueGroupRoster(groupId: string, onlyHome?: string): void {
             const epoch = !cur ? null
                 : record ? { current: cur.epoch, stale: false, record, wraps: wrapsFor(groupId, cur.epoch, keys) }
                 : { current: cur.epoch, stale: true };
-            queueToHome(groupId, home, keys, 'roster', { ...names, epoch });
+            const since = guests.filter((g) => g.home === home).map((g) => g.state_at).sort()[0];
+            queueToHome(groupId, home, keys, 'roster', { ...names, former: formerInChat(groupId, since, inChat), epoch });
         }
         flushSoon();
     } catch (e) {

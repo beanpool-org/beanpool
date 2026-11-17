@@ -78,6 +78,11 @@
  *      nothing changed) x (an invitation waiting, removals and takedowns 2 and 32 days old, the roster) -> told again within
  *      the time a home may hold what they drop, once; 20d a take-over and take-back end to end: the removal as queued, then
  *      the invitation under a counter past both; 20e an account with 5,000 lines: one request per 500, inside a time budget
+ *  21  close the class, names of people out of the chat (emulator walk 17 Nov, finding a): every author of a line (a member
+ *      who left after writing, without writing, only before the home's first guest came in, whose only line was taken
+ *      down; a member or guest in; a guest of the same or another home who left, removed, invited again, never in; a key
+ *      nobody here knows; the system) x which home -> named in that home's roster's `former` or not at all; the names in
+ *      the chat stay exactly its keys; the newest writers first, ROSTER_FORMER_MAX at most
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests node scripts/run-server-suites.mjs
  */
@@ -2257,6 +2262,110 @@ async function main(): Promise<void> {
         const ratio = big.ms / Math.max(small.ms, 1);
         assert(purges20.length === 2 && ratio <= RATIO20,
             `20e. the ${big.n}-line deletion takes at most ${RATIO20} times the ${small.n}-line one in this run: it grows with the lines, not with the lines times the queue (${Math.round(big.ms)} ms against ${Math.round(small.ms)} ms, ${ratio.toFixed(1)} times)`);
+    }
+
+    // ── 21. Close the class: the names a guest's phone needs for lines of people no longer in the chat (walk 17 Nov, a) ──
+    console.log("\n21. Close the class: every author of a line x where they stand now x which home -> named in the roster's former, or not at all");
+    // On a guest's phone a fellow guest who left or was removed was named by an 8-character key: the roster named only who
+    // is in. Now `former` names everyone out of the chat who wrote a line the home's guests may have (since the first of
+    // them came in), by the rule a group line's author is named by; names only, never a key an epoch wraps to.
+    {
+        const g = createGroup({ name: 'Former names', joinPolicy: 'open', createdBy: ana.pk }).id;
+        const T0 = Date.now() - 60 * 60_000;
+        const at = (min: number) => new Date(T0 + min * 60_000).toISOString();
+        const member = (name: string, status: 'active' | 'removed') => {
+            const p = addLocal(name);
+            db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', ?, 1)`).run(g, p.pk, status);
+            return p;
+        };
+        const guest = (name: string, home: string, state: string, stateAt: string) => {
+            const p = newId(name);
+            db.prepare(`INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+                .run(g, p.pk, home, name, state, ana.pk, at(-120), stateAt);
+            return p;
+        };
+        const line = (author: string, min: number, type = 'text') => db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp)
+            VALUES (?, ?, ?, 'c2VhbGVk', 'group-xc20p-v1:n', ?, ?, ?)`).run(crypto.randomUUID(), g, author, type, JSON.stringify({ epoch: 1 }), at(min));
+        const stays = member('Stays21', 'active');
+        const left = member('Left21', 'removed');
+        const quiet = member('Quiet21', 'removed');
+        const before = member('Before21', 'removed');
+        const takenDown = member('TakenDown21', 'removed');
+        const x = guest('X21', 'a.example', 'in', at(0));                   // the home under test: a.example, in since minute 0
+        const p = guest('P21', 'c.example', 'in', at(2));                   // c.example's guest, in since minute 2
+        const wentA = guest('WentA21', 'a.example', 'left', at(30));
+        const leftC = guest('LeftC21', 'c.example', 'left', at(30));
+        const removedC = guest('RemovedC21', 'c.example', 'removed', at(30));
+        const againC = guest('AgainC21', 'c.example', 'invited', at(30));
+        const neverIn = guest('NeverIn21', 'c.example', 'removed', at(30));
+        const stranger = newId('Stranger21');
+        line(before.pk, -1);
+        line(left.pk, 1);
+        line(stays.pk, 3); line(x.pk, 3); line(p.pk, 3);
+        line(leftC.pk, 4); line(removedC.pk, 5); line(wentA.pk, 6); line(againC.pk, 7);
+        line(takenDown.pk, 8, 'removed');
+        line('SYSTEM', 9, 'system');
+        line(stranger.pk, 10);
+        const nR = outs.length;
+        guests?.queueGroupRoster(g);
+        await settle();
+        const rosterTo = (home: string) => outs.slice(nR).filter((o) => o.body?.kind === 'roster' && o.body.group === g && o.home === home).at(-1)?.body.data ?? null;
+        const named = (data: any, key: string) => {
+            const m = data?.former?.members?.find((e: any) => e.key === key);
+            if (m) return `member ${m.name}`;
+            const gg = data?.former?.guests?.find((e: any) => e.key === key);
+            return gg ? `guest ${gg.name} · ${gg.home} · ${gg.state}` : 'not named';
+        };
+        // [who, their key, what a.example's roster names them, what c.example's does]
+        const ROWS21: Array<[string, string, string, string]> = [
+            ['a member who left after writing', left.pk, 'member Left21', 'not named'],
+            ['a member who left without writing', quiet.pk, 'not named', 'not named'],
+            ['a member whose lines were all before the home\'s first guest came in', before.pk, 'not named', 'not named'],
+            ['a member whose only line was taken down', takenDown.pk, 'not named', 'not named'],
+            ['a member in the chat', stays.pk, 'not named', 'not named'],
+            ['the convenor, in the chat, who never wrote', ana.pk, 'not named', 'not named'],
+            ['a guest in, of the home under test', x.pk, 'not named', 'not named'],
+            ['a guest in, of another home', p.pk, 'not named', 'not named'],
+            ['a guest of the same home who left', wentA.pk, 'guest WentA21 · a.example · left', 'guest WentA21 · a.example · left'],
+            ['a guest of another home who left', leftC.pk, 'guest LeftC21 · c.example · left', 'guest LeftC21 · c.example · left'],
+            ['a guest removed', removedC.pk, 'guest RemovedC21 · c.example · removed', 'guest RemovedC21 · c.example · removed'],
+            ['a guest who wrote, left and is invited again', againC.pk, 'guest AgainC21 · c.example · invited', 'guest AgainC21 · c.example · invited'],
+            ['a guest invited and removed, never in', neverIn.pk, 'not named', 'not named'],
+            ['a key no member or guest here (a deleted account)', stranger.pk, 'not named', 'not named'],
+            ['the system', 'SYSTEM', 'not named', 'not named'],
+        ];
+        const a21 = rosterTo('a.example'), c21 = rosterTo('c.example');
+        for (const [who, key, wantA, wantC] of ROWS21) {
+            assert(named(a21, key) === wantA && named(c21, key) === wantC,
+                `21. ${who}: a.example's roster -> ${wantA}, c.example's -> ${wantC} (got ${named(a21, key)}; ${named(c21, key)})`);
+        }
+        const keysOf = (d: any) => [...(d?.members ?? []), ...(d?.guests ?? [])].map((e: any) => e.key).sort().join(',');
+        const formerKeys = (d: any) => [...(d?.former?.members ?? []), ...(d?.former?.guests ?? [])].map((e: any) => e.key);
+        assert(!!a21 && !!c21 && keysOf(a21) === [ana.pk, stays.pk, x.pk, p.pk].sort().join(',') && keysOf(c21) === keysOf(a21)
+            && formerKeys(a21).every((k) => !keysOf(a21).includes(k)),
+            `21. the names in the chat are exactly its keys, and nobody in former is among them (got ${keysOf(a21)})`);
+        // Members first, then guests; each the newest writers first.
+        assert(JSON.stringify(formerKeys(a21)) === JSON.stringify([left.pk, againC.pk, wentA.pk, removedC.pk, leftC.pk]),
+            `21. the newest writers first (got ${formerKeys(a21).map((k) => k.slice(0, 6)).join(' ')})`);
+
+        // The cap: ROSTER_FORMER_MAX names at most, the newest writers.
+        const g2 = createGroup({ name: 'Former names, many', joinPolicy: 'open', createdBy: ana.pk }).id;
+        db.prepare(`INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, 'a.example', 'X21b', 'in', ?, ?, ?)`)
+            .run(g2, newId('X21b').pk, ana.pk, at(-120), at(0));
+        const max = guests?.ROSTER_FORMER_MAX ?? 100;
+        const many = Array.from({ length: max + 5 }, (_, i) => addLocal(`Many21 ${i}`));
+        for (const [i, m] of many.entries()) {
+            db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, from_epoch) VALUES (?, ?, 'member', 'removed', 1)`).run(g2, m.pk);
+            db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, 'c2VhbGVk', 'group-xc20p-v1:n', 'text', '{"epoch":1}', ?)`)
+                .run(crypto.randomUUID(), g2, m.pk, at(1 + i / 1000));
+        }
+        const nM = outs.length;
+        guests?.queueGroupRoster(g2);
+        await settle();
+        const big = outs.slice(nM).filter((o) => o.body?.kind === 'roster' && o.body.group === g2).at(-1)?.body.data;
+        const bigKeys = (big?.former?.members ?? []).map((e: any) => e.key);
+        assert(bigKeys.length === max && JSON.stringify(bigKeys) === JSON.stringify(many.slice(-max).reverse().map((m) => m.pk)),
+            `21. ${max + 5} former writers: the roster names the ${max} who wrote last, newest first (got ${bigKeys.length})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

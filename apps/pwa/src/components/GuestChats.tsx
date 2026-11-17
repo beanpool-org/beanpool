@@ -109,7 +109,14 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const [askLeave, setAskLeave] = useState(false);
+    // The names in the chat show on one line until tapped, as on the phone (emulator walk 17 Nov: two guests' names wrapped
+    // to five lines at 320 dp).
+    const [namesOpen, setNamesOpen] = useState(false);
     const alive = useRef(true);
+    // The end of the page: the chat opens there, at its newest line with the box, or why it closed, under it (deciding review
+    // of #3285: the page never scrolled, so in a long chat why it closed sat under every line, out of view). The phone's list
+    // is inverted, so it opens there too.
+    const endRef = useRef<HTMLDivElement | null>(null);
 
     const load = useCallback(async () => {
         const all = await loadGuestChats().catch(() => ({}) as Record<string, GuestChat>);
@@ -175,13 +182,17 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
         }
     };
 
+    // Why it is closed: core's one sentence for each reason the host gives, the same on the phone.
+    const closed = chat ? guestClosedWords(chat) : null;
+    // To the end on opening, on a new line, and when the chat closes while open (no line comes then, but why it closed does).
+    const lineCount = chat?.lines.length ?? 0;
+    useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }); }, [lineCount, closed]);
+
     if (chat === undefined) return <div data-testid="guest-chat" />;
     const viewer = chat ? guestViewerOf(chat) : null;
     const canWrite = !!chat && chat.state === 'in' && viewer !== null && guestAccess(viewer, 'chat') === 'shown';
     // Leave while joining or in; once out there is nothing to leave.
     const canLeave = !!chat && (chat.state === 'in' || chat.state === 'joining');
-    // Why it is closed: core's one sentence for each reason the host gives, the same on the phone.
-    const closed = chat ? guestClosedWords(chat) : null;
     const names = chat?.roster && viewer !== null && guestAccess(viewer, 'roster') === 'shown'
         ? [...chat.roster.members.map((m) => m.name), ...chat.roster.guests.map((g) => guestNameLine(g.name, g.home))].join(', ')
         : null;
@@ -200,7 +211,18 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.2rem', ...wrap }}>{chat.name || t('Group chat')}</h2>
                         <p data-testid="guest-chat-from" style={{ margin: '0.15rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>{chat.host}</p>
-                        {names && <p data-testid="guest-chat-names" style={{ margin: '0.15rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>{names}</p>}
+                        {/* The names in the chat: one line until tapped (then every name, wrapping), a 44 px target; a screen
+                            reader hears them all either way (the button's words are the whole list). */}
+                        {names && (
+                            <button type="button" data-testid="guest-chat-names" aria-expanded={namesOpen} title={names} onClick={() => setNamesOpen((open) => !open)}
+                                style={{
+                                    display: 'block', width: '100%', minHeight: '44px', margin: 0, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
+                                    textAlign: 'left', fontFamily: 'inherit', fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap,
+                                    ...(namesOpen ? {} : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }),
+                                }}>
+                                {names}
+                            </button>
+                        )}
                     </div>
                     {chat.state === 'invited' ? (
                         <div data-testid="guest-invitation" style={{ padding: '0.85rem', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
@@ -224,7 +246,6 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                                 <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)' }}>{t('Kept in this browser only. Your community keeps no copy.')}</p>
                                 <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)' }}>{t(W.newDevice)}</p>
                                 {chat.state === 'joining' && <p data-testid="guest-chat-joining" style={{ margin: '0.4rem 0 0', fontWeight: 600 }}>{t(W.joining)}</p>}
-                                {closed && <p data-testid="guest-chat-closed" style={{ margin: '0.4rem 0 0', fontWeight: 600 }}>{closed}</p>}
                             </div>
                             <div role="log" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 {chat.lines.map((l, i) => {
@@ -248,6 +269,13 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                                     );
                                 })}
                             </div>
+                            {/* Closed: why, under the newest line where the box was, as on the phone (emulator walk 17 Nov: at
+                                the top, above the lines, it was out of view in a long chat). The page opens at its end (endRef). */}
+                            {closed && (
+                                <p data-testid="guest-chat-closed" style={{ margin: 0, padding: '0.75rem 0 0', borderTop: '1px solid var(--border-primary)', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center', ...wrap }}>
+                                    {closed}
+                                </p>
+                            )}
                         </>
                     )}
                     {note && <p role="alert" style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', ...wrap }}>{note}</p>}
@@ -278,6 +306,8 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                             {t(W.leave)}
                         </button>
                     )}
+                    {/* Clear of the bottom bar: <main> pads for it, but a scroll into view goes by the scroll margin, not padding. */}
+                    <div ref={endRef} data-testid="guest-chat-end" style={{ scrollMarginBottom: 'var(--bottom-nav-offset)' }} />
                     <ChatConfirmDialog
                         isOpen={askLeave && canLeave}
                         title={t(W.leaveAsk)}

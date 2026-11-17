@@ -1942,6 +1942,18 @@ describe('MessagesPage: a block or an unblock the community did not take is said
         render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
         expect(await screen.findByText(/You have blocked this user/)).toBeInTheDocument();
     });
+
+    it('a blocked DM says so under the lines, never among them: the lines scroll, the words stay in view (deciding review of #3285)', async () => {
+        // The guest and outside chats are pages that scroll whole (GuestChats/OutsideChats render tests); here the lines
+        // scroll in their own box and what closes the chat sits below it, in view whatever the lines have scrolled to.
+        vi.mocked(isUserBlocked).mockReturnValue(true);
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        const banner = (await screen.findByText(/You have blocked this user/)).closest('[role="alert"]') as HTMLElement;
+        const thread = screen.getByTestId('chat-thread');
+        expect(thread.style.overflowY).toBe('auto');
+        expect(thread.contains(banner)).toBe(false);
+        expect(thread.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
 });
 
 describe('MessagesPage: a chat with no picture has one ready-made face, the same in the list and in its header (#2511 review)', () => {

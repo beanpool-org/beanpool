@@ -53,6 +53,7 @@ import { outsideChatStore, clearOutsideChats } from '../lib/outside-chat-store';
 import { doorOpen, reportOutsideLine, sendFromBox, sendOutsideChange } from '../lib/outside-mail';
 import { AddressCardPanel } from './AddressCardPanel';
 import { OutsideChatThread, outsideRoundNow } from './OutsideChats';
+import { outOfView, recordScrolls, stopRecordingScrolls } from '../chat-end-in-view.test-support';
 
 const chatId = relayConversationId(BEN.key, SOL.key);
 
@@ -131,6 +132,33 @@ describe('the chat (OutsideChatThread)', () => {
         expect(await screen.findByTestId('outside-chat-input')).toBeTruthy();
         expect((await here.ctx.store.chat(BEN.key, chatId))?.state).toBe('open');
         expect(onAccepted).toHaveBeenCalledTimes(1);
+    });
+
+    // The deciding review of #3285 (the guest chat's twin is GuestChats.render.test.tsx): this page scrolled its newest line
+    // to the bottom of the screen, so the box, or a request's Accept, sat under it, out of view. Each state -> what must be
+    // in view when the chat opens.
+    describe('opens at its newest line, with what comes after it in view (30 lines)', () => {
+        beforeEach(() => recordScrolls());
+        afterEach(() => stopRecordingScrolls());
+        const newest = () => document.querySelector('[role="log"]')?.lastElementChild ?? null;
+        async function withLines(state: 'request' | 'open' | 'declined') {
+            const at = Date.now() - 100_000;
+            for (let i = 0; i < 30; i++) {
+                await here.ctx.store.writeTheirs(BEN.key, { id: crypto.randomUUID(), chatId, author: SOL.key, text: `Line ${i + 1}`, replyTo: null, at: at + i, sealed: '{}' }, { home: SOL_HOME, name: 'Sol' }, 'request');
+            }
+            if (state !== 'request') await here.ctx.store.decide(BEN.key, chatId, state);
+            render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+            await waitFor(() => expect(document.querySelectorAll('[data-testid="outside-line-theirs"]')).toHaveLength(30));
+        }
+        const ROWS: Array<[string, 'request' | 'open' | 'declined', Array<[string, () => Element | null]>]> = [
+            ['open: the newest line and the box', 'open', [['the newest line', newest], ['the box', () => screen.queryByTestId('outside-chat-input')]]],
+            ['a request: the newest line and Accept', 'request', [['the newest line', newest], ['Accept', () => screen.queryByTestId('outside-request-accept')]]],
+            ['declined: the newest line', 'declined', [['the newest line', newest]]],
+        ];
+        it.each(ROWS)('%s', async (_what, state, must) => {
+            await withLines(state);
+            await waitFor(() => expect(must.map(([name, el]) => outOfView(el(), name)).filter(Boolean)).toEqual([]));
+        });
     });
 });
 

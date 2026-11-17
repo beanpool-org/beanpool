@@ -643,6 +643,9 @@ async function main(): Promise<void> {
             // Every knock tells the owners (a bell and a push): settled before the write is measured, so it is not the write's.
             for (let waited = 0; outside.length === sent && waited < 2000; waited += 10) await settle(10);
             await settle(30);
+            // Its bell put each owner one over the notices a member keeps: trimmed now, so the hygiene timer's trim (every
+            // few minutes, state-engine.ts) never lands inside the write's window as a change to push_notices.
+            tidyNow();
             return id;
         };
         const wrong: string[] = [];

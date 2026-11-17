@@ -13,7 +13,11 @@
  * This guard reads every Alert.alert in the phone app (app, components, utils, services, tools, constants). It follows a
  * title or a message through `?:`, `??` and `||`, and reads a word where it can: a literal, `t('…')`, `tn(n, '…', '…')`, a
  * word constant (`t(W.key)`, from core or this app's own object of words) or a core word function called with nothing.
- * Then:
+ * Since review 6933630856 ("You're in {name}" reached a title through joinedNudgeWords and joinedTitle) it also follows a
+ * helper, up to MAX_FOLLOW deep: what a function returns (this file's, another file's, or core's, read from core's
+ * source), a method of an object of words called with an argument, `x.title` where `const x = helper(…)`, the two
+ * paragraphs of utils/alert-words twoParagraphs, and English written as a template (`You're in ${name}` reads
+ * "You're in {name}"). Then:
  *
  *   1. An Alert that can open with no message (one argument, or a message that can be undefined, null or '') must have a
  *      title it can read, and that title must be in SHORT_TITLE_ONLY with the reason it says enough alone (an options
@@ -22,12 +26,16 @@
  *   3. A title that puts in a value other than a count (a name, an address, a guest line, a link) is in NAMED_TITLES with
  *      why that value stays short, or it moves to the message.
  *   4. A title made from an error or a server's words (`e.message`, `…ErrorWords(e)`, `…FailureWords(e)`) always fails.
+ *   5. No part of an Alert stays English in a language another part of its message is shown in: each word of its title
+ *      and of its message is in the phone's or core's catalog for every language one word of its message is. (Review
+ *      6933630856: the guest Remove's question went English when its key left the phone's catalogs, and its new title
+ *      was a key no catalog has.) A title may be translated where its message isn't yet: a screen not drafted.
  *
  * An entry in either list that no longer matches an Alert fails too, so the lists can't rot.
  *
- * What it cannot see: a title built by a function it can't call (a screen's own helper, a word function that takes an
- * argument), and translations. A title of 30 English characters can be longer in another language; TITLE_MAX leaves some
- * room for that, not all.
+ * What it cannot see: a value it can't follow (a function's parameter, state, a server's answer), which branch an `if`
+ * already ruled out (so whether a message can be empty is read as written, not through a helper), and how long a title
+ * is in another language: TITLE_MAX leaves some room for that, not all.
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
@@ -635,7 +643,7 @@ describe('rule 5 can fail: no part of an Alert stays English beside a translated
             .toEqual([expect.stringMatching(/title "Remove" stays English in 2 language\(s\) its message is shown in \(de, fr\)/)]);
     });
     it("a paragraph of the message whose key left the catalogs (the guest Remove's 'Remove {name}?')", () => {
-        const { 'Remove {name}?': _gone, ...rest } = both;
+        const rest = Object.fromEntries(Object.entries(both).filter(([k]) => k !== 'Remove {name}?'));
         expect(gaps(`${head}Alert.alert(t('Remove'), twoParagraphs(t(W.ask, { name }), t(W.what)), []);`, { de: rest }))
             .toEqual([expect.stringMatching(/message "Remove \{name\}\?" stays English in 1 language\(s\) its message is shown in \(de\)/)]);
     });
@@ -694,11 +702,22 @@ describe('every Alert in the phone app', () => {
         ['app/(tabs)/index.tsx', 'title', 'From your community'],
         ['components/GroupInvitedList.tsx', 'title', 'Something went wrong'],
         ['components/GroupInvitedList.tsx', 'message', 'Could not withdraw the invitation'],
-        ['components/ShowOnGlobalRow.tsx', 'title', 'Global community'],
     ];
     it.each(MOVED)('%s: its %s "%s" is translated in all 24 languages', (file, part, en) => {
         const shown = found.filter((f) => f.key === file).flatMap((f) => worded(f[part])).filter((l) => l.en === en);
         expect(shown.length, `no Alert in ${file} shows "${en}" in its ${part}`).toBeGreaterThan(0);
         for (const l of shown) expect([...langsOf(cats, l.key)].sort(), `${file}: ${l.key}`).toEqual(LANGS);
+    });
+
+    // The titles the guard read for the first time once it followed a helper (review 6933630856's class), each too long
+    // for two lines: none is a title now, and nothing in its file breaks a rule. One row each; each failed on 05047cec.
+    const FOLLOWED: Array<[string, string]> = [
+        ['app/(tabs)/index.tsx', 'An admin answered. Open Invites to read it.'], // core inviteAskNoticeHere: a notice's own title
+        ['components/GroupInvitedList.tsx', 'Could not withdraw the invitation'], // core withdrawWords(p).failed
+        ['components/ShowOnGlobalRow.tsx', 'Also show this on the global community'], // showOnGlobalLabel(), three Alerts
+    ];
+    it.each(FOLLOWED)('%s: "%s" is no Alert\'s title', (file, en) => {
+        expect(found.filter((f) => f.key === file && worded(f.title).some((l) => l.en === en)).map((f) => f.at)).toEqual([]);
+        expect(problems.filter((p) => p.startsWith(`${file}:`))).toEqual([]);
     });
 });

@@ -840,4 +840,36 @@ describe('doors are one-shot and land where they name (round 2)', () => {
         expect(screen.queryAllByTestId('forum-topic-row')).toHaveLength(0);
         expect(keptSearch()?.q).toBe('seeds');
     });
+
+    // #3270 decide (pre-existing): ✕ while a search was out left 🔍 disabled until the dropped answer came back. ✕ ends the
+    // wait at once; the dropped answer, coming back during the member's next search, never ends that search's wait.
+    it('✕ while a search is out makes 🔍 live at once, and the dropped answer never ends the next search\'s wait', async () => {
+        let answerGarden: (a: unknown) => void = () => {};
+        const garden = new Promise((r) => { answerGarden = r; });
+        let answerSeeds: (a: unknown) => void = () => {};
+        const seeds = new Promise((r) => { answerSeeds = r; });
+        node.answer = (c) => (c.path.startsWith('/api/forum/search?q=garden') ? garden : c.path.startsWith('/api/forum/search?q=seeds') ? seeds : standIn(c));
+        render(<ForumPage me={ME} />);
+        const go = () => screen.getByRole('button', { name: 'Search' }) as HTMLButtonElement;
+        // The member's earlier search, its hits showing (and its ✕).
+        await screen.findAllByTestId('forum-topic-row');
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'beans' } });
+        fireEvent.click(go());
+        expect(await screen.findAllByTestId('forum-search-hit')).toHaveLength(1);
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'garden' } });
+        fireEvent.click(go());
+        await waitFor(() => expect(go().disabled).toBe(true));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear the search' }));
+        expect(go().disabled).toBe(false);
+        // The next search, asked while the first is still out: 🔍 waits for its answer, not the dropped one.
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'seeds' } });
+        fireEvent.click(go());
+        await waitFor(() => expect(sent('GET', '/api/forum/search?q=seeds')).toHaveLength(1));
+        expect(go().disabled).toBe(true);
+        await act(async () => { answerGarden({ hits: [hit(3, 'garden beds')], next: null }); await garden; });
+        expect({ waiting: go().disabled, hits: screen.queryAllByTestId('forum-search-hit').length }).toEqual({ waiting: true, hits: 0 });
+        await act(async () => { answerSeeds({ hits: [hit(4, 'seed trays')], next: null }); await seeds; });
+        await waitFor(() => expect(screen.queryAllByTestId('forum-search-hit')).toHaveLength(1));
+        expect({ waiting: go().disabled, topics: screen.queryAllByTestId('forum-topic-row').length, kept: keptSearch()?.q }).toEqual({ waiting: false, topics: 0, kept: 'seeds' });
+    });
 });

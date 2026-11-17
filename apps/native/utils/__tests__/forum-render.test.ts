@@ -493,6 +493,42 @@ describe.each(LOOKS)('the forum list\'s search in %s (%s)', (_name, set) => {
         expect({ hits: allById(host, 'forum-search-hit').length, topics: allById(host, 'forum-topic-row').length }).toEqual({ hits: 1, topics: 0 });
         expect(vi.mocked(searchForum)).toHaveBeenCalledTimes(3);
     });
+
+    // #3270 decide (pre-existing): ✕ while a search is out left the spinner on, and the box took no new search, until the
+    // dropped answer came back. ✕ ends the wait at once; the dropped answer, coming back during the next search, never ends
+    // that search's wait (its spinner stays until its own answer).
+    it('✕ while a search is out ends the wait at once, and the dropped answer never ends the next search\'s wait', async () => {
+        const { searchForum } = await import('../forum-search');
+        const found = { hits: [{ topicId: 't2', sectionId: 'skills', title: 'Seed swap ideas', postId: 'p7', number: 7, writer: writer(ANA, 'Asha'), createdAt: at(2), excerpt: '…swap seeds in spring…' }], next: null };
+        const held = () => {
+            let answer: (page: typeof found) => void = () => {};
+            vi.mocked(searchForum).mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+            return (page: typeof found) => act(async () => { answer(page); await Promise.resolve(); });
+        };
+        const host = await render(set, ForumPane);
+        const waiting = () => ({ spinner: host.querySelectorAll('[data-testid="forum-search"] i:not([data-icon])').length, go: allById(host, 'forum-search-go').length });
+
+        const dropped = held();
+        await typeIn(byId(host, 'forum-search-box'), 'swap seeds');
+        await press(byId(host, 'forum-search-go'));
+        expect(waiting()).toEqual({ spinner: 1, go: 0 });
+        await press(byId(host, 'forum-search-clear'));
+        expect(waiting()).toEqual({ spinner: 0, go: 1 });
+
+        // The member's next search, asked while the first is still out.
+        const next = held();
+        await typeIn(byId(host, 'forum-search-box'), 'seed trays');
+        await press(byId(host, 'forum-search-go'));
+        expect(vi.mocked(searchForum)).toHaveBeenCalledTimes(2);
+        expect(waiting()).toEqual({ spinner: 1, go: 0 });
+        await dropped(found);
+        await act(async () => {});
+        expect({ ...waiting(), hits: allById(host, 'forum-search-hit').length }).toEqual({ spinner: 1, go: 0, hits: 0 });
+        await next(found);
+        await act(async () => {});
+        expect({ ...waiting(), hits: allById(host, 'forum-search-hit').length, topics: allById(host, 'forum-topic-row').length })
+            .toEqual({ spinner: 0, go: 1, hits: 1, topics: 0 });
+    });
 });
 
 describe('the composer stand-in', () => {

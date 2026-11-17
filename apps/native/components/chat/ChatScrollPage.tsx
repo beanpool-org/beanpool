@@ -3,8 +3,8 @@
  * screen's bars and the key card above them, components/chat/DmKeyChangedPane; the About chip over the composer; the rooms
  * are utils/chat-column-fit's). A page cut by its room never hides that it scrolls: its scroll bar stays shown (Android), it
  * flashes once when it first opens taller than its room (iOS has no lasting bar), and the edge with more beyond it fades
- * (Android). A room of 0
- * folds it away until the room comes back. Taps go through with the keyboard up, so a ✕ or Release in it works while typing.
+ * (Android). A room of 0 folds it away until the room comes back. Taps go through with the keyboard up, so a ✕ or Release
+ * in it works while typing.
  * A page anchored at its end (the bars, over the thread) is kept scrolled there whenever its room or its content changes, so
  * what gives way first is its top (the deals strip before the listing's header before the release bar); the key card's page
  * keeps its start, the card's words.

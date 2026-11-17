@@ -12,8 +12,9 @@
  * finding 1). Without the card the bars are a page of their own in the room utils/chat-column-fit gives them (barsRoom): the
  * column less the box, a keyboard up and one line of the thread. They stand whole while they fit, scroll as a page once they
  * are taller (kept at its end, so the deals strip gives way first, then the listing's header, then the release bar; the
- * brief of #3283's fix round), and fold away while the room has none (typing on a small phone; walk of 17 Nov, the market DM at 320 dp and
- * 1.3×: they left the thread 0 dp and pushed the box under the navigation bar, and with the keyboard up behind it).
+ * brief of #3283's fix round), and fold away while the room has none (typing on a small phone; walk of 17 Nov, the market
+ * DM at 320 dp and 1.3×: they left the thread 0 dp and pushed the box under the navigation bar, and with the keyboard up
+ * behind it).
  *
  * The box can't be typed in while the card is up (ChatComposer disabled), so a keyboard still up when the pause starts is
  * put away: with it up the card had only its title (the same walk). Once, and again when the chat comes back in front with

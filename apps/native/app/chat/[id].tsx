@@ -1643,8 +1643,8 @@ function ChatScreen({ id }: { id: string }) {
                 deciding review of 6775428c). The column holds nothing else, so nothing new goes between this and the keyboard
                 view: it goes in here. Keyed on the offered key, so a tick given for one code never carries over to another.
                 Named from the key's member row, never the conversation id. Without the card the bars are a page of their own
-                (barsRoom, chatColumnFit): whole while they fit, scrolling once taller (kept at the end, so the deals strip gives way
-                first), folded away while typing leaves no room,
+                (barsRoom, chatColumnFit): whole while they fit, scrolling once taller (kept at the end, so the deals strip
+                gives way first), folded away while typing leaves no room,
                 so the box and one line of the thread always have theirs (walk of 17 Nov, the market DM at 320 dp and 1.3×). */}
             <DmKeyChangedPane
                 key={keyChange?.offeredPeer ?? 'none'}

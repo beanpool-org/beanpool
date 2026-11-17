@@ -93,7 +93,7 @@ This one slows down anyone guessing a code the server checks, without ever letti
 
 Signing in from the app's Manage button never goes through the brake. A break-glass code is checked only when adding an admin key, even from an address that is waiting (at most once every 10 seconds from one address); anywhere else it is not read at all.
 
-Signing in with Manage, and approving a computer's sign-in from the phone, type no code: the phone's own lock is the proof. A computer's sign-in code lasts 2 minutes. It is cancelled after 5 refused approvals or 3 wrong tries at the two digits.
+Signing in with Manage, and approving a computer's sign-in from the phone, type no code: the phone's own lock is the proof. A computer's sign-in code lasts 2 minutes. It is cancelled after 5 refused approvals or one wrong try at the six digits.
 
 If it keeps happening, someone is guessing a code. The logs name the address by a code, such as ip#k3Jx9QaB7d, never the address itself: the same code means the same address, until the code changes: at the next day (UTC), or when the server restarts. Sign in from the app meanwhile, which the brake never touches. If they are guessing a break-glass code, make a new one (Access and security).
 

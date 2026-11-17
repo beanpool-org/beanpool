@@ -13,11 +13,11 @@ This page is about a server that is already running. To have an assistant set up
 
 ## Connecting from Claude or ChatGPT (owners and admins)
 
-Under Appliance & Data, then Access & Security, **Connected assistants** shows four steps:
+AI assistants are off until an owner turns them on, so first an owner presses **Allow AI assistants** on the card (see Turning AI assistants on and off, below). Under Appliance & Data, then Access & Security, **Connected assistants** shows four steps:
 
 - Copy the address: your server's address with /mcp at the end.
 - In Claude or ChatGPT: Settings, Connectors, **Add custom connector**, and paste it.
-- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), what it will read, and what an owner's assistant does without asking (a backup, and posts if you tick **May post for me** there; it is off unless you do). Its second tick, **May take down posts for me**, lets an owner's or an admin's assistant take posts down (below); it is off unless you tick it too. Scan the code on that page inside the BeanPool app, not with the phone's camera (**Settings** tab → **COMMUNITY ADMIN** → the last row, **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.
+- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), what it will read, and what an owner's assistant does without asking (a backup, and posts if you tick **May post for me** there; it is off unless you do). Its second tick, **May take down posts for me**, lets an owner's or an admin's assistant take posts down (below); it is off unless you tick it too. Tick them **before** you scan: the phone shows your ticks and approves only those, and once it has answered, the page can't change them. Scan the code on that page inside the BeanPool app, not with the phone's camera (**Settings** tab → **COMMUNITY ADMIN** → the last row, **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address and what you ticked. Press **Connect**, pass the phone's unlock, and type the phone's six digits on the page. You get one try: a wrong one ends the request, and you start again from your assistant.
 - Ask it: "what needs me?"
 
 No key or token is shown, and none is stored anywhere you can lose it. The assistant gets a pass that lasts an hour and renews itself; if it isn't used for 30 days, approve it again. It acts as you, with your role: if you stop being an owner or admin, it stops too. Each member can have at most 5 connected this way. Only an owner or an admin can approve one; a moderator's or a member's phone is refused. The phone must be a BeanPool app that can show which assistant is asking: an older one is told to update.
@@ -202,13 +202,13 @@ Each assistant can make 60 calls a minute and 2,000 a day; past either the serve
 
 If the server sees a used pass presented a second time, someone else may hold a copy: it disconnects that assistant at once and tells the owners, as a high alert. Its member can connect it again from their phone. The rule is strict on purpose: Claude and ChatGPT renew their pass from their own servers, one renewal at a time, so they should not trip it. An assistant that sent two renewals at once, or sent one again after its answer was lost, is disconnected the same way, and the alert can then be a false one: connect it again from the phone.
 
-Assistants connected from the phone belong to this server alone: they are never in a backup or a standby's copy, so after a standby takes over, connect them again. The same goes for assistants connected with a token. The switch that turns AI assistants off belongs to the server too: after a take-over they are allowed again until an owner turns them off on the new main server.
+Assistants connected from the phone belong to this server alone: they are never in a backup or a standby's copy, so after a standby takes over, connect them again. The same goes for assistants connected with a token. The switch that turns AI assistants on belongs to the server too: after a take-over they are off on the new main server until an owner turns them on there.
 
 An assistant also stops on its own when its days are up, or when the member it acts for stops being an owner or admin. An owner who becomes an admin keeps theirs, as an admin's assistant (no backups, no posting, and takedowns one post a call if it was ticked for them). If a laptop with a token on it is lost or someone may have copied the token, disconnect that assistant and connect it again.
 
-## Turning AI assistants off
+## Turning AI assistants on and off
 
-AI assistants are allowed unless an owner turns them off: the card's **Turn AI assistants off**. While they are off, no assistant can connect, /mcp and the connecting pages answer nobody (as if they were not there), and an admin's **What it sees** says they are turned off instead of showing answers. Turning them on again lets the assistants still connected back in. Only owners can turn them on or off, and the other owners are told.
+AI assistants are off until an owner turns them on: the card's **Allow AI assistants**. A server updated from an earlier version starts with them off too, unless an owner had pressed that switch to turn them on there before: its connected assistants are refused until an owner turns them on. **Turn AI assistants off** turns them off again. While they are off, no assistant can connect, /mcp and the connecting pages answer nobody (as if they were not there), and an admin's **What it sees** says they are turned off instead of showing answers. Turning them on again lets the assistants still connected back in. Only owners can turn them on or off, and the other owners are told.
 
 ## What the server logs
 

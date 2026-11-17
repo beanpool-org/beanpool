@@ -306,7 +306,8 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                             {t(W.leave)}
                         </button>
                     )}
-                    <div ref={endRef} data-testid="guest-chat-end" />
+                    {/* Clear of the bottom bar: <main> pads for it, but a scroll into view goes by the scroll margin, not padding. */}
+                    <div ref={endRef} data-testid="guest-chat-end" style={{ scrollMarginBottom: 'var(--bottom-nav-offset)' }} />
                     <ChatConfirmDialog
                         isOpen={askLeave && canLeave}
                         title={t(W.leaveAsk)}

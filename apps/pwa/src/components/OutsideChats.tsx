@@ -438,8 +438,9 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                         </form>
                     ) : null}
                     {/* The end of the page, under the box or a request's Accept: the chat opens here, its newest line just above
-                        them (deciding review of #3285: the end sat inside the lines, so the box and Accept were under the screen). */}
-                    <div ref={endRef} data-testid="outside-chat-end" />
+                        them (deciding review of #3285: the end sat inside the lines, so the box and Accept were under the screen).
+                        Clear of the bottom bar: <main> pads for it, but a scroll into view goes by the scroll margin, not padding. */}
+                    <div ref={endRef} data-testid="outside-chat-end" style={{ scrollMarginBottom: 'var(--bottom-nav-offset)' }} />
                 </>
             )}
         </div>

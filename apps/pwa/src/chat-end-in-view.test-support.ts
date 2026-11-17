@@ -6,7 +6,9 @@
  * The model: a thread that scrolls an element into view with `block: 'end'` shows that element at the bottom of the
  * screen and what sits just above it. An element is in view when it comes at or before that last scroll's element and no
  * line of the chat (a child of its role="log") lies between them: only the few controls under the lines can (the box,
- * Leave, a note), never the lines themselves.
+ * Leave, a note), never the lines themselves. In the app the page scrolls in <main>, under the phone-width bottom bar,
+ * which is fixed: <main> pads for it, but a scroll into view goes by the element's scroll margin, never padding, so the
+ * element scrolled to keeps a scroll margin of the bar's height (--bottom-nav-offset), or the end lands under the bar.
  */
 type Scroll = { el: Element; block: ScrollLogicalPosition | undefined };
 
@@ -44,6 +46,7 @@ export function outOfView(must: Element | null, name: string): string | null {
     if (!last) return `${name}: nothing was scrolled into view, so the page opens at its top`;
     const end = last.el;
     if (last.block !== 'end') return `${name}: the last scroll put its element at the ${last.block ?? 'start'} of the screen, not the end`;
+    if (!String((end as HTMLElement).style?.scrollMarginBottom ?? '').includes('--bottom-nav-offset')) return `${name}: the end it scrolled to keeps no room for the bottom bar, so it lands under it`;
     if (!(must === end || end.contains(must) || follows(must, end))) return `${name}: the page scrolled to something above it`;
     const lines = Array.from(document.querySelectorAll('[role="log"] > *'))
         .filter((line) => !line.contains(must) && !line.contains(end) && follows(must, line) && follows(line, end));

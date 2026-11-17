@@ -814,6 +814,14 @@ describe('NAMES (emulator walk 17 Nov, finding a): every author x how this devic
         const due = guestEpochDue(chats[ID], gus.pk);
         expect(due?.recipients).toEqual([ana.pk, gus.pk].sort());
     });
+    it('a roster that differs only in former is the same roster to an epoch made from it (its mark), never one to make another from', () => {
+        const chats = take(chatWith('in'), next, 'a roster notice', NOW);
+        const plain = take(chatWith('in'), { ...next, former: undefined }, 'a roster notice', NOW);
+        const more = take(chatWith('in'), { ...next, former: { members: [asMember(ben), asMember(eve)], guests: [] } }, 'a roster notice', NOW);
+        expect(guestRosterMark(chats[ID].roster)).toBe(guestRosterMark(plain[ID].roster));
+        expect(guestRosterMark(more[ID].roster)).toBe(guestRosterMark(plain[ID].roster));
+        expect(guestRosterMark(take(chatWith('in'), first, 'a roster notice', NOW)[ID].roster)).not.toBe(guestRosterMark(plain[ID].roster));
+    });
     it('a roster with no former (or one that is no list) is taken as before, and a bad name never costs the roster', () => {
         const plain = take(chatWith('in'), first, 'a roster notice', NOW);
         expect(plain[ID].roster?.former).toBeUndefined();

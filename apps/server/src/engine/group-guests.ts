@@ -604,7 +604,9 @@ export const ROSTER_FORMER_MAX = 100;
  * had a line from; a line taken down or a system line names nobody. Names only: none of these keys goes in the roster's
  * `members` or `guests`, the keys an epoch wraps to. The newest writers first, ROSTER_FORMER_MAX at most.
  */
-function formerInChat(groupId: string, since: string, inChat: ReadonlySet<string>): { members: Array<{ key: string; name: string }>; guests: Array<{ key: string; home: string; name: string; state: GuestState }> } {
+function formerInChat(groupId: string, since: string | undefined, inChat: ReadonlySet<string>): { members: Array<{ key: string; name: string }>; guests: Array<{ key: string; home: string; name: string; state: GuestState }> } {
+    // No guest of that home in (never so for a home a roster goes to): no line reached it, so nobody to name.
+    if (!since) return { members: [], guests: [] };
     const writers = db.prepare(`SELECT m.author_pubkey AS key, memb.callsign AS callsign, MAX(m.timestamp) AS last FROM messages m
                                 LEFT JOIN members memb ON memb.public_key = m.author_pubkey
                                 WHERE m.conversation_id = ? AND m.timestamp >= ? AND COALESCE(m.type, 'text') NOT IN ('system', 'removed')

@@ -836,9 +836,12 @@ function sealedEpochOf(line: GuestLine): number | null {
     }
 }
 
-/** A short mark of a roster, to tell whether the roster is still the one an epoch was made from. */
+/**
+ * A short mark of a roster, to tell whether the roster is still the one an epoch was made from. Its `former` (names of
+ * people out of the chat: never a key an epoch wraps to) is left out, so a roster that names one more of them is the same.
+ */
 export function guestRosterMark(roster: GuestRoster | null | undefined): string {
-    return bytesToHex(sha256(utf8ToBytes(JSON.stringify(roster ?? null)))).slice(0, 32);
+    return bytesToHex(sha256(utf8ToBytes(JSON.stringify(roster ? { ...roster, former: undefined } : null)))).slice(0, 32);
 }
 
 function structuredCloneChats(c: GuestChats): GuestChats {

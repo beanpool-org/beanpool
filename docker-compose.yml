@@ -205,10 +205,14 @@ services:
       - FEDERATION_SETTLEMENT=${FEDERATION_SETTLEMENT:-}
       # Proxies whose forwarding headers (CF-Connecting-IP / X-Forwarded-For) name the real client, as comma-separated
       # IPs or CIDRs. EMPTY is right for a server reached through its own .beanpool.org name (the tunnel runs in this
-      # container, on loopback), straight over the internet, or through Cloudflare's proxy. Name a reverse proxy by its
-      # OWN address, never a whole Docker network. `docker-host`: a tunnel (cloudflared) or web server on this machine
-      # that dials localhost:<port>; only with every port above published on 127.0.0.1 ("127.0.0.1:80:8080"), else anyone
-      # reaching a port over IPv6 arrives from the same place and can name any address. See apps/server/src/client-ip.ts.
+      # container, on loopback), straight over the internet, or through Cloudflare's proxy. Name a reverse proxy by an
+      # address only it can have, never a whole Docker network: a proxy in another container can get a different address each
+      # time it starts or is recreated, so pin one (ipv4_address on a network created with a fixed --subnet; beanpool-shared
+      # has none) or run it with network_mode: host. `docker-host`: a tunnel (cloudflared) or web server on this machine
+      # that dials 127.0.0.1:<port>; only with the ports published on 127.0.0.1, else anyone reaching a port over IPv6 or
+      # from another container arrives from the same place and can name any address. Publish them so in
+      # docker-compose.override.yml (`ports: !override`), never in this file: an update replaces this file and opens the
+      # ports again while TRUSTED_PROXIES stays. The operator manual, Rate limits; apps/server/src/client-ip.ts.
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
       # The open door's busy day (apps/server/src/engine/door-signal.ts doorBusy): past this many open-door joins in 24 hours a
       # 12-words join asks at least work level 3. EMPTY = 300; 0 switches it off.

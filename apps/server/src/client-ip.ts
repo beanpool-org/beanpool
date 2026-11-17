@@ -18,11 +18,14 @@
  * Trusted peers, and nothing else (security inventory 17 Nov 2026, risk 5):
  *   - loopback: only a program inside this container (cloudflared run by this server among them) has that source;
  *   - TRUSTED_PROXIES: the operator's own proxies, by their own IPs or CIDRs, comma-separated (a reverse proxy on
- *     another host or in another container);
+ *     another host, or in another container at an address pinned to it: Docker can hand a container a different address
+ *     each time it starts or is recreated, and whoever gets the old one would be believed);
  *   - TRUSTED_PROXIES=docker-host: the machine Docker runs on, through this container's default gateway, for a tunnel
  *     or web server there that dials localhost:<published port>. Only with the ports published on 127.0.0.1: else
  *     whoever reaches a published port over IPv6 (Docker's port proxy hands it on from the gateway) or from a
- *     neighbouring container arrives from there too and could name any address it likes;
+ *     neighbouring container arrives from there too and could name any address it likes. Published so in
+ *     docker-compose.override.yml, which updates keep; an edit to docker-compose.yml goes with the next update, and
+ *     daemon.json's "ip" covers only Docker's default bridge, which this container is not on (the operator manual, Rate limits);
  *   - Cloudflare's published edge ranges — trusted for CF-Connecting-IP only, never for X-Forwarded-For, which
  *     Cloudflare passes through with the client's own entries still in it.
  * Never "any private subnet" of this machine, and never the bridge gateway unless the operator said docker-host: Docker's
@@ -172,9 +175,10 @@ function noteUntrustedForwarder(ip: string): void {
         entry.warned = true;
         // Named by its daily keyed hash, never its address: this goes to stdout, which is Docker's log (log-address.ts).
         // From Docker's bridge gateway it is a tunnel or web server on the host (or anyone Docker's port proxy hands on).
+        // `docker compose up -d`, not a restart: a restart keeps the environment the container was made with.
         const fix = defaultGateways().has(ip)
-            ? `If that is a tunnel (cloudflared) or web server on the machine Docker runs on, publish the server's ports on 127.0.0.1 only and set TRUSTED_PROXIES=${DOCKER_HOST_ENTRY} in the node's .env, then restart`
-            : `If that is your reverse proxy, add its address to TRUSTED_PROXIES in the node's .env and restart`;
+            ? `If that is a tunnel (cloudflared) or web server on the machine Docker runs on, publish the server's ports on 127.0.0.1 only, in docker-compose.override.yml so that updates keep it (never in docker-compose.yml, which an update replaces), set TRUSTED_PROXIES=${DOCKER_HOST_ENTRY} in the node's .env, then run docker compose up -d (the operator manual, Rate limits: Behind a proxy or tunnel of your own)`
+            : `If that is your reverse proxy, add its address to TRUSTED_PROXIES in the node's .env, then run docker compose up -d; a proxy in another container first needs an address that stays its own (the operator manual, Rate limits: Behind a proxy or tunnel of your own)`;
         console.warn(`[client-ip] A peer (${logAddressTag(key)}: its address, hashed with a key that changes daily) sent forwarding headers (X-Forwarded-For or similar) but is not a trusted proxy, so they are ignored and every request through it counts as coming from that one address. ${fix}; until then the members behind it share one set of rate limits and one admin-password brake.`);
     }
 }

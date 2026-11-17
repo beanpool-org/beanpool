@@ -10,15 +10,19 @@
  *      router.stack) is in exactly one of STRANGER_REFUSED (a stranger is refused and changes nothing) or STRANGER_MAY (a
  *      stranger may call it: answered, changing only the tables named there, each with a one-line reason). A write in
  *      neither fails here, so a new one must be sorted into one, with a body in BODIES if BAIT does not reach its data. An
- *      entry the node no longer serves fails too.
+ *      entry the node no longer serves fails too. The writes the code lets a key with no row make on purpose, charged to
+ *      its address (db/writes-by-address.ts admitByAddress), are found in the source: each caller must be in ADDRESS_CAPPED,
+ *      its route on STRANGER_MAY or KNOCKER_MAY with writes_by_address, and reached by the sweep's body.
  *   2. A fresh key. Each write, signed by a key made for that one request (so no per-key limit or spent nonce answers in
  *      its place), with a body that reaches members' things (Alice's offer, event, poll, group, chat lines, trade,
  *      enterprise, crowdfund, Commons decision and project, forum topic, Local knowledge page, invite code, DM; Kim's
- *      request to join) and names the signer wherever a route takes the actor from the body. A refused write is answered
- *      neither as done (2xx) nor with a server error (500), changes no table (every row of every table, hashed, before and
- *      after; node_config key by key; only the BOOKKEEPING ones below are left out, each named with why) and sends nothing
- *      out (no Expo push, no web push, no call to any outside host; mail for another community is a table, so it is
- *      watched with the rest). A STRANGER_MAY write changes only its named tables, and sends out only where it says so.
+ *      request to join) and names the signer wherever a route takes the actor from the body. A refused write, sent that
+ *      body (BAIT, or its own in BODIES), is answered neither as done (2xx) nor with a server error (500), changes no table
+ *      (every row of every table, hashed, before and after; node_config key by key; only the BOOKKEEPING ones below are
+ *      left out, each named with why) and sends nothing out (no Expo push, no web push, no call to any outside host; mail
+ *      for another community is a table, so it is watched with the rest). Where that body never reaches the write, the
+ *      refusal is the body's, not the gate's: section 5's control and OWN_STATE say which bodies do. A STRANGER_MAY write
+ *      is answered as done, changes only its named tables, and sends out only where it says so.
  *   3. A key with an open request to join (a knock, the door every stranger may use): the same sweep, each key knocking
  *      first through the real door. A knock is no membership: it may act on its own request, phone and browser, and
  *      nothing else; Kim's request is still waiting at the end.
@@ -47,10 +51,14 @@ process.env.TIKTOK_CLIENT_SECRET = 'sw-client-secret';
 
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
 import nodeHttp from 'node:http';
 import nodeHttps from 'node:https';
 import { syncBuiltinESMExports } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import { pushLeaveText, signedRequestBytes } from '@beanpool/core';
 import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
@@ -69,9 +77,10 @@ interface May { why: string; tables: string[]; config?: string[]; out?: string }
 const KNOCK_MEASURE = 'knockAnswersNoneSince';
 
 /**
- * The writes a key with no row here may call, each with why. Answered (often as done), but changing nothing beyond its own
- * tables. Doors that need a secret this sweep never holds (an invite code's redeem, a claim code, a re-key code, a verified
- * sign-in, a pairing's confirm digits, a replication token) are in STRANGER_REFUSED: without the secret they change nothing.
+ * The writes a key with no row here may call, each with why. Answered as done (section 2 checks it, so each body reaches
+ * what its route does), but changing nothing beyond its own tables. Doors that need a secret this sweep never holds (an
+ * invite code's redeem, a claim code, a re-key code, a verified sign-in, a pairing's confirm digits, a replication token)
+ * are in STRANGER_REFUSED: without the secret they change nothing.
  */
 const STRANGER_MAY: Record<string, May> = {
     'POST /api/join/knock': { why: 'asking to join is the stranger\'s own door: its request, and the owners and admins told someone is asking',
@@ -86,6 +95,16 @@ const STRANGER_MAY: Record<string, May> = {
     'POST /oauth/revoke': { why: 'an assistant\'s token revoke answers 200 to anything (RFC 7009 §2.2), revoking only a token it is sent', tables: [] },
     'POST /api/funnel-event': { why: 'an onboarding step the phone counts (routes/community.ts): a key, not a membership, one of three allowlisted '
         + 'steps into an anonymous count that keeps no key (M2)', tables: ['onboarding_funnel'] },
+    'DELETE /api/web-push': { why: 'taking the signer\'s own browser off (routes/web-push.ts, its own row only, the same answer whether it had one): '
+        + 'a key with no row has none, so nothing goes', tables: [] },
+    'POST /api/pair/init': { why: 'a browser starting a pairing with a phone (routes/pairing.ts, signed or not): a session held in memory, '
+        + 'which only the phone that scans its code fills', tables: [] },
+    'POST /api/pricing-guide/report': { why: 'a price report, which may be anonymous (the phone sends every one unsigned; https-server.ts '
+        + 'isOptionallySignedWrite): a key with no member row files an anonymous one, capped by address and for the node '
+        + '(db/pricing-guide-db.ts PRICE_REPORT_RULES), never copied to a standby', tables: ['pricing_reports', 'writes_by_address'] },
+    'POST /api/push-tokens/leave/:publicKey': { why: 'a phone\'s leave statement, signed by the key that left it (routes/community.ts): only that '
+        + 'key\'s registration of that phone goes, charged to the address and the node\'s day (state-engine.ts STRANGER_LEAVE_RULES), never '
+        + 'copied to a standby', tables: ['push_token_leaves', 'writes_by_address'] },
 };
 
 /** What a key with an open request to join may also do, beyond STRANGER_MAY: its own request, its phone and its browser. */
@@ -98,6 +117,19 @@ const KNOCKER_MAY: Record<string, May> = {
     'POST /api/web-push': { why: 'its browser, so it hears the answer (web push W1)', tables: ['web_push_subscriptions'] },
     'DELETE /api/web-push': { why: 'taking its own browser off', tables: ['web_push_subscriptions'] },
 };
+
+/**
+ * Every write the code lets a key with no member row make on purpose, charged to the request's address and the node's day
+ * (db/writes-by-address.ts admitByAddress): its kind, where it is called (file and function), the route that reaches it,
+ * and whether a stranger or only a knocking key may. Section 1 reads the callers from the source, so a new one fails until
+ * it is listed here and its route is on STRANGER_MAY or KNOCKER_MAY with writes_by_address; sections 2 and 3 check that
+ * the sweep's body reaches each one (writes_by_address moves), so what it changes is measured, not a 400.
+ */
+const ADDRESS_CAPPED: Array<{ kind: string; at: string; route: string; who: 'stranger' | 'knocker' }> = [
+    { kind: 'push_token', at: 'state-engine.ts admitStrangersToken', route: 'POST /api/push-tokens', who: 'knocker' },
+    { kind: 'push_leave', at: 'state-engine.ts applyPushLeave', route: 'POST /api/push-tokens/leave/:publicKey', who: 'stranger' },
+    { kind: 'price_report', at: 'db/pricing-guide-db.ts submitPricingReport', route: 'POST /api/pricing-guide/report', who: 'stranger' },
+];
 
 /** Every other write: a stranger, with or without an open request to join, is refused and changes nothing. */
 const STRANGER_REFUSED = new Set<string>([
@@ -112,7 +144,7 @@ const STRANGER_REFUSED = new Set<string>([
     'DELETE /api/pricing-guide/admin/item/:id', 'DELETE /api/recovery/community-copy', 'DELETE /api/recovery/shares',
     'DELETE /api/recovery/shares/sso/:provider', 'DELETE /api/tools/:tool', 'DELETE /api/treasury/:treasury/backing',
     'DELETE /api/treasury/:treasury/location', 'DELETE /api/treasury/:treasury/pledge',
-    'DELETE /api/treasury/:treasury/thread/message/:messageId', 'DELETE /api/treasury/:treasury/tools/:tool', 'DELETE /api/web-push',
+    'DELETE /api/treasury/:treasury/thread/message/:messageId', 'DELETE /api/treasury/:treasury/tools/:tool',
     'DELETE /mcp', 'PATCH /api/groups/:id', 'PATCH /api/groups/:id/members/:pubkey', 'POST /api/admin/check-update', 'POST /api/admin/reports',
     'POST /api/admin/seed-invite', 'POST /api/admin/thresholds', 'POST /api/admin/thresholds/get', 'POST /api/bills',
     'POST /api/bills/:id/decline', 'POST /api/bills/:id/pay', 'POST /api/bills/:id/withdraw', 'POST /api/blocks', 'POST /api/blocks/clear',
@@ -236,11 +268,11 @@ const STRANGER_REFUSED = new Set<string>([
     'POST /api/names/step-back', 'POST /api/names/vouchers', 'POST /api/names/vouchers/:member/budget', 'POST /api/names/vouchers/settings',
     'POST /api/node-admin/break-glass', 'POST /api/node/check', 'POST /api/node/owner/lights-out', 'POST /api/node/owner/lock-open-check',
     'POST /api/node/owner/words-check', 'POST /api/notices/push/seen', 'POST /api/notices/seen', 'POST /api/pair/cancel',
-    'POST /api/pair/collect', 'POST /api/pair/confirm', 'POST /api/pair/init', 'POST /api/pair/offer', 'POST /api/pair/saved',
+    'POST /api/pair/collect', 'POST /api/pair/confirm', 'POST /api/pair/offer', 'POST /api/pair/saved',
     'POST /api/pair/send', 'POST /api/pair/transfer', 'POST /api/peek', 'POST /api/peek/stop', 'POST /api/pricing-guide/admin/aggregate',
     'POST /api/pricing-guide/admin/config', 'POST /api/pricing-guide/admin/item', 'POST /api/pricing-guide/admin/pin',
-    'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'POST /api/pricing-guide/reports/:id/status',
-    'POST /api/profile/update', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey', 'POST /api/ratings',
+    'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/reports/:id/status',
+    'POST /api/profile/update', 'POST /api/push-tokens', 'POST /api/ratings',
     'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments', 'POST /api/recovery/collect/hub',
     'POST /api/recovery/collect/mine', 'POST /api/recovery/collect/status', 'POST /api/recovery/community-copy',
     'POST /api/recovery/community-copy/half', 'POST /api/recovery/community-copy/status', 'POST /api/recovery/find',
@@ -552,6 +584,9 @@ async function main(): Promise<void> {
     const invite = await call('POST', alice, '/api/invite/generate', { publicKey: alice.pk });
     const inviteCode = invite.body?.invite?.code as string;
     if (!inviteCode) throw new Error(`setup: Alice's invite was answered ${show(invite)}`);
+    // An item of the price guide, which every node seeds at boot (db/pricing-guide-db.ts seedPricingGuideIfEmpty).
+    const priceItem = (db.prepare('SELECT id FROM pricing_guide_items ORDER BY id LIMIT 1').get() as { id: string } | undefined)?.id;
+    if (!priceItem) throw new Error('setup: the price guide has no items');
     await settle(200);
 
     // ── 1. the writes, and the two lists ─────────────────────────────────────────────────────────────
@@ -568,6 +603,34 @@ async function main(): Promise<void> {
     assert(gone.length === 0, `every listed write is one the node serves${gone.length ? ` — not served: ${gone.join(', ')}` : ''}`);
     console.log(`  (${STRANGER_REFUSED.size} refused to a stranger, ${Object.keys(STRANGER_MAY).length} a stranger may call; `
         + `a key with an open request to join may also call ${Object.keys(KNOCKER_MAY).filter(r => !(r in STRANGER_MAY)).length} more)`);
+    {
+        // The writes the code lets a key with no row make on purpose: every call of admitByAddress in the server's code (its
+        // own definition aside), by the kind it names and the function it sits in. A fourth fails here until it is listed.
+        const src = path.dirname(fileURLToPath(import.meta.url));
+        const found: string[] = [];
+        const walk = (dir: string) => {
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+                const f = path.join(dir, e.name);
+                if (e.isDirectory()) { if (e.name !== 'node_modules' && e.name !== '__tests__') walk(f); continue; }
+                if (!/\.ts$/.test(e.name) || /^test-|\.test\.ts$/.test(e.name)) continue;
+                const text = fs.readFileSync(f, 'utf8');
+                for (const m of text.matchAll(/\badmitByAddress\(([^)]*)/g)) {
+                    if (/^\s*kind\s*:/.test(m[1])) continue; // the definition, db/writes-by-address.ts
+                    const kind = /^\s*'([a-z_]+)'/.exec(m[1])?.[1] ?? `(a kind not written out: ${m[1].trim().slice(0, 40)})`;
+                    const fn = [...text.slice(0, m.index).matchAll(/\bfunction\s+([A-Za-z0-9_]+)\s*\(/g)].pop()?.[1] ?? '(outside a function)';
+                    found.push(`${kind} at ${path.relative(src, f).split(path.sep).join('/')} ${fn}`);
+                }
+            }
+        };
+        walk(src);
+        const listed = ADDRESS_CAPPED.map(a => `${a.kind} at ${a.at}`);
+        assert(JSON.stringify([...found].sort()) === JSON.stringify([...listed].sort()),
+            `the code's calls of admitByAddress are the ${listed.length} in ADDRESS_CAPPED and no others (found ${found.length}: ${found.join('; ')})`);
+        const offList = ADDRESS_CAPPED.filter(a => !(a.who === 'stranger' ? STRANGER_MAY : KNOCKER_MAY)[a.route]?.tables.includes('writes_by_address'))
+            .map(a => `${a.route} (${a.who === 'stranger' ? 'STRANGER_MAY' : 'KNOCKER_MAY'})`);
+        assert(offList.length === 0, `each of their routes is on STRANGER_MAY or KNOCKER_MAY, with writes_by_address among its tables`
+            + `${offList.length ? ` — not: ${offList.join(', ')}` : ''}`);
+    }
 
     const ID_BY_PREFIX: Array<[RegExp, string]> = [
         [/^\/api\/groups\//, club.id], [/^\/api\/marketplace\/posts\/:id\/chat/, event.id], [/^\/api\/marketplace\/posts\/:id\/vote/, poll.id],
@@ -613,6 +676,17 @@ async function main(): Promise<void> {
             token: 'ExponentPushToken[swept]', platform: 'android', preferences: { chat: true },
             touches: 'member', effect: 'suspend', photos: [TINY_PNG],
         };
+    };
+    /** A phone's leave statement, as the app signs one when an account leaves it: `x` no longer wants this token here. */
+    const leaveStatement = (x: Id) => {
+        const token = 'ExponentPushToken[swept-leave]';
+        const leftAt = Date.now();
+        const text = pushLeaveText(signedForHost(), x.pk, token, leftAt);
+        return { token, leftAt, signedFor: signedForHost(), signature: crypto.sign(null, signedRequestBytes(text), x.priv).toString('base64') };
+    };
+    /** A write's own path, where the route's key names the signer itself (materialise names Alice). */
+    const PATHS: Record<string, (signer: Id) => string> = {
+        'POST /api/push-tokens/leave/:publicKey': (x) => `/api/push-tokens/leave/${x.pk}`,
     };
     /** A write's own body, where BAIT won't reach the part of it a stranger would want. */
     const BODIES: Record<string, (signer: Id) => Record<string, unknown>> = {
@@ -661,6 +735,17 @@ async function main(): Promise<void> {
         'POST /api/members/preferences': (x) => ({ publicKey: x.pk, preferences: { notify_chat: false } }),
         // An onboarding step the phone counts.
         'POST /api/funnel-event': () => ({ event: 'guide_complete', variant: 'sw' }),
+        // A price report on an item of the guide, as the phone sends one (BAIT names no item of the guide and no report type).
+        'POST /api/pricing-guide/report': () => ({ itemId: priceItem, reportType: 'too_high' }),
+        // The signer's own leave statement for a phone's token, presented at its own key's path (PATHS), as a phone presents one.
+        'POST /api/push-tokens/leave/:publicKey': (x) => leaveStatement(x),
+        // A browser opening a pairing, as the web app opens one.
+        'POST /api/pair/init': () => ({ sessionId: crypto.randomBytes(16).toString('hex'), desktopPubHex: crypto.randomBytes(32).toString('hex') }),
+        // A browser taken off by the id its subscription was given (BAIT has no id, so it never reached the removal).
+        'DELETE /api/web-push': () => ({ subId: 'ab'.repeat(32) }),
+        // The open door's work, as a joining phone asks for it. The door is a profile's switch (routes/open-join.ts doorOpen),
+        // off on a local node, so every key is told the community is invite-only (404): refused, here, before the door.
+        'POST /api/join/work': () => ({ door: 'words' }),
         // ── the signer's own things (OWN_STATE): bodies that reach each write, so Alice's changes something ──
         // Bob added as a friend, then taken off again.
         'POST /api/friends/add': () => ({ friendPubkey: bob.pk }),
@@ -691,7 +776,7 @@ async function main(): Promise<void> {
         // One tap, no words (a body that says anything is refused before the engine is asked).
         'POST /api/vouchers/ask': () => ({}),
     };
-    const unservedBodies = Object.keys(BODIES).filter(r => !writes.includes(r));
+    const unservedBodies = [...Object.keys(BODIES), ...Object.keys(PATHS)].filter(r => !writes.includes(r));
     assert(unservedBodies.length === 0, `every body written for a route is for one the node serves, so none goes unsent${unservedBodies.length ? ` — not served: ${unservedBodies.join(', ')}` : ''}`);
 
     // ── the tables ───────────────────────────────────────────────────────────────────────────────────
@@ -743,11 +828,20 @@ async function main(): Promise<void> {
         resetLimits();
         const before = snapshot(withoutStamp);
         const sent = outside.length;
-        const r = await call(method, signer, materialise(routePath), body);
+        const r = await call(method, signer, PATHS[route]?.(signer) ?? materialise(routePath), body);
         await settle();
         const after = snapshot(withoutStamp);
         return { r, changed: changedTables(before, after), config: differing(before, after).filter(t => t.startsWith('node_config.')), left: outside.slice(sent) };
     };
+    type Measured = Awaited<ReturnType<typeof measure>>;
+    /** The address-charged writes (ADDRESS_CAPPED) whose measured call did not reach the count, each with its answer. */
+    const notCounted = (which: typeof ADDRESS_CAPPED, got: Map<string, Measured>) => which
+        .filter(a => !got.get(a.route)?.changed.includes('writes_by_address'))
+        .map(a => `${a.route} (${got.has(a.route) ? show(got.get(a.route)!.r) : 'not swept'})`);
+    /** The routes among `which` whose measured call was not answered as done (2xx), each with its answer. */
+    const notDone = (which: string[], got: Map<string, Measured>) => which
+        .filter(r => !(got.get(r) && got.get(r)!.r.status >= 200 && got.get(r)!.r.status < 300))
+        .map(r => `${r} (${got.has(r) ? show(got.get(r)!.r) : 'not swept'})`);
     /** What is wrong with one write's outcome, if anything, given what this signer may do on that route. */
     const verdict = (route: string, m: Awaited<ReturnType<typeof measure>>, allowed: May | undefined): string | null => {
         const problems: string[] = [];
@@ -770,15 +864,23 @@ async function main(): Promise<void> {
     {
         const wrong: string[] = [];
         const tally: Record<string, number> = {};
+        const got = new Map<string, Measured>();
         for (const route of writes) {
             const m = await measure(route, newId());
             tally[m.r.status] = (tally[m.r.status] ?? 0) + 1;
+            got.set(route, m);
             const v = verdict(route, m, STRANGER_MAY[route]);
             if (v) wrong.push(v);
         }
         assert(wrong.length === 0, `a fresh key's ${writes.length} writes: each refused one is not answered as done, changes no table, sends `
             + `nothing and is no server error; each it may call changes only its own tables${wrong.length ? `; ${wrong.length} did not:\n    ${wrong.join('\n    ')}` : ''}`);
         console.log(`  (answers by status: ${Object.entries(tally).map(([k, v]) => `${k}×${v}`).join(', ')})`);
+        const unanswered = notDone(Object.keys(STRANGER_MAY), got);
+        assert(unanswered.length === 0, `each of the ${Object.keys(STRANGER_MAY).length} writes a stranger may call is answered as done: its body reaches `
+            + `what the route does, so "changes only its own tables" was measured where it writes${unanswered.length ? ` — not: ${unanswered.join(', ')}` : ''}`);
+        const missed = notCounted(ADDRESS_CAPPED.filter(a => a.who === 'stranger'), got);
+        assert(missed.length === 0, `its body reaches each write a stranger may make charged to its address, so what those change was measured `
+            + `(writes_by_address moved)${missed.length ? ` — not reached: ${missed.join(', ')}` : ''}`);
     }
 
     // ── 3. a key with an open request to join ──────────────────────────────────────────────────────────
@@ -802,9 +904,11 @@ async function main(): Promise<void> {
             return id;
         };
         const wrong: string[] = [];
+        const got = new Map<string, Measured>();
         for (const route of writes) {
             const id = await knocker();
             const m = await measure(route, id);
+            got.set(route, m);
             const v = verdict(route, m, KNOCKER_MAY[route] ?? STRANGER_MAY[route]);
             if (v) wrong.push(v);
             // Its request goes once measured, so the node's limit on open requests is never what answers the next one, and
@@ -814,6 +918,16 @@ async function main(): Promise<void> {
         }
         assert(wrong.length === 0, `a knocking key's ${writes.length} writes: the same, with its own request, phone and browser added`
             + `${wrong.length ? `; ${wrong.length} did not:\n    ${wrong.join('\n    ')}` : ''}`);
+        // Asking again while its request is open is answered as the request stands (409 knock_open), and changes nothing.
+        const again = 'POST /api/join/knock';
+        const mayCall = [...new Set([...Object.keys(STRANGER_MAY), ...Object.keys(KNOCKER_MAY)])].filter(r => r !== again);
+        const unanswered = notDone(mayCall, got);
+        assert(unanswered.length === 0 && got.get(again)?.r.body?.code === 'knock_open', `each of the ${mayCall.length} other writes it may call is `
+            + `answered as done, so what they change was measured where they write, and asking again is told its request is open `
+            + `(${got.has(again) ? show(got.get(again)!.r) : 'not swept'})${unanswered.length ? ` — not: ${unanswered.join(', ')}` : ''}`);
+        const missed = notCounted(ADDRESS_CAPPED, got);
+        assert(missed.length === 0, `its body reaches each of the ${ADDRESS_CAPPED.length} writes charged to its address (its phone among them), so what `
+            + `those change was measured (writes_by_address moved)${missed.length ? ` — not reached: ${missed.join(', ')}` : ''}`);
         const kimStill = db.prepare('SELECT status FROM join_requests WHERE id = ?').get(kimKnockId) as { status: string } | undefined;
         assert(kimStill?.status === 'pending', `Kim's request to join is still waiting for a member's answer (${kimStill?.status})`);
     }
@@ -865,8 +979,8 @@ async function main(): Promise<void> {
         }
         console.log(`  (Alice's same body changed something or called out on ${reached.length} writes, `
             + `${reached.filter(r => STRANGER_REFUSED.has(r)).length} of them refused to a stranger: ${reached.join(', ')})`);
-        // 59 when this suite was written, 76 once OWN_STATE had its bodies (18 Nov 2026); the floor leaves room for routes that
-        // change, not for bodies that miss.
+        // 59 when this suite was written, 76 once OWN_STATE had its bodies, 78 once the price report and the leave statement had
+        // theirs (18 Nov 2026); the floor leaves room for routes that change, not for bodies that miss.
         assert(reached.length >= 45, `the member the bodies name, signing them, changes something on ${reached.length} of the ${writes.length} writes `
             + '(at least 45): the bodies reach real data');
         for (const must of ['POST /api/marketplace/posts/pause', 'POST /api/marketplace/posts/resume', 'POST /api/marketplace/posts/update',

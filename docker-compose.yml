@@ -203,10 +203,12 @@ services:
       # that one back off still finishes trades already in flight (federation-settlement.ts).
       - ENABLE_PEER_CONNECTORS=${ENABLE_PEER_CONNECTORS:-}
       - FEDERATION_SETTLEMENT=${FEDERATION_SETTLEMENT:-}
-      # Extra proxies whose forwarding headers (CF-Connecting-IP / X-Forwarded-For) name the real client, as
-      # comma-separated IPs or CIDRs. EMPTY is right for almost every node: loopback, the docker networks this
-      # container is on (where cloudflared connects from) and Cloudflare's edge are trusted already. Only for a
-      # reverse proxy on ANOTHER host. See apps/server/src/client-ip.ts.
+      # Proxies whose forwarding headers (CF-Connecting-IP / X-Forwarded-For) name the real client, as comma-separated
+      # IPs or CIDRs. EMPTY is right for a server reached through its own .beanpool.org name (the tunnel runs in this
+      # container, on loopback), straight over the internet, or through Cloudflare's proxy. Name a reverse proxy by its
+      # OWN address, never a whole Docker network. `docker-host`: a tunnel (cloudflared) or web server on this machine
+      # that dials localhost:<port>; only with every port above published on 127.0.0.1 ("127.0.0.1:80:8080"), else anyone
+      # reaching a port over IPv6 arrives from the same place and can name any address. See apps/server/src/client-ip.ts.
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
       # The open door's busy day (apps/server/src/engine/door-signal.ts doorBusy): past this many open-door joins in 24 hours a
       # 12-words join asks at least work level 3. EMPTY = 300; 0 switches it off.

@@ -565,7 +565,7 @@ async function main(): Promise<void> {
             `…its 10 all opened: its next → 429, and another address still registers (${show(twelfth)}; ${otherAddress.status})`);
 
         // Finding 6: no public address: X-Forwarded-Host is believed only from our own proxy.
-        setTrustConfigForTests({ loopback: false, localSubnets: false });
+        setTrustConfigForTests({ loopback: false });
         const asForged = await call('GET', '/.well-known/oauth-authorization-server', { headers: { 'X-Forwarded-Host': 'evil.example' } });
         const prmForged = await call('GET', '/.well-known/oauth-protected-resource/mcp', { headers: { 'X-Forwarded-Host': 'evil.example' } });
         setTrustConfigForTests(undefined);

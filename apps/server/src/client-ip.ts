@@ -2,9 +2,10 @@
  * The address of the person on the other end of a request — what every IP-keyed limiter must key on.
  *
  * A node sees requests arrive three ways:
- *   - Tunnel mode: cloudflared (a sidecar container on the compose network) opens every connection, so the
- *     socket peer is the cloudflared container for the whole community. The member's address is in
- *     CF-Connecting-IP, which Cloudflare's edge sets and overwrites (a client cannot choose it).
+ *   - Tunnel mode: cloudflared opens every connection, so the socket peer is cloudflared for the whole community:
+ *     loopback when the server runs it in this container (services/tunnel-connector.ts, every .beanpool.org name the
+ *     registrar gives), or Docker's bridge gateway when it runs on the host and dials localhost:<published port>. The
+ *     member's address is in CF-Connecting-IP, which Cloudflare's edge sets and overwrites (a client cannot choose it).
  *   - Direct mode behind Cloudflare's proxy (the registrar creates proxied A records): the socket peer is a
  *     Cloudflare edge address, shared by everyone near the same data centre. Again CF-Connecting-IP names the member.
  *   - Truly direct (LAN node, or someone reaching the origin IP): the socket peer IS the client.
@@ -14,19 +15,23 @@
  * never be throttled. Koa's `ctx.ip` under `app.proxy = true` is the leftmost X-Forwarded-For from ANY peer,
  * so it must never feed a limiter.
  *
- * Trusted peers:
- *   - loopback;
- *   - the subnets this machine's own private interfaces are on. In a container these are the docker networks
- *     (the compose network cloudflared lives on, and its gateway, where a host-level cloudflared arrives from);
- *     on a bare LAN host it is the LAN;
- *   - TRUSTED_PROXIES: extra IPs or CIDRs, comma-separated (e.g. a reverse proxy on another host);
+ * Trusted peers, and nothing else (security inventory 17 Nov 2026, risk 5):
+ *   - loopback: only a program inside this container (cloudflared run by this server among them) has that source;
+ *   - TRUSTED_PROXIES: the operator's own proxies, by their own IPs or CIDRs, comma-separated (a reverse proxy on
+ *     another host or in another container);
+ *   - TRUSTED_PROXIES=docker-host: the machine Docker runs on, through this container's default gateway, for a tunnel
+ *     or web server there that dials localhost:<published port>. Only with the ports published on 127.0.0.1: else
+ *     whoever reaches a published port over IPv6 (Docker's port proxy hands it on from the gateway) or from a
+ *     neighbouring container arrives from there too and could name any address it likes;
  *   - Cloudflare's published edge ranges — trusted for CF-Connecting-IP only, never for X-Forwarded-For, which
  *     Cloudflare passes through with the client's own entries still in it.
+ * Never "any private subnet" of this machine, and never the bridge gateway unless the operator said docker-host: Docker's
+ * port proxy hands on an IPv6 visitor from the gateway, and a neighbour on beanpool-shared is on a private subnet.
  */
 import net from 'node:net';
-import os from 'node:os';
 import type Koa from 'koa';
 import { logAddressTag } from './log-address.js';
+import { defaultGateways } from './default-gateways.js';
 
 // https://www.cloudflare.com/ips-v4 and /ips-v6, fetched 2026-09-19.
 const CLOUDFLARE_V4 = [
@@ -77,20 +82,24 @@ function inList(list: net.BlockList, ip: string): boolean {
 
 export interface TrustConfig {
     loopback: boolean;
-    localSubnets: boolean;
     cloudflare: boolean;
+    /** TRUSTED_PROXIES=docker-host: this container's default gateway, the machine Docker runs on (above). */
+    dockerHost: boolean;
     extra: string[];
 }
 
+/** The TRUSTED_PROXIES word for the machine Docker runs on (above). */
+export const DOCKER_HOST_ENTRY = 'docker-host';
+
 function defaultTrustConfig(): TrustConfig {
-    const extra = (process.env.TRUSTED_PROXIES || '').split(',').map(s => s.trim()).filter(Boolean);
-    return { loopback: true, localSubnets: true, cloudflare: true, extra };
+    const entries = (process.env.TRUSTED_PROXIES || '').split(',').map(s => s.trim()).filter(Boolean);
+    const dockerHost = entries.some(e => e.toLowerCase() === DOCKER_HOST_ENTRY);
+    const extra = entries.filter(e => e.toLowerCase() !== DOCKER_HOST_ENTRY);
+    return { loopback: true, cloudflare: true, dockerHost, extra };
 }
 
 let trustConfig: TrustConfig = defaultTrustConfig();
 let localProxies: net.BlockList | null = null;
-let localProxiesBuiltAt = 0;
-const LOCAL_REFRESH_MS = 5 * 60_000; // docker networks can be attached after start
 
 function isPrivate(ip: string): boolean {
     if (net.isIPv4(ip)) {
@@ -106,34 +115,24 @@ function buildLocalProxies(): net.BlockList {
         list.addSubnet('127.0.0.0', 8, 'ipv4');
         list.addAddress('::1', 'ipv6');
     }
-    if (trustConfig.localSubnets) {
-        for (const addrs of Object.values(os.networkInterfaces())) {
-            for (const i of addrs || []) {
-                // A public interface's subnet is the internet's neighbourhood, not our proxy.
-                if (i.internal || !i.cidr || !isPrivate(normalizeIp(i.address))) continue;
-                addCidr(list, i.cidr);
-            }
-        }
-    }
     for (const e of trustConfig.extra) {
-        if (!addCidr(list, e)) console.warn(`[client-ip] ignoring TRUSTED_PROXIES entry "${e}" (not an IP or CIDR)`);
+        if (!addCidr(list, e)) console.warn(`[client-ip] ignoring TRUSTED_PROXIES entry "${e}" (not an IP, a CIDR or ${DOCKER_HOST_ENTRY})`);
     }
     return list;
 }
 
 function localProxyList(): net.BlockList {
-    const now = Date.now();
-    if (!localProxies || now - localProxiesBuiltAt > LOCAL_REFRESH_MS) {
-        localProxies = buildLocalProxies();
-        localProxiesBuiltAt = now;
-    }
+    if (!localProxies) localProxies = buildLocalProxies();
     return localProxies;
 }
 
-/** A peer whose CF-Connecting-IP and X-Forwarded-For are believed. */
+/** A peer whose CF-Connecting-IP and X-Forwarded-For are believed: loopback, TRUSTED_PROXIES, and with docker-host the
+ *  default gateway (read as default-gateways.ts reads it, so a network attached after the start counts). */
 export function isTrustedProxy(peer: string | undefined): boolean {
     const ip = normalizeIp(peer);
-    return !!ip && inList(localProxyList(), ip);
+    if (!ip) return false;
+    if (inList(localProxyList(), ip)) return true;
+    return trustConfig.dockerHost && net.isIPv4(ip) && defaultGateways().has(ip);
 }
 
 function isCloudflareEdge(ip: string): boolean {
@@ -172,7 +171,11 @@ function noteUntrustedForwarder(ip: string): void {
         lastForwarderWarning = now;
         entry.warned = true;
         // Named by its daily keyed hash, never its address: this goes to stdout, which is Docker's log (log-address.ts).
-        console.warn(`[client-ip] A peer (${logAddressTag(key)}: its address, hashed with a key that changes daily) sent forwarding headers (X-Forwarded-For or similar) but is not a trusted proxy, so they are ignored and every request through it counts as coming from that one address. If that is your reverse proxy, add its address to TRUSTED_PROXIES in the node's .env and restart; until then the members behind it share one set of rate limits and one admin-password brake.`);
+        // From Docker's bridge gateway it is a tunnel or web server on the host (or anyone Docker's port proxy hands on).
+        const fix = defaultGateways().has(ip)
+            ? `If that is a tunnel (cloudflared) or web server on the machine Docker runs on, publish the server's ports on 127.0.0.1 only and set TRUSTED_PROXIES=${DOCKER_HOST_ENTRY} in the node's .env, then restart`
+            : `If that is your reverse proxy, add its address to TRUSTED_PROXIES in the node's .env and restart`;
+        console.warn(`[client-ip] A peer (${logAddressTag(key)}: its address, hashed with a key that changes daily) sent forwarding headers (X-Forwarded-For or similar) but is not a trusted proxy, so they are ignored and every request through it counts as coming from that one address. ${fix}; until then the members behind it share one set of rate limits and one admin-password brake.`);
     }
 }
 

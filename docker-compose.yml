@@ -208,7 +208,7 @@ services:
       # container, on loopback), straight over the internet, or through Cloudflare's proxy. Name a reverse proxy by an
       # address only it can have, never a whole Docker network: a proxy in another container can get a different address each
       # time it starts or is recreated, so pin one (ipv4_address on a network created with a fixed --subnet; beanpool-shared
-      # has none) or run it with network_mode: host. `docker-host`: a tunnel (cloudflared) or web server on this machine
+      # has none) or run it on the host's own network (the manual). `docker-host`: a tunnel (cloudflared) or web server on this machine
       # that dials 127.0.0.1:<port>; only with the ports published on 127.0.0.1, else anyone reaching a port over IPv6 or
       # from another container arrives from the same place and can name any address. Publish them so in
       # docker-compose.override.yml (`ports: !override`), never in this file: an update replaces this file and opens the

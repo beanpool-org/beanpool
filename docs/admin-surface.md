@@ -263,7 +263,9 @@ liked. We found this on the test node on 2026-09-19. It was replaced by this bra
   it logs a warning naming `TRUSTED_PROXIES`, and that source's wait is **capped at 10 minutes** instead of an
   hour. The fix is to add the proxy's address to `TRUSTED_PROXIES` in `.env` and restart. The restart also
   clears the brake. A lone guesser can send such a header to get the lower cap too, but that only gains it six
-  checks an hour instead of one. Our own nodes aren't affected, because they resolve `CF-Connecting-IP` (#935).
+  checks an hour instead of one. A node whose tunnel runs inside it resolves `CF-Connecting-IP` from loopback (#935); a
+  tunnel on the host arrives from Docker's gateway, which is believed only with `TRUSTED_PROXIES=docker-host` and the
+  ports published on 127.0.0.1 (security inventory 17 Nov 2026, risk 5).
 - Memory is bounded: at most 100,000 sources and 100,000 blocks. When full, the one that failed longest ago is
   dropped, and that costs about a microsecond, not a rescan.
 - Parallel guesses from one source are checked one at a time, so a burst can't all pass the gate before the first
@@ -325,7 +327,7 @@ section.
 > If it keeps closing, someone is guessing your password. Sign in from the app meanwhile, and make sure the
 > password is long and not used anywhere else.
 >
-> **Behind a proxy on another machine.** If you haven't listed that proxy in `TRUSTED_PROXIES` in `.env`, your
+> **Behind a proxy of your own.** If you haven't listed that proxy in `TRUSTED_PROXIES` in `.env` (on the same machine: `docker-host`), your
 > server sees every member as the proxy's address. Then a few wrong passwords from anyone make everyone wait,
 > for up to 10 minutes. The log says so and names `TRUSTED_PROXIES`. Add the proxy's address there and restart
 > the server. The restart also clears the brake.

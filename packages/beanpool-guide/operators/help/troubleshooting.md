@@ -26,7 +26,7 @@ Run it again: a data folder it had moved out of the way is put back before the s
 
 - Read the message: it names the limit. See Rate limits.
 - Many people joining at once from one wifi can hit the sign-in limit. It clears within a minute.
-- If everyone hits the gateway limit at once, your server may think every member has the same internet address. That happens behind a proxy on another machine: set TRUSTED_PROXIES.
+- If everyone hits the gateway limit at once, your server may think every member has the same internet address. That happens behind a proxy or tunnel of your own: set TRUSTED_PROXIES (see Rate limits).
 - A restart clears every count, if you need it right now.
 
 ## The disk is full

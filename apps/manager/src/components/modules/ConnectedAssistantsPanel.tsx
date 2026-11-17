@@ -546,12 +546,12 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'token' 
                             </p>
                         </div>
                     )}
-                    {/* The owner switch (design pick 5: on, inert until someone connects; an owner can turn it off). */}
+                    {/* The owner switch: OFF until an owner turns it on (security inventory risk 3, 18 Nov; it was on by default). */}
                     <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-switch">
                         <p className="text-xs text-white m-0 break-words">
                             {data.allowed
                                 ? 'AI assistants may connect to this server.'
-                                : 'AI assistants are turned off on this server: none can connect, and connected ones are refused.'}
+                                : 'AI assistants are turned off on this server until an owner turns them on: none can connect, and connected ones are refused.'}
                         </p>
                         {isOwner ? (
                             <button

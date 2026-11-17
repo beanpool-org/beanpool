@@ -18,7 +18,8 @@ import {
  *
  * Shows the QR, the short code to compare with the phone, and a countdown; waits for the phone; a new code comes
  * by itself when one runs out (up to AUTO_RENEWALS times, so a forgotten tab stops asking the node), or on
- * "New code". When the phone shows two digits (a newer app), the card asks for them; only the right digits sign in.
+ * "New code". When the phone shows its six digits, the card asks for them; only the right digits sign in, and one wrong try
+ * ends that code: the card starts a new one and says why (security inventory risk 2).
  */
 
 /** Ten minutes of fresh codes for an unattended page, then it waits for a click. */
@@ -47,7 +48,7 @@ export function PhoneSignIn({ onSignedIn }: PhoneSignInProps) {
     signedIn.current = onSignedIn;
     const [digits, setDigits] = useState('');
 
-    const newCode = useCallback(async (auto: boolean) => {
+    const newCode = useCallback(async (auto: boolean, why: string | null = null) => {
         const mine = ++run.current;
         abort.current?.abort();
         const ctl = new AbortController();
@@ -59,7 +60,7 @@ export function PhoneSignIn({ onSignedIn }: PhoneSignInProps) {
         if (run.current !== mine) return;
         if (started.kind === 'error') { setState({ kind: 'ended', message: started.message }); return; }
         const pairing = started.pairing;
-        setState({ kind: 'showing', pairing, notice: null });
+        setState({ kind: 'showing', pairing, notice: why });
 
         while (run.current === mine) {
             const asked = Date.now();
@@ -125,6 +126,10 @@ export function PhoneSignIn({ onSignedIn }: PhoneSignInProps) {
                 setDigits('');
                 setState({ ...current, busy: false, message: wrongDigitsMessage(res.triesLeft) });
                 return;
+            case 'burned':
+                setDigits('');
+                void newCode(false, PHONE_SIGNIN_MESSAGES.wrongDigits);
+                return;
             case 'retry':
             case 'waiting':
             case 'confirm':
@@ -137,7 +142,7 @@ export function PhoneSignIn({ onSignedIn }: PhoneSignInProps) {
                 setState({ kind: 'ended', message: res.message });
                 return;
         }
-    }, [state, digits]);
+    }, [state, digits, newCode]);
 
     useEffect(() => {
         if (state.kind !== 'showing' && state.kind !== 'confirm') return;
@@ -208,18 +213,17 @@ export function PhoneSignIn({ onSignedIn }: PhoneSignInProps) {
             {state.kind === 'confirm' && (
                 <form onSubmit={sendDigits} className="space-y-3 text-center" data-testid="phone-signin-confirm">
                     <label htmlFor="phone-signin-digits" className="block text-sm text-nature-100 font-semibold">
-                        Type the two digits your phone shows
+                        Type the six digits your phone shows (one try)
                     </label>
                     <input
                         id="phone-signin-digits"
                         inputMode="numeric"
                         autoComplete="one-time-code"
-                        pattern="[0-9]{2}"
-                        maxLength={2}
+                        maxLength={7}
                         autoFocus
                         value={digits}
-                        onChange={(e) => setDigits(e.target.value.replace(/\D/g, '').slice(0, 2))}
-                        className="w-24 min-h-[48px] text-center text-2xl font-black font-mono tracking-widest rounded-xl bg-nature-950 border border-nature-700 text-white"
+                        onChange={(e) => setDigits(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        className="w-40 max-w-full min-h-[48px] text-center text-2xl font-black font-mono tracking-widest rounded-xl bg-nature-950 border border-nature-700 text-white"
                     />
                     <div className="text-sm text-nature-300">
                         <span className="whitespace-nowrap">{formatCountdown(state.deadline - now)} left</span>
@@ -231,7 +235,7 @@ export function PhoneSignIn({ onSignedIn }: PhoneSignInProps) {
                     )}
                     <button
                         type="submit"
-                        disabled={state.busy || digits.length !== 2}
+                        disabled={state.busy || digits.length !== 6}
                         className="w-full min-h-[48px] px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-semibold text-sm disabled:opacity-50"
                     >
                         Confirm

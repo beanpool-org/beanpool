@@ -21,14 +21,20 @@ import { provedAtScan, scanProofRefusal } from '../utils/pair-device-target';
 import { proofAt } from '../utils/address-verify';
 import { communityRecordsReady } from '../utils/community-record';
 import {
-    readSigninScan, scanProblemMessage, lookupPairing, approveComputerSignin, declineComputerSignin, formatShortCode,
+    readSigninScan, scanProblemMessage, lookupPairing, approveComputerSignin, declineComputerSignin, formatShortCode, formatDigits,
     SIGNIN_QUESTION, SIGNIN_WARNING, AGENT_QUESTION, AGENT_WARNING,
     DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
     type ApproveOutcome, type PairingLookup,
 } from '../utils/settings-signin';
 import { t, type SettingsSigninQr } from '@beanpool/core';
 import { TotpCodeDialog, looksLikeTotpCode } from '../components/TotpCodeDialog';
-import { agentLinesWords, computerLinesWords, confirmDigitsWords, digitsDoneWords, keyLineWords, timeLeftWords } from '../components/key-lines';
+import { agentLinesWords, computerLinesWords, confirmDigitsWords, digitsDoneWords, keyLineWords, otherNetworkWords, timeLeftWords } from '../components/key-lines';
+
+/** The six digits' size: one line at 320 dp and 1.3x text (settings-signin-digits-fit.test.ts measures it). */
+const SIGNIN_DIGITS_FONT = 36;
+const SIGNIN_DIGITS_SPACING = 4;
+/** The sheet's own padding, each side. */
+const SHEET_PAD = 20;
 
 /** `look` is the node's answer; `openedAt` lets "asked … ago" and the time left move while the sheet is open. */
 type Found = { qr: SettingsSigninQr; host: string; look: Extract<PairingLookup, { kind: 'ok' }>; openedAt: number };
@@ -48,7 +54,7 @@ export default function SettingsSigninScreen() {
     const [found, setFound] = useState<Found | null>(null);
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(false);
-    /** The two digits the computer must type (a node with number matching), shown once approved. */
+    /** The six digits the computer must type (number matching), shown once approved. */
     const [confirmCode, setConfirmCode] = useState<string | null>(null);
     /** When the computer's 30 seconds to type them run out, by this phone's clock (a little after the node's). */
     const [digitsUntil, setDigitsUntil] = useState(0);
@@ -140,7 +146,7 @@ export default function SettingsSigninScreen() {
         if (!found || !identity || busy) return;
         setBusy(true);
         try {
-            handle(await approveComputerSignin({ qr: found.qr, identity, communityName, agentShown: !!found.look.agent }));
+            handle(await approveComputerSignin({ qr: found.qr, identity, communityName, agentShown: !!found.look.agent, ticks: found.look.agent?.asks }));
         } finally {
             setBusy(false);
         }
@@ -236,15 +242,20 @@ export default function SettingsSigninScreen() {
                 <View style={styles.sheetBackdrop}>
                     <ScrollView
                         style={[styles.sheet, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]}
-                        contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 20 }}
+                        contentContainerStyle={{ padding: SHEET_PAD, paddingBottom: insets.bottom + SHEET_PAD }}
                     >
                         {done && confirmCode ? (
                             <View style={{ alignItems: 'center' }} accessibilityLiveRegion="polite">
                                 <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
-                                    {confirmDigitsWords(confirmCode)}
+                                    {confirmDigitsWords(formatDigits(confirmCode))}
                                 </Text>
-                                <Text style={[styles.digits, { color: colors.text.heading }]} accessibilityLabel={t('Digits {digits}', { digits: confirmCode.split('').join(' ') })}>
-                                    {confirmCode}
+                                <Text
+                                    style={[styles.digits, { color: colors.text.heading, fontSize: SIGNIN_DIGITS_FONT, letterSpacing: SIGNIN_DIGITS_SPACING }]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    accessibilityLabel={t('Digits {digits}', { digits: confirmCode.split('').join(' ') })}
+                                >
+                                    {formatDigits(confirmCode)}
                                 </Text>
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
                                     {named
@@ -287,6 +298,15 @@ export default function SettingsSigninScreen() {
                                 <Text style={[styles.body, { color: colors.feedback.danger.fg, fontWeight: '700' }]}>
                                     {keyLineWords(found.look.agent ? AGENT_WARNING : SIGNIN_WARNING)}
                                 </Text>
+                                {found.look.otherNetwork && (
+                                    <Text
+                                        style={[styles.body, styles.loud, { color: colors.feedback.danger.fg, borderColor: colors.feedback.danger.fg }]}
+                                        accessibilityRole="alert"
+                                        testID="signin-other-network"
+                                    >
+                                        {otherNetworkWords()}
+                                    </Text>
+                                )}
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
                                     {found.look.agent
                                         ? t('Tap Connect only if the computer in front of you shows this code:')
@@ -363,7 +383,8 @@ const styles = StyleSheet.create({
     sheet: { maxHeight: '90%', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, flexGrow: 0 },
     title: { fontSize: 19, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
     body: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginBottom: 12 },
-    digits: { fontSize: 56, fontWeight: '900', letterSpacing: 8, textAlign: 'center', marginVertical: 12, fontVariant: ['tabular-nums'] },
+    digits: { fontWeight: '900', textAlign: 'center', marginVertical: 12, fontVariant: ['tabular-nums'], alignSelf: 'stretch' },
+    loud: { fontWeight: '800', borderWidth: 2, borderRadius: 12, padding: 10 },
     code: { fontSize: 32, fontWeight: '900', letterSpacing: 4, textAlign: 'center', marginVertical: 8, fontVariant: ['tabular-nums'] },
     infoBox: { borderWidth: 1, borderRadius: 12, padding: 12, marginVertical: 12, gap: 4 },
     infoLine: { fontSize: 14, lineHeight: 20 },

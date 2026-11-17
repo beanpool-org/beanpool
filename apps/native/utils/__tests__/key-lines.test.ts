@@ -39,7 +39,7 @@ import { OWNER_WORDS_COPY, ownerWordsFindThem } from '../owner-words';
 import { NO_DEVICE_LOCK_MESSAGE } from '../node-admin';
 import { openedFromLinkWarning, scanProblemMessage as unlockScanProblem, unlockRefusalMessage } from '../takeover-unlock';
 import {
-    AGENT_QUESTION, AGENT_WARNING, DIGITS_PRIVATE, SIGNIN_QUESTION, SIGNIN_WARNING, agentLines, computerLines, confirmDigitsLine, digitsDone,
+    AGENT_QUESTION, AGENT_WARNING, DIGITS_PRIVATE, OTHER_NETWORK_WARNING, SIGNIN_QUESTION, SIGNIN_WARNING, agentLines, computerLines, confirmDigitsLine, digitsDone,
     formatTimeLeft, scanProblemMessage as signinScanProblem, type PairingLookup,
 } from '../settings-signin';
 import { REKEY_TEXT } from '../rekey-redeem';
@@ -50,7 +50,7 @@ import { NAMES_COPY, UNREACHABLE, firstSentence } from '../names-list';
 import { DEBT_COPY, DEBT_UNREACHABLE, SETTLE_UNANSWERED } from '../names-debts';
 import { HEALTH_COPY } from '../community-health';
 import {
-    agentLinesWords, claimOutcomeWords, computerLinesWords, confirmDigitsWords, confirmedByWords, digitsDoneWords, keyLineWords, knownKeyLines,
+    agentLinesWords, claimOutcomeWords, computerLinesWords, confirmDigitsWords, confirmedByWords, digitsDoneWords, keyLineWords, knownKeyLines, otherNetworkWords,
     newPhoneConfirmWords, newPhoneEndWords, newPhoneProgressWords, oldWordsEndWords, oldWordsProgressWords, openedFromLinkWords,
     ownerWordsCountWords, stillKeptWords, timeLeftWords,
 } from '../../components/key-lines';
@@ -296,16 +296,18 @@ describe('key-lines.ts: sentences built again from the same values read word for
 
     it('a computer signing in: its lines, the time left, the digits and the held Done', () => {
         const look = (over: Partial<Extract<PairingLookup, { kind: 'ok' }>>): Extract<PairingLookup, { kind: 'ok' }> => ({
-            kind: 'ok', browser: 'Firefox on Linux', expiresAt: 0, expiresInSeconds: 90, askedSecondsAgo: 12, fromAddress: '203.0.113.7', sameNetwork: false, agent: null, ...over,
+            kind: 'ok', browser: 'Firefox on Linux', expiresAt: 0, expiresInSeconds: 90, askedSecondsAgo: 12, fromAddress: '203.0.113.7', sameNetwork: false, otherNetwork: false, agent: null, ...over,
         });
         const looks = [look({}), look({ askedSecondsAgo: 0, sameNetwork: true }), look({ askedSecondsAgo: 1 }), look({ askedSecondsAgo: 125, fromAddress: null }),
             look({ browser: 'A browser', askedSecondsAgo: null })];
         for (const l of looks) for (const open of [0, 7, 59]) expect(computerLinesWords(l, open)).toEqual(computerLines(l, open));
         for (const s of [0, 1, 59.2, 95, 600]) expect(timeLeftWords(s)).toBe(formatTimeLeft(s));
-        expect(confirmDigitsWords('42')).toBe(confirmDigitsLine('42'));
+        expect(confirmDigitsWords('042 193')).toBe(confirmDigitsLine('042 193'));
+        expect(otherNetworkWords()).toBe(OTHER_NETWORK_WARNING);
         for (const ms of [0, -5, 1, 9_000, 30_000]) expect(digitsDoneWords(ms)).toBe(digitsDone(ms).label);
-        for (const a of [{ name: 'Claude', sendsTo: 'api.example.com' }, { name: '', sendsTo: 'api.example.com' }]) expect(agentLinesWords(a)).toEqual(agentLines(a));
-        const xx = inXx(() => [...computerLinesWords(look({}), 3), ...agentLinesWords({ name: 'Claude', sendsTo: 'api.example.com' }), timeLeftWords(95), confirmDigitsWords('42'), digitsDoneWords(9_000)]);
+        const none = { canPost: false, canModerate: false }, both = { canPost: true, canModerate: true };
+        for (const a of [{ name: 'Claude', sendsTo: 'api.example.com', asks: none }, { name: '', sendsTo: 'api.example.com', asks: both }]) expect(agentLinesWords(a)).toEqual(agentLines(a));
+        const xx = inXx(() => [...computerLinesWords(look({}), 3), ...agentLinesWords({ name: 'Claude', sendsTo: 'api.example.com', asks: both }), timeLeftWords(95), confirmDigitsWords('42'), digitsDoneWords(9_000)]);
         expect(xx.filter((line) => outsideBrackets(line, ['Firefox on Linux', 'Claude', 'api.example.com']) !== '')).toEqual([]);
     });
 

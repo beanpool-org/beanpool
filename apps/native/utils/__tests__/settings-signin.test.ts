@@ -26,12 +26,12 @@ vi.mock('@noble/ed25519', async (orig) => {
 import * as LocalAuthentication from 'expo-local-authentication';
 import { sign as memberKeySign } from '@noble/ed25519';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { buildSettingsSigninQr, settingsSigninText, signedRequestBytes, utf8Bytes } from '@beanpool/core';
+import { assistantConsentText, buildSettingsSigninQr, settingsSigninText, signedRequestBytes, utf8Bytes } from '@beanpool/core';
 import {
     readSigninScan, scanProblemMessage, lookupPairing, buildSigninRequest,
     approveComputerSignin, declineComputerSignin, formatShortCode,
     SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine,
-    AGENT_QUESTION, AGENT_WARNING, agentLines,
+    AGENT_QUESTION, AGENT_WARNING, agentLines, asksLines, formatDigits, OTHER_NETWORK_WARNING,
     DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
 } from '../settings-signin';
 import type { CommunityRecord } from '../community-index';
@@ -120,7 +120,7 @@ describe('asking the node about the pairing', () => {
         const calls = mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Firefox on Windows', expiresAt: 5 } }]);
         expect(await lookupPairing(qr)).toEqual({
             kind: 'ok', browser: 'Firefox on Windows', expiresAt: 5,
-            expiresInSeconds: null, askedSecondsAgo: null, fromAddress: null, sameNetwork: false, agent: null,
+            expiresInSeconds: null, askedSecondsAgo: null, fromAddress: null, sameNetwork: false, otherNetwork: false, agent: null,
         });
         expect(calls[0].url).toBe(`https://mullum.beanpool.org/api/local/admin/auth/pairing/${ID}`);
     });
@@ -132,14 +132,14 @@ describe('asking the node about the pairing', () => {
         } }]);
         expect(await lookupPairing(qr)).toEqual({
             kind: 'ok', browser: 'Chrome on macOS', expiresAt: 5,
-            expiresInSeconds: 95, askedSecondsAgo: 25, fromAddress: '203.0.113.9', sameNetwork: true, agent: null,
+            expiresInSeconds: 95, askedSecondsAgo: 25, fromAddress: '203.0.113.9', sameNetwork: true, otherNetwork: false, agent: null,
         });
     });
 
     it("reads an AI assistant's consent: its own name and the host its answers go to; a host that isn't one is dropped", async () => {
         mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Chrome on macOS', expiresAt: 5, agent: { name: 'Claude\u202E', sendsTo: 'Claude.AI' } } }]);
         const look = await lookupPairing(qr);
-        expect(look.kind === 'ok' && look.agent).toEqual({ name: 'Claude', sendsTo: 'claude.ai' });
+        expect(look.kind === 'ok' && look.agent).toEqual({ name: 'Claude', sendsTo: 'claude.ai', asks: { canPost: false, canModerate: false } });
         mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Chrome on macOS', expiresAt: 5, agent: { name: 'Claude', sendsTo: 'evil.example/claude.ai path' } } }]);
         const bad = await lookupPairing(qr);
         expect(bad.kind === 'ok' && bad.agent).toBeNull();
@@ -180,7 +180,7 @@ describe('the approval request', () => {
         expect(init.method).toBe('POST');
         expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
         const body = JSON.parse(init.body as string);
-        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org', confirm: true });
+        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org', confirm: 'six-digits' });
         expect(signedBy(body.signature, signedRequestBytes(settingsSigninText('mullum.beanpool.org', 'approve', ID, 'K7F3QX')))).toBe(true);
         // Not the old unbound text (before request binding), which any community could relay: no build signs it now.
         expect(signedBy(body.signature, utf8Bytes(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`))).toBe(false);
@@ -198,7 +198,7 @@ describe('the approval request', () => {
 
     it("says the screen showed an AI assistant (agentShown) on an approval only when it did, never on a decline", async () => {
         const shown = JSON.parse((await buildSigninRequest('approve', qr, identity, undefined, true)).init.body as string);
-        expect(shown).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org', confirm: true, agentShown: true });
+        expect(shown).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org', confirm: 'six-digits', agentShown: true });
         expect(JSON.parse((await buildSigninRequest('approve', qr, identity)).init.body as string).agentShown).toBeUndefined();
         expect(JSON.parse((await buildSigninRequest('decline', qr, identity, undefined, true)).init.body as string).agentShown).toBeUndefined();
     });
@@ -228,11 +228,13 @@ describe('the "Sign in" press', () => {
         expect(calls).toHaveLength(0);
     });
 
-    it('a node that asks for number matching hands back two digits for the computer', async () => {
-        mockFetch([{ status: 200, body: { success: true, role: 'owner', confirmCode: '47', confirmExpiresAt: 9 } }]);
-        expect(await approveComputerSignin(opts)).toEqual({ kind: 'approved', confirmCode: '47' });
-        mockFetch([{ status: 200, body: { success: true, role: 'owner', confirmCode: '4x7' } }]);
-        expect(await approveComputerSignin(opts)).toEqual({ kind: 'approved' });
+    it('a node that asks for number matching hands back six digits for the computer (risk 2: six, one try)', async () => {
+        mockFetch([{ status: 200, body: { success: true, role: 'owner', confirmCode: '047193', confirmExpiresAt: 9 } }]);
+        expect(await approveComputerSignin(opts)).toEqual({ kind: 'approved', confirmCode: '047193' });
+        for (const odd of ['4x7193', '47', '0471930']) {
+            mockFetch([{ status: 200, body: { success: true, role: 'owner', confirmCode: odd } }]);
+            expect(await approveComputerSignin(opts)).toEqual({ kind: 'approved' });
+        }
     });
 
     it('approves after the unlock', async () => {
@@ -279,7 +281,7 @@ describe('what the approval screen says', () => {
     });
 
     it('says how long ago the computer asked, from which address, and "same network" only when it is', () => {
-        const base = { kind: 'ok' as const, browser: 'Firefox on Windows', expiresAt: 0, expiresInSeconds: 100, agent: null };
+        const base = { kind: 'ok' as const, browser: 'Firefox on Windows', expiresAt: 0, expiresInSeconds: 100, agent: null, otherNetwork: false };
         expect(computerLines({ ...base, askedSecondsAgo: 40, fromAddress: '203.0.113.9', sameNetwork: true }, 0)).toEqual([
             'Computer: Firefox on Windows',
             'Asked 40 seconds ago',
@@ -296,8 +298,22 @@ describe('what the approval screen says', () => {
         expect(computerLines({ ...base, askedSecondsAgo: null, fromAddress: null, sameNetwork: false, expiresInSeconds: null }, 0)).toEqual(['Computer: Firefox on Windows']);
     });
 
-    it('tells the owner which two digits to type on the computer', () => {
-        expect(confirmDigitsLine('47')).toBe('On the computer, type 47');
+    it('tells the owner which six digits to type on the computer, in two groups', () => {
+        expect(confirmDigitsLine(formatDigits('047193'))).toBe('On the computer, type 047 193');
+        expect(formatDigits('047193')).toBe('047 193');
+    });
+
+    it('reads "other network" from the node only when both addresses could be compared and differ (the loud line)', async () => {
+        const qr = { nodeUrl: 'https://riverside.example', pairingId: ID, shortCode: 'K7F3QX' };
+        const reply = (over: Record<string, unknown>) => mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Chrome on macOS', expiresAt: 5, ...over } }]);
+        reply({ fromAddress: '198.51.100.4', sameNetwork: false, otherNetwork: true });
+        expect(await lookupPairing(qr)).toMatchObject({ kind: 'ok', otherNetwork: true });
+        reply({ fromAddress: '198.51.100.4', sameNetwork: false });
+        expect(await lookupPairing(qr)).toMatchObject({ otherNetwork: false });
+        reply({ fromAddress: '198.51.100.4', sameNetwork: true, otherNetwork: true });
+        expect(await lookupPairing(qr)).toMatchObject({ otherNetwork: false });
+        expect(OTHER_NETWORK_WARNING).toMatch(/different network/);
+        expect(OTHER_NETWORK_WARNING).toMatch(/tap No\.$/);
     });
 
     it('says never to read the digits to anyone: only type them yourself, on the computer you just opened (4171995285)', () => {
@@ -317,16 +333,16 @@ describe('what the approval screen says', () => {
 
 describe("an AI assistant's consent (admin MCP S2)", () => {
     it("never shows the assistant's name without the host its answers go to, and asks the assistant question", () => {
-        const lines = agentLines({ name: 'Claude', sendsTo: 'claude.ai' });
+        const lines = agentLines({ name: 'Claude', sendsTo: 'claude.ai', asks: { canPost: false, canModerate: false } });
         expect(lines[0]).toBe('Assistant: “Claude” (the name it gave itself)');
         expect(lines[1]).toBe('Sends what it reads to: claude.ai');
-        expect(agentLines({ name: '', sendsTo: 'chatgpt.com' })).toContain('Sends what it reads to: chatgpt.com');
+        expect(agentLines({ name: '', sendsTo: 'chatgpt.com', asks: { canPost: false, canModerate: false } })).toContain('Sends what it reads to: chatgpt.com');
         expect(AGENT_QUESTION).toBe('Did you just add this community to an AI assistant?');
         expect(AGENT_WARNING).toMatch(/sent you this code/);
     });
 
     it("tells an owner who approves that their assistant posts at once, with no approval (MCP-OWNER-POSTS), never that it can only suggest", () => {
-        const line = agentLines({ name: 'Claude', sendsTo: 'claude.ai' })[2];
+        const line = agentLines({ name: 'Claude', sendsTo: 'claude.ai', asks: { canPost: false, canModerate: false } })[2];
         expect(line).toMatch(/If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval\./);
         expect(line).toMatch(/Anything else it can only suggest, and nothing changes until you approve\.$/);
         expect(line).not.toMatch(/can only suggest changes/);
@@ -334,10 +350,32 @@ describe("an AI assistant's consent (admin MCP S2)", () => {
 
     it('the Connect press sends agentShown after the unlock', async () => {
         const qr = { nodeUrl: 'https://mullum.beanpool.org', pairingId: ID, shortCode: 'K7F3QX' };
-        const calls = mockFetch([{ status: 200, body: { success: true, role: 'admin', confirmCode: '42' } }]);
+        const calls = mockFetch([{ status: 200, body: { success: true, role: 'admin', confirmCode: '420042' } }]);
         const out = await approveComputerSignin({ qr, identity, communityName: 'Mullum', agentShown: true });
-        expect(out).toEqual({ kind: 'approved', confirmCode: '42' });
+        expect(out).toEqual({ kind: 'approved', confirmCode: '420042' });
         expect(JSON.parse(calls[0].init?.body as string).agentShown).toBe(true);
+    });
+
+    it('shows what the computer ticked, and says when nothing is (risk 3)', () => {
+        const a = { name: 'Claude', sendsTo: 'api.example.com' };
+        expect(agentLines({ ...a, asks: { canPost: false, canModerate: false } }).slice(3)).toEqual(['Nothing ticked on the computer: it posts nothing and takes nothing down.']);
+        expect(asksLines({ canPost: true, canModerate: true })).toEqual([
+            "Ticked on the computer: May post for me. An owner's assistant posts Offers, Needs, events and polls as you, at once.",
+            'Ticked on the computer: May take down posts for me, at once.',
+        ]);
+    });
+
+    it('the Connect press signs the ticks it showed and sends them; the node grants only those (risk 3)', async () => {
+        const qr = { nodeUrl: 'https://riverside.example', pairingId: ID, shortCode: 'K7F3QX' };
+        const ticks = { canPost: true, canModerate: false };
+        const calls = mockFetch([{ status: 200, body: { success: true, role: 'owner', confirmCode: '123456' } }]);
+        expect(await approveComputerSignin({ qr, identity, communityName: 'Riverside', agentShown: true, ticks })).toEqual({ kind: 'approved', confirmCode: '123456' });
+        const body = JSON.parse(calls[0].init?.body as string);
+        expect(body).toMatchObject({ confirm: 'six-digits', agentShown: true, ticks, signedFor: 'riverside.example' });
+        expect(signedBy(body.signature, signedRequestBytes(assistantConsentText('riverside.example', ID, 'K7F3QX', ticks)))).toBe(true);
+        // Not the Settings sign-in text, and not other ticks: the node checks the signature over exactly what it was shown.
+        expect(signedBy(body.signature, signedRequestBytes(settingsSigninText('riverside.example', 'approve', ID, 'K7F3QX')))).toBe(false);
+        expect(signedBy(body.signature, signedRequestBytes(assistantConsentText('riverside.example', ID, 'K7F3QX', { canPost: true, canModerate: true })))).toBe(false);
     });
 
     it("an older node's 426 (or an owner-or-admin refusal) is shown as the node words it", async () => {

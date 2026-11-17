@@ -7,7 +7,7 @@
  * then long-polls. When the owner approves on their phone, the poll answers with the same key session
  * lib/key-session.ts ends up with after the app's one-time link: an admin_session cookie and a CSRF token.
  *
- * A newer app shows two digits after its approval; the poll then answers `confirm` and the page must send those
+ * The app shows six digits after its approval; the poll then answers `confirm` and the page must send those
  * digits (confirmPhoneDigits) before the node gives it the session. Someone who only sent the owner the QR never
  * sees the phone, so they cannot type them.
  */
@@ -62,7 +62,9 @@ export const PHONE_SIGNIN_MESSAGES = {
     wrongBrowser: 'That code belongs to another browser or tab. Get a new code here.',
     notAdmin: "The phone that scanned isn't an owner, admin or moderator of this community. Scan with the phone of someone who is.",
     failed: 'The sign-in was not accepted. Get a new code to try again.',
-    confirmLate: 'The two digits were not typed in time. Get a new code to try again.',
+    confirmLate: 'The six digits were not typed in time. Get a new code to try again.',
+    /** One wrong try ends a code (security inventory risk 2): the page starts a new one and says why. */
+    wrongDigits: 'Those were not the digits on your phone, so that code ended. Here is a new one: scan it, then type the new digits.',
 } as const;
 
 /** "Those are not the digits on your phone. 2 tries left." */
@@ -93,15 +95,18 @@ export async function waitForPhone(pairingId: string, signal?: AbortSignal): Pro
     return pollAnswer(body);
 }
 
-/** The phone's two digits, typed on this page. `wrong` keeps the box open; anything else is the poll's answer. */
-export async function confirmPhoneDigits(pairingId: string, code: string): Promise<PhonePoll | { kind: 'wrong'; triesLeft: number }> {
+/**
+ * The phone's six digits, typed on this page (spaces dropped). `wrong` keeps the box open; `burned` is a wrong try that ended
+ * the code (one try, risk 2): the page starts a new one. Anything else is the poll's answer.
+ */
+export async function confirmPhoneDigits(pairingId: string, code: string): Promise<PhonePoll | { kind: 'wrong'; triesLeft: number } | { kind: 'burned' }> {
     let res: Response;
     try {
         res = await fetch(`${PAIRING_PATH}/${encodeURIComponent(pairingId)}/confirm`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code }),
+            body: JSON.stringify({ code: code.replace(/\D/g, '') }),
         });
     } catch {
         return { kind: 'retry' };
@@ -109,6 +114,7 @@ export async function confirmPhoneDigits(pairingId: string, code: string): Promi
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
     if (res.status >= 500 || res.status === 429) return { kind: 'retry' };
     if (body.status === 'wrong') return { kind: 'wrong', triesLeft: typeof body.triesLeft === 'number' ? body.triesLeft : 0 };
+    if (body.status === 'refused') return { kind: 'burned' };
     return pollAnswer(body);
 }
 

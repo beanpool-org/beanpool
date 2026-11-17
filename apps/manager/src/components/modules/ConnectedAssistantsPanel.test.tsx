@@ -283,6 +283,17 @@ describe('ConnectedAssistantsPanel', () => {
         expect(screen.queryByTestId('agent-token-value')).toBeNull();
     });
 
+    it('a node whose owners never turned assistants on shows the switch off, in words, and offers to allow them (risk 3)', async () => {
+        const calls = fakeNode({ grants: [], allowed: false });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        expect(await screen.findByText('AI assistants are turned off on this server until an owner turns them on: none can connect, and connected ones are refused.')).toBeInTheDocument();
+        const sw = screen.getByRole('switch');
+        expect(sw).toHaveAttribute('aria-checked', 'false');
+        expect(sw).toHaveTextContent('Allow AI assistants');
+        fireEvent.click(sw);
+        await waitFor(() => expect(calls.some((c) => c.url.endsWith('/agent/switch') && c.body?.allowed === true)).toBe(true));
+    });
+
     it('an owner turns AI assistants off; an admin is told only an owner can', async () => {
         const calls = fakeNode({ grants: [] });
         const { unmount } = render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);

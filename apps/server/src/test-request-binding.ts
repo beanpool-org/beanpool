@@ -610,8 +610,10 @@ async function main(): Promise<void> {
         console.log('\n— 9. phone pairing and offline tickets —');
         await section('9', async () => {
             await B.send('resetLimits');
+            // As today's app approves: it shows the six digits (`confirm: 'six-digits'`; anything else is an older app, 426
+            // before the signature is read, settings-signin-pairing.ts), so each answer below is about the signature's binding.
             const approve = (p: { pairingId: string }, body: Record<string, unknown>) =>
-                call(B, 'POST', `/api/local/admin/auth/pairing/${p.pairingId}/approve`, {}, JSON.stringify({ memberPubkey: owner.pk, confirm: true, ...body }));
+                call(B, 'POST', `/api/local/admin/auth/pairing/${p.pairingId}/approve`, {}, JSON.stringify({ memberPubkey: owner.pk, confirm: 'six-digits', ...body }));
             let p = await B.send('pairing');
             const madeAtA = await approve(p, { signature: await core.signSettingsSignin('https://a.test', 'approve', p.pairingId, p.shortCode, owner.sign), signedFor: 'a.test' });
             assert(madeAtA.status === 421 && madeAtA.body?.code === 'wrong_community', `a pairing approved for a.test (A showed B's code) → 421 at B (${show(madeAtA)})`);

@@ -281,6 +281,11 @@ async function main() {
     const { localFetch } = await import('./keepalive-test-fetch.js');
     initStateEngine();
     await initTls();
+    // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov). With the switch off, the door's writes
+    // (/oauth/register, token, revoke and the consent page's wait, confirm and asks) answer 404 before the guard
+    // (agent/oauth-route.ts oauthDoorOff; test-admin-mcp-oauth). The sweep opens it, so those routes meet the guard as
+    // they do on a node whose owners allowed assistants (the larger surface).
+    (await import('./config/local-config.js')).updateLocalConfig({ aiAssistantsAllowed: true });
     const port = await https.startHttpsServer(0);
     const BASE = `https://localhost:${port}`;
 

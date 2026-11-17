@@ -233,6 +233,11 @@ async function main(): Promise<void> {
     console.log('A key that is not a live member cannot act on other people\n');
     await initTls();
     initStateEngine();
+    // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov). With the switch off, the door's writes
+    // (/oauth/register, token, revoke and the consent page's wait, confirm and asks) answer 404 before the middleware
+    // (agent/oauth-route.ts oauthDoorOff; test-admin-mcp-oauth). The sweeps open it, so those routes meet the middleware
+    // as they do on a node whose owners allowed assistants (the larger surface).
+    (await import('./config/local-config.js')).updateLocalConfig({ aiAssistantsAllowed: true });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 

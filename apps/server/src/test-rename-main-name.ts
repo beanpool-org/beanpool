@@ -1171,6 +1171,9 @@ async function main(): Promise<void> {
         const { webAppCanonicalUrl } = await import('./web-app-robots.js');
         const { ownNodeHome } = await import('./engine/node-key.js');
         const { registerClient, issueCode } = await import('./agent/oauth.js');
+        // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov): with the switch off the door answers 404 at
+        // every address. This section is about a node whose owners allowed them, so its assistant has a door to keep.
+        updateLocalConfig({ aiAssistantsAllowed: true });
         const OLD = 'oldvale.beanpool.org';
         // From 9: the name, the old name and the domain listed. Start with no choice made.
         updateNodeConfig({ mainAddress: null } as any);

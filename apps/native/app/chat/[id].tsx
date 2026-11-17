@@ -254,12 +254,15 @@ function ChatScreen({ id }: { id: string }) {
     // Replying to banner whole beside it (the field stops growing first), one line of the thread, then the bars and the
     // About chip, which scroll as pages or fold away while typing on a small phone (walk of 17 Nov: a market DM at 320 dp
     // and 1.3× left the thread 0 dp and the box under the keyboard; deciding review of f4bbcfa4: the banner folded). The
-    // composer and the banner are measured on their own, so no room waits on its own height.
+    // composer and the banner are measured on their own, so no room waits on its own height. While a line's menu or emoji
+    // row is open the thread keeps room for the line and its menu (CHAT_MENU_ROOM), the bars and the About chip giving way,
+    // so Reply and Edit are in view (emulator walk 146: in one line of thread only Copy showed, and dragging it closes the menu).
     const [inputHeight, setInputHeight] = useState(0);
     const [bannerHeight, setBannerHeight] = useState(0);
     const fit = chatColumnFit({
         column: column.column, box: column.composer, input: inputHeight, banner: bannerHeight,
         windowHeight, keyboard: keyboardHeight, paused: keyChangePending,
+        menu: !!(activeMessageActionsId || activeEmojiPickerId),
     });
     // Modals get their own native window, and keyboard-controller only hears keyboard
     // events on the main window. If a modal opens while the keyboard is up, the hide

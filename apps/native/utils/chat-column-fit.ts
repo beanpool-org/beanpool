@@ -25,6 +25,12 @@
  * the thread. Nothing in either page is shorter than that (every bar and the About chip's ✕ are 44 dp or more), so a page
  * that would fit is never folded.
  *
+ * While a line's menu is open (tapped or held: Reply, React, Edit and Delete beside it, Copy and Report under it, or the
+ * emoji row), the thread's floor is CHAT_MENU_ROOM instead of one line, so the line and its menu are in view: the bars and
+ * then the About chip give way to it as they do to the composer, and come back when the menu closes. In one line of thread
+ * only Copy showed, and dragging the thread to reach Reply or Edit closes the menu (emulator walk 146, 17 Nov: the walk's
+ * market DM at 320 dp and 1.3×, both themes). A phone with room for it all moves nothing.
+ *
  * While the key card is up (sending paused) the thread gives way: the card's page takes the bars with it in the room
  * dmKeyBannerMaxHeight gives it (#3278), and the About chip has all the composer and the banner leave.
  * Every figure is in dp, read from the screen's own layout: `column` is the header's bottom to the keyboard view's bottom,
@@ -38,6 +44,14 @@ import { CHAT_INPUT_MAX_HEIGHT, CHAT_INPUT_MIN_HEIGHT } from '../components/chat
  * 44-dp target to drag the thread by. The rest of a line is a scroll away.
  */
 export const CHAT_THREAD_LINE = 44;
+
+/**
+ * The thread's floor while a line's menu is open: a line and its menu at 320 dp and 1.3× text. The walk's two-line line
+ * (83 dp) with Copy (44) and Report (43) under it took 174 dp (emulator walk 146); this holds a line of four lines with
+ * them, or one of mine with the "You can edit a message for 15 minutes" note and Copy. The menu's buttons sit beside the
+ * line, so a longer line keeps them in view with its top cut.
+ */
+export const CHAT_MENU_ROOM = 240;
 
 /** The least room a page is shown in: a 44-dp target, to scroll it or tap what is in it. */
 export const CHAT_PAGE_MIN = 44;
@@ -58,6 +72,8 @@ export interface ChatColumnMeasure {
     keyboard: number;
     /** The key card is up: nothing can be sent, and the thread gives way to its page. */
     paused: boolean;
+    /** A line's menu (or its emoji row) is open: the thread's floor is CHAT_MENU_ROOM until it closes. */
+    menu?: boolean;
 }
 
 export interface ChatColumnFit {
@@ -85,7 +101,8 @@ export function chatColumnFit(m: ChatColumnMeasure): ChatColumnFit {
     const composer = Math.max(0, room - banner);
     const bannerRoom = Math.max(0, room - input);
     const bannerShown = Math.min(banner, bannerRoom);
-    const threadLine = m.paused ? 0 : Math.min(CHAT_THREAD_LINE, Math.max(0, room - input - bannerShown));
+    const left = Math.max(0, room - input - bannerShown);
+    const threadLine = m.paused ? 0 : Math.min(m.menu ? CHAT_MENU_ROOM : CHAT_THREAD_LINE, left);
     const about = pageRoom(room - input - bannerShown - threadLine);
     const bars = pageRoom(room - box - threadLine);
     return { composer, banner: bannerRoom, about, bars, threadLine };

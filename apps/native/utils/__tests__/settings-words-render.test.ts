@@ -142,11 +142,14 @@ vi.mock('expo-location', () => ({
     requestForegroundPermissionsAsync: async () => ({ status: 'granted' }),
 }));
 const chosen = vi.hoisted(() => ({ now: '' }));
+/** The theme the screen is drawn in: light, unless a case draws it dark (the preference the menu shows stays Light). */
+const look = vi.hoisted(() => ({ theme: 'light' as 'light' | 'dark' }));
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors } = await import('../../constants/colors');
+    const { lightColors, darkColors } = await import('../../constants/colors');
+    const colours = () => (look.theme === 'dark' ? darkColors : lightColors);
     return {
-        useTheme: () => ({ theme: 'light', colors: lightColors, themePreference: 'light', setThemePreference(v: string) { chosen.now = v; }, patternEnabled: false, setPatternEnabled() {} }),
-        useStyles: (make: (t: { theme: string; colors: unknown; patternEnabled: boolean }) => unknown) => make({ theme: 'light', colors: lightColors, patternEnabled: false }),
+        useTheme: () => ({ theme: look.theme, colors: colours(), themePreference: 'light', setThemePreference(v: string) { chosen.now = v; }, patternEnabled: false, setPatternEnabled() {} }),
+        useStyles: (make: (t: { theme: string; colors: unknown; patternEnabled: boolean }) => unknown) => make({ theme: look.theme, colors: colours(), patternEnabled: false }),
     };
 });
 
@@ -202,6 +205,8 @@ const node = vi.hoisted(() => ({
     prefsSaved: [] as Record<string, unknown>[],
     /** What GET /api/members/preferences answers beside holiday mode. */
     prefsServed: {} as Record<string, unknown>,
+    /** Whether GET /api/community/info carries the counts: false, Share Member Count off and this reader not a member's (#3292). */
+    shareCounts: true,
 }));
 const vault = vi.hoisted(() => ({ on: false, holds: [] as any[], offer: null as any, note: null as null | string }));
 vi.mock('../db', () => ({
@@ -366,6 +371,8 @@ beforeEach(() => {
     node.knownRule = null;
     node.prefsSaved = [];
     node.prefsServed = {};
+    node.shareCounts = true;
+    look.theme = 'light';
     readerFeaturesHeld.clear();
     sheet.props = null;
     vault.on = false;
@@ -376,7 +383,7 @@ beforeEach(() => {
         const u = String(url);
         if (u.includes('/api/members/preferences')) return new Response(JSON.stringify({ holiday_mode: 'false', ...node.prefsServed }), { status: 200 });
         if (u.includes('/api/community/known-rule') && node.knownRule) return new Response(JSON.stringify(node.knownRule), { status: 200 });
-        if (u.includes('/api/community/info')) return new Response(JSON.stringify({ memberCount: 14, postCount: 30, transactionCount: 9, ...(node.rule ? { recoveryCopies: node.rule } : {}) }), { status: 200 });
+        if (u.includes('/api/community/info')) return new Response(JSON.stringify({ ...(node.shareCounts ? { memberCount: 14, postCount: 30, transactionCount: 9 } : {}), commonsBalance_c: 0, ...(node.rule ? { recoveryCopies: node.rule } : {}) }), { status: 200 });
         return new Response('{}', { status: 404 });
     }) as typeof fetch;
 });
@@ -688,6 +695,41 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(byLabel('Edit profile')).not.toBeNull();
         expect(host.textContent).toMatch(/BEANPOOL OS \S+ \(Build \d+\)/);
     });
+});
+
+describe('Settings → Database Health on a community that shares no counts with this reader (#3292)', () => {
+    // A suspended member or a visitor's row reads the node's info without its counts when the owners turned Share Member
+    // Count off. The compare is drawn only for a count the node gave: never "Node has 0", and no false "Out of Sync".
+    async function openHealth() {
+        await renderIn('en');
+        await click(row('Database Health & Stats', 'en'), 'Database Health');
+        await settle();
+    }
+    for (const theme of ['light', 'dark'] as const) {
+        it(`counts left out, in ${theme} at 320 dp and 1.3x text: no compare line for them, and the status is not Out of Sync`, async () => {
+            look.theme = theme;
+            node.shareCounts = false;
+            await openHealth();
+            const text = host.textContent ?? '';
+            expect(text).toContain('Cached Members');
+            expect(text).toContain('🟢 Healthy & Synced');
+            expect(text).not.toContain('Out of Sync');
+            expect(text).not.toContain('Node has');
+            expect(text).not.toContain('Node In Sync');
+            expect(text).not.toContain('Node History');
+            // The phone's own cache is still drawn, as it was.
+            expect(text).toContain('🟢 Local First Offline');
+        });
+
+        it(`a member's counts, in ${theme}: the compare as before (the node has 14 members, this phone 12)`, async () => {
+            look.theme = theme;
+            await openHealth();
+            const text = host.textContent ?? '';
+            expect(text).toContain('⚠️ Node has 14');
+            expect(text).toContain('🟢 Node In Sync');
+            expect(text).toContain('Out of Sync');
+        });
+    }
 });
 
 describe('Notification Preferences: "Requests to join" only where it changes something (front doors S1)', () => {

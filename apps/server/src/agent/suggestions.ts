@@ -137,7 +137,7 @@ export function grantStillLive(grantId: string, now = Date.now()): LiveGrant | n
 }
 
 /** The owners' switch "Allow AI assistants" (agent/mcp-route.ts aiAssistantsAllowed, read here to keep the imports one way). */
-const assistantsAllowed = (): boolean => getLocalConfig().aiAssistantsAllowed !== false;
+const assistantsAllowed = (): boolean => getLocalConfig().aiAssistantsAllowed === true;
 
 /** The open suggestions whose grant is live, the expired ones dropped; none while the owners' switch is off. */
 export function openSuggestions(now = Date.now()): Array<Suggestion & { grant: LiveGrant }> {

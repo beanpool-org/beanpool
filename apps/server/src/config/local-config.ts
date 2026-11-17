@@ -75,8 +75,8 @@ export interface LocalConfig {
     // Owner automation tokens (automation-tokens.ts): each one's public id, name, scope, who made it and when, and a
     // SHA-256 of its secret, never the secret. This server's own: never in a backup file, the stager's copy or the bundle.
     automationTokens?: AutomationTokenRecord[];
-    // "Allow AI assistants" (agent/mcp-route.ts, admin MCP design §2): the owner switch for /mcp. Left out or true: the
-    // endpoint answers (inert until an owner makes an agent token); false: /mcp answers 404 to everyone. This server's own.
+    // "Allow AI assistants" (agent/mcp-route.ts, admin MCP design §2): the owner switch for /mcp. Only true opens it: the
+    // endpoint answers; left out or false: /mcp and the OAuth door answer 404 to everyone (risk 3, 18 Nov). This server's own.
     aiAssistantsAllowed?: boolean;
     /** AI assistants connected through OAuth with the phone's approval (agent/oauth.ts): this server's own, never in a backup. */
     agentOAuthGrants?: AgentOAuthGrantRecord[];

@@ -772,7 +772,7 @@ const STOPPED_MEANWHILE = 'This assistant was disconnected, or may no longer pos
  * "May post for me", and the owners' switch "Allow AI assistants" still on. Read again after any wait (photo fetches, uploads).
  */
 export function grantMayStillPost(grant: AgentGrant, now = Date.now()): boolean {
-    if (getLocalConfig().aiAssistantsAllowed === false) return false;
+    if (getLocalConfig().aiAssistantsAllowed !== true) return false; // off unless an owner turned it on (risk 3)
     const live = grantStillLive(grant.id, now);
     if (!live || live.role !== 'owner' || live.member !== grant.member) return false;
     const oauth = listOAuthGrants(now).find((g) => g.id === grant.id);

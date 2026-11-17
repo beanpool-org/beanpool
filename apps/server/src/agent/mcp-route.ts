@@ -4,7 +4,7 @@
  * nothing here calls a model.
  *
  * The boundary is this server, never the assistant's process. In order, every request to /mcp:
- *   1. the owner switch "Allow AI assistants" (local config `aiAssistantsAllowed`, on unless an owner turned it off): off → 404;
+ *   1. the owner switch "Allow AI assistants" (local config `aiAssistantsAllowed`, OFF unless an owner turned it on): off → 404;
  *   2. `Origin` absent or one of this community's own addresses (isOwnOrigin), else 403 (a web page cannot drive it from a browser);
  *   3. POST only: GET (no server push in v1) and DELETE (no session to end) → 405; no other method is a route here, so the
  *      router answers PUT and PATCH 405 itself and the CORS layer answers OPTIONS 204, switch on or off, before any of this;
@@ -49,9 +49,9 @@ export const AGENT_SWITCH_PATH = '/api/local/admin/agent/switch';
 /** An MCP message's body: a method, an id and a few arguments (https-server.ts reads no more before the route runs). */
 export const MCP_BODY_MAX = 64 * 1024;
 
-/** The owner switch: on unless an owner turned it off. */
+/** The owner switch: OFF unless an owner turned it on (security inventory risk 3, 18 Nov). Left out of the config = off. */
 export function aiAssistantsAllowed(): boolean {
-    return getLocalConfig().aiAssistantsAllowed !== false;
+    return getLocalConfig().aiAssistantsAllowed === true;
 }
 
 const UNAUTHORISED = "Connect this assistant by adding this address as a connector in Claude or ChatGPT and approving on your phone, or send an owner's assistant token as `Authorization: Bearer bp_…` (an owner makes one in Settings → Connected assistants)";

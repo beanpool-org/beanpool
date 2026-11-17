@@ -45,6 +45,8 @@ export const SIGNED_FOR_HEADER = 'X-Signed-For';
 export const REQUEST_TAG = 'beanpool-request/2';
 export const ADMIN_SIGNIN_TAG = 'beanpool-admin-signin/2';
 export const SETTINGS_SIGNIN_TAG = 'beanpool-settings-signin/2';
+/** An owner's or admin's approval of an AI assistant, naming what it may do (security inventory risk 3, 18 Nov). */
+export const ASSISTANT_CONSENT_TAG = 'beanpool-assistant-consent/1';
 export const INVITE_TICKET_TAG = 'beanpool-invite-ticket/2';
 /** An offline ticket bound to a names-list entry (community modes slice 3): format 2 with the entry's id after the date. */
 export const NAMED_INVITE_TICKET_TAG = 'beanpool-invite-ticket-named/1';
@@ -231,6 +233,17 @@ export function adminSigninText(host: string, challengeId: string): string {
 /** Approving (or declining) a browser's "Sign in with your phone" pairing. */
 export function settingsSigninText(host: string, action: 'approve' | 'decline', pairingId: string, shortCode: string): string {
     return `${SETTINGS_SIGNIN_TAG}\n${host}\n${action}\n${pairingId}\n${shortCode}`;
+}
+
+/** What an assistant asks to do beyond reading: "May post for me" and "May take down posts for me". Each off unless true. */
+export interface AssistantTicks { canPost: boolean; canModerate: boolean }
+
+/**
+ * Approving an AI assistant's connection: the pairing, its short code, and the ticks the phone showed. The node grants
+ * only these ticks, so a tick the browser adds after the phone said yes is never granted.
+ */
+export function assistantConsentText(host: string, pairingId: string, shortCode: string, ticks: AssistantTicks): string {
+    return `${ASSISTANT_CONSENT_TAG}\n${host}\napprove\n${pairingId}\n${shortCode}\npost=${ticks.canPost === true ? 1 : 0}\ntakedown=${ticks.canModerate === true ? 1 : 0}`;
 }
 
 /**
@@ -451,6 +464,15 @@ export async function signSettingsSignin(
     const host = audienceOf(nodeUrl);
     if (!host) throw new Error('Cannot sign in: the node address names no host');
     return toBase64(await sign(signedRequestBytes(settingsSigninText(host, action, pairingId, shortCode))));
+}
+
+/** The approval of an AI assistant's connection at the node at `nodeUrl`, with the ticks the phone showed (base64). */
+export async function signAssistantConsent(
+    nodeUrl: string, pairingId: string, shortCode: string, ticks: AssistantTicks, sign: Signer,
+): Promise<string> {
+    const host = audienceOf(nodeUrl);
+    if (!host) throw new Error('Cannot connect the assistant: the node address names no host');
+    return toBase64(await sign(signedRequestBytes(assistantConsentText(host, pairingId, shortCode, ticks))));
 }
 
 /** An offline invite ticket for the community at `nodeUrl`, as the `BP-` code carries it (base64 of `{p, s}`). */

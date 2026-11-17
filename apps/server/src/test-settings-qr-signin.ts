@@ -16,10 +16,11 @@
  *   7. Decline, and the brakes: creation per client, approvals through the auth limiter.
  *   8. The phone is told the computer's address as the node saw it, how long ago it asked, the time left, and
  *      "same network" when the phone's address matches.
- *   9. Number matching: a new app's approval gives two digits; the page must type them. Wrong digits, three tries,
- *      30 s, a replay, or a browser without the binding cookie: no session. An older app (no `confirm`) is refused,
- *      426 app_too_old (fable-security-signin finding 2). Every sign-in in sections 1-6 therefore approves as the app
- *      does (`confirm: true`) and types the two digits it is shown (typeDigits) before the browser has a session.
+ *   9. Number matching: a new app's approval gives six digits; the page must type them. ONE wrong try (security
+ *      inventory risk 2, 18 Nov: it was two digits and three tries), 30 s, a replay, or a browser without the binding
+ *      cookie: no session. An older app (no `confirm`, or `confirm: true`: it can show only two) is refused, 426
+ *      app_too_old. Every sign-in in sections 1-6 therefore approves as the app does (`confirm: 'six-digits'`) and
+ *      types the six digits it is shown (typeDigits) before the browser has a session.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -111,17 +112,17 @@ async function poll(b: Browser, opts: { cookie?: string | null; wait?: boolean }
     return { ...r, sessionId: session ? session.split(';')[0].slice('admin_session='.length) : null };
 }
 
-/** The two digits each approval showed on the phone, by pairing: the member reads them off the phone. */
+/** The six digits each approval showed on the phone, by pairing: the member reads them off the phone. */
 const shownDigits = new Map<string, string>();
 
-/** What the app does after the phone's unlock: it can show the two digits (`confirm: true`), as every app now must. */
+/** What the app does after the phone's unlock: it can show the six digits (`confirm: 'six-digits'`), as every app now must. */
 async function approve(pairingId: string, shortCode: string, signer: Identity, opts: { claimed?: string; totpCode?: string; ip?: string; olderApp?: boolean } = {}) {
     const r = await call('POST', `/api/local/admin/auth/pairing/${pairingId}/approve`, {
         body: {
             memberPubkey: opts.claimed ?? signer.pub,
             ...settingsSigninFields(signer.priv, 'approve', pairingId, shortCode),
             ...(opts.totpCode ? { totpCode: opts.totpCode } : {}),
-            ...(opts.olderApp ? {} : { confirm: true }),
+            ...(opts.olderApp ? {} : { confirm: 'six-digits' }),
         },
         headers: via(opts.ip ?? freshIp()),
     });
@@ -129,7 +130,7 @@ async function approve(pairingId: string, shortCode: string, signer: Identity, o
     return r;
 }
 
-/** The member types the phone's two digits on the computer: the page's answer, a session when they are right. */
+/** The member types the phone's six digits on the computer: the page's answer, a session when they are right. */
 async function typeDigits(b: Browser) {
     const r = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/confirm`, {
         body: { code: shownDigits.get(b.pairingId) },
@@ -286,7 +287,7 @@ async function main() {
         const body = {
             memberPubkey: owner.pub,
             ...settingsSigninFields(owner.priv, 'approve', b.pairingId, b.shortCode),
-            confirm: true,
+            confirm: 'six-digits',
         };
         const first = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, { body, headers: via(freshIp()) });
         assert(first.status === 200, 'the first approval is accepted');
@@ -300,7 +301,7 @@ async function main() {
         assert((await poll(b2)).body.status === 'waiting', 'and that other pairing is still waiting');
 
         const wrongCode = await call('POST', `/api/local/admin/auth/pairing/${b2.pairingId}/approve`, {
-            body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', b2.pairingId, 'AAAAAA'), confirm: true },
+            body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', b2.pairingId, 'AAAAAA'), confirm: 'six-digits' },
             headers: via(freshIp()),
         });
         assert(wrongCode.status === 403, 'an approval over a different short code is refused');
@@ -487,10 +488,10 @@ async function main() {
         }
     }
 
-    // ── 9. Number matching: the computer types the two digits the phone shows (design §5 fix 3) ──
-    console.log('\n9. Two digits typed on the computer');
+    // ── 9. Number matching: the computer types the six digits the phone shows (design §5 fix 3; risk 2, 18 Nov) ──
+    console.log('\n9. Six digits typed on the computer, one try');
     const approveNew = (b: Browser, signer: Identity) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
-        body: { memberPubkey: signer.pub, ...settingsSigninFields(signer.priv, 'approve', b.pairingId, b.shortCode), confirm: true },
+        body: { memberPubkey: signer.pub, ...settingsSigninFields(signer.priv, 'approve', b.pairingId, b.shortCode), confirm: 'six-digits' },
         headers: via(freshIp()),
     });
     const confirmDigits = (b: Browser, code: string, cookie: string | null = b.cookie) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/confirm`, {
@@ -501,20 +502,17 @@ async function main() {
         const s = r.cookies.find(c => c.startsWith('admin_session='));
         return s ? s.split(';')[0].slice('admin_session='.length) : null;
     };
-    const wrongOf = (code: string) => String((Number(code) + 1) % 100).padStart(2, '0');
+    const wrongOf = (code: string) => String((Number(code) + 1) % 1_000_000).padStart(6, '0');
     {
         // Right digits: a session, once.
         const b = await newPairing();
         const ok = await approveNew(b, owner);
-        assert(ok.status === 200 && /^\d{2}$/.test(ok.body.confirmCode || ''), `a new app's approval gets two digits to show (${ok.body.confirmCode})`);
+        assert(ok.status === 200 && /^\d{6}$/.test(ok.body.confirmCode || ''), `a new app's approval gets six digits to show (${ok.body.confirmCode})`);
         const waiting = await poll(b);
         assert(waiting.status === 200 && waiting.body.status === 'confirm' && !waiting.sessionId,
             'the page is asked for the digits, and holds no session yet');
         const noCookie = await confirmDigits(b, ok.body.confirmCode, null);
         assert(noCookie.status === 403 && !sessionOf(noCookie), 'digits from a browser without the binding cookie are refused');
-        const wrong = await confirmDigits(b, wrongOf(ok.body.confirmCode));
-        assert(wrong.status === 400 && wrong.body.status === 'wrong' && wrong.body.triesLeft === 2 && !sessionOf(wrong),
-            'wrong digits give no session and say how many tries are left (the cookie-less try was not counted)');
         const right = await confirmDigits(b, ok.body.confirmCode);
         const sid = sessionOf(right);
         assert(right.status === 200 && right.body.status === 'signed-in' && !!sid, 'the right digits sign the browser in');
@@ -525,23 +523,30 @@ async function main() {
         assert(again.status === 410 && !again.sessionId, 'the page cannot redeem the pairing a second time');
     }
     {
-        // Three wrong: the pairing is burned, the right digits are then useless.
+        // ONE wrong try: the pairing is burned, the right digits are then useless (the cookie-less try above was not counted).
         const b = await newPairing();
         const ok = await approveNew(b, admin);
-        for (let i = 0; i < 3; i++) await confirmDigits(b, wrongOf(ok.body.confirmCode));
+        const wrong = await confirmDigits(b, wrongOf(ok.body.confirmCode));
+        assert(wrong.status === 410 && wrong.body.status === 'refused' && !sessionOf(wrong), 'one wrong try gives no session and ends the pairing');
         const late = await confirmDigits(b, ok.body.confirmCode);
-        assert(late.status === 410 && late.body.status === 'refused' && !sessionOf(late), 'three wrong tries burn the pairing; the right digits then give nothing');
+        assert(late.status === 410 && late.body.status === 'refused' && !sessionOf(late), 'the right digits after one wrong try give nothing');
         assert((await poll(b)).body.status === 'refused', 'the page is told the sign-in was refused');
         assert(auditLines().some(l => l.includes('wrong digits')), 'the burn is logged');
     }
     {
         // An older app sends no `confirm`, so it cannot show the digits: refused (finding 2). Letting it through would sign
-        // in whoever made the QR, with nothing typed.
+        // in whoever made the QR, with nothing typed. One that sends `confirm: true` shows only two (1.4.x): refused too.
         const b = await newPairing();
         const old = await approve(b.pairingId, b.shortCode, owner, { olderApp: true });
         assert(old.status === 426 && old.body.code === 'app_too_old' && old.body.reason === 'app-too-old' && !('confirmCode' in old.body),
             `an older app's approval is refused, 426 app_too_old (${old.status} ${JSON.stringify(old.body)})`);
         assert(/Update the BeanPool app/.test(old.body.error || ''), 'and it says to update the app');
+        const two = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
+            body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', b.pairingId, b.shortCode), confirm: true },
+            headers: via(freshIp()),
+        });
+        assert(two.status === 426 && two.body.code === 'app_too_old' && !('confirmCode' in two.body) && /six digits/.test(two.body.error || ''),
+            `an app that can show only two digits (confirm: true) is refused, 426, told it can't show six (${two.status} ${JSON.stringify(two.body)})`);
         const r = await poll(b);
         assert(r.body.status === 'waiting' && !r.sessionId, 'the browser is not signed in: the pairing still waits');
         assert((await approve(b.pairingId, b.shortCode, owner)).status === 200 && (await typeDigits(b)).body.status === 'signed-in',
@@ -553,7 +558,7 @@ async function main() {
         const b = await newPairing();
         const v1 = `beanpool-settings-signin:v1:approve:${b.pairingId}:${b.shortCode}`;
         const old = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
-            body: { memberPubkey: owner.pub, signature: signText(owner, v1), confirm: true },
+            body: { memberPubkey: owner.pub, signature: signText(owner, v1), confirm: 'six-digits' },
             headers: via(freshIp()),
         });
         assert(old.status === 426 && old.body.code === 'app_too_old' && old.body.reason === 'app-too-old' && !('confirmCode' in old.body),
@@ -571,9 +576,9 @@ async function main() {
         if (!created.ok) throw new Error('create failed');
         const res = approvePairing({
             pairingId: created.pairingId, memberPubkey: owner.pub,
-            ...settingsSigninFields(owner.priv, 'approve', created.pairingId, created.shortCode), confirm: true, now: t + 1_000,
+            ...settingsSigninFields(owner.priv, 'approve', created.pairingId, created.shortCode), confirm: 'six-digits', now: t + 1_000,
         });
-        assert(res.ok && /^\d{2}$/.test(res.confirmCode || ''), 'the module hands out two digits');
+        assert(res.ok && /^\d{6}$/.test(res.confirmCode || ''), 'the module hands out six digits');
         const code = res.ok ? res.confirmCode! : '';
         const late = confirmPairing(created.pairingId, created.secret, code, t + 1_000 + PAIRING_CONFIRM_TTL_MS + 1);
         assert(late.kind === 'expired', `the right digits after ${PAIRING_CONFIRM_TTL_MS / 1000}s give no session (${late.kind})`);

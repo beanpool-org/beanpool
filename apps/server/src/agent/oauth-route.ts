@@ -504,7 +504,7 @@ function show(r){
 }
 function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{}),credentials:'same-origin'}).then(function(x){return x.json()}).catch(function(){return null})}
 function poll(){post(base+'/wait').then(show)}
-function asks(){post(base+'/asks',{canPost:cp.checked===true,canModerate:cm.checked===true}).then(function(r){if(r&&r.asks){cp.checked=r.asks.canPost===true;cm.checked=r.asks.canModerate===true}else{freeze()}})}
+function asks(){post(base+'/asks',{canPost:cp.checked===true,canModerate:cm.checked===true}).then(function(r){if(r&&r.asks){cp.checked=r.asks.canPost===true;cm.checked=r.asks.canModerate===true}else if(r){freeze()}else{st.textContent='Lost touch with the server: tick again before you scan.'}})}
 cp.addEventListener('change',asks);cm.addEventListener('change',asks);
 form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value.replace(/\\D/g,'')}).then(show)});
 poll();

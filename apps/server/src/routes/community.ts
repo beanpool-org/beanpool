@@ -2220,6 +2220,13 @@ router.post('/api/ratings', async (ctx) => {
         ctx.body = { error: 'raterPubkey must match authenticated signer' };
         return;
     }
+    // A key with no member row here rates nobody: refused as a visitor's refused write is (403 not_a_member), where
+    // addRating's assertMemberActive would throw "Member not found" and answer 500 (test-strangers-cant-write).
+    if (!isNodeMember(activeActor)) {
+        ctx.status = 403;
+        ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
+        return;
+    }
     // A rating's comment is on the other member's profile for everyone: a muted member (G3) writes none.
     if (respondIfMuted(ctx, activeActor)) return;
     const rating = addRating(activeActor, targetPubkey, Number(stars), comment || '', transactionId);

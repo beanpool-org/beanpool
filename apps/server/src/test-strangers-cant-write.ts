@@ -27,7 +27,8 @@
  *   5. Controls, so the sweep can fail: the same bodies signed by Alice, the owner they name, change something or call out
  *      on many of the writes (the bodies reach real data, so a stranger's "nothing changed" is a refusal), and a row a
  *      stranger planted would be seen by the same snapshot. Among them every write in OWN_STATE (the signer's own switches,
- *      marks, profile, phone and channels), the class a body that missed once hid three holes in; each it can't reach says why.
+ *      marks, profile, phone and channels), the class where bodies that missed once hid two holes and a write in the wrong
+ *      list; each it can't reach says why.
  *
  * The engines the inventory had not traced (pausePost, resumePost, publishKnowledge, deleteGroupPost,
  * removeGroupThreadMessage, skipEventDate, names step-back) are among the swept writes, each with a body that reaches them.
@@ -277,7 +278,7 @@ const REACHED = 'reached';
 const GLOBAL_ONLY = 'the global directory\'s: 404 feature_off on a local node before any handler (routes/profile-feature-gate.ts), and '
     + 'its watcher() asks isNodeMember first';
 /** Not reached here, but refused before the body is read: `gate` asks for the signer's member row first, whatever the body says. */
-const firstAsks = (gate: string, needs: string) => `${gate} asks for an active member row before the body is read; ${needs}`;
+const firstAsks = (gate: string, needs: string) => `${gate} asks for the signer's member row before the body is read; ${needs}`;
 const CONTACTS = 'asMember (routes/contacts.ts)';
 const KEEPERS = 'activeSigner (routes/keepers.ts)';
 const MAIL = 'memberHere (routes/relay.ts)';
@@ -873,8 +874,8 @@ async function main(): Promise<void> {
             'POST /api/join/knocks/:id/approve', 'POST /api/marketplace/polls/vote', 'POST /api/knowledge/posts', 'DELETE /api/groups/:id/posts/:postId']) {
             assert(reached.includes(must), `among them ${must}, which the stranger sweeps sent the same body to`);
         }
-        // The class the three found in review slipped through (a stranger's push switches, the node's TikTok relay, the funnel
-        // count): a write that keeps the signer's own things, where BAIT never reached the write. Each such write has a body
+        // The class where review found two holes (a stranger's push switches, the node's TikTok relay) and a write in the wrong
+        // list (the funnel count): a write that keeps the signer's own things, where BAIT never reached the write. Each such write has a body
         // here that does, so Alice's same body changes something, or it says why it can't.
         const ownUnserved = Object.keys(OWN_STATE).filter(r => !STRANGER_REFUSED.has(r));
         assert(ownUnserved.length === 0, `every write listed as keeping the signer's own things is one a stranger is refused${ownUnserved.length ? ` — not: ${ownUnserved.join(', ')}` : ''}`);

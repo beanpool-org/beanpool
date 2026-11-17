@@ -24,9 +24,9 @@ export const shownVersion = (version: string): string | null => (version === '0.
 
 /**
  * The commit this server runs (git's short hash of the working directory's checkout), or 'unknown' where there is no
- * git (the image has none). Asked of git once and kept: /api/version answers it to an owner's or admin's session alone
- * (#3292), but every caller's request reaches it, and running git for every request blocked the event loop for about 6 ms
- * each time, 149 requests a second where a 401 path answers 19,000 (the confirm review of #1384).
+ * git (the image has none). Asked of git once and kept: /api/version answers it only to a request carrying an owner's or
+ * admin's session (#3292), and running git for each such request blocked the event loop for about 6 ms each time, 149
+ * requests a second where a 401 path answers 19,000 (the confirm review of #1384).
  */
 export function getCommit(): string {
     if (cachedCommit === null) {

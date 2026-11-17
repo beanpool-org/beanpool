@@ -117,7 +117,7 @@ async function main() {
     let sellers = 0;
     function offerFor(m: Id, what: string): { seller: Id; postId: string } {
         const s = member(`Sela${++sellers}`);
-        return { seller: s, postId: createPost('offer', 'misc', `${what} for ${m.callsign}`, `${what}, fresh`, hc(10), 'fixed', s.pk).id };
+        return { seller: s, postId: createPost('offer', 'misc', `${what} for ${m.callsign}`, `${what}, fresh`, hc(10), 'fixed', s.pk)!.id };
     }
     const gen = keypair('Gen');
     se.seedGenesisMember(gen.pk, gen.callsign); // the node's first owner
@@ -172,7 +172,7 @@ async function main() {
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(ent, hc(500), today);
         se.reconcileLedgerFromDb();
         createPost('offer', 'misc', `Tool hire (${m.callsign})`, 'Tools by the day', hc(10), 'fixed', ent);
-        const need = createPost('need', 'misc', `Fix the roof (${m.callsign})`, 'Two hours of work', hc(20), 'fixed', ent);
+        const need = createPost('need', 'misc', `Fix the roof (${m.callsign})`, 'Two hours of work', hc(20), 'fixed', ent)!;
         const tx = se.requestPost(need.id, helper.pk);
         kept = { ent, needTx: tx.id };
         keptBy.set(m.pk, kept);
@@ -199,7 +199,7 @@ async function main() {
         {
             name: 'say yes to a helper on their own need (POST /api/marketplace/transactions/approve)',
             setup: (m) => {
-                const need = createPost('need', 'misc', `Weeding for ${m.callsign}`, 'An hour of weeding', hc(10), 'fixed', m.pk);
+                const need = createPost('need', 'misc', `Weeding for ${m.callsign}`, 'An hour of weeding', hc(10), 'fixed', m.pk)!;
                 const tx = se.requestPost(need.id, helper.pk);
                 return { method: 'POST', path: '/api/marketplace/transactions/approve', body: { transactionId: tx.id, authorPublicKey: m.pk } };
             },

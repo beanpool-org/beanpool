@@ -11,7 +11,8 @@
  * column, so a card beside them had no room, and a bar left out of its sum came off the box (deciding review of 6775428c,
  * finding 1). Without the card the bars are a page of their own in the room utils/chat-column-fit gives them (barsRoom): the
  * column less the box, a keyboard up and one line of the thread. They stand whole while they fit, scroll as a page once they
- * are taller, and fold away while the room has none (typing on a small phone; walk of 17 Nov, the market DM at 320 dp and
+ * are taller (kept at its end, so the deals strip gives way first, then the listing's header, then the release bar; the
+ * brief of #3283's fix round), and fold away while the room has none (typing on a small phone; walk of 17 Nov, the market DM at 320 dp and
  * 1.3×: they left the thread 0 dp and pushed the box under the navigation bar, and with the keyboard up behind it).
  *
  * The box can't be typed in while the card is up (ChatComposer disabled), so a keyboard still up when the pause starts is
@@ -43,7 +44,7 @@ export interface DmKeyChangedPaneProps {
 export const DM_KEY_PANE_FADE = CHAT_PAGE_FADE;
 
 export function DmKeyChangedPane({ card, maxHeight, barsRoom, children }: DmKeyChangedPaneProps) {
-    if (!card) return barsRoom === undefined ? <>{children}</> : <ChatScrollPage testID="chat-bars-page" maxHeight={barsRoom}>{children}</ChatScrollPage>;
+    if (!card) return barsRoom === undefined ? <>{children}</> : <ChatScrollPage testID="chat-bars-page" maxHeight={barsRoom} anchor="end">{children}</ChatScrollPage>;
     return <KeyCardPage card={card} maxHeight={maxHeight}>{children}</KeyCardPage>;
 }
 

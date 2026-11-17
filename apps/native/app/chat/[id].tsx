@@ -250,13 +250,15 @@ function ChatScreen({ id }: { id: string }) {
     // A keyboard already up when a pause starts pads the column's KeyboardAvoidingView by up to its height: the banner's
     // cap takes it off the room, so the paused box is never under it (#1872/#1873 confirmation 2, finding 5).
     const keyboardHeight = useKeyboardState(s => (s.isVisible ? s.height : 0));
-    // Without the card, the column shares its room in an order (utils/chat-column-fit): the composer whole, one line of the
-    // thread, the banners over the composer, then the bars, which scroll as a page or fold away while typing on a small
-    // phone (walk of 17 Nov: a market DM at 320 dp and 1.3× left the thread 0 dp and the box under the keyboard). The
-    // composer is measured on its own, so the banners' room never waits on the banners' own height.
+    // Without the card, the column shares its room in an order (utils/chat-column-fit): the composer whole, the Editing or
+    // Replying to banner whole beside it (the field stops growing first), one line of the thread, then the bars and the
+    // About chip, which scroll as pages or fold away while typing on a small phone (walk of 17 Nov: a market DM at 320 dp
+    // and 1.3× left the thread 0 dp and the box under the keyboard; deciding review of f4bbcfa4: the banner folded). The
+    // composer and the banner are measured on their own, so no room waits on its own height.
     const [inputHeight, setInputHeight] = useState(0);
+    const [bannerHeight, setBannerHeight] = useState(0);
     const fit = chatColumnFit({
-        column: column.column, box: column.composer, input: inputHeight,
+        column: column.column, box: column.composer, input: inputHeight, banner: bannerHeight,
         windowHeight, keyboard: keyboardHeight, paused: keyChangePending,
     });
     // Modals get their own native window, and keyboard-controller only hears keyboard
@@ -1641,7 +1643,8 @@ function ChatScreen({ id }: { id: string }) {
                 deciding review of 6775428c). The column holds nothing else, so nothing new goes between this and the keyboard
                 view: it goes in here. Keyed on the offered key, so a tick given for one code never carries over to another.
                 Named from the key's member row, never the conversation id. Without the card the bars are a page of their own
-                (barsRoom, chatColumnFit): whole while they fit, scrolling once taller, folded away while typing leaves no room,
+                (barsRoom, chatColumnFit): whole while they fit, scrolling once taller (kept at the end, so the deals strip gives way
+                first), folded away while typing leaves no room,
                 so the box and one line of the thread always have theirs (walk of 17 Nov, the market DM at 320 dp and 1.3×). */}
             <DmKeyChangedPane
                 key={keyChange?.offeredPeer ?? 'none'}
@@ -1827,11 +1830,20 @@ function ChatScreen({ id }: { id: string }) {
                     </VoicePlaybackProvider>
                 )}
 
-                {/* The box: everything under the thread, measured whole for the key card's room (dmKeyBannerMaxHeight). Its
-                    banners (Editing, About, Replying to) are one page in what the composer and one line of the thread leave
-                    (chatColumnFit): they stand whole while they fit and scroll past it, so the composer is never cut. */}
+                {/* The box: everything under the thread, measured whole for the key card's room (dmKeyBannerMaxHeight). The
+                    About chip is a page in what the composer, the banner and one line of the thread leave (chatColumnFit),
+                    the last to give way after the bars. The Editing or Replying to banner sits whole on the composer while
+                    typing: the field gives way to it (ChatComposer maxHeight), and only once that is down to its line is
+                    the banner's padding cropped, its words and ✕ centred (deciding review of f4bbcfa4, findings 1 and 2). */}
                 <View onLayout={measured('composer')}>
-                <ChatScrollPage testID="chat-box-banners" maxHeight={fit.banners}>
+                {!editingMessage && (
+                    <ChatScrollPage testID="chat-about-page" maxHeight={fit.about}>
+                        <ChatAboutBanner conversationId={String(id)} />
+                    </ChatScrollPage>
+                )}
+
+                <View testID="chat-box-banner" style={{ maxHeight: fit.banner, overflow: 'hidden', justifyContent: 'center' }}>
+                <View onLayout={(e) => setBannerHeight(Math.ceil(e.nativeEvent.layout.height))}>
                 {editingMessage && (
                     <ChatEditBanner
                         styles={chat}
@@ -1840,16 +1852,15 @@ function ChatScreen({ id }: { id: string }) {
                     />
                 )}
 
-                {!editingMessage && <ChatAboutBanner conversationId={String(id)} />}
-
                 {replyToMessage && !editingMessage && (() => {
                     // What is being answered, as the thread judged it (dmQuoteFor).
                     const q = dmQuoteFor(replyToMessage, identity?.publicKey, peerName);
                     return <ChatReplyBanner styles={chat} author={q.author} text={q.text} note={q.note} onCancel={() => setReplyToMessage(null)} />;
                 })()}
-                </ChatScrollPage>
+                </View>
+                </View>
 
-                {/* The composer (or a request's panel) alone, measured for the banners' room. */}
+                {/* The composer (or a request's panel) alone, measured for the About chip's and the banner's rooms. */}
                 <View onLayout={(e) => setInputHeight(Math.round(e.nativeEvent.layout.height))}>
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
@@ -1958,6 +1969,7 @@ function ChatScreen({ id }: { id: string }) {
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
+                        maxHeight={fit.composer}
                         onVoice={voiceHere && requestMode === 'none' && !requestLineId && !editingMessage ? sendVoice : undefined}
                         voiceOwner={voiceOwner}
                         leading={

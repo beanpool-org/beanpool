@@ -487,7 +487,7 @@ h1{font-size:1.2rem}p{margin:.6rem 0}.qr{background:#fff;display:inline-block;pa
 <fieldset id="asks"><legend>Before you scan</legend><p><label><input type="checkbox" id="canpost"> May post for me: an owner's assistant posts Offers, Needs, events and polls as you, at once, with no approval. Without it, the assistant posts nothing.</label></p><p><label><input type="checkbox" id="canmoderate"> May take down posts for me: an owner's assistant takes posts down at once, one or many; an admin's, one post a call. Each is hidden from everyone else at once, and a person can put it back in Settings for ${TAKEDOWN.holdDays} days. Without it, the assistant takes nothing down.</label></p><p class="muted" id="asksnote">Your phone shows these ticks and approves only them. Change them before you scan.</p></fieldset>
 <div class="qr">${p.svg}</div>
 <p class="muted">The phone should show the code <span class="code">${escapeHtml(p.shortCode)}</span>.</p>
-<form id="confirm" hidden><label for="digits">Type the six digits your phone shows (one try): </label><input id="digits" inputmode="numeric" maxlength="6" autocomplete="one-time-code"> <button type="submit">Connect</button></form>
+<form id="confirm" hidden><label for="digits">Type the six digits your phone shows (one try): </label><input id="digits" inputmode="numeric" maxlength="7" autocomplete="one-time-code"> <button type="submit">Connect</button></form>
 <p id="status" role="status" class="muted">Waiting for your phone…</p>
 <script nonce="${p.nonce}">
 (function(){
@@ -506,7 +506,7 @@ function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'applic
 function poll(){post(base+'/wait').then(show)}
 function asks(){post(base+'/asks',{canPost:cp.checked===true,canModerate:cm.checked===true}).then(function(r){if(r&&r.asks){cp.checked=r.asks.canPost===true;cm.checked=r.asks.canModerate===true}else{freeze()}})}
 cp.addEventListener('change',asks);cm.addEventListener('change',asks);
-form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value}).then(show)});
+form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value.replace(/\\D/g,'')}).then(show)});
 poll();
 })();
 </script></body></html>`;

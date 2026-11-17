@@ -536,7 +536,8 @@ export function confirmPairing(pairingId: string, secret: string | undefined, di
         notify(p.id);
         return { kind: 'refused' };
     }
-    const typed = String(digits ?? '').trim();
+    // As the phone groups them ("047 193"), or not: spaces never cost the one try.
+    const typed = String(digits ?? '').replace(/\s+/g, '');
     const right = SIX_DIGITS.test(typed) && crypto.timingSafeEqual(Buffer.from(typed), Buffer.from(p.confirmCode!));
     if (!right) {
         p.confirmTries = (p.confirmTries ?? 0) + 1;

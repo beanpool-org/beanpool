@@ -27,6 +27,8 @@ vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
     getYourGroups: vi.fn(async () => ({ items: [] })),
     groupKeysNet: { get: vi.fn(async () => { throw new Error('the chat card never reads keys'); }), post: vi.fn(async () => { throw new Error('the chat card never reads keys'); }) },
+    // Home's let-go of a done request (lib/web-push stopTellingMeAtHome): no network here (#3290, HomePage.find.test.tsx).
+    sendSignedAt: vi.fn(async () => { throw new TypeError('Failed to fetch'); }),
 }));
 // The shared town search (components/AddressSearch.tsx over @beanpool/core createAddressLookup), stood in for by one
 // match: what is tested here is where a picked town goes, never OpenStreetMap.

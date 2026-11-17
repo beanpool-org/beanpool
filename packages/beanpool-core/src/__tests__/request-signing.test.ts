@@ -3,7 +3,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
 import {
-    BOUND_SIGNATURE_MARKER, INVITE_TICKET_TAG, REQUEST_TAG, SIGNED_FOR_HEADER,
+    ASSISTANT_CONSENT_TAG, BOUND_SIGNATURE_MARKER, INVITE_TICKET_TAG, REQUEST_TAG, SIGNED_FOR_HEADER, assistantConsentText, signAssistantConsent,
     adminSigninText, audienceOf, bodyOfSignedText, buildBoundRequestHeaders, buildBoundWsParams, buildInviteTicket,
     bytesOfSignedText, ed25519Signer, inviteTicketText, parseInviteTicketText, parseSignedText, signAdminSignin,
     signSettingsSignin, settingsSigninText, signedPathOf, signedRequestBytes, signedRequestText, timestampOfSignedText,
@@ -168,6 +168,21 @@ describe('builders', () => {
         expect(ed25519.verify(b64(sig), signedRequestBytes(adminSigninText('a.example', id)), ed25519.getPublicKey(SEED))).toBe(true);
         // A node's "challenge" that is really a request for another community is refused before anything is signed.
         await expect(signAdminSignin('https://a.example', 'POST\n/api/member/purge\n1\nn\n', ed25519Signer(SEED))).rejects.toThrow();
+    });
+
+    it("an assistant's approval names the host, the pairing, its short code and the ticks the phone showed (risk 3)", async () => {
+        const id = 'ef'.repeat(32);
+        const ticks = { canPost: true, canModerate: false };
+        expect(assistantConsentText('a.example', id, 'ABCDEF', ticks)).toBe(`${ASSISTANT_CONSENT_TAG}\na.example\napprove\n${id}\nABCDEF\npost=1\ntakedown=0`);
+        const sig = await signAssistantConsent('https://a.example', id, 'ABCDEF', ticks, ed25519Signer(SEED));
+        const ok = (text: string) => ed25519.verify(b64(sig), signedRequestBytes(text), ed25519.getPublicKey(SEED));
+        expect(ok(assistantConsentText('a.example', id, 'ABCDEF', ticks))).toBe(true);
+        // Never valid for other ticks, another community, or as a Settings sign-in.
+        expect(ok(assistantConsentText('a.example', id, 'ABCDEF', { canPost: true, canModerate: true }))).toBe(false);
+        expect(ok(assistantConsentText('b.example', id, 'ABCDEF', ticks))).toBe(false);
+        expect(ok(settingsSigninText('a.example', 'approve', id, 'ABCDEF'))).toBe(false);
+        // Only a true is a tick.
+        expect(assistantConsentText('a.example', id, 'ABCDEF', { canPost: 'yes', canModerate: 1 } as any)).toMatch(/post=0\ntakedown=0$/);
     });
 
     it('pairing, ticket and re-enrolment name the host too', async () => {

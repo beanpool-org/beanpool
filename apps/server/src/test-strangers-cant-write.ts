@@ -51,8 +51,13 @@ function assert(cond: boolean, msg: string): void {
 }
 
 // ── the lists ───────────────────────────────────────────────────────────────────────────────────────
-/** What a stranger's call to a write it may make is allowed to change: these tables, and a call out only when `out` says so. */
-interface May { why: string; tables: string[]; out?: string }
+/**
+ * What a stranger's call to a write it may make is allowed to change: these tables, these keys of node_config (which holds
+ * the owners' settings, so it is never allowed whole), and a call out only when `out` says so.
+ */
+interface May { why: string; tables: string[]; config?: string[]; out?: string }
+/** A knock may move the node's measure of how promptly requests are answered, which the directory shows (engine/knocks.ts). */
+const KNOCK_MEASURE = 'knockAnswersNoneSince';
 
 /**
  * The writes a key with no row here may call, each with why. Answered (often as done), but changing nothing beyond its own
@@ -61,7 +66,7 @@ interface May { why: string; tables: string[]; out?: string }
  */
 const STRANGER_MAY: Record<string, May> = {
     'POST /api/join/knock': { why: 'asking to join is the stranger\'s own door: its request, and the owners and admins told someone is asking',
-        tables: ['join_requests', 'push_notices', 'node_config'], out: 'a push to the owners and admins who answer requests' },
+        tables: ['join_requests', 'push_notices'], config: [KNOCK_MEASURE], out: 'a push to the owners and admins who answer requests' },
     'DELETE /api/push-tokens': { why: 'taking the signer\'s own phone off: a key with no row has none, so nothing goes', tables: [] },
     'POST /api/channels/mine': { why: 'the signer\'s own Pulse channels, asked by POST: a key with no row has none', tables: [] },
     'POST /api/member/pulse/nudges': { why: 'the signer\'s own Pulse nudges, asked by POST: a key with no row has none', tables: [] },
@@ -74,8 +79,8 @@ const STRANGER_MAY: Record<string, May> = {
 
 /** What a key with an open request to join may also do, beyond STRANGER_MAY: its own request, its phone and its browser. */
 const KNOCKER_MAY: Record<string, May> = {
-    'POST /api/join/knock': { why: 'asking again: its open request is answered as it stands', tables: ['join_requests', 'push_notices', 'node_config'],
-        out: 'a push to the owners and admins who answer requests' },
+    'POST /api/join/knock': { why: 'asking again: its open request is answered as it stands', tables: ['join_requests', 'push_notices'],
+        config: [KNOCK_MEASURE], out: 'a push to the owners and admins who answer requests' },
     'POST /api/join/knock/cancel': { why: 'taking back its own request', tables: ['join_requests'] },
     'POST /api/push-tokens': { why: 'its phone, so it hears the answer (web push W4: kept only while its request is open), counted against its address\'s day cap',
         tables: ['push_tokens', 'writes_by_address'] },
@@ -602,8 +607,10 @@ async function main(): Promise<void> {
         const problems: string[] = [];
         if (m.r.status === 500) problems.push('a server error');
         if (!allowed && m.r.status >= 200 && m.r.status < 300) problems.push('answered as done');
-        const extra = m.changed.filter(t => !(allowed?.tables ?? []).includes(t));
-        if (extra.length) problems.push(`changed ${extra.join(', ')}${m.config.length ? ` (${m.config.join(', ')})` : ''}`);
+        const extra = m.changed.filter(t => t !== 'node_config' && !(allowed?.tables ?? []).includes(t));
+        const keys = m.config.map(k => k.slice('node_config.'.length)).filter(k => !(allowed?.config ?? []).includes(k));
+        if (keys.length) extra.push(`node_config (${keys.join(', ')})`);
+        if (extra.length) problems.push(`changed ${extra.join(', ')}`);
         if (m.left.length && !allowed?.out) problems.push(`sent ${m.left.join(', ')}`);
         return problems.length ? `${route} → ${show(m.r)}: ${problems.join('; ')}` : null;
     };

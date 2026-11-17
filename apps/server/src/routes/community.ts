@@ -2220,8 +2220,9 @@ router.post('/api/ratings', async (ctx) => {
         ctx.body = { error: 'raterPubkey must match authenticated signer' };
         return;
     }
-    // A key with no member row here rates nobody: refused as a visitor's refused write is (403 not_a_member), where
-    // addRating's assertMemberActive would throw "Member not found" and answer 500 (test-strangers-cant-write).
+    // A key that is no member here rates nobody: refused as a visitor's refused write is (403 not_a_member), where a key
+    // with no row made addRating's assertMemberActive throw "Member not found" and answer 500 (test-strangers-cant-write).
+    // Pruned, replaced, retired and visitors' keys never get this far: the signature middleware refuses them first.
     if (!isNodeMember(activeActor)) {
         ctx.status = 403;
         ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };

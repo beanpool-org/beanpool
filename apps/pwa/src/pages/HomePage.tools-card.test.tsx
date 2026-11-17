@@ -11,6 +11,8 @@ vi.mock('../lib/api', () => ({
     saveHomePreferences: vi.fn(async (_pk: string, prefs: Record<string, unknown>) => ({ success: true, ...prefs })),
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 1 })),
     getCommunityMe: vi.fn(async () => ({ probation: null })),
+    // Home's let-go of a done request (lib/web-push stopTellingMeAtHome): no network here (#3290, HomePage.find.test.tsx).
+    sendSignedAt: vi.fn(async () => { throw new TypeError('Failed to fetch'); }),
 }));
 
 vi.mock('../components/AddressSearch', () => ({

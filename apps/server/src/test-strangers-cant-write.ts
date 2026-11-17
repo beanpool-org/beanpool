@@ -24,9 +24,9 @@
  *      nothing else; Kim's request is still waiting at the end.
  *   4. The live socket: it reads one message, the heartbeat's ping. A socket signed by a stranger's key, and one unsigned,
  *      send every frame a write would be: nothing changes and nothing leaves.
- *   5. Controls, so the sweep can fail: the same bodies signed by Bob, a member, change something on many of the writes
- *      (the bodies reach real data, so a stranger's "nothing changed" is a refusal), and a row a stranger planted would be
- *      seen by the same snapshot.
+ *   5. Controls, so the sweep can fail: the same bodies signed by Alice, the owner they name, change something or call out
+ *      on many of the writes (the bodies reach real data, so a stranger's "nothing changed" is a refusal), and a row a
+ *      stranger planted would be seen by the same snapshot.
  *
  * The engines the inventory had not traced (pausePost, resumePost, publishKnowledge, deleteGroupPost,
  * removeGroupThreadMessage, skipEventDate, names step-back) are among the swept writes, each with a body that reaches them.
@@ -39,8 +39,15 @@ delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 delete process.env.NODE_PROFILE;
+// TikTok's relay on, so the Pulse's token exchange reaches its call out (answered by the recorder below, never sent).
+process.env.TIKTOK_CLIENT_KEY = 'sw-client-key';
+process.env.TIKTOK_CLIENT_SECRET = 'sw-client-secret';
 
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import nodeHttp from 'node:http';
+import nodeHttps from 'node:https';
+import { syncBuiltinESMExports } from 'node:module';
 import WebSocket from 'ws';
 import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -75,6 +82,8 @@ const STRANGER_MAY: Record<string, May> = {
     'POST /api/local/admin/auth/pairing': { why: 'starting a Settings sign-in by QR: a pairing held in memory, which only a role-holder\'s phone approves', tables: [] },
     'POST /api/local/admin/auth/logout': { why: 'signing out a session the caller does not have: nothing to end', tables: [] },
     'POST /oauth/revoke': { why: 'an assistant\'s token revoke answers 200 to anything (RFC 7009 §2.2), revoking only a token it is sent', tables: [] },
+    'POST /api/funnel-event': { why: 'an onboarding step the phone counts (routes/community.ts): a key, not a membership, one of three allowlisted '
+        + 'steps into an anonymous count that keeps no key (M2)', tables: ['onboarding_funnel'] },
 };
 
 /** What a key with an open request to join may also do, beyond STRANGER_MAY: its own request, its phone and its browser. */
@@ -129,7 +138,7 @@ const STRANGER_REFUSED = new Set<string>([
     'POST /api/forum/topics/:id/close', 'POST /api/forum/topics/:id/decision', 'POST /api/forum/topics/:id/follow',
     'POST /api/forum/topics/:id/links', 'POST /api/forum/topics/:id/move', 'POST /api/forum/topics/:id/pin', 'POST /api/forum/topics/:id/poll',
     'POST /api/forum/topics/:id/read', 'POST /api/forum/topics/:id/replies', 'POST /api/friends/add', 'POST /api/friends/remove',
-    'POST /api/funnel-event', 'POST /api/global/circles/:id/starting', 'POST /api/global/watches', 'POST /api/groups',
+    'POST /api/global/circles/:id/starting', 'POST /api/global/watches', 'POST /api/groups',
     'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/chat/report',
     'POST /api/groups/:id/decisions', 'POST /api/groups/:id/decisions/:decisionId/vote', 'POST /api/groups/:id/guests',
     'POST /api/groups/:id/join', 'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/epoch', 'POST /api/groups/:id/keys/wrap',
@@ -259,15 +268,18 @@ const STRANGER_REFUSED = new Set<string>([
 // ── nothing leaves the node ─────────────────────────────────────────────────────────────────────────
 /**
  * Every call the node made to a host that is not this machine: Expo's push service, a browser's push service (web push
- * goes out with the global fetch, services/web-push.ts), another community, anything. Answered here, never sent.
+ * goes out with the global fetch, services/web-push.ts), another community, a link's preview (engine/pulse-resolver.ts
+ * ssrfSafeFetch, https.request), TikTok or Instagram (engine/platform-identity.ts platformRequest, https.request; its
+ * recorder is set in main), a public address check, an off-box backup, anything. Answered here, never sent.
  */
 const outside: string[] = [];
+const isLocal = (host: string) => ['localhost', '127.0.0.1', '::1', '[::1]'].includes(host);
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init?: any) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input?.url;
     let host = '';
     try { host = new URL(String(url)).hostname; } catch { /* not a URL */ }
-    if (host && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1' && host !== '[::1]') {
+    if (host && !isLocal(host)) {
         let to = '';
         if (host === 'exp.host') { try { to = ` (push to ${JSON.parse(String(init?.body ?? '[]')).map((m: any) => m.to).join(', ')})`; } catch { /* not a list */ } }
         outside.push(`${init?.method ?? 'GET'} ${host}${to}`);
@@ -275,6 +287,30 @@ globalThis.fetch = (async (input: any, init?: any) => {
     }
     return realFetch(input, init);
 }) as typeof fetch;
+/**
+ * The same for http.request, https.request and their get: a call to a host not this machine is counted and answered with a
+ * refused connection, never made. This suite's own socket (wss://localhost) goes through as it is.
+ */
+for (const mod of [nodeHttp, nodeHttps] as Array<Record<'request' | 'get', (...a: any[]) => any>>) {
+    for (const fn of ['request', 'get'] as const) {
+        const real = mod[fn];
+        mod[fn] = (...args: any[]) => {
+            const [a0, a1] = args;
+            const opts = (typeof a0 === 'string' || a0 instanceof URL) ? { ...(a1 && typeof a1 === 'object' ? a1 : {}), url: new URL(String(a0)) } : (a0 ?? {});
+            const host = String(opts.url?.hostname ?? opts.hostname ?? opts.host ?? 'localhost').replace(/:\d+$/, '');
+            if (isLocal(host)) return real(...args);
+            outside.push(`${String(opts.method ?? 'GET').toUpperCase()} ${host}`);
+            const req = new EventEmitter() as EventEmitter & Record<string, unknown>;
+            const refuse = () => setImmediate(() => { if (req.listenerCount('error')) req.emit('error', new Error(`${host}: no outside call from this suite`)); });
+            Object.assign(req, { write: () => true, setHeader: () => req, getHeader: () => undefined, removeHeader: () => req,
+                setTimeout: () => req, setNoDelay: () => req, flushHeaders: () => req, destroy: () => req, abort: () => req,
+                end: () => { refuse(); return req; } });
+            if (fn === 'get') refuse();
+            return req;
+        };
+    }
+}
+syncBuiltinESMExports();
 
 // ── identities and requests ─────────────────────────────────────────────────────────────────────────
 interface Id { pk: string; priv: crypto.KeyObject; name: string }
@@ -332,6 +368,11 @@ async function main(): Promise<void> {
     const { resetClaimBrake } = await import('./claim-code.js');
     const { tidyKnocks, startTidyingKnocks } = await import('./engine/knocks.js');
     const { tidyPushNotices } = await import('./engine/push-notices.js');
+    // TikTok and Instagram, as the platform would answer a good token: counted as a call out, never sent.
+    (await import('./engine/platform-identity.js')).setPlatformRequestForTests(async (method, url) => {
+        outside.push(`${method} ${new URL(url).hostname}`);
+        return { status: 200, json: { access_token: 'at-sw', refresh_token: 'rt-sw', expires_in: 86_400, open_id: 'sw', scope: 'user.info.basic' } };
+    });
     /**
      * The node's own tidy-ups, run here between writes, never inside one's window: every knock bells the owners and admins,
      * and a knocking key's phone and browser stay only while its request is open, so after hundreds of knocks the timers
@@ -544,6 +585,12 @@ async function main(): Promise<void> {
         'POST /api/web-push': () => ({ subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/swept',
             keys: { p256dh: (() => { const e = crypto.createECDH('prime256v1'); e.generateKeys(); return e.getPublicKey().toString('base64url'); })(),
                 auth: crypto.randomBytes(16).toString('base64url') } } }),
+        // A refresh through the node's TikTok app, naming no channel (a plain relay): it spends the node's hourly allowance.
+        'POST /api/member/pulse/oauth-exchange': () => ({ platform: 'tiktok', grantType: 'refresh_token', refreshToken: 'rt-swept' }),
+        // A real push switch, turned off (BAIT's `chat` is no push key, so it never reached the write).
+        'POST /api/members/preferences': (x) => ({ publicKey: x.pk, preferences: { notify_chat: false } }),
+        // An onboarding step the phone counts.
+        'POST /api/funnel-event': () => ({ event: 'guide_complete', variant: 'sw' }),
     };
     const unservedBodies = Object.keys(BODIES).filter(r => !writes.includes(r));
     assert(unservedBodies.length === 0, `every body written for a route is for one the node serves, so none goes unsent${unservedBodies.length ? ` — not served: ${unservedBodies.join(', ')}` : ''}`);
@@ -713,7 +760,7 @@ async function main(): Promise<void> {
         for (const route of writes) {
             if (route === 'POST /api/member/purge') continue; // Alice stays a member for the rest of this control
             const m = await measure(route, alice, true);
-            if (m.changed.length) reached.push(route);
+            if (m.changed.length || m.left.length) reached.push(route);
         }
         console.log(`  (Alice's same body changed something on ${reached.length} writes: ${reached.join(', ')})`);
         // 59 when this suite was written (18 Nov 2026); the floor leaves room for routes that change, not for bodies that miss.

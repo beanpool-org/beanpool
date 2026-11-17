@@ -5,7 +5,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { checkDoorWorkChallenge, checkDoorWorkSolution, makeDoorWorkChallenge, solveDoorWorkSync } from '@beanpool/core/door-work';
+import {
+    checkDoorWorkChallenge, checkDoorWorkSolution, DOOR_WORK_MESSAGE_BYTES, DOOR_WORK_PAD_BYTES, doorWorkSha256, makeDoorWorkChallenge, solveDoorWorkSync,
+    type DoorWorkDigestSync,
+} from '@beanpool/core/door-work';
 import { WebJoin } from './WebJoin';
 import { generateIdentity, loadPendingJoin, savePendingJoin, PENDING_JOIN_TTL_MS } from '../lib/identity';
 import { readAuthReturn, requestDoorWork, doorCheckUrl, doorOutcome, joinVerdict, resetCapturedAuthReturn, wordsWorkRefusal } from '../lib/web-join';
@@ -25,7 +28,21 @@ function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const solver: DoorWorkSolver = (challenge) => ({ done: Promise.resolve(solveDoorWorkSync(challenge)), cancel: () => {} });
+/**
+ * A cheap work target (18 Nov nightly): each try hashes the try's own head (the challenge's hash, the part, the counter)
+ * and not the 64 KB of zeros after it. The solver and the stubbed node both use it, so the join still has to carry
+ * counters that solve this challenge's puzzle for this key and door; only each try is cheap. With the real hash, a join
+ * here hashed about 200 MB on this test's thread (about 1.4 s alone), and during the full parallel run that went past
+ * the 15 s wait (setupTests.ts): "back with a token" and "the door got busy" failed, and the join still out failed the
+ * next test's pendingHere(). The real hash is core's door-work tests' and lib/door-work.test.ts's to check.
+ */
+let hashed = 0;
+const cheapDigest: DoorWorkDigestSync = (message) => {
+    const head = message.subarray(0, DOOR_WORK_MESSAGE_BYTES - DOOR_WORK_PAD_BYTES);
+    hashed += head.length;
+    return doorWorkSha256(head);
+};
+const solver: DoorWorkSolver = (challenge) => ({ done: Promise.resolve(solveDoorWorkSync(challenge, cheapDigest)), cancel: () => {} });
 
 /**
  * The node, busy: work only with a good token (or a pass from one), and a join only with work. `joinAsks`: it got busy
@@ -55,7 +72,7 @@ function busyNode(o: { goodToken?: string; joinAsks?: boolean; asksAgain?: boole
             joins.push(body);
             if (o.joinAsks && !passed) return json(429, CHECK_REQUIRED);
             const c = checkDoorWorkChallenge(body.work?.challenge, { workKey: WORK_KEY, key, door: 'words' });
-            if (!c.ok || !checkDoorWorkSolution(body.work.challenge, body.work.counters).ok) return json(400, { error: 'bad', code: 'work_invalid' });
+            if (!c.ok || !checkDoorWorkSolution(body.work.challenge, body.work.counters, cheapDigest).ok) return json(400, { error: 'bad', code: 'work_invalid' });
             return json(200, { success: true, member: { callsign: body.callsign }, door: 'words' });
         }
         if (path === '/api/join/sso-nonce') return json(200, { nonce: 'n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web' } });
@@ -169,9 +186,13 @@ describe('the join', () => {
     it('back with a token, the join carries on by itself and the member is in', async () => {
         const p = await pendingHere({ checkHop: true });
         const node = busyNode({ goodToken: '0.tok' });
+        hashed = 0;
         const { onJoined } = renderJoin({ authReturn: readAuthReturn('/app/auth/check', '#token=0.tok') });
         await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
         expect(onJoined.mock.calls[0][0]).toMatchObject({ door: 'words' });
+        // The work this join carried was solved and checked on the cheap target: kilobytes hashed, not hundreds of megabytes.
+        expect(hashed).toBeGreaterThan(0);
+        expect(hashed).toBeLessThan(1_000_000);
         expect(node.works[0]).toEqual({ door: 'words', turnstile: '0.tok' });
         expect(node.joins).toHaveLength(1);
         expect((await loadPendingJoin())?.identity.publicKey ?? p.identity.publicKey).toBe(p.identity.publicKey);

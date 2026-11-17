@@ -179,7 +179,9 @@ describe('Invited, not joined yet (the phone)', () => {
         await act(async () => { await buttons[1].onPress?.(); });
         await settle();
         const [failedTitle, failedBody] = alertCall();
-        expect(failedTitle).toBe('Could not withdraw the invitation');
+        // A short title; "Could not withdraw the invitation" leads the message (33 characters were cut at two lines as a title).
+        expect(failedTitle).toBe('Something went wrong');
+        expect(String(failedBody).split('\n\n')[0]).toBe('Could not withdraw the invitation');
         expect(String(failedBody)).toContain('Only a group convenor can remove members');
         expect(rows('group-invited-row')).toHaveLength(2);
     });
@@ -198,7 +200,8 @@ describe('Invited, not joined yet (the phone)', () => {
         await settle();
         expect(withdrawGroupInvitationApi).toHaveBeenCalledWith('g-1', 'pk-mia');
         const [failedTitle, failedBody] = alertCall();
-        expect(failedTitle).toBe('Could not withdraw the invitation');
+        expect(failedTitle).toBe('Something went wrong');
+        expect(String(failedBody).split('\n\n')[0]).toBe('Could not withdraw the invitation');
         expect(String(failedBody)).toContain('They have already joined the group');
         expect(host.textContent).not.toContain('Mia');
         expect(rows('group-invited-row')).toHaveLength(1);

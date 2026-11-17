@@ -36,6 +36,7 @@ import { globalEntryLine } from '../utils/global-entry-line';
 import { askCommunityName, communityName } from '../utils/community-name';
 import { doorNodeAt, openDoorHrefForTap } from '../utils/open-door';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
+import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { copiesAtFor } from '../utils/copies-rule';
 import { NoWordsNotice } from '../components/NoWordsNotice';
 import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
@@ -231,7 +232,8 @@ export default function NodeMismatchScreen() {
             });
             await recheck().catch(() => 'unknown');
             setInviteText('');
-            const nudge = joinedNudge(joined.name, await copiesAtFor(joined.url));
+            // In the member's language, as every screen that joins another community (utils/joined-nudge-words).
+            const nudge = joinedNudgeWords(joinedNudge(joined.name, await copiesAtFor(joined.url)), joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
                 // Only where each community keeps its own sign-in copy (a build without a key vault).

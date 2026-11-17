@@ -29,7 +29,9 @@ describe('the joined nudge in the member\'s language', () => {
             for (const part of [words.title, words.body, words.later, words.protect].filter((p): p is string => !!p)) {
                 expect(part.startsWith('['), part).toBe(true);
             }
-            expect(words.title).toBe(pseudoLocalise("You're in {name}").replace('{name}', 'Mullumbimby'));
+            // A short title; the community's name leads the message (a name can be 120 characters; a title is cut at two lines).
+            expect(words.title).toBe(pseudoLocalise('Welcome'));
+            expect(words.body).toContain(pseudoLocalise("You're in {name}").replace('{name}', 'Mullumbimby'));
         });
     }
 

@@ -159,10 +159,12 @@ export interface JoinedNudge {
  * nudge; `none` says it keeps none and the words are the way back there, with Next; absent, this build's place.
  */
 export function joinedNudge(name: string, copies: SignInCopies = signInCopiesAt()): JoinedNudge {
-    const came = 'Your key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\n';
+    // The community's name leads the message, under a short title: a name can be 120 characters, and Android cuts an
+    // Alert's title at two lines (utils/__tests__/alert-words-in-message.test.ts).
+    const came = `You're in ${name}\n\nYour key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\n`;
     if (copies === 'community') {
         return {
-            title: `You're in ${name}`,
+            title: 'Welcome',
             body: came + `A sign-in that protects your account is kept by each community, so protect your account in ${name} too.`,
             later: 'Later',
             protect: 'Protect it',
@@ -171,14 +173,14 @@ export function joinedNudge(name: string, copies: SignInCopies = signInCopiesAt(
     }
     if (copies === 'none') {
         return {
-            title: `You're in ${name}`,
+            title: 'Welcome',
             body: came + `${name} keeps no copies of members' accounts, so your 12 words are your way back there. A copy you made before, in another community, is still yours.`,
             later: 'Next',
             kind: 'none',
         };
     }
     return {
-        title: `You're in ${name}`,
+        title: 'Welcome',
         body: came + 'A sign-in you linked to get back into your account works here too: BeanPool keeps one copy for all your communities.',
         later: 'Next',
         kind: 'vault',

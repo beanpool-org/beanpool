@@ -277,7 +277,8 @@ describe('Stop showing, on the host\'s page', () => {
         calls.stop.mockImplementation(async () => { calls.pair.mockImplementation(async () => null); return false; });
         await shownRow();
         await press('show-on-global-act');
-        expect((globalThis as any).__alerts).toEqual([['Also show this on the global community', 'It comes down later']]);
+        // A short title (the row's 38-character label was cut at two lines as one); the words in the message.
+        expect((globalThis as any).__alerts).toEqual([['Global community', 'It comes down later']]);
         expect(host.textContent).not.toContain('Stop showing');
     });
 

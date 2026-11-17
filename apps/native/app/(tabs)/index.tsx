@@ -13,6 +13,7 @@ import {
     starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
+import { twoParagraphs } from '../../utils/alert-words';
 import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications } from '../../utils/notification-permission';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
 import { resendWordsKept } from '../../utils/words-kept';
@@ -1024,7 +1025,9 @@ export default function HomeScreen() {
             const found = list?.find(n => n.id === noticeId);
             if (found) { title = found.title; body = found.body; }
         } catch { /* the card's own words */ }
-        Alert.alert(inviteAskNoticeHere(title), inviteAskNoticeHere(body));
+        // The notice's own title is the community's words, any length: it leads the message, under a short title (Android
+        // cuts a title at two lines: utils/__tests__/alert-words-in-message.test.ts).
+        Alert.alert(t('From your community'), body ? twoParagraphs(inviteAskNoticeHere(title), inviteAskNoticeHere(body)) : inviteAskNoticeHere(title));
         try { await signedPost(url, '/api/notices/seen', { ids: [noticeId] }, id); } catch { /* seen next time */ }
         void refreshRef.current('again');
     }, [url]);

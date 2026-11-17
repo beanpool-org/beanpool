@@ -58,6 +58,7 @@ const SHORT_TITLE_ONLY: Record<string, string> = {
 const NAMED_TITLES: Record<string, string> = {
     'app/(tabs)/settings.tsx: Disconnect {name}?': 'a sign-in provider: Apple, Google or Facebook (utils/sso-providers.ts SSO_PROVIDER_NAMES)',
     'app/channels.tsx: Disconnect {platform}?': "a platform's own short name (core channels.ts platformName: YouTube, TikTok, Instagram…)",
+    'components/VaultMoveCard.tsx: Remove your {name} recovery?': 'a sign-in provider: Apple, Google or Facebook (SSO_PROVIDER_NAMES[offer.provider]); "Remove your Facebook recovery?" is 30',
 };
 
 /**
@@ -73,7 +74,8 @@ const PASS_THROUGH: Record<string, string> = {
 
 type Leaf =
     | { kind: 'empty' }
-    | { kind: 'text'; en: string }
+    /** `key`: the catalog key t() looks up (a translator's note kept, a plural's `one|other`); none for English written out. */
+    | { kind: 'text'; en: string; key?: string }
     | { kind: 'opaque'; code: string };
 
 type Source = { rel: string; sf: ts.SourceFile };
@@ -113,8 +115,11 @@ function literalText(n: ts.Expression | undefined): string | null {
     return ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e) ? e.text : null;
 }
 
-/** What a top-level name in this file stands for: a core export, another file's export, or a local declaration. */
-type Binding = { core: string } | { node: ts.Expression; src: Source } | null;
+/**
+ * What a top-level name in this file stands for: a core export, another file's export, or a local declaration (a value,
+ * or a function declared with `function`).
+ */
+type Binding = { core: string } | { node: ts.Node; src: Source } | null;
 
 function bindingOf(src: Source, name: string, depth = 0): Binding {
     if (depth > 4) return null;
@@ -128,7 +133,8 @@ function bindingOf(src: Source, name: string, depth = 0): Binding {
                 const spec = st.moduleSpecifier.text;
                 if (spec === '@beanpool/core') return { core: imported };
                 if (spec.startsWith('.')) {
-                    const base = path.resolve(path.dirname(path.join(NATIVE, src.rel)), spec);
+                    // core's own files import './x.js' (ESM): its source is x.ts.
+                    const base = path.resolve(path.dirname(path.join(NATIVE, src.rel)), spec.replace(/\.js$/, ''));
                     for (const cand of [`${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')]) {
                         const other = parseFile(cand);
                         if (other) return bindingOf(other, imported, depth + 1);
@@ -137,6 +143,7 @@ function bindingOf(src: Source, name: string, depth = 0): Binding {
                 return null;
             }
         }
+        if (ts.isFunctionDeclaration(st) && st.name?.text === name && st.body) return { node: st, src };
         if (ts.isVariableStatement(st)) {
             for (const d of st.declarationList.declarations) {
                 if (ts.isIdentifier(d.name) && d.name.text === name && d.initializer) {
@@ -151,10 +158,10 @@ function bindingOf(src: Source, name: string, depth = 0): Binding {
 }
 
 /** A word of `<object>.<key>`, when the object is a core export or an object literal of words; else null. */
-function wordOf(src: Source, objName: string, key: string, call: boolean): string | null {
+function wordOf(src: Source, objName: string, key: string, call: boolean): { en: string; key: string } | null {
     const w = wordOfRaw(src, objName, key, call);
-    // A word with a translator's note is `text\u0004note` (core words.ts word()); t() shows the text.
-    return w === null ? null : w.split('\u0004')[0];
+    // A word with a translator's note is `text\u0004note` (core words.ts word()); t() shows the text, and looks up the whole.
+    return w === null ? null : { en: w.split('\u0004')[0], key: w };
 }
 
 function wordOfRaw(src: Source, objName: string, key: string, call: boolean): string | null {
@@ -180,34 +187,199 @@ function wordOfRaw(src: Source, objName: string, key: string, call: boolean): st
     return null;
 }
 
-/** `t('…')`'s or `word('…')`'s English, or null. */
+/** `t('…')`'s or `word('…')`'s catalog key (its English, and a translator's note if it has one), or null. */
 function tLiteral(n: ts.Expression | ts.ConciseBody): string | null {
     const e = strip(n as ts.Expression);
-    if (ts.isCallExpression(e) && ts.isIdentifier(e.expression) && (e.expression.text === 't' || e.expression.text === 'word')) return literalText(e.arguments[0]);
+    if (ts.isCallExpression(e) && ts.isIdentifier(e.expression) && (e.expression.text === 't' || e.expression.text === 'word')) return callKey(e);
     return null;
 }
 
-function leaves(src: Source, n: ts.Expression | undefined): Leaf[] {
+/** The key `t('X', values, 'note')` or `word('X', 'note')` looks up: core words.ts wordKey. */
+function callKey(e: ts.CallExpression): string | null {
+    const en = literalText(e.arguments[0]);
+    if (en === null) return null;
+    const note = literalText(e.arguments[(e.expression as ts.Identifier).text === 'word' ? 1 : 2]);
+    return note ? `${en}\u0004${note}` : en;
+}
+
+// ── Following a helper (review 6933630856: "You're in {name}" reached a title through joinedNudgeWords and joinedTitle) ──
+
+/** How many helpers deep a title or message is followed. */
+const MAX_FOLLOW = 4;
+
+const CORE_SRC = path.join(NATIVE, '..', '..', 'packages', 'beanpool-core', 'src');
+let coreIndex: Map<string, Source> | null = null;
+/** The core source file that declares an export, for a core function that takes an argument (it can't be called here). */
+function coreSourceOf(name: string): Source | null {
+    if (!coreIndex) {
+        coreIndex = new Map();
+        for (const abs of listSources(CORE_SRC)) {
+            const text = fs.readFileSync(abs, 'utf8');
+            for (const m of text.matchAll(/^export (?:async )?(?:function|const) ([A-Za-z0-9_$]+)/gm)) {
+                if (!coreIndex.has(m[1])) coreIndex.set(m[1], parseFile(abs)!);
+            }
+        }
+    }
+    return coreIndex.get(name) ?? null;
+}
+
+/** A binding, with a core export taken to its source file. */
+function sourceBinding(src: Source, name: string): { node: ts.Node; src: Source } | null {
+    const b = bindingOf(src, name);
+    if (!b) return null;
+    if (!('core' in b)) return b;
+    const file = coreSourceOf(b.core);
+    const inCore = file ? bindingOf(file, b.core) : null;
+    return inCore && !('core' in inCore) ? inCore : null;
+}
+
+type Fn = { fn: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration; src: Source };
+
+function asFn(node: ts.Node, src: Source): Fn | null {
+    const n = ts.isExpression(node) ? strip(node) : node;
+    if (ts.isFunctionDeclaration(n) || ts.isArrowFunction(n) || ts.isFunctionExpression(n) || ts.isMethodDeclaration(n)) return n.body ? { fn: n, src } : null;
+    return null;
+}
+
+/** The function a call calls: a helper of this file or another, a core function, or a method of an object of words. */
+function functionAt(src: Source, callee: ts.Expression): Fn | null {
+    const c = strip(callee);
+    if (ts.isIdentifier(c)) {
+        if (['t', 'tn', 'word', 'wordn'].includes(c.text)) return null;
+        const b = sourceBinding(src, c.text);
+        return b ? asFn(b.node, b.src) : null;
+    }
+    if (ts.isPropertyAccessExpression(c) && ts.isIdentifier(c.expression)) {
+        const b = sourceBinding(src, c.expression.text);
+        if (!b || !ts.isExpression(b.node)) return null;
+        const obj = strip(b.node);
+        if (!ts.isObjectLiteralExpression(obj)) return null;
+        for (const p of obj.properties) {
+            const pname = p.name && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) ? p.name.text : null;
+            if (pname !== c.name.text) continue;
+            if (ts.isMethodDeclaration(p)) return asFn(p, b.src);
+            if (ts.isPropertyAssignment(p)) return asFn(p.initializer, b.src);
+        }
+    }
+    return null;
+}
+
+/** What a function returns: its expression body, or each `return` in its body (not in a function inside it). */
+function returnsOf(f: Fn): ts.Expression[] {
+    const body = f.fn.body!;
+    if (!ts.isBlock(body)) return [body];
+    const out: ts.Expression[] = [];
+    const walk = (n: ts.Node) => {
+        if (n !== body && ts.isFunctionLike(n)) return;
+        if (ts.isReturnStatement(n) && n.expression) out.push(n.expression);
+        ts.forEachChild(n, walk);
+    };
+    walk(body);
+    return out;
+}
+
+/** The value a local name was given (`const nudge = await joinedNudgeWords(…)`), the nearest declaration before `at`. */
+function localValue(src: Source, id: ts.Identifier): ts.Expression | null {
+    for (let scope: ts.Node | undefined = id.parent; scope; scope = scope.parent) {
+        const statements = ts.isBlock(scope) || ts.isSourceFile(scope) || ts.isCaseClause(scope) || ts.isDefaultClause(scope) ? scope.statements : null;
+        if (!statements) continue;
+        let found: ts.Expression | null = null;
+        for (const st of statements) {
+            if (st.getStart(src.sf) > id.getStart(src.sf)) break;
+            if (!ts.isVariableStatement(st)) continue;
+            for (const d of st.declarationList.declarations) {
+                if (ts.isIdentifier(d.name) && d.name.text === id.text && d.initializer) found = d.initializer;
+            }
+        }
+        if (found) return found;
+    }
+    return null;
+}
+
+function unwrapAwait(n: ts.Expression): ts.Expression {
+    let e = strip(n);
+    while (ts.isAwaitExpression(e)) e = strip(e.expression);
+    return e;
+}
+
+/** `value.<prop>`, where value is an object a helper returns, or one written out: the property's leaves; null if unread. */
+function pick(src: Source, n: ts.Expression, prop: string, depth: number): Leaf[] | null {
+    if (depth > MAX_FOLLOW) return null;
+    const e = unwrapAwait(n);
+    if (ts.isConditionalExpression(e)) {
+        const a = pick(src, e.whenTrue, prop, depth);
+        const b = pick(src, e.whenFalse, prop, depth);
+        return a && b ? [...a, ...b] : null;
+    }
+    if (ts.isObjectLiteralExpression(e)) {
+        for (const p of [...e.properties].reverse()) {
+            if (ts.isSpreadAssignment(p)) {
+                const spread = pick(src, p.expression, prop, depth + 1);
+                if (spread) return spread;
+                continue;
+            }
+            const pname = p.name && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) ? p.name.text : null;
+            if (pname !== prop) continue;
+            if (ts.isPropertyAssignment(p)) return leaves(src, p.initializer, depth);
+            return null;
+        }
+        return null;
+    }
+    if (ts.isCallExpression(e)) {
+        const f = functionAt(src, e.expression);
+        if (!f) return null;
+        const out: Leaf[] = [];
+        for (const r of returnsOf(f)) {
+            const got = pick(f.src, r, prop, depth + 1);
+            if (!got) return null;
+            out.push(...got);
+        }
+        return out.length ? out : null;
+    }
+    if (ts.isIdentifier(e)) {
+        const v = localValue(src, e);
+        return v ? pick(src, v, prop, depth + 1) : null;
+    }
+    return null;
+}
+
+/** A template's English, a placeholder for each value: `You're in ${name}` reads "You're in {name}". */
+function templateText(e: ts.TemplateExpression): string {
+    const holder = (x: ts.Expression): string => {
+        const s = strip(x);
+        if (ts.isIdentifier(s)) return s.text;
+        if (ts.isPropertyAccessExpression(s)) return s.name.text;
+        return 'value';
+    };
+    return e.head.text + e.templateSpans.map((s) => `{${holder(s.expression)}}${s.literal.text}`).join('');
+}
+
+function leaves(src: Source, n: ts.Expression | undefined, depth = 0): Leaf[] {
     if (!n) return [{ kind: 'empty' }];
     const e = strip(n);
-    if (ts.isConditionalExpression(e)) return [...leaves(src, e.whenTrue), ...leaves(src, e.whenFalse)];
+    if (ts.isConditionalExpression(e)) return [...leaves(src, e.whenTrue, depth), ...leaves(src, e.whenFalse, depth)];
     if (ts.isBinaryExpression(e) && (e.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken || e.operatorToken.kind === ts.SyntaxKind.BarBarToken)) {
-        return [...leaves(src, e.left), ...leaves(src, e.right)];
+        return [...leaves(src, e.left, depth), ...leaves(src, e.right, depth)];
     }
     if (e.kind === ts.SyntaxKind.NullKeyword || (ts.isIdentifier(e) && e.text === 'undefined')) return [{ kind: 'empty' }];
     const lit = literalText(e);
     if (lit !== null) return [lit === '' ? { kind: 'empty' } : { kind: 'text', en: lit }];
+    if (ts.isTemplateExpression(e)) return [{ kind: 'text', en: templateText(e) }];
     const code = e.getText(src.sf).replace(/\s+/g, ' ');
+    // utils/alert-words.ts twoParagraphs(first, then): the message is both paragraphs.
+    if (ts.isCallExpression(e) && ts.isIdentifier(e.expression) && e.expression.text === 'twoParagraphs' && e.arguments.length === 2) {
+        return [...leaves(src, e.arguments[0], depth), ...leaves(src, e.arguments[1], depth)];
+    }
     if (ts.isCallExpression(e)) {
         const callee = e.expression;
         // t('…'), t(W.key), word('…')
         if (ts.isIdentifier(callee) && (callee.text === 't' || callee.text === 'word')) {
             const a = e.arguments[0] && strip(e.arguments[0]);
             const direct = literalText(a);
-            if (direct !== null) return [{ kind: 'text', en: direct }];
+            if (direct !== null) return [{ kind: 'text', en: direct, key: callKey(e) ?? direct }];
             if (a && ts.isPropertyAccessExpression(a) && ts.isIdentifier(a.expression)) {
                 const w = wordOf(src, a.expression.text, a.name.text, false);
-                if (w !== null) return [{ kind: 'text', en: w }];
+                if (w !== null) return [{ kind: 'text', ...w }];
             }
             return [{ kind: 'opaque', code }];
         }
@@ -215,23 +387,34 @@ function leaves(src: Source, n: ts.Expression | undefined): Leaf[] {
         if (ts.isIdentifier(callee) && callee.text === 'tn') {
             const one = literalText(e.arguments[1]);
             const many = literalText(e.arguments[2]);
-            return one !== null && many !== null ? [{ kind: 'text', en: one }, { kind: 'text', en: many }] : [{ kind: 'opaque', code }];
+            const key = `${one}|${many}`; // core words.ts pluralKey
+            return one !== null && many !== null ? [{ kind: 'text', en: one, key }, { kind: 'text', en: many, key }] : [{ kind: 'opaque', code }];
         }
         // W.key() and fn(): a word function called with nothing
         if (e.arguments.length === 0 && ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)) {
             const w = wordOf(src, callee.expression.text, callee.name.text, true);
-            if (w !== null) return [{ kind: 'text', en: w }];
+            if (w !== null) return [{ kind: 'text', ...w }];
         }
         if (e.arguments.length === 0 && ts.isIdentifier(callee)) {
             const b = bindingOf(src, callee.text);
             const fn = b && 'core' in b ? (core as Record<string, any>)[b.core] : null;
-            if (typeof fn === 'function' && fn.length === 0) return [{ kind: 'text', en: String(fn()) }];
+            if (typeof fn === 'function' && fn.length === 0) return [{ kind: 'text', en: String(fn()), key: String(fn()) }];
+        }
+        // joinedPlaceWords(place, …): what the helper returns, read in its own file.
+        const f = depth < MAX_FOLLOW ? functionAt(src, callee) : null;
+        if (f) {
+            const returned = returnsOf(f);
+            if (returned.length) return returned.flatMap((r) => leaves(f.src, r, depth + 1));
         }
         return [{ kind: 'opaque', code }];
     }
     if (ts.isPropertyAccessExpression(e) && ts.isIdentifier(e.expression)) {
         const w = wordOf(src, e.expression.text, e.name.text, false);
-        if (w !== null) return [{ kind: 'text', en: w }];
+        if (w !== null) return [{ kind: 'text', ...w }];
+        // `nudge.title`, where `const nudge = joinedNudgeWords(…)`: what the helper returns as `title`.
+        const v = depth < MAX_FOLLOW ? localValue(src, e.expression) : null;
+        const picked = v ? pick(src, v, e.name.text, depth + 1) : null;
+        if (picked) return picked;
     }
     return [{ kind: 'opaque', code }];
 }
@@ -239,7 +422,8 @@ function leaves(src: Source, n: ts.Expression | undefined): Leaf[] {
 /** An error's or a server's own words, used as a title. */
 const ERRORISH = /\.message\b|ErrorWords|ErrorMessage|FailureWords|NotSentWords/;
 
-type Found = { at: string; key: string; title: Leaf[]; messageCanBeEmpty: boolean };
+/** One Alert: where, its title's code as written (for PASS_THROUGH), and what its title and message can read. */
+type Found = { at: string; key: string; titleCode: string; title: Leaf[]; message: Leaf[]; messageCanBeEmpty: boolean };
 
 function alertsIn(src: Source): Found[] {
     const out: Found[] = [];
@@ -251,8 +435,12 @@ function alertsIn(src: Source): Found[] {
         ) {
             const line = src.sf.getLineAndCharacterOfPosition(n.getStart(src.sf)).line + 1;
             const title = leaves(src, n.arguments[0]);
+            const titleCode = n.arguments[0] ? strip(n.arguments[0]).getText(src.sf).replace(/\s+/g, ' ') : '';
             const message = n.arguments.length < 2 ? [{ kind: 'empty' } as Leaf] : leaves(src, n.arguments[1]);
-            out.push({ at: `${src.rel}:${line}`, key: src.rel, title, messageCanBeEmpty: message.some((l) => l.kind === 'empty') });
+            // Whether it can open with no message is read as written, not through a helper: a helper's `error` or `body` can be
+            // null in a branch the screen has already ruled out (`if (billAsked.error) Alert.alert(…, billAsked.error)`).
+            const asWritten = n.arguments.length < 2 ? [{ kind: 'empty' } as Leaf] : leaves(src, n.arguments[1], MAX_FOLLOW);
+            out.push({ at: `${src.rel}:${line}`, key: src.rel, titleCode, title, message, messageCanBeEmpty: asWritten.some((l) => l.kind === 'empty') });
         }
         ts.forEachChild(n, visit);
     };
@@ -269,8 +457,9 @@ function check(found: Found[]): { problems: string[]; usedShort: Set<string>; us
     for (const f of found) {
         const texts = f.title.filter((l): l is Extract<Leaf, { kind: 'text' }> => l.kind === 'text');
         const opaque = f.title.filter((l): l is Extract<Leaf, { kind: 'opaque' }> => l.kind === 'opaque');
-        const pass = opaque.length === 1 && f.title.length === 1 ? `${f.key}: ${opaque[0].code}` : null;
-        if (pass && PASS_THROUGH[pass]) usedPass.add(pass);
+        // The title as written, before any helper is followed: a wrapper hands on its caller's.
+        const pass = `${f.key}: ${f.titleCode}`;
+        if (PASS_THROUGH[pass]) usedPass.add(pass);
         else if (f.messageCanBeEmpty) {
             if (opaque.length || f.title.some((l) => l.kind === 'empty')) {
                 problems.push(`${f.at}: no message, and a title the guard can't read (${opaque.map((o) => o.code).join(' | ') || 'empty'}): put the words in the message, under a short title`);
@@ -294,7 +483,60 @@ function check(found: Found[]): { problems: string[]; usedShort: Set<string>; us
             if (ERRORISH.test(o.code)) problems.push(`${f.at}: title made from an error or a server's words (${o.code}): put them in the message`);
         }
     }
-    return { problems, usedShort, usedNamed, usedPass };
+    // A helper with several returns can give one title twice: one line each.
+    return { problems: [...new Set(problems)], usedShort, usedNamed, usedPass };
+}
+
+/** Each language's words as the phone loads them: its own catalog and core's (setLanguage(lang, [phone, core])). */
+type Catalogs = Record<string, Record<string, unknown>>;
+
+function loadCatalogs(): Catalogs {
+    const out: Catalogs = {};
+    for (const f of fs.readdirSync(path.join(NATIVE, 'words')).filter((n) => n.endsWith('.json'))) {
+        const lang = f.slice(0, -'.json'.length);
+        const read = (dir: string) => (fs.existsSync(path.join(dir, f)) ? JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) : {});
+        out[lang] = { ...read(path.join(CORE_SRC, '..', 'words')), ...read(path.join(NATIVE, 'words')) };
+    }
+    return out;
+}
+
+/** The languages a key is translated into; none for English written out (no key). */
+function langsOf(cats: Catalogs, key: string | undefined): Set<string> {
+    const out = new Set<string>();
+    if (key === undefined) return out;
+    for (const [lang, c] of Object.entries(cats)) {
+        const v = c[key];
+        if ((typeof v === 'string' && v.length > 0) || (v && typeof v === 'object')) out.add(lang);
+    }
+    return out;
+}
+
+type TextLeaf = Extract<Leaf, { kind: 'text' }>;
+/** A word with letters in it: '{first}\n\n{then}' joins, it says nothing. */
+const worded = (ls: Leaf[]): TextLeaf[] => ls.filter((l): l is TextLeaf => l.kind === 'text' && /\p{L}/u.test(l.en.replace(/\{\w+\}/g, '')));
+
+/**
+ * Rule 5 (review 6933630856: the guest Remove's question lost its 24 translations when its key left the phone's catalogs,
+ * and its new title was a key no catalog has): no part of an Alert stays English in a language another part of its message
+ * is shown in. Every word the guard reads in its message, and every word of its title, is translated in each language any
+ * word of its message is. A title may be translated where its message isn't yet (a screen not drafted).
+ */
+function translationGaps(found: Found[], cats: Catalogs): string[] {
+    const problems: string[] = [];
+    for (const f of found) {
+        const message = worded(f.message);
+        const shown = new Set<string>();
+        for (const l of message) for (const lang of langsOf(cats, l.key)) shown.add(lang);
+        if (!shown.size) continue;
+        for (const [part, ls] of [['title', worded(f.title)], ['message', message]] as const) {
+            for (const l of ls) {
+                const have = langsOf(cats, l.key);
+                const missing = [...shown].filter((lang) => !have.has(lang)).sort();
+                if (missing.length) problems.push(`${f.at}: ${part} "${l.en}" stays English in ${missing.length} language(s) its message is shown in (${missing.join(', ')})`);
+            }
+        }
+    }
+    return [...new Set(problems)];
 }
 
 function checkSource(rel: string, text: string): string[] {
@@ -341,15 +583,80 @@ describe('the guard can fail', () => {
     });
 });
 
+describe('the guard follows a helper, and can fail through one (review 6933630856)', () => {
+    const head = "import { t, tn } from '@beanpool/core';\n";
+    it("a name in a title a helper returns, read through a local: joinedNudgeWords's \"You're in {name}\"", () => {
+        const src = `${head}function nudgeWords(kind, name) {
+    if (kind === 'a') return { title: t("You're in {name}", { name }), body: t('A.') };
+    return { title: t("You're in {name}", { name }), body: t('B.') };
+}
+async function joined() {
+    const nudge = nudgeWords(await kindOf(), name);
+    Alert.alert(nudge.title, nudge.body, []);
+}`;
+        expect(checkSource('app/x.tsx', src)).toEqual([expect.stringMatching(/title puts in \{name\}: "You're in \{name\}"/)]);
+    });
+    it("a name in a title a helper returns directly: joinedTitle's", () => {
+        const src = `${head}function placeTitle(place) { return place.global ? t('Welcome') : t("You're in {name}", { name: place.name }); }
+Alert.alert(placeTitle(p), t('Body.'), []);`;
+        expect(checkSource('app/x.tsx', src)).toEqual([expect.stringMatching(/title puts in \{name\}: "You're in \{name\}"/)]);
+    });
+    it('English written as a template: join-another-community.ts\'s own words', () => {
+        expect(checkSource('app/x.tsx', `${head}Alert.alert(\`You're in \${name}\`, body, []);`)).toEqual([expect.stringMatching(/title puts in \{name\}: "You're in \{name\}"/)]);
+    });
+    it('a word function with an argument, a method of an object of words', () => {
+        const src = `${head}const COPY = { failed: (name) => t('Could not withdraw the invitation to {name}', { name }) };
+Alert.alert(COPY.failed(who), t('Please try again.'));`;
+        expect(checkSource('app/x.tsx', src)).toEqual([
+            expect.stringMatching(/title of 43 characters/),
+            expect.stringMatching(/title puts in \{name\}/),
+        ]);
+    });
+    it('passes: the helper\'s title is short, the name leads its message', () => {
+        const src = `${head}function nudgeWords(name) { return { title: t('Welcome'), body: twoParagraphs(t("You're in {name}", { name }), t('A.')) }; }
+function go() { const nudge = nudgeWords(n); Alert.alert(nudge.title, nudge.body, []); }`;
+        expect(checkSource('app/x.tsx', src)).toEqual([]);
+        const found = alertsIn(parse('app/x.tsx', src));
+        expect(worded(found[0].message).map((l) => l.en)).toEqual(["You're in {name}", 'A.']);
+    });
+    it("a helper's field the screen checked first is not read as a missing message (people.tsx's billAsked.error)", () => {
+        const src = `${head}function ask(x) { return x ? { error: null } : { error: t('Too long.') }; }
+function go() { const asked = ask(v); if (asked.error) { Alert.alert(t('Not sent'), asked.error); } }`;
+        expect(checkSource('app/x.tsx', src)).toEqual([]);
+    });
+});
+
+describe('rule 5 can fail: no part of an Alert stays English beside a translated part (review 6933630856)', () => {
+    const head = "import { t, word } from '@beanpool/core';\nconst W = { remove: word('Remove', 'button: remove a guest'), ask: word('Remove {name}?'), what: word('What happens.') };\n";
+    const both = { 'Remove': 'Entfernen', 'Remove {name}?': '{name} entfernen?', 'What happens.': 'Was passiert.' };
+    const gaps = (src: string, cats: Catalogs) => translationGaps(alertsIn(parse('app/x.tsx', src)), cats);
+    it("a title whose key carries a translator's note no catalog has (the guest Remove's t(W.remove))", () => {
+        expect(gaps(`${head}Alert.alert(t(W.remove), twoParagraphs(t(W.ask, { name }), t(W.what)), []);`, { de: both, fr: both }))
+            .toEqual([expect.stringMatching(/title "Remove" stays English in 2 language\(s\) its message is shown in \(de, fr\)/)]);
+    });
+    it("a paragraph of the message whose key left the catalogs (the guest Remove's 'Remove {name}?')", () => {
+        const { 'Remove {name}?': _gone, ...rest } = both;
+        expect(gaps(`${head}Alert.alert(t('Remove'), twoParagraphs(t(W.ask, { name }), t(W.what)), []);`, { de: rest }))
+            .toEqual([expect.stringMatching(/message "Remove \{name\}\?" stays English in 1 language\(s\) its message is shown in \(de\)/)]);
+    });
+    it('passes: every part translated; and a screen with no word translated yet (nothing beside it is shown translated)', () => {
+        expect(gaps(`${head}Alert.alert(t('Remove'), twoParagraphs(t(W.ask, { name }), t(W.what)), []);`, { de: both, fr: both })).toEqual([]);
+        expect(gaps(`${head}Alert.alert(t('Remove'), twoParagraphs(t(W.ask, { name }), t(W.what)), []);`, { de: {} })).toEqual([]);
+    });
+});
+
 describe('every Alert in the phone app', () => {
     const found = ROOTS.flatMap((r) => listSources(path.join(NATIVE, r))).flatMap((abs) => {
         const text = fs.readFileSync(abs, 'utf8');
         return text.includes('Alert.alert') ? alertsIn(parse(path.relative(NATIVE, abs).split(path.sep).join('/'), text)) : [];
     });
     const { problems, usedShort, usedNamed, usedPass } = check(found);
+    const cats = loadCatalogs();
+    const LANGS = Object.keys(cats).sort();
 
-    it('reads hundreds of Alerts (the scan is not empty)', () => {
+    it('reads hundreds of Alerts (the scan is not empty), and all 24 languages', () => {
         expect(found.length).toBeGreaterThan(400);
+        expect(LANGS).toHaveLength(24);
     });
     it('keeps its words in the message, under a short title', () => {
         expect(problems).toEqual([]);
@@ -358,5 +665,40 @@ describe('every Alert in the phone app', () => {
         expect(Object.keys(SHORT_TITLE_ONLY).filter((k) => !usedShort.has(k))).toEqual([]);
         expect(Object.keys(NAMED_TITLES).filter((k) => !usedNamed.has(k))).toEqual([]);
         expect(Object.keys(PASS_THROUGH).filter((k) => !usedPass.has(k))).toEqual([]);
+    });
+    it('rule 5: no part of an Alert stays English in a language another part of its message is shown in', () => {
+        expect(translationGaps(found, cats)).toEqual([]);
+    });
+
+    // Review 6933630856, finding 2 and the brief's class: every Alert that tells a member they joined a community. A
+    // community's name can be 120 characters (REGISTRAR_COMMUNITY_NAME_MAX); in a title it was cut at two lines.
+    const JOINED = ['app/(tabs)/people.tsx', 'app/community-card.tsx', 'app/find-community.tsx', 'app/node-mismatch.tsx', 'app/join-open-door.tsx'];
+    it.each(JOINED)("%s: the joined Alert names the community in its message (\"You're in {name}\"), under the short title Welcome", (file) => {
+        const joined = found.filter((f) => f.key === file && worded(f.message).some((l) => l.en === "You're in {name}"));
+        expect(joined.map((f) => f.at)).toHaveLength(1);
+        expect([...new Set(joined[0].title.map((l) => (l.kind === 'text' ? l.en : `<${l.kind}>`)))]).toEqual(['Welcome']);
+        expect(problems.filter((p) => p.startsWith(`${joined[0].at}:`))).toEqual([]);
+    });
+
+    // Review 6933630856, finding 1 and the brief: a title this round chose, or a word it moved into a message, is shown in
+    // all 24 languages: "Remove {name}?" went English when its key left the phone's catalogs, and t(W.remove) was a key no
+    // catalog has. One row each; each failed on 05047cec.
+    const MOVED: Array<[string, 'title' | 'message', string]> = [
+        ['components/GroupGuestsList.tsx', 'title', 'Remove'],
+        ['components/GroupGuestsList.tsx', 'message', 'Remove {name}?'],
+        ['components/GroupGuestsList.tsx', 'message', 'Nothing more of this chat reaches them. What they already have stays with them.'],
+        ['components/GroupGuestsList.tsx', 'message', 'Their invitation is withdrawn.'],
+        ['app/contacts.tsx', 'title', 'Contacts'],
+        ...JOINED.map((file): [string, 'title', string] => [file, 'title', 'Welcome']),
+        ...JOINED.map((file): [string, 'message', string] => [file, 'message', "You're in {name}"]),
+        ['app/(tabs)/index.tsx', 'title', 'From your community'],
+        ['components/GroupInvitedList.tsx', 'title', 'Something went wrong'],
+        ['components/GroupInvitedList.tsx', 'message', 'Could not withdraw the invitation'],
+        ['components/ShowOnGlobalRow.tsx', 'title', 'Global community'],
+    ];
+    it.each(MOVED)('%s: its %s "%s" is translated in all 24 languages', (file, part, en) => {
+        const shown = found.filter((f) => f.key === file).flatMap((f) => worded(f[part])).filter((l) => l.en === en);
+        expect(shown.length, `no Alert in ${file} shows "${en}" in its ${part}`).toBeGreaterThan(0);
+        for (const l of shown) expect([...langsOf(cats, l.key)].sort(), `${file}: ${l.key}`).toEqual(LANGS);
     });
 });

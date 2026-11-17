@@ -123,7 +123,9 @@ describe('after joining another community: no "protect this community too"', () 
 
     it('says what came along and what didn’t, and never asks to protect the new community', () => {
         const n = joinedNudge('Mullumbimby');
-        expect(n.title).toBe('You’re in Mullumbimby'.replace('’', "'"));
+        // A short title; the community's name leads the message (a name can be 120 characters; a title is cut at two lines).
+        expect(n.title).toBe('Welcome');
+        expect(n.body.split('\n\n')[0]).toBe('You’re in Mullumbimby'.replace('’', "'"));
         expect(n.body).toContain('Your key and your 12 words came with you');
         expect(n.body).toContain('Your posts, chats and trades stay in each community.');
         expect(n.body).toContain('A sign-in you linked to get back into your account works here too');

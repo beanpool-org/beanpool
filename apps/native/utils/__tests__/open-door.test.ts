@@ -56,7 +56,7 @@ import {
     openDoorHrefForTap, restoreAtDoorHref, restoreAtWaiting, takeDoorTap, takeRestoreAt,
 } from '../open-door';
 import {
-    doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedTitle, placeAt,
+    doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedPlaceWords, placeAt,
 } from '../open-door-words';
 import { DOOR_MESSAGES, nameCheckMessage, type DoorAnswer, type NameCheck } from '../global-join';
 import { ACCOUNT_DOOR_MESSAGES, accountDoorMessage, joinedGlobalNotice } from '../global-join-existing';
@@ -355,7 +355,7 @@ describe('what the door says', () => {
         }
         expect(doorKeeperWords(GLOBAL, 'community').choose).toBe('The global community keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.');
         expect(doorKeeperWords(GLOBAL, 'vault').signIn).toBe('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into your account if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.');
-        expect(joinedTitle(GLOBAL, joinedGlobalNotice(null).title)).toBe("You're in the global community");
+        expect(joinedPlaceWords(GLOBAL, joinedGlobalNotice(null).title)).toBe("You're in the global community");
     });
 
     it('another community\'s door: the same, under its own name; never "the global community"', () => {
@@ -373,7 +373,7 @@ describe('what the door says', () => {
             doorNameCheckWords('Wren', { kind: 'taken', suggestions: [], suggestionsTimedOut: true }, OTHER),
             doorNameCheckWords('Wren', { kind: 'taken', suggestions: ['Wren2'], suggestionsTimedOut: false }, OTHER),
             doorNameCheckWords('Wren', { kind: 'taken', suggestions: [], suggestionsTimedOut: false }, OTHER),
-            joinedTitle(OTHER, joinedGlobalNotice(null).title),
+            joinedPlaceWords(OTHER, joinedGlobalNotice(null).title),
         ];
         for (const line of all) {
             expect(line, line).not.toMatch(/global community/i);

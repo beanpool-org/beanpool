@@ -47,7 +47,8 @@ export async function showEventOnGlobal(event: HomeEvent, identity: BeanPoolIden
     const here = await (await import('../utils/node-post')).anchorUrl();
     if (takesQuestions) await (await import('../utils/global-requests')).noteQuestionsOpened(identity.publicKey);
     const line = here ? copyResultLine(await showOnGlobal(event, here, identity, undefined, takesQuestions)) : null;
-    if (line) Alert.alert(showOnGlobalLabel(), line);
+    // The row's label is 38 characters: as a title it was cut at two lines; a short one, the words in the message.
+    if (line) Alert.alert(t('Global community'), line);
 }
 
 /**
@@ -76,7 +77,7 @@ function useOffer(enabled: boolean): { offer: 'tick' | 'join' | null; ask: () =>
     return { offer: !enabled || !identity ? null : kept === 'stranger' ? 'join' : 'tick', ask };
 }
 
-const unreachable = () => Alert.alert(showOnGlobalLabel(), t("The global community can't be reached right now."));
+const unreachable = () => Alert.alert(t('Global community'), t("The global community can't be reached right now."));
 
 /**
  * The composer's tick. Off until the member ticks it, and off again if the form moves away from what it is for (Online, a
@@ -219,7 +220,7 @@ export function ShowOnGlobalHostRow({ event, enabled, listing = false }: { event
     // A stop that didn't reach global reads as done once the row flips back, so the member is told it is still up.
     const stop = async () => {
         const { stopLaterLine, stopShowing } = await import('../utils/show-on-global');
-        if (!(await stopShowing(event.id, identity))) Alert.alert(showOnGlobalLabel(), stopLaterLine());
+        if (!(await stopShowing(event.id, identity))) Alert.alert(t('Global community'), stopLaterLine());
     };
     const act = async () => {
         setBusy(true);

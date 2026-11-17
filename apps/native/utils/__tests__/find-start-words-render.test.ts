@@ -250,7 +250,9 @@ describe('Find a community in the pseudo-locale: every word came through t() (wo
         expect(host.textContent).toContain(xx('The others are in the list below.'));
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
         await click(byLabel(xx('Join {name}').replace('{name}', 'Lismore Commons')), 'Join');
-        expect(alerts.said[0]).toBe(xx("You're in {name}").replace('{name}', 'Lismore Commons'));
+        // A short title; the community's name leads the message (a title is cut at two lines).
+        expect(alerts.said[0]).toBe(xx('Welcome'));
+        expect(alerts.said[1]).toContain(xx("You're in {name}").replace('{name}', 'Lismore Commons'));
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
         alerts.said.length = 0;
         world.join = new Error(UNSAFE_NODE_ADDRESS_MESSAGE);

@@ -83,16 +83,16 @@ async function main() {
 
     // ── The floor ────────────────────────────────────────────────────────────────
     delete process.env.MIN_APP_VERSION;
-    assert(getMinAppVersion() === '1.4.1', 'the default floor is 1.4.1 (the release that offers Each): in code, so every node holds old apps off');
+    assert(getMinAppVersion() === '1.4.6', 'the default floor is 1.4.6 (the phone build that goes with this release): in code, so every node holds old apps off');
     process.env.MIN_APP_VERSION = 'v1.5.0';
     assert(getMinAppVersion() === '1.5.0', 'an operator can raise the floor, leading v and all');
     // Never lower it (#3047's deciding review, finding 2): 1.1.0 was a raise over the old 1.0.75 default, and is a cut now.
     process.env.MIN_APP_VERSION = 'v1.1.0';
-    assert(getMinAppVersion() === '1.4.1', 'a floor below the built-in one is ignored: 1.4.1 stands');
-    process.env.MIN_APP_VERSION = '1.4.0';
-    assert(getMinAppVersion() === '1.4.1', 'and so is 1.4.0, the floor before this one: 1.4.1 stands');
+    assert(getMinAppVersion() === '1.4.6', 'a floor below the built-in one is ignored: 1.4.6 stands');
+    process.env.MIN_APP_VERSION = '1.4.1';
+    assert(getMinAppVersion() === '1.4.6', 'and so is 1.4.1, the floor before this one: 1.4.6 stands');
     process.env.MIN_APP_VERSION = 'nonsense';
-    assert(getMinAppVersion() === '1.4.1', 'an unparseable floor falls back to the default');
+    assert(getMinAppVersion() === '1.4.6', 'an unparseable floor falls back to the default');
     delete process.env.MIN_APP_VERSION;
 
     // ── The health payload the app actually reads ────────────────────────────────
@@ -104,7 +104,7 @@ async function main() {
     const res = await fetch(`${BASE}/api/community/health`);
     assert(res.status === 200, 'GET /api/community/health returns 200');
     const body = await res.json() as any;
-    assert(body.minAppVersion === '1.4.1', 'health serves the node floor');
+    assert(body.minAppVersion === '1.4.6', 'health serves the node floor');
     assert(!!body.appVersions, 'health serves appVersions');
     assert(body.appVersions.android === '1.2.31', 'health serves the cached Play version');
     assert(body.appVersions.ios === '1.2.32', 'health serves the cached App Store version');

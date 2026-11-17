@@ -190,7 +190,7 @@ try {
             check(await aCard.isVisible() && await admin.page.getByText('Only an owner turns this on or off.').isVisible()
                 && await admin.page.getByRole('switch').count() === 0, `${at}: an admin sees the card, without the switch`);
             const steps = aCard.getByTestId('agent-connect-oauth');
-            check(await steps.isVisible() && /Add custom connector/.test(await steps.innerText()) && /type the two digits/.test(await steps.innerText())
+            check(await steps.isVisible() && /Add custom connector/.test(await steps.innerText()) && /first tick[\s\S]*type the six digits it shows \(one try\)/.test(await steps.innerText())
                 && await aCard.getByRole('button', { name: 'Copy address' }).isVisible()
                 && await aCard.getByTestId('agent-admin-oauth').isVisible() && await aCard.getByTestId('agent-admin-soon').count() === 0
                 && await aCard.getByRole('button', { name: 'Connect', exact: true }).count() === 0 && await aCard.getByLabel('Assistant’s name').count() === 0,

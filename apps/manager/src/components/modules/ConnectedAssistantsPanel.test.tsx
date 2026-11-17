@@ -244,9 +244,11 @@ describe('ConnectedAssistantsPanel', () => {
         const steps = await screen.findByTestId('agent-connect-oauth');
         expect(steps).toHaveTextContent('https://mullum.example/mcp');
         expect(steps).toHaveTextContent(/Settings → Connectors → Add custom connector → paste it/);
-        expect(steps).toHaveTextContent(/Approve on your phone.*type the two digits/);
+        // Risk 3: the ticks first, then the phone (which shows them and approves only those), then its six digits, one try.
+        expect(steps).toHaveTextContent(/first tick.*Then scan the page’s code in the BeanPool app.*your ticks.*type the six digits it shows \(one try\)/);
+        expect(steps).not.toHaveTextContent(/two digits/);
         // MCP-MODERATION S3: the consent page's second tick, an admin's one post a call; never the owner's posting tick.
-        expect(steps).toHaveTextContent('Tick “May take down posts for me” on that page only if it should take posts down for you, one post a call.');
+        expect(steps).toHaveTextContent('On the page your assistant opens, first tick “May take down posts for me”, only if it should take posts down for you, one post a call.');
         expect(steps).not.toHaveTextContent(/May post for me/);
         expect(screen.getByTestId('agent-grant-moderates')).toHaveTextContent('May take down, one post a call · 1 today');
         expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();

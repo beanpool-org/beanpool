@@ -267,7 +267,7 @@ export function EventChatView({ eventId }: Props) {
                 renderMessage={renderMessage}
                 activeId={activeMessageActionsId}
                 onAtBottomChange={atBottom => { atBottomRef.current = atBottom; }}
-                onScrollBeginDrag={() => setActiveMessageActionsId(null)}
+                onCloseMenu={() => setActiveMessageActionsId(null)}
                 ListEmptyComponent={
                     <Text style={chat.empty}>
                         {view.readOnly ? t('Nothing was said here.') : t('No messages yet. Say hello.')}

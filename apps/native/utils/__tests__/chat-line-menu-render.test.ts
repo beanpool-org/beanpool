@@ -12,6 +12,12 @@
  * line allows (Reply, React, Edit, Delete, Remove, Copy, Report) is in view, or a scroll away with the menu still open, never
  * dropped; the thread keeps a line while the keyboard is down; and a line whose menu is all in view still closes on a drag.
  *
+ * Then where the line is, not only how tall (#3288 review): a menu never stays open on a line the member can't see. Over tall
+ * lines (two lines, five, a photo) × keyboard × the emoji row (none, over the line, under it, measured as Yoga places it outside
+ * the cell) the thread is dragged until the line leaves, through its bottom (the newest line, dragged back) and through its top
+ * (an older line, dragged toward the newest): while part of it is in view the menu stays open, and once none of it is, the menu
+ * closes, a fling's resting place included. The newest line whose emoji row reaches past the thread's top keeps its menu on a drag.
+ *
  * The outside chat's actions sit under the line in its own list, which no drag closes; the forum's ⋯ is a sheet over the
  * screen, laid out here at the phone's window. A guest chat's lines have no menu (their words are selectable), and the web
  * draws a line's actions in the line itself (MessagesPage, EventChat: wrapping, in the page's scroll), so nothing there opens
@@ -132,7 +138,7 @@ const STACKS: Stack[] = [
 ];
 
 /** The lines, each with every action it allows (utils/chat-actions decides which a screen offers; here, the most). */
-interface Line { name: string; kind: ChatKind; isMe: boolean; text: string; actions: MessageActions; onReport: boolean }
+interface Line { name: string; kind: ChatKind; isMe: boolean; text: string; actions: MessageActions; onReport: boolean; photo?: boolean }
 const TWO = 'Yes, the trays are ready. Come by after four and bring the twine.';
 const FOUR = 'The trays are ready on the back step. Come by after four, bring the twine if you have it, and the pots too; I will leave the gate open for you.';
 const LINES: Line[] = [
@@ -141,20 +147,34 @@ const LINES: Line[] = [
     { name: 'my line', kind: 'dm', isMe: true, text: TWO, onReport: false, actions: { reply: true, react: true, edit: true, delete: true, remove: false, copy: true } },
     { name: 'my line past the edit window', kind: 'group', isMe: true, text: TWO, onReport: false, actions: { reply: true, react: true, edit: false, delete: true, remove: false, editClosed: true, copy: true } },
 ];
+/** Tall lines, for the drag until the line leaves: someone else's of two lines and of five (Copy and Report under it), and a photo. */
+const FIVE = 'The trays are ready on the back step by the tank. Come by after four, bring the twine if you have it, and the pots too, the big ones and the small. I will leave the gate open for you and the dog inside, so just let yourself in and take what you need.';
+const OTHERS: MessageActions = { reply: true, react: true, edit: false, delete: false, remove: false, report: true, copy: true };
+const TALL: Line[] = [
+    { name: 'someone else\'s two-line line', kind: 'dm', isMe: false, text: TWO, onReport: true, actions: OTHERS },
+    { name: 'someone else\'s five-line line', kind: 'dm', isMe: false, text: FIVE, onReport: true, actions: OTHERS },
+    { name: 'someone else\'s photo', kind: 'dm', isMe: false, text: '', photo: true, onReport: true, actions: { ...OTHERS, copy: false } },
+];
+type EmojiRow = 'top' | 'bottom' | null;
 const LABELS: [keyof MessageActions, string][] = [
     ['reply', 'Reply'], ['react', 'React'], ['edit', 'Edit message'], ['delete', 'Delete message'], ['remove', 'Remove this message'],
     ['copy', 'Copy message'], ['report', 'Report message'],
 ];
 
-/** The open line, laid out at the phone's width inside the list's padding: its height and where each action sits in it. */
-function openLine(line: Line, p: Phone, s: Scale) {
+/**
+ * The open line, laid out at the phone's width inside the list's padding: its height, where each action sits in it, and how far
+ * its emoji row (when it is up) reaches past the cell, over it or under it, as Yoga places it (it is absolutely positioned).
+ */
+function openLine(line: Line, p: Phone, s: Scale, emojiRow: EmojiRow = null) {
     flat.window = { width: p.width, height: p.window, fontScale: s };
     const styles = makeChatStyles({ theme: theme.name, colors: theme.colors } as any) as any;
-    const item = { id: 'line-1', text: line.text, senderId: line.isMe ? 'me' : 'ben', timestamp: Date.now(), type: 'text' } as unknown as ChatMessage;
+    const item = { id: 'line-1', text: line.text, senderId: line.isMe ? 'me' : 'ben', timestamp: Date.now(), type: line.photo ? 'image' : 'text' } as unknown as ChatMessage;
     act(() => root.render(createElement('div', { 'data-testid': 'list', 'data-style': JSON.stringify({ width: p.width, paddingHorizontal: 16 }) },
         createElement('div', { 'data-testid': 'cell', 'data-style': '{}' },
             createElement(ChatMessageRow, {
-                item, isMe: line.isMe, styles, kind: line.kind, actions: line.actions, showActions: true, showEmojiPicker: false, pickerPosition: 'top',
+                item, isMe: line.isMe, styles, kind: line.kind, actions: line.actions, showActions: true, showEmojiPicker: !!emojiRow, pickerPosition: emojiRow ?? 'top',
+                // A DM's photo is drawn 220 × 220 in its bubble (components/chat/DmChatImage).
+                attachment: line.photo ? createElement('div', { 'data-style': JSON.stringify({ width: 220, height: 220 }) }) : undefined,
                 onPressBubble: () => {}, onReply: () => {}, onToggleEmojiPicker: () => {}, onEdit: () => {}, onDelete: () => {}, onRemove: () => {},
                 onReport: line.onReport ? () => {} : undefined, onPickEmoji: () => {},
             }))) as Parameters<Root['render']>[0]));
@@ -165,24 +185,87 @@ function openLine(line: Line, p: Phone, s: Scale) {
         const el = host.querySelector(`[aria-label="${label}"]`);
         return { k, label, el, top: el ? topIn(el) : NaN, height: el ? layout.height(el) : 0 };
     });
-    return { height: layout.height(cell), actions };
+    const height = layout.height(cell);
+    const picker = host.querySelector('[aria-label^="React with"]')?.parentElement;
+    if (emojiRow) expect(picker, 'the emoji row drawn').toBeTruthy();
+    const reach = picker ? { above: Math.max(0, -topIn(picker)), below: Math.max(0, topIn(picker) + layout.height(picker) - height) } : { above: 0, below: 0 };
+    return { height, actions, reach };
 }
+type OpenLine = ReturnType<typeof openLine>;
 
-/** The real ChatMessageList with the line's menu open: the phone lays out the thread and the open line, then the thread is dragged. */
-function dragCloses(thread: number, line: number): boolean {
+/** The newest line sits on the list's bottom padding (the list is inverted: its paddingTop is the gap over the composer). */
+const LIST_BOTTOM = (makeChatStyles({ theme: 'light', colors: lightColors } as any) as any).listContent.paddingTop as number;
+
+/**
+ * The real ChatMessageList with a line's menu open, laid out as the phone lays it out: the thread's height, how far it is
+ * scrolled, the open line's cell at `y` (counted up from the bottom of the list's content: the list is inverted) and its emoji
+ * row. Then the drag, the scroll and a fling's resting place as the phone hands them, and whether the screen was told to close.
+ * Each call is a thread of its own, unless `reopen`: the same thread, its menu closed and then opened again on the same line.
+ */
+let threadKey = 0;
+function openThread(o: { thread: number; y: number; height: number; emojiRow?: EmojiRow; offset?: number; reopen?: boolean }) {
     const close = vi.fn();
     const styles = makeChatStyles({ theme: theme.name, colors: theme.colors } as any) as any;
-    act(() => root.render(createElement(ChatMessageList, {
-        listRef: { current: null }, items: [{ id: 'line-1' } as any], styles, renderMessage: () => null, activeId: 'line-1', onScrollBeginDrag: close,
-    }) as Parameters<Root['render']>[0]));
+    const list = (activeId: string | null) => createElement(ChatMessageList, {
+        key: threadKey, listRef: { current: null }, items: [{ id: 'line-1' } as any], styles, renderMessage: () => null, activeId,
+        activeEmojiRow: o.emojiRow ?? null, onCloseMenu: close, onAtBottomChange: () => {},
+    }) as Parameters<Root['render']>[0];
+    if (o.reopen) act(() => root.render(list(null)));
+    else threadKey++;
+    act(() => root.render(list('line-1')));
     const props = flat.props!;
+    const at = (y: number) => ({ nativeEvent: { contentOffset: { x: 0, y } } });
     act(() => {
-        props.onLayout?.({ nativeEvent: { layout: { height: thread } } });
+        props.onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 320, height: Math.max(0, o.thread) } } });
+        if (o.offset) props.onScroll?.(at(o.offset));
         const cell = props.CellRendererComponent({ item: { id: 'line-1' }, style: {}, onLayout: () => {}, children: null });
-        cell.props.onLayout?.({ nativeEvent: { layout: { height: line } } });
+        cell.props.onLayout?.({ nativeEvent: { layout: { x: 0, y: o.y, width: 320, height: o.height } } });
     });
-    act(() => props.onScrollBeginDrag?.());
-    return close.mock.calls.length > 0;
+    return {
+        closed: () => close.mock.calls.length > 0,
+        drag: () => props.onScrollBeginDrag?.(at(0)),
+        scrollTo: (offset: number) => props.onScroll?.(at(offset)),
+        rest: (offset: number) => props.onMomentumScrollEnd?.(at(offset)),
+    };
+}
+
+/**
+ * The thread dragged from `start` until the open line leaves it, 2 dp a frame: `dir` 1 drags back through older lines (the
+ * line leaves through the thread's bottom), -1 toward the newest (through its top). While part of the line, its menu or its
+ * emoji row is in view the menu stays open; once none of it is, it is closed. And a fling from the same place whose scroll
+ * events thinned out: only where it came to rest is heard, and the menu is closed.
+ */
+function dragUntilGone(o: { thread: number; y: number; start: number; dir: 1 | -1; open: OpenLine; emojiRow: EmojiRow }) {
+    const low = o.y - o.open.reach.below;
+    const high = o.y + o.open.height + o.open.reach.above;
+    const shown = (offset: number) => Math.min(high, offset + o.thread) - Math.max(low, offset);
+    // Half a dp covers the fractions of a measure, as the phone's thread counts it (chatLineInView).
+    const all = low >= o.start - 0.5 && high <= o.start + o.thread + 0.5;
+    const list = openThread({ thread: o.thread, y: o.y, height: o.open.height, emojiRow: o.emojiRow, offset: o.start });
+    expect(list.closed(), 'in view when opened: open').toBe(false);
+    list.drag();
+    if (all) { expect(list.closed(), 'all of it in view: a drag closes the menu').toBe(true); return; }
+    expect(list.closed(), `${shown(o.start).toFixed(0)} of its ${(high - low).toFixed(0)} dp in ${o.thread} dp of thread: a drag keeps the menu`).toBe(false);
+    for (let offset = o.start, n = 0; ; offset += 2 * o.dir, n++) {
+        list.scrollTo(offset);
+        const left = shown(offset);
+        if (left > 1) expect(list.closed(), `${left.toFixed(1)} dp of it in view, scrolled to ${offset}: open`).toBe(false);
+        if (left <= 0) { expect(list.closed(), `none of it in view, scrolled to ${offset}: closed`).toBe(true); break; }
+        expect(n, 'the line leaves').toBeLessThan(5000);
+    }
+    const fling = openThread({ thread: o.thread, y: o.y, height: o.open.height, emojiRow: o.emojiRow, offset: o.start });
+    fling.drag();
+    expect(fling.closed()).toBe(false);
+    fling.rest(o.dir > 0 ? high + 2000 : low - o.thread - 2000);
+    expect(fling.closed(), 'a fling past it: closed').toBe(true);
+}
+
+/** The newest line with its menu open, at rest on the thread's bottom, then the thread is dragged: whether the menu closes. */
+function dragCloses(thread: number, line: number, emojiRow: EmojiRow = null): boolean {
+    const list = openThread({ thread, y: LIST_BOTTOM, height: line, emojiRow });
+    if (list.closed()) return true;
+    list.drag();
+    return list.closed();
 }
 
 describe.each([['light', lightColors], ['dark', darkColors]] as const)('every chat\'s line menu, %s: each action in view or a scroll away with the menu open', (name, colors) => {
@@ -197,8 +280,11 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('every ch
             // While the keyboard is down every screen leaves the thread a line, so the line can be tapped and scrolled.
             if (!kbUp) expect(thread, 'a line of thread').toBeGreaterThanOrEqual(CHAT_THREAD_LINE);
             const closes = dragCloses(thread, open.height);
-            // The newest line sits on the thread's bottom (the list is inverted): in view is what is under the thread's top.
-            const viewTop = open.height - thread;
+            // The newest line sits on the list's bottom padding (the list is inverted): in view is what is under the thread's top.
+            const viewTop = open.height + LIST_BOTTOM - thread;
+            // A thread that shows none of the line (the keyboard up and the box's banners on the smallest phone): the member can't
+            // see it, so its menu closes, and the bars it folded come back (#3288 review). The keyboard goes down to read.
+            if (thread <= LIST_BOTTOM) { expect(kbUp, 'only with the keyboard up').toBe(true); expect(closes, 'none of the line in view: closed').toBe(true); return; }
             for (const a of open.actions) {
                 const inView = a.top >= viewTop - 0.5;
                 if (inView) continue;
@@ -210,7 +296,7 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('every ch
                 if (!kbUp) expect(thread, 'room to show the action once scrolled').toBeGreaterThanOrEqual(Math.min(a.height, CHAT_THREAD_LINE));
             }
             // A line and its menu all in view: a drag still closes it, as before.
-            if (open.height <= thread) expect(closes, 'all in view: a drag closes the menu').toBe(true);
+            if (open.height + LIST_BOTTOM <= thread) expect(closes, 'all in view: a drag closes the menu').toBe(true);
         });
     }
 });
@@ -260,22 +346,84 @@ describe('the check can fail', () => {
         const open = openLine(LINES[0], p, 1.3);
         expect(open.height).toBeGreaterThan(thread);
         const reply = open.actions.find((a) => a.k === 'reply')!;
-        expect(reply.top).toBeLessThan(open.height - thread);
+        expect(reply.top).toBeLessThan(open.height + LIST_BOTTOM - thread);
         // Main before this change: ChatMessageList handed every drag to the screen, which closed the menu.
         expect(dragCloses(thread, open.height)).toBe(false);
-        expect(dragCloses(open.height, open.height)).toBe(true);
+        expect(dragCloses(open.height + LIST_BOTTOM, open.height)).toBe(true);
+    });
+    it('a tall line kept open on a drag and dragged until it left: the head of #3288 kept its menu open for good', () => {
+        const p = PHONES[0];
+        const thread = Math.round(STACKS[1].thread(p, 1.3, true));
+        const open = openLine(TALL[1], p, 1.3);
+        expect(open.height).toBeGreaterThan(thread);
+        const list = openThread({ thread, y: LIST_BOTTOM, height: open.height });
+        list.drag();
+        expect(list.closed()).toBe(false);
+        list.scrollTo(LIST_BOTTOM + open.height + 1);
+        expect(list.closed()).toBe(true);
     });
 });
 
-describe('every chat hands its drag to ChatMessageList, which decides', () => {
-    it('the DM, the group and the event chat close the menu only through ChatMessageList\'s onScrollBeginDrag', () => {
+describe('a line\'s menu closes once the line has left the thread; a drag keeps it while part of it is out of view (#3288 review)', () => {
+    // Where things are doesn't change with the theme: the dark one, as below.
+    beforeEach(() => { theme.colors = darkColors; theme.name = 'dark'; });
+    for (const stack of STACKS) for (const p of PHONES) for (const s of [1, 1.3] as const) for (const kbUp of [false, true]) for (const line of TALL) {
+        for (const emojiRow of [null, 'top', 'bottom'] as const) {
+            const row = emojiRow === 'top' ? 'the emoji row over it' : emojiRow === 'bottom' ? 'the emoji row under it' : 'no emoji row';
+            it(`${stack.name}, ${p.name} at ${s}×, keyboard ${kbUp ? 'up' : 'down'}: ${line.name}, ${row}`, () => {
+                const thread = Math.round(stack.thread(p, s, kbUp));
+                const open = openLine(line, p, s, emojiRow);
+                if (emojiRow === 'top') expect(open.reach.above, 'the row reaches past the cell\'s top').toBeGreaterThan(30);
+                if (emojiRow === 'bottom') expect(open.reach.below, 'the row reaches past the cell\'s bottom').toBeGreaterThan(30);
+                if (thread <= LIST_BOTTOM) {
+                    // No line of thread to see (the keyboard up, the box's banners, the smallest phone): the menu closes.
+                    expect(kbUp).toBe(true);
+                    expect(dragCloses(thread, open.height, emojiRow), 'none of the line in view: closed').toBe(true);
+                    return;
+                }
+                // The newest line, on the list's bottom padding, dragged back through older lines until it leaves at the bottom.
+                dragUntilGone({ thread, y: LIST_BOTTOM, start: 0, dir: 1, open, emojiRow });
+                // An older line with its lowest edge at the thread's middle, dragged toward the newest until it leaves at the top.
+                const y = 5000;
+                dragUntilGone({ thread, y, start: y - open.reach.below - thread / 2, dir: -1, open, emojiRow });
+            });
+        }
+    }
+    it('the newest line whose emoji row reaches past the thread\'s top keeps its menu on a drag, and closes once it has left', () => {
+        const p = PHONES[0];
+        const open = openLine(TALL[0], p, 1.3, 'top');
+        // The line and its menu fit under the thread's top; its emoji row does not (the review's 218-dp line in 240 dp of thread).
+        const thread = Math.round(LIST_BOTTOM + open.height + open.reach.above / 2);
+        expect(LIST_BOTTOM + open.height).toBeLessThanOrEqual(thread);
+        expect(dragCloses(thread, open.height, 'top'), 'its emoji row half out of view: a drag keeps the menu').toBe(false);
+        expect(dragCloses(thread, open.height, null), 'the same line without its emoji row, all in view: a drag closes').toBe(true);
+        dragUntilGone({ thread, y: LIST_BOTTOM, start: 0, dir: 1, open, emojiRow: 'top' });
+    });
+    it('a line opened again is placed by its new layout, never where it was the last time it was open', () => {
+        const list = openThread({ thread: 240, y: LIST_BOTTOM, height: 120 });
+        expect(list.closed()).toBe(false);
+        // Closed; new lines pushed it up the thread; the member scrolled to it and opened it again.
+        const again = openThread({ thread: 240, y: 900, height: 120, offset: 840, reopen: true });
+        expect(again.closed()).toBe(false);
+        again.drag();
+        expect(again.closed(), 'all of it in view: a drag closes the menu').toBe(true);
+    });
+});
+
+describe('every chat hands its menu\'s closing to ChatMessageList, which decides', () => {
+    it('the DM, the group and the event chat close the menu only through ChatMessageList\'s onCloseMenu, and say where the emoji row is', () => {
         for (const f of [['app', 'chat', '[id].tsx'], ['components', 'GroupChatView.tsx'], ['components', 'EventChatView.tsx']]) {
             const src = fs.readFileSync(path.join(__dirname, '..', '..', ...f), 'utf8');
             expect(src, f.join('/')).toContain('<ChatMessageList');
-            expect(src.match(/onScrollBeginDrag=/g), f.join('/')).toHaveLength(1);
+            expect(src.match(/onCloseMenu=/g), f.join('/')).toHaveLength(1);
+            expect(src, f.join('/')).not.toContain('onScrollBeginDrag=');
+            // The event chat draws no emoji row (showEmojiPicker={false}); the DM and the group say which side it opens on.
+            if (f[1] !== 'EventChatView.tsx') expect(src, f.join('/')).toContain('activeEmojiRow={activeEmojiPickerId ? pickerPosition : null}');
+            else expect(src).toContain('showEmojiPicker={false}');
         }
         const list = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'chat', 'ChatMessageList.tsx'), 'utf8');
-        expect(list).toContain('onScrollBeginDrag={onScrollBeginDrag ? onDrag : undefined}');
-        expect(list).toContain('if (chatMenuClosesOnDrag({ thread: threadHeight.current, line })) onScrollBeginDrag?.();');
+        expect(list).toContain('onScrollBeginDrag={onCloseMenu ? onDrag : undefined}');
+        expect(list).toContain('onScroll={onAtBottomChange || onCloseMenu ? onScroll : undefined}');
+        expect(list).toContain('onMomentumScrollEnd={onCloseMenu ? onScrollEnd : undefined}');
     });
 });

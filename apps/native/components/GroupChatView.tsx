@@ -1048,8 +1048,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 styles={chat}
                 renderMessage={renderMessage}
                 activeId={activeEmojiPickerId || activeMessageActionsId}
+                activeEmojiRow={activeEmojiPickerId ? pickerPosition : null}
                 onAtBottomChange={atBottom => { atBottomRef.current = atBottom; }}
-                onScrollBeginDrag={() => { setActiveMessageActionsId(null); setActiveEmojiPickerId(null); }}
+                onCloseMenu={() => { setActiveMessageActionsId(null); setActiveEmojiPickerId(null); }}
                 // Inverted: the footer is what renders at the visual TOP, above the oldest message.
                 ListFooterComponent={showInvitePrompt ? invitePrompt : null}
                 ListEmptyComponent={

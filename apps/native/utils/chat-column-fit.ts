@@ -54,14 +54,43 @@ export const CHAT_THREAD_LINE = 44;
 export const CHAT_MENU_ROOM = 240;
 
 /**
- * Whether dragging the thread closes the open line's menu: only when the whole line and its menu are in view, so nothing of
- * it is left to reach. A line taller than the thread (the keyboard up, a long line, a group's or an event's bars, which no
- * fit moves) keeps its menu open while the thread is dragged, and Reply, React, Edit, Delete, Copy and Report are a scroll
- * away, never dropped (emulator walk 146: in one line of thread only Copy showed, and a drag to reach Reply closed the menu).
- * Every chat's thread asks this (components/chat/ChatMessageList); half a dp covers the fractions of a line's measure.
+ * Where the open line is in its thread, as the phone lays them out. The thread is inverted (the newest line at its bottom), so
+ * every figure counts up from the bottom of the list's content: the thread shows `offset` to `offset + thread`, the open line's
+ * cell (the line with Reply, React, Edit, Delete beside it and Copy, Report under it) is `y` to `y + height`, and its emoji row,
+ * while it is up, reaches `above` past the cell's top or `below` past its bottom: it is drawn outside the cell, so the cell's
+ * own height leaves it out (components/chat/styles CHAT_EMOJI_ROW_PAST_CELL).
  */
-export function chatMenuClosesOnDrag(m: { thread: number; line: number }): boolean {
-    return m.line <= m.thread + 0.5;
+export interface ChatOpenLine { thread: number; offset: number; y: number; height: number; above: number; below: number }
+
+/** How much of the open line, with its menu and its emoji row, the thread shows. Half a dp covers the fractions of a measure. */
+export function chatLineInView(m: ChatOpenLine): 'all' | 'part' | 'none' {
+    const bottom = m.y - m.below;
+    const top = m.y + m.height + m.above;
+    const viewTop = m.offset + m.thread;
+    if (bottom >= m.offset - 0.5 && top <= viewTop + 0.5) return 'all';
+    return Math.min(top, viewTop) - Math.max(bottom, m.offset) > 0.5 ? 'part' : 'none';
+}
+
+/**
+ * Whether dragging the thread closes the open line's menu: when all of the line and its menu are in view, so nothing of it is
+ * left to reach, or none of it is. While part of it is out of view (a line taller than the thread with the keyboard up, a long
+ * line, a photo, a group's or an event's bars, which no fit moves, its emoji row past the thread's top) the menu stays open
+ * while the thread is dragged, and Reply, React, Edit, Delete, Copy and Report are a scroll away, never dropped (emulator walk
+ * 146: in one line of thread only Copy showed, and a drag to reach Reply closed the menu). A line whose place isn't known yet
+ * closes, as every drag did before. Every chat's thread asks this (components/chat/ChatMessageList).
+ */
+export function chatMenuClosesOnDrag(line: ChatOpenLine | null): boolean {
+    return !line || chatLineInView(line) !== 'part';
+}
+
+/**
+ * Whether the open line has left the thread, so its menu closes whatever moved it (the drag that kept it open, a fling, a new
+ * line, the keyboard): a menu never stays open on a line the member can't see, and the bars and the About chip it folded
+ * (chatColumnFit's `menu`) come back (#3288 review: a menu kept on a tall line that scrolled away left them folded with
+ * nothing on screen to say why).
+ */
+export function chatMenuLineGone(line: ChatOpenLine | null): boolean {
+    return !!line && chatLineInView(line) === 'none';
 }
 
 /** The least room a page is shown in: a 44-dp target, to scroll it or tap what is in it. */

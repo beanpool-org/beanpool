@@ -1820,8 +1820,9 @@ function ChatScreen({ id }: { id: string }) {
                         styles={chat}
                         renderMessage={renderMessage}
                         activeId={activeEmojiPickerId || activeMessageActionsId}
+                        activeEmojiRow={activeEmojiPickerId ? pickerPosition : null}
                         onAtBottomChange={atBottom => { atBottomRef.current = atBottom; }}
-                        onScrollBeginDrag={() => {
+                        onCloseMenu={() => {
                             setActiveMessageActionsId(null);
                             setActiveEmojiPickerId(null);
                         }}

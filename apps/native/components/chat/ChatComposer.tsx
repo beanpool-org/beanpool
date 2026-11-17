@@ -23,6 +23,7 @@ import { CHAT_INPUT_MAX_HEIGHT, CHAT_INPUT_MIN_HEIGHT, CHAT_INPUT_V_PADDING, typ
 import { t } from '@beanpool/core';
 import { VoiceRecorderHost, type VoiceRecorderParts, type VoiceSend } from './VoiceRecorder';
 import { newVoiceAudioOwner } from '../../utils/voice-audio';
+import { chatFieldCap } from '../../utils/chat-column-fit';
 
 export interface ChatComposerHandle {
     /** Put text in the box and in both mirrors — the way an Edit fills it. */
@@ -63,6 +64,13 @@ interface Props {
     maxLength?: number;
     bottomPadding: number;
     /**
+     * The most the composer may take (the DM's column, utils/chat-column-fit: the room less the Editing or Replying to
+     * banner). Past it the field stops growing and scrolls within itself, never under its one line, so the banner over the
+     * box stays whole while typing (deciding review of #3283 at f4bbcfa4, finding 1). Absent, the field grows to
+     * CHAT_INPUT_MAX_HEIGHT as it always has.
+     */
+    maxHeight?: number;
+    /**
      * Voice messages (DESIGN-cross-chat-voice-fable.md §5.3, slice V3): with the box empty and no photo waiting, Send becomes a
      * microphone; while a recording runs or waits, it takes the box's place. Absent (an event's or enterprise's chat, a
      * request), no microphone. Each recording comes with its one line id, the same on every try of it. Throw and the recorder
@@ -77,12 +85,17 @@ interface Props {
 }
 
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer(
-    { styles, onSend, placeholder, accessibilityLabel, leading, onAttach, attachment, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding, onVoice, voiceOwner }, ref,
+    { styles, onSend, placeholder, accessibilityLabel, leading, onAttach, attachment, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding, maxHeight, onVoice, voiceOwner }, ref,
 ) {
     const { colors } = useTheme();
     const inputRef = useRef<TextInput>(null);
     const [draft, setDraft] = useState('');
     const [inputHeight, setInputHeight] = useState(CHAT_INPUT_MIN_HEIGHT);
+    // Under a maxHeight: the composer's frame (all of it but the field: padding, border, a line over the field), measured,
+    // and the field shown at most what that room leaves. inputHeight stays the text's own height, so the field grows back
+    // without a keystroke when the room returns.
+    const [frame, setFrame] = useState(0);
+    const fieldHeight = Math.min(inputHeight, chatFieldCap(maxHeight, frame));
     const sendingRef = useRef(false);
 
     // Mirror of the native input's text for SEND LOGIC — see the note at the top of this file.
@@ -180,7 +193,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
     const [voice, setVoice] = useState<VoiceRecorderParts | null>(null);
 
     return (
-        <View>
+        <View onLayout={maxHeight === undefined ? undefined : (e) => {
+            // While a recording stands in for the field it is hidden, so the frame is read only with the field shown.
+            if (!voice?.bar) setFrame(Math.max(0, Math.round(e.nativeEvent.layout.height) - fieldHeight));
+        }}>
             {!!notice && <Text style={styles.composerNotice}>{notice}</Text>}
             {!!voice?.hint && <Text testID="voice-hint" style={{ fontSize: 11, color: colors.text.muted, paddingHorizontal: 12, paddingTop: 6 }}>{voice.hint}</Text>}
             {attachment}
@@ -204,7 +220,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
                     ref={inputRef}
                     accessibilityLabel={accessibilityLabel}
                     // Kept mounted while a recording takes its place, so nothing typed or focused is lost.
-                    style={[styles.input, { height: inputHeight }, voice?.bar ? { display: 'none' } : null]}
+                    style={[styles.input, { height: fieldHeight }, voice?.bar ? { display: 'none' } : null]}
                     onContentSizeChange={e => setInputHeight(Math.min(CHAT_INPUT_MAX_HEIGHT,
                         Math.max(CHAT_INPUT_MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height) + CHAT_INPUT_V_PADDING)))}
                     placeholder={placeholder}

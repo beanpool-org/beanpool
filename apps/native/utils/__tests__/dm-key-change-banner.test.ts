@@ -317,7 +317,9 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(src).not.toMatch(/measured\('deals'\)/);
         // The box is everything under the thread, measured whole: the edit, about and reply banners over the composer too, so
         // the card's room never counts on space they take (the thread gives way while the card is up; walk of 17 Nov).
-        expect(src).toMatch(/<View onLayout=\{measured\('composer'\)\}>\s*\{editingMessage && \(\s*<ChatEditBanner/);
+        // Inside it the About chip is a page in its room, then the Editing or Replying to banner whole in its crop, measured
+        // on its own (chatColumnFit; market-dm-fit-render.test.ts), still before the composer.
+        expect(src).toMatch(/<View onLayout=\{measured\('composer'\)\}>\s*\{!editingMessage && \(\s*<ChatScrollPage testID="chat-about-page" maxHeight=\{fit\.about\}>\s*<ChatAboutBanner conversationId=\{String\(id\)\} \/>\s*<\/ChatScrollPage>\s*\)\}\s*<View testID="chat-box-banner" style=\{\{ maxHeight: fit\.banner, overflow: 'hidden', justifyContent: 'center' \}\}>\s*<View onLayout=\{\(e\) => setBannerHeight\(Math\.ceil\(e\.nativeEvent\.layout\.height\)\)\}>\s*\{editingMessage && \(\s*<ChatEditBanner/);
         const box = src.indexOf("<View onLayout={measured('composer')}>");
         expect(src.indexOf('<ChatAboutBanner', box)).toBeGreaterThan(box);
         expect(src.indexOf('<ChatReplyBanner', box)).toBeGreaterThan(box);

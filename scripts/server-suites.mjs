@@ -566,6 +566,7 @@ export const SUITES = [
     'test-online-events-set-cap',
     'test-project-deadline-http',
     'test-pledge-deadline-http',
+    'test-paused-members-move-no-beans',
     'test-unfunded-pledges-return',
     'test-standing-deals',
     'test-standing-lower',

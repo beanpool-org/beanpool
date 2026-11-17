@@ -38,7 +38,7 @@ import { enterpriseThreadReadRefusal } from '../engine/enterprise-thread.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { LISTING_COPY_CODE } from '../engine/escrow.js';
 import { pledgesReturnedAt as pledgesReturnedAtFor } from '../engine/unfunded-pledges.js';
-import { db, pledgeToProject, getCrowdfundProject, mayCancelProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR } from '../db/db.js';
+import { db, pledgeToProject, getCrowdfundProject, mayCancelProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR, PLEDGE_NOT_ACTIVE_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -568,7 +568,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const memberStatus = getActingMember(actor) ? statusOf(actor) : undefined;
         if (memberStatus !== 'active') {
             ctx.status = 403;
-            ctx.body = { error: word('Only active community members can pledge.') };
+            ctx.body = { error: PLEDGE_NOT_ACTIVE_ERROR };
             return;
         }
         if (blockCrossNodeSettlement(ctx, actor)) return;

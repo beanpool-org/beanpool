@@ -98,6 +98,8 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
+    // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov): this suite tests a node whose owners did.
+    (await import('./config/local-config.js')).updateLocalConfig({ aiAssistantsAllowed: true });
     const owner = keypair(), owner2 = keypair(), mia = keypair(), admin = keypair();
     seedGenesisMember(owner.pub, 'Olive');
     const longAgo = new Date(Date.now() - 60 * DAY).toISOString();

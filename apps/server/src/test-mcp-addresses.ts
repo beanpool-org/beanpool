@@ -126,6 +126,8 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
+    // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov): this suite tests a node whose owners did.
+    (await import('./config/local-config.js')).updateLocalConfig({ aiAssistantsAllowed: true });
     // This server's own key, which a check that answers `own` compares with: it must never come back here, whole or as `/check`'s fingerprint.
     setPrivateKeyForTests(await loadOrCreateIdentity());
     const owner = keypair(), owner2 = keypair(), owner3 = keypair();

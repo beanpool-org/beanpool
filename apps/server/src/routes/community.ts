@@ -345,10 +345,11 @@ router.get('/api/local/community-info', async (ctx) => {
  * NOT under `/api/local/`, and that placement is the authentication. Everything below
  * `/api/local/` is bypassed by the global requireSignature middleware; a POST to
  * `/api/funnel-event` is not, so it arrives with an Ed25519 signature over
- * method+path+timestamp+nonce+body, checked for freshness and single-use nonce. Only
- * somebody holding a real member's private key can move these numbers, and they cannot
- * replay a request to move them twice. An open endpoint here would let anyone on the
- * internet invent a node's onboarding history, which is worse than having no numbers.
+ * method+path+timestamp+nonce+body, checked for freshness and single-use nonce, so a
+ * request cannot be replayed to move them twice. It asks for a key, not a membership: the
+ * count keeps no key (M2) and only the phone knows a step was its first, so a key with no
+ * row here may count a step too, one of the three allowlisted below, and nothing else
+ * (test-strangers-cant-write lists it as a write a stranger may make, with that reason).
  *
  * The caller's public key is checked by that middleware and then deliberately dropped: the
  * counter table has no column for it (M2). Knowing four people abandoned the protection
@@ -2181,6 +2182,14 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // A key with no row here keeps no switches: each would be a member_preferences row for anyone with a fresh key, without
+    // limit, carried to a standby (test-strangers-cant-write). A visitor's row keeps its push switches (its guest chats push
+    // it), and a key waiting on its request to join has no Settings to save them from (the web app shows it the waiting page).
+    if (!getMember(activeKey)) {
+        ctx.status = 403;
+        ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
+        return;
+    }
     // setMemberPreferences THROWS on a body it refuses (a key that isn't a push setting, holiday mode
     // among them, a toggle that isn't true or false, or a rejected eventReminderOffsets) rather than
     // saving the rest, so a member never believes they set something they didn't. Holiday mode is
@@ -2234,6 +2243,14 @@ router.post('/api/ratings', async (ctx) => {
     if (raterPubkey && raterPubkey !== activeActor) {
         ctx.status = 403;
         ctx.body = { error: 'raterPubkey must match authenticated signer' };
+        return;
+    }
+    // A key that is no member here rates nobody: refused as a visitor's refused write is (403 not_a_member), where a key
+    // with no row made addRating's assertMemberActive throw "Member not found" and answer 500 (test-strangers-cant-write).
+    // Pruned, replaced, retired and visitors' keys never get this far: the signature middleware refuses them first.
+    if (!isNodeMember(activeActor)) {
+        ctx.status = 403;
+        ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
         return;
     }
     // A rating's comment is on the other member's profile for everyone: a muted member (G3) writes none.

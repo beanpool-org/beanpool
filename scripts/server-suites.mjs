@@ -460,6 +460,7 @@ export const SUITES = [
     'test-one-open-deal',
     'test-deal-listing-keepers',
     'test-non-members-cant-act',
+    'test-strangers-cant-write',
     'test-marketplace-auth',
     'test-marketplace-list',
     'test-listing-edit-numbers',

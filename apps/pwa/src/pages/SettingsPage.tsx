@@ -638,11 +638,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 postCount = keys.filter(k => k.includes('post') || k.includes('offer')).length;
             } catch {}
 
+            // A count the node left out stays null (lib/shared-figure.ts), and its tile is not drawn: never a 0 it was not given.
             setDbStats({
                 integrity: 'ok',
                 members: stats ? stats.members : memberCount,
                 posts: stats ? stats.posts : postCount,
-                transactions: stats?.transactions ?? 0,
+                transactions: stats ? stats.transactions : 0,
                 messages: 0
             });
         } catch (e) {
@@ -1710,21 +1711,27 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 {/* Cache Metrics Grid */}
                                 <div className="grid grid-cols-2 gap-3 mb-5">
-                                    <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
-                                        <div className="text-xl mb-1">👥</div>
-                                        <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.members ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Community Members')}</div>
-                                    </div>
-                                    <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
-                                        <div className="text-xl mb-1">🛒</div>
-                                        <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.posts ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Active Posts')}</div>
-                                    </div>
-                                    <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
-                                        <div className="text-xl mb-1">💸</div>
-                                        <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.transactions ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Ledger Deals')}</div>
-                                    </div>
+                                    {typeof dbStats?.members === 'number' && (
+                                        <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50" data-testid="diagnostics-members">
+                                            <div className="text-xl mb-1">👥</div>
+                                            <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats.members}</div>
+                                            <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Community Members')}</div>
+                                        </div>
+                                    )}
+                                    {typeof dbStats?.posts === 'number' && (
+                                        <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50" data-testid="diagnostics-posts">
+                                            <div className="text-xl mb-1">🛒</div>
+                                            <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats.posts}</div>
+                                            <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Active Posts')}</div>
+                                        </div>
+                                    )}
+                                    {typeof dbStats?.transactions === 'number' && (
+                                        <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50" data-testid="diagnostics-transactions">
+                                            <div className="text-xl mb-1">💸</div>
+                                            <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats.transactions}</div>
+                                            <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">{t('Ledger Deals')}</div>
+                                        </div>
+                                    )}
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💬</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.messages ?? 0}</div>

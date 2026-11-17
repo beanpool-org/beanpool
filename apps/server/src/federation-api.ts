@@ -11,7 +11,7 @@
 import type Koa from 'koa';
 import type Router from '@koa/router';
 import { getPeerOrigins, getConnectorsByLevel } from './connector-manager.js';
-import { getMembers, getPosts, communityCountsCached } from './state-engine.js';
+import { getMembers, getPosts, communityCountsCached, communityInfoShown, publicFiguresShownTo } from './state-engine.js';
 import { getLocalConfig } from './config/local-config.js';
 
 /**
@@ -67,14 +67,16 @@ export function mountFederationRoutes(router: Router): void {
             }));
 
         const counts = communityCountsCached();
+        ctx.set('Cache-Control', 'private, no-store');
         ctx.body = {
             name: config.communityName || 'BeanPool Node',
             // The node-wide counts from communityCountsCached, as GET /api/community/info: members not pruned, and the
             // live public listings (getActivePostCount, the count it caches). This read is public and counted both
             // afresh on every hit, and the member count reads every inline photo (the global load rehearsal). Counted
             // again once a member or a listing changes (the version counters), else at most COMMUNITY_COUNTS_TTL_MS old.
-            memberCount: counts.memberCount,
-            postCount: counts.postCount,
+            // To a reader who reads as a member, and to anyone else only with "Share Member Count" on (risk 10).
+            ...communityInfoShown({ memberCount: counts.memberCount, postCount: counts.postCount },
+                publicFiguresShownTo(ctx.state.actor as string | undefined)),
             peerNodes: peers,
         };
     });

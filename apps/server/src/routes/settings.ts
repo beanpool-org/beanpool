@@ -19,7 +19,7 @@ import {
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
     getGatewayConfig,
 } from '../config/local-config.js';
-import { requireAdminRole, requireFreshProof, TOKEN_REFUSED_CODE, type AdminRole } from '../admin-auth.js';
+import { requireAdminRole, requireFreshProof, holdsOwnerOrAdminSession, TOKEN_REFUSED_CODE, type AdminRole } from '../admin-auth.js';
 import { actingAs } from '../services/security-signal.js';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE, directoryPromiseStatus, directoryPromiseSaved } from '../services/directory-publisher.js';
 import { listingFields, publicListingFields, setPromiseTicks } from '../engine/directory-promise.js';
@@ -579,12 +579,17 @@ if (process.env.DISABLE_UPDATE_CHECK !== 'true') {
     setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000).unref();
 }
 
+// The version is everyone's: the apps and the operators' monitors read it before anyone signs in. The commit and what
+// the update check found (whether a newer release is out, which, and when it looked) are an owner's or admin's, read by
+// Settings under its session (holdsOwnerOrAdminSession): to anyone else they said exactly which build runs here and
+// whether it is behind, a stranger's map of what to try (security inventory 17 Nov 2026, risk 10).
 router.get('/api/version', (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    const cachedUpdateInfo = cachedNodeUpdateInfo();
+    const ownerOrAdmin = holdsOwnerOrAdminSession(ctx);
+    const cachedUpdateInfo = ownerOrAdmin ? cachedNodeUpdateInfo() : null;
     ctx.body = {
         version: getVersion(),
-        commit: getCommit(),
+        ...(ownerOrAdmin ? { commit: getCommit() } : {}),
         buildTime: new Date().toISOString(),
         node: process.env.CF_RECORD_NAME || 'local',
         // Include cached update info if available

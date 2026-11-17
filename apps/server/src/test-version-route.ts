@@ -16,6 +16,7 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -50,14 +51,29 @@ async function main() {
         const port = await startHttpsServer(0);
         // The gateway's limit would answer 429 from the 121st request on, before the route runs: off, so all reach it.
         updateGatewayConfig({ ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: false, maxRequestsPerMinute: 120 } });
-        const version = async () => {
-            const r = await fetch(`https://localhost:${port}/api/version`);
+        // The commit is an owner's or admin's (routes/settings.ts, risk 10 of the 17 Nov security inventory): asked under an
+        // owner's session, as Settings asks it. Anyone else gets the version and no commit (test-public-counts §6).
+        const { grantNodeRole } = se;
+        const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+        const { db } = await import('./db/db.js');
+        const ownerPk = crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+            VALUES (?, 'Owner', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(ownerPk);
+        grantNodeRole(ownerPk, 'owner', 'SYSTEM');
+        const opened = consumeHandshakeToken(mintHandshakeToken(ownerPk, 'owner').handshakeToken);
+        if (!opened.ok || !opened.sessionId) throw new Error(`could not open an owner's session: ${opened.error}`);
+        const session = opened.sessionId;
+        const version = async (headers: Record<string, string> = { 'X-Admin-Session': session }) => {
+            const r = await fetch(`https://localhost:${port}/api/version`, { headers });
             return { status: r.status, body: await r.json().catch(() => null) as { version?: string; commit?: string } | null };
         };
 
+        const anyone = await version({});
+        assert(anyone.status === 200 && typeof anyone.body?.version === 'string' && anyone.body?.commit === undefined,
+            `to anyone, the version and no commit (${anyone.status} ${JSON.stringify(anyone.body)})`);
         const first = await version();
         assert(first.status === 200 && first.body?.commit === '0badc0de' && typeof first.body?.version === 'string',
-            `the first answer carries the commit git gave (${first.status} ${JSON.stringify(first.body)})`);
+            `the first answer to an owner carries the commit git gave (${first.status} ${JSON.stringify(first.body)})`);
         const before = gitCalls();
         const statuses = new Map<string, number>();
         for (let i = 0; i < 1000; i++) {

@@ -15,6 +15,7 @@ delete process.env.CF_RECORD_NAME;
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -100,10 +101,14 @@ async function main(): Promise<void> {
     assert(typeof nodeConfigBody === 'object' && nodeConfigBody !== null, 'GET /api/node/config returns node configuration object');
 
     // ── 4. API Version Endpoint ───────────────────────────────────
+    // The version to anyone; the commit to an owner's or admin's session, as Settings asks (risk 10 of the 17 Nov security
+    // inventory; test-public-counts §6 has every kind of caller).
     const versionRes = await fetch(`${BASE}/api/version`);
     assert(versionRes.status === 200, 'GET /api/version returns 200');
     const versionBody = (await versionRes.json()) as VersionResponse;
-    assert(typeof versionBody?.version === 'string' && typeof versionBody?.commit === 'string', 'GET /api/version returns version and commit string');
+    assert(typeof versionBody?.version === 'string' && versionBody?.commit === undefined, 'GET /api/version returns the version string, and no commit, to anyone');
+    const ownerVersion = (await (await fetch(`${BASE}/api/version`, { headers: ownerSessionHeaders() })).json()) as VersionResponse;
+    assert(typeof ownerVersion?.version === 'string' && typeof ownerVersion?.commit === 'string', "GET /api/version returns version and commit string to an owner's session");
 
     // ── 5. Directory Info Endpoint ───────────────────────────────
     const dirInfoRes = await fetch(`${BASE}/api/directory/info`);

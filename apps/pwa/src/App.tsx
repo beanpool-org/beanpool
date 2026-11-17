@@ -14,6 +14,7 @@ import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
 import { getMyUnread, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, request, type CommunityInfo, type MarketplaceTransaction, type Group, type AppStoreVersions } from './lib/api';
+import { healthFigures } from './lib/shared-figure';
 import { GroupDetailModal } from './components/GroupDetailModal';
 import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
@@ -490,6 +491,9 @@ export function App() {
     }, [identity?.publicKey]);
     const [showCommunityStatus, setShowCommunityStatus] = useState(false);
     const [communityHealth, setCommunityHealth] = useState<NodeHealthState | null>(null);
+    // Each read of the node's health is numbered, and only the latest one's answer is kept: a slow read made before a
+    // sign-in (no counts, where the node shares none) never lands on top of the member's read made after it.
+    const healthReads = useRef(0);
     // The node's own version, once health has answered; the baked-in bundle version until then.
     const displayVersion = communityHealth?.version?.trim() || __APP_VERSION__;
     // A page left open across this server's upgrade: a reload loads the new one (lib/app-version.ts webAppBehindServer). Not
@@ -508,9 +512,10 @@ export function App() {
         }
         // Never loaded, or loaded offline: re-check, so a cold start or a dropped
         // connection recovers on a tap instead of needing a page reload.
+        const read = ++healthReads.current;
         getCommunityHealth()
-            .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
-            .catch(() => { setCommunityHealth(prev => ({ ...prev, online: false })); setShowCommunityStatus(true); });
+            .then(h => { if (read === healthReads.current) setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
+            .catch(() => { if (read === healthReads.current) setCommunityHealth(prev => ({ ...prev, online: false })); setShowCommunityStatus(true); });
     };
 
     // A member's web push (W2): kept at each open, and a click on a notification opened as the bell's tap, or refused once.
@@ -850,9 +855,10 @@ export function App() {
             })
             .finally(() => { if (mounted) setLoading(false); });
 
+        const read = ++healthReads.current;
         getCommunityHealth()
-            .then(h => { if (mounted) setCommunityHealth({ ...h, online: true }); })
-            .catch(() => { if (mounted) setCommunityHealth(prev => ({ ...prev, online: false })); });
+            .then(h => { if (mounted && read === healthReads.current) setCommunityHealth({ ...h, online: true }); })
+            .catch(() => { if (mounted && read === healthReads.current) setCommunityHealth(prev => ({ ...prev, online: false })); });
 
         retryPendingReports().catch(() => {});
         const handleOnline = () => {
@@ -865,6 +871,25 @@ export function App() {
             window.removeEventListener('online', handleOnline);
         };
     }, []);
+
+    /*
+     * Health again whenever the key this page signs with changes without a reload: a join, a sign-in, a sign-out, a re-key.
+     * Where the owners share no counts (Share Member Count off), the node gives them only to a member's signed read, and the
+     * page-load read above went as whoever this browser held then. The first identity after the load is that read's own
+     * (lib/api.ts request() signs with the stored key), so it is not asked twice.
+     */
+    const healthReadAs = useRef<string | null | undefined>(undefined);
+    useEffect(() => {
+        if (loading) return;
+        const key = identity?.publicKey ?? null;
+        const before = healthReadAs.current;
+        healthReadAs.current = key;
+        if (before === undefined || before === key) return;
+        const read = ++healthReads.current;
+        getCommunityHealth()
+            .then(h => { if (read === healthReads.current) setCommunityHealth({ ...h, online: true }); })
+            .catch(() => { if (read === healthReads.current) setCommunityHealth(prev => ({ ...prev, online: false })); });
+    }, [identity?.publicKey, loading]);
 
     /*
      * A member back from a provider (two-doors design §2.5): a sign-in this browser left to add to an account made with
@@ -1256,6 +1281,7 @@ export function App() {
     }
 
     // The community's status, opened from the header's title (or, on the map, its name).
+    const statusFigures = healthFigures(communityHealth);
     const communityStatus = showCommunityStatus && communityHealth && (
         <div 
             className="absolute top-full mt-2 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl p-4 min-w-[220px] z-50 pointer-events-auto"
@@ -1272,14 +1298,19 @@ export function App() {
                     <span>{t('Node:')}</span>
                     <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || t('Local')}</span>
                 </div>
-                <div className="flex justify-between">
-                    <span>{t('Members:')}</span>
-                    <span className="font-mono font-semibold">{communityHealth.memberCount ?? communityHealth.tree?.totalMembers ?? 0}</span>
-                </div>
-                <div className="flex justify-between">
-                    <span>{t('Active Posts:')}</span>
-                    <span className="font-mono font-semibold">{communityHealth.postCount ?? communityHealth.activity?.totalPosts ?? 0}</span>
-                </div>
+                {/* Each count only where the node gave it (lib/shared-figure.ts): a hidden one is left out, never shown as 0. */}
+                {statusFigures.members !== null && (
+                    <div className="flex justify-between" data-testid="community-status-members">
+                        <span>{t('Members:')}</span>
+                        <span className="font-mono font-semibold">{statusFigures.members}</span>
+                    </div>
+                )}
+                {statusFigures.posts !== null && (
+                    <div className="flex justify-between" data-testid="community-status-posts">
+                        <span>{t('Active Posts:')}</span>
+                        <span className="font-mono font-semibold">{statusFigures.posts}</span>
+                    </div>
+                )}
             </div>
             <button
                 onClick={() => setShowCommunityStatus(false)}

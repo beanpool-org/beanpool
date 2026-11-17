@@ -25,6 +25,20 @@ human instead). It only sends `SIGUSR2` to containers whose env actually has
 `--report-on-signal` — otherwise SIGUSR2 would *kill* the node — so the flag can
 be rolled out node-by-node while the watchdog guards them all.
 
+## What the node reports
+
+Each pass writes `watchdog-status.json` into the node's data directory: a
+heartbeat, the recoveries so far and the last one's time. The node reads it
+and reports it in two places:
+
+- the admin health, always: its flags (`watchdog_recovery`,
+  `watchdog_down`), which the fleet manager turns into alerts;
+- the public `GET /api/community/health` (`watchdog`), to someone who is not a
+  member only while the owners keep **Share Node Health & Version** on
+  (Settings → Directory sharing). With it off, an uptime monitor reading the
+  public answer without credentials no longer sees the watchdog; the admin
+  flags above are unchanged.
+
 ## Prerequisite
 
 The node containers must run with `--report-on-signal` for step 2 to produce a

@@ -67,6 +67,8 @@ export interface NodeHarvestState {
     dbSizeBytes: number;
     memberCount: number;
     postCount: number;
+    /** When the last pull came through: a node that shares no counts is pulled again UNSHARED_COUNTS_PULL_MS after it. */
+    lastPullAt?: string;
     /** 'secured' = a locked backup is held, and it carries the node keys. 'partial' = only a readable backup (no keys). */
     identityStatus: 'secured' | 'partial' | 'missing';
     /** Why identity is not 'secured', in words for the dashboard; null when it is. */
@@ -173,20 +175,38 @@ function normalizeUrl(url: string): string {
     return trimmed.replace(/\/+$/, '');
 }
 
-/** Fetch remote counts from the public /api/community/info: it needs no credential, so none is sent. */
-async function fetchRemoteCounts(node: FleetNodeConfig): Promise<{ members: number; posts: number } | null> {
+/**
+ * How often a node that does not share its counts is pulled: its owners turned "Share Member Count" off, so its public
+ * /api/community/info carries no counts to tell a change by (risk 10), and with no figure to compare the harvester would
+ * otherwise never pull it again after the first.
+ */
+export const UNSHARED_COUNTS_PULL_MS = 60 * 60_000;
+
+/**
+ * Fetch remote counts from the public /api/community/info: it needs no credential, so none is sent. `shared: false` when
+ * the node answered without them (its owners turned "Share Member Count" off): the harvester then pulls on the clock.
+ */
+async function fetchRemoteCounts(node: FleetNodeConfig): Promise<{ members: number; posts: number; shared: boolean } | null> {
     try {
         const baseUrl = normalizeUrl(node.url);
         const res = await fetch(`${baseUrl}/api/community/info`, { signal: AbortSignal.timeout(10000) });
         if (res.ok) {
             const data = await res.json() as any;
+            const shared = typeof data?.memberCount === 'number' && typeof data?.postCount === 'number';
             return {
                 members: Number(data.memberCount) || 0,
                 posts: Number(data.postCount) || 0,
+                shared,
             };
         }
     } catch { /* ignore error and return null */ }
     return null;
+}
+
+/** Whether a node that shares no counts is due a pull: none yet, or the last more than UNSHARED_COUNTS_PULL_MS ago. */
+function unsharedPullDue(prev: NodeHarvestState, now = Date.now()): boolean {
+    const last = prev.lastPullAt ? Date.parse(prev.lastPullAt) : NaN;
+    return !Number.isFinite(last) || now - last >= UNSHARED_COUNTS_PULL_MS;
 }
 
 // ── Sealed files (sealed-keys.md §6.3) ─────────────────────────────────────────────────────
@@ -970,7 +990,7 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
         const counts = await fetchRemoteCounts(node);
         // Also pull once after this update (backupLock unset), to learn whether the node's backups are locked.
         const hasDrift = force || !counts || counts.members !== prev.memberCount || counts.posts !== prev.postCount
-            || prev.dbSizeBytes === 0 || prev.backupLock === undefined;
+            || prev.dbSizeBytes === 0 || prev.backupLock === undefined || (!counts.shared && unsharedPullDue(prev));
         const waitUntil = prev.pullBackoff ? Date.parse(prev.pullBackoff.nextPullAt) : 0;
 
         if (hasDrift && !force && waitUntil > Date.now()) {
@@ -980,6 +1000,7 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
             console.log(`[Harvester] Pulling backup for ${node.name} (${slug}) [force: ${force}]`);
             try {
                 const r = await pullBackupForNode(node);
+                prev.lastPullAt = new Date().toISOString();
                 prev.dbSizeBytes = r.dbSize;
                 prev.backupLock = r.kind === 'sealed'
                     ? { locked: true, message: 'Backups are locked.', at: new Date().toISOString() }

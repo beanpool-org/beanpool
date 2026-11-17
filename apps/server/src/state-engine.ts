@@ -1629,12 +1629,14 @@ function sweepSettledEscrowAccounts(): void {
 export function addWsClient(ws: any): void {
     wsClients.add(ws);
     try {
-        // The cached counts (communityCountsCached): every socket's greeting ran three full-table counts before.
+        // The cached counts (communityCountsCached): every socket's greeting ran three full-table counts before. The member
+        // and listing counts go to a socket that reads as a member's (`_memberFeed`, https-server.ts), and to anyone else
+        // only with "Share Member Count" on (publicFiguresShownTo, risk 10): an unsigned socket is anyone's.
         const counts = communityCountsCached();
+        const shown = ws._memberFeed === true ? { counts: true } : publicFiguresShownTo(null);
         ws.send(JSON.stringify({
             type: 'state_snapshot',
-            memberCount: counts.memberCount,
-            postCount: counts.postCount,
+            ...communityInfoShown({ memberCount: counts.memberCount, postCount: counts.postCount }, shown),
             commonsBalance_c: COMMONS_BALANCE,
         }));
     } catch { /* ignore */ }
@@ -7374,6 +7376,30 @@ export function getPublicCommunityInfo(publicKey?: string): CommunityInfo {
 }
 
 /**
+ * What a reader who is not a member here is told of the community's size, activity and running (security inventory
+ * 17 Nov 2026, risk 10): its exact member, listing and trade counts only with the owners' "Share Member Count" on
+ * (`publishMembers`), and its activity over 7 and 30 days and the host watchdog's report only with "Share Node Health &
+ * Version" on (`publishHealth`). A reader who reads as a member (readsAsMember: a verified signer, not suspended, not a
+ * visitor's row) is told all of it, whatever the switches say. Every public answer that carries one of them asks this:
+ * GET /api/community/info, /api/community/health, /api/node/info and the /ws greeting.
+ */
+export function publicFiguresShownTo(reader: string | null | undefined): { counts: boolean; health: boolean } {
+    if (readsAsMember(reader)) return { counts: true, health: true };
+    const config = getNodeConfig();
+    return { counts: config.publishMembers !== false, health: config.publishHealth !== false };
+}
+
+/** The node-wide counts a CommunityInfo carries, left out where `shown.counts` is false (publicFiguresShownTo). */
+export function communityInfoShown<T extends Partial<CommunityCounts>>(info: T, shown: { counts: boolean }): T {
+    if (shown.counts) return info;
+    const out = { ...info };
+    delete out.memberCount;
+    delete out.postCount;
+    delete out.transactionCount;
+    return out;
+}
+
+/**
  * O(1) count of live, listable posts — the same set getPosts({}) returns (active AND
  * status in active/pending), so it EXCLUDES paused posts. Intentionally narrower than
  * getCommunityInfo().postCount (which counts all active=1, paused included).
@@ -8588,6 +8614,36 @@ export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth
     }
     const { reportCount: _adminsOnly, ...health } = healthBody(publicHealthCache.counts, 0, publicHealthCache.watchdog);
     return health;
+}
+
+/**
+ * The public health as `reader` may read it (publicFiguresShownTo): a member reads it whole. Anyone else reads the
+ * member, listing and trade totals (`tree`, `activity.totalPosts`, `activity.totalTransactions`) only with
+ * `publishMembers` on; the trades over 7 and 30 days and the host watchdog's report (recoveries, the last one's time)
+ * only with `publishHealth` on; and the active and inactive members only with both, because the two add up to the member
+ * count. The name, version, app floors, store versions, currency and the Commons pot are everyone's: the apps read them
+ * before anyone signs in (node-version-gate, force-update).
+ */
+export function getPublicCommunityHealthFor(reader: string | null | undefined, now = Date.now()): Partial<Omit<CommunityHealth, 'flags' | 'reportCount'>> {
+    const health: Partial<Omit<CommunityHealth, 'flags' | 'reportCount'>> = getPublicCommunityHealth(now);
+    const shown = publicFiguresShownTo(reader);
+    if (shown.counts && shown.health) return health;
+    const out = { ...health };
+    const activity: Record<string, unknown> = { ...(health.activity ?? {}) };
+    if (!shown.counts) {
+        delete out.tree;
+        delete activity.totalTransactions;
+        delete activity.totalPosts;
+    }
+    if (!shown.health) {
+        delete out.watchdog;
+        delete activity.last7Days;
+        delete activity.last30Days;
+    }
+    delete activity.activeMemberCount;
+    delete activity.inactiveMemberCount;
+    out.activity = activity;
+    return out;
 }
 
 /**

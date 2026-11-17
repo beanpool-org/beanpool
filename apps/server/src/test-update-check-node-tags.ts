@@ -25,7 +25,7 @@ process.env.APP_VERSION = '1.2.20';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -74,8 +74,13 @@ async function checkUpdate(): Promise<{ status: number; body: any }> {
     const r = await fetch(`${BASE}/api/admin/check-update`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner } });
     return { status: r.status, body: await r.json().catch(() => null) };
 }
-async function version(): Promise<any> {
-    const r = await fetch(`${BASE}/api/version`);
+/**
+ * An owner's key session, as Settings reads GET /api/version: what the update check found is an owner's or admin's
+ * (routes/settings.ts, risk 10 of the 17 Nov security inventory); anyone else is told the version alone.
+ */
+let ownerSession: Record<string, string> = {};
+async function version(headers: Record<string, string> = ownerSession): Promise<any> {
+    const r = await fetch(`${BASE}/api/version`, { headers });
     return r.json();
 }
 
@@ -86,6 +91,7 @@ async function main() {
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     asOwner = ownerTokenHeaders('admin');
+    ownerSession = ownerSessionHeaders();
 
     // ── 1. A vault release is GitHub's Latest ───────────────────────────────────────────────────────────
     console.log('\n— 1. vault-v1.0.0 is Latest, v1.2.27 the newest node release —');
@@ -190,7 +196,10 @@ async function main() {
             await check();
             const after = await version();
             assert(after.latestVersion === '1.2.27' && after.updateAvailable === true && typeof after.lastUpdateCheck === 'string',
-                `after it, /api/version says 1.2.27 is available (${JSON.stringify({ latestVersion: after.latestVersion, updateAvailable: after.updateAvailable })})`);
+                `after it, /api/version says 1.2.27 is available to an owner (${JSON.stringify({ latestVersion: after.latestVersion, updateAvailable: after.updateAvailable })})`);
+            const anyone = await version({});
+            assert(typeof anyone.version === 'string' && anyone.latestVersion === undefined && anyone.updateAvailable === undefined && anyone.lastUpdateCheck === undefined,
+                `and to anyone else, the version alone (${JSON.stringify(anyone)})`);
             github.releases = github.latest = { status: 500, body: {} };
             github.tags = { status: 500, body: {} };
             await check();

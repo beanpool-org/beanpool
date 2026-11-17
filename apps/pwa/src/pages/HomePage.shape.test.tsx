@@ -17,6 +17,8 @@ vi.mock('../lib/api', () => ({
     getListedCommunityByHost: vi.fn(async () => null),
     // The modal reads the date on a tightened line (lib/known-rule.ts).
     request: vi.fn(async () => null),
+    // Home's let-go of a done request (lib/web-push stopTellingMeAtHome): no network here (#3290, HomePage.find.test.tsx).
+    sendSignedAt: vi.fn(async () => { throw new TypeError('Failed to fetch'); }),
 }));
 vi.mock('../components/AddressSearch', () => ({
     AddressSearch: () => null,

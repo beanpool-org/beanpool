@@ -27,6 +27,9 @@ vi.mock('../lib/api', () => ({
     getListedCommunityByHost: vi.fn(async () => null),
     // lib/knock's own calls (where a test doesn't stub them): no network here, as a browser offline would say.
     signedFetchAt: vi.fn(async () => { throw new TypeError('Failed to fetch'); }),
+    // Home's let-go of a done request (HomePage's "Told from here" effect, lib/web-push stopTellingMeAtHome): no network here.
+    // Without it, a late let-go hit the mock and failed the run (#3290: 'No "sendSignedAt" export is defined').
+    sendSignedAt: vi.fn(async () => { throw new TypeError('Failed to fetch'); }),
 }));
 vi.mock('../components/AddressSearch', () => ({
     AddressSearch: ({ onPick }: { onPick: (r: unknown) => void }) => (
@@ -1399,5 +1402,23 @@ describe('told from another origin on the waiting row (global yes Y2)', () => {
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await waitFor(() => expect(new Set(letGo.mock.calls.map(c => c[0]))).toEqual(new Set([RIVERSIDE.url, HILLSIDE.url])));
         expect(letGo.mock.calls.every(c => c[1] === ME)).toBe(true);
+    });
+
+    // #3290's red ('No "sendSignedAt" export is defined on the "../lib/api" mock'): the test above stubs the let-go, and its
+    // afterEach puts the real one back while Home is still drawn, so a late effect reached lib/api's sendSignedAt, which this
+    // file's mock didn't have. Here the real let-go runs on purpose: the DELETE leaves for that community alone.
+    it('the real let-go of a done request: a signed DELETE for its pin goes to that community, and the pin goes; a waiting one keeps its pin', async () => {
+        vi.mocked(api.sendSignedAt).mockClear();
+        await askedOf(RIVERSIDE, HILLSIDE);
+        const pin = (origin: string) => ({ origin, publicKey: ME.publicKey, subId: (origin === RIVERSIDE.url ? 'e' : 'f').repeat(64), pushKey: 'd'.repeat(64), vapidKey: 'v', for: 'asker' });
+        localStorage.setItem('beanpool_web_push', JSON.stringify([pin(RIVERSIDE.url), pin(HILLSIDE.url)]));
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === RIVERSIDE.url
+            ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null, member: true } }
+            : { ok: true, value: { status: 'pending' } }));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(vi.mocked(api.sendSignedAt)).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(api.sendSignedAt)).toHaveBeenCalledWith('DELETE', RIVERSIDE.url, webPushModule.WEB_PUSH_PATH, JSON.stringify({ subId: 'e'.repeat(64) }), ME);
+        await waitFor(() => expect(webPushModule.readWebPushPin(RIVERSIDE.url, ME.publicKey)).toBeNull());
+        expect(webPushModule.readWebPushPin(HILLSIDE.url, ME.publicKey)?.subId).toBe('f'.repeat(64));
     });
 });

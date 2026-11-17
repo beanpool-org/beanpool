@@ -139,6 +139,10 @@ describe('the member key signs only through core\'s builders', () => {
             'utils/crypto.ts buildVaultSignedHeaders',
             'utils/member-statements.ts signAdminChallenge',
             'utils/member-statements.ts signPairing',
+            // An AI assistant's approval (risk 3, 18 Nov): core's signAssistantConsent, `0xFF ‖ beanpool-assistant-consent/1\nHOST\n
+            // approve\nID\nCODE\npost=…\ntakedown=…`, the host from audienceOf of a plain address, the pairing and code from the
+            // scanned QR (checked against the node's lookup), the ticks the sheet showed. Under its own tag, never a sign-in.
+            'utils/member-statements.ts signAssistantApproval',
             'utils/member-statements.ts makeOfflineTicket',
             // The push leave statement: core's signPushLeave builds `0xFF ‖ beanpool-push-leave/2\nHOST\n…` from the
             // key, the phone's own token and stamp, and the host of the address the phone sent the token to.

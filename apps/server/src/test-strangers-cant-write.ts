@@ -26,7 +26,8 @@
  *      send every frame a write would be: nothing changes and nothing leaves.
  *   5. Controls, so the sweep can fail: the same bodies signed by Alice, the owner they name, change something or call out
  *      on many of the writes (the bodies reach real data, so a stranger's "nothing changed" is a refusal), and a row a
- *      stranger planted would be seen by the same snapshot.
+ *      stranger planted would be seen by the same snapshot. Among them every write in OWN_STATE (the signer's own switches,
+ *      marks, profile, phone and channels), the class a body that missed once hid three holes in; each it can't reach says why.
  *
  * The engines the inventory had not traced (pausePost, resumePost, publishKnowledge, deleteGroupPost,
  * removeGroupThreadMessage, skipEventDate, names step-back) are among the swept writes, each with a body that reaches them.
@@ -275,6 +276,11 @@ const STRANGER_REFUSED = new Set<string>([
 const REACHED = 'reached';
 const GLOBAL_ONLY = 'the global directory\'s: 404 feature_off on a local node before any handler (routes/profile-feature-gate.ts), and '
     + 'its watcher() asks isNodeMember first';
+/** Not reached here, but refused before the body is read: `gate` asks for the signer's member row first, whatever the body says. */
+const firstAsks = (gate: string, needs: string) => `${gate} asks for an active member row before the body is read; ${needs}`;
+const CONTACTS = 'asMember (routes/contacts.ts)';
+const KEEPERS = 'activeSigner (routes/keepers.ts)';
+const MAIL = 'memberHere (routes/relay.ts)';
 const OWN_STATE: Record<string, string> = {
     'POST /api/members/preferences': REACHED,
     'POST /api/member/pulse/oauth-exchange': REACHED,
@@ -285,10 +291,44 @@ const OWN_STATE: Record<string, string> = {
     'POST /api/blocks/remove': REACHED,
     'POST /api/forum/topics/:id/follow': REACHED,
     'POST /api/forum/topics/:id/read': REACHED,
+    'POST /api/forum/told': REACHED,
     'POST /api/notices/push/seen': REACHED,
+    'POST /api/messages/mark-read': REACHED,
+    'POST /api/messages/mute': REACHED,
+    'POST /api/members/holiday': REACHED,
+    'POST /api/community/me/area': REACHED,
+    'POST /api/push-tokens': REACHED,
+    'POST /api/web-push': REACHED,
+    'PUT /api/profile/privacy': REACHED,
+    'POST /api/profile/update': REACHED,
+    'PUT /api/events/:postId/reminder': REACHED,
+    'POST /api/member/channels': REACHED,
+    'POST /api/member/pulse/items/:id/mute': REACHED,
+    'POST /api/mail/device/forget': REACHED,
+    'DELETE /api/tools/:tool': REACHED,
     'POST /api/global/watches': GLOBAL_ONLY,
     'DELETE /api/global/watches/:id': GLOBAL_ONLY,
     'POST /api/global/circles/:id/starting': GLOBAL_ONLY,
+    'PUT /api/contacts/copy': firstAsks(CONTACTS, 'a body that reaches the write is a copy the sender signed, in whole 16 KiB steps'),
+    'DELETE /api/contacts/copy': firstAsks(CONTACTS, 'Alice keeps no copy here to delete'),
+    'DELETE /api/contacts/former': firstAsks(CONTACTS, 'Alice was never re-keyed, so keeps no former copy'),
+    'POST /api/recovery/community-copy': firstAsks(KEEPERS, 'a body that reaches the write is a sealed copy and its key'),
+    'POST /api/recovery/community-copy/half': firstAsks(KEEPERS, 'a body that reaches the write is a sealed half and its copy\'s digest'),
+    'DELETE /api/recovery/community-copy': firstAsks(KEEPERS, 'Alice keeps no copy here to delete'),
+    'POST /api/recovery/shares/sso': firstAsks(KEEPERS, 'a body that reaches the write is a sign-in the provider verified'),
+    'DELETE /api/recovery/shares': firstAsks(KEEPERS, 'Alice keeps no fragments here to delete'),
+    'DELETE /api/recovery/shares/sso/:provider': firstAsks(KEEPERS, 'Alice has no sign-in connected'),
+    'POST /api/find/me': firstAsks('memberHere (routes/find-by-name.ts)', 'a body that reaches the write carries the verified card'),
+    'POST /api/mail/confirm': firstAsks(MAIL, 'Alice has no mail from another community waiting'),
+    'POST /api/mail/group/confirm': firstAsks(MAIL, 'Alice has no group notice from another community waiting'),
+    'POST /api/notices/seen': firstAsks('member() (routes/notices.ts)', 'Alice\'s kept notices have no fixed ids here'),
+    'POST /api/messages/request/ignore-all': firstAsks('requestDecider (routes/messaging.ts; a live visitor too)', 'nobody asked Alice to talk'),
+    'POST /api/vouchers/ask': 'its body ({}) reaches askForMore, which asks getMember first (engine/vouchers.ts); Alice, an owner, has no '
+        + 'limit to ask past (409 no_limit)',
+    'POST /api/member/pulse/preview': 'matchOwnedChannel (routes/pulse-submit.ts) finds the signer\'s own channel before any call out; '
+        + 'Alice\'s needs a platform page to answer',
+    'POST /api/member/pulse/submit': 'matchOwnedChannel finds the signer\'s own channel before any call out or write; Alice\'s needs a '
+        + 'platform page to answer',
 };
 
 // ── nothing leaves the node ─────────────────────────────────────────────────────────────────────────
@@ -387,6 +427,8 @@ async function main(): Promise<void> {
     const { lockedDm } = await import('./dm-test-payload.js');
     const { lockedGroupLine } = await import('./group-test-payload.js');
     const { addBlocks } = await import('./engine/member-blocks.js');
+    const { noteMailDevice } = await import('./engine/relay-mail.js');
+    const MAIL_DEVICE = 'a1'.repeat(16);
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { resetChatRateLimit } = await import('./chat-rate-limit.js');
@@ -631,6 +673,22 @@ async function main(): Promise<void> {
         'POST /api/forum/topics/:id/read': () => ({ upTo: 2 }),
         // The bell cleared: the signer's own notices only (Alice's say Kim and the knockers asked to join).
         'POST /api/notices/push/seen': () => ({ all: true }),
+        // Who invited the signer, hidden; a line about them; a reminder an hour before Alice's working bee.
+        'PUT /api/profile/privacy': () => ({ inviterShown: false }),
+        'POST /api/profile/update': () => ({ bio: 'A stranger writes this' }),
+        // (Alice going to her own working bee first: a reminder is kept on the signer's own RSVP.)
+        'PUT /api/events/:postId/reminder': (x) => { if (x === alice) se.rsvpEvent(event.id, alice.pk, 'going'); return { offsets: [60] }; },
+        // A Pulse channel of the signer's own, and Alice's video muted on her own channel.
+        'POST /api/member/channels': () => ({ platform: 'youtube', url: 'https://www.youtube.com/@sweptchannel', category: 'food' }),
+        // (Her video put back first: deleting her channel, earlier in the control's pass, took it down.)
+        'POST /api/member/pulse/items/:id/mute': (x) => {
+            if (x === alice) db.prepare("UPDATE pulse_items SET deleted_at = NULL WHERE id = 'item_sw'").run();
+            return { muted: true };
+        },
+        // A phone's mail id forgotten (Alice's noted just before, so hers has one to forget).
+        'POST /api/mail/device/forget': (x) => { if (x === alice) noteMailDevice(alice.pk, MAIL_DEVICE); return { device: MAIL_DEVICE }; },
+        // One tap, no words (a body that says anything is refused before the engine is asked).
+        'POST /api/vouchers/ask': () => ({}),
     };
     const unservedBodies = Object.keys(BODIES).filter(r => !writes.includes(r));
     assert(unservedBodies.length === 0, `every body written for a route is for one the node serves, so none goes unsent${unservedBodies.length ? ` — not served: ${unservedBodies.join(', ')}` : ''}`);
@@ -797,14 +855,17 @@ async function main(): Promise<void> {
         // left out: the bodies reach real data, so a stranger's "nothing changed" is a refusal, not a body that missed.
         // One pass, in route order, so a write early in it can leave a later one nothing to do: the count is a floor.
         const reached: string[] = [];
+        const aliceGot = new Map<string, string>();
         for (const route of writes) {
             if (route === 'POST /api/member/purge') continue; // Alice stays a member for the rest of this control
             const m = await measure(route, alice, true);
             if (m.changed.length || m.left.length) reached.push(route);
+            else aliceGot.set(route, show(m.r));
         }
         console.log(`  (Alice's same body changed something or called out on ${reached.length} writes, `
             + `${reached.filter(r => STRANGER_REFUSED.has(r)).length} of them refused to a stranger: ${reached.join(', ')})`);
-        // 59 when this suite was written (18 Nov 2026); the floor leaves room for routes that change, not for bodies that miss.
+        // 59 when this suite was written, 76 once OWN_STATE had its bodies (18 Nov 2026); the floor leaves room for routes that
+        // change, not for bodies that miss.
         assert(reached.length >= 45, `the member the bodies name, signing them, changes something on ${reached.length} of the ${writes.length} writes `
             + '(at least 45): the bodies reach real data');
         for (const must of ['POST /api/marketplace/posts/pause', 'POST /api/marketplace/posts/resume', 'POST /api/marketplace/posts/update',
@@ -821,7 +882,10 @@ async function main(): Promise<void> {
         const ownReached = Object.values(OWN_STATE).filter(why => why === REACHED).length;
         assert(ownMissed.length === 0, `each of the ${ownReached} writes that keep the signer's own things and are reached here changed something for Alice, `
             + `so a stranger's "nothing changed" on them is a refusal (${Object.keys(OWN_STATE).length - ownReached} more say why they can't be)`
-            + `${ownMissed.length ? ` — not reached: ${ownMissed.join(', ')}` : ''}`);
+            + `${ownMissed.length ? ` — not reached: ${ownMissed.map(r => `${r} (Alice: ${aliceGot.get(r)})`).join(', ')}` : ''}`);
+        const saidNot = Object.entries(OWN_STATE).filter(([r, why]) => why !== REACHED && reached.includes(r)).map(([r]) => r);
+        assert(saidNot.length === 0, `and none listed with why it can't be reached is reached after all, so the list says what the control does`
+            + `${saidNot.length ? ` — reached: ${saidNot.join(', ')}` : ''}`);
         // And the snapshot sees a stranger's row: one planted by hand.
         const before = snapshot();
         db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(newId().pk, alice.pk);

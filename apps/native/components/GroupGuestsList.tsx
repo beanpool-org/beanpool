@@ -69,7 +69,7 @@ export function GroupGuestsList({ groupId, isConvenor, reloadKey = 0 }: Props) {
         Alert.alert(t('Remove'), twoParagraphs(t(W.removeAsk, { name }), g.state === 'invited' ? t(W.removeWhatAsked) : t(W.removeWhatIn)), [
             { text: t('Cancel'), style: 'cancel' },
             {
-                text: t(W.remove), style: 'destructive',
+                text: t('Remove'), style: 'destructive',
                 onPress: async () => {
                     setBusy(true);
                     setNote(null);
@@ -120,7 +120,7 @@ export function GroupGuestsList({ groupId, isConvenor, reloadKey = 0 }: Props) {
                     {isConvenor && (g.state === 'in' || g.state === 'invited') && (
                         <Pressable style={[styles.removeBtn, busy && { opacity: 0.6 }]} disabled={busy} onPress={() => remove(g)} accessibilityRole="button"
                             accessibilityLabel={t(W.removeLabel, { name: guestNameLine(g.name, g.home) })} testID="group-guest-remove">
-                            <Text style={styles.addText}>{t(W.remove)}</Text>
+                            <Text style={styles.addText}>{t('Remove')}</Text>
                         </Pressable>
                     )}
                 </View>

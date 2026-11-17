@@ -1,5 +1,6 @@
 import 'fast-text-encoding';
 import { useEffect, useState, useRef, type ReactElement, type ReactNode } from 'react';
+import { twoParagraphs } from '../utils/alert-words';
 import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -1160,7 +1161,9 @@ export default function RootLayout() {
                 const own = requestsClearedNotice(data);
                 const title = own?.title ?? (data.title || t('System Announcement'));
                 const body = own?.body ?? (data.body || '');
-                Alert.alert(title, body, [{ text: t('Acknowledge'), style: 'cancel' }]);
+                // The node's own title is any length (an owner's announcement takes 200 characters): it leads the message, under a
+                // short title, as Home's kept copy does (Android cuts a title at two lines: utils/__tests__/alert-words-in-message.test.ts).
+                Alert.alert(t('From your community'), body ? twoParagraphs(title, body) : title, [{ text: t('Acknowledge'), style: 'cancel' }]);
                 // A notice the node keeps names its id: shown now, so the background sync never posts it again
                 // (utils/sync-notices.ts).
                 void markNoticeShown(data.noticeId, AsyncStorage);

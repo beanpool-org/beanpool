@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     // says, which is all this suite reads; every other timer keeps its delay.
     const realSetTimeout = globalThis.setTimeout;
     globalThis.setTimeout = ((fn: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) =>
-        realSetTimeout(fn, /[\\/]admin-auth\.[cm]?[jt]s:\d+/.test(new Error().stack ?? '') ? 0 : ms, ...args)) as typeof setTimeout;
+        realSetTimeout(fn, /[\\/]admin-auth\.[cm]?[jt]s:\d+/.test(new Error().stack ?? '') ? 0 : ms, ...args)) as unknown as typeof setTimeout;
     const stranger = newId();
 
     // ── 1. with both switches on, the figures are there to find ──
@@ -208,6 +208,7 @@ async function main(): Promise<void> {
     // ── 2. the sweep, both switches off ──
     setSwitches(false, false);
     const app = https.getKoaApp();
+    if (!app) throw new Error('the server has no app to list the routes of');
     const served = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
         .flatMap((l: any) => (l.methods as string[]).filter(m => m !== 'HEAD').map(m => `${m} ${l.path}`)))].sort();
     assert(served.length > 400, `the node serves ${served.length} routes, every one swept below`);

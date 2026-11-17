@@ -150,7 +150,7 @@ export function ForumMenu({ label, items, onClose, onDismiss }: { label: string;
  */
 export function askForumTold(): Promise<boolean> {
     return new Promise((resolve) => {
-        Alert.alert(t(TOLD_WORDS.title), t(TOLD_WORDS.body), [
+        Alert.alert(t('Global community'), t(TOLD_WORDS.body), [
             { text: t(TOLD_WORDS.notNow), style: 'cancel', onPress: () => resolve(false) },
             { text: t(TOLD_WORDS.post), onPress: () => resolve(true) },
         ], { cancelable: true, onDismiss: () => resolve(false) });

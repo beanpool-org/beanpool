@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
     pages: [] as any[],
     sent: [] as Array<{ method: string; path: string; body: any }>,
     answer: null as null | ((path: string, body: any) => any),
-    alerts: [] as Array<{ title: string; buttons?: Array<{ text: string; onPress?: () => void }> }>,
+    alerts: [] as Array<{ title: string; body?: string; buttons?: Array<{ text: string; onPress?: () => void }> }>,
 }));
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), navigate: vi.fn(), canGoBack: vi.fn(() => true) }));
 
@@ -55,7 +55,7 @@ vi.mock('react-native', async () => {
         StyleSheet: { create: (s: unknown) => s, flatten: (s: unknown) => s, hairlineWidth: 1 },
         DeviceEventEmitter: { addListener: () => ({ remove: () => {} }), emit: vi.fn() },
         Keyboard: { dismiss: vi.fn() },
-        Alert: { alert: vi.fn((title: string, _message?: string, buttons?: any[]) => { h.alerts.push({ title, buttons }); }) },
+        Alert: { alert: vi.fn((title: string, body?: string, buttons?: any[]) => { h.alerts.push({ title, body, buttons }); }) },
     };
 });
 vi.mock('../../app/ThemeContext', async () => {
@@ -405,7 +405,8 @@ describe('My suggestions (§3.4)', () => {
         expect(row.textContent).toContain('New');
         expect(row.textContent).toContain('Waiting since 3 Nov');
         await click(q('learn-mine-take-back-w1'));
-        expect(h.alerts[0].title).toBe('Take this back? The admins won’t see it.');
+        expect(h.alerts[0].title).toBe('Take it back');
+        expect(h.alerts[0].body).toBe('Take this back? The admins won’t see it.');
         expect(h.alerts[0].buttons?.map((b) => b.text)).toEqual(['Keep it', 'Take it back']);
         h.mine = { waiting: [], answered: [] };
         await act(async () => { h.alerts[0].buttons![1].onPress!(); });

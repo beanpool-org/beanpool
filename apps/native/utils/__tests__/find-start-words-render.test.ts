@@ -250,7 +250,9 @@ describe('Find a community in the pseudo-locale: every word came through t() (wo
         expect(host.textContent).toContain(xx('The others are in the list below.'));
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
         await click(byLabel(xx('Join {name}').replace('{name}', 'Lismore Commons')), 'Join');
-        expect(alerts.said[0]).toBe(xx("You're in {name}").replace('{name}', 'Lismore Commons'));
+        // A short title; the community's name leads the message (a title is cut at two lines).
+        expect(alerts.said[0]).toBe(xx('Welcome'));
+        expect(alerts.said[1]).toContain(xx("You're in {name}").replace('{name}', 'Lismore Commons'));
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
         alerts.said.length = 0;
         world.join = new Error(UNSAFE_NODE_ADDRESS_MESSAGE);
@@ -337,6 +339,10 @@ describe('the Manage press in the pseudo-locale: its alerts', () => {
     }
     const press = async () => { await click(host.querySelector('[data-testid="manage"]'), 'Manage'); };
 
+    // A refusal's message: which community, then why (utils/alert-words twoParagraphs), the title kept short.
+    const cantOpen = () => xx("Can't open {name}'s settings").replace('{name}', 'Mullum Commons');
+    const two = (first: string, then: string) => xx('{first}\n\n{then}').replace('{first}', () => first).replace('{then}', () => then);
+
     it('no screen lock, a refusal with no words, the node\'s own words, not connected', async () => {
         await renderIn('xx', createElement(Probe));
         manage.outcome = { kind: 'no-device-lock' };
@@ -345,15 +351,15 @@ describe('the Manage press in the pseudo-locale: its alerts', () => {
         alerts.said.length = 0;
         manage.outcome = { kind: 'refused', message: 'You do not hold an owner, admin or moderator role on this node.' };
         await press();
-        expect(alerts.said).toEqual([xx("Can't open {name}'s settings").replace('{name}', 'Mullum Commons'), xx('You do not hold an owner, admin or moderator role on this node.')]);
+        expect(alerts.said).toEqual([xx('Settings'), two(cantOpen(), xx('You do not hold an owner, admin or moderator role on this node.'))]);
         alerts.said.length = 0;
         manage.outcome = { kind: 'error', message: 'The node did not answer (502).' };
         await press();
-        expect(alerts.said[1]).toBe(xx('The node did not answer ({status}).').replace('{status}', '502'));
+        expect(alerts.said[1]).toBe(two(cantOpen(), xx('The node did not answer ({status}).').replace('{status}', '502')));
         alerts.said.length = 0;
         manage.outcome = { kind: 'refused', message: 'Settings are closed for maintenance.' };
         await press();
-        expect(alerts.said[1]).toBe('Settings are closed for maintenance.');
+        expect(alerts.said[1]).toBe(two(cantOpen(), 'Settings are closed for maintenance.'));
         alerts.said.length = 0;
         manage.anchor = null;
         await press();

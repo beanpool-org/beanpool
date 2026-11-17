@@ -201,7 +201,9 @@ describe('a re-key code in the pseudo-locale', () => {
         expect(host.textContent).toContain(pseudoLocalise('This phone showed a number for a re-key at {where}, and {where} isn’t answering. Try again later, or forget that re-key.').split('{where}').join('mullum.example'));
         const forget = pseudoLocalise('Forget the re-key at {host}').replace('{host}', 'mullum.example');
         await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === forget), 'Forget the re-key at mullum.example');
-        expect(alerts.said[0]).toBe(pseudoLocalise('Forget the re-key at {host}?').replace('{host}', 'mullum.example'));
+        // A short title; the question, with its address, leads the message (a title is cut at two lines).
+        expect(alerts.said[0]).toBe(pseudoLocalise('Re-key code'));
+        expect(alerts.said[1]).toContain(`${pseudoLocalise('Forget the re-key at {host}?').replace('{host}', 'mullum.example')}\n\n`);
         expect(clean()).toEqual([]);
     });
 });
@@ -215,7 +217,8 @@ describe('deleting the account from the not-recognised screen, in the pseudo-loc
         for (const w of TWELVE) expect(host.textContent).toContain(w);
         expect(clean()).toEqual([]);
         await click(buttonWith("I've saved them — delete the account"), 'Delete the account');
-        expect(alerts.said[0]).toBe(pseudoLocalise('Delete this account from this phone?'));
+        expect(alerts.said[0]).toBe(pseudoLocalise('Delete'));
+        expect(alerts.said[1]).toContain(`${pseudoLocalise('Delete this account from this phone?')}\n\n`);
         expect(alerts.said[1]).toContain(pseudoLocalise(NO_OTHER_COMMUNITY_LINE));
         expect(clean()).toEqual([]);
         expect(unfit(host, 320 - 48 - 48, WRITTEN)).toEqual([]);

@@ -27,6 +27,7 @@ import { ReportMessageSheet } from '../../components/ReportMessageSheet';
 import { OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../../utils/outside-chat-store';
 import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
+import { twoParagraphs } from '../../utils/alert-words';
 
 /** Core's sentence, the web's too (@beanpool/core outside-devices.ts). */
 const LINES = { writesStayThere: OUTSIDE_WRITES_STAY_THERE };
@@ -96,7 +97,7 @@ export default function OutsideChatScreen() {
             await sendOutsideChange(ctx, chat.id, c);
             return true;
         } catch (e) {
-            Alert.alert(outsideErrorWords(e, !(e instanceof OutsideMailError)));
+            Alert.alert(t('Not sent'), outsideErrorWords(e, !(e instanceof OutsideMailError)));
             return false;
         } finally {
             setPicked(null);
@@ -137,7 +138,7 @@ export default function OutsideChatScreen() {
                 setText((now) => (now.trim() === words ? '' : now));
                 void load();
             });
-            if (error) Alert.alert(outsideErrorWords(error, kept));
+            if (error) Alert.alert(t('Not sent'), outsideErrorWords(error, kept));
             await load();
         } finally {
             setBusy(false);
@@ -154,7 +155,8 @@ export default function OutsideChatScreen() {
 
     const block = () => {
         if (!chat) return;
-        Alert.alert(t('Block {name}?', { name: chat.peerName ?? chat.peerHome }), t("They won't be told. Nothing more from them will reach you."), [
+        // The name in the message: a card's name or a community's address can be longer than a title's two lines.
+        Alert.alert(t('Block this user?'), twoParagraphs(chat.peerName ?? chat.peerHome, t("They won't be told. Nothing more from them will reach you.")), [
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t('Block'), style: 'destructive', onPress: async () => {
@@ -178,7 +180,7 @@ export default function OutsideChatScreen() {
             await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined');
             Alert.alert(t('Reported'), reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => { setReporting(null); router.back(); } }]);
         } catch (e) {
-            Alert.alert(e instanceof OutsideMailError && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('That did not go through. Please try again.'));
+            Alert.alert(t('Not sent'), e instanceof OutsideMailError && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('That did not go through. Please try again.'));
             throw e; // the sheet keeps the choice and the words
         }
     };

@@ -60,7 +60,7 @@ export async function fetchedPostPhoto(url: string): Promise<FetchedPhoto> {
 export async function postPhotoFromCamera(): Promise<string | null> {
     const ImagePicker = await import('expo-image-picker');
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert(t('Permission needed')); return null; }
+    if (!perm.granted) { Alert.alert(t('Permission needed'), t('Camera access is needed.')); return null; }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, base64: false });
     return !result.canceled && result.assets?.[0]?.uri ? postPhotoOf(result.assets[0].uri) : null;
 }

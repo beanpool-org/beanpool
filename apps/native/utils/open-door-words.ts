@@ -244,8 +244,12 @@ export function doorNameCheckWords(name: string, check: NameCheck, place: DoorPl
     }
 }
 
-/** "You're in": the title over global-join-existing.ts joinedGlobalNotice's body, by name. */
-export function joinedTitle(place: DoorPlace, globalTitle: string): string {
+/**
+ * "You're in …", by name: the first paragraph of the joined Alert's message, over global-join-existing.ts joinedGlobalNotice's
+ * body. Not its title: a community's name can be 120 characters, and Android cuts a title at two lines
+ * (utils/__tests__/alert-words-in-message.test.ts).
+ */
+export function joinedPlaceWords(place: DoorPlace, globalTitle: string): string {
     return place.global ? phoneDoorLineWords(globalTitle) : t("You're in {name}", { name: place.name });
 }
 

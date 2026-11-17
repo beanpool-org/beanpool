@@ -78,7 +78,7 @@ import { membershipAnswerOf } from '../membership-answer';
 import { addSavedNode, clearGuestNode, getSavedNodes } from '../nodes';
 import { askCommunityName } from '../community-name';
 import { doorNodeAt, doorNodeFromParam, openDoorHref } from '../open-door';
-import { doorKeeperWords, doorRefusalWords, doorScreenWords, joinedTitle, placeAt } from '../open-door-words';
+import { doorKeeperWords, doorRefusalWords, doorScreenWords, joinedPlaceWords, placeAt } from '../open-door-words';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { GLOBAL_NODE_URL } from '../global-node-url';
 import { noVault } from './fake-vault';
@@ -279,12 +279,12 @@ describe("global entry P5: a self-hoster's open community on its own host name, 
             ...Object.values(doorKeeperWords(place, 'community')),
             ...Object.values(doorKeeperWords(place, 'vault')),
             doorRefusalWords('unreachable', place), doorRefusalWords('not_global', place), doorRefusalWords('door_closed', place),
-            joinedTitle(place, "You're in the global community"),
+            joinedPlaceWords(place, "You're in the global community"),
         ];
         for (const line of said) expect(line, line).not.toMatch(/global community/i);
         expect(doorScreenWords(place).title).toBe(`Join ${NODE_NAME}`);
         expect(doorScreenWords(place).nameLabel).toBe(`Your name in ${NODE_NAME}`);
-        expect(joinedTitle(place, "You're in the global community")).toBe(`You're in ${NODE_NAME}`);
+        expect(joinedPlaceWords(place, "You're in the global community")).toBe(`You're in ${NODE_NAME}`);
         // Its host, shown under the title, so the member sees where they are joining.
         expect(place.host).toBe(URL_BASE.replace('https://', ''));
     }, STEP_MS);

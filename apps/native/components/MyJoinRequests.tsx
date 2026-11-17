@@ -5,6 +5,7 @@ import { useStyles } from '../app/ThemeContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { rememberedKnocks, readKnockStatus, knockCardState, cancelKnock, KNOCK_MESSAGES, type KnockStatusResult, type RememberedKnock } from '../utils/knock';
 import { t } from '@beanpool/core';
+import { twoParagraphs } from '../utils/alert-words';
 
 /** A note the phone wrote (KNOCK_MESSAGES), in the member's language; a community's own words as it sent them (slice S4). */
 function noteWords(note: string): string {
@@ -52,7 +53,8 @@ export function MyJoinRequests({ identity }: { identity: BeanPoolIdentity }) {
     // Asked first: the key can't ask that community again for a day. Done, the row goes (Find a community says it was cancelled).
     const cancel = (k: RememberedKnock) => {
         const name = k.name ?? k.url.replace(/^https:\/\//, '');
-        Alert.alert(t('Cancel your request to join {name}?', { name }), t('You can ask again after 24 hours.'), [
+        // The name in the message: a community's address can be longer than a title's two lines.
+        Alert.alert(t('Cancel request'), twoParagraphs(t('Cancel your request to join {name}?', { name }), t('You can ask again after 24 hours.')), [
             { text: t('Keep it'), style: 'cancel' },
             {
                 text: t('Cancel my request'), style: 'destructive', onPress: async () => {

@@ -138,7 +138,7 @@ vi.mock('../../services/push-notifications', () => ({ registerAfterKnock: async 
 const joins = vi.hoisted(() => [] as Array<{ targetUrl: string; code: string; knownName?: string | null }>);
 vi.mock('../join-another-community', () => ({
     joinAnotherCommunity: async (opts: { targetUrl: string; code: string; knownName?: string | null }) => { joins.push(opts); return { name: 'Riverside' }; },
-    joinedNudge: (name: string) => ({ title: `You're in ${name}`, body: 'b', later: 'Next' }),
+    joinedNudge: (name: string) => ({ title: 'Welcome', body: `You're in ${name}\n\nb`, later: 'Next' }),
     PROTECT_REDIRECT: '/(tabs)/settings?section=protection',
     HOME_REDIRECT: '/(tabs)',
 }));
@@ -257,7 +257,9 @@ describe("a member's request to join, on the community's card", () => {
         expect(joins).toEqual([expect.objectContaining({ targetUrl: ORIGIN, code: 'BP-RIVR-0001', knownName: 'Riverside' })]);
         // The knock is done with: the phone forgets it, and the member is told they're in.
         expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks).toEqual([]);
-        expect(alerts[0]?.[0]).toBe("You're in Riverside");
+        // A short title; the community's name leads the message (a title is cut at two lines).
+        expect(alerts[0]?.[0]).toBe('Welcome');
+        expect(String(alerts[0]?.[1]).split('\n\n')[0]).toBe("You're in Riverside");
     });
 
     it('none (it lapsed, or a no): the request is no longer open, and Ask to join again (fails before: read "waiting", no Ask)', async () => {

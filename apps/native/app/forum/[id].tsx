@@ -187,7 +187,7 @@ export default function ForumTopicScreen() {
     /** Up to 3 photos with the reply, each fitted within 800 px; past 3 the web's line. */
     async function attach() {
         if (photosRef.current.length >= FORUM_LIMITS.photos) {
-            Alert.alert(t('At most {n} photos.', { n: FORUM_LIMITS.photos }));
+            Alert.alert(t('Photos'), t('At most {n} photos.', { n: FORUM_LIMITS.photos }));
             return;
         }
         const photo = await pickForumPhoto();
@@ -430,7 +430,7 @@ export default function ForumTopicScreen() {
                     try {
                         await reportForumPost(reporting.id, reason);
                     } catch (e) {
-                        Alert.alert((e as Error)?.message || t(TOPIC_WORDS.saveFailed));
+                        Alert.alert(t('Not saved'), (e as Error)?.message || t(TOPIC_WORDS.saveFailed));
                         throw e;
                     }
                     setReporting(null);

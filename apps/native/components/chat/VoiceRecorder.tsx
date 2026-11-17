@@ -37,11 +37,12 @@ import {
     isVoiceNotSent, type VoicePermission, type VoiceRecorderEffect, type VoiceRecorderEvent, type VoiceRecorderState,
 } from '../../utils/voice-recorder';
 import { holdAudioForRecording, holdAudioForReview, releaseAudio } from '../../utils/voice-audio';
+import { twoParagraphs } from '../../utils/alert-words';
 
 export const VOICE_RECORDER_WORDS = {
     hold: word('Hold to record'),
     slide: word('Slide to cancel'),
-    micOffTitle: word('The microphone is off for BeanPool'),
+    micOff: word('The microphone is off for BeanPool'),
     micOffText: word('To record a voice message, turn on the microphone for BeanPool in Settings.'),
     micFailed: word("The microphone couldn't start. Try again."),
     notSent: word('Voice message not sent'),
@@ -230,7 +231,7 @@ export function useVoiceRecorder({ onSend, owner, disabled }: { onSend: VoiceSen
                     return;
                 }
                 case 'settings':
-                    Alert.alert(t(VOICE_RECORDER_WORDS.micOffTitle), t(VOICE_RECORDER_WORDS.micOffText), [
+                    Alert.alert(t('Permission needed'), twoParagraphs(t(VOICE_RECORDER_WORDS.micOff), t(VOICE_RECORDER_WORDS.micOffText)), [
                         { text: t('Not now'), style: 'cancel' },
                         { text: t('Open Settings'), onPress: () => { Linking.openSettings().catch(() => {}); } },
                     ]);
@@ -247,7 +248,7 @@ export function useVoiceRecorder({ onSend, owner, disabled }: { onSend: VoiceSen
                     } catch {
                         // 'failed' answers 'discard', which lets go of the hold (voice-composer-render.test.ts pins it).
                         dispatch({ type: 'failed' });
-                        Alert.alert(t(VOICE_RECORDER_WORDS.micFailed));
+                        Alert.alert(t('Something went wrong'), t(VOICE_RECORDER_WORDS.micFailed));
                     }
                     return;
                 case 'keep':

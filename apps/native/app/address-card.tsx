@@ -65,12 +65,12 @@ export default function AddressCardScreen() {
         try {
             // No card: my server answered and knows none of its names. Not reached (offline) throws, with that reason.
             const card = await myAddressCard(ctx);
-            if (!card) { Alert.alert(t("This community's server knows none of its own names yet, so it can't send to another community.")); return; }
+            if (!card) { Alert.alert(t('My address card'), t("This community's server knows none of its own names yet, so it can't send to another community.")); return; }
             await setDoor(ctx.store, true);
             setOpen(true);
             setMine(card);
         } catch (e) {
-            Alert.alert(outsideErrorWords(e));
+            Alert.alert(t('My address card'), outsideErrorWords(e));
         }
     };
 
@@ -119,7 +119,7 @@ export default function AddressCardScreen() {
             // The words stay in this box while the line goes. Kept on this phone: on to the chat, which shows it (Sending… or
             // Not delivered). Not kept: this screen stays, with the words, to send again.
             const { kept, error } = await sendFromBox(ctx, chatId, words, OUTSIDE_SEND_MS, () => {});
-            if (error) Alert.alert(outsideErrorWords(error, kept));
+            if (error) Alert.alert(t('Not sent'), outsideErrorWords(error, kept));
             if (kept) router.replace(`/outside-chat/${chatId}`);
         } finally {
             setBusy(false);

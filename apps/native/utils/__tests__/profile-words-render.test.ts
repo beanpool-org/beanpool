@@ -248,7 +248,7 @@ describe('another member\'s profile in the pseudo-locale: every word came throug
         expect(bypassing(host, [...NODE_WORDS, ...MEMBERS, '4'.repeat(8)], said())).toEqual([]);
 
         await click(buttonReading(xx('Block {name}').replace('{name}', 'Kofi')), 'Block Kofi');
-        expect(said()).toEqual([xx('Block {name}?').replace('{name}', 'Kofi'),
+        expect(said()).toEqual([xx('Block this user?'),
             xx('This will instantly hide all posts, offers, and messages from {name}, and notify moderation.').replace('{name}', 'Kofi'), xx('Cancel'), xx('Block User')]);
         alerts.said.length = 0;
         await act(async () => { await alerts.buttons[1].onPress?.(); });

@@ -410,7 +410,7 @@ describe('Invite from a contact on the phone', () => {
         await render();
         expect(text()).toContain('Is this Dee Walker?');
         await press('No');
-        expect(mem.alerts.at(-1)?.[0]).toBe("Then someone else used it. If that's a problem, tell an admin.");
+        expect(mem.alerts.at(-1)?.slice(0, 2)).toEqual(['Not linked', "Then someone else used it. If that's a problem, tell an admin."]);
         const dee = (await listNow())?.contacts[0];
         expect(dee?.links).toEqual([]);
         expect(dee?.invite).toBeNull();

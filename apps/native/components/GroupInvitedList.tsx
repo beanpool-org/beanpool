@@ -16,6 +16,7 @@ import { useStyles } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
 import { fetchGroupInvitations, withdrawGroupInvitationApi } from '../utils/db';
 import { hapticSuccess } from '../utils/haptics';
+import { twoParagraphs } from '../utils/alert-words';
 import { signedRequestWords } from './signed-request-lines';
 import {
     declinedInvitationLine, declinedListNote, declinedListTitle, hasInvitationsToShow, invitedListTitle, invitedName,
@@ -81,7 +82,8 @@ export function GroupInvitedList({ groupId, myPubkey, reloadKey = 0, onChanged }
                         await load();
                         onChanged?.();
                     } catch (e: any) {
-                        Alert.alert(w.failed, e?.message ? signedRequestWords(e.message) : undefined);
+                        // "Could not withdraw the invitation" leads the message: as a title it was cut at two lines.
+                        Alert.alert(t('Something went wrong'), twoParagraphs(w.failed, e?.message ? signedRequestWords(e.message) : t('Please try again.')));
                         // Refused because things moved on (they joined, or it was declined or withdrawn): read both lists
                         // again, so the person shows where they now are.
                         await load();

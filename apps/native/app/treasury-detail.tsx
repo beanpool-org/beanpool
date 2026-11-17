@@ -44,6 +44,7 @@ import {
 } from '../utils/shopfront';
 import { mayManage } from '../utils/enterprise-manage';
 import { decodeThreadMessage } from '../utils/enterprise-thread';
+import { twoParagraphs } from '../utils/alert-words';
 
 // Ledger lines render in pages: an all-time ledger can run to hundreds of lines on a low-end phone.
 const LEDGER_PAGE = 20;
@@ -479,7 +480,7 @@ export default function TreasuryDetailScreen() {
     const handleBlockEnterprise = () => {
         if (!treasuryKey || blocking) return;
         Alert.alert(
-            t('Block {name}?', { name }),
+            t('Block'),
             t('This will instantly hide all posts, offers, and messages from {name}, and notify moderation.', { name }),
             [
                 { text: t('Cancel'), style: 'cancel' },
@@ -493,7 +494,7 @@ export default function TreasuryDetailScreen() {
                             if (!(await blockUser(treasuryKey, identity?.publicKey, 'Blocked from the enterprise page'))) throw new Error('not blocked');
                             setBlockedHere(true);
                             setShowMoreMenu(false);
-                            Alert.alert(t('{name} has been blocked and removed from your feed.', { name }), undefined, [
+                            Alert.alert(t('Done'), t('{name} has been blocked and removed from your feed.', { name }), [
                                 { text: t('OK'), onPress: () => router.back() },
                             ]);
                         } catch {
@@ -546,7 +547,7 @@ export default function TreasuryDetailScreen() {
         setMessagingLead(true);
         try {
             if (await isUserBlocked(leadKeeper.publicKey)) {
-                Alert.alert(t('You have blocked {name}', { name: leadKeeper.callsign }), t('Unblock them from their profile to write to them.'));
+                Alert.alert(t('User Blocked'), twoParagraphs(t('You have blocked {name}', { name: leadKeeper.callsign }), t('Unblock them from their profile to write to them.')));
                 return;
             }
             const conv = await createConversationApi('dm', [myPubkey, leadKeeper.publicKey], myPubkey);

@@ -525,7 +525,7 @@ export function GroupDetailModal({
             if (roster.handOverBlockedByObservers) {
                 // MAKE_OBSERVER_MEMBER_FIRST's words, after the line that says whose lead it is: one sentence.
                 Alert.alert(
-                    t('Make an Observer a Member First'),
+                    t('Not yet'),
                     t('You are the lead convenor of {group}. Make one of the observers a member first, then hand the lead to them.', { group: groupData.name }),
                 );
                 return;

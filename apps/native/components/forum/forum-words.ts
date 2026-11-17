@@ -100,7 +100,6 @@ export const FIRST_LOOK_WORDS = {
 };
 
 export const TOLD_WORDS = {
-    title: word('Anyone on the web can read this forum'),
     body: word('Anyone on the web can read this forum, with your name. Not your picture, your area or your profile.'),
     post: word('Post'),
     notNow: word('Not now'),

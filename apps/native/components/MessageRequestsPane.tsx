@@ -75,7 +75,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         } catch (e: any) {
             // Gone from the node (its opener cancelled it): the list the card came from is old, so the next one drops it.
             if (requestIsGone(e)) { onChanged(); return; }
-            Alert.alert(requestDecisionFailureWords(e));
+            Alert.alert(t('Message requests'), requestDecisionFailureWords(e));
         } finally {
             setBusy(false);
         }
@@ -86,13 +86,19 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         try {
             const outcome = await reportRequestAndBlock(entry.id, preview.line ?? null, peer, reason, myPubkey);
             const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);
+            // A report that did not go whole still blocked them (each such sentence ends "They are blocked."): that is the title,
+            // and the sentence is the message, since Android cuts a title at two lines.
             Alert.alert(
-                notSent ?? t('Reported'),
-                notSent ? undefined : reportedAlertBody(undefined, reason),
+                notSent ? t('User Blocked') : t('Reported'),
+                notSent ?? reportedAlertBody(undefined, reason),
                 [{ text: t('OK'), onPress: () => { setReporting(false); onChanged(); } }],
             );
         } catch (e: any) {
-            Alert.alert(e instanceof ReportedNotBlockedError ? t('Reported, but not blocked. Please try again.') : chatActionErrorMessage({ status: e?.status ?? null, message: e?.message, nodeAnswered: !!e?.nodeAnswered }));
+            const halfDone = e instanceof ReportedNotBlockedError;
+            Alert.alert(
+                halfDone ? t('Reported') : t('Not sent'),
+                halfDone ? t('Reported, but not blocked. Please try again.') : chatActionErrorMessage({ status: e?.status ?? null, message: e?.message, nodeAnswered: !!e?.nodeAnswered }),
+            );
             throw e; // the box keeps the choice and the words
         }
     };
@@ -335,8 +341,8 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
     const handleIgnoreAll = () => {
         if (ignoringAll) return;
         Alert.alert(
+            t('Message requests'),
             tn(count, "Decline {n} request? They won't be told.", "Decline all {n} requests? They won't be told."),
-            '',
             [
                 { text: t('Cancel'), style: 'cancel' },
                 {
@@ -348,7 +354,7 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                             await ignoreAllMessageRequests();
                             onChanged();
                         } catch {
-                            Alert.alert(t('That did not go through. Please try again.'));
+                            Alert.alert(t('Message requests'), t('That did not go through. Please try again.'));
                         } finally {
                             setIgnoringAll(false);
                         }

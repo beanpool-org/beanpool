@@ -449,7 +449,8 @@ describe('a request waiting for this member, on the phone', () => {
             const navigate = vi.spyOn(router, 'navigate');
             await kofiAsks(() => Promise.reject(refusal('This community is read-only for now.', { status: 503, code: 'standby', nodeAnswered: true })));
             await tap('Accept');
-            expect(alerts.said).toEqual(['This community is read-only for now.']);
+            // The node's words are the message, under a short title (Android cuts a title at two lines: alert-words-in-message.test.ts).
+            expect(alerts.said).toEqual(['Message requests', 'This community is read-only for now.']);
             expect(host.textContent).toContain('Kofi wants to message you');
             expect(navigate).not.toHaveBeenCalled();
             navigate.mockRestore();
@@ -461,7 +462,7 @@ describe('a request waiting for this member, on the phone', () => {
             await tap('Accept');
             answer = new Error('Network request failed');
             await tap('Decline');
-            expect(alerts.said).toEqual(['Connect to your community to accept or decline.', 'Connect to your community to accept or decline.']);
+            expect(alerts.said).toEqual(['Message requests', 'Connect to your community to accept or decline.', 'Message requests', 'Connect to your community to accept or decline.']);
         });
     });
 

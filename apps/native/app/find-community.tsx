@@ -44,6 +44,7 @@ import { DoorRuleLine } from '../components/DoorRuleLine';
 import { communityRecordByKey, directoryRowCommunity, recordAddresses } from '../utils/community-index';
 import { askMemberHere, directoryRowDoor } from '../utils/member-here';
 import { communityRecordsReady } from '../utils/community-record';
+import { twoParagraphs } from '../utils/alert-words';
 
 export { ErrorBoundary };
 
@@ -542,7 +543,8 @@ export default function FindCommunityScreen() {
     const [cancelNotes, setCancelNotes] = useState<Record<string, string>>({});
     const cancel = (url: string, name: string | null) => {
         if (!identity) return;
-        Alert.alert(t('Cancel your request to join {name}?', { name: name ?? url.replace(/^https:\/\//, '') }), t('You can ask again after 24 hours.'), [
+        // The name in the message: a community's address can be longer than a title's two lines.
+        Alert.alert(t('Cancel request'), twoParagraphs(t('Cancel your request to join {name}?', { name: name ?? url.replace(/^https:\/\//, '') }), t('You can ask again after 24 hours.')), [
             { text: t('Keep it'), style: 'cancel' },
             {
                 text: t('Cancel my request'), style: 'destructive', onPress: async () => {

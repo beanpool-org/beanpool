@@ -16,7 +16,9 @@ import { searchForum, type ForumSearchHit } from '../../utils/forum-search';
  * - **A hit** is a small card: a tap anywhere opens its topic at the post found. Its topic's title, who wrote the post, its
  *   section, when, and its words around the find. ✕ clears the search and gives the list back.
  * - **An answer the box let go of is dropped** (#3264 review): a search still out when ✕ clears it, or when a section's door
- *   draws a new box in this one's place (ForumPane's key), never shows its hits or hides the list when it answers.
+ *   draws a new box in this one's place (ForumPane's key), never shows its hits or hides the list when it answers. ✕ also
+ *   ends the wait at once (#3270 decide): the spinner goes and the box takes a new search, and the dropped answer, when it
+ *   comes, never ends the wait of a search asked after it.
  * - The search row is the chat list's own shape (app/(tabs)/chats.tsx): 44 dp, the subtle surface, colours from the theme.
  */
 export const FORUM_SEARCH_WORDS = {
@@ -75,11 +77,13 @@ export function ForumSearch({ onOpen, onShowing, sectionName }: {
             if (mine !== asks.current) return;
             setFailed((e as Error)?.message || t(FORUM_SEARCH_WORDS.failed));
         } finally {
-            setBusy(false);
+            // A search let go of ended its wait when it was let go of; a later search's wait is that search's to end.
+            if (mine === asks.current) setBusy(false);
         }
     }
     function clear() {
         asks.current += 1;
+        setBusy(false);
         setTyped('');
         setAnswer(null);
         setFailed(null);

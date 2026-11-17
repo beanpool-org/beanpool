@@ -16,6 +16,8 @@
  * - **A search let go of while it is out is dropped** (#3264 review): ✕, or a section's door drawing a new box in this one's
  *   place (ForumPage's key, after forgetForumSearch), and its answer neither shows nor hides the list. Only a let-go drops it
  *   (lib/forum.ts forumSearchLetGo): a hit's topic opened meanwhile unmounts this box, and the answer is kept for the way back.
+ *   ✕ also ends the wait at once (#3270 decide): 🔍 is live again for a new search, and the dropped answer, when it comes,
+ *   never ends the wait of a search asked after it.
  */
 import { useEffect, useRef, useState } from 'react';
 import { forumSectionName, forumWriterLine, t, timeAgo, word } from '@beanpool/core';
@@ -48,6 +50,8 @@ export function ForumSearch({ sections, searchFor = null, onSearchTaken, onOpen,
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState<string | null>(null);
     const box = useRef<HTMLInputElement>(null);
+    // This box's newest search: only its answer ends the wait, so a search ✕ let go of never ends a later one's (#3270 decide).
+    const newest = useRef(0);
 
     useEffect(() => {
         if (!searchFor) return;
@@ -64,6 +68,7 @@ export function ForumSearch({ sections, searchFor = null, onSearchTaken, onOpen,
         if (!q && !offset) box.current?.focus();
         if (!q || busy) return;
         const asked = forumSearchLetGo();
+        const mine = ++newest.current;
         setBusy(true);
         setFailed(null);
         try {
@@ -75,11 +80,13 @@ export function ForumSearch({ sections, searchFor = null, onSearchTaken, onOpen,
             if (asked !== forumSearchLetGo()) return;
             setFailed((e as Error)?.message || t(SEARCH_WORDS.failed));
         } finally {
-            setBusy(false);
+            // ✕ ended this search's wait when it let go of it; a later search's wait is that search's to end.
+            if (mine === newest.current) setBusy(false);
         }
     }
     function clear() {
         forgetForumSearch();
+        setBusy(false);
         setAnswer(null);
         setTyped('');
         setFailed(null);

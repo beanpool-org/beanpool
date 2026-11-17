@@ -1841,9 +1841,17 @@ router.post('/api/ledger/transfer', async (ctx) => {
     }
     // A key with no row here holds nothing to send: refused as a visitor's refused write is (403 not_a_member), where
     // transfer()'s assertMemberActive would throw and answer 500. A visitor's row sends what it holds, below.
-    if (!getMember(from)) {
+    const sender = getMember(from);
+    if (!sender) {
         ctx.status = 403;
         ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
+        return;
+    }
+    // A paused or suspended member keeps their Beans and sends none (transfer()'s assertMemberActive): refused here, 403
+    // in words, where that refusal thrown out of transfer() answered 500, a server fault an app tries again.
+    if (sender.status === 'disabled' || sender.status === 'suspended') {
+        ctx.status = 403;
+        ctx.body = { error: word('Account is suspended or disabled') };
         return;
     }
     // SECURITY (SRV-8): whole hundredths above 0 at the route (money-body.ts: 400 amount_c_required for the old `amount`,

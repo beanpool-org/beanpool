@@ -28,7 +28,7 @@ import {
     pledgeToProject, deleteCrowdfundProject, db,
     PROJECT_DEADLINE_PASSED_ERROR,
     isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, isMemberActive, INACTIVE_MEMBER_CREATE_ERROR,
-    isAcceptableGoal, GOAL_AMOUNT_ERROR,
+    isAcceptableGoal, GOAL_AMOUNT_ERROR, PLEDGE_NOT_ACTIVE_ERROR,
 } from '../db/db.js';
 import { getThresholds } from '../config/local-config.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -686,6 +686,14 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     if (!isNodeMember(actor)) {
         ctx.status = 403;
         ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
+        return;
+    }
+    // isNodeMember admits a paused or suspended member ('disabled', 'suspended'), who keeps their balance: they pledge none
+    // of it (security inventory 17 Nov, risk 13), as at the enterprise pledge door (routes/treasury.ts) and every send
+    // (transfer's assertMemberActive). pledgeToProject refuses them too; this answers first, before anything is read.
+    if (!isMemberActive(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: PLEDGE_NOT_ACTIVE_ERROR };
         return;
     }
     // A note with a pledge is words the project's creator reads: a muted member (G3) pledges without one.

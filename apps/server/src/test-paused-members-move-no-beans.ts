@@ -358,22 +358,24 @@ async function main() {
         `the crowdfund door answers a paused member 403 "${PLEDGE_NOT_ACTIVE_ERROR}" (${piaPledge.status} ${JSON.stringify(piaPledge.body)})`);
 
     // ---- 3. The engine itself, past the doors ---------------------------------------------------------------------------
-    for (const s of states) {
+    // Each call against what was there just before it, so one call's outcome is never read as another's.
+    function refusedAndNothingMoved(call: () => unknown): { refusal: unknown; moved: boolean } {
         const before = fingerprint();
-        let pledged: unknown = null;
-        try { pledgeToProject(crypto.randomUUID(), project, s.m.pk, hc(5), 'Project Pledge'); } catch (e) { pledged = e; }
-        assert(pledged instanceof Error && pledged.message === PLEDGE_NOT_ACTIVE_ERROR && (pledged as any).status === 403 && fingerprint() === before,
+        let refusal: unknown = null;
+        try { refusal = call(); } catch (e) { refusal = e; }
+        return { refusal, moved: fingerprint() !== before };
+    }
+    for (const s of states) {
+        const toProject = refusedAndNothingMoved(() => pledgeToProject(crypto.randomUUID(), project, s.m.pk, hc(5), 'Project Pledge'));
+        assert(toProject.refusal instanceof Error && toProject.refusal.message === PLEDGE_NOT_ACTIVE_ERROR && (toProject.refusal as any).status === 403 && !toProject.moved,
             `pledgeToProject refuses ${s.m.callsign} (${s.what}) to a crowdfund in plain words, and nothing moves`);
-        let toEnterprise: unknown = null;
-        try { pledgeToProject(crypto.randomUUID(), raisingPk, s.m.pk, hc(5), 'Enterprise Pledge'); } catch (e) { toEnterprise = e; }
-        assert(toEnterprise instanceof Error && toEnterprise.message === PLEDGE_NOT_ACTIVE_ERROR && fingerprint() === before,
+        const toEnterprise = refusedAndNothingMoved(() => pledgeToProject(crypto.randomUUID(), raisingPk, s.m.pk, hc(5), 'Enterprise Pledge'));
+        assert(toEnterprise.refusal instanceof Error && toEnterprise.refusal.message === PLEDGE_NOT_ACTIVE_ERROR && !toEnterprise.moved,
             `pledgeToProject refuses ${s.m.callsign} (${s.what}) to an enterprise raising a goal, and nothing moves`);
-        let sent: unknown = null;
-        try { sent = se.transfer(s.m.pk, friend.pk, hc(5), 'gift'); } catch (e) { sent = e; }
-        assert((sent === null || sent instanceof Error) && fingerprint() === before, `transfer refuses ${s.m.callsign} (${s.what}), and nothing moves`);
-        let paid: unknown = null;
-        try { paid = se.payToCommons(s.m.pk, hc(5)); } catch (e) { paid = e; }
-        assert(paid instanceof Error && fingerprint() === before, `payToCommons refuses ${s.m.callsign} (${s.what}), and nothing moves`);
+        const sent = refusedAndNothingMoved(() => se.transfer(s.m.pk, friend.pk, hc(5), 'gift'));
+        assert((sent.refusal === null || sent.refusal instanceof Error) && !sent.moved, `transfer refuses ${s.m.callsign} (${s.what}), and nothing moves`);
+        const paid = refusedAndNothingMoved(() => se.payToCommons(s.m.pk, hc(5)));
+        assert(paid.refusal instanceof Error && !paid.moved, `payToCommons refuses ${s.m.callsign} (${s.what}), and nothing moves`);
     }
     // And an active member's engine pledge still goes through (the check can fail).
     const before = fingerprint();

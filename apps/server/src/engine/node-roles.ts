@@ -45,10 +45,25 @@ export const NODE_ROLE_ACTS = "m.status = 'active' AND m.is_visitor = 0";
  * The member directory (GET /api/members) names each member's node role. A role that changes moves the member's
  * profile_updated_at (here), so a phone's delta read carries the row, and the members' version (grantNodeRole and
  * revokeNodeRole, after their transaction), so a phone holding the old list isn't answered 304. Neither moved before,
- * and a phone kept the old role until its hourly full read.
+ * and a phone kept the old role until its hourly full read. Every way a role changes calls it: a grant, a revoke, a
+ * role a suspension or removal takes (dropNodeRoleRow) and one given back (noteNodeRoleBack), whose callers move the
+ * version by the profile_updated they broadcast once their transaction is done (test-profile-fanout section 4). A role
+ * the listing shows or hides by the member's status alone goes through noteListedRoleStatus.
  */
 function noteRoleChanged(pubkey: string): void {
     db.prepare("UPDATE members SET profile_updated_at = ? WHERE public_key = ?").run(new Date().toISOString(), pubkey);
+}
+
+/**
+ * A member's status moved into or out of 'active' (a re-key code's hold and its cancel, a pause and its lift, a removal and
+ * a reinstate): the directory lists a node role only while the member is active (listNodeRoles), so a role holder's listed
+ * role changed with it, though the node_roles row stayed. The next delta carries the card, as noteRoleChanged's does. A key
+ * with no node_roles row lists no role either way, and is not stamped. Its callers move the version by the profile_updated
+ * they broadcast once their transaction is done.
+ */
+export function noteListedRoleStatus(pubkey: string): void {
+    db.prepare(`UPDATE members SET profile_updated_at = ? WHERE public_key = ? AND EXISTS (SELECT 1 FROM node_roles WHERE member_pubkey = ?)`)
+        .run(new Date().toISOString(), pubkey, pubkey);
 }
 
 /**
@@ -316,6 +331,8 @@ export function dropNodeRoleRow(pubkey: string, by: RoleChangeBy): NodeRole | nu
     const actorRole = actorRoleOf(by.actor);
     const row = db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pubkey) as { role: NodeRole } | undefined;
     if (!row || db.prepare('DELETE FROM node_roles WHERE member_pubkey = ?').run(pubkey).changes === 0) return null;
+    // A suspended member stays in the directory with no role now: the next delta carries it, as a revoke's does.
+    noteRoleChanged(pubkey);
     // A budget the role gave ends with it, and the credit committee's place (engine/vouchers.ts; never throws).
     vouchingAfterRoleChange(pubkey, by.actor);
     const role = row.role;
@@ -328,6 +345,8 @@ export function dropNodeRoleRow(pubkey: string, by: RoleChangeBy): NodeRole | nu
 
 /** A role a suspension held aside, given back (decisions-engine restoreSuspendedNodeRole): told as a grant is. */
 export function noteNodeRoleBack(pubkey: string, role: NodeRole, by: RoleChangeBy): void {
+    // The directory names the role again: the next delta carries it, as a grant's does.
+    noteRoleChanged(pubkey);
     // An owner given their role back vouches by it again, as one granted it; an admin gets no budget, and one a suspension
     // took is not brought back (an owner makes an admin a voucher by hand, I5; engine/vouchers.ts; never throws).
     vouchingAfterRoleChange(pubkey, by.actor);

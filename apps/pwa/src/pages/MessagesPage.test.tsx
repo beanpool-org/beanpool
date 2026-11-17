@@ -1933,6 +1933,15 @@ describe('MessagesPage: a block or an unblock the community did not take is said
         expect(unblockUser).toHaveBeenCalledWith('peer-pubkey');
         expect(screen.getByText(/You have blocked this user/)).toBeInTheDocument();
     });
+
+    it("a DM that lists the blocked person's old key beside their new one is blocked, whichever comes first (review of #3268)", async () => {
+        // The member blocked the old key; the list names the new key first. The phone holds the same rule (dm-blocked.ts).
+        mockConversations = [{ ...mockConversations[0], participants: ['my-pubkey', 'peer-new', 'peer-old'] } as Conversation];
+        mockConversationDetails = { 'conv-1': mockConversations[0] };
+        vi.mocked(isUserBlocked).mockImplementation((k: string) => k === 'peer-old');
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        expect(await screen.findByText(/You have blocked this user/)).toBeInTheDocument();
+    });
 });
 
 describe('MessagesPage: a chat with no picture has one ready-made face, the same in the list and in its header (#2511 review)', () => {

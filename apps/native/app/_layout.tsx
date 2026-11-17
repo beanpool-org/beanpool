@@ -17,7 +17,7 @@ import { initDB, clearDB, redeemInvite, pushProfileToServer } from '../utils/db'
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { parseRekeyLink } from '../utils/rekey-redeem';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
-import { retryPendingReports, syncBlocks } from '../utils/blocklist';
+import { followRekeyedBlocks, retryPendingReports, syncBlocks } from '../utils/blocklist';
 import { loadIdentity } from '../utils/identity';
 import { presentLeaveStatements } from '../utils/push-leave';
 import { markNoticeShown } from '../utils/sync-notices';
@@ -1186,7 +1186,9 @@ export default function RootLayout() {
         presentLeaveStatements();
         // The member's blocks reach the community the phone is set to (utils/blocklist.ts syncBlocks): the first run of this
         // build sends the blocks the phone held before it. Now, on each return, and with the 5-minute sync below; nothing is
-        // sent when nothing changed.
+        // sent when nothing changed. Just before it, a block of someone since re-keyed follows them to their new key
+        // (followRekeyedBlocks: one read, only while the account has blocks).
+        void followRekeyedBlocks();
         void syncBlocks();
         // A push registration that didn't land (no connection, no answer, an error), and any community on the phone that
         // was never asked, is tried on each return and with the 5-minute sync, until it lands (utils/push-registrations.ts
@@ -1202,6 +1204,7 @@ export default function RootLayout() {
                 requestSync();
                 presentLeaveStatements();
                 retryPushRegistrations();
+                void followRekeyedBlocks();
                 void syncBlocks();
                 void tendGlobalCopies();
                 void askOtherCommunitiesNow();
@@ -1213,6 +1216,7 @@ export default function RootLayout() {
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
                 requestSync();
                 retryPendingReports();
+                void followRekeyedBlocks();
                 void syncBlocks();
                 presentLeaveStatements();
                 retryPushRegistrations();

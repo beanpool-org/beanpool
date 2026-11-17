@@ -65,7 +65,7 @@ export function GroupGuestsList({ groupId, isConvenor, reloadKey = 0 }: Props) {
         if (busy) return;
         const name = guestNameLine(g.name, g.home);
         // The guest line in the message: "Sol · riverside.example · guest" is longer than a title's two lines (walk 17 Nov).
-        // The title is plain 'Remove', which every catalog has; W.remove's key carries a translator's note no catalog has.
+        // The title is plain 'Remove', which every catalog has; core's catalogs give W.remove (the web's button) the same word.
         Alert.alert(t('Remove'), twoParagraphs(t(W.removeAsk, { name }), g.state === 'invited' ? t(W.removeWhatAsked) : t(W.removeWhatIn)), [
             { text: t('Cancel'), style: 'cancel' },
             {

@@ -53,6 +53,17 @@ export const CHAT_THREAD_LINE = 44;
  */
 export const CHAT_MENU_ROOM = 240;
 
+/**
+ * Whether dragging the thread closes the open line's menu: only when the whole line and its menu are in view, so nothing of
+ * it is left to reach. A line taller than the thread (the keyboard up, a long line, a group's or an event's bars, which no
+ * fit moves) keeps its menu open while the thread is dragged, and Reply, React, Edit, Delete, Copy and Report are a scroll
+ * away, never dropped (emulator walk 146: in one line of thread only Copy showed, and a drag to reach Reply closed the menu).
+ * Every chat's thread asks this (components/chat/ChatMessageList); half a dp covers the fractions of a line's measure.
+ */
+export function chatMenuClosesOnDrag(m: { thread: number; line: number }): boolean {
+    return m.line <= m.thread + 0.5;
+}
+
 /** The least room a page is shown in: a 44-dp target, to scroll it or tap what is in it. */
 export const CHAT_PAGE_MIN = 44;
 

@@ -21,11 +21,12 @@
  * before this component existed.
  */
 
-import React, { useCallback } from 'react';
-import { FlatList, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import React, { useCallback, useRef } from 'react';
+import { FlatList, View, type LayoutChangeEvent, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
 import { isAtBottom, isDaySeparator, isOldLinesLabel, isRemovedRun, type ChatListItem } from '../../utils/chat-actions';
+import { chatMenuClosesOnDrag } from '../../utils/chat-column-fit';
 import { ChatDaySeparator, ChatOldLinesLabel, ChatRemovedRunLine } from './ChatBubble';
 import { ChatFoldProvider } from './ChatFold';
 import type { ChatStyles } from './styles';
@@ -43,6 +44,10 @@ interface Props {
     renderMessage: (item: any) => React.ReactElement | null;
     /** The one row whose cell is lifted above its siblings (its picker or action bar is open). */
     activeId?: string | null;
+    /**
+     * The thread was dragged: the screen closes the open line's menu. Called only while the whole line and its menu are in
+     * view (utils/chat-column-fit chatMenuClosesOnDrag); a line taller than the thread keeps its menu while it is dragged.
+     */
     onScrollBeginDrag?: () => void;
     onAtBottomChange?: (atBottom: boolean) => void;
     /** The oldest loaded message came into view: grow the window by a page. */
@@ -77,14 +82,26 @@ export function ChatMessageList({
     // List cells are siblings, and a later-mounted cell paints over an earlier one — so the reaction picker
     // and the action buttons (positioned at top/bottom: -45, overflowing into adjacent rows) rendered BEHIND
     // sibling bubbles. zIndex inside the row cannot win across cells; the whole cell has to be lifted.
-    const renderCell = useCallback(({ children, item, style, ...props }: any) => {
+    // The thread's height and the open line's (its row with the menu), as laid out: a drag closes the menu only while
+    // the line and its menu fit in the thread, so a line taller than it keeps its menu to scroll to (emulator walk 146).
+    const threadHeight = useRef(0);
+    const activeLine = useRef<{ id: string; height: number } | null>(null);
+    const renderCell = useCallback(({ children, item, style, onLayout, ...props }: any) => {
         const lifted = !!activeId && item?.id === activeId;
         return (
-            <View {...props} style={[style, lifted ? { zIndex: 9999, elevation: 9999, overflow: 'visible' } : { zIndex: 1 }]}>
+            <View
+                {...props}
+                onLayout={lifted ? (e: LayoutChangeEvent) => { activeLine.current = { id: item.id, height: e.nativeEvent.layout.height }; onLayout?.(e); } : onLayout}
+                style={[style, lifted ? { zIndex: 9999, elevation: 9999, overflow: 'visible' } : { zIndex: 1 }]}
+            >
                 {children}
             </View>
         );
     }, [activeId]);
+    const onDrag = useCallback(() => {
+        const line = activeId && activeLine.current?.id === activeId ? activeLine.current.height : 0;
+        if (chatMenuClosesOnDrag({ thread: threadHeight.current, line })) onScrollBeginDrag?.();
+    }, [activeId, onScrollBeginDrag]);
 
     const renderItem = useCallback(({ item }: { item: ChatListItem }) => {
         if (isDaySeparator(item)) return <ChatDaySeparator label={item.label} styles={styles} />;
@@ -117,7 +134,8 @@ export function ChatMessageList({
                 // Inverted list: "end" = the oldest loaded message (visual top).
                 onEndReachedThreshold={0.8}
                 onEndReached={onEndReached}
-                onScrollBeginDrag={onScrollBeginDrag}
+                onScrollBeginDrag={onScrollBeginDrag ? onDrag : undefined}
+                onLayout={(e: LayoutChangeEvent) => { threadHeight.current = e.nativeEvent.layout.height; }}
                 ListEmptyComponent={ListEmptyComponent}
                 ListFooterComponent={ListFooterComponent}
             />

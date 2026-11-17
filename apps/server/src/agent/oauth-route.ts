@@ -419,6 +419,8 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
         if (res.ok) { ctx.body = { status: 'ok', asks: res.asks }; return; }
         if (res.kind === 'wrong-browser') { ctx.status = 403; ctx.body = { status: 'wrong-browser', error: 'This request belongs to the page that showed the code.' }; return; }
         if (res.kind === 'unknown') { ctx.status = 404; ctx.body = { status: 'unknown' }; return; }
+        // Run out: nobody answered, and nothing can be ticked now (410, as the page's poll answers an expired request).
+        if (res.kind === 'expired') { ctx.status = 410; ctx.body = { status: 'expired', error: 'This request has run out: nothing was connected. Start again from your assistant.' }; return; }
         ctx.status = 409;
         ctx.body = { status: res.kind, error: 'Your phone has already answered: what it approved stays as it was.' };
     });
@@ -491,22 +493,30 @@ h1{font-size:1.2rem}p{margin:.6rem 0}.qr{background:#fff;display:inline-block;pa
 <p id="status" role="status" class="muted">Waiting for your phone…</p>
 <script nonce="${p.nonce}">
 (function(){
-var id=${JSON.stringify(p.pairingId)},base='/oauth/authorize/'+id,st=document.getElementById('status'),form=document.getElementById('confirm'),cp=document.getElementById('canpost'),cm=document.getElementById('canmoderate');
-function freeze(){cp.disabled=true;cm.disabled=true;document.getElementById('asksnote').textContent='Your phone answered: these ticks are what it saw.'}
+var id=${JSON.stringify(p.pairingId)},base='/oauth/authorize/'+id,st=document.getElementById('status'),form=document.getElementById('confirm'),cp=document.getElementById('canpost'),cm=document.getElementById('canmoderate'),last={canPost:false,canModerate:false};
+var APPROVED='Your phone approved these ticks: they can no longer change.';
+function ended(s){return s==='declined'?'Declined on the phone: these ticks were not given.':s==='expired'?'This request ran out before it was approved: these ticks were not given.':s==='refused'?'This request was refused: these ticks were not given.':s==='not-waiting'?'Your phone has already answered: these ticks stay as they were when it looked.':'This request ended: these ticks were not given.'}
+function freeze(note){cp.disabled=true;cm.disabled=true;document.getElementById('asksnote').textContent=note}
 function go(r){if(r&&r.redirect){location.replace(r.redirect);return true}return false}
 function show(r){
  if(!r){st.textContent='Lost touch with the server: reload to try again.';return}
- if(r.status==='confirm'){freeze();form.hidden=false;st.textContent='Approved on the phone: type its six digits here.';document.getElementById('digits').focus();return}
- if(r.status==='approved'){st.textContent='Connected. Taking you back to your assistant…';go(r);return}
+ if(r.status==='confirm'){freeze(APPROVED);form.hidden=false;st.textContent='Approved on the phone: type its six digits here.';document.getElementById('digits').focus();return}
+ if(r.status==='approved'){freeze(APPROVED);st.textContent='Connected. Taking you back to your assistant…';go(r);return}
  if(r.status==='wrong'){st.textContent=r.error+' Tries left: '+r.triesLeft;return}
  if(r.status==='waiting'){st.textContent=r.notice==='not-admin'?'That phone is not an owner or admin here. Waiting…':'Waiting for your phone…';poll();return}
- freeze();form.hidden=true;st.textContent=r.status==='declined'?'Declined on the phone: nothing was connected.':'This request ended: nothing was connected. Start again from your assistant.';
+ freeze(ended(r.status));form.hidden=true;st.textContent=r.status==='declined'?'Declined on the phone: nothing was connected.':'This request ended: nothing was connected. Start again from your assistant.';
 }
 function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{}),credentials:'same-origin'}).then(function(x){return x.json()}).catch(function(){return null})}
 function poll(){post(base+'/wait').then(show)}
-function asks(){post(base+'/asks',{canPost:cp.checked===true,canModerate:cm.checked===true}).then(function(r){if(r&&r.asks){cp.checked=r.asks.canPost===true;cm.checked=r.asks.canModerate===true}else if(r){freeze()}else{st.textContent='Lost touch with the server: tick again before you scan.'}})}
+function asks(){post(base+'/asks',{canPost:cp.checked===true,canModerate:cm.checked===true}).then(function(r){
+ if(r&&r.asks){last=r.asks;cp.checked=last.canPost===true;cm.checked=last.canModerate===true;return}
+ if(!r){st.textContent='Lost touch with the server: tick again before you scan.';return}
+ cp.checked=last.canPost===true;cm.checked=last.canModerate===true;
+ freeze(ended(r.status))})}
 cp.addEventListener('change',asks);cm.addEventListener('change',asks);
-form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value.replace(/\\D/g,'')}).then(show)});
+form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value.replace(/\\D/g,'')}).then(function(r){
+ if(r&&r.status==='refused'){freeze(ended('refused'));form.hidden=true;st.textContent='Those are not the digits on the phone, so this request ended: nothing was connected. Start again from your assistant.';return}
+ show(r)})});
 poll();
 })();
 </script></body></html>`;

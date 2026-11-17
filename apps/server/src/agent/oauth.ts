@@ -1,6 +1,6 @@
 /**
  * The AI assistant's OAuth 2.1 door (admin MCP design §2, slice S2): how an owner or an admin connects claude.ai or
- * ChatGPT by pasting this node's /mcp address, approving on their PHONE (the QR sign-in with its two-digit number match,
+ * ChatGPT by pasting this node's /mcp address, approving on their PHONE (the QR sign-in with its six-digit number match,
  * settings-signin-pairing.ts) instead of copying a token. This node is its own authorization server; nothing of ours
  * is asked (no registrar, DNS or relay).
  *
@@ -168,7 +168,7 @@ export interface ConsentRequest {
     codeChallenge: string;
     resource: string;
     createdAt: number;
-    /** "May post for me", as the consent page's tick was when its digits were sent (setConsentTicks). */
+    /** "May post for me", as the phone showed and signed it (setConsentTicks, from the pairing's approvedTicks; risk 3). */
     canPost?: boolean;
     /** "May take down posts for me" (MCP-MODERATION S3), the same way: off unless ticked. */
     canModerate?: boolean;
@@ -176,7 +176,11 @@ export interface ConsentRequest {
 
 const requests = new Map<string, ConsentRequest>();
 
-/** The consent page's two ticks, sent with its digits: the code, and the grant it makes, carry them. Each is off unless ticked. */
+/**
+ * The two ticks the phone approved (settings-signin-pairing.ts approvedTicks: the consent page set them before the phone
+ * looked, and the phone showed and signed them; never what the page sends with its digits). The code, and the grant it
+ * makes, carry them. Each is off unless ticked.
+ */
 export function setConsentTicks(pairingId: string, ticks: { canPost: boolean; canModerate: boolean }): void {
     const r = requests.get(pairingId);
     if (r) { r.canPost = ticks.canPost === true; r.canModerate = ticks.canModerate === true; }

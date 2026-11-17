@@ -48,7 +48,7 @@ import { initStateEngine, seedGenesisMember, submitReport } from './state-engine
 import { updateLocalConfig, getLocalConfig, redactLocalConfig } from './config/local-config.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
-import { resetPairingsForTests } from './settings-signin-pairing.js';
+import { PAIRING_TTL_MS, resetPairingsForTests } from './settings-signin-pairing.js';
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
 import { db } from './db/db.js';
 import { getAlertsStatus } from './services/alerts.js';
@@ -687,6 +687,17 @@ async function main(): Promise<void> {
             const m = await manualConnect(owner, 'Phone Ticked', true);
             const g = listOAuthGrants().find(x => x.clientName === 'Phone Ticked');
             assert(m.token.status === 200 && g?.canPost === true && g?.canModerate === false, `the grant keeps the phone's ticks (${JSON.stringify(g && { canPost: g.canPost, canModerate: g.canModerate })})`);
+        }
+        resetLimits();
+        {
+            // Nobody answered in time: a tick now is told the request ran out (410, as the page's poll is), never that the phone answered.
+            const reg = await call('POST', '/oauth/register', { body: { client_name: 'Ran Out', redirect_uris: [REDIRECT] } });
+            const pg = await openConsent(authorizeUrl(reg.body.client_id));
+            skew = PAIRING_TTL_MS + 1000;
+            const ranOut = await call('POST', `/oauth/authorize/${pg.id}/asks`, { body: { canPost: true }, headers: { Cookie: pg.cookie } });
+            skew = 0;
+            assert(ranOut.status === 410 && ranOut.body?.status === 'expired' && /run out/.test(String(ranOut.body?.error)) && !/already answered/.test(String(ranOut.body?.error)),
+                `a tick after the request ran out: 410, in words that say it ran out, not that the phone answered (${show(ranOut)})`);
         }
 
         // ── 11. Lifetimes and the pins finding 9 asked for ──

@@ -504,11 +504,16 @@ export function initSchema() {
     if (gate.kind === 'fresh') db.transaction(() => { db.exec(schemaSql); writeSchemaStamp(db, getVersion()); })();
 
     // ── The schema steps born since 1.4.0 ─────────────────────────────────────────────────────────────────────────────
-    // The gate opens a file 1.4.0 or later last started (db/schema-gate.ts). These bring one from 1.4.0 to this release's
-    // shape, and do nothing on a file that has it. Before the schema.sql exec, which may index their columns: CREATE INDEX
-    // on a missing column stops the whole exec (test-schema-upgrade-fresh-shape.ts holds every column schema.sql names to
-    // that). (The steps born between 1.2.36 and 1.4.0, the hundredths step among them, were log rows CUT2, B10 and B11,
-    // removed once every kept node had started 1.4.0.)
+    // The gate opens a file 1.4.1 or later last started (db/schema-gate.ts MINIMUM_RELEASE). These bring one from 1.4.1 to
+    // this release's shape, and do nothing on a file that has it. Before the schema.sql exec, which may index their columns:
+    // CREATE INDEX on a missing column stops the whole exec (test-schema-upgrade-fresh-shape.ts holds every column schema.sql
+    // names to that). (The steps born between 1.2.36 and 1.4.0, the hundredths step among them, were log rows CUT2, B10 and
+    // B11, removed once every kept node had started 1.4.0. The four born with per-item prices in 1.4.1, posts.units_left,
+    // lot_price_c and lot_units and marketplace_transactions.item_option, were log rows PERITEM-S1 to S4, removed once every
+    // kept node had started 1.4.1, whose file has them from schema.sql; the gate's minimum rose to 1.4.1 with them, so a
+    // file 1.4.0 last started, which lacks those four, is refused before anything here runs.) K1's step below was born in
+    // 1.4.1 too and stays: an addition, not conversion code, with no log row; it finds its columns on every file the gate
+    // opens.
 
     // Born with Local knowledge (slice K1; DESIGN-local-knowledge-fable.md §4.1, §4.4): seven columns on posts, empty on every
     // row that is there (knowledge_helped takes its default, 0). Additions, not conversion code (Marty's pick 6, 11 Nov
@@ -527,18 +532,6 @@ export function initSchema() {
     // posts.free_tags. An addition, as fix_base's above: nothing is read, filled in or rewritten. A schema step a node with the
     // table needs to boot its inserts, named in the PR (no-conversion-code: "name them, don't assume either way").
     try { db.prepare(`ALTER TABLE knowledge_drafts ADD COLUMN free_tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
-
-    // Born with per-item prices (DESIGN-per-item-price-fable.md §3, §6; Marty's Q5, 12 Nov 2026): four empty columns, each with
-    // schema.sql's own CHECK, NULL on every row that is there. Nothing is read, filled in or rewritten: a listing becomes
-    // per-item only by its seller's own edit. On a fresh install each finds its column and does nothing.
-    // CONVERSION CODE (schema step), log row PERITEM-S1, remove in the release after the one that ships per-item.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN units_left INTEGER CHECK (units_left IS NULL OR (units_left >= 0 AND units_left <= 9999))`).run(); } catch { }
-    // CONVERSION CODE (schema step), log row PERITEM-S2, remove in the release after the one that ships per-item.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN lot_price_c INTEGER CHECK (lot_price_c IS NULL OR lot_price_c > 0)`).run(); } catch { }
-    // CONVERSION CODE (schema step), log row PERITEM-S3, remove in the release after the one that ships per-item.
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN lot_units INTEGER CHECK (lot_units IS NULL OR lot_units >= 2)`).run(); } catch { }
-    // CONVERSION CODE (schema step), log row PERITEM-S4, remove in the release after the one that ships per-item.
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN item_option TEXT CHECK (item_option IS NULL OR item_option IN ('each', 'lot'))`).run(); } catch { }
 
     // Born with the forum's moderation (slice F2; DESIGN-forums-fable.md §3 and §20, the joint design §2.4): four empty columns,
     // NULL on every row that is there. Additions, not conversion code, as K1's above and as the design's §20 says: nothing is

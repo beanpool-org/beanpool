@@ -1,8 +1,8 @@
 -- apps/server/src/db/schema.sql as released in v1.4.0 (`git show v1.4.0:apps/server/src/db/schema.sql`, tag commit 7bc18565), unchanged
--- below this header: the oldest shape the gate opens since the cutover's steps went (db/schema-gate.ts; log rows CUT1, CUT2,
--- B10, B11). A file made from it and stamped as 1.4.0 stamps a fresh install (kept-node-test-fixture.ts: user_version 5,
--- node_config schema_release '1.4.0') is a database a kept node last started on 1.4.0 (test-schema-gate.ts and the
--- upgrade suites).
+-- below this header: without per-item prices' four columns (posts.units_left, lot_price_c, lot_units and
+-- marketplace_transactions.item_option, born in 1.4.1). A file made from it and stamped as 1.4.0 stamps a fresh install
+-- (kept-node-test-fixture.ts makeTooOldDatabase: user_version 5, node_config schema_release '1.4.0') is one the gate
+-- refuses since its minimum rose to 1.4.1 (db/schema-gate.ts), at boot and at restore (test-schema-gate, test-restore-verified).
 -- 1. Members and Profiles
 CREATE TABLE IF NOT EXISTS members (
     public_key TEXT PRIMARY KEY,

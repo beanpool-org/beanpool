@@ -7,14 +7,16 @@
  * no-opped against the old shape, the index failed with "no such column", `db.exec` aborted, and the node
  * would not start. Every suite that starts from an EMPTY data dir passed, because the table is created complete there.
  *
- * The oldest file a node opens is one a kept node last started on 1.4.0 (db/schema-gate.ts; test-schema-gate.ts boots
- * __fixtures__/schema-v1.4.0.sql, stamped as 1.4.0 stamped it, to a fresh install's exact shape). The upgrades checked
- * here are the steps born since (db.ts, before the schema.sql exec), on that file (kept-node-test-fixture.ts):
+ * Every kept node's file is one it last started on 1.4.1 or later (test-schema-gate.ts boots __fixtures__/schema-v1.4.1.sql,
+ * stamped as 1.4.1 stamped it, to a fresh install's exact shape). The upgrades checked here are the steps db.ts runs before
+ * the schema.sql exec, on that file (kept-node-test-fixture.ts). (Per-item prices' steps for a file 1.4.0 last started, log
+ * rows PERITEM-S1 to S4, are gone, and the gate, db/schema-gate.ts, refuses such a file: its minimum is 1.4.1.)
  *
  *  1. A fresh install, for the shape everything else is compared against.
  *  5. No late-added column may be referenced by schema.sql (static), and every column added before the exec is declared.
- *  accounts.balance_c NOT NULL, fresh or upgraded, and a 1.4.0 file's balances kept as they are.
- *  8f. Per-item prices: the four columns and their CHECKs, the same fresh or upgraded, nothing filled in (PERITEM-S1..S4).
+ *  accounts.balance_c NOT NULL, fresh or upgraded, and a kept node's balances kept as they are.
+ *  8f. Per-item prices: the four columns and their CHECKs, the same fresh or on a kept node's file, nothing filled in (their
+ *      steps, PERITEM-S1..S4, went once every kept node had started 1.4.1, whose schema.sql has them).
  * (Sections 2-4, 6 and 8-8d upgraded shapes from before 1.2.36, and the members' photos section moved photos a
  * pre-1.2.28 file held; the 1.4.0 gate refused those files, and they went with their steps. Section 8e, 1.2.37's
  * standing_deals dropped whole by the hundredths step, and the 1.2.36 balance it dropped unread, went with those steps
@@ -40,10 +42,10 @@ import { KEPT_NODE_RELEASE, makeKeptNodeDatabase } from './kept-node-test-fixtur
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * A data dir holding a file a kept node last started on 1.4.0 (v1.4.0's schema, stamped as 1.4.0 stamped it), WAL as every
- * node's is; `more` runs on it before it is closed (rows).
+ * A data dir holding a file a kept node last started on KEPT_NODE_RELEASE (that release's schema, stamped as it stamped
+ * it), WAL as every node's is; `more` runs on it before it is closed (rows).
  */
-function release140(name: string, more?: (d: Database.Database) => void): string {
+function keptNodeDir(name: string, more?: (d: Database.Database) => void): string {
     const dir = tmp(name);
     const d = new Database(path.join(dir, 'state.db'));
     d.pragma('journal_mode = WAL');
@@ -196,18 +198,18 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
 
     // ── accounts.balance_c NOT NULL (review FABLE-sec-input F1, 2026-10-01; whole hundredths since 1.4.0) ────────────────
     // better-sqlite3 binds NaN as NULL, so a nullable column took a NaN balance without a word. A fresh install declares
-    // accounts.balance_c NOT NULL, and so does a 1.4.0 file (whole hundredths came with 1.4.0). Booting one keeps every row
-    // as it is, its balance to the hundredth, stamps and epochs too: no step touches money any more (the hundredths step,
-    // log row B11, went once every kept node had started 1.4.0).
+    // accounts.balance_c NOT NULL, and so does a kept node's file (whole hundredths came with 1.4.0). Booting one keeps
+    // every row as it is, its balance to the hundredth, stamps and epochs too: no step touches money any more (the
+    // hundredths step, log row B11, went once every kept node had started 1.4.0).
     {
-        console.log('\n— accounts.balance_c is NOT NULL, fresh or upgraded; a 1.4.0 balance is kept as it is —');
+        console.log(`\n— accounts.balance_c is NOT NULL, fresh or upgraded; a ${KEPT_NODE_RELEASE} balance is kept as it is —`);
         const balanceNotNull = (d: Database.Database) =>
             ((d.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance_c'`).get() as any)?.nn ?? 0) === 1;
         const oldBalance = (d: Database.Database) => !!d.prepare(`SELECT 1 FROM pragma_table_info('accounts') WHERE name = 'balance'`).get();
         assert(balanceNotNull(freshDb) && !oldBalance(freshDb), 'a fresh install declares accounts.balance_c NOT NULL, and has no old balance column');
 
         const at = '2026-09-30T00:00:00.000Z';
-        const dir = release140('accounts-1.4.0', (d) => {
+        const dir = keptNodeDir(`accounts-${KEPT_NODE_RELEASE}`, (d) => {
             const ins = d.prepare(`INSERT INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES (?, ?, ?, 7)`);
             for (const [pk, b] of [['acct_a', 1250], ['acct_b', -300], ['acct_c', 0]] as const) ins.run(pk, b, at);
         });
@@ -228,26 +230,28 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
-    // ── 8f. Per-item prices: four empty columns, each with its CHECK, fresh or upgraded (PERITEM-S1..S4) ──────────────────
+    // ── 8f. Per-item prices: four empty columns, each with its CHECK, fresh or on a kept node's file ──────────────────────
     // DESIGN-per-item-price-fable.md §9 "Schema": the shape compare alone does not see a CHECK, so a write each CHECK must
-    // refuse is made on both files, and the column's text is the same on both. Red if a schema step's ALTER drops its CHECK
-    // (or schema.sql's), or a step fills anything in.
+    // refuse is made on both files, and the column's text is the same on both. Red if schema.sql's CHECK changes from the one
+    // every kept node's file holds (no step carries a change there now: PERITEM-S1..S4 went once every kept node had started
+    // 1.4.1), or the boot fills anything in.
     {
-        console.log('\n— 8f. Per-item columns: the same four, with the same CHECKs, fresh or upgraded —');
-        const dir = release140('per-item-1.4.0', (d) => {
+        console.log(`\n— 8f. Per-item columns: the same four, with the same CHECKs, fresh or on a ${KEPT_NODE_RELEASE} file —`);
+        const dir = keptNodeDir(`per-item-${KEPT_NODE_RELEASE}`, (d) => {
             d.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey) VALUES ('old-post', 'offer', 'tools', 'Panels', '', ?)`).run('aa'.repeat(32));
             d.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status) VALUES ('old-deal', 'old-post', ?, ?, 'completed')`).run('bb'.repeat(32), 'aa'.repeat(32));
         });
         {
-            // Per-item prices were born after 1.4.0, so the four steps really run on this file (they are not a no-op here).
+            // Per-item prices were born in 1.4.1, so the kept node's file has the four from its own schema.sql: no boot step
+            // adds them now.
             const before = new Database(path.join(dir, 'state.db'), { readonly: true });
             const had = [...columns(before, 'posts'), ...columns(before, 'marketplace_transactions')]
                 .filter((c) => ['units_left', 'lot_price_c', 'lot_units', 'item_option'].includes(c));
             before.close();
-            assert(had.length === 0, `setup: the ${KEPT_NODE_RELEASE} file has none of the four columns (${had.join(', ') || 'none'})`);
+            assert(had.length === 4, `setup: the ${KEPT_NODE_RELEASE} file has all four columns before it boots (${had.join(', ') || 'none'})`);
         }
         const boot = bootInto(dir);
-        assert(boot.ok, `a ${KEPT_NODE_RELEASE} file boots with the four schema steps (${boot.ok ? 'booted' : boot.output.split('\n').slice(-5).join(' | ')})`);
+        assert(boot.ok, `a ${KEPT_NODE_RELEASE} file boots (${boot.ok ? 'booted' : boot.output.split('\n').slice(-5).join(' | ')})`);
         const up = new Database(path.join(dir, 'state.db'));
         up.pragma('foreign_keys = OFF');
         const writable = new Database(path.join(freshDir, 'state.db'));

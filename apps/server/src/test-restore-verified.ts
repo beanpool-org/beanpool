@@ -61,7 +61,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { localFetch } from './keepalive-test-fetch.js';
 // Reads no db.ts (a file and the gate's stamp writer only), so the child scenarios' own data dirs are untouched by it.
-import { makeKeptNodeDatabase } from './kept-node-test-fixture.js';
+import { makeKeptNodeDatabase, makeTooOldDatabase } from './kept-node-test-fixture.js';
 
 const IS_CHILD = process.argv[2] === '--child';
 
@@ -558,18 +558,19 @@ async function main(): Promise<void> {
         d.close();
         return f;
     };
-    // A database a kept node last started on 1.4.0 (kept-node-test-fixture.ts: v1.4.0's schema.sql, stamped as 1.4.0 stamped
-    // it; the oldest the gate opens), its founder and one member. A node that started on v1.2.15 … v1.2.18 still carries that
-    // release's recovery_requests and its touch trigger: no boot ever removed them. `extra` is run on it after.
+    // A database a kept node last started on 1.4.1 (kept-node-test-fixture.ts: v1.4.1's schema.sql, stamped as 1.4.1 stamped
+    // it; the file every kept node holds), its founder and one member. A node that started on v1.2.15 … v1.2.18 still carries that
+    // release's recovery_requests and its touch trigger: no boot ever removed them. `extra` is run on it after. With `make`
+    // makeTooOldDatabase, the same on a database a node last started on 1.4.0 (v1.4.0's schema.sql, stamped as 1.4.0 stamped it).
     const OLD_RECOVERY_REQUESTS = [
         OLD_SCHEMA.match(/CREATE TABLE IF NOT EXISTS recovery_requests \([\s\S]*?\n\);/)?.[0] ?? '',
         OLD_SCHEMA.match(/CREATE TRIGGER IF NOT EXISTS recovery_requests_touch_updated_at[\s\S]*?END;/)?.[0] ?? '',
     ];
     assert(OLD_RECOVERY_REQUESTS.every((s) => s.length > 0), "setup: v1.2.18's recovery_requests and its touch trigger");
-    const keptNodeDb = (extra: string[] = []) => {
+    const keptNodeDb = (extra: string[] = [], make = makeKeptNodeDatabase) => {
         const f = path.join(fs.mkdtempSync(path.join(work, 'kept-')), 'state.db');
         const d = new Database(f);
-        makeKeptNodeDatabase(d);
+        make(d);
         for (const s of OLD_RECOVERY_REQUESTS) d.exec(s);
         const at = new Date().toISOString();
         d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES ('genesis', 'Genesis', ?)`).run(at);
@@ -674,15 +675,15 @@ async function main(): Promise<void> {
             // 1.4.0 made it). Under float Beans a missing `balance` column was refused here.
             const noAccountKey = made('no-account-key.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (balance_c INTEGER)',
                 'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)']);
-            // Stamped, so the gate opens it (db/schema-gate.ts): what is checked here is the core tables alone.
+            // Stamped 1.4.1, the gate's minimum, so the gate opens it (db/schema-gate.ts): what is checked here is the core tables alone.
             const noMoneyColumn = made('no-money-column.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
                 'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
-                "INSERT INTO node_config (key, value) VALUES ('schema_release', '1.4.0')", 'PRAGMA user_version = 5']);
+                "INSERT INTO node_config (key, value) VALUES ('schema_release', '1.4.1')", 'PRAGMA user_version = 5']);
             // The same with a node_config no release made (no value column): the gate answers, refusing; it does not throw.
             const oddConfig = made('odd-config.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
                 'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)', 'PRAGMA user_version = 5']);
             const odd = check(oddConfig);
-            assert(!odd.ok && (odd as any).status === 400 && /^This backup's state\.db was last started by a BeanPool older than 1\.4\.0\./.test((odd as any).error ?? ''),
+            assert(!odd.ok && (odd as any).status === 400 && /^This backup's state\.db was last started by a BeanPool older than 1\.4\.1\./.test((odd as any).error ?? ''),
                 `4. user_version 5 with a node_config no release made: refused 400 in the gate's words, not a 500 (${JSON.stringify(odd).slice(0, 200)})`);
             for (const [label, f, why] of [
                 ['an empty database', emptyDb, 'no members table'], ['a dummy table', dummyDb, 'no members table'],
@@ -759,7 +760,7 @@ async function main(): Promise<void> {
         }
 
         // ── 8. N1: the backups the live nodes made ──
-        console.log('\n── 8. N1: a backup of a kept node that started on v1.2.15 … v1.2.18 restores; a trigger this version does not know, a backup with no node_roles, and one from before 1.4.0, are refused ──');
+        console.log('\n── 8. N1: a backup of a kept node that started on v1.2.15 … v1.2.18 restores; a trigger this version does not know, a backup with no node_roles, and one from before 1.4.1 (1.4.0 or older), are refused ──');
         {
             const RETIRED = 'recovery_requests_touch_updated_at';
             const triggersIn = (f: string): string[] => {
@@ -796,10 +797,25 @@ async function main(): Promise<void> {
                 `CREATE TRIGGER old_thing_touch AFTER UPDATE ON old_thing BEGIN UPDATE old_thing SET at = 'now' WHERE rowid = NEW.rowid; END`]));
             assert(gone.ok === true && !(gone as any).left.includes('old_thing_touch'),
                 `8. a trigger on a table this version does not have passes, dropped from the file (${JSON.stringify(gone).slice(0, 300)})`);
-            // A backup last started before 1.4.0, node_roles and all: the gate would refuse it at the next start
+            // A backup last started before 1.4.1, node_roles and all: the gate would refuse it at the next start
             // (db/schema-gate.ts), so the restore refuses it first, in the gate's words, and the file is left as it was.
-            const OLDER = "This backup's state.db was last started by a BeanPool older than 1.4.0. This version opens databases from 1.4.0 on. "
-                + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.4.0, then start this version again. Nothing was changed.';
+            const OLDER = "This backup's state.db was last started by a BeanPool older than 1.4.1. This version opens databases from 1.4.1 on. "
+                + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.4.1, then start this version again. Nothing was changed.';
+            // One a node made while it ran 1.4.0 (off-box backups and restore points are kept 30 days; a downloaded tar as long
+            // as its owner keeps it): without per-item prices' four columns, whose boot steps (PERITEM-S1..S4) are gone. Put in
+            // place, it would start a node whose every listing and deal read fails.
+            {
+                const at140 = keptNodeDb(UPDATED, makeTooOldDatabase);
+                const bytes140 = fs.readFileSync(at140).toString('base64');
+                const r140 = direct(at140);
+                assert(!r140.ok && (r140 as any).status === 400 && (r140 as any).error === OLDER && fs.readFileSync(at140).toString('base64') === bytes140,
+                    `8. a backup a node made on 1.4.0, node_roles and all: refused 400 in the gate's words, the file untouched (${JSON.stringify(r140).slice(0, 260)})`);
+                const node = stoppedNode();
+                const before = JSON.stringify(await dirState(node));
+                const s = shell(node, ['restore', '--unlocked', tarOf(at140)], 'UNLOCKED\n');
+                assert(s.code === 1 && s.out.includes(OLDER) && JSON.stringify(await dirState(node)) === before,
+                    `8. beanpool restore --unlocked of it: refused in those words, exit 1, nothing changed (exit ${s.code}: ${s.out.trim().slice(-260)})`);
+            }
             const older = oldReleaseDb(UPDATED);
             const olderBytes = fs.readFileSync(older).toString('base64');
             const tooOld = direct(older);

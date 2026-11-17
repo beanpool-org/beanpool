@@ -175,6 +175,7 @@ export const SUITES = [
     'test-cors-policy',
     'test-knock-cors',
     'test-health-cors',
+    'test-public-counts',
     'test-gateway-config',
     'test-gateway-real-client',
     'test-dos-hardening',

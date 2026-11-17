@@ -15,7 +15,7 @@ import {
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
     updateProfile, getProfile, getAllProfiles, isCallsignAvailable,
-    getPublicCommunityHealth,
+    getPublicCommunityHealthFor, publicFiguresShownTo, communityInfoShown,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, getReportCount, getReportablePulseItemOwner, getReportablePostAuthor, findPendingReport, updatePendingReportReason, isReportRateLimited,
@@ -728,7 +728,9 @@ router.get('/api/community/info', async (ctx) => {
     // read), and ran three full-table counts on every hit (DoS review F4).
     const actor = ctx.state.actor as string | undefined;
     const body = {
-        ...getPublicCommunityInfo(actor),
+        // The counts (members, listings, trades) to a reader who reads as a member, and to anyone else only with "Share
+        // Member Count" on (state-engine publicFiguresShownTo, risk 10). The ETag below is of the reader and this answer.
+        ...communityInfoShown(getPublicCommunityInfo(actor), publicFiguresShownTo(actor)),
         // Request binding (@beanpool/core request-signing.ts): this server verifies format 2, so an app signs its
         // requests here for the host it connects to. A server that doesn't say gets the old format. `addresses`: this
         // community's own names (engine/own-addresses.ts), public by nature; empty on a node that knows none.
@@ -927,7 +929,13 @@ router.get('/api/community/health', async (ctx) => {
     // been raised past it.
     // `lightsOut`: as /api/community/info carries it (services/lights-out.ts publicLightsOut): the phone's health ping is how
     // it learns the hall opened, or closed and where home is (design §2.5).
-    const health = { ...getPublicCommunityHealth(), lightsOut: publicLightsOut() };
+    //
+    // The member, listing and trade totals, the activity and the watchdog's report as the reader may read them
+    // (state-engine getPublicCommunityHealthFor, risk 10): whole to a member; to anyone else only as the owners' "Share
+    // Member Count" and "Share Node Health & Version" allow. Not kept by any shared cache, as it differs by reader.
+    const actor = ctx.state.actor as string | undefined;
+    const health = { ...getPublicCommunityHealthFor(actor), lightsOut: publicLightsOut() };
+    ctx.set('Cache-Control', 'private, no-store');
     const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
     ctx.vary(APP_VERSION_HEADER);
     ctx.body = app ? { ...health, minAppVersion: getPlatformFloor(app.platform) } : health;

@@ -265,6 +265,32 @@ const STRANGER_REFUSED = new Set<string>([
     'PUT /mcp/photos/u/:token',
 ]);
 
+/**
+ * The writes in STRANGER_REFUSED that keep the signer's OWN things (switches, read marks, follows, blocks, friends, watches,
+ * reminders, copies, its profile ...): the class a stranger can reach without touching any member's data, so the class two
+ * holes were found in (push switches saved for any key; the node's TikTok relay spent by any key). Each is REACHED: BODIES
+ * sends a body that reaches its write, and Alice's same body in the control (section 5) must change something or call out,
+ * so the stranger's refusal is real. Or it says why this suite can't reach it.
+ */
+const REACHED = 'reached';
+const GLOBAL_ONLY = 'the global directory\'s: 404 feature_off on a local node before any handler (routes/profile-feature-gate.ts), and '
+    + 'its watcher() asks isNodeMember first';
+const OWN_STATE: Record<string, string> = {
+    'POST /api/members/preferences': REACHED,
+    'POST /api/member/pulse/oauth-exchange': REACHED,
+    'POST /api/friends/add': REACHED,
+    'POST /api/friends/remove': REACHED,
+    'POST /api/blocks': REACHED,
+    'POST /api/blocks/clear': REACHED,
+    'POST /api/blocks/remove': REACHED,
+    'POST /api/forum/topics/:id/follow': REACHED,
+    'POST /api/forum/topics/:id/read': REACHED,
+    'POST /api/notices/push/seen': REACHED,
+    'POST /api/global/watches': GLOBAL_ONLY,
+    'DELETE /api/global/watches/:id': GLOBAL_ONLY,
+    'POST /api/global/circles/:id/starting': GLOBAL_ONLY,
+};
+
 // ── nothing leaves the node ─────────────────────────────────────────────────────────────────────────
 /**
  * Every call the node made to a host that is not this machine: Expo's push service, a browser's push service (web push
@@ -360,6 +386,7 @@ async function main(): Promise<void> {
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
     const { lockedDm } = await import('./dm-test-payload.js');
     const { lockedGroupLine } = await import('./group-test-payload.js');
+    const { addBlocks } = await import('./engine/member-blocks.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { resetChatRateLimit } = await import('./chat-rate-limit.js');
@@ -591,6 +618,19 @@ async function main(): Promise<void> {
         'POST /api/members/preferences': (x) => ({ publicKey: x.pk, preferences: { notify_chat: false } }),
         // An onboarding step the phone counts.
         'POST /api/funnel-event': () => ({ event: 'guide_complete', variant: 'sw' }),
+        // ── the signer's own things (OWN_STATE): bodies that reach each write, so Alice's changes something ──
+        // Bob added as a friend, then taken off again.
+        'POST /api/friends/add': () => ({ friendPubkey: bob.pk }),
+        'POST /api/friends/remove': () => ({ friendPubkey: bob.pk }),
+        // Carol blocked, the list cleared; and one block taken off (Alice has one to take off: cleared just before).
+        'POST /api/blocks': () => ({ targetPubkey: carol.pk }),
+        'POST /api/blocks/clear': () => ({}),
+        'POST /api/blocks/remove': (x) => { if (x === alice) addBlocks(alice.pk, [carol.pk]); return { targetPubkey: carol.pk }; },
+        // Alice's topic followed, and read to its second post (Bob's reply).
+        'POST /api/forum/topics/:id/follow': () => ({ follow: 'following' }),
+        'POST /api/forum/topics/:id/read': () => ({ upTo: 2 }),
+        // The bell cleared: the signer's own notices only (Alice's say Kim and the knockers asked to join).
+        'POST /api/notices/push/seen': () => ({ all: true }),
     };
     const unservedBodies = Object.keys(BODIES).filter(r => !writes.includes(r));
     assert(unservedBodies.length === 0, `every body written for a route is for one the node serves, so none goes unsent${unservedBodies.length ? ` — not served: ${unservedBodies.join(', ')}` : ''}`);
@@ -762,7 +802,8 @@ async function main(): Promise<void> {
             const m = await measure(route, alice, true);
             if (m.changed.length || m.left.length) reached.push(route);
         }
-        console.log(`  (Alice's same body changed something on ${reached.length} writes: ${reached.join(', ')})`);
+        console.log(`  (Alice's same body changed something or called out on ${reached.length} writes, `
+            + `${reached.filter(r => STRANGER_REFUSED.has(r)).length} of them refused to a stranger: ${reached.join(', ')})`);
         // 59 when this suite was written (18 Nov 2026); the floor leaves room for routes that change, not for bodies that miss.
         assert(reached.length >= 45, `the member the bodies name, signing them, changes something on ${reached.length} of the ${writes.length} writes `
             + '(at least 45): the bodies reach real data');
@@ -771,7 +812,17 @@ async function main(): Promise<void> {
             'POST /api/join/knocks/:id/approve', 'POST /api/marketplace/polls/vote', 'POST /api/knowledge/posts', 'DELETE /api/groups/:id/posts/:postId']) {
             assert(reached.includes(must), `among them ${must}, which the stranger sweeps sent the same body to`);
         }
-        // And the snapshot sees a stranger's row: one planted, in a table no route above wrote.
+        // The class the three found in review slipped through (a stranger's push switches, the node's TikTok relay, the funnel
+        // count): a write that keeps the signer's own things, where BAIT never reached the write. Each such write has a body
+        // here that does, so Alice's same body changes something, or it says why it can't.
+        const ownUnserved = Object.keys(OWN_STATE).filter(r => !STRANGER_REFUSED.has(r));
+        assert(ownUnserved.length === 0, `every write listed as keeping the signer's own things is one a stranger is refused${ownUnserved.length ? ` — not: ${ownUnserved.join(', ')}` : ''}`);
+        const ownMissed = Object.entries(OWN_STATE).filter(([r, why]) => why === REACHED && !reached.includes(r)).map(([r]) => r);
+        const ownReached = Object.values(OWN_STATE).filter(why => why === REACHED).length;
+        assert(ownMissed.length === 0, `each of the ${ownReached} writes that keep the signer's own things and are reached here changed something for Alice, `
+            + `so a stranger's "nothing changed" on them is a refusal (${Object.keys(OWN_STATE).length - ownReached} more say why they can't be)`
+            + `${ownMissed.length ? ` — not reached: ${ownMissed.join(', ')}` : ''}`);
+        // And the snapshot sees a stranger's row: one planted by hand.
         const before = snapshot();
         db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(newId().pk, alice.pk);
         assert(changedTables(before, snapshot()).includes('friends'), 'a row a stranger added would be seen: the snapshot names its table');

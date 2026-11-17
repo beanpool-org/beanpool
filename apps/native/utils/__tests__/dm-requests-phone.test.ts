@@ -277,7 +277,7 @@ describe('MessageRequestsPane on phone', () => {
 
         fireEvent.click(screen.getByTestId('request-accept'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
-        expect(alerts.said[0].title).toBe('This community is read-only for now.');
+        expect(alerts.said[0]).toMatchObject({ title: 'Message requests', body: 'This community is read-only for now.' });
         expect(onChanged).not.toHaveBeenCalled();
     });
 
@@ -286,14 +286,14 @@ describe('MessageRequestsPane on phone', () => {
         renderCard();
         fireEvent.click(screen.getByTestId('request-accept'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
-        expect(alerts.said[0].title).toBe('Connect to your community to accept or decline.');
+        expect(alerts.said[0]).toMatchObject({ title: 'Message requests', body: 'Connect to your community to accept or decline.' });
         cleanup();
 
         dbMocks.decideMessageRequest.mockRejectedValueOnce(new Error('Network request failed'));
         renderCard();
         fireEvent.click(screen.getByTestId('request-decline'));
         await waitFor(() => expect(alerts.said.length).toBe(2));
-        expect(alerts.said[1].title).toBe('Connect to your community to accept or decline.');
+        expect(alerts.said[1]).toMatchObject({ title: 'Message requests', body: 'Connect to your community to accept or decline.' });
     });
 
     // Review 4399651364: blockUser answers false rather than throwing (no account on the phone, the list not written, the
@@ -344,8 +344,8 @@ describe('MessageRequestsPane on phone', () => {
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
         expect(blockMocks.blockUser).not.toHaveBeenCalled();
-        expect(alerts.said[0].title).toBe('Busy right now. Try again in a moment.');
-        expect(alerts.said[0].title).not.toMatch(/lot of reports|blocked/);
+        expect(alerts.said[0]).toMatchObject({ title: 'Not sent', body: 'Busy right now. Try again in a moment.' });
+        expect(`${alerts.said[0].title} ${alerts.said[0].body}`).not.toMatch(/lot of reports|blocked/i);
         expect(onChanged).not.toHaveBeenCalled();
         expect(screen.getByTestId('request-report')).toBeTruthy();
     });
@@ -356,14 +356,14 @@ describe('MessageRequestsPane on phone', () => {
         renderCard({ onChanged });
         fireEvent.click(screen.getByTestId('request-accept'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
-        expect(alerts.said[0].title).toBe('Busy right now. Try again in a moment.');
+        expect(alerts.said[0]).toMatchObject({ title: 'Message requests', body: 'Busy right now. Try again in a moment.' });
         cleanup();
 
         dbMocks.decideMessageRequest.mockRejectedValueOnce(busyError(null));
         renderCard({ onChanged });
         fireEvent.click(screen.getByTestId('request-decline'));
         await waitFor(() => expect(alerts.said.length).toBe(2));
-        expect(alerts.said[1].title).toBe('Busy right now. Try again in a moment.');
+        expect(alerts.said[1]).toMatchObject({ title: 'Message requests', body: 'Busy right now. Try again in a moment.' });
         expect(onChanged).not.toHaveBeenCalled();
     });
 
@@ -374,7 +374,7 @@ describe('MessageRequestsPane on phone', () => {
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
         expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey');
-        expect(alerts.said[0].title).toBe('You have sent a lot of reports recently, so this one did not go. They are blocked.');
+        expect(alerts.said[0]).toMatchObject({ title: 'User Blocked', body: 'You have sent a lot of reports recently, so this one did not go. They are blocked.' });
         alerts.said[0].buttons?.[0].onPress();
         await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     });
@@ -387,7 +387,7 @@ describe('MessageRequestsPane on phone', () => {
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
         expect(blockMocks.isUserBlocked).toHaveBeenCalledWith('bob-pubkey');
-        expect(alerts.said[0].title).toBe('Reported, but not blocked. Please try again.');
+        expect(alerts.said[0]).toMatchObject({ title: 'Reported', body: 'Reported, but not blocked. Please try again.' });
         expect(onChanged).not.toHaveBeenCalled();
     });
 
@@ -406,7 +406,7 @@ describe('MessageRequestsPane on phone', () => {
         await waitFor(() => expect(alerts.said.length).toBe(1));
         expect(dbMocks.reportDmLine).not.toHaveBeenCalled();
         expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Harassment');
-        expect(alerts.said[0].title).toBe('That message was deleted, so your report of them goes without its words. They are blocked.');
+        expect(alerts.said[0]).toMatchObject({ title: 'User Blocked', body: 'That message was deleted, so your report of them goes without its words. They are blocked.' });
         alerts.said[0].buttons?.[0].onPress();
         await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     });
@@ -431,7 +431,7 @@ describe('MessageRequestsPane on phone', () => {
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
         expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Harassment');
-        expect(alerts.said[0].title).toBe('Your community did not take that message, so your report of them goes without its words. They are blocked.');
+        expect(alerts.said[0]).toMatchObject({ title: 'User Blocked', body: 'Your community did not take that message, so your report of them goes without its words. They are blocked.' });
         alerts.said[0].buttons?.[0].onPress();
         await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     });
@@ -444,7 +444,7 @@ describe('MessageRequestsPane on phone', () => {
         await reportFrom(onChanged);
         fireEvent.click(await screen.findByTestId('report-sheet-submit'));
         await waitFor(() => expect(alerts.said.length).toBe(1));
-        expect(alerts.said[0].title).toBe('That did not go through. Please try again.');
+        expect(alerts.said[0]).toMatchObject({ title: 'Not sent', body: 'That did not go through. Please try again.' });
         expect(onChanged).not.toHaveBeenCalled();
     });
 
@@ -551,7 +551,8 @@ describe('MessageRequestsPane on phone', () => {
 
         fireEvent.click(ignoreAllBtn);
         expect(alerts.said.length).toBe(1);
-        expect(alerts.said[0].title).toContain('Decline all 6 requests?');
+        expect(alerts.said[0].title).toBe('Message requests');
+        expect(alerts.said[0].body).toContain('Decline all 6 requests?');
 
         // Confirm ignore all
         const confirmBtn = alerts.said[0].buttons?.find(b => b.text === 'Decline all');

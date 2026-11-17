@@ -50,6 +50,7 @@ import {
     abandonRekey, askRekey, beginRekey, cleanRekeyCode, endsRekey, finishRekey, isBringBackCode, openBringBack, parseRekeyLink, pollRekey,
     rekeyCommunityUrl, resumeRekey, REKEY_POLL_MS, REKEY_TEXT, RekeyHeldError, type RekeyAnswer, type RekeyDeps, type RekeySlot,
 } from '../utils/rekey-redeem';
+import { twoParagraphs } from '../utils/alert-words';
 
 type Phase = 'form' | 'asking' | 'waiting' | 'holding' | 'words' | 'linkAgain' | 'broughtBack' | 'ended';
 
@@ -412,7 +413,8 @@ export default function RekeyCodeScreen() {
     // The way out when an earlier ask can't be checked: its record and key go, after one warning.
     const forgetHeld = () => {
         if (!heldHost) return;
-        Alert.alert(t('Forget the re-key at {host}?', { host: heldHost }), t('If an admin at {host} has typed the number this phone showed, or types it later, your account there moves to a key this phone will no longer have. Only a new code from them gets you back in.', { host: heldHost }), [
+        // The address in the message: a title is cut at two lines.
+        Alert.alert(t('Re-key code'), twoParagraphs(t('Forget the re-key at {host}?', { host: heldHost }), t('If an admin at {host} has typed the number this phone showed, or types it later, your account there moves to a key this phone will no longer have. Only a new code from them gets you back in.', { host: heldHost })), [
             { text: t('Keep it'), style: 'cancel' },
             { text: t('Forget it'), style: 'destructive', onPress: async () => { await abandonRekey(deps); setHeldHost(null); setError(null); } },
         ]);

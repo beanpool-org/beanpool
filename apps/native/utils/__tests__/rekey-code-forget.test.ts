@@ -159,7 +159,9 @@ describe('the re-key screen, when an earlier ask showed a number (#1783 reviews 
         await press(forget);
         expect(fake.alerts).toHaveLength(1);
         const alert = fake.alerts[0];
-        expect(alert.title).toBe(`Forget the re-key at ${MULLUM}?`);
+        // A short title; the question, with the address, leads the message (a title is cut at two lines).
+        expect(alert.title).toBe('Re-key code');
+        expect(alert.message?.startsWith(`Forget the re-key at ${MULLUM}?\n\n`)).toBe(true);
         // The warning says what a later number does, not only an earlier one.
         expect(alert.message).toMatch(/has typed the number this phone showed, or types it later/);
         expect(alert.buttons?.map((b) => [b.text, b.style])).toEqual([['Keep it', 'cancel'], ['Forget it', 'destructive']]);

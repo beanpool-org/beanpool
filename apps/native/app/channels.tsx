@@ -83,6 +83,7 @@ import {
     type PulseOAuthConfig,
     PulseOAuthError,
 } from '../utils/pulse-oauth';
+import { twoParagraphs } from '../utils/alert-words';
 
 interface Channel {
     id: string;
@@ -245,10 +246,10 @@ export default function ChannelsScreen() {
                 // among more than the two it mentions.
                 const several = others.length > 1;
                 Alert.alert(
-                    several ? t('You post video in more than one place') : t('You post video in two places'),
-                    t("If you put the same videos on {platform} and {other}, they'd show up twice on the feed.\n\nWhich should the feed use?", {
+                    t('Channels & Showcase'),
+                    twoParagraphs(several ? t('You post video in more than one place') : t('You post video in two places'), t("If you put the same videos on {platform} and {other}, they'd show up twice on the feed.\n\nWhich should the feed use?", {
                         platform: platformName(platform), other: platformName(rival.platform),
-                    }),
+                    })),
                     [
                         {
                             text: label(platform, data.channel?.supportsAutolist === true),

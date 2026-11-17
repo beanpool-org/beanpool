@@ -42,6 +42,7 @@ import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
+import { twoParagraphs } from '../utils/alert-words';
 
 /**
  * Shown when the active community is reachable but definitively does NOT recognise this identity as a member, or has
@@ -288,10 +289,10 @@ export default function NodeMismatchScreen() {
     function handleConfirmWipe() {
         const hasWords = hasMnemonic(identity);
         Alert.alert(
-            t('Delete this account from this phone?'),
-            hasWords
+            t('Delete'),
+            twoParagraphs(t('Delete this account from this phone?'), hasWords
                 ? t('Only do this if you have written your 12 words down. They are the only way back in, apart from a sign-in account linked on a community that holds a recovery piece for you.\n\n{line}', { line: keyLineWords(NO_OTHER_COMMUNITY_LINE) })
-                : t('{noWords}\n\n{line}\n\nSwitching communities is almost certainly what you want instead.', { noWords: settingsLineWords(noWordsBeforeWipe()), line: keyLineWords(NO_OTHER_COMMUNITY_LINE) }),
+                : t('{noWords}\n\n{line}\n\nSwitching communities is almost certainly what you want instead.', { noWords: settingsLineWords(noWordsBeforeWipe()), line: keyLineWords(NO_OTHER_COMMUNITY_LINE) })),
             [
                 { text: t('Cancel'), style: 'cancel' },
                 {

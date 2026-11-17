@@ -15,6 +15,7 @@ import { manageNode, NO_DEVICE_LOCK_MESSAGE, type ManageOutcome, type SettingsSe
 import { t, word, type WordKey } from '@beanpool/core';
 import { settingsLineWords } from './settings/settings-lines';
 import type { BeanPoolIdentity } from '../utils/identity';
+import { twoParagraphs } from '../utils/alert-words';
 
 /**
  * utils/node-admin.ts signs the sign-in with the member's key, so it never reaches the words layer: its own sentences are
@@ -71,11 +72,11 @@ export function useManageNode(account?: BeanPoolIdentity | null) {
                 return; // They cancelled, or the phone said no. Nothing to explain.
             case 'refused':
                 setTotp(null);
-                Alert.alert(t("Can't open {name}'s settings", { name: communityName }), manageLineWords(out.message));
+                Alert.alert(t('Settings'), twoParagraphs(t("Can't open {name}'s settings", { name: communityName }), manageLineWords(out.message)));
                 return;
             case 'error':
                 setTotp(null);
-                Alert.alert(t("Can't open {name}'s settings", { name: communityName }), manageLineWords(out.message));
+                Alert.alert(t('Settings'), twoParagraphs(t("Can't open {name}'s settings", { name: communityName }), manageLineWords(out.message)));
                 return;
         }
     };

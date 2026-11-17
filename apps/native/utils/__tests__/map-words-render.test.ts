@@ -440,7 +440,7 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         await click(byLabel(xx('Add photo')), 'Add photo');
         expect(said()).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Browse files')]);
         await pressAlert(xx('Camera'));
-        expect(said().at(-1)).toBe(xx('Permission needed'));
+        expect(said().slice(-2)).toEqual([xx('Permission needed'), xx('Camera access is needed.')]);
         // My location, refused, then a phone that can't find itself.
         alerts.said.length = 0;
         await click(buttonHolding(xx('My location')), 'My location');

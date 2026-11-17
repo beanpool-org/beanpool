@@ -638,14 +638,14 @@ describe('after a re-key (slice C6): the old list, and the people chatted with',
         await answer('Delete it');
         expect(mem.formerDeleted).toBe(1);
         expect(host.querySelector('[data-testid="contacts-former"]')).toBeTruthy();
-        expect(mem.alerts[mem.alerts.length - 1]?.[0]).toBe("Some of your communities didn't answer. Your old contacts list is still kept there. Try again later.");
+        expect(mem.alerts[mem.alerts.length - 1]?.slice(0, 2)).toEqual(['Not deleted', "Some of your communities didn't answer. Your old contacts list is still kept there. Try again later."]);
         // Gone here but another community silent: the notice goes, and the member is still told.
         mem.alerts.length = 0;
         mem.deleteAnswer = { here: true, complete: false };
         await press('Delete it');
         await answer('Delete it');
         expect(host.querySelector('[data-testid="contacts-former"]')).toBeNull();
-        expect(mem.alerts[mem.alerts.length - 1]?.[0]).toBe("Some of your communities didn't answer. Your old contacts list is still kept there. Try again later.");
+        expect(mem.alerts[mem.alerts.length - 1]?.slice(0, 2)).toEqual(['Not deleted', "Some of your communities didn't answer. Your old contacts list is still kept there. Try again later."]);
         // Mutation: hide on `complete` alone → the second Delete leaves the notice up for a copy that is gone here.
     });
 

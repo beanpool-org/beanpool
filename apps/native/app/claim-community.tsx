@@ -50,6 +50,7 @@ import {
 import type { JoinKey } from '../utils/door-key';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { numberNudge, numberOnlyAddress, registrarNameOf } from '../utils/address-follow';
+import { twoParagraphs } from '../utils/alert-words';
 
 export { ErrorBoundary };
 
@@ -406,7 +407,10 @@ export default function ClaimCommunityScreen() {
             communitySwitched();
             setIsAnchor(true);
         } catch (e: any) {
-            Alert.alert(named ? t("Couldn't switch to {name}", { name: named }) : t("Couldn't switch to this community"), e?.message ? keyLineWords(e.message) : t('Try again.'));
+            Alert.alert(
+                t("Couldn't switch community"),
+                twoParagraphs(named ? t("Couldn't switch to {name}", { name: named }) : t("Couldn't switch to this community"), e?.message ? keyLineWords(e.message) : t('Try again.')),
+            );
         } finally {
             setSwitching(false);
         }

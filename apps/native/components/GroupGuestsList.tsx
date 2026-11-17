@@ -13,6 +13,7 @@ import { MemberAvatar } from './MemberAvatar';
 import { fetchGroupGuests, inviteGroupGuest, removeGroupGuest, type GroupGuest } from '../utils/guest-chat-live';
 import { outsideErrorWords } from '../utils/outside-chat-live';
 import { Alert } from '../utils/keyboard-alert';
+import { twoParagraphs } from '../utils/alert-words';
 
 const W = GUEST_CHAT_WORDS;
 
@@ -63,7 +64,8 @@ export function GroupGuestsList({ groupId, isConvenor, reloadKey = 0 }: Props) {
     const remove = (g: GroupGuest) => {
         if (busy) return;
         const name = guestNameLine(g.name, g.home);
-        Alert.alert(t(W.removeAsk, { name }), g.state === 'invited' ? t(W.removeWhatAsked) : t(W.removeWhatIn), [
+        // The guest line in the message: "Sol · riverside.example · guest" is longer than a title's two lines (walk 17 Nov).
+        Alert.alert(t(W.remove), twoParagraphs(t(W.removeAsk, { name }), g.state === 'invited' ? t(W.removeWhatAsked) : t(W.removeWhatIn)), [
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t(W.remove), style: 'destructive',

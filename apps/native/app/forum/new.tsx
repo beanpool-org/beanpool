@@ -57,7 +57,7 @@ export default function NewForumTopicScreen() {
     const photosOk = !!front && (front.linksOn || front.firstTopicWaits);
     const full = photos.length >= FORUM_LIMITS.photos;
     async function attach() {
-        if (full) { Alert.alert(t('At most {n} photos.', { n: FORUM_LIMITS.photos })); return; }
+        if (full) { Alert.alert(t('Photos'), t('At most {n} photos.', { n: FORUM_LIMITS.photos })); return; }
         const photo = await pickForumPhoto();
         if (photo) setPhotos((now) => (now.length < FORUM_LIMITS.photos ? [...now, photo] : now));
     }

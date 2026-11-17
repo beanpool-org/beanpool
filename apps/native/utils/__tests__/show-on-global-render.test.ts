@@ -520,7 +520,8 @@ describe('the door on a copy (slice GD)', () => {
             await press('take-questions-tick');
             expect(calls.take).toHaveBeenCalledWith('home-1', false, world.identity);
             expect(calls.noted).not.toHaveBeenCalled();
-            expect((globalThis as any).__alerts).toEqual([[LABEL, 'It stops later']]);
+            // A short title (the tick's own label is 49 characters, cut at two lines on a small phone); the words in the message.
+            expect((globalThis as any).__alerts).toEqual([['Global community', 'It stops later']]);
             expect(byId('take-questions-tick')!.getAttribute('aria-checked')).toBe('false');
         });
 
@@ -529,7 +530,7 @@ describe('the door on a copy (slice GD)', () => {
             calls.take.mockImplementation(async () => ({ refused: 'Not while muted.' }));
             await draw(createElement(ShowOnGlobalHostRow, { event: EVENT as any, enabled: true, listing: true }));
             await press('take-questions-tick');
-            expect((globalThis as any).__alerts).toEqual([[LABEL, 'Not while muted.']]);
+            expect((globalThis as any).__alerts).toEqual([['Global community', 'Not while muted.']]);
         });
 
         it('the composer\'s tick goes with the listing, and a plain one sends none and marks nothing', async () => {

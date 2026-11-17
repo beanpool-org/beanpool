@@ -242,7 +242,7 @@ for (const dark of [false, true]) {
 
             await click(block, 'Block');
             expect(alerts.said).toEqual([
-                `Block ${NAME}?`,
+                'Block',
                 `This will instantly hide all posts, offers, and messages from ${NAME}, and notify moderation.`,
                 'Cancel', 'Block',
             ]);
@@ -300,7 +300,7 @@ describe('the "…" menu in the pseudo-locale: every word through t()', () => {
         await click(byLabel(xx('More options')), 'More options');
         await click(byLabel(xx('Block {name}', { name: NAME })), 'Block');
         expect(alerts.said).toEqual([
-            xx('Block {name}?', { name: NAME }),
+            xx('Block'),
             xx('This will instantly hide all posts, offers, and messages from {name}, and notify moderation.', { name: NAME }),
             xx('Cancel'), xx('Block'),
         ]);

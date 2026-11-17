@@ -325,11 +325,12 @@ describe("part 2: the guest's Leave and a convenor's Remove, each asked first", 
         await openGuests(true);
         act(() => (host.querySelectorAll('[data-testid="group-guest-remove"]')[0] as HTMLButtonElement).click());
         let asked = await lastAsked();
-        expect([asked.title, asked.words]).toEqual(['Remove Dax · eastside.example · guest?', 'Nothing more of this chat reaches them. What they already have stays with them.']);
+        // A short title; the guest line in the message, where it wraps (a title is cut at two lines: walk 17 Nov).
+        expect([asked.title, asked.words]).toEqual(['Remove', 'Remove Dax · eastside.example · guest?\n\nNothing more of this chat reaches them. What they already have stays with them.']);
         expect(live.removeGroupGuest).not.toHaveBeenCalled();
         act(() => (host.querySelectorAll('[data-testid="group-guest-remove"]')[1] as HTMLButtonElement).click());
         asked = await lastAsked();
-        expect([asked.title, asked.words]).toEqual(['Remove Me · hillside.example · guest?', 'Their invitation is withdrawn.']);
+        expect([asked.title, asked.words]).toEqual(['Remove', 'Remove Me · hillside.example · guest?\n\nTheir invitation is withdrawn.']);
         await asked.press('Remove');
         expect(live.removeGroupGuest).toHaveBeenCalledWith('grp-tools', ME);
         expect(q('group-guest-note')?.textContent).toBe('Removed. Their community is told.');

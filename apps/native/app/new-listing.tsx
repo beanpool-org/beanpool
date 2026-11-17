@@ -64,6 +64,7 @@ import {
     marketShowsBeans, postFormPrice_c, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, postFormRules, composerNeedsProfilePhoto,
     NO_BEANS_EDIT_NOTE,
 } from '../utils/market-global';
+import { twoParagraphs } from '../utils/alert-words';
 
 const CATEGORIES = POST_CATEGORIES;
 /** A line kept as word() in utils/market-global.ts, shown here in the member's language. */
@@ -729,7 +730,7 @@ export default function NewListingScreen() {
                 // Made from a topic: linked to it (the listing stands whatever the answer), then back to the topic, read again.
                 const refused = await linkPostedNeed(seed.topicId, made?.post?.id ?? newId);
                 noteNeedLinked(seed.topicId);
-                if (refused !== null) Alert.alert(t(LINK_WORDS.needNotLinked), refused || undefined);
+                if (refused !== null) Alert.alert(t('Not linked'), refused ? twoParagraphs(t(LINK_WORDS.needNotLinked), refused) : t(LINK_WORDS.needNotLinked));
                 resetNewPost();
                 setShowNewPost(false);
                 setPosting(false);

@@ -34,6 +34,7 @@ import { shopStateLine, shopTitle } from '../../utils/shop';
 import {
     featuredOf, messageLabel, readShopListingsForReader, readShopPage, shopSectionsOf, sinceLine, type ShopfrontListing, type ShopPageRead,
 } from '../../utils/shopfront';
+import { twoParagraphs } from '../../utils/alert-words';
 
 export default function ShopPageScreen() {
     const { colors } = useTheme();
@@ -74,7 +75,7 @@ export default function ShopPageScreen() {
         setMessaging(true);
         try {
             if (await isUserBlocked(shop.ownerPublicKey)) {
-                Alert.alert(t('You have blocked {name}', { name: shop.ownerName }), t('Unblock them from their profile to write to them.'));
+                Alert.alert(t('User Blocked'), twoParagraphs(t('You have blocked {name}', { name: shop.ownerName }), t('Unblock them from their profile to write to them.')));
                 return;
             }
             const conv = await createConversationApi('dm', [identity.publicKey, shop.ownerPublicKey], identity.publicKey);

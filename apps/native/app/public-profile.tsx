@@ -949,7 +949,7 @@ export default function PublicProfileScreen() {
         // Whole sentences with the member's name or without it ("this user"), never a stand-in glued into a sentence.
         const name = callsignStr;
         Alert.alert(
-            name ? t('Block {name}?', { name }) : t('Block this user?'),
+            t('Block this user?'),
             name
                 ? t('This will instantly hide all posts, offers, and messages from {name}, and notify moderation.', { name })
                 : t('This will instantly hide all posts, offers, and messages from this user, and notify moderation.'),

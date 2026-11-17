@@ -237,8 +237,8 @@ export function ShowOnGlobalHostRow({ event, enabled, listing = false }: { event
             const { questionsLaterLine, takeQuestions } = await import('../utils/show-on-global');
             if (on) await (await import('../utils/global-requests')).noteQuestionsOpened(identity.publicKey);
             const result = await takeQuestions(event.id, on, identity);
-            if (result === 'later') Alert.alert(takeQuestionsLabel(), on ? t('It will go up on the global community as soon as it can.') : questionsLaterLine());
-            else if (typeof result === 'object') Alert.alert(takeQuestionsLabel(), result.refused);
+            if (result === 'later') Alert.alert(t('Global community'), on ? t('It will go up on the global community as soon as it can.') : questionsLaterLine());
+            else if (typeof result === 'object') Alert.alert(t('Global community'), result.refused);
         } finally {
             read();
             setBusy(false);

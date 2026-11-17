@@ -80,7 +80,7 @@ export default function GuestChatScreen() {
             atBottomRef.current = true;
             toNewest();
         } catch (e) {
-            Alert.alert(outsideErrorWords(e));
+            Alert.alert(t('Not sent'), outsideErrorWords(e));
         } finally {
             setBusy(false);
             void load();
@@ -95,7 +95,7 @@ export default function GuestChatScreen() {
             if (!yes) { router.back(); return; }
             void syncGuestMailNow().then(load);
         } catch (e) {
-            Alert.alert(outsideErrorWords(e, false));
+            Alert.alert(t('Not sent'), outsideErrorWords(e, false));
         } finally {
             setBusy(false);
             void load();
@@ -114,7 +114,7 @@ export default function GuestChatScreen() {
                     try {
                         await leaveGuestChatNow(chat.id);
                     } catch (e) {
-                        Alert.alert(outsideErrorWords(e, false));
+                        Alert.alert(t('Not sent'), outsideErrorWords(e, false));
                     } finally {
                         setBusy(false);
                         void load();

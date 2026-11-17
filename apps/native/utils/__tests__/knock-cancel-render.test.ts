@@ -155,8 +155,9 @@ const byTestId = (host: HTMLElement, id: string) => host.querySelector(`[data-te
 async function cancelVia(button: HTMLElement): Promise<void> {
     await act(async () => { button.click(); });
     const ask = alerts.said.at(-1)!;
-    expect(ask.title).toBe('Cancel your request to join Mullumbimby?');
-    expect(ask.body).toBe('You can ask again after 24 hours.');
+    // A short title; the question, with the community's name, leads the message (a title is cut at two lines).
+    expect(ask.title).toBe('Cancel request');
+    expect(ask.body).toBe('Cancel your request to join Mullumbimby?\n\nYou can ask again after 24 hours.');
     expect(ask.buttons?.map(b => b.text)).toEqual(['Keep it', 'Cancel my request']);
     await act(async () => { await ask.buttons![1].onPress!(); });
     for (let i = 0; i < 3; i++) await act(async () => {});

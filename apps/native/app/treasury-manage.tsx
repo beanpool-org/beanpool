@@ -42,6 +42,7 @@ import { readEnterpriseOffers, type ShopListing } from '../utils/shop';
 import { shopCategoryOf } from '../utils/shopfront';
 import { leadsIt, mayManage, notKeeperLine } from '../utils/enterprise-manage';
 import { decodeThreadMessage, removedLine } from '../utils/enterprise-thread';
+import { twoParagraphs } from '../utils/alert-words';
 
 type LifecycleAction = 'pause' | 'resume' | 'windUp' | 'cancelWindUp' | 'finaliseWindUp';
 
@@ -479,7 +480,7 @@ export default function TreasuryManageScreen() {
 
     const handleRemoveKeeper = (k: any) => {
         if (!treasuryKey || processingChangeId) return;
-        Alert.alert(t('Remove {name}?', { name: k.callsign }), removeKeeperConfirmText(k, kw), [
+        Alert.alert(t('Remove'), removeKeeperConfirmText(k, kw), [
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t('Remove'), style: 'destructive', onPress: async () => {
@@ -548,8 +549,8 @@ export default function TreasuryManageScreen() {
     const handleCancelInitiative = () => {
         if (!treasuryKey || cancelling) return;
         Alert.alert(
-            t('Cancel Initiative & Refund Backers?'),
-            t('This will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account\'s beans did, and everyone else\'s still goes back to them.'),
+            t('Cancel & Refund'),
+            twoParagraphs(t('Cancel Initiative & Refund Backers?'), t('This will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account\'s beans did, and everyone else\'s still goes back to them.')),
             [
                 { text: t('Keep Initiative'), style: 'cancel' },
                 {

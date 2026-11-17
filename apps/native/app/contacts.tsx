@@ -134,7 +134,7 @@ export default function ContactsScreen() {
             await editContacts(identity, fn);
             return true;
         } catch {
-            Alert.alert(t("Couldn't save your contacts on this phone. Try again."));
+            Alert.alert(t('Not saved'), t("Couldn't save your contacts on this phone. Try again."));
             return false;
         } finally {
             setBusy(false);
@@ -154,7 +154,7 @@ export default function ContactsScreen() {
                         try {
                             if (await setAsideDamaged(identity)) await syncContacts(identity);
                         } catch {
-                            Alert.alert(t("Couldn't save your contacts on this phone. Try again."));
+                            Alert.alert(t('Not saved'), t("Couldn't save your contacts on this phone. Try again."));
                         } finally {
                             setBusy(false);
                         }
@@ -182,7 +182,7 @@ export default function ContactsScreen() {
                     const added = await importChosen(identity, chosen);
                     setScreen({ kind: 'done', added, fromPhone: screen.read.fromPhone });
                 } catch {
-                    Alert.alert(t("Couldn't save your contacts on this phone. Try again."));
+                    Alert.alert(t('Not saved'), t("Couldn't save your contacts on this phone. Try again."));
                 } finally {
                     setBusy(false);
                 }
@@ -251,12 +251,12 @@ export default function ContactsScreen() {
             const [chats, friends] = await Promise.all([getChattedWithMembers(identity.publicKey), getFriendsLocal(identity.publicKey)]);
             people = [...chats, ...friends].map((p: { publicKey?: unknown; callsign?: unknown }) => ({ key: String(p.publicKey ?? ''), callsign: String(p.callsign ?? '') }));
         } catch {
-            Alert.alert(addPeopleWords.unread());
+            Alert.alert(t('Contacts'), addPeopleWords.unread());
             return;
         }
         const n = peopleToAdd(list ?? emptyContactsList(), people, identity.publicKey).length;
-        if (n === 0) { Alert.alert(addPeopleWords.row(), addPeopleWords.none()); return; }
-        Alert.alert(addPeopleWords.row(), addPeopleWords.ask(n, communityLabel(view, anchor)), [
+        if (n === 0) { Alert.alert(t('Contacts'), addPeopleWords.none()); return; }
+        Alert.alert(t('Contacts'), addPeopleWords.ask(n, communityLabel(view, anchor)), [
             { text: t('Cancel'), style: 'cancel' },
             { text: addPeopleWords.yes(n), onPress: () => { void change((l) => withPeopleAdded(l, people, identity.publicKey, anchor)); } },
         ]);
@@ -267,7 +267,7 @@ export default function ContactsScreen() {
             const held = l.contacts.find((x) => x.id === c.id);
             return held ? putContact(l, yes ? linkContactToInvite(held, used) : forgetContactInvite(held)) : l;
         });
-        if (done && !yes) Alert.alert(contactInviteNoWords());
+        if (done && !yes) Alert.alert(t('Not linked'), contactInviteNoWords());
     };
     return shell(t('Contacts'), <>
         <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
@@ -316,7 +316,7 @@ function saveFile(list: ContactsList | null) {
     if (!list) return;
     Alert.alert(t('Save a copy as a file (.vcf)'), t('This file is not locked. Anyone who has it can read it. Keep it somewhere safe.'), [
         { text: t('Cancel'), style: 'cancel' },
-        { text: t('Save'), onPress: () => { shareContactsFile(list).catch(() => Alert.alert(t("Couldn't save the file. Try again."))); } },
+        { text: t('Save'), onPress: () => { shareContactsFile(list).catch(() => Alert.alert(t('Not saved'), t("Couldn't save the file. Try again."))); } },
     ]);
 }
 
@@ -386,7 +386,7 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
             const community = communityLabel(view, link.community);
             return (
                 <Pressable accessibilityRole="button" style={styles.btn} onPress={() => Alert.alert(
-                    t('Open {community} ›', { community }),
+                    t('Switch to this community'),
                     t('{name} is in {community}. Switch to {community} to message them?', { name: c.name, community }),
                     // A switch that fails says so, in the words the Communities list uses (useCommunities.switchTo).
                     [{ text: t('Cancel'), style: 'cancel' }, { text: t('Switch'), onPress: () => {
@@ -535,7 +535,7 @@ function FormerNotice({ me, seen }: { me: string; seen: number }) {
         try {
             const r = await deleteFormerCopies(identity);
             if (r.here) setShown(null);
-            if (!r.complete) Alert.alert(formerContactsWords.removeFailed());
+            if (!r.complete) Alert.alert(t('Not deleted'), formerContactsWords.removeFailed());
         } finally {
             setBusy(false);
         }

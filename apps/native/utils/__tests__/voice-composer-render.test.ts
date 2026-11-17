@@ -370,7 +370,8 @@ describe('ChatComposer: the microphone turned on in Settings (PR #3112 review)',
         expoAudioStub.permission = { granted: false, canAskAgain: false, status: 'denied' };
         await reopen();
         await hold();
-        expect(Alert.alert).toHaveBeenCalledWith('The microphone is off for BeanPool', expect.any(String), expect.any(Array));
+        // A short title; the words in the message (a title is cut at two lines on a small phone).
+        expect(Alert.alert).toHaveBeenCalledWith('Permission needed', expect.stringMatching(/^The microphone is off for BeanPool\n\nTo record a voice message/), expect.any(Array));
         expect(expoAudioStub.recorder.isRecording).toBe(false);
         await release();
         // Open Settings, the microphone on, back to BeanPool: the chat was never closed.
@@ -535,7 +536,7 @@ describe('ChatComposer: a hold reaches its own chat only (PR #3112 review, round
         } finally {
             expoAudioStub.recorder.prepareToRecordAsync = prepare;
         }
-        expect(Alert.alert).toHaveBeenCalledWith("The microphone couldn't start. Try again.");
+        expect(Alert.alert).toHaveBeenCalledWith('Something went wrong', "The microphone couldn't start. Try again.");
         expect(voiceAudioHold(OWNER)).toBeNull();
         expect(voiceAudioHold('another-chat')).toBeNull();
         await release();

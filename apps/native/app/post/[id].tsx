@@ -2749,7 +2749,7 @@ function PostDetailModal() {
                                     if (!post?.author_pubkey || isBlocking) return;
                                     const authorName = post.author_callsign;
                                     Alert.alert(
-                                        authorName ? t('Block {name}?', { name: authorName }) : t('Block this user?'),
+                                        t('Block this user?'),
                                         authorName
                                             ? t('This will instantly hide all posts from {name} and notify moderation.', { name: authorName })
                                             : t('This will instantly hide all posts from this user and notify moderation.'),

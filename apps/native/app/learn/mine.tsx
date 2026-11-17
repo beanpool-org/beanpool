@@ -55,7 +55,7 @@ export default function MySuggestionsScreen() {
     useFocusEffect(load);
 
     const takeBack = (d: KnowledgeDraftMine) => {
-        Alert.alert(t(LEARN_WRITE.takeBackAsk), undefined, [
+        Alert.alert(t(LEARN_WRITE.takeBack), t(LEARN_WRITE.takeBackAsk), [
             { text: t(LEARN_WRITE.keep), style: 'cancel' },
             {
                 text: t(LEARN_WRITE.takeBack), style: 'destructive',

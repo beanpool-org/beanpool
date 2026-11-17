@@ -81,7 +81,7 @@ export function GroupInvitedList({ groupId, myPubkey, reloadKey = 0, onChanged }
                         await load();
                         onChanged?.();
                     } catch (e: any) {
-                        Alert.alert(w.failed, e?.message ? signedRequestWords(e.message) : undefined);
+                        Alert.alert(w.failed, e?.message ? signedRequestWords(e.message) : t('Please try again.'));
                         // Refused because things moved on (they joined, or it was declined or withdrawn): read both lists
                         // again, so the person shows where they now are.
                         await load();

@@ -332,7 +332,8 @@ describe('Phone public profile message and friend actions (S0)', () => {
         await act(async () => {
             headerBlock!.click();
         });
-        expect(alerts.said).toContain('Block Kofi?');
+        expect(alerts.said).toContain('Block this user?');
+        expect(alerts.said).toContain('This will instantly hide all posts, offers, and messages from Kofi, and notify moderation.');
         const confirm = alerts.buttons.find(b => b.text === 'Block User');
         alerts.said.length = 0;
         await act(async () => {

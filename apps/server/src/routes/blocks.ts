@@ -2,13 +2,20 @@
  * A member's own block list, kept by the community for the account (engine/member-blocks.ts), so the web app has it back
  * on any browser after signing in and keeps nothing about it in the browser.
  *
- *   GET  /api/blocks                                → { blocked: [{ publicKey, blockedAt }], max }, oldest first
- *   POST /api/blocks        { targetPubkey }        → { success: true, added: [keys], blocked, max }
- *                           { targetPubkeys: [..] } → { success: true, added: [keys], skipped: count, blocked, max }
+ *   GET  /api/blocks                                → { blocked: [{ publicKey, blockedAt }], max, formerKeys }, oldest first
+ *                           (`formerKeys`: { key on the list → the keys a re-key replaced with it }, only keys with any,
+ *                           key-succession.ts rekeyedFromChains: the phone's own copy of the list follows a re-key by it)
+ *   POST /api/blocks        { targetPubkey }        → { success: true, added: [keys], person, blocked, max, formerKeys }
+ *                           { targetPubkeys: [..] } → { success: true, added: [keys], skipped: count, blocked, max, formerKeys }
  *                           (the web app's one-time move of a list it kept in the browser: only keys this node has a
  *                           row for go on the list, and the rest are counted in `skipped`)
- *   POST /api/blocks/remove { targetPubkey }        → { success: true, removed: boolean, blocked, max }
- *   POST /api/blocks/clear                          → { success: true, removed: count, blocked: [], max }
+ *   POST /api/blocks/remove { targetPubkey }        → { success: true, removed: boolean, person, blocked, max, formerKeys }
+ *   POST /api/blocks/clear                          → { success: true, removed: count, blocked: [], max, formerKeys: {} }
+ *
+ *   Every answer is the list as it stands after the change, with `formerKeys`, and a change of one key names the person
+ *   it changed, `person`: every key they are known by here, the key they hold now first (key-succession.ts personKeysOf),
+ *   whether or not they are on the list now. A block is of a person (engine/member-blocks.ts: one row each), and the phone
+ *   keeps its copy of the list as these answers say (apps/native utils/blocklist.ts).
  *
  * ## Only ever the signer's own
  *
@@ -19,7 +26,8 @@
  * and a write, which the middleware does not hold to membership): the read with the read gate's own test, as
  * /api/notices does, and the writes with the act test, answered in the words the middleware answers a visitor's row with.
  * A suspended member keeps and changes their own list. Each answer holds the signer's own list and nothing about anyone
- * else's: whether someone else blocked anyone is never read here.
+ * else's: whether someone else blocked anyone is never read here. The read also names, for a key on the list, the keys a re-key
+ * replaced with it (the community moved the block to the new key), and nothing else about that member.
  *
  * A change rings a bare doorbell (`{ type: 'blocklist_updated' }`) on the signer's own sockets only, so their other tabs
  * and devices read the list again. Nothing goes to anyone else, and nothing is written to the activity feed.
@@ -34,6 +42,7 @@ import { passesReadGate, isNodeMember, getNodeRole, broadcast } from '../state-e
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { listBlocks, addBlocks, addKnownBlocks, removeBlock, clearBlocks, BlockRefusal, MEMBER_BLOCKS_MAX } from '../engine/member-blocks.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
+import { personKeysOf, rekeyedFromChains } from '../engine/key-succession.js';
 import type { RouteDeps } from './types.js';
 import { word } from '@beanpool/core';
 
@@ -65,10 +74,14 @@ function changer(ctx: any): string | undefined {
     return actor;
 }
 
-/** The signer's list as every answer carries it, private. */
+/**
+ * The signer's list as every answer carries it, private: for each key on it, the keys a re-key replaced with it (the
+ * community moved the block to the new key, and a phone's own copy may still name the old one, blocklist.ts).
+ */
 function answer(ctx: any, actor: string, extra: Record<string, unknown> = {}): void {
     ctx.set('Cache-Control', 'private, no-store');
-    ctx.body = { ...extra, blocked: listBlocks(actor), max: MEMBER_BLOCKS_MAX };
+    const blocked = listBlocks(actor);
+    ctx.body = { ...extra, blocked, max: MEMBER_BLOCKS_MAX, formerKeys: rekeyedFromChains(blocked.map(b => b.publicKey)) };
 }
 
 /** The doorbell on the signer's own sockets, after a change. */
@@ -116,7 +129,7 @@ export function createBlockRoutes(_deps: RouteDeps): Router {
             throw e;
         }
         if (result.added.length > 0) ring(actor);
-        answer(ctx, actor, { success: true, ...result });
+        answer(ctx, actor, { success: true, ...result, ...(many === undefined ? { person: personKeysOf(one) } : {}) });
     });
 
     router.post('/api/blocks/remove', async (ctx) => {
@@ -126,7 +139,7 @@ export function createBlockRoutes(_deps: RouteDeps): Router {
         if (!isMemberKeySpelling(target)) return refuse(ctx, 400, BAD_KEY_ERROR, BAD_KEY_CODE);
         const removed = removeBlock(actor, target);
         if (removed) ring(actor);
-        answer(ctx, actor, { success: true, removed });
+        answer(ctx, actor, { success: true, removed, person: personKeysOf(target) });
     });
 
     router.post('/api/blocks/clear', async (ctx) => {

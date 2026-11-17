@@ -269,7 +269,7 @@ vi.mock('../node-post', () => ({
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? NODE,
     signedPost: async () => new Response(JSON.stringify({}), { status: 200 }),
 }));
-vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], unblockUser: async () => {}, clearBlocklist: async () => {}, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
+vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], getBlockedPeople: async () => [], unblockUser: async () => {}, clearBlocklist: async () => {}, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({ 'x-signature': 'sig' }) }));
 vi.mock('../membership-probe', () => ({ fetchMembership: async () => ({ ok: true, json: async () => ({ isMember: true }) }) }));
 vi.mock('../node-admin', () => ({

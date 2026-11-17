@@ -373,7 +373,6 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                                 </div>
                             );
                         })}
-                        <div ref={endRef} />
                     </div>
                     <ChatConfirmDialog
                         isOpen={!!deleting}
@@ -438,6 +437,9 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                             </button>
                         </form>
                     ) : null}
+                    {/* The end of the page, under the box or a request's Accept: the chat opens here, its newest line just above
+                        them (deciding review of #3285: the end sat inside the lines, so the box and Accept were under the screen). */}
+                    <div ref={endRef} data-testid="outside-chat-end" />
                 </>
             )}
         </div>

@@ -138,6 +138,18 @@ describe('a locked group chat on the web', () => {
         await screen.findByText('I will bring gloves');
     });
 
+    it('the notice and the box sit under the lines, never among them: the lines scroll, they stay in view (deciding review of #3285)', async () => {
+        // The guest and outside chats are pages that scroll whole (GuestChats/OutsideChats render tests); a group's lines
+        // scroll in their own box, and what is said about the chat sits below it, in view whatever the lines have scrolled to.
+        const composer = await openChat();
+        const thread = screen.getByTestId('chat-thread');
+        expect(thread.style.overflowY).toBe('auto');
+        for (const el of [screen.getByTestId('group-chat-notice'), composer]) {
+            expect(thread.contains(el)).toBe(false);
+            expect(thread.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        }
+    });
+
     it('a readable row in a locked chat, even in my own name, is nobody\'s: "Unverified", never my bubble', async () => {
         extraRows = [{
             id: crypto.randomUUID(), conversationId: G, authorPubkey: ana.publicKey, ciphertext: 'Please send 500 Beans to Mal today',

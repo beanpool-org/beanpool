@@ -600,8 +600,10 @@ export const ROSTER_FORMER_MAX = 100;
  * in now came in: a line goes only to guests in, so an older one never reached them) and is not in the chat now
  * (`inChat`), by the rule a group line's author is named by (group-thread.ts groupLineAuthorName): a member here by their
  * name; else a guest of this group by their card's name and home, with where they stand (`left`, `removed`, or `invited`
- * again); else nobody (an account deleted: its lines are taken down for the guests too). Only names a guest there already
- * had a line from; a line taken down or a system line names nobody. Names only: none of these keys goes in the roster's
+ * again); else nobody (an account deleted: its lines are taken down for the guests too). Only names a guest of that home
+ * had a line from, not each guest: one roster goes to every guest of a home, so one who came in after a fellow guest from
+ * there may keep, never shown, the name of someone who wrote and left before they came (no line of theirs reached that
+ * device). A line taken down or a system line names nobody. Names only: none of these keys goes in the roster's
  * `members` or `guests`, the keys an epoch wraps to. The newest writers first, ROSTER_FORMER_MAX at most.
  */
 function formerInChat(groupId: string, since: string | undefined, inChat: ReadonlySet<string>): { members: Array<{ key: string; name: string }>; guests: Array<{ key: string; home: string; name: string; state: GuestState }> } {

@@ -113,6 +113,10 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
     // to five lines at 320 dp).
     const [namesOpen, setNamesOpen] = useState(false);
     const alive = useRef(true);
+    // The end of the page: the chat opens there, at its newest line with the box, or why it closed, under it (deciding review
+    // of #3285: the page never scrolled, so in a long chat why it closed sat under every line, out of view). The phone's list
+    // is inverted, so it opens there too.
+    const endRef = useRef<HTMLDivElement | null>(null);
 
     const load = useCallback(async () => {
         const all = await loadGuestChats().catch(() => ({}) as Record<string, GuestChat>);
@@ -178,13 +182,17 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
         }
     };
 
+    // Why it is closed: core's one sentence for each reason the host gives, the same on the phone.
+    const closed = chat ? guestClosedWords(chat) : null;
+    // To the end on opening, on a new line, and when the chat closes while open (no line comes then, but why it closed does).
+    const lineCount = chat?.lines.length ?? 0;
+    useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }); }, [lineCount, closed]);
+
     if (chat === undefined) return <div data-testid="guest-chat" />;
     const viewer = chat ? guestViewerOf(chat) : null;
     const canWrite = !!chat && chat.state === 'in' && viewer !== null && guestAccess(viewer, 'chat') === 'shown';
     // Leave while joining or in; once out there is nothing to leave.
     const canLeave = !!chat && (chat.state === 'in' || chat.state === 'joining');
-    // Why it is closed: core's one sentence for each reason the host gives, the same on the phone.
-    const closed = chat ? guestClosedWords(chat) : null;
     const names = chat?.roster && viewer !== null && guestAccess(viewer, 'roster') === 'shown'
         ? [...chat.roster.members.map((m) => m.name), ...chat.roster.guests.map((g) => guestNameLine(g.name, g.home))].join(', ')
         : null;
@@ -262,7 +270,7 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                                 })}
                             </div>
                             {/* Closed: why, under the newest line where the box was, as on the phone (emulator walk 17 Nov: at
-                                the top, above the lines, it was out of view in a long chat). */}
+                                the top, above the lines, it was out of view in a long chat). The page opens at its end (endRef). */}
                             {closed && (
                                 <p data-testid="guest-chat-closed" style={{ margin: 0, padding: '0.75rem 0 0', borderTop: '1px solid var(--border-primary)', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center', ...wrap }}>
                                     {closed}
@@ -298,6 +306,7 @@ export function GuestChatThread({ chatId, onBack }: { chatId: string; onBack: ()
                             {t(W.leave)}
                         </button>
                     )}
+                    <div ref={endRef} data-testid="guest-chat-end" />
                     <ChatConfirmDialog
                         isOpen={askLeave && canLeave}
                         title={t(W.leaveAsk)}

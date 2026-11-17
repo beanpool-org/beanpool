@@ -325,6 +325,15 @@ async function main(): Promise<void> {
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { resetPasswordBrake } = await import('./password-brake.js');
     const { resetClaimBrake } = await import('./claim-code.js');
+    const { tidyKnocks, startTidyingKnocks } = await import('./engine/knocks.js');
+    const { tidyPushNotices } = await import('./engine/push-notices.js');
+    /**
+     * The node's own tidy-ups, run here between writes, never inside one's window: every knock bells the owners and admins,
+     * and a knocking key's phone and browser stay only while its request is open, so after hundreds of knocks the timers
+     * (the knocks' every minute, the notices' hygiene) would find work to do, and a write they landed beside would look as
+     * though it changed push_notices, push_tokens or web_push_subscriptions. Run first, they find nothing at their tick.
+     */
+    const tidyNow = () => { tidyKnocks(); tidyPushNotices(); };
     /** Every limiter a caller from this one address meets, cleared before each request: this suite asks what a write DOES, never how often. */
     const resetLimits = () => {
         resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); https.resetAdminRateLimit?.(); resetChatRateLimit();
@@ -545,8 +554,12 @@ async function main(): Promise<void> {
     };
     const tableNames = () => (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[])
         .map(t => t.name);
-    /** Every table's row count and a hash of every row, but the bookkeeping ones; node_config key by key. */
-    function snapshot(): Map<string, string> {
+    /**
+     * Every table's row count and a hash of every row, but the bookkeeping ones; node_config key by key. `withoutStamp`: a
+     * member's row without its last-activity stamp, which every write a member signs moves (engine/members.ts
+     * recordActivity, never for a key with no row), so the control below counts only what a write itself changed.
+     */
+    function snapshot(withoutStamp = false): Map<string, string> {
         const out = new Map<string, string>();
         for (const name of tableNames()) {
             if (name in BOOKKEEPING) continue;
@@ -558,7 +571,11 @@ async function main(): Promise<void> {
             }
             const h = crypto.createHash('sha256');
             let n = 0;
-            for (const row of db.prepare(`SELECT * FROM "${name}"`).iterate()) { h.update(JSON.stringify(row)); n++; }
+            for (const row of db.prepare(`SELECT * FROM "${name}"`).iterate() as Iterable<Record<string, unknown>>) {
+                if (withoutStamp && name === 'members') delete row.last_active_at;
+                h.update(JSON.stringify(row));
+                n++;
+            }
             out.set(name, `${n}:${h.digest('hex')}`);
         }
         return out;
@@ -569,15 +586,15 @@ async function main(): Promise<void> {
         [...new Set(differing(a, b).map(t => t.startsWith('node_config.') ? 'node_config' : t))];
 
     /** One write, signed by `signer`: its answer, the tables it changed, the node_config keys among them, and what left the node. */
-    const measure = async (route: string, signer: Id) => {
+    const measure = async (route: string, signer: Id, withoutStamp = false) => {
         const [method, routePath] = route.split(' ') as [Method, string];
         const body = (BODIES[route] ?? bait)(signer);
         resetLimits();
-        const before = snapshot();
+        const before = snapshot(withoutStamp);
         const sent = outside.length;
         const r = await call(method, signer, materialise(routePath), body);
         await settle();
-        const after = snapshot();
+        const after = snapshot(withoutStamp);
         return { r, changed: changedTables(before, after), config: differing(before, after).filter(t => t.startsWith('node_config.')), left: outside.slice(sent) };
     };
     /** What is wrong with one write's outcome, if anything, given what this signer may do on that route. */
@@ -590,6 +607,10 @@ async function main(): Promise<void> {
         if (m.left.length && !allowed?.out) problems.push(`sent ${m.left.join(', ')}`);
         return problems.length ? `${route} → ${show(m.r)}: ${problems.join('; ')}` : null;
     };
+
+    // The knocks' tidy runs here, between writes (tidyNow), not on its minute: restarted with a day's period, it never ticks.
+    startTidyingKnocks(86_400_000);
+    tidyNow();
 
     // ── 2. a fresh key ───────────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. a fresh key with no row here, one per write ──');
@@ -630,8 +651,10 @@ async function main(): Promise<void> {
             const m = await measure(route, id);
             const v = verdict(route, m, KNOCKER_MAY[route] ?? STRANGER_MAY[route]);
             if (v) wrong.push(v);
-            // Its request goes once measured, so the node's limit on open requests is never what answers the next one.
+            // Its request goes once measured, so the node's limit on open requests is never what answers the next one, and
+            // with it (tidied now) its phone and browser, and the owners' oldest bells.
             db.prepare('DELETE FROM join_requests WHERE pubkey = ?').run(id.pk);
+            tidyNow();
         }
         assert(wrong.length === 0, `a knocking key's ${writes.length} writes: the same, with its own request, phone and browser added`
             + `${wrong.length ? `; ${wrong.length} did not:\n    ${wrong.join('\n    ')}` : ''}`);
@@ -646,6 +669,7 @@ async function main(): Promise<void> {
         // Every frame a write would be, from a socket signed by a stranger's key and from one unsigned, changes nothing.
         const frames = ['{"type":"ping","wantPong":true}', '{"type":"ping"}', JSON.stringify({ type: 'post_updated', id: aliceOffer.id }),
             JSON.stringify({ type: 'send', conversationId: dm.id, ...lockedDm() }), JSON.stringify({ type: 'transfer', to: alice.pk, amount_c: 100 }), 'not json'];
+        tidyNow();
         const before = snapshot();
         const sent = outside.length;
         let pongs = 0;
@@ -671,18 +695,23 @@ async function main(): Promise<void> {
     // ── 5. controls: the sweep can fail ──────────────────────────────────────────────────────────────
     console.log('\n── 5. controls ──');
     {
-        // The same bodies, signed by Bob (a member: in Alice's club, a keeper of her enterprise, asking for her offer), change
-        // what the sweep watches on many writes: the bodies reach real data, so a stranger's "nothing changed" is a refusal.
+        // The same bodies and paths, signed by Alice (the owner whose offer, event, poll, group, enterprise, crowdfund, topic and
+        // page they name, Kim's request among them), change what the sweep watches on many writes, her own activity stamp
+        // left out: the bodies reach real data, so a stranger's "nothing changed" is a refusal, not a body that missed.
+        // One pass, in route order, so a write early in it can leave a later one nothing to do: the count is a floor.
         const reached: string[] = [];
         for (const route of writes) {
-            if (route === 'POST /api/member/purge') continue; // Bob stays a member for the rest of this control
-            const m = await measure(route, bob);
+            if (route === 'POST /api/member/purge') continue; // Alice stays a member for the rest of this control
+            const m = await measure(route, alice, true);
             if (m.changed.length) reached.push(route);
         }
-        console.log(`  (a member's same body changed something on ${reached.length} writes: ${reached.join(', ')})`);
-        assert(reached.length >= 40, `a member signing the same bodies changes something on ${reached.length} of the ${writes.length} writes `
-            + '(at least 40): the bodies reach real data');
-        for (const must of ['POST /api/marketplace/posts/pause', 'POST /api/groups/:id/chat/message', 'POST /api/messages/send', 'POST /api/forum/topics/:id/replies']) {
+        console.log(`  (Alice's same body changed something on ${reached.length} writes: ${reached.join(', ')})`);
+        // 59 when this suite was written (18 Nov 2026); the floor leaves room for routes that change, not for bodies that miss.
+        assert(reached.length >= 45, `the member the bodies name, signing them, changes something on ${reached.length} of the ${writes.length} writes `
+            + '(at least 45): the bodies reach real data');
+        for (const must of ['POST /api/marketplace/posts/pause', 'POST /api/marketplace/posts/resume', 'POST /api/marketplace/posts/update',
+            'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/marketplace/posts/:id/chat/remove',
+            'POST /api/join/knocks/:id/approve', 'POST /api/marketplace/polls/vote', 'POST /api/knowledge/posts', 'DELETE /api/groups/:id/posts/:postId']) {
             assert(reached.includes(must), `among them ${must}, which the stranger sweeps sent the same body to`);
         }
         // And the snapshot sees a stranger's row: one planted, in a table no route above wrote.

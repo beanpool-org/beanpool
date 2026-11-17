@@ -1192,6 +1192,12 @@ export function updateCrowdfundProject(
 /** What a member's money door says to an amount that is not whole hundredths above 0 (a pledge, a send, a payment to the Commons). */
 export const WHOLE_CENTS_ERROR = word('The amount is a number of Beans above 0, to the cent.');
 
+/**
+ * What both pledge doors (routes/commons.ts, routes/treasury.ts) and pledgeToProject itself say to a pledger who is not an
+ * active member here: paused or suspended ('disabled', 'suspended'), removed, a visitor's row, or no row at all.
+ */
+export const PLEDGE_NOT_ACTIVE_ERROR = word('Only active community members can pledge.');
+
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {
     if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // SECURITY (SRV-8): defense-in-depth — reject non-positive amounts at the data
@@ -1203,6 +1209,11 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     assertMoneyMayMove?.();
     // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the project row below.
     assertLedgerWritable();
+    // Only an active member's Beans (security inventory 17 Nov, risk 13). A paused or suspended member keeps their row and
+    // balance, and this moves the Beans itself, not through transfer() (whose assertMemberActive refuses them): asked
+    // here too, not only at the doors, so no caller can move a paused member's Beans into an escrow that the goal then
+    // sweeps to the enterprise. Before the project row below is written, so a refusal changes nothing.
+    if (!isMemberActive(fromPubkey)) throw Object.assign(new Error(PLEDGE_NOT_ACTIVE_ERROR), { status: 403 });
     // Never into a person's account (namesNoProject): a projects row under a member's key paid the pledge into their
     // balance and set their status to funded.
     if (namesNoProject(projectId)) throw new Error("Project not found");

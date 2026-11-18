@@ -779,12 +779,11 @@ export function createBackupRoutes(deps: RouteDeps): Router {
         }
     }
 
-    // Helper: resolve the public URL for backup enrollment
+    // Helper: resolve the public URL for backup enrollment: the host and scheme the request reached, by the one rule
+    // (forwarded-host.ts): the Host header, and X-Forwarded-Proto only from a proxy this server trusts, never the caller's.
     function resolvePrimaryUrl(ctx: any): string {
         if (process.env.CF_RECORD_NAME) return 'https://' + process.env.CF_RECORD_NAME;
-        const host = ctx.request.header['x-forwarded-host'] || ctx.request.header['host'] || ctx.host;
-        const proto = (ctx.request.header['x-forwarded-proto'] as string) || ctx.protocol || 'https';
-        return proto + '://' + host;
+        return `${ctx.protocol || 'https'}://${ctx.host}`;
     }
 
     /** Real client IP for replication logging (client-ip.ts: forwarding headers only from our own tunnel/proxy) */

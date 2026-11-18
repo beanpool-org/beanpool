@@ -35,6 +35,7 @@ import type Koa from 'koa';
 import { configuredAddresses, isBeanPoolName, isLoopbackHost, normalizeAddress, primaryAddress } from './engine/own-addresses.js';
 import { isDirectLanRequest, isLoopbackSource } from './direct-lan.js';
 import { isTrustedProxy } from './client-ip.js';
+import { saysHttpsBefore } from './forwarded-host.js';
 import { lightsOutOn } from './services/lights-out.js';
 import { holdsOwnCertificate, servedHosts, servesCaCertificateFor } from './services/tls.js';
 import { acmeTargets } from './services/acme/schedule.js';
@@ -94,13 +95,8 @@ export function hallMayReach(req: PlainRequest): boolean {
     return lightsOutOn() || hallPathWhileOff(req.path);
 }
 
-/** Whether a proxy's headers say the request before it came over https: the first hop's X-Forwarded-Proto or proto=. */
-export function saysHttpsBefore(req: Pick<PlainRequest, 'forwardedProto' | 'forwarded'>): boolean {
-    const xfp = (req.forwardedProto ?? '').split(',')[0].trim().toLowerCase();
-    if (xfp === 'https') return true;
-    const first = (req.forwarded ?? '').split(',')[0];
-    return /(?:^|;)\s*proto\s*=\s*"?https"?\s*(?:;|$)/i.test(first);
-}
+// Whether a proxy's headers say the request before it came over https: one rule with Koa's ctx.protocol (forwarded-host.ts).
+export { saysHttpsBefore };
 
 /**
  * Whether the plain listener answers this request as it always has (the tunnel's delegation, the trust page, the

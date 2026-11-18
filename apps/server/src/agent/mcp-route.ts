@@ -36,7 +36,7 @@ import { getVersion } from '../version.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { logAddressTag } from '../log-address.js';
-import { clientLimiterKey, isTrustedProxy } from '../client-ip.js';
+import { clientLimiterKey } from '../client-ip.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
 import { grantDraftsKnowledge, grantModerates, grantPosts, offersSuggestions, toolDescription, toolsFor, unlistedToolWords, type AgentGrant } from './tools.js';
@@ -80,20 +80,16 @@ export function isOwnOrigin(origin: string): boolean {
     return origin === own || listedUrls().some((u) => { try { return new URL(u).origin === origin; } catch { return false; } });
 }
 
-/** The host[:port] a request reached. X-Forwarded-Host is believed only from our own proxy (nodeUrlFor). */
+/** The host[:port] a request reached: Koa's ctx.host, the Host header it carried, never X-Forwarded-Host (forwarded-host.ts). */
 function reachedHost(ctx: any): string {
-    const socket = ctx.req?.socket;
-    return socket && !isTrustedProxy(socket.remoteAddress)
-        ? String(ctx.req.headers?.[':authority'] || ctx.req.headers?.host || '').split(',')[0].trim()
-        : String(ctx.host || '');
+    return String(ctx.host || '');
 }
 const HOST_SHAPE = /^[a-z0-9.\-:[\]]{1,255}$/i;
 
 /**
  * The address the welcome names, and Settings' connector address: the main one, else the host the assistant reached (a LAN or
- * bare-IP node can name itself no other way). X-Forwarded-Host is believed only from our own proxy (client-ip.ts
- * isTrustedProxy: loopback and TRUSTED_PROXIES, never a private subnet as such), as X-Forwarded-For is; Koa's ctx.host
- * under app.proxy would take it from anyone (#1881 review, finding 6).
+ * bare-IP node can name itself no other way). X-Forwarded-Host is believed from no one, our own tunnel included: Cloudflare
+ * passes a visitor's on untouched (forwarded-host.ts). #1881's review (finding 6) had it believed from our own proxy only.
  */
 export function nodeUrlFor(ctx: any): string {
     const pub = mainPublicUrl();

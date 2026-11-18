@@ -50,7 +50,9 @@ const READERS: Record<string, string> = {
     'http-server.ts': 'cf-connecting-ip only routes a request on to the HTTPS app, which resolves the address itself; the tests\' socket hook',
     'plain-http-gate.ts': 'a tunnel\'s or proxy\'s claim only from isTrustedProxy; the hall only by direct-lan.ts (row: plain port)',
     'direct-lan.ts': 'the hall and the APK: a private source that is not a default gateway, with no proxy header at all (row: hall)',
-    'agent/mcp-route.ts': 'X-Forwarded-Host only from isTrustedProxy (row: assistant metadata)',
+    'forwarded-host.ts': 'the scheme a request reached: X-Forwarded-Proto or Forwarded: proto= only from isTrustedProxy, by the socket\'s address (test-forwarded-host.ts)',
+    // agent/mcp-route.ts read the socket's address to decide whether to believe X-Forwarded-Host; it now reads Koa's ctx.host,
+    // which believes X-Forwarded-Host from no one (forwarded-host.ts, test-forwarded-host.ts; row: assistant metadata).
 };
 const ADDRESS_READ = /\bremoteAddress\b|\bctx\.(?:request\.)?ips?\b|\breq(?:uest)?\.ips?\b|['"`](?:x-forwarded-for|x-real-ip|cf-connecting-ip|cf-connecting-ipv6|true-client-ip|x-client-ip|forwarded)['"`]/i;
 const withoutComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
@@ -256,13 +258,14 @@ for (const mode of ['TRUSTED_PROXIES empty (every node as it starts)', 'TRUSTED_
         updateGatewayConfig(unlimited);
     }
 
-    // the assistant door's metadata (agent/mcp-route.ts): X-Forwarded-Host only from a trusted proxy
+    // the assistant door's metadata (agent/mcp-route.ts): X-Forwarded-Host from no one, a trusted proxy included (Cloudflare
+    // passes a visitor's on through the tunnel: forwarded-host.ts); the host named is the Host header the request carried
     trusting(host ? 'docker-host' : null);
     {
         const meta = await get(GATEWAY, '/.well-known/oauth-authorization-server', { ...forged(0), 'x-forwarded-host': 'elsewhere.example' });
         const issuer = String(meta.body?.issuer ?? '');
-        check(host ? 'assistant metadata: the trusted host\'s X-Forwarded-Host names the host reached' : 'assistant metadata: X-Forwarded-Host from the gateway moves nothing',
-            meta.status === 200 && (host ? issuer === 'https://elsewhere.example' : !issuer.includes('elsewhere.example')), `${meta.status} ${issuer}`);
+        check(host ? 'assistant metadata: X-Forwarded-Host from the trusted host moves nothing either' : 'assistant metadata: X-Forwarded-Host from the gateway moves nothing',
+            meta.status === 200 && !!issuer && !issuer.includes('elsewhere.example'), `${meta.status} ${issuer}`);
     }
 }
 

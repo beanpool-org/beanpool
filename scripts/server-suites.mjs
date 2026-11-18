@@ -178,6 +178,7 @@ export const SUITES = [
     'test-gateway-config',
     'test-gateway-real-client',
     'test-client-ip-trust',
+    'test-forwarded-host',
     'test-dos-hardening',
     'test-keepalive-idle-close',
     'test-global-server-limits',

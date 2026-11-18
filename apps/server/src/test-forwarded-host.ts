@@ -168,14 +168,14 @@ interface Answer { status: number; headers: http.IncomingHttpHeaders; text: stri
 /** One request on a socket of its own (agent: false), so the hook gives it the row's address; fetch can't send our Host. */
 function send(tls: boolean, from: string | null, method: string, p: string, headers: Record<string, string>): Promise<Answer> {
     fakeRemote = from;
-    const lib = tls ? https : http;
     const url = `${tls ? 'https' : 'http'}://127.0.0.1:${tls ? httpsPort : httpPort}${p}`;
     return new Promise((resolve, reject) => {
         const body = method === 'POST' ? '{}' : undefined;
-        const req = lib.request(url, {
+        const options: https.RequestOptions = {
             method, agent: false, rejectUnauthorized: false,
             headers: { ...headers, ...(body ? { 'Content-Type': 'application/json', 'Content-Length': String(body.length) } : {}) },
-        }, (res) => {
+        };
+        const answered = (res: http.IncomingMessage) => {
             let text = '';
             res.setEncoding('utf8');
             res.on('data', (d) => { text += d; });
@@ -184,7 +184,8 @@ function send(tls: boolean, from: string | null, method: string, p: string, head
                 try { parsed = JSON.parse(text); } catch { /* a page */ }
                 resolve({ status: res.statusCode ?? 0, headers: res.headers, text, body: parsed });
             });
-        });
+        };
+        const req = tls ? https.request(url, options, answered) : http.request(url, options, answered);
         req.setTimeout(10_000, () => req.destroy(new Error('timed out')));
         req.on('error', reject);
         req.end(body);

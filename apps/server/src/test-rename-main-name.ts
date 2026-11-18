@@ -62,7 +62,7 @@ delete process.env.PUBLIC_IP;
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
-import https from 'node:https';
+import nodeHttps from 'node:https';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { localFetch } from './keepalive-test-fetch.js';
@@ -1187,7 +1187,7 @@ async function main(): Promise<void> {
          */
         const atHost = (host: string, route: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}) =>
             new Promise<{ status: number; json: any }>((resolve, reject) => {
-                const req = https.request(base + route, {
+                const req = nodeHttps.request(base + route, {
                     method: init.method ?? 'GET', agent: false, rejectUnauthorized: false,
                     headers: { ...init.headers, Host: host, ...(init.body !== undefined ? { 'Content-Length': String(Buffer.byteLength(init.body)) } : {}) },
                 }, (res) => {

@@ -4,7 +4,9 @@ import { useFocusEffect, router } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
-import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
+import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests, closeHeldCopies } from '../../utils/db';
+import { heldChatRows, type HeldChatRow as HeldChat } from '../../utils/held-chats';
+import { HeldChatRow } from '../../components/HeldChatRow';
 import { openGlobalRequests, requestsWaitingOnGlobal } from '../../utils/global-requests';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -157,6 +159,9 @@ export default function ChatsScreen() {
     const [guestChats, setGuestChats] = useState<GuestChat[]>([]);
     const guestInvites = React.useMemo(() => guestChats.filter((c) => c.state === 'invited'), [guestChats]);
     const { recheck, nodeUrl: communityUrl } = useNodeStatus();
+    // Chats in the other communities this phone holds (slice S1, utils/held-chats.ts): each read from that community's own
+    // copy, its name in grey; a tap moves there and opens the chat (openHeldChat).
+    const [heldChats, setHeldChats] = useState<HeldChat[]>([]);
     const otherNotices = useOtherCommunitiesNotices();
     const requestsHere = requests ?? ((onGlobal ?? 0) > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
     // The row's count and red dot (core dm-requests.ts requestsRowCount, utils/requests-seen.ts): every kind behind the row.
@@ -189,6 +194,53 @@ export default function ChatsScreen() {
             setSwitchingCommunity(false);
         }
     };
+    // A held community's chat (slice S1): the phone moves there through the one switch and lands in that chat, as a tapped
+    // notice does. Reading it in place, with no switch, is slice S2.
+    const openHeldChat = async (chat: HeldChat) => {
+        if (!identity?.publicKey || switchingCommunity) return;
+        setSwitchNote(null);
+        setSwitchingCommunity(true);
+        try {
+            const result = await openNoticeIn(chat.community, null, async () => `/chat/${chat.id}` as const, {
+                storage: AsyncStorage,
+                publicKey: identity.publicKey,
+                joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
+                switchUnderWay: communitySwitchUnderWay,
+                switchTo: switchCommunity,
+                recheck,
+            });
+            if (result !== 'switched') setSwitchNote(t("Something went wrong. Try again in a moment."));
+        } finally {
+            setSwitchingCommunity(false);
+        }
+    };
+    // Read as Chat opens, when the phone moves to another community and when a block changes: a held copy changes only
+    // while the member is there, so a sync tick here never reads them again. Closed as Chat is left.
+    useFocusEffect(React.useCallback(() => {
+        let active = true;
+        const loadHeld = async () => {
+            if (!identity?.publicKey) {
+                if (active) setHeldChats([]);
+                return;
+            }
+            try {
+                const [blocked, rows] = await Promise.all([getBlockedUsers(), heldChatRows(identity.publicKey)]);
+                // A DM with someone the member blocked, under any key the chat names them by, is not listed (dm-blocked.ts).
+                const shown = rows.filter((c) => talkShowsChat(c, blocked));
+                if (active) setHeldChats((prev) => (JSON.stringify(prev) === JSON.stringify(shown) ? prev : shown));
+            } catch (e) {
+                console.warn('[Held] Could not list the chats of the other communities', e);
+                if (active) setHeldChats([]);
+            }
+        };
+        void loadHeld();
+        const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); });
+        return () => {
+            active = false;
+            blockSub.remove();
+            void closeHeldCopies();
+        };
+    }, [identity, communityUrl]));
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
@@ -382,7 +434,7 @@ export default function ChatsScreen() {
                 id: c.id, outside: true, guest: true, peer: c.name, peerPubkey: c.id, outsideHome: c.host,
                 lastMessage: last?.text ?? '', rawTimestamp: new Date(last?.at ?? c.updatedAt).toISOString(), unread: 0,
             };
-        })];
+        }), ...heldChats.map((c) => ({ ...c, id: c.key, heldChat: c, lastMessage: '', unread: 0 }))];
 
         // 1. Text Search Filter
         if (searchQuery.trim() !== '') {
@@ -447,7 +499,7 @@ export default function ChatsScreen() {
         regular = orderTalkRows(regular, sortBy);
 
         return { actionRequired, regularConversations: regular };
-    }, [conversations, outsideChats, guestChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
+    }, [conversations, outsideChats, guestChats, heldChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
 
     const resetFilters = () => {
         setSearchQuery('');
@@ -602,6 +654,8 @@ export default function ChatsScreen() {
     );
 
     const renderItem = ({ item }: { item: any }) => {
+        // A chat in another community this phone holds (slice S1): that community's name in grey, and a tap moves there.
+        if (item.heldChat) return <HeldChatRow item={item.heldChat} busy={switchingCommunity} onOpen={(c) => void openHeldChat(c)} />;
         if (item.outside) {
             // Someone in another community: their community always shows (joint design §2.6), the chat is this phone's own. The
             // name is the sender's own choice (up to 60 characters, new with each line), so the community never shares its line:

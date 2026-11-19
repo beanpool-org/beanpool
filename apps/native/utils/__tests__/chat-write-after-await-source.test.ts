@@ -20,6 +20,17 @@
  * 4. Taking chatCopyForRequest(), every signedGet / _signedRequest it makes is sent to that community's address
  *    (signedGet's `anchorUrl` option, _signedRequest's third argument): a request read from the address again could go to
  *    another community than the file its answer is written into.
+ *
+ * And the held copies (slice S1, utils/held-copies.ts): a chat read of another community's copy takes that community by name.
+ * 5. A function that reads a held copy (`heldCopies.all`) reads the file it names from one of its own parameters
+ *    (`const file = getDatabaseFilenameForNode(<parameter>)`, then `heldCopies.all(file, …)`): never a file worked out from
+ *    anything else.
+ * 6. It never takes the copy open now or the address in use: no getDb(), waitForInit(), chatCopyForRequest() or
+ *    copyStillFor(), no 'beanpool_anchor_url', no anchorUrl or getCachedAnchorUrl (a photo built from the anchor would ask
+ *    the community in use for another's).
+ * 7. `heldCopies` is used only through its own methods (all, close, closeAll, paused, pauseUntil, openFiles), never handed
+ *    on: no held handle reaches a writer.
+ * 8. Only utils/db.ts makes held copies (createHeldCopies, once), and no other file of the app sets `query_only`.
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
@@ -27,6 +38,7 @@ import * as path from 'node:path';
 import ts from 'typescript';
 
 const DB_TS = path.join(__dirname, '..', 'db.ts');
+const APP = path.join(__dirname, '..', '..');
 const NETWORK = new Set(['signedGet', '_signedRequest', 'signedRequest', 'signedRequestWithMethod', 'fetch']);
 const TAKES_THE_COPY_OPEN_NOW = new Set(['getDb', 'waitForInit']);
 const CHAT_TABLES = ['messages', 'conversations', 'conversation_participants', 'groups', 'group_members'];
@@ -167,5 +179,125 @@ describe('a chat write after a network await goes through the file its request w
         expect(holes.filter((x) => x.startsWith('fine '))).toEqual([]);
         expect(holes.filter((x) => x.startsWith('handsItOn '))).toEqual([]);
         expect(holes.filter((x) => x.startsWith('handsNothing ')).some((x) => x.includes('rule 2'))).toBe(true);
+    });
+});
+
+const HELD_METHODS = new Set(['all', 'close', 'closeAll', 'paused', 'pauseUntil', 'openFiles']);
+const HELD_TAKES_NOW = new Set(['getDb', 'waitForInit', 'chatCopyForRequest', 'copyStillFor', 'getCachedAnchorUrl']);
+
+/** Each held-copy rule (5-7) broken in `source`, as "function (line): what". */
+export function heldHolesIn(source: string): string[] {
+    const sf = ts.createSourceFile('db.ts', source, ts.ScriptTarget.Latest, true);
+    const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+    const holes: string[] = [];
+    // Rule 7: every use of heldCopies is a call of one of its methods, or its declaration.
+    (function walk(x: ts.Node) {
+        if (ts.isIdentifier(x) && x.text === 'heldCopies') {
+            const p = x.parent;
+            const declared = ts.isVariableDeclaration(p) && p.name === x;
+            const method = ts.isPropertyAccessExpression(p) && p.expression === x && HELD_METHODS.has(p.name.text)
+                && ts.isCallExpression(p.parent) && p.parent.expression === p;
+            if (!declared && !method) holes.push(`heldCopies (db.ts:${lineOf(x)}): rule 7, used other than by a call of its methods`);
+        }
+        ts.forEachChild(x, walk);
+    })(sf);
+    const check = (name: string, f: ts.FunctionLikeDeclaration) => {
+        const reads: ts.CallExpression[] = [];
+        const params = new Set(f.parameters.map((p) => p.name.getText(sf)));
+        // Each local named from a parameter's community: `const x = getDatabaseFilenameForNode(<parameter>)`.
+        const byName = new Set<string>();
+        const at = `${name} (db.ts:${lineOf(f)})`;
+        const takes: string[] = [];
+        (function walk(x: ts.Node) {
+            if (ts.isCallExpression(x)) {
+                const e = x.expression;
+                if (ts.isPropertyAccessExpression(e) && ts.isIdentifier(e.expression) && e.expression.text === 'heldCopies' && e.name.text === 'all') reads.push(x);
+                const called = calledName(e);
+                if (called && HELD_TAKES_NOW.has(called)) takes.push(`${called}()`);
+            }
+            if (ts.isVariableDeclaration(x) && ts.isIdentifier(x.name) && x.initializer && ts.isCallExpression(x.initializer)
+                && calledName(x.initializer.expression) === 'getDatabaseFilenameForNode'
+                && x.initializer.arguments.length === 1 && ts.isIdentifier(x.initializer.arguments[0]) && params.has(x.initializer.arguments[0].text)) {
+                byName.add(x.name.text);
+            }
+            if ((ts.isStringLiteral(x) || ts.isNoSubstitutionTemplateLiteral(x)) && x.text === 'beanpool_anchor_url') takes.push("'beanpool_anchor_url'");
+            if (ts.isIdentifier(x) && x.text === 'anchorUrl') takes.push('anchorUrl');
+            ts.forEachChild(x, walk);
+        })(f);
+        if (reads.length === 0) return;
+        for (const r of reads) {
+            const file = r.arguments[0];
+            if (!file || !ts.isIdentifier(file) || !byName.has(file.text)) holes.push(`${at}: rule 5, heldCopies.all() on a file not named from a parameter`);
+        }
+        for (const t of new Set(takes)) holes.push(`${at}: rule 6, a held read that takes ${t}`);
+    };
+    for (const st of sf.statements) {
+        if (ts.isFunctionDeclaration(st) && st.name && st.body) check(st.name.text, st);
+        if (ts.isVariableStatement(st)) {
+            for (const d of st.declarationList.declarations) {
+                if (d.initializer && (ts.isArrowFunction(d.initializer) || ts.isFunctionExpression(d.initializer))) check(d.name.getText(sf), d.initializer);
+            }
+        }
+    }
+    return holes;
+}
+
+/** Every .ts/.tsx file of the app, tests and native projects left out. */
+function appSources(dir = APP, out: string[] = []): string[] {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (['node_modules', '__tests__', 'e2e', 'android', 'ios', 'dist'].includes(e.name) || e.name.startsWith('.')) continue;
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) appSources(p, out);
+        else if (/\.(ts|tsx)$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) out.push(p);
+    }
+    return out;
+}
+
+describe('a held chat read takes its community by name (slice S1, utils/held-copies.ts)', () => {
+    it('no function in utils/db.ts breaks a held-copy rule', () => {
+        const source = fs.readFileSync(DB_TS, 'utf8');
+        expect(heldHolesIn(source)).toEqual([]);
+        // And it is not vacuous: the one held chat read there is getHeldConversations, by its community.
+        expect(source).toMatch(/export async function getHeldConversations\(myPubkey: string, community: string\)/);
+        expect(source.match(/heldCopies\.all</g)?.length ?? 0).toBeGreaterThan(0);
+    });
+
+    it('only utils/db.ts makes held copies, once, and no other file of the app sets query_only', () => {
+        const makers: string[] = [];
+        const queryOnly: string[] = [];
+        for (const f of appSources()) {
+            const text = fs.readFileSync(f, 'utf8');
+            const rel = path.relative(APP, f);
+            if (rel === path.join('utils', 'held-copies.ts')) continue;
+            const made = text.match(/\bcreateHeldCopies\s*(?:<[^>]*>)?\s*\(/g)?.length ?? 0;
+            if (made) makers.push(`${rel} x${made}`);
+            if (/query_only/i.test(text)) queryOnly.push(rel);
+        }
+        expect(makers).toEqual([`${path.join('utils', 'db.ts')} x1`]);
+        expect(queryOnly).toEqual([]);
+    });
+
+    it('the guard sees each held rule broken (so a clean read above is a real one)', () => {
+        const broken = `
+            const heldCopies = createHeldCopies({});
+            async function byAnchor(me) { const file = getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')); return heldCopies.all(file, 'SELECT 1', []); }
+            async function byOpenCopy(me, community) { const file = getDatabaseFilenameForNode(community); const d = await getDb(); return heldCopies.all(file, 'SELECT 1', []); }
+            async function photoFromAnchor(me, community) { const file = getDatabaseFilenameForNode(community); const anchorUrl = getCachedAnchorUrl(); return heldCopies.all(file, 'SELECT 1', [anchorUrl]); }
+            async function notFromAParameter(me) { const file = getDatabaseFilenameForNode(SOMEWHERE); return heldCopies.all(file, 'SELECT 1', []); }
+            async function literalFile(me, community) { return heldCopies.all('community_x.db', 'SELECT 1', []); }
+            function handsItOn() { return heldCopies; }
+            async function fine(me, community) { const file = getDatabaseFilenameForNode(community); const rows = await heldCopies.all(file, 'SELECT 1', [me]); await heldCopies.close(file); return rows; }
+        `;
+        const holes = heldHolesIn(broken);
+        const of = (fn: string) => holes.filter((x) => x.startsWith(`${fn} `));
+        expect(of('byAnchor').some((x) => x.includes('rule 5'))).toBe(true);
+        expect(of('byAnchor').some((x) => x.includes('rule 6') && x.includes('beanpool_anchor_url'))).toBe(true);
+        expect(of('byOpenCopy').some((x) => x.includes('rule 6') && x.includes('getDb()'))).toBe(true);
+        expect(of('photoFromAnchor').some((x) => x.includes('rule 6') && x.includes('getCachedAnchorUrl()'))).toBe(true);
+        expect(of('photoFromAnchor').some((x) => x.includes('rule 6') && x.includes('takes anchorUrl'))).toBe(true);
+        expect(of('notFromAParameter').some((x) => x.includes('rule 5'))).toBe(true);
+        expect(of('literalFile').some((x) => x.includes('rule 5'))).toBe(true);
+        expect(holes.some((x) => x.startsWith('heldCopies ') && x.includes('rule 7'))).toBe(true);
+        expect(of('fine')).toEqual([]);
     });
 });

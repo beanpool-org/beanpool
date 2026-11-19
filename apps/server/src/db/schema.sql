@@ -4271,3 +4271,17 @@ CREATE TABLE IF NOT EXISTS group_guest_sent (
 );
 CREATE INDEX IF NOT EXISTS idx_group_guest_sent_host ON group_guest_sent(state, host, created_at);
 CREATE INDEX IF NOT EXISTS idx_group_guest_sent_sender ON group_guest_sent(sender_key, updated_at, item_id);
+
+-- A member's copy's lease on a node that keeps copies (engine/copy-lease.ts; DESIGN-no-switch-messaging-fable.md §4): when a
+-- device signed by its author last said the copy is still in step at home (its create, an edit, or the confirm route), and
+-- when the lease took it off the board for want of one (`hidden_at`; the copy's own row is paused then). Only copies have a
+-- row, by their post's id. No row: a copy from before the lease, under the 90-day rule alone. No trigger, index or default
+-- here calls a connection function, so an older image boots on this file.
+CREATE TABLE IF NOT EXISTS copy_leases (
+    post_id      TEXT PRIMARY KEY,
+    confirmed_at TEXT NOT NULL,
+    hidden_at    TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at   DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_copy_leases_confirmed ON copy_leases(confirmed_at);

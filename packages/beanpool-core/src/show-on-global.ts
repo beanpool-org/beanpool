@@ -17,7 +17,9 @@
  *   one that can't falls off by itself. The pairs live on the device alone, but the copy's ids don't ({@link copyIdOf}): a
  *   device that holds no pair works out every id a listing can have, so a delete or a cancel there still takes the copy down
  *   ({@link CopyKeeper.stopShowing}), and a device restored from its 12 words finds its copies and tends them
- *   (`adoptCopies`). Neither tells the member's community anything.
+ *   (`adoptCopies`). Neither tells the member's community anything. Global gives a copy a lease (apps/server
+ *   engine/copy-lease.ts): one no device has confirmed in 14 days comes off its board until one does, so each tend says, once a
+ *   day, which copies it holds in step (`confirmCopies`). A send says it too.
  * - **A holiday at home.** The member's listings leave their community's board, and the copy leaves global with them. The
  *   pair stays, and when the holiday ends the copy goes back up as a new one ({@link CopyPair.resting}). So does an Offer or
  *   a Need that is off the board for now: paused, in a deal, out on loan, hidden by reports (`restsAtHome`).
@@ -57,12 +59,20 @@ import { isHundredths } from './hundredths.js';
 const POSTS_PATH = '/api/marketplace/posts';
 const PREFERENCES_PATH = '/api/members/preferences';
 const QUESTIONS_PATH = `${POSTS_PATH}/takes-questions`;
+const CONFIRM_PATH = `${POSTS_PATH}/copies/confirm`;
 /** How long one request gets, its answer's body included. React Native's fetch never gives up by itself. */
 export const COPY_TIMEOUT_MS = 60_000;
 /** A copy unchanged this long is sent again, so global's retention (90 days without a change) only takes an untended one. */
 export const COPY_KEEP_ALIVE_MS = 30 * 24 * 60 * 60 * 1000;
 /** A first send looks this many ids on from its own for a copy that is already there (`placeOf`), and tries at most this many. */
 export const COPY_IDS_LOOKED_AT = 16;
+/**
+ * A copy in step is confirmed to global at most this often (`confirmCopies`), well inside its 14-day lease (apps/server
+ * engine/copy-lease.ts COPY_LEASE_DAYS): a device away for less than two weeks never lets one lapse.
+ */
+export const COPY_CONFIRM_EVERY_MS = 24 * 60 * 60 * 1000;
+/** The most copies one confirm names (apps/server engine/copy-lease.ts COPY_CONFIRM_MOST). */
+const CONFIRM_MOST = 100;
 /** A device looks for copies of its key's listings that it holds no pair for (`adoptCopies`) at most this often. */
 export const COPY_ADOPT_EVERY_MS = 24 * 60 * 60 * 1000;
 /** The most rows one read gives (apps/server https-server.ts MAX_PAGE_LIMIT): a member's own listings at their community. */
@@ -150,6 +160,8 @@ export interface CopyPair {
     questions?: boolean;
     /** `questions` hasn't reached global yet: `tendCopies` sends it. */
     questionsOwed?: boolean;
+    /** When this device last told global the copy is in step (`confirmCopies`); a send says it too, at `sentAt`. */
+    confirmedAt?: number;
 }
 
 /**
@@ -1001,6 +1013,25 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                     await weighOff(copyId, await settleQuestions(copyId, identity, deps).catch(() => 'later' as const), now);
                 }
             } catch { /* the next time round */ }
+        }
+        await confirmCopies(identity, deps, now).catch(() => {});
+    }
+
+    /**
+     * Global's lease (apps/server engine/copy-lease.ts): the copies this device holds up and in step, told once a day, so a copy
+     * whose devices all stopped tending it comes off global's board and one still tended never does. A pair sent to within the day
+     * has said it already. Only global's answer counts: one it didn't give is asked at the next tend, and one it refused (a
+     * global from before the lease) waits the day.
+     */
+    async function confirmCopies(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
+        const due = (await readPairs()).filter((p) => p.publicKey === identity.publicKey && !!p.sent && !p.leaving && !p.resting
+            && now - Math.max(p.sentAt, p.confirmedAt ?? 0) >= COPY_CONFIRM_EVERY_MS).map((p) => p.copyId);
+        for (let at = 0; at < due.length; at += CONFIRM_MOST) {
+            const ids = due.slice(at, at + CONFIRM_MOST);
+            const answer = await withTimeout(async (signal) => answerOf(await deps.post(deps.global, CONFIRM_PATH, { ids }, identity, signal)))
+                .catch(() => 'later' as const);
+            if (answer === 'later') return;
+            await store.change((pairs) => pairs.map((p) => (ids.includes(p.copyId) ? { ...p, confirmedAt: now } : p)));
         }
     }
 

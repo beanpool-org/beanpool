@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    createPost, getPosts, removePost, setCopyQuestions, updatePost,
+    confirmCopies, createPost, getPosts, removePost, setCopyQuestions, updatePost,
     acceptPost, completePostTransaction, cancelPostTransaction,
     pausePost, resumePost, getMarketplaceTransactions,
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
@@ -37,6 +37,8 @@ import { respondSettlementAware } from '../federation-settlement.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import { copyBody, copyUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
+import { COPY_CONFIRM_MOST } from '../engine/copy-lease.js';
+import { standbyWritesNothing } from '../config/node-role.js';
 import { itemRefusalOf, itemTakeUpRefusalOf } from '../engine/per-item.js';
 import { directoryStamp } from '../engine/directory-cache.js';
 import type { EventTimeOut } from '../engine/posts.js';
@@ -932,6 +934,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
             ctx.body = { error: word('Failed — author must be a registered member') };
             return;
         }
+        // A copy's create is its device's first word that it is in step (engine/copy-lease.ts).
+        if (copy) leaseFrom(post.id, actor);
 
         ctx.body = { success: true, post: readOfCopy(post, actor), ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
@@ -1007,6 +1011,41 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
 });
 
 // "Take questions about this on the global community" (engine/event-copy.ts): an Offer's or Need's door, by its own author alone.
+/** A copy's lease from its own author's write (engine/copy-lease.ts). Never in the write's way: it is the write that counts. */
+function leaseFrom(id: string, actor: string | undefined): void {
+    if (!actor || standbyWritesNothing()) return;
+    try {
+        confirmCopies([id], actor);
+    } catch (e) {
+        console.warn(`[Copies] lease not stamped for ${id.slice(0, 8)}:`, e);
+    }
+}
+
+// A device's word that the copies it tends are still in step at home (engine/copy-lease.ts; @beanpool/core show-on-global.ts):
+// each of the signer's own is kept on the board for another 14 days, and one the lease took off goes back on. What isn't the
+// signer's copy is passed over and named in nothing: the count is of their own.
+router.post('/api/marketplace/posts/copies/confirm', async (ctx) => {
+    const { ids } = (ctx as any).requestBody || {};
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > COPY_CONFIRM_MOST || ids.some((x) => typeof x !== 'string' || x.length === 0 || x.length > 200)) {
+        ctx.status = 400;
+        ctx.body = { error: `ids is 1 to ${COPY_CONFIRM_MOST} copy ids` };
+        return;
+    }
+    if (!membersOnlyHere(ctx)) return;
+    try {
+        ctx.body = { success: true, confirmed: confirmCopies(ids, actor).length };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: memberErrorText(e, word('Failed to update post')) };
+    }
+});
+
 // A route of its own, since an edit is refused to a muted member and closing a door never is.
 router.post('/api/marketplace/posts/takes-questions', async (ctx) => {
     const { id, on } = (ctx as any).requestBody || {};
@@ -1072,7 +1111,8 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             assertMayEditPhotos(actor, String(id), Math.min(updates.photos.length, 5), fresh);
         }
         // A member's copy keeps to what a copy holds (engine/event-copy.ts). A home price is a copy's alone (engine updatePost).
-        if ((db.prepare('SELECT shown_from_host FROM posts WHERE id = ?').get(id) as { shown_from_host: string | null } | undefined)?.shown_from_host != null) copyUpdates(updates);
+        const isCopy = (db.prepare('SELECT shown_from_host FROM posts WHERE id = ?').get(id) as { shown_from_host: string | null } | undefined)?.shown_from_host != null;
+        if (isCopy) copyUpdates(updates);
         const timeOut: EventTimeOut = {};
         const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor, timeOut);
         if (!post) {
@@ -1080,6 +1120,8 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             ctx.body = { error: word('Post not found or not owned by you') };
             return;
         }
+        // An edit of a copy is its device's word that it is in step, a 1.4.6 phone's 30-day resend included (engine/copy-lease.ts).
+        if (isCopy) leaseFrom(String(id), actor);
         ctx.body = { success: true, post: readOfCopy(post, actor), ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;

@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { COPY_ADOPT_EVERY_MS, COPY_IDS_LOOKED_AT, copyIdOf, copyResultLine, ed25519Signer, makeCopyKeeper, OFF_RETRY_FIRST_MS, OFF_RETRY_MOST_MS, owesOff, POST_ID_TAKEN_CODE, toEd25519Pkcs8, type CopyDeps, type CopyPair, type CopyStore, type HomeEvent } from '../index.js';
+import { COPY_ADOPT_EVERY_MS, COPY_CONFIRM_EVERY_MS, COPY_IDS_LOOKED_AT, copyIdOf, copyResultLine, ed25519Signer, makeCopyKeeper, OFF_RETRY_FIRST_MS, OFF_RETRY_MOST_MS, owesOff, POST_ID_TAKEN_CODE, toEd25519Pkcs8, type CopyDeps, type CopyPair, type CopyStore, type HomeEvent } from '../index.js';
 
 const seed = new Uint8Array(32).fill(7);
 const pkcs8 = toEd25519Pkcs8(seed);
@@ -51,6 +51,9 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
     const removes: string[] = [];
     /** Each read of the key's own listings at their community. */
     const authorReads: string[] = [];
+    /** The ids of each confirm sent to global's lease, in order. */
+    const confirms: string[][] = [];
+    let confirmAnswer: (() => Response | null) | null = null;
     const home: HomeEvent = {
         id: 'home-1', type: 'offer', category: 'food', title: 'Tomatoes', price_c: 2000, priceType: 'fixed', authorPublicKey: publicKey, audienceScope: 'public',
         lat: -28.68731, lng: 153.52219, photos: [], status: 'active', active: true,
@@ -75,6 +78,10 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
         },
         async post(_url, path, body: any) {
             bodies.push(body);
+            if (path.endsWith('/copies/confirm')) {
+                confirms.push(body.ids);
+                return confirmAnswer?.() ?? json({ success: true, confirmed: body.ids.length });
+            }
             if (path.endsWith('/takes-questions')) {
                 doorSends.push(body);
                 asked.push('door');
@@ -152,7 +159,9 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
         /** Which was asked in what order, a community's reads and global's door. */
         asked,
         /** The ids of each read of global, and of each remove, in order. */
-        reads, removes, authorReads,
+        reads, removes, authorReads, confirms,
+        /** Global answers a confirm with this; null, it takes them all. */
+        confirmAnswers: (answer: (() => Response | null) | null) => { confirmAnswer = answer; },
         json,
         up: () => [...rows.values()].filter((r) => r.status === 'active'),
     };
@@ -2260,5 +2269,71 @@ describe('a device restored from 12 words finds its copies and tends them', () =
         await plain.tendCopies(identity);
         expect(plain.pairs()).toEqual([]);
         expect(w.authorReads).toEqual([]);
+    });
+});
+
+describe('global\'s lease: a device tells global, once a day, which copies it holds in step', () => {
+    const DAY = COPY_CONFIRM_EVERY_MS;
+
+    it('a send says it: a tend inside the day after one sends no confirm', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        await phone.tendCopies(identity, undefined, Date.now() + 60_000);
+        expect(w.confirms).toEqual([]);
+    });
+
+    it('a day on, the copies up and in step, in one confirm; then nothing until the next day', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        const second = { ...w.home, id: 'home-2', title: 'Beans' };
+        await phone.showOnGlobal(second, HOME, identity);
+        const now = Date.now() + DAY;
+        await phone.tendCopies(identity, undefined, now);
+        expect(w.confirms).toHaveLength(1);
+        expect([...w.confirms[0]].sort()).toEqual(phone.pairs().map((p) => p.copyId).sort());
+        await phone.tendCopies(identity, undefined, now + 60 * 60 * 1000);
+        expect(w.confirms).toHaveLength(1);
+        await phone.tendCopies(identity, undefined, now + DAY);
+        expect(w.confirms).toHaveLength(2);
+    });
+
+    it('nothing resting, on its way out or not yet landed is confirmed', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0].resting).toBe(true);
+        const waiting = await tickWaiting(world());
+        await phone.tendCopies(identity, undefined, Date.now() + DAY);
+        await waiting.tendCopies(identity, undefined, Date.now() + DAY);
+        expect(w.confirms).toEqual([]);
+    });
+
+    it('global not answering: asked again at the next tend; global refusing (one from before the lease): the day waits', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        const now = Date.now() + DAY;
+        w.confirmAnswers(() => w.json({ error: 'Busy' }, 503));
+        await phone.tendCopies(identity, undefined, now);
+        await phone.tendCopies(identity, undefined, now + 60_000);
+        expect(w.confirms).toHaveLength(2);
+        w.confirmAnswers(() => w.json({ error: 'Not found' }, 404));
+        await phone.tendCopies(identity, undefined, now + 120_000);
+        await phone.tendCopies(identity, undefined, now + 180_000);
+        expect(w.confirms).toHaveLength(3);
+    });
+
+    it('a copy taken up after a restore is confirmed by the device that took it up', async () => {
+        const w = world();
+        await w.device().showOnGlobal(w.home, HOME, identity);
+        const restored = w.device({ homes: [HOME] });
+        await restored.tendCopies(identity);
+        expect(restored.pairs()).toHaveLength(1);
+        await restored.tendCopies(identity, undefined, Date.now() + DAY);
+        expect(w.confirms).toEqual([[restored.pairs()[0].copyId]]);
     });
 });

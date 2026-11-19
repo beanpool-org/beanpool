@@ -350,7 +350,7 @@ const SCREEN_LINES: Line[] = [
     { name: 'a DM: my photo', kind: 'dm', isMe: true, text: '', photo: true, onReport: false, actions: { reply: true, react: true, edit: false, delete: true, remove: false } },
     { name: 'someone else\'s photo', kind: 'dm', isMe: false, text: '', photo: true, onReport: true, actions: { ...OTHERS, copy: false } },
 ];
-/** A wide screen: a tablet or an unfolded phone held upright (Android installs the app there; iOS draws it as a phone). */
+/** A wide screen: a phone turned on its side (app.json's orientation is "default"), an unfolded phone or a tablet. */
 const WIDE = { name: 'a wide screen, 800 × 1280', width: 800, window: 1280 };
 describe.each([['light', lightColors], ['dark', darkColors]] as const)('a line and its round buttons stay inside the screen, %s', (name, colors) => {
     beforeEach(() => { theme.colors = colors; theme.name = name; });
@@ -391,8 +391,9 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('a line a
             // The emoji row (React, where the chat has it). Over the line, where it opens unless the line is held in the screen's top
             // 230 dp: never on buttons that have their own line. Under it: never on them while Copy, Report or the edit-window note
             // is under them (it lies on the last of those, as before). With nothing under them (my photo, no words to copy) it lies
-            // on their lowest few dp, as it lay on the line's before; where the emoji row goes is a design of its own (walk 147's
-            // second finding). Beside the line the buttons are where they always were, and so is the emoji row.
+            // on their lowest 7 dp at 1.3× (a 52-dp row set 45 dp past the cell), as it lay on the line's before; where the emoji row
+            // goes is a design of its own (walk 147's second finding). Beside the line the buttons are where they always were, and
+            // so is the emoji row.
             if (!line.actions.react || fits) return;
             for (const at of ['top', 'bottom'] as const) {
                 const withRow = openLine(line, p, s, at);

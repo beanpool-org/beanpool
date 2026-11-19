@@ -85,10 +85,13 @@ async function main(): Promise<void> {
 
     let n = 0;
     const newId = () => `ring-${String(++n).padStart(4, '0')}-${crypto.randomBytes(6).toString('hex')}`;
+    // The clock read once: each item its own time after it (`at` orders a member's mail), never the live clock per row.
+    const T0 = Date.now();
     async function item(from: Keys, to: string, kind: RelayItemKind = 'dm-line'): Promise<RelayItem> {
         const payload = crypto.randomBytes(120).toString('base64');
+        const itemId = newId();
         const envelope = await signRelayEnvelope({
-            kind, itemId: newId(), senderKey: from.key, senderHome: 'a.example', recipient: to, recipientHome: 'b.example', at: Date.now(),
+            kind, itemId, senderKey: from.key, senderHome: 'a.example', recipient: to, recipientHome: 'b.example', at: T0 + n,
             payloadHash: relayPayloadHash(payload),
         }, signerOf(from.seed));
         return { envelope, payload };

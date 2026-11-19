@@ -243,6 +243,8 @@ vi.mock('../outside-chat-live', () => ({
     OUTSIDE_SEND_MS: 10_000,
     outsideErrorWords: (e: unknown) => String((e as Error)?.message ?? e),
     syncOutsideMailNow: async () => null,
+    // The other communities' across mail (slice S4): nothing held here.
+    syncHeldMailNow: async () => 0,
     outsideContext: async () => ({
         identity: { publicKey: 'me-key' },
         store: {

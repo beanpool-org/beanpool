@@ -9981,7 +9981,11 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
         console.warn('[Groups] Remote fetch failed, falling back to local DB:', e);
     }
 
-    // Local fallback
+    return localGroups(filter);
+}
+
+/** The groups this phone keeps for the community it is on now (fetchGroups' fallback when the node can't be asked). */
+async function localGroups(filter?: { category?: string; memberPubkey?: string; search?: string }): Promise<GroupItem[]> {
     const database = await getDb();
     let query = `
         SELECT g.*,

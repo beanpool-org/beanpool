@@ -1,0 +1,406 @@
+/**
+ * A chat answer is written only into the file of the community it was asked of (utils/db.ts chatCopyForRequest).
+ *
+ * The S1 probe measured it on the API 26 emulator (scratch/walks/RESULT-s1-second-handle-probe.md (4), run 6): syncMessages
+ * asked community A, the member switched to B while the answer was on its way, and A's conversation row was written into
+ * B's file (A 0, B 1; with no switch A 1, B 0). The function took getDb() after the network await.
+ *
+ * One table, every chat function that writes after a network await: each is driven with the node's answer held while the
+ * phone switches to B (the address written, and the copy open moved to B's file, as getDb swaps), then the answer lands.
+ * Each row asserts that B's file and B's own stored state are as they were, that the request was asked of A, and that a
+ * sync drops the answer without throwing. B's file starts as a copy of A's, so a write by id (an edit, a delete, a
+ * reaction, a request decided) into the wrong file would show.
+ *
+ * Real SQLite files on disk (node:sqlite, in a directory of this test's own), the real database open, the real DM pins,
+ * real DM sealing between real keys; the node is a stand-in that answers as routes/messaging.ts does.
+ */
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import Module from 'node:module';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+
+const h = vi.hoisted(() => ({
+    dir: '',
+    store: new Map<string, string>(),
+    me: { publicKey: '', privateKey: '' },
+}));
+
+/** expo-sqlite over node:sqlite, one real file per name in this test's directory, as expo-sqlite opens them in its own. */
+vi.mock('expo-sqlite', async () => {
+    const { DatabaseSync: Sqlite } = await import('node:sqlite');
+    const { join } = await import('node:path');
+    const params = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as any[];
+    return {
+        get defaultDatabaseDirectory() { return `file://${h.dir}`; },
+        openDatabaseAsync: vi.fn(async (name: string) => {
+            const sql = new Sqlite(join(h.dir, name));
+            return {
+                runAsync: async (q: string, p?: unknown) => {
+                    const r = sql.prepare(q).run(...params(p));
+                    return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
+                },
+                execAsync: async (q: string) => { sql.exec(q); },
+                getAllAsync: async (q: string, p?: unknown) => sql.prepare(q).all(...params(p)),
+                getFirstAsync: async (q: string, p?: unknown) => sql.prepare(q).get(...params(p)) ?? null,
+                withTransactionAsync: async (cb: () => Promise<void>) => { await cb(); },
+                closeAsync: async () => { sql.close(); },
+            };
+        }),
+    };
+});
+vi.mock('expo-file-system/legacy', async () => {
+    const nodeFs = await import('node:fs');
+    const local = (uri: string) => decodeURI(uri).replace(/^file:\/\//, '');
+    return {
+        get cacheDirectory() { return `file://${h.dir}/cache/`; },
+        get documentDirectory() { return `file://${h.dir}/doc/`; },
+        EncodingType: { Base64: 'base64' },
+        getInfoAsync: vi.fn(async (uri: string) => ({ exists: nodeFs.existsSync(local(uri)), size: 0 })),
+        moveAsync: vi.fn(async ({ from, to }: { from: string; to: string }) => { nodeFs.renameSync(local(from), local(to)); }),
+        copyAsync: vi.fn(async ({ from, to }: { from: string; to: string }) => { nodeFs.copyFileSync(local(from), local(to)); }),
+        deleteAsync: vi.fn(async (uri: string) => { nodeFs.rmSync(local(uri), { force: true, recursive: true }); }),
+        makeDirectoryAsync: vi.fn(async (uri: string) => { nodeFs.mkdirSync(local(uri), { recursive: true }); }),
+        writeAsStringAsync: vi.fn(async (uri: string, data: string) => { nodeFs.writeFileSync(local(uri), data); }),
+        readAsStringAsync: vi.fn(async (uri: string) => (nodeFs.existsSync(local(uri)) ? nodeFs.readFileSync(local(uri), 'utf8') : '')),
+        readDirectoryAsync: vi.fn(async (uri: string) => (nodeFs.existsSync(local(uri)) ? nodeFs.readdirSync(local(uri)) : [])),
+    };
+});
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (k: string) => h.store.get(k) ?? null),
+        setItem: vi.fn(async (k: string, v: string) => { h.store.set(k, String(v)); }),
+        removeItem: vi.fn(async (k: string) => { h.store.delete(k); }),
+        getAllKeys: vi.fn(async () => [...h.store.keys()]),
+        multiRemove: vi.fn(async (ks: string[]) => { for (const k of ks) h.store.delete(k); }),
+    },
+}));
+vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
+vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
+vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
+vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
+vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => {}) }));
+vi.mock('../crypto', async (orig) => ({
+    ...(await orig<any>()),
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
+}));
+
+import { VOICE_BARS } from '@beanpool/core';
+import * as db from '../db';
+import { getDatabaseFilenameForNode } from '../nodes';
+import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
+import { sealDmLine } from '../e2e-crypto';
+
+// A finished sync ends with require('react-native') for a DeviceEventEmitter nudge: answered at node's loader for the file.
+const realLoad = (Module as any)._load;
+(Module as any)._load = function (request: string, ...rest: any[]) {
+    if (request === 'react-native') return { DeviceEventEmitter: { emit: () => {}, addListener: () => ({ remove: () => {} }) } };
+    return realLoad.call(this, request, ...rest);
+};
+
+const root = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'bp-chat-switch-'));
+afterAll(() => {
+    (Module as any)._load = realLoad;
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+const A = 'https://riverside.example';
+const B = 'https://hilltop.example';
+const A_FILE = getDatabaseFilenameForNode(A);
+const B_FILE = getDatabaseFilenameForNode(B);
+const ANCHOR = 'beanpool_anchor_url';
+const CHAT_TABLES = ['conversations', 'conversation_participants', 'messages', 'groups', 'group_members'];
+
+interface Person { publicKey: string; privateKey: string }
+function person(): Person {
+    const seed = ed25519.utils.randomSecretKey();
+    return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed) };
+}
+
+// ── The node ────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+interface Line { id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; type: string; metadata: string | null; timestamp: string; editedAt: string | null }
+interface Conv { id: string; type: string; participants: string[] }
+const node = { convs: [] as Conv[], lines: [] as Line[] };
+let clock = Date.parse('2026-11-19T00:00:00.000Z');
+const tick = () => new Date((clock += 1000)).toISOString();
+
+/** The answer held: the request it matches, where it was sent, and the moment it is let go. */
+interface Hold { matches: (method: string, pathname: string) => boolean; url: string | null; seen: Promise<void>; release: () => void; seenNow: () => void; released: Promise<void> }
+let hold: Hold | null = null;
+function holdFor(matches: Hold['matches']): Hold {
+    let seenNow!: () => void;
+    let release!: () => void;
+    const seen = new Promise<void>((r) => { seenNow = r; });
+    const released = new Promise<void>((r) => { release = r; });
+    return { matches, url: null, seen, seenNow, release, released };
+}
+
+function answer(status: number, body: unknown) {
+    const text = JSON.stringify(body);
+    return { ok: status >= 200 && status < 300, status, headers: { get: () => null }, text: async () => text, json: async () => JSON.parse(text) };
+}
+const view = (c: Conv) => ({ id: c.id, type: c.type, name: null, participants: c.participants, createdBy: c.participants[0], createdAt: '2026-11-19T00:00:00.000Z' });
+
+const fetchMock = vi.fn(async (url: string, init: any = {}) => {
+    const u = new URL(url);
+    const method = init.method || 'GET';
+    if (hold && !hold.url && hold.matches(method, u.pathname)) {
+        hold.url = url;
+        hold.seenNow();
+        await hold.released;
+    }
+    const body = init.body ? JSON.parse(init.body) : {};
+    if (method === 'POST' && u.pathname === '/api/messages/send') {
+        const line: Line = { id: body.id, conversationId: body.conversationId, authorPubkey: body.authorPubkey, ciphertext: body.ciphertext, nonce: body.nonce, type: body.type || 'text', metadata: body.metadata ?? null, timestamp: tick(), editedAt: null };
+        node.lines.push(line);
+        return answer(200, { success: true, message: line });
+    }
+    if (method === 'POST' && u.pathname === '/api/messages/edit') return answer(200, { success: true, message: { id: body.messageId, editedAt: tick() } });
+    if (method === 'POST' && u.pathname === '/api/messages/delete') {
+        return answer(200, { success: true, message: { id: body.messageId, ciphertext: 'gone', metadata: { removed: true, removedBy: h.me.publicKey, removedAt: tick() } } });
+    }
+    if (method === 'POST' && u.pathname === '/api/messages/react') return answer(200, { success: true });
+    if (method === 'POST' && u.pathname === '/api/messages/request') return answer(200, { success: true, request: { state: 'accepted', from: h.me.publicKey, at: tick() } });
+    if (method === 'POST' && u.pathname === '/api/messages/conversation') {
+        const conv: Conv = { id: randomUUID(), type: 'dm', participants: body.participants };
+        node.convs.push(conv);
+        return answer(200, { conversation: view(conv) });
+    }
+    const list = u.pathname.match(/^\/api\/messages\/conversations\/([^/]+)$/);
+    if (list) {
+        return answer(200, { conversations: node.convs.filter((c) => c.participants.includes(list[1])).map(view), totalUnread: 0, deletedAccounts: [], requests: { count: 0, conversations: [] } });
+    }
+    const page = u.pathname.match(/^\/api\/messages\/([^/]+)$/);
+    if (page && method === 'GET') {
+        const conv = node.convs.find((c) => c.id === decodeURIComponent(page[1]));
+        if (!conv) return answer(404, { error: 'Conversation not found' });
+        return answer(200, { conversation: view(conv), messages: node.lines.filter((l) => l.conversationId === conv.id).map((l) => ({ ...l })) });
+    }
+    if (u.pathname === '/api/groups') {
+        return answer(200, [{ id: 'allotment-group', name: 'Allotment', slug: 'allotment', description: '', avatarUrl: null, category: 'garden', createdBy: h.me.publicKey, joinPolicy: 'open', createdAt: '2026-11-19T00:00:00.000Z', updatedAt: '2026-11-19T00:00:00.000Z', memberCount: 1 }]);
+    }
+    if (u.pathname === '/api/members') return answer(200, []);
+    return answer(404, { error: 'not here' });
+});
+
+/** A DM line on the node, sealed between its author and the other person, as the apps write it. */
+function nodeLine(conv: Conv, author: Person, text: string): Line {
+    const other = conv.participants.find((p) => p !== author.publicKey)!;
+    const id = randomUUID();
+    const { ciphertext, nonce } = sealDmLine(text, { myEdPrivHex: author.privateKey, peerEdPubHex: other, conversationId: conv.id }, { senderPubHex: author.publicKey, messageId: id });
+    const line: Line = { id, conversationId: conv.id, authorPubkey: author.publicKey, ciphertext, nonce, type: 'text', metadata: null, timestamp: tick(), editedAt: null };
+    node.lines.push(line);
+    return line;
+}
+
+// ── The phone ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+let me: Person;
+let peer: Person;
+let third: Person;
+let dm: Conv;
+/** A line of mine in the DM, on both files: what an edit, a delete and a reaction change. */
+let mine: string;
+let phoneN = 0;
+const settle = async () => { for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0)); };
+
+/** Every chat row of one file, read from the disk on a connection of the test's own (never the app's). */
+function rowsOf(file: string): Record<string, unknown[]> {
+    const sql = new DatabaseSync(path.join(h.dir, file));
+    try {
+        const out: Record<string, unknown[]> = {};
+        for (const t of CHAT_TABLES) out[t] = sql.prepare(`SELECT * FROM ${t} ORDER BY 1, 2`).all().map((r) => ({ ...(r as object) }));
+        return out;
+    } finally {
+        sql.close();
+    }
+}
+/** What this phone stores for one file outside it (the DM pins, the DM guard list, the requests list, the cursors). */
+const storedFor = (file: string) => Object.fromEntries([...h.store.entries()].filter(([k]) => k.includes(file)).sort());
+
+/**
+ * A phone on A that has synced its DM with `peer` (pinned at first sight) and holds a line of the peer's and one of its
+ * own, and B, a community whose file is a copy of A's as it stands, so the same ids are in both.
+ */
+async function phoneOnAWithBCopied(): Promise<void> {
+    await db.closeDB();
+    db._resetDmPeerPinsForTests();
+    h.dir = path.join(root, `phone-${++phoneN}`);
+    fs.mkdirSync(h.dir);
+    h.store.clear();
+    h.store.set(CACHE_NAMES_DONE_KEY, '1');
+    h.store.set('bp_trust_sync_v3', 'true');
+    h.store.set(ANCHOR, A);
+    me = person();
+    peer = person();
+    third = person();
+    h.me = { publicKey: me.publicKey, privateKey: me.privateKey };
+    dm = { id: randomUUID(), type: 'dm', participants: [me.publicKey, peer.publicKey] };
+    node.convs = [dm];
+    node.lines = [];
+    nodeLine(dm, peer, 'hello from the other side');
+    hold = null;
+    (globalThis as any).fetch = fetchMock;
+
+    expect(await db.syncMessages(me.publicKey)).toBe(true);
+    mine = await db.insertMessage(dm.id, me.publicKey, 'my own words');
+    await settle();
+    const held = rowsOf(A_FILE);
+    expect(held.messages.length).toBe(2);
+    // B: A's file as it stands, under B's name. Closed first, so its log is in the file.
+    await db.closeDB();
+    fs.copyFileSync(path.join(h.dir, A_FILE), path.join(h.dir, B_FILE));
+    await db.getDb();
+}
+
+interface Row {
+    name: string;
+    /** The request whose answer is held across the switch. */
+    held: (method: string, pathname: string) => boolean;
+    /** What the node has new, before the call. */
+    before?: () => void;
+    act: () => Promise<unknown>;
+    /** A sync: it drops the answer and never throws at the member. */
+    sync?: boolean;
+}
+
+const ROWS: Row[] = [
+    {
+        name: 'syncMessages (the conversation list)', sync: true,
+        before: () => { node.convs.push({ id: randomUUID(), type: 'dm', participants: [me.publicKey, third.publicKey] }); },
+        held: (m, p) => m === 'GET' && p.startsWith('/api/messages/conversations/'),
+        act: () => db.syncMessages(me.publicKey),
+    },
+    {
+        name: 'syncMessages (a chat\'s page)', sync: true,
+        before: () => { nodeLine(dm, peer, 'a new line on the page'); },
+        held: (m, p) => m === 'GET' && p === `/api/messages/${dm.id}`,
+        act: () => db.syncMessages(me.publicKey),
+    },
+    {
+        name: 'syncSingleConversation', sync: true,
+        before: () => { nodeLine(dm, peer, 'a line the open chat polls for'); },
+        held: (m, p) => m === 'GET' && p === `/api/messages/${dm.id}`,
+        act: () => db.syncSingleConversation(dm.id),
+    },
+    {
+        name: 'refreshConversationFromNode (getConversationKind asking the node)', sync: true,
+        before: () => { node.convs.push({ id: 'riverside-new-chat', type: 'dm', participants: [me.publicKey, third.publicKey] }); },
+        held: (m, p) => m === 'GET' && p === '/api/messages/riverside-new-chat',
+        act: () => db.getConversationKind('riverside-new-chat', { askNode: true }),
+    },
+    {
+        name: 'deleteMessageApi',
+        held: (m, p) => m === 'POST' && p === '/api/messages/delete',
+        act: () => db.deleteMessageApi(mine),
+    },
+    {
+        name: 'decideMessageRequest',
+        held: (m, p) => m === 'POST' && p === '/api/messages/request',
+        act: () => db.decideMessageRequest(dm.id, 'accept'),
+    },
+    {
+        name: 'toggleMessageReactionApi',
+        held: (m, p) => m === 'POST' && p === '/api/messages/react',
+        act: () => db.toggleMessageReactionApi(mine, me.publicKey, '👍'),
+    },
+    {
+        name: 'createConversationApi',
+        held: (m, p) => m === 'POST' && p === '/api/messages/conversation',
+        act: () => db.createConversationApi('dm', [me.publicKey, third.publicKey], me.publicKey),
+    },
+    {
+        name: 'insertMessage (its delivery, _deliverPendingMessage)',
+        held: (m, p) => m === 'POST' && p === '/api/messages/send',
+        act: () => db.insertMessage(dm.id, me.publicKey, 'sent as the phone switched'),
+    },
+    {
+        name: 'editMessage',
+        held: (m, p) => m === 'POST' && p === '/api/messages/edit',
+        act: () => db.editMessage(dm.id, mine, 'my words, edited'),
+    },
+    {
+        name: 'sendImageMessage',
+        held: (m, p) => m === 'POST' && p === '/api/messages/send',
+        act: () => db.sendImageMessage(dm.id, 'data:image/jpeg;base64,/9j/AAAA', ''),
+    },
+    {
+        name: 'sendVoiceMessage',
+        held: (m, p) => m === 'POST' && p === '/api/messages/send',
+        act: () => {
+            const sound = new Uint8Array(400);
+            sound.set([0, 0, 0, 0x14, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20, 0, 0, 0, 0, 0x4d, 0x34, 0x41, 0x20]);
+            return db.sendVoiceMessage(dm.id, { durationMs: 4200, bars: Array.from({ length: VOICE_BARS }, (_, i) => i * 5), sound });
+        },
+    },
+    {
+        name: 'fetchGroups',
+        held: (m, p) => m === 'GET' && p === '/api/groups',
+        act: () => db.fetchGroups(),
+    },
+];
+
+beforeEach(async () => {
+    await phoneOnAWithBCopied();
+});
+
+describe('a chat answer held while the phone switches community lands only in the file it was asked for', () => {
+    it.each(ROWS.map((r) => [r.name, r] as const))('%s', async (_name, row) => {
+        row.before?.();
+        hold = holdFor(row.held);
+        let thrown: unknown = null;
+        const running = row.act().catch((e) => { thrown = e; });
+        await hold.seen;
+
+        // The member switches to B while the answer is on its way: the address written, and the copy open moved to B's file.
+        h.store.set(ANCHOR, B);
+        await db.getDb();
+        await settle();
+        const bBefore = rowsOf(B_FILE);
+        const bStoredBefore = storedFor(B_FILE);
+
+        hold.release();
+        await running;
+        await settle();
+
+        expect(new URL(hold.url!).origin, 'asked of the community whose file it writes').toBe(A);
+        expect(rowsOf(B_FILE), "B's file is as it was").toEqual(bBefore);
+        expect(storedFor(B_FILE), "B's pins, guard list and requests are as they were").toEqual(bStoredBefore);
+        if (row.sync) expect(thrown, 'a sync drops the answer, nothing thrown at the member').toBeNull();
+    });
+
+    it('the control, with no switch: the conversation list is written into A (A 1, B 0)', async () => {
+        const extra: Conv = { id: randomUUID(), type: 'dm', participants: [me.publicKey, third.publicKey] };
+        node.convs.push(extra);
+        const bBefore = rowsOf(B_FILE);
+        expect(await db.syncMessages(me.publicKey)).toBe(true);
+        const inA = rowsOf(A_FILE).conversations.filter((r: any) => r.id === extra.id).length;
+        const inB = rowsOf(B_FILE).conversations.filter((r: any) => r.id === extra.id).length;
+        expect([inA, inB]).toEqual([1, 0]);
+        expect(rowsOf(B_FILE)).toEqual(bBefore);
+    });
+
+    it('the probe\'s run 6, with the switch: the conversation list lands in neither file (A 0, B 0), and the next pass on A writes it (A 1)', async () => {
+        const extra: Conv = { id: randomUUID(), type: 'dm', participants: [me.publicKey, third.publicKey] };
+        node.convs.push(extra);
+        hold = holdFor((m, p) => m === 'GET' && p.startsWith('/api/messages/conversations/'));
+        const running = db.syncMessages(me.publicKey);
+        await hold.seen;
+        h.store.set(ANCHOR, B);
+        await db.getDb();
+        hold.release();
+        expect(await running).toBe(false);
+        const count = (file: string) => rowsOf(file).conversations.filter((r: any) => r.id === extra.id).length;
+        expect([count(A_FILE), count(B_FILE)]).toEqual([0, 0]);
+        // Back on A, its next pass reads the list again and keeps it there.
+        hold = null;
+        h.store.set(ANCHOR, A);
+        expect(await db.syncMessages(me.publicKey)).toBe(true);
+        expect([count(A_FILE), count(B_FILE)]).toEqual([1, 0]);
+    });
+});

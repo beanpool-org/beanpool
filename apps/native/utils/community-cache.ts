@@ -48,10 +48,26 @@ export async function removeCommunityCaches(
     communities: readonly string[],
     opts: { everyCopy?: boolean; beforeRemoving?: (copies: string[]) => Promise<void> } = {},
 ): Promise<void> {
+    // No held handle on another community's copy (db.ts heldCopies, utils/held-copies.ts) is open while the copies go,
+    // and none opens until they have: one left open would go on showing a deleted copy's chats (the S1 probe, measured).
+    let removed!: () => void;
+    const done = new Promise<void>((resolve) => { removed = resolve; });
+    try {
+        await removeCopies(communities, opts, done);
+    } finally {
+        removed();
+    }
+}
+
+async function removeCopies(
+    communities: readonly string[],
+    opts: { everyCopy?: boolean; beforeRemoving?: (copies: string[]) => Promise<void> },
+    done: Promise<void>,
+): Promise<void> {
     // What the sync last applied belonged to the copies going now: the next account's sync must not skip a payload
     // because it matches one of them (pillar-sync.ts).
     resetSyncFingerprints();
-    await closeDB();
+    await closeDB({ heldClosedUntil: done });
 
     const directory = typeof defaultDatabaseDirectory === 'string'
         ? defaultDatabaseDirectory.replace(/^file:\/\//, '').replace(/\/+$/, '')

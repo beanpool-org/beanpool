@@ -8,6 +8,8 @@
  *   - Chat's row for each other community where messages wait: components/OtherCommunityNotices.tsx, the very component
  *     app/(tabs)/chats.tsx renders, with a community named long enough to wrap, a number, and the note a tap that moved
  *     nothing leaves;
+ *   - a chat held in another community (slice S1): components/HeldChatRow.tsx, with a long name and a community named long
+ *     enough to wrap (the avatar stood in for: its picture is not what is measured);
  *   - the Message requests list's card for each other community where requests wait (S0, Marty 19 Nov 2026):
  *     components/RequestsElsewhereCards.tsx, as components/MessageRequestsPane.tsx renders it, with a long name and the note;
  *   - the BeanPool sheet: app/beanpool.tsx, opened as a member opens it (a long press on a saved community's row), with the
@@ -23,7 +25,12 @@
  * aborts every request but its own. The browser: run `pnpm --filter @beanpool/pwa exec playwright install --only-shell
  * chromium` once.
  *
- *   node apps/native/e2e/chat-s1-45-320.mjs [--shots <dir>]
+ *   node apps/native/e2e/chat-s1-45-320.mjs [--shots <dir>] [--chat-only]
+ *
+ * `--chat-only`: the Chat rows and the Message requests list's cards alone, in both schemes, with the sheet left out of the
+ * bundle. On main as of 19 Nov 2026 the sheet's import throws on web (react-native-worklets: "runOnUISync is not supported on
+ * web"), which leaves the whole page blank, so every state above "passes" with nothing drawn, and the sheet's long press then
+ * times out.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -40,6 +47,7 @@ const SCALE = 1.3;
 const WIDTH = 320;
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? path.resolve(process.argv[shotsAt + 1]) : null;
+const CHAT_ONLY = process.argv.includes('--chat-only');
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-s1-45-320-'));
 
@@ -104,9 +112,15 @@ const STUBS = {
     // The two modules the switch reaches a community through: the page gives the answer each state needs.
     'account-leaves-phone': `export const turnAlertsOff = async () => globalThis.__reached !== false;`,
     'push-notifications': `export const turnAlertsOnAt = async () => {};`,
+    'MemberAvatar': `
+        import React from 'react';
+        import { View, Text } from 'react-native-web';
+        export const MemberAvatar = ({ size, callsign }) => React.createElement(View, { style: { width: size, height: size, borderRadius: size / 2, backgroundColor: '#475569', alignItems: 'center', justifyContent: 'center' } },
+            React.createElement(Text, { style: { color: '#fff', fontSize: 12, fontWeight: '700' } }, String(callsign).slice(0, 1)));
+    `,
 };
 const STUBBED_FILES = ['ThemeContext', 'IdentityContext', 'NodeStatusContext', 'use-communities', 'use-global-door-open', 'use-global-entry',
-    'use-global-guest-visit', 'use-guide', 'nodes', 'global-join-existing', 'beanpool-links', 'account-leaves-phone', 'push-notifications'];
+    'use-global-guest-visit', 'use-guide', 'nodes', 'global-join-existing', 'beanpool-links', 'account-leaves-phone', 'push-notifications', 'MemberAvatar'];
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {
     if (STUBS[spec] && !spec.startsWith('.')) return spec;
@@ -124,8 +138,9 @@ import { View, Text } from 'react-native';
 import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { OtherCommunityNotices } from ${JSON.stringify(path.join(NATIVE, 'components/OtherCommunityNotices'))};
 import { MessageRequestsRow } from ${JSON.stringify(path.join(NATIVE, 'components/MessageRequestsRow'))};
+import { HeldChatRow } from ${JSON.stringify(path.join(NATIVE, 'components/HeldChatRow'))};
 import { RequestsElsewhereCards } from ${JSON.stringify(path.join(NATIVE, 'components/RequestsElsewhereCards'))};
-import BeanPoolSheet from ${JSON.stringify(path.join(NATIVE, 'app/beanpool'))};
+${CHAT_ONLY ? '' : `import BeanPoolSheet from ${JSON.stringify(path.join(NATIVE, 'app/beanpool'))};`}
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
@@ -155,6 +170,19 @@ const Chat = () => (
         />
         {/* Chat's Message requests row (components/MessageRequestsRow.tsx): the count, and the red dot while unopened. */}
         <MessageRequestsRow count={12} unseen={q.get('dot') !== '0'} onPress={() => {}} />
+        {/* Chats held in other communities (slice S1): that community's name in grey, a tap moves there. */}
+        <HeldChatRow busy={false} onOpen={() => {}} item={{
+            id: 'c1', key: 'held:c:c1', held: true, type: 'dm', postId: null, postTitle: null, postPhoto: null,
+            peer: 'Alexandria Montgomery-Whitfield', peerAvatar: null, peerUpdatedAt: null, peerPubkey: 'c3'.repeat(32), peerKeys: [],
+            rawTimestamp: new Date(Date.now() - 3 * 3600000).toISOString(), createdAt: null,
+            community: 'https://riverside.example', communityName: 'Riverside and the Upper Valley Neighbours Network',
+        }} />
+        <HeldChatRow busy={false} onOpen={() => {}} item={{
+            id: 'c2', key: 'held:b:c2', held: true, type: 'dm', postId: null, postTitle: null, postPhoto: null,
+            peer: 'Kai', peerAvatar: null, peerUpdatedAt: null, peerPubkey: 'd4'.repeat(32), peerKeys: [],
+            rawTimestamp: '2026-11-12T09:00:00.000Z', createdAt: null,
+            community: 'https://hilltop.example', communityName: 'Hilltop',
+        }} />
         <Text style={{ padding: 16, color: colors.text.secondary, fontSize: 13 }}>(the conversation list, not drawn here)</Text>
     </View>
 );
@@ -176,7 +204,7 @@ const Requests = () => (
 
 createRoot(document.getElementById('root')).render(
     <View style={{ height: '100vh', width: '100%', backgroundColor: colors.surface.app }}>
-        {view === 'chat' ? <Chat /> : view === 'requests' ? <Requests /> : <BeanPoolSheet />}
+        {view === 'chat' ? <Chat /> : view === 'requests' ? <Requests /> : ${CHAT_ONLY ? 'null' : '<BeanPoolSheet />'}}
     </View>
 );
 `);
@@ -321,6 +349,7 @@ try {
         await page.goto(`${base}/?view=requests&scheme=${scheme}&note=1`);
         await page.waitForTimeout(250);
         await measure(`requests-elsewhere-320-${scheme}`);
+        if (CHAT_ONLY) continue;
 
         await page.goto(`${base}/?view=sheet&scheme=${scheme}`);
         await openOptions();

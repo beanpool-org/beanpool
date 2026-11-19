@@ -281,9 +281,10 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         // The key check runs BEFORE the thread is read (DESIGN-dm-key-signal-model §7 S1): its resting rule moves a person not
         // marked verified to the new key first, so no frame shows the paused box or the fixed line for them.
         // S2: the header's "Verified ✓" reads the pins between the two (getDmKeyCodeInfo reads only), still before the thread.
-        expect(src).toMatch(/const change = await getDmKeyChange\(id as string\)\.catch\(\(\) => undefined\);\s*(?:\/\/[^\n]*\n\s*)*const codeInfo = await getDmKeyCodeInfo\(id as string\)\.catch\(\(\) => undefined\);\s*let data: any\[\];\s*try \{\s*data = await getMessages\(id as string, \{ limit: msgLimitRef\.current, notices: true \}\);/);
+        // Each names the chat's community (`at`, slice S2: undefined for the community in use, as before).
+        expect(src).toMatch(/const change = await getDmKeyChange\(id as string, at\)\.catch\(\(\) => undefined\);\s*(?:\/\/[^\n]*\n\s*)*const codeInfo = await getDmKeyCodeInfo\(id as string, at\)\.catch\(\(\) => undefined\);\s*let data: any\[\];\s*try \{\s*data = await getMessages\(id as string, \{ limit: msgLimitRef\.current, notices: true, community: at \}\);/);
         expect(src).toMatch(/if \(change !== undefined\) setKeyChange\(change\);/);
-        expect(src).not.toMatch(/getDmKeyChange\(id as string\)\.then\(setKeyChange/);
+        expect(src).not.toMatch(/getDmKeyChange\(id as string(?:, at)?\)\.then\(setKeyChange/);
         expect(src).toMatch(/const keyChangePending = !!keyChange;\s*const unplaced = !!keyChange\?\.unplaced;/);
         expect(src).not.toMatch(/isDmUnplaced/);
         expect(src).toMatch(/disabled=\{keyChangePending\}/);
@@ -521,7 +522,7 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
         expect(screen).toMatch(/\{state === 'waiting' && <Text style=\{styles\.keyCodeBody\}>\{copy\.waiting\}<\/Text>\}/);
         const chatSrc = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
         // Read after the key check, so it sees the pin as the resting rule left it; the same rule as the screen's.
-        expect(chatSrc).toMatch(/const change = await getDmKeyChange\(id as string\)\.catch\(\(\) => undefined\);\s*\/\/[^\n]*\n\s*const codeInfo = await getDmKeyCodeInfo\(id as string\)\.catch\(\(\) => undefined\);/);
+        expect(chatSrc).toMatch(/const change = await getDmKeyChange\(id as string, at\)\.catch\(\(\) => undefined\);\s*\/\/[^\n]*\n\s*const codeInfo = await getDmKeyCodeInfo\(id as string, at\)\.catch\(\(\) => undefined\);/);
         expect(chatSrc).toMatch(/setPeerVerified\(dmKeyCodeShowsVerified\(codeInfo, keyCodeOf\(codeInfo\?\.peer\)\)\)/);
         expect(chatSrc).toMatch(/\{isEncrypted \? t\('🔒 End-to-end encrypted'\) : t\('Connected via your community'\)\}\s*<\/Text>\s*\{isEncrypted && peerVerified && \(\s*<Text style=\{\[styles\.headerSubtitle, styles\.headerVerified\]\} numberOfLines=\{1\}>\{t\('Verified ✓'\)\}<\/Text>/);
         // "Verified ✓" never gives way at 320 dp; "🔒 End-to-end encrypted" does.
@@ -535,14 +536,15 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
         const chatSrc = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
         expect(chatSrc).toMatch(/label: t\('Key code'\),\s*hidden: !isEncrypted,/);
         expect(chatSrc).toMatch(/const renderMessage = \(item: any\) => \{\s*\/\/[^\n]*\n\s*if \(item\.keyChangedNotice\) return <DmKeyChangedNotice peerName=\{peerName\} onPress=\{openKeyCode\} \/>;/);
-        expect(chatSrc).toMatch(/router\.push\(\{ pathname: '\/chat\/key-code', params: \{ id: String\(id\) \} \}\)/);
+        // In place (slice S2) the key code screen gets the chat's community too, and reads and marks that community's pins.
+        expect(chatSrc).toMatch(/router\.push\(\{ pathname: '\/chat\/key-code', params: at \? \{ id: String\(id\), community: at \} : \{ id: String\(id\) \} \}\)/);
         const screen = readFileSync(join(process.cwd(), 'app', 'chat', 'key-code.tsx'), 'utf8');
         expect(screen).not.toMatch(/<Modal\b/);
         expect(screen).not.toMatch(/import \{[^}]*\bModal\b[^}]*\} from 'react-native'/);
         expect(screen).not.toMatch(/numberOfLines/);
         expect(screen).toMatch(/<ScrollView/);
-        expect(screen).toMatch(/markDmPeerVerified\(String\(id\), info\.peer\)/);
-        expect(screen).toMatch(/getDmKeyCodeInfo\(String\(id\)\)/);
+        expect(screen).toMatch(/markDmPeerVerified\(String\(id\), info\.peer, at\)/);
+        expect(screen).toMatch(/getDmKeyCodeInfo\(String\(id\), at\)/);
         const card = readFileSync(join(process.cwd(), 'components', 'ChatMemoryCard.tsx'), 'utf8');
         expect(card).toMatch(/\{t\(CHAT_MEMORY_COPY\.confirm\)\}<\/Text>\s*<Text style=\{styles\.confirmText\}>\{t\(CHAT_MEMORY_COPY\.verifiedGo\)\}<\/Text>/);
     });

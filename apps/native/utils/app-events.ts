@@ -24,3 +24,9 @@ export function emitAppEvent(name: string, payload?: unknown): void {
         // Not in a React Native runtime (vitest, a script) — nothing is listening anyway.
     }
 }
+
+/**
+ * A push arrived while the app is open (services/push-notifications.ts): a chat open in place, which has no socket of its
+ * own (slice S2: one socket per phone, the community in use's), reads its community again at once.
+ */
+export const PUSH_RECEIVED_EVENT = 'push_received_while_open';

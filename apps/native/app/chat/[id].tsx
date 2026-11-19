@@ -9,7 +9,9 @@ import { dealStateWords, dealStep, formatHundredths, freePriceWords, itemDealTit
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { leaveScreen } from '../../utils/leave-screen';
+import { PUSH_RECEIVED_EVENT } from '../../utils/app-events';
 
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,7 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
 import { ChatScrollPage } from '../../components/chat/ChatScrollPage';
@@ -29,6 +31,8 @@ import { keyCodeOf } from '../../utils/key-code';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
+import { chatInPlaceRoute, type ChatInPlaceRoute } from '../../utils/held-chats';
+import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { dmPeerName, isDmBlocked } from '../../utils/dm-blocked';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
@@ -115,20 +119,48 @@ const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getC
  * link or a push.
  */
 export default function ChatRoute() {
-    const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{
+    // `communityName` (a held row's, a contact's) is never shown: the name is the one the phone saved (#3305 review F2).
+    const { id, event, group, enterprise, created, name, info, community } = useLocalSearchParams<{
         id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string; info?: string;
+        community?: string; communityName?: string;
     }>();
+    const { identity } = useIdentity();
+    // A chat named with a community (slice S2): what this phone holds there decides, before anything draws (#3305 review
+    // F1). A link can carry any id and any address, so only a direct chat that community's own copy already holds opens in
+    // place, at its saved address and under its saved name; the community in use takes the ordinary route; anything else
+    // opens nothing there (utils/held-chats.ts chatInPlaceRoute).
+    const placeKey = id && community ? `${String(community)}\n${String(id)}` : null;
+    const [placed, setPlaced] = useState<{ for: string; answer: ChatInPlaceRoute } | null>(null);
+    useEffect(() => {
+        // Asked once the account on the phone is known (a link can open the app before it has loaded): until then nothing draws.
+        if (!placeKey || !identity?.publicKey) return;
+        let alive = true;
+        setPlaced(null);
+        chatInPlaceRoute(identity.publicKey, String(id), String(community))
+            .catch((): ChatInPlaceRoute => ({ open: 'nothing' }))
+            .then((answer) => { if (alive) setPlaced({ for: placeKey, answer }); });
+        return () => { alive = false; };
+        // The key names the id and the community; the account is read as the answer is asked.
+    }, [placeKey, identity?.publicKey]);
+    const placedNow = placeKey && placed?.for === placeKey ? placed.answer : null;
+    // No community named, or the one in use: the ordinary route.
+    const ordinary = !community || placedNow?.open === 'here';
     // The answer for the id it was asked of: a new id draws nothing until its own answer is in.
     const [route, setRoute] = useState<{ for: string; answer: ChatRouteAnswer } | null>(null);
     useEffect(() => {
-        if (!id) return;
+        if (!id || !ordinary) return;
         let alive = true;
         setRoute(null);
         routeChat(ROUTE_ASKS, String(id), { event: event === '1', thread: group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null })
             .then(answer => { if (alive) setRoute({ for: String(id), answer }); });
         return () => { alive = false; };
-    }, [id, event, group, enterprise]);
+    }, [id, event, group, enterprise, ordinary]);
 
+    // A direct chat of another community this phone holds, read and written there in place (slice S2): its screen reaches
+    // that community by name for everything.
+    if (id && community && !placedNow) return null;
+    if (id && placedNow?.open === 'in-place') return <ChatScreen id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
+    if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;
     if (!id || !route || route.for !== String(id)) return null;
     const { view, screenId } = route.answer;
     if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
@@ -137,9 +169,82 @@ export default function ChatRoute() {
     return <ChatScreen id={screenId} />;
 }
 
-/** The DM screen, on routeChat's id: a known DM's own spelling, else the link's. */
-function ChatScreen({ id }: { id: string }) {
+/**
+ * A chat named with a community that doesn't open in place (#3305 review F1): nothing of that community's copy is opened,
+ * read or written here, and nothing is asked of its server. A community this phone holds as a member: one tap moves the
+ * phone there and opens the chat, as Chat's held row of a group's chat does (S1, utils/push-notice-switch.ts
+ * openNoticeIn). Any other: only that the chat can't be opened.
+ */
+function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) {
+    const { colors } = useTheme();
+    const { identity } = useIdentity();
+    const { recheck } = useNodeStatus();
+    const [moving, setMoving] = useState(false);
+    // A tap that moved nothing says so, as Chat's held rows do (app/(tabs)/chats.tsx switchNote): a join or a switch under
+    // way (openNoticeIn's 'held'), or a switch that failed.
+    const [moveNote, setMoveNote] = useState<string | null>(null);
+    const move = where.open === 'move' ? where : null;
+    // As Contacts' own move button (app/contacts.tsx `go`): central tokens, readable light and dark, 44 dp and wrapping.
+    const styles = useStyles(({ colors: c }) => StyleSheet.create({
+        page: { flex: 1, backgroundColor: c.surface.card },
+        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+        back: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start' },
+        body: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+        words: { fontSize: 15, color: c.text.body, lineHeight: 21, textAlign: 'center' },
+        go: { minHeight: 44, maxWidth: '100%', paddingHorizontal: 16, borderRadius: 10, backgroundColor: c.brand.fill, alignItems: 'center', justifyContent: 'center' },
+        goText: { fontSize: 15, fontWeight: '800', color: c.text.inverse, textAlign: 'center' },
+    }));
+    const moveThere = async () => {
+        if (!move || !identity?.publicKey || moving) return;
+        setMoveNote(null);
+        setMoving(true);
+        try {
+            // Asked only on the tap: the switch and its guards, as Chat's held rows move (app/(tabs)/chats.tsx openHeldChat).
+            const [{ openNoticeIn }, { switchCommunity, communitySwitchUnderWay }, { getPendingOnboarding }] = await Promise.all([
+                import('../../utils/push-notice-switch'), import('../../utils/use-communities'), import('../../utils/onboarding-state'),
+            ]);
+            const result = await openNoticeIn(move.community, null, async () => `/chat/${id}` as const, {
+                storage: AsyncStorage,
+                publicKey: identity.publicKey,
+                joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
+                switchUnderWay: communitySwitchUnderWay,
+                switchTo: switchCommunity,
+                recheck,
+            });
+            if (result !== 'switched') setMoveNote(t("Something went wrong. Try again in a moment."));
+        } finally {
+            setMoving(false);
+        }
+    };
+    return (
+        <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
+            <View style={styles.header}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Back')} onPress={() => leaveScreen(router, 'chat/[id]')} style={styles.back}>
+                    <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text.body} />
+                </Pressable>
+            </View>
+            <View style={styles.body} testID="chat-not-in-place">
+                <Text style={styles.words} accessibilityRole="alert">{t('Could not open this chat.')}</Text>
+                {move ? (
+                    <Pressable accessibilityRole="button" style={styles.go} disabled={moving} onPress={() => void moveThere()}>
+                        <Text style={styles.goText}>{t('Open {community} ›', { community: move.name })}</Text>
+                    </Pressable>
+                ) : null}
+                {move && moveNote ? <Text style={styles.words} accessibilityRole="alert">{moveNote}</Text> : null}
+            </View>
+        </SafeAreaView>
+    );
+}
+
+/**
+ * The DM screen, on routeChat's id: a known DM's own spelling, else the link's. `inPlace`: a DM of another community this
+ * phone holds, read and written there without a switch (slice S2): every read and write below names it (`at`), and what
+ * this slice doesn't do there (deals, photos and voice sent, reports, a profile or a listing opened) is not offered.
+ */
+function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string; name: string } }) {
     const { theme, colors } = useTheme();
+    // The community this chat lives in when it is not the one in use: undefined, the one in use, as before.
+    const at = inPlace?.community;
     const { triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();
     const [messages, setMessages] = useState<any[]>([]);
@@ -163,7 +268,7 @@ function ChatScreen({ id }: { id: string }) {
     // Voice messages only where the community says it takes them (core voiceLinesOn; a live community, 14 Nov): a node from before
     // voice V2 stores one as words with a sound no one can play. Read at send time from the ref, as the recorder holds the
     // onVoice it was given while a recording waits.
-    const voiceHere = voiceLinesOn(nodeProfile?.features);
+    const voiceHere = !at && voiceLinesOn(nodeProfile?.features);
     const voiceHereRef = useRef(voiceHere);
     voiceHereRef.current = voiceHere;
     // `amount_c`: what the deal holds, whole hundredths of a Bean (null when the phone holds no figure for it).
@@ -242,6 +347,9 @@ function ChatScreen({ id }: { id: string }) {
     // History-window paging. Refs (not state) because loadMessages is called from
     // long-lived closures (poll interval, ws listener) that must see current values.
     const msgLimitRef = useRef(MESSAGE_PAGE_SIZE);
+    // True from the focus effect's start to its cleanup: a read still on its way once the chat is left asks nothing more
+    // (no mark read, nothing shown), so nothing is asked of a chat in place's community after it is left (#3305 review).
+    const inViewRef = useRef(false);
     const messagesLenRef = useRef(0);
     const loadingOlderRef = useRef(false);
     // While the keyboard is up, KeyboardAvoidingView already lifts the input bar to sit
@@ -306,6 +414,8 @@ function ChatScreen({ id }: { id: string }) {
         headerTextContainer: { flex: 1, justifyContent: 'center' },
         headerTitle: { fontSize: 16, fontWeight: '800', color: colors.text.body, letterSpacing: 0.5 },
         headerSubtitle: { fontSize: 11, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
+        // A chat in place (slice S2): its community's name in grey under the person's, as Chat's held row says it.
+        headerCommunity: { fontSize: 11, color: colors.text.secondary, fontWeight: '600', marginTop: 2 },
         // The subtitle's row: "🔒 End-to-end encrypted" gives way first at 320 dp and 1.3× text, so "Verified ✓" stays whole.
         headerSubtitleRow: { flexDirection: 'row', alignItems: 'center' },
         headerSubtitleText: { flexShrink: 1 },
@@ -462,7 +572,8 @@ function ChatScreen({ id }: { id: string }) {
     useChatSoftInputMode();
 
     const loadRatedTransactions = useCallback(async () => {
-        if (!identity?.publicKey) return;
+        // Deals and ratings are the community in use's: none in place (slice S2).
+        if (!identity?.publicKey || at) return;
         try {
             const db = await getDb();
             const ratedRows = await db.getAllAsync<any>(
@@ -479,7 +590,7 @@ function ChatScreen({ id }: { id: string }) {
         } catch (e) {
             console.error("[Chat] Failed to load rated transaction list:", e);
         }
-    }, [identity?.publicKey]);
+    }, [identity?.publicKey, at]);
 
     // Blocked when any key the other person is known by here is on the block list (utils/dm-blocked.ts): the name order
     // may pick their new key after a re-key, and the member blocked the old one (review of #3268, finding 2).
@@ -506,7 +617,18 @@ function ChatScreen({ id }: { id: string }) {
 
     const loadConversationData = useCallback(async () => {
         if (id && identity?.publicKey) {
-            const res = await getConversation(id as string, identity.publicKey);
+            let res: any;
+            try {
+                res = await getConversation(id as string, identity.publicKey, at);
+            } catch (e: any) {
+                // A read refused (in place: that community's copy can't be opened now, or the chat was left meanwhile): its
+                // name is never "Loading..." for good (#3305 review F4), and nothing more is read or asked. The thread's own
+                // read, refused the same way, shows the chat's not-available words (loadMessages).
+                if (!inViewRef.current) return;
+                console.warn('[Chat] Could not read this conversation:', e?.message || e);
+                setPeerName(String(id).slice(0, 8));
+                return;
+            }
             if (res) {
                 setConvRow(res);
                 // Talk's list and Needs you name it by the same rule (utils/dm-blocked.ts dmPeerName): never the conversation's id.
@@ -515,7 +637,7 @@ function ChatScreen({ id }: { id: string }) {
                 setPeerKeys(prev => keepKeys(prev, Array.isArray(res.peerKeys) ? res.peerKeys : []));
                 setIsEncrypted(res.type === 'dm' && !!res.otherPubkey);
                 setPeerAvatar(res.otherAvatar || null);
-                if (res.postId) {
+                if (res.postId && !at) {
                     setPostContext({
                         id: res.postId,
                         title: res.postTitle,
@@ -549,8 +671,8 @@ function ChatScreen({ id }: { id: string }) {
                 } else {
                     setIsDynamicContext(true);
                 }
-                // Track pending transaction for inline action bar
-                if (res.pendingTxId && identity.publicKey) {
+                // Track pending transaction for inline action bar (never in place: a deal is the community in use's)
+                if (res.pendingTxId && identity.publicKey && !at) {
                     setPendingTx({
                         id: res.pendingTxId,
                         amount_c: res.pendingAmount_c ?? null,
@@ -562,7 +684,7 @@ function ChatScreen({ id }: { id: string }) {
 
                 // Consolidated-thread review deep-link: the inbox passes the specific deal's txId
                 // (per-pair threads have no postId, so the post-based trigger above won't fire).
-                if (triggerReview === 'true' && txIdParam && !promptedRef.current && res.otherPubkey) {
+                if (triggerReview === 'true' && txIdParam && !promptedRef.current && res.otherPubkey && !at) {
                     promptedRef.current = true;
                     setPromptReviewForTx({
                         txId: String(txIdParam),
@@ -574,13 +696,13 @@ function ChatScreen({ id }: { id: string }) {
                 setPeerName(String(id).slice(0, 8));
             }
         }
-    }, [id, identity, triggerReview]);
+    }, [id, identity, triggerReview, at]);
 
     // All deals with this peer, from local SQLite. Re-queried on focus, on the poll,
     // and on sync events below so a deal written moments after navigation
     // (e.g. accept-offer → chat) still surfaces without a remount.
     const loadDeals = useCallback(async () => {
-        if (!identity?.publicKey || !peerPubkey) return;
+        if (!identity?.publicKey || !peerPubkey || at) return;
         try {
             const next = await getDealsBetween(identity.publicKey, peerPubkey);
             // Polled every few seconds — keep the previous reference when nothing
@@ -589,9 +711,13 @@ function ChatScreen({ id }: { id: string }) {
         } catch (e) {
             console.warn('[Deals] load failed', e);
         }
-    }, [identity?.publicKey, peerPubkey]);
+    }, [identity?.publicKey, peerPubkey, at]);
 
     React.useEffect(() => { loadDeals(); }, [loadDeals]);
+    // The peer's key, once read, changes loadDeals, and the focus effect runs again so an ordinary chat's deals read under
+    // it. In place loadDeals does nothing, and that re-run would let go of the community's copy and hold it again, cutting
+    // the first poll from that community's server on its way (#3305 review): there the key arriving runs nothing again.
+    const dealsRerun = at ? null : loadDeals;
 
     useFocusEffect(
         useCallback(() => {
@@ -602,6 +728,12 @@ function ChatScreen({ id }: { id: string }) {
             let interval: ReturnType<typeof setInterval> | null = null;
             let appStateSub: any = null;
             promptedRef.current = false;
+            // From here to the cleanup: a follow-up of anything begun meanwhile (a poll, a push, the first sync) that lands
+            // once the chat is left runs nothing (#3305 review). In place, db.ts refuses the copy too (enterChatInPlace).
+            let active = true;
+            inViewRef.current = true;
+            // Held in place (slice S2) before the first read: its copy opens again, once a close still under way is done.
+            if (at) enterChatInPlace(at);
 
             let sub: any = null;
             let wsSub: any = null;
@@ -611,7 +743,10 @@ function ChatScreen({ id }: { id: string }) {
                 loadRatedTransactions();
                 loadDeals();
                 loadMessages().then(() => {
+                    // The whole sync is the community in use's: a chat in place polls its own community below.
+                    if (at || !active) return;
                     syncMessages(identity!.publicKey).then(() => {
+                        if (!active) return;
                         loadConversationData();
                         loadMessages(true);
                         loadRatedTransactions();
@@ -620,12 +755,16 @@ function ChatScreen({ id }: { id: string }) {
                 });
 
                 // Background Poll. The chat is the node's word once its answer is read back here (nodeAnswered).
+                // In place (slice S2): every few seconds from that community's own server, no socket of its own.
+                // A poll or a push whose answer lands once the chat is left: nothing more is read or asked.
+                const afterSingle = async (answered: boolean) => {
+                    if (!active) return;
+                    loadDeals();
+                    await Promise.all([loadConversationData(), loadMessages(true)]);
+                    if (active && answered !== false) setNodeAnswered(true);
+                };
                 const pollSingle = () => {
-                    syncSingleConversation(id as string).then(async (answered) => {
-                        loadDeals();
-                        await Promise.all([loadConversationData(), loadMessages(true)]);
-                        if (answered !== false) setNodeAnswered(true);
-                    });
+                    syncSingleConversation(id as string, at).then(afterSingle);
                 };
 
                 const startPolling = () => {
@@ -657,6 +796,7 @@ function ChatScreen({ id }: { id: string }) {
                 appStateSub = AppState.addEventListener('change', handleAppStateChange);
 
                 sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
+                    if (!active) return;
                     loadConversationData();
                     loadMessages(true);
                     loadRatedTransactions();
@@ -667,23 +807,26 @@ function ChatScreen({ id }: { id: string }) {
                 // conversation immediately with a single targeted fetch, rather
                 // than waiting for the heavier full reconciliation (requestSync)
                 // to finish and emit 'sync_data_updated'.
-                wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
-                    if (AppState.currentState === 'active') {
-                        syncSingleConversation(id as string).then(async (answered) => {
-                            loadDeals();
-                            await Promise.all([loadConversationData(), loadMessages(true)]);
-                            if (answered !== false) setNodeAnswered(true);
-                        });
+                // In place, the doorbell is a push from that community (utils/push-notifications.ts PUSH_RECEIVED_EVENT): the
+                // socket is the community in use's.
+                wsSub = DeviceEventEmitter.addListener(at ? PUSH_RECEIVED_EVENT : 'ws_activity', () => {
+                    if (active && AppState.currentState === 'active') {
+                        syncSingleConversation(id as string, at).then(afterSingle);
                     }
                 });
             }
             return () => {
+                active = false;
+                inViewRef.current = false;
                 if (interval) clearInterval(interval);
                 if (appStateSub) appStateSub.remove();
                 if (sub) sub.remove();
                 if (wsSub) wsSub.remove();
+                // Left: that community's copy open in place closes, and opens for nothing until the chat is back (or its key
+                // code screen holds it: then it closes as that screen goes).
+                if (at) void leaveChatInPlace(at);
             };
-        }, [id, identity, loadConversationData, loadDeals])
+        }, [id, identity, loadConversationData, dealsRerun, at])
     );
 
     // Change signature for the poll-tick compare in loadMessages: every field that
@@ -696,30 +839,37 @@ function ChatScreen({ id }: { id: string }) {
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
+        // Left (the focus effect's cleanup): nothing is read or asked, and one still on its way stops at the next step below
+        // (#3305 review). In place, db.ts refuses that community's copy from the leave on as well (leaveChatInPlace).
+        if (!inViewRef.current) return;
         // The key check first (DESIGN-dm-key-signal-model §7 S1): it applies the resting rule, so a person not marked
         // verified has already moved to the new key when the thread is read, and no frame shows the paused box or the
         // "Sent from the new key" line for them. Unreadable pins: the banner stays as it was (undefined), and a send says why
         // it refused. A rule-5 record comes back as a change too (unplaced).
-        const change = await getDmKeyChange(id as string).catch(() => undefined);
+        const change = await getDmKeyChange(id as string, at).catch(() => undefined);
         // Read after the check, so it sees the pin as the resting rule left it. Reads only; unreadable pins keep what showed.
-        const codeInfo = await getDmKeyCodeInfo(id as string).catch(() => undefined);
+        const codeInfo = await getDmKeyCodeInfo(id as string, at).catch(() => undefined);
         let data: any[];
         try {
-            data = await getMessages(id as string, { limit: msgLimitRef.current, notices: true });
+            data = await getMessages(id as string, { limit: msgLimitRef.current, notices: true, community: at });
             setLoadError(null);
         } catch (e: any) {
+            // A read refused because the chat was left meanwhile (in place: its copy is closed) is not this chat's error.
+            if (!inViewRef.current) return;
             console.warn('[Chat] Could not read this conversation:', e?.message || e);
             setLoadError(e?.message || t('Could not open this chat.'));
             return;
         } finally {
             setFirstLoadDone(true);
         }
+        // Left while it read: not marked read, nothing asked of the chat's server, nothing shown.
+        if (!inViewRef.current) return;
         // Lines only: the key-changed notices are the phone's own and don't count toward the history window.
         messagesLenRef.current = data.filter((m: any) => !m.keyChangedNotice).length;
         if (change !== undefined) setKeyChange(change);
         if (codeInfo !== undefined) setPeerVerified(dmKeyCodeShowsVerified(codeInfo, keyCodeOf(codeInfo?.peer)));
         if (identity?.publicKey) {
-            await markConversationRead(id as string, identity.publicKey).catch(() => {});
+            await markConversationRead(id as string, identity.publicKey, at).catch(() => {});
         }
 
         setMessages(prev => {
@@ -741,9 +891,9 @@ function ChatScreen({ id }: { id: string }) {
     // moves only to the key whose code the banner showed: if the node offered another meanwhile, nothing moves.
     const handleContinueWithNewKey = async (peer: string) => {
         try {
-            const moved = await acceptOfferedPeer(id as string, peer);
+            const moved = await acceptOfferedPeer(id as string, peer, at);
             if (!moved) {
-                const now = await getDmKeyChange(id as string).catch(() => undefined);
+                const now = await getDmKeyChange(id as string, at).catch(() => undefined);
                 if (now === null) Alert.alert(t('Nothing changed'), t('This chat no longer offers that key, so nothing was moved.'));
                 else Alert.alert(t('Nothing changed'), t('The key on offer changed while you were checking. Look at the new code and check it again.'));
             }
@@ -781,17 +931,17 @@ function ChatScreen({ id }: { id: string }) {
         if (cancellingRequest) return;
         setCancellingRequest(true);
         try {
-            const answer = await decideMessageRequest(String(id), 'cancel');
+            const answer = await decideMessageRequest(String(id), 'cancel', at);
             const nextRequest = answer.request ?? { ...convRow?.request, nextLineIsRequest: true };
             setConvRow((prev: any) => prev ? { ...prev, request: nextRequest } : prev);
             if (messages.length > 0) {
                 for (const m of messages) {
                     if (m.keyChangedNotice) continue;
-                    await deleteLocalMessage(m.id).catch(() => {});
+                    await deleteLocalMessage(m.id, at).catch(() => {});
                 }
             }
             await loadMessages(true);
-            void syncSingleConversation(String(id));
+            void syncSingleConversation(String(id), at);
         } catch (e: any) {
             Alert.alert(t('Could not cancel request'), e.message ? chatLineWords(e.message) : t('That did not go through. Please try again.'));
         } finally {
@@ -803,7 +953,7 @@ function ChatScreen({ id }: { id: string }) {
     // the other accepts. Not an edit of that line, which the node and the web allow (PR #2540 review 4394827275).
     const requestLine = requestMode === 'to-me' ? requestLineIn(messages, identity?.publicKey, heldRequest?.at) : null;
     // With no line here, only the node's word says none is left: this phone may just not have it yet.
-    const canReportRequest = !!requestLine || nodeAnswered;
+    const canReportRequest = !at && (!!requestLine || nodeAnswered);
     const requestHoldsSends = requestMode === 'to-me' || requestMode === 'mine-loading' || (requestMode === 'mine-waiting' && !editingMessage);
     // Asked before the composer empties the box, so a refused send keeps what was typed.
     const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && !requestLineId && !requestHoldsSends;
@@ -822,7 +972,7 @@ function ChatScreen({ id }: { id: string }) {
         const wasEditing = editingMessage;
         try {
             if (wasEditing) {
-                await withTimeout(editMessage(id as string, wasEditing.id, currentDraft), 15_000, t('Editing is taking too long — please try again.'));
+                await withTimeout(editMessage(id as string, wasEditing.id, currentDraft, at), 15_000, t('Editing is taking too long — please try again.'));
                 setEditingMessage(null);
                 loadMessages(true);
             } else {
@@ -833,7 +983,7 @@ function ChatScreen({ id }: { id: string }) {
                 // The listing the member came from (Message on a Need or an Offer) goes with this line, sealed beside its words; the
                 // chip is spent once the line is written, and the line itself holds it from there, so a Resend carries it too.
                 const about = chatAboutDrafts.get(String(id));
-                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata, undefined, about), 15_000, t('Sending is taking too long — please try again.'));
+                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata, undefined, about, at), 15_000, t('Sending is taking too long — please try again.'));
                 if (about) chatAboutDrafts.drop(String(id));
                 setReplyToMessage(null);
                 // Written here and on its way: the chat waits only once the node has taken it (the effect above).
@@ -871,7 +1021,7 @@ function ChatScreen({ id }: { id: string }) {
             { text: t('Cancel'), style: 'cancel' },
             { text: t('Delete'), style: 'destructive', onPress: async () => {
                 try {
-                    await deleteMessageApi(item.id);
+                    await deleteMessageApi(item.id, at);
                     hapticSuccess();
                     loadMessages(true);
                 } catch (e: any) {
@@ -886,7 +1036,7 @@ function ChatScreen({ id }: { id: string }) {
         setMuteOpen(false);
         setMenuOpen(false);
         try {
-            const res = await muteChatApi(id as string, duration);
+            const res = await muteChatApi(id as string, duration, at);
             setMute(duration === 'off' ? null : (res?.mute ?? { conversationId: String(id), mutedUntil: null, always: duration === 'always' }));
         } catch (e: any) {
             Alert.alert(t('Not changed'), chatActionErrorMessage(e));
@@ -907,7 +1057,7 @@ function ChatScreen({ id }: { id: string }) {
             : t('This message could not be sent.');
         Alert.alert(t('Message not delivered'), errorText, [
             { text: t('Discard'), style: 'destructive', onPress: async () => {
-                await deleteLocalMessage(item.id).catch(() => {});
+                await deleteLocalMessage(item.id, at).catch(() => {});
                 loadMessages(true);
             }},
             { text: t('Resend'), onPress: async () => {
@@ -922,7 +1072,7 @@ function ChatScreen({ id }: { id: string }) {
                     // of a duplicate the peer sees twice. insertMessage replaces the
                     // failed row only once the words are locked, so a resend that
                     // can't be locked leaves it here to try again.
-                    const sentId = await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id);
+                    const sentId = await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id, undefined, at);
                     if (requestMode === 'mine-unsent' && typeof sentId === 'string') setRequestLineId(sentId);
                     setLockNotice(null);
                 } catch (e: any) {
@@ -942,8 +1092,9 @@ function ChatScreen({ id }: { id: string }) {
     // the same line id (`lineId`, the recording's own) on every try, and the 60 s gives the send up for real (its POST
     // aborted, nothing written here after), so a Send after a timeout is the node's duplicate, never a second message.
     const sendVoice = async (voice: VoiceInput, lineId: string) => {
-        // The community no longer says it takes voice messages (asked again since the recording began): kept, not sent.
-        if (!voiceHereRef.current) {
+        // The community no longer says it takes voice messages (asked again since the recording began): kept, not sent. Never
+        // in place (slice S2): a voice message goes to the community in use.
+        if (!voiceHereRef.current || at) {
             const why = t(VOICE_LINES_WORDS.notTaken);
             setLockNotice(why);
             throw new VoiceNotSentError(why);
@@ -970,7 +1121,8 @@ function ChatScreen({ id }: { id: string }) {
     };
 
     const pickAndSendImage = async () => {
-        if (!identity?.publicKey || sendingRef.current) return;
+        // Photos go to the community in use: not offered in place (slice S2).
+        if (!identity?.publicKey || sendingRef.current || at) return;
         if (!requestTakesPhoto(requestMode) || requestLineId) return;
         // Same phantom-keyboard hazard as the review modal: the source-picker Alert and
         // the image-picker Activity are separate windows — hide the keyboard first.
@@ -1020,7 +1172,8 @@ function ChatScreen({ id }: { id: string }) {
     };
 
     const handleReleaseCredits = async () => {
-        if (!pendingTx || !identity?.publicKey) return;
+        // A deal is the community in use's: never released from a chat in place (slice S2).
+        if (!pendingTx || !identity?.publicKey || at) return;
         await KeyboardController.dismiss(); // Alert = separate window; see review-modal note
         // English writes one form for both; a language with more forms has them.
         Alert.alert(
@@ -1049,7 +1202,7 @@ function ChatScreen({ id }: { id: string }) {
                             }
                             
                             // Refresh conversation state
-                            syncSingleConversation(id as string).then(() => {
+                            syncSingleConversation(id as string, at).then(() => {
                                 loadConversationData();
                                 loadDeals();
                                 loadMessages(true);
@@ -1067,6 +1220,8 @@ function ChatScreen({ id }: { id: string }) {
     };
 
     const handleCancelEscrow = async () => {
+        // A deal is the community in use's: never cancelled from a chat in place (slice S2).
+        if (at) return;
         if (!pendingTx || !identity?.publicKey) return;
         await KeyboardController.dismiss();
         Alert.alert(
@@ -1083,7 +1238,7 @@ function ChatScreen({ id }: { id: string }) {
                             await cancelMarketplaceTransaction(pendingTx.id, identity.publicKey);
                             hapticWarning();
                             Alert.alert(t('Cancelled'), t('The hold has been cancelled and the Beans refunded.'));
-                            syncSingleConversation(id as string).then(() => {
+                            syncSingleConversation(id as string, at).then(() => {
                                 loadConversationData();
                                 loadDeals();
                                 loadMessages(true);
@@ -1169,7 +1324,7 @@ function ChatScreen({ id }: { id: string }) {
 
     /** `amount_c`: what the deal holds, whole hundredths of a Bean (null: no figure, said "—"). */
     const handleReleaseDeal = async (txId: string, amount_c: number | null) => {
-        if (!identity?.publicKey) return;
+        if (!identity?.publicKey || at) return;
         await KeyboardController.dismiss();
         Alert.alert(t('Release Beans'), tn((amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.', { n: formatHundredths(amount_c) }), [
             { text: t('Cancel'), style: 'cancel' },
@@ -1179,7 +1334,7 @@ function ChatScreen({ id }: { id: string }) {
                     await completeMarketplaceTransaction(txId, identity.publicKey);
                     hapticSuccess();
                     if (peerPubkey) setPromptReviewForTx({ txId, targetPubkey: peerPubkey, targetCallsign: peerName });
-                    await syncSingleConversation(id as string);
+                    await syncSingleConversation(id as string, at);
                     await loadDeals();
                     loadMessages(true);
                 } catch (e: any) {
@@ -1191,7 +1346,7 @@ function ChatScreen({ id }: { id: string }) {
     };
 
     const handleCancelDeal = async (txId: string) => {
-        if (!identity?.publicKey) return;
+        if (!identity?.publicKey || at) return;
         await KeyboardController.dismiss();
         Alert.alert(t('Cancel Deal'), t('Cancel this deal? The Beans held in trust will be refunded.'), [
             { text: t('Keep'), style: 'cancel' },
@@ -1200,7 +1355,7 @@ function ChatScreen({ id }: { id: string }) {
                 try {
                     await cancelMarketplaceTransaction(txId, identity.publicKey);
                     hapticWarning();
-                    await syncSingleConversation(id as string);
+                    await syncSingleConversation(id as string, at);
                     await loadDeals();
                     loadMessages(true);
                 } catch (e: any) {
@@ -1222,7 +1377,7 @@ function ChatScreen({ id }: { id: string }) {
     // Today / Yesterday / "Mon, 12 May" reads exactly like a DM's (utils/chat-actions).
     const listItems = React.useMemo(() => buildChatListItems(messages), [messages]);
     // The listings the messages name (Message on a listing; core chat-about.ts), as this member can read them.
-    const aboutListings = useAboutListings(React.useMemo(() => messages.filter((m) => m.about).map((m) => m.about.postId as string), [messages]));
+    const aboutListings = useAboutListings(React.useMemo(() => (at ? [] : messages.filter((m) => m.about).map((m) => m.about.postId as string)), [messages, at]));
 
     // Who this member is in this chat. The one place the action rules are asked, so a DM and a group chat
     // can never disagree about what tapping a bubble offers.
@@ -1231,13 +1386,15 @@ function ChatScreen({ id }: { id: string }) {
         myPubkey: identity?.publicKey ?? null,
         canPost: !isPeerBlocked,
         isModerator: false,
-        reportsLines: true,
-    }), [identity?.publicKey, isPeerBlocked]);
+        // A report goes to the community in use's moderators: not offered in place (slice S2).
+        reportsLines: !at,
+    }), [identity?.publicKey, isPeerBlocked, at]);
 
     // One line reported to the moderators, as its sender's signature and these words (core dm-line-report.ts). `blocks`:
     // Report on a request, which blocks its sender too (utils/request-report.ts). The sheet stays under the dialog until OK.
     const submitLineReport = async (reason: string) => {
-        if (!reportingLine) return;
+        // A report goes to the community in use's moderators: never from a chat in place (slice S2).
+        if (!reportingLine || at) return;
         const { item, blocks } = reportingLine;
         try {
             let outcome: RequestReportOutcome = 'reported';
@@ -1311,8 +1468,9 @@ function ChatScreen({ id }: { id: string }) {
                 </View>
                 <Text style={chat.systemTimestamp}>{messageTime(item)}</Text>
 
-                {/* Inline post link — only when it points somewhere the sticky header doesn't already cover */}
-                {item.metadata?.postId && item.metadata.postId !== postContext?.id && (
+                {/* Inline post link — only when it points somewhere the sticky header doesn't already cover. Not in place
+                    (slice S2): the listing screen reads the community in use, which never has this chat's listing. */}
+                {!at && item.metadata?.postId && item.metadata.postId !== postContext?.id && (
                     <Pressable
                         accessibilityRole="button"
                         style={chat.systemActionBtn}
@@ -1323,7 +1481,7 @@ function ChatScreen({ id }: { id: string }) {
                     </Pressable>
                 )}
 
-                {item.systemType === 'ESCROW_RELEASED' && item.metadata?.postId && (() => {
+                {!at && item.systemType === 'ESCROW_RELEASED' && item.metadata?.postId && (() => {
                     // This line's own trade: its transactionId, or for an older line the one that finished with it — the
                     // same rule the web reads it by (review #1980 B1).
                     const lineTxId = releaseLineTradeId(myCompletedTrades, item.metadata, item.rawTimestamp, identity?.publicKey, peerPubkey);
@@ -1399,7 +1557,7 @@ function ChatScreen({ id }: { id: string }) {
     );
 
     // The key code screen for this chat (DESIGN-dm-key-signal-model §3): from the ⋯ menu and from a key-changed notice.
-    const openKeyCode = () => router.push({ pathname: '/chat/key-code', params: { id: String(id) } });
+    const openKeyCode = () => router.push({ pathname: '/chat/key-code', params: at ? { id: String(id), community: at } : { id: String(id) } });
 
     const renderMessage = (item: any) => {
         // The phone's own notice that the key changed and the chat carried on (a person not marked verified): never anyone's words.
@@ -1421,7 +1579,7 @@ function ChatScreen({ id }: { id: string }) {
         const handleEmojiSelect = async (emoji: string) => {
             if (!identity?.publicKey || inRequest) return;
             try {
-                await toggleMessageReactionApi(item.id, identity.publicKey, emoji);
+                await toggleMessageReactionApi(item.id, identity.publicKey, emoji, at);
                 hapticSuccess();
                 setActiveEmojiPickerId(null);
                 setActiveMessageActionsId(null);
@@ -1524,7 +1682,7 @@ function ChatScreen({ id }: { id: string }) {
                 editing={editingMessage?.id === item.id}
                 quote={quote}
                 about={item.about ? (
-                    <ChatAboutCard about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => router.push(`/post/${postId}`)} />
+                    <ChatAboutCard about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => { if (!at) router.push(`/post/${postId}`); }} />
                 ) : null}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
                     // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept
@@ -1534,14 +1692,14 @@ function ChatScreen({ id }: { id: string }) {
                     </Text>
                 ) : (
                     // oldLine: conversion code, log row OLDCHAT, remove after 12 Dec 2026.
-                    <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} oldLine={!!item.oldLine} keyContext={dmKeyContextOf(keyChange)} />
+                    <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} oldLine={!!item.oldLine} keyContext={dmKeyContextOf(keyChange)} community={at} />
                 )) : item.type === 'voice' && !item.oldLine ? (requestMode === 'to-me' ? (
                     // No voice message comes from a request (design §3.5): one that came anyway stays closed, unfetched.
                     <Text testID="request-voice-closed" style={{ color: colors.text.muted, fontStyle: 'italic', padding: 8 }}>
                         <Text aria-hidden={true} importantForAccessibility="no">🎤 </Text>{t('Voice message: shown when you accept')}
                     </Text>
                 ) : (
-                    <VoiceBubble messageId={item.id} isMe={isMe} load={() => getDecryptedVoice(id as string, item.id)} />
+                    <VoiceBubble messageId={item.id} isMe={isMe} load={() => getDecryptedVoice(id as string, item.id, at)} />
                 )) : null}
                 status={status}
                 footer={((item.type === 'image' || item.type === 'voice') && !item.text) || item.integrityNote ? (
@@ -1582,7 +1740,8 @@ function ChatScreen({ id }: { id: string }) {
         {
             icon: 'account-outline',
             label: t('View profile'),
-            hidden: !peerPubkey,
+            // The profile screen reads the community in use: not offered in place (slice S2).
+            hidden: !peerPubkey || !!at,
             onPress: () => {
                 setMenuOpen(false);
                 if (peerPubkey) router.push({ pathname: '/public-profile', params: { publicKey: peerPubkey, callsign: peerName } });
@@ -1610,7 +1769,7 @@ function ChatScreen({ id }: { id: string }) {
                 <Pressable
                     accessibilityRole="button"
                     onPress={() => {
-                        if (peerPubkey) {
+                        if (peerPubkey && !at) {
                             router.push({
                                 pathname: '/public-profile',
                                 params: { publicKey: peerPubkey, callsign: peerName }
@@ -1627,6 +1786,8 @@ function ChatScreen({ id }: { id: string }) {
                     />
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle} numberOfLines={1}>{peerName}</Text>
+                        {/* In place (slice S2): the community this chat lives in, its name as the phone saved it, in grey. */}
+                        {inPlace?.name ? <Text style={styles.headerCommunity} numberOfLines={1} testID="chat-in-place-community">{inPlace.name}</Text> : null}
                         <View style={styles.headerSubtitleRow}>
                             <Text style={[styles.headerSubtitle, styles.headerSubtitleText]} numberOfLines={1}>
                                 {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via your community')}
@@ -1900,9 +2061,9 @@ function ChatScreen({ id }: { id: string }) {
                                     if (decidingRequest) return;
                                     setDecidingRequest(true);
                                     try {
-                                        const answer = await decideMessageRequest(String(id), 'accept');
+                                        const answer = await decideMessageRequest(String(id), 'accept', at);
                                         setConvRow((prev: any) => prev ? { ...prev, request: answer.request } : prev);
-                                        void syncSingleConversation(String(id));
+                                        void syncSingleConversation(String(id), at);
                                     } catch (e: any) {
                                         // Gone from the node (its opener cancelled it): back to Talk, as Ignore goes.
                                         if (requestIsGone(e)) { router.navigate('/(tabs)/chats'); return; }
@@ -1923,7 +2084,7 @@ function ChatScreen({ id }: { id: string }) {
                                     if (decidingRequest) return;
                                     setDecidingRequest(true);
                                     try {
-                                        await decideMessageRequest(String(id), 'ignore');
+                                        await decideMessageRequest(String(id), 'ignore', at);
                                         router.navigate('/(tabs)/chats');
                                     } catch (e: any) {
                                         if (requestIsGone(e)) { router.navigate('/(tabs)/chats'); return; }
@@ -1982,11 +2143,11 @@ function ChatScreen({ id }: { id: string }) {
                         maxHeight={fit.composer}
                         onVoice={voiceHere && requestMode === 'none' && !requestLineId && !editingMessage ? sendVoice : undefined}
                         voiceOwner={voiceOwner}
-                        leading={
+                        leading={at ? undefined : (
                             <Pressable accessibilityRole="button" accessibilityLabel={t('Attach image')} style={chat.attachBtn} onPress={pickAndSendImage}>
                                 <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
                             </Pressable>
-                        }
+                        )}
                     />
                 )}
                 </View>

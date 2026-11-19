@@ -248,3 +248,14 @@ export async function isGuestNode(url: string): Promise<boolean> {
     if (!url) return false;
     return (await readGuestNodes()).includes(url);
 }
+
+/**
+ * True when a guest mark names `address`'s community however either is spelled: compared by the copy's file, as the
+ * phone keeps one copy per community (slice S2, #3305 review F2: a chat in place is never opened on a guest's look by a
+ * link spelling the address in capitals or with a trailing path).
+ */
+export async function isGuestCopy(address: string): Promise<boolean> {
+    if (!address) return false;
+    const file = getDatabaseFilenameForNode(address);
+    return (await readGuestNodes()).some((u) => getDatabaseFilenameForNode(u) === file);
+}

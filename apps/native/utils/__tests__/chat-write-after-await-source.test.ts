@@ -28,7 +28,8 @@
  * 6. It never takes the copy open now or the address in use: no getDb(), waitForInit(), chatCopyForRequest() or
  *    copyStillFor(), no 'beanpool_anchor_url', no anchorUrl or getCachedAnchorUrl (a photo built from the anchor would ask
  *    the community in use for another's).
- * 7. `heldCopies` is used only through its own methods (all, close, closeAll, paused, pauseUntil, openFiles), never handed
+ * 7. `heldCopies` is used only through its own methods (all, close, closeAll, paused, pauseUntil, openFiles, and S2's inPlace
+ *    and closeReads), never handed
  *    on: no held handle reaches a writer.
  * 8. Only utils/db.ts makes held copies (createHeldCopies, once), and no other file of the app sets `query_only`.
  */
@@ -182,7 +183,9 @@ describe('a chat write after a network await goes through the file its request w
     });
 });
 
-const HELD_METHODS = new Set(['all', 'close', 'closeAll', 'paused', 'pauseUntil', 'openFiles']);
+// inPlace and closeReads: slice S2's copy open in place (its own rule, 9, is chat-in-place-source.test.ts). readsSettled:
+// waits for a read handle's close under way and closes nothing (#3305 round 5, the route's check as Chat is left).
+const HELD_METHODS = new Set(['all', 'close', 'closeAll', 'paused', 'pauseUntil', 'openFiles', 'inPlace', 'closeReads', 'readsSettled']);
 const HELD_TAKES_NOW = new Set(['getDb', 'waitForInit', 'chatCopyForRequest', 'copyStillFor', 'getCachedAnchorUrl']);
 
 /** Each held-copy rule (5-7) broken in `source`, as "function (line): what". */

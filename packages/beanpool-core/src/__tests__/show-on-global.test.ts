@@ -2080,7 +2080,7 @@ describe('a delete on a device that holds no pair (Damo, 16 Nov: an offer delete
         expect(w.up()).toEqual([]);
     });
 
-    it('costs one remove of the first id, one read of COPY_IDS_LOOKED_AT ids, and a remove for each found up', async () => {
+    it('costs one read of COPY_IDS_LOOKED_AT ids and a remove for each found up: with nothing up, the read alone', async () => {
         const w = world();
         await w.device().showOnGlobal(w.home, HOME, identity);
         w.reads.length = 0;
@@ -2088,6 +2088,13 @@ describe('a delete on a device that holds no pair (Damo, 16 Nov: an offer delete
         expect(w.reads.map((ids) => ids.length)).toEqual([COPY_IDS_LOOKED_AT]);
         expect(w.reads[0][0]).toBe(await copyIdOf('home-1', 0, sign));
         expect(w.removes).toEqual([await copyIdOf('home-1', 0, sign)]);
+        w.reads.length = 0;
+        w.removes.length = 0;
+        const never = w.device();
+        expect(await never.stopShowing('home-1', identity, undefined, goneOf(w))).toBe(true);
+        expect(w.reads).toHaveLength(1);
+        expect(w.removes).toEqual([]);
+        expect(never.pairs()).toEqual([]);
     });
 
     it('global not answering: it is kept on its way out, shows as not shown, and the next tend takes the copy down', async () => {
@@ -2218,6 +2225,24 @@ describe('a device restored from 12 words finds its copies and tends them', () =
         w.silentOn(null);
         await restored.tendCopies(identity);
         expect(restored.pairs()).toHaveLength(1);
+    });
+
+    it('nowhere to look yet starts no day: the first tend with a community to look from looks at once', async () => {
+        const w = world();
+        await w.device().showOnGlobal(w.home, HOME, identity);
+        let homes: string[] = [];
+        let pairs: CopyPair[] = [];
+        const keeper = makeCopyKeeper({
+            store: { read: async () => pairs, change: async (edit) => { pairs = edit(pairs); } }, deps: w.deps,
+            copyId: (homeId, generation) => copyIdOf(homeId, generation, sign), plainOrigin: (url) => url, isEventEnded: () => false,
+            homesOf: async () => homes,
+        });
+        const now = Date.now();
+        await keeper.tendCopies(identity, undefined, now);
+        expect(w.authorReads).toEqual([]);
+        homes = [HOME];
+        await keeper.tendCopies(identity, undefined, now + 60_000);
+        expect(pairs).toHaveLength(1);
     });
 
     it('a device not told where to look (no homesOf) tends only its own pairs, and asks nobody for its posts', async () => {

@@ -667,7 +667,7 @@ describe('EventDetail', () => {
         const rows = within(panel).getAllByRole('listitem').map(li => li.textContent);
         expect(rows).toEqual(['BoGoing', 'AriInterested']);
         fireEvent.click(within(panel).getByRole('button', { name: 'Cancel event' }));
-        await waitFor(() => expect(api.removeMarketplacePost).toHaveBeenCalledWith('ev-1', 'host-pk'));
+        await waitFor(() => expect(api.removeMarketplacePost).toHaveBeenCalledWith('ev-1', 'host-pk', expect.objectContaining({ id: 'ev-1' })));
         expect(onCancelled).toHaveBeenCalled();
         confirm.mockRestore();
     });

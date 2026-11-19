@@ -3314,7 +3314,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         if (!confirm(t('Delete this post?'))) return;
                                         setDeleting(selectedPost.id);
                                         try {
-                                            await removeMarketplacePost(selectedPost.id, identity.publicKey);
+                                            await removeMarketplacePost(selectedPost.id, identity.publicKey, selectedPost);
                                             setSelectedPost(null);
                                             setSelectedTxId(null);
                                             refresh();

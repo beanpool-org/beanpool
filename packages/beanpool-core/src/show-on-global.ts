@@ -876,7 +876,8 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
      * `gone`: the listing a delete or a cancel at home took away, as the device last had it. With no pair here, a copy made by
      * the member's other device, or before a 12-word restore, has one of this listing's ids all the same ({@link copyIdOf}), so
      * every id it can have is asked after and what is up comes down. Only for a listing that could have had one: anything else
-     * asks nobody. A pair is kept for it, on its way out, so a tend asks again where global didn't answer.
+     * asks nobody. The pair made for it holds no copy of its own, as a resting one holds none, so global is read once and only
+     * what is up gets a remove; it is kept on its way out, so a tend asks again where global didn't answer.
      */
     async function stopShowing(id: string, identity: I, deps: CopyDeps<I> = liveDeps, gone?: ShowableListing & { id: string }): Promise<boolean> {
         const named = (await readPairs()).filter((p) => p.publicKey === identity.publicKey
@@ -886,7 +887,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         if (gone?.id !== id || !mayShowOnGlobal(gone, identity.publicKey)) return true;
         return takeDown({
             publicKey: identity.publicKey, home: '', homeId: id, copyId: await setup.copyId(id, 0, identity), generation: 0,
-            sent: '', sentAt: 0, photo: '', skips: [], leaving: true,
+            sent: '', sentAt: 0, photo: '', skips: [], resting: true,
         }, identity, deps);
     }
 
@@ -1015,9 +1016,12 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     async function adoptCopies(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
         const key = identity.publicKey;
         if (!setup.homesOf || now - (lookedAt.get(key) ?? -Infinity) < COPY_ADOPT_EVERY_MS) return;
+        // Nowhere to look yet is no look: the day starts when there is one, so a key heard on global later isn't kept waiting.
+        const homes = await setup.homesOf(identity);
+        if (homes.length === 0) return;
         const held = (await readPairs()).filter((p) => p.publicKey === key);
         const unpaired: { home: HomeEvent; url: string }[] = [];
-        for (const url of await setup.homesOf(identity)) {
+        for (const url of homes) {
             const rows = await readJson(url, `${POSTS_PATH}?author=${encodeURIComponent(key)}&limit=${OWN_READ_MOST}`, identity, deps);
             if (!Array.isArray(rows)) return;
             for (const home of rows as HomeEvent[]) {

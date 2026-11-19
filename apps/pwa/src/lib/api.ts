@@ -2433,9 +2433,10 @@ export async function commissionListing(postId: string, amount_c?: number): Prom
     return request('POST', '/api/federation/commission', amount_c === undefined ? { postId } : { postId, amount_c });
 }
 
-export async function removeMarketplacePost(id: string, authorPublicKey: string): Promise<{ success: boolean }> {
+/** `post`: the listing as the page had it, so its copy on global comes down even where this browser holds no pair for it. */
+export async function removeMarketplacePost(id: string, authorPublicKey: string, post?: MarketplacePost): Promise<{ success: boolean }> {
     const answer = await request<{ success: boolean }>('POST', '/api/marketplace/posts/remove', { id, authorPublicKey });
-    onGlobalCopy((copy, identity) => copy.stopShowing(id, identity));
+    onGlobalCopy((copy, identity) => copy.stopShowing(id, identity, post?.id === id ? post : undefined));
     return answer;
 }
 

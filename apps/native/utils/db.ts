@@ -3942,6 +3942,8 @@ export async function deletePost(id: string) {
 
     const identity = await loadIdentity();
     if (!identity) throw new Error('Not logged in. Identity required.');
+    // What the listing was, for its copy on global (utils/show-on-global.ts stopShowingGone): read before the row goes.
+    const gone = await goneListingOf(id);
 
     const payload = JSON.stringify({ id, authorPublicKey: identity.publicKey });
     const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/marketplace/posts/remove`, payload, identity.privateKey, identity.publicKey);
@@ -3963,12 +3965,26 @@ export async function deletePost(id: string) {
         throw new Error(data.error || 'Failed to remove post on Node');
     }
 
-    repeatOnGlobalCopy((copy) => copy.stopShowing(id, identity));
+    repeatOnGlobalCopy((copy) => (gone ? copy.stopShowingGone(gone, identity) : copy.stopShowing(id, identity)));
 
     // 2. Erase from local SQLite Cache
     const database = await getDb();
     await database.runAsync('DELETE FROM posts WHERE id = ?', [id]);
     refreshBalanceFromServer(identity.publicKey).catch(() => null);
+}
+
+/** A cached post as core's copy keeper weighs whether it could have had a copy on global (mayShowOnGlobal). Null if not cached. */
+async function goneListingOf(id: string): Promise<import('@beanpool/core').ShowableListing & { id: string } | null> {
+    try {
+        const row: any = await (await getDb()).getFirstAsync('SELECT type, lat, lng, audience_scope, author_pubkey, origin_node, event_online FROM posts WHERE id = ?', [id]);
+        if (!row) return null;
+        return {
+            id, type: row.type, lat: row.lat, lng: row.lng, audienceScope: row.audience_scope ?? 'public', authorPublicKey: row.author_pubkey,
+            originNode: row.origin_node ?? null, eventOnline: row.event_online === 1,
+        };
+    } catch {
+        return null;
+    }
 }
 
 /**

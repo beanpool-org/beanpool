@@ -65,10 +65,6 @@ export function heldChatsInView(): HeldChatsView {
 }
 
 /**
- * Chat's held rows. `view`: Chat in view ({@link heldChatsInView}); once it is left, no further community is read, and
- * what this list opened closes as it ends (unless Chat is in view again).
- */
-/**
  * The held rows Chat lists: {@link heldChatRows} less every DM with someone the member blocked, under any key that chat
  * names them by in its own community, its pin's former and offered keys included (db.ts getHeldConversations peerKeys), as
  * Talk's own list leaves them out (dm-blocked.ts talkShowsChat).
@@ -78,6 +74,10 @@ export async function heldChatsShown(myPubkey: string, view?: HeldChatsView): Pr
     return rows.filter((c) => talkShowsChat(c, blocked));
 }
 
+/**
+ * Chat's held rows. `view`: Chat in view ({@link heldChatsInView}); once it is left, no further community is read, and
+ * what this list opened closes as it ends (unless Chat is in view again).
+ */
 export async function heldChatRows(myPubkey: string, view?: HeldChatsView): Promise<HeldChatRow[]> {
     try {
         return await heldChatRowsWhile(myPubkey, view ? view.inView : () => true);

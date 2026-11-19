@@ -6,7 +6,9 @@
  * B's file (A 0, B 1; with no switch A 1, B 0). The function took getDb() after the network await.
  *
  * One table, every chat function that writes after a network await: each is driven with the node's answer held while the
- * phone switches to B (the address written, and the copy open moved to B's file, as getDb swaps), then the answer lands.
+ * phone switches to B, then the answer lands. Two switches, each row under both: the member's (utils/reconnect.ts
+ * switchPhoneTo: the copy closed, the address written, B's copy opened, as the probe's run 6 switched) and getDb's own
+ * swap (the address written with no closeDB, the copy left closed once the sync lock is free).
  * Each row asserts that B's file and B's own stored state are as they were, that the request was asked of A, and that a
  * sync drops the answer without throwing. B's file starts as a copy of A's, so a write by id (an edit, a delete, a
  * reaction, a request decided) into the wrong file would show.
@@ -91,6 +93,7 @@ vi.mock('../crypto', async (orig) => ({
 
 import { VOICE_BARS } from '@beanpool/core';
 import * as db from '../db';
+import { switchPhoneTo } from '../reconnect';
 import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { sealDmLine } from '../e2e-crypto';
@@ -269,6 +272,12 @@ interface Row {
     sync?: boolean;
 }
 
+/** The two ways the phone moves to B while an answer is out. */
+const SWITCHES = {
+    'switchPhoneTo': async () => { await switchPhoneTo(B); },
+    "getDb's swap": async () => { h.store.set(ANCHOR, B); await db.getDb(); },
+} as const;
+
 const ROWS: Row[] = [
     {
         name: 'syncMessages (the conversation list)', sync: true,
@@ -350,16 +359,16 @@ beforeEach(async () => {
 });
 
 describe('a chat answer held while the phone switches community lands only in the file it was asked for', () => {
-    it.each(ROWS.map((r) => [r.name, r] as const))('%s', async (_name, row) => {
+    const cases = ROWS.flatMap((r) => Object.entries(SWITCHES).map(([how, sw]) => [r.name, how, r, sw] as const));
+    it.each(cases)('%s, switched by %s', async (_name, _how, row, switchToB) => {
         row.before?.();
         hold = holdFor(row.held);
         let thrown: unknown = null;
         const running = row.act().catch((e) => { thrown = e; });
         await hold.seen;
 
-        // The member switches to B while the answer is on its way: the address written, and the copy open moved to B's file.
-        h.store.set(ANCHOR, B);
-        await db.getDb();
+        // The member switches to B while the answer is on its way.
+        await switchToB();
         await settle();
         const bBefore = rowsOf(B_FILE);
         const bStoredBefore = storedFor(B_FILE);
@@ -391,15 +400,14 @@ describe('a chat answer held while the phone switches community lands only in th
         hold = holdFor((m, p) => m === 'GET' && p.startsWith('/api/messages/conversations/'));
         const running = db.syncMessages(me.publicKey);
         await hold.seen;
-        h.store.set(ANCHOR, B);
-        await db.getDb();
+        await switchPhoneTo(B);
         hold.release();
         expect(await running).toBe(false);
         const count = (file: string) => rowsOf(file).conversations.filter((r: any) => r.id === extra.id).length;
         expect([count(A_FILE), count(B_FILE)]).toEqual([0, 0]);
         // Back on A, its next pass reads the list again and keeps it there.
         hold = null;
-        h.store.set(ANCHOR, A);
+        await switchPhoneTo(A);
         expect(await db.syncMessages(me.publicKey)).toBe(true);
         expect([count(A_FILE), count(B_FILE)]).toEqual([1, 0]);
     });

@@ -43,7 +43,7 @@ Your list has two parts: **On BeanPool** and **Not on BeanPool yet**. BeanPool n
 - **When someone joins with an invite you sent a contact** (below), and you say it was them.
 - **On the phone,** **⋯**, then **Add people I've chatted with and my friends** adds everyone you have chatted with or added as a friend in the community you are on.
 
-Under **On BeanPool**, **Message** opens a chat. If the person is in another of your communities, the button names it: the phone offers to switch you there, and the web app opens that community's web app. A member you blocked shows **Blocked** and **Unblock**. Blocking someone doesn't take them out of your contacts, and taking them out doesn't unblock them. Being in your contacts doesn't let anyone past message requests.
+Under **On BeanPool**, **Message** opens a chat. If the person is in another of your communities, the button names it. On the phone, tap it and the phone switches you there and opens the chat with them; for a community you haven't joined on this phone, it asks first. The web app opens that community's web app. A member you blocked shows **Blocked** and **Unblock**. Blocking someone doesn't take them out of your contacts, and taking them out doesn't unblock them. Being in your contacts doesn't let anyone past message requests.
 
 ## Inviting someone
 

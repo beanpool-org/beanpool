@@ -151,8 +151,8 @@ export const MESSAGE_REQUESTS_SEEN_STORE_PREFIX = 'beanpool_message_requests_see
 
 /**
  * How far one account had opened Chat's Message requests list in one community file (core dm-requests.ts RequestsSeen,
- * JSON): the row's red dot shows while something newer waits (Marty, 19 Nov 2026). Times and a count, nothing of who
- * wrote. Per (account, file), as the list it marks is; Sign Out and Replace wipe every one by
+ * JSON): the row's red dot shows while something newer waits (Marty, 19 Nov 2026). Times and counts (with the addresses of
+ * the phone's other communities where requests waited), nothing of who wrote. Per (account, file), as the list it marks is; Sign Out and Replace wipe every one by
  * {@link MESSAGE_REQUESTS_SEEN_STORE_PREFIX} (utils/identity.ts wipeIdentityScopedStorage).
  */
 export function messageRequestsSeenStoreKey(publicKey: string, file: string): string {

@@ -45,8 +45,8 @@ interface Storage {
  * A community's count, the notices it has seen (id → when the phone noted it, whole seconds), its own unread count as it
  * last answered a round, and what a rise is measured from: how many of those lines it said a push would have told
  * ({@link noteServerUnread}). The last two are absent until it answers, and again after a switch to it. `requests`: the
- * message requests it said wait there, for Chat's line about that community alone ({@link readNoticeRequests}): never in its
- * number or the badge, and never a notice (Marty, 1 Nov 2026; the line's wording, 19 Nov 2026).
+ * message requests it said wait there, for the Message requests row alone ({@link readNoticeRequests}): never in its number
+ * or the badge, and never a notice (Marty, 1 Nov 2026; in the row, 19 Nov 2026).
  */
 interface Tally { n: number; seen: Record<string, number>; server?: number; alerts?: number; requests?: number }
 type Tallies = Record<string, Tally>;
@@ -250,8 +250,11 @@ export async function readNoticeCounts(storage: Pick<Storage, 'getItem'>): Promi
 
 /**
  * The message requests each other community said wait there as it last answered a round, by its address, on the same terms
- * as {@link readNoticeCounts} (kept, not in use, alerts on, none at 0): for Chat's line "1 message request in {community}"
- * alone. Never in {@link noticeCountsSum}: a request makes no badge (Marty, 1 Nov 2026). Empty when they can't be read.
+ * as {@link readNoticeCounts} (kept, not in use, alerts on), 0 included: for the Message requests row's count and its
+ * "In {community}" cards (utils/requests-elsewhere.ts; Marty, 19 Nov 2026, decision 4 of DESIGN-no-switch-messaging-fable.md).
+ * A community that hasn't answered since it was last the one in use, or since its alerts went off, is not in it: not known,
+ * which the row's red dot keeps apart from none waiting. Never in {@link noticeCountsSum}: a request makes no badge (Marty,
+ * 1 Nov 2026). Empty when they can't be read.
  */
 export async function readNoticeRequests(storage: Pick<Storage, 'getItem'>): Promise<Record<string, number>> {
     await writes;
@@ -262,8 +265,7 @@ export async function readNoticeRequests(storage: Pick<Storage, 'getItem'>): Pro
         const off = new Set(await communitiesWithAlertsOff(storage));
         const out: Record<string, number> = {};
         for (const [c, tally] of Object.entries(tallies)) {
-            const number = tally.requests ?? 0;
-            if (c !== anchor && number > 0 && (!kept || kept.has(c)) && !off.has(c)) out[c] = number;
+            if (c !== anchor && tally.requests !== undefined && (!kept || kept.has(c)) && !off.has(c)) out[c] = tally.requests;
         }
         return out;
     } catch {

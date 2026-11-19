@@ -38,7 +38,11 @@ import { sameCommunity } from '../utils/push-pins';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
 import { createConversationApi, getChattedWithMembers, getFriendsLocal } from '../utils/db';
 import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
-import { switchCommunity } from '../utils/use-communities';
+import { communitySwitchUnderWay, switchCommunity } from '../utils/use-communities';
+import { messageInHeldCommunity, takeMessageAfterSwitch } from '../utils/message-after-switch';
+import { getPendingOnboarding } from '../utils/onboarding-state';
+import { useNodeStatus } from './NodeStatusContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
 import { useScreenKeyboardOffset } from '../components/useScreenKeyboardOffset';
@@ -60,7 +64,8 @@ export default function ContactsScreen() {
     const screenKeyboard = useScreenKeyboardOffset();
     const view = useContacts(identity);
     // Opened from Chat's "Import contacts" (no list yet), it starts on Import, and Back from there goes back to Chat.
-    const { start } = useLocalSearchParams<{ start?: string }>();
+    // Opened where the phone landed after Contacts' own Message moved it (utils/message-after-switch.ts): whom it was for.
+    const { start, message: messageAsked } = useLocalSearchParams<{ start?: string; message?: string }>();
     const startedOnImport = start === 'import';
     const [screen, setScreen] = useState<Screen>(startedOnImport ? { kind: 'import' } : { kind: 'list' });
     const [info, setInfo] = useState(false);
@@ -270,7 +275,7 @@ export default function ContactsScreen() {
         if (done && !yes) Alert.alert(t('Not linked'), contactInviteNoWords());
     };
     return shell(t('Contacts'), <>
-        <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
+        <ListScreen view={view} list={list} busy={busy} me={identity.publicKey} messageAsked={messageAsked ?? null}
             onOpen={(id) => { setCancelToo(false); setScreen({ kind: 'contact', id }); }} onAdd={() => setScreen({ kind: 'add' })} onImport={() => setScreen({ kind: 'import' })} onInfo={() => setInfo(true)}
             onRemoveAll={() => change((l) => removeEveryContact(l))} onAddPeople={anchor ? () => void addPeople() : null}
             onInvite={anchor ? setInviting : null} ask={(c) => (anchor ? contactInviteAsk(c, mine ?? [], isHere) : null)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />
@@ -320,8 +325,10 @@ function saveFile(list: ContactsList | null) {
     ]);
 }
 
-function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onRemoveAll, onAddPeople, onInvite, ask, onAnswer }: {
+function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImport, onInfo, onRemoveAll, onAddPeople, onInvite, ask, onAnswer }: {
     view: ContactsView; list: ContactsList | null; busy: boolean; me: string;
+    /** The person a move to this community was for, as the landing named them (utils/message-after-switch.ts). */
+    messageAsked: string | null;
     onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onRemoveAll: () => Promise<boolean>;
     /** "Add people I've chatted with and my friends" (C6); null where the phone is on no community of the member's. */
     onAddPeople: (() => void) | null;
@@ -356,6 +363,10 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
         ];
     }, [people, q]);
     const here = (community: string) => !!view.anchor && sameCommunity(community, view.anchor);
+    // A community this phone holds (kept, and not a guest's look: use-contacts.ts `communities`): Message moves there with no
+    // question and opens the chat (Marty, 19 Nov 2026, S0 of DESIGN-no-switch-messaging-fable.md; utils/message-after-switch.ts).
+    const holds = (community: string) => view.communities.some((c) => sameCommunity(c, community));
+    const { recheck } = useNodeStatus();
 
     const message = async (key: string) => {
         if (opening) return;
@@ -371,6 +382,29 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
             setOpening(null);
         }
     };
+    // Landed here after Message moved the phone to this community: the chat with that person opens, once, unless the member
+    // blocked them here (their row then says Blocked, with Unblock, as for anyone in the community in use).
+    useEffect(() => {
+        const key = view.anchor ? takeMessageAfterSwitch(me, view.anchor, messageAsked) : null;
+        if (!key) return;
+        void getBlockedUsers().catch(() => [] as string[]).then((list) => { if (!list.includes(key)) void message(key); });
+        // Only the community the phone landed in and the person named matter; `message` is this render's.
+    }, [me, view.anchor, messageAsked]);
+    const messageThere = async (key: string, community: string) => {
+        if (opening) return;
+        setOpening(key);
+        const moved = await messageInHeldCommunity(key, community, {
+            storage: AsyncStorage,
+            publicKey: me,
+            joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
+            switchUnderWay: communitySwitchUnderWay,
+            switchTo: switchCommunity,
+            recheck,
+        });
+        setOpening(null);
+        // A switch that didn't happen says so, in the words the Communities list uses (useCommunities.switchTo).
+        if (moved !== 'switched') Alert.alert(t("Couldn't switch community"), t('Please try again.'));
+    };
     const action = (c: Contact) => {
         const link = c.links.find((l) => here(l.community)) ?? c.links[0];
         if (!link) {
@@ -379,6 +413,13 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
             return (
                 <Pressable accessibilityRole="button" style={styles.btn} disabled={busy} onPress={() => onInvite(c)}>
                     <Text style={styles.btnText}>{c.invite ? contactInviteWords.again() : contactInviteWords.invite()}</Text>
+                </Pressable>
+            );
+        }
+        if (!here(link.community) && holds(link.community)) {
+            return (
+                <Pressable accessibilityRole="button" style={styles.btn} disabled={opening !== null} onPress={() => void messageThere(link.key, link.community)}>
+                    <Text style={styles.btnText}>{t('Open {community} ›', { community: communityLabel(view, link.community) })}</Text>
                 </Pressable>
             );
         }

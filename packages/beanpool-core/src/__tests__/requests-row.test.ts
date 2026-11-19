@@ -63,9 +63,29 @@ describe('the Message requests row', () => {
 
     it('reads a kept mark, and none from anything else', () => {
         expect(parseRequestsSeen(JSON.stringify({ here: 1, outside: 2, guest: 3, global: 4 }))).toEqual({ here: 1, outside: 2, guest: 3, global: 4 });
-        for (const raw of [null, undefined, '', 'nope', '[]', '{"here":1}', JSON.stringify({ here: -1, outside: 0, guest: 0, global: 0 })]) {
+        // The phone's other communities, by address: only counts above 0 are kept.
+        expect(parseRequestsSeen(JSON.stringify({ here: 1, outside: 2, guest: 3, global: 4, elsewhere: { 'https://hill.example': 2, 'https://vale.example': 0 } })))
+            .toEqual({ here: 1, outside: 2, guest: 3, global: 4, elsewhere: { 'https://hill.example': 2 } });
+        for (const raw of [null, undefined, '', 'nope', '[]', '{"here":1}', JSON.stringify({ here: -1, outside: 0, guest: 0, global: 0 }),
+            JSON.stringify({ here: 0, outside: 0, guest: 0, global: 0, elsewhere: [] }), JSON.stringify({ here: 0, outside: 0, guest: 0, global: 0, elsewhere: null }),
+            JSON.stringify({ here: 0, outside: 0, guest: 0, global: 0, elsewhere: { 'https://hill.example': -1 } }),
+            JSON.stringify({ here: 0, outside: 0, guest: 0, global: 0, elsewhere: { 'https://hill.example': 'two' } })]) {
             expect(parseRequestsSeen(raw)).toBeNull();
         }
+    });
+
+    it('counts each other community the phone holds, and none it does not know yet (Marty, 19 Nov 2026, S0)', () => {
+        const w: RequestsWaiting = { ...none, here: { count: 1, conversations: [req('2026-11-19T10:00:00Z')] }, elsewhere: { 'https://hill.example': 2, 'https://vale.example': 0 } };
+        expect(requestsRowCount(w)).toBe(3);
+        expect(requestsRowCount({ ...w, elsewhere: null })).toBe(1);
+        expect(requestsRowCount({ ...w, elsewhere: undefined })).toBe(1);
+        expect(requestsRowCount({ ...none, elsewhere: { 'https://hill.example': -2, 'https://vale.example': Number.NaN } })).toBe(0);
+        // An address is never read off the object's prototype.
+        expect(requestsUnseen({ ...none, elsewhere: { constructor: 1 } as Record<string, number> }, { here: 0, outside: 0, guest: 0, global: 0, elsewhere: { 'https://hill.example': 1 } })).toBe(true);
+        expect(requestsUnseen({ ...none, elsewhere: { 'https://hill.example': 1 } }, null)).toBe(true);
+        // The web sends none: its mark is as it always was.
+        expect(requestsSeenNext({ ...none, onGlobal: 1 }, null, true)).toEqual({ here: 0, outside: 0, guest: 0, global: 1 });
+        expect(Object.keys(requestsSeenNext({ ...none, onGlobal: 1 }, null, true)!)).not.toContain('elsewhere');
     });
 
     it('shows 99+ past 99', () => {
@@ -76,9 +96,10 @@ describe('the Message requests row', () => {
 });
 
 /**
- * The rule for every kind the mark keeps (RequestsSeen: here, global, outside, guest invitations), against each way it was
- * found broken or could be (PR #3298 review): a read not made yet or failed, a late arrival, a clock that is out, a real
- * fall, and an opened list. A new request always lights the dot; a seen one never does on a reload.
+ * The rule for every kind the mark keeps (RequestsSeen: here, global, outside, guest invitations, and the phone's other
+ * communities: S0, 19 Nov 2026), against each way it was found broken or could be (PR #3298 review): a read not made yet or
+ * failed, a late arrival, a clock that is out, a real fall, and an opened list. A new request always lights the dot; a seen
+ * one never does on a reload.
  */
 describe('a new request always lights the dot; a seen one never does on a reload', () => {
     afterEach(() => { vi.useRealTimers(); });
@@ -96,6 +117,13 @@ describe('a new request always lights the dot; a seen one never does on a reload
     /** An invitation as the device keeps it: `updatedAt` this device's when written here (the host's clock never enters). */
     const invite = (written: number) => ({ id: `g-${written}`, state: 'invited', updatedAt: written });
     const guest = (...is: Array<ReturnType<typeof invite>>) => W({ guestInvites: is });
+    /**
+     * The phone's other communities, by address, as each last answered its rounds (S0): a count alone, like global's. A
+     * community not in the map isn't known (not asked since it was the one in use, or its alerts are off); null: not read yet.
+     */
+    const HILL = 'https://hill.example';
+    const VALE = 'https://vale.example';
+    const away = (counts: Record<string, number> | null | undefined) => W({ elsewhere: counts });
 
     // One render, as both apps' hooks do it (apps/native/utils/requests-seen.ts, apps/pwa/src/lib/requests-seen.ts): the mark
     // moves to what requestsSeenNext gives, when it gives one, and the dot is read against the mark as it then is. A reload
@@ -105,6 +133,7 @@ describe('a new request always lights the dot; a seen one never does on a reload
     const SHUT = false;
     const A = line(T + 60 * MIN, T + 65 * MIN);   // written 11:00 by its sender, here 11:05
     const B = line(T, T + 120 * MIN);             // written 10:00 by a sender offline, held, here at 12:00
+    const THREE = 'one waits and is seen, answered elsewhere to none, then a new one (PR #3301 review)';
 
     const rows: Array<[kind: string, what: string, steps: Step[]]> = [
         ['here', 'opened, then reloads', [[here(T), SHUT, true], [here(T), OPEN, false], [here(T), SHUT, false], [here(T), SHUT, false]]],
@@ -140,6 +169,37 @@ describe('a new request always lights the dot; a seen one never does on a reload
             [guest(invite(T)), OPEN, false], [guest(invite(T), invite(T + DAY)), SHUT, true]]],
         ['guest', 'a real fall (one declined), then a new one', [
             [guest(invite(T), invite(T + MIN)), OPEN, false], [guest(invite(T)), SHUT, false], [guest(invite(T), invite(T + 2 * MIN)), SHUT, true]]],
+
+        ['elsewhere', 'opened, then reloads', [[away({ [HILL]: 2 }), SHUT, true], [away({ [HILL]: 2 }), OPEN, false], [away({ [HILL]: 2 }), SHUT, false], [away({ [HILL]: 2 }), SHUT, false]]],
+        ['elsewhere', 'a reload before the phone reads the counts (null or undefined), then the same count', [
+            [away({ [HILL]: 2 }), OPEN, false], [away(null), SHUT, false], [away({ [HILL]: 2 }), SHUT, false], [away(undefined), SHUT, false], [away({ [HILL]: 2 }), SHUT, false]]],
+        ['elsewhere', 'a community not known for a while (back from it before its next round, or its alerts off and on), then the same count', [
+            [away({ [HILL]: 2, [VALE]: 1 }), OPEN, false], [away({ [VALE]: 1 }), SHUT, false], [away({ [VALE]: 1 }), OPEN, false], [away({ [HILL]: 2, [VALE]: 1 }), SHUT, false]]],
+        ['elsewhere', 'one more there: only the count', [[away({ [HILL]: 2 }), OPEN, false], [away({ [HILL]: 3 }), SHUT, true]]],
+        ['elsewhere', 'a first one in another community, while one already seen waits in the first', [
+            [away({ [HILL]: 2, [VALE]: 0 }), OPEN, false], [away({ [HILL]: 2, [VALE]: 1 }), SHUT, true]]],
+        ['elsewhere', 'a real fall there is followed (to none, too), so the next one shows', [
+            [away({ [HILL]: 3 }), OPEN, false], [away({ [HILL]: 1 }), SHUT, false], [away({ [HILL]: 2 }), SHUT, true]]],
+        ['elsewhere', 'answered there to none, then a new one', [
+            [away({ [HILL]: 2 }), OPEN, false], [away({ [HILL]: 0 }), SHUT, false], [away(null), SHUT, false], [away({ [HILL]: 1 }), SHUT, true]]],
+        ['elsewhere', 'a fall in one community moves nothing of another', [
+            [away({ [HILL]: 2, [VALE]: 2 }), OPEN, false], [away({ [HILL]: 1, [VALE]: 2 }), SHUT, false], [away({ [HILL]: 1, [VALE]: 2 }), SHUT, false], [away({ [HILL]: 1, [VALE]: 3 }), SHUT, true]]],
+        ['elsewhere', 'seen while the list shows, with the counts read only then', [[away(null), OPEN, false], [away({ [HILL]: 1 }), OPEN, false], [away({ [HILL]: 1 }), SHUT, false]]],
+
+        // The reviewer's three steps (PR #3301), for every kind: one waits and the list is opened; it is answered elsewhere (on
+        // global's web app, another phone, or it expired), so none waits; then a NEW one comes, which must light the dot. A
+        // count known to be 0 is a fall; a count not known (null, or a community missing from `elsewhere`) is not.
+        ['here', THREE, [[here(T), OPEN, false], [here(), SHUT, false], [here(T + MIN), SHUT, true]]],
+        ['global', THREE, [[global(1), OPEN, false], [global(0), SHUT, false], [global(1), SHUT, true]]],
+        ['global', `${THREE}, with not known between`, [
+            [global(1), OPEN, false], [global(null), SHUT, false], [global(0), SHUT, false], [global(undefined), SHUT, false], [global(1), SHUT, true]]],
+        ['outside', THREE, [[outside(A), OPEN, false], [outside(), SHUT, false], [outside(line(T, T + 200 * MIN)), SHUT, true]]],
+        ['guest', THREE, [[guest(invite(T)), OPEN, false], [guest(), SHUT, false], [guest(invite(T + MIN)), SHUT, true]]],
+        ['elsewhere', THREE, [[away({ [HILL]: 1 }), OPEN, false], [away({ [HILL]: 0 }), SHUT, false], [away({ [HILL]: 1 }), SHUT, true]]],
+        ['elsewhere', `${THREE}, with not known between`, [
+            [away({ [HILL]: 1 }), OPEN, false], [away({}), SHUT, false], [away({ [HILL]: 0 }), SHUT, false], [away(null), SHUT, false], [away({ [HILL]: 1 }), SHUT, true]]],
+        ['elsewhere', `${THREE}, in one community while another's stays seen`, [
+            [away({ [HILL]: 1, [VALE]: 2 }), OPEN, false], [away({ [HILL]: 0, [VALE]: 2 }), SHUT, false], [away({ [HILL]: 1, [VALE]: 2 }), SHUT, true]]],
     ];
 
     // This device's own clock never enters: the same steps give the same dots with it a day out either way.

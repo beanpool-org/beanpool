@@ -109,7 +109,9 @@ const ME = vi.hoisted(() => ({ publicKey: '', privateKey: '' }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
 vi.mock('../db', () => ({ createConversationApi: vi.fn(async () => ({ id: 'conv-1' })) }));
 vi.mock('../blocklist', () => ({ BLOCKLIST_UPDATED_EVENT: 'blocklist', getBlockedUsers: async () => [], unblockUser: vi.fn(async () => true) }));
-vi.mock('../use-communities', () => ({ switchCommunity: vi.fn(async () => {}) }));
+vi.mock('../use-communities', () => ({ switchCommunity: vi.fn(async () => {}), communitySwitchUnderWay: () => false }));
+// The root layout's recognition, asked again before a move (Message on a contact in a held community: S0).
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'member' }) }));
 vi.mock('../../components/signed-request-lines', () => ({ signedRequestWords: (m: string) => m }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => mem.profile }));
 vi.mock('../node-admin', () => ({ askNodeRole: async () => ({ role: mem.role }), readPersistedNodeRole: async () => mem.role }));

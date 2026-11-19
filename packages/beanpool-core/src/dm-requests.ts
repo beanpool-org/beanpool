@@ -10,7 +10,9 @@ import { isBusyError, busyWords } from './busy-answer.js';
  * What waits for a member in one community, in counts alone (GET /api/me/unread): both apps read it, and it names nobody
  * and no chat. `unread` is the lines in the chats their list shows, so the number can always be opened and cleared.
  * `requests` is the message requests waiting for them: never in `unread`, and no badge or alert is made of it
- * (Marty, 1 Nov 2026: nothing until accepted). `asOf` is when the node counted (ISO 8601).
+ * (Marty, 1 Nov 2026: nothing until accepted). Since 19 Nov 2026 (Marty) the phone shows it on Chat's line about another
+ * community ("1 message request in {community}") and the row's count ({@link requestsRowCount}), and nowhere else. `asOf`
+ * is when the node counted (ISO 8601).
  *
  * `alerts` is how many lines of `unread` the node would have sent this member a push about: never those of a chat they muted
  * (an @mention of them gets through, as it does a mute), none with their Direct Messages off, none of an event's chat, none

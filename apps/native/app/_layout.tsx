@@ -15,7 +15,7 @@ import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
 import { askOtherCommunitiesNow, registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler, showBadgeSum } from '../services/push-notifications';
 import { registerWhenNotificationsAllowed } from '../utils/notification-permission';
 import { initDB, clearDB, redeemInvite, pushProfileToServer } from '../utils/db';
-import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
+import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin, isLinkWithoutInvite } from '../utils/invite-parser';
 import { parseRekeyLink } from '../utils/rekey-redeem';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
 import { followRekeyedBlocks, retryPendingReports, syncBlocks } from '../utils/blocklist';
@@ -412,6 +412,9 @@ function RootLayoutNav() {
             if (isComponentMounted.current) router.push({ pathname: '/rekey-code', params: { link: currentUrl } });
             return;
         }
+
+        // Any other link that carries no invite (a chat's `beanpool://chat/<id>?community=…`, walk 147): never an invite.
+        if (isLinkWithoutInvite(currentUrl)) return;
 
         const inviteToken = extractInviteToken(currentUrl);
         // Valid invite tokens must be present, and not be full HTTP URLs or paths

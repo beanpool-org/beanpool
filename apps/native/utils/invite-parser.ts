@@ -75,6 +75,20 @@ export function redeemTargetUrl(rawInvite: string, typedNodeUrl: string, anchorU
     return extractNodeOrigin(rawInvite) ?? (withNodeScheme(typedNodeUrl) || anchorUrl);
 }
 
+/**
+ * Whether the root layout's link handling must not read `raw` as an invite (app/_layout.tsx): a link, with a scheme
+ * (`beanpool://…`, `beanpool:…`, `https://…`), that carries no invite. Every invite link the apps and the node make carries
+ * one, an `invite=` in its query (people.tsx, the web's InvitePage, the node's trampoline `beanpool://welcome?invite=…`) or
+ * an `INV-xxxx-xxxx` / `BP-xxxx-xxxx` code (core inviteCodeIn). Any other link was read by {@link extractInviteToken}'s
+ * last resort, the path's last part: a chat's `beanpool://chat/<id>?community=https://…` gave its id as the code and
+ * raised "You're already in!" (walk 147). The guards before this one each name a link of their own; this covers the rest.
+ * Text without a scheme (a scanned code alone, an older short code) is not a link, and is read as before.
+ */
+export function isLinkWithoutInvite(raw: string): boolean {
+    const s = String(raw ?? '').trim();
+    return /^(?:[a-z][a-z0-9+.-]*:\/\/|beanpool:)/i.test(s) && inviteCodeIn(s) === null;
+}
+
 export function extractInviteToken(raw: string): string {
     const trimmed = raw.trim();
     

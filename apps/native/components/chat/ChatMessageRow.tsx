@@ -1,9 +1,10 @@
 /**
- * One row of the thread: the bubble, the action buttons beside it and the emoji picker above it.
+ * One row of the thread: the bubble, the action buttons beside it (or under it, when the two don't fit) and the emoji
+ * picker above it.
  *
  * The layout is the DM screen's — buttons on the inside of the bubble (left of my own, right of someone
- * else's), the picker overflowing the row by 45dp — and it is here so a group chat gets exactly the same
- * gestures rather than an approximation of them.
+ * else's; on a line of their own under a line too wide for them, #3307), the picker overflowing the row by
+ * 45dp — and it is here so a group chat gets exactly the same gestures rather than an approximation of them.
  */
 
 import React from 'react';

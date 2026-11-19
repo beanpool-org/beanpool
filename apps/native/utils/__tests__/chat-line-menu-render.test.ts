@@ -75,7 +75,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatMessageList } from '../../components/chat/ChatMessageList';
 import { ForumMenu } from '../../components/forum/ForumBits';
 import { CHAT_INPUT_MIN_HEIGHT, makeChatStyles } from '../../components/chat/styles';
-import { CHAT_THREAD_LINE, chatColumnFit } from '../chat-column-fit';
+import { CHAT_MENU_ROOM, CHAT_THREAD_LINE, chatColumnFit, chatLineInView } from '../chat-column-fit';
 import type { ChatKind, ChatMessage, MessageActions } from '../chat-actions';
 import { layOut } from './yoga-dom-layout';
 
@@ -403,6 +403,88 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('a line a
             }
         });
     }
+});
+
+/**
+ * The DM's room for a line and its menu (utils/chat-column-fit CHAT_MENU_ROOM) at 320 dp and 1.3× text, now that a full-width
+ * line's round buttons have a line of their own under it (#3307 deciding review: the room was 240 dp, sized for them beside the
+ * line, and someone else's four-line line with its menu needed about 269 dp on walk 146's figures, so where the screen cuts the
+ * thread down to the room its first line of words was a scroll away). Lines Yoga lays out in four lines of words: someone
+ * else's, Reply and React under it, then Copy and Report; mine, Reply, React, Edit and Delete under it, then Copy; mine past the
+ * edit window, Reply, React and Delete, its note and Copy. Each, with its menu and the list's padding under the newest line,
+ * fits the room whole: in a thread of that room, and in the walk's market DM with the keyboard down, its first line of words
+ * and every action are in view, so a drag closes the menu as on any line all in view. The room is the least whole dp that holds
+ * the tallest of them and the walk's own line grown the same way, so it takes no more from the bars than the line needs.
+ */
+const FOUR_YOGA_LINES = 'Yes, the trays are ready after four.';
+const MENU_ROOM_LINES: Line[] = [
+    { name: 'someone else\'s four-line line: Reply and React under it, Copy and Report', kind: 'dm', isMe: false, text: FOUR_YOGA_LINES, onReport: true, actions: OTHERS },
+    { name: 'my four-line line: Reply, React, Edit and Delete under it, Copy', kind: 'dm', isMe: true, text: FOUR_YOGA_LINES, onReport: false, actions: MINE },
+    { name: 'my four-line line past the edit window: its note and Copy', kind: 'dm', isMe: true, text: FOUR_YOGA_LINES, onReport: false, actions: { reply: true, react: true, edit: false, delete: true, remove: false, editClosed: true, copy: true } },
+];
+describe('the DM\'s menu room holds a four-line line and its menu whole at 320 dp and 1.3× (#3307 review)', () => {
+    // Where things are doesn't change with the theme: the dark one, as below.
+    beforeEach(() => { theme.colors = darkColors; theme.name = 'dark'; });
+    const st = () => makeChatStyles({ theme: 'dark', colors: darkColors } as any) as any;
+    /** The bubble's lines of words, from its height: its padding, its border (someone else's) and a line of 22 dp × the text size. */
+    const wordLines = (open: OpenLine, isMe: boolean) => {
+        const s = st();
+        const frame = 2 * s.messageBubble.paddingVertical + (isMe ? 0 : 2 * s.messageOther.borderWidth);
+        return (open.bubble!.bottom - open.bubble!.top - frame) / (s.messageText.lineHeight * 1.3);
+    };
+    for (const p of PHONES.filter((x) => x.width === 320)) for (const line of MENU_ROOM_LINES) {
+        it(`${p.name}: ${line.name}`, () => {
+            const open = openLine(line, p, 1.3);
+            expect(open.bubble, 'the bubble drawn').not.toBeNull();
+            expect(wordLines(open, line.isMe), 'four lines of words').toBeCloseTo(4, 5);
+            // The round buttons on a line of their own under it: the layout #3307 brought.
+            expect(Math.min(...open.round.map((r) => r.top)), 'its round buttons under it').toBeGreaterThanOrEqual(open.bubble!.bottom - 0.5);
+            // The line, its menu and the list's padding under the newest line fit the room.
+            const need = open.height + LIST_BOTTOM;
+            expect(need, `${need.toFixed(1)} dp in the room's ${CHAT_MENU_ROOM}`).toBeLessThanOrEqual(CHAT_MENU_ROOM);
+            // In a thread of that room: its first line of words and every action in view, so a drag closes the menu.
+            const viewTop = need - CHAT_MENU_ROOM;
+            expect(open.bubble!.top, 'its first line of words in view').toBeGreaterThanOrEqual(viewTop - 0.5);
+            for (const a of open.actions) expect(a.top, `${a.label} in view`).toBeGreaterThanOrEqual(viewTop - 0.5);
+            expect(dragCloses(CHAT_MENU_ROOM, open.height), 'all of it in view: a drag closes the menu').toBe(true);
+            // The walk's market DM with the keyboard down, its box as it stands with the About chip, Replying to or Editing: the
+            // thread chatColumnFit leaves it holds the line whole.
+            if (p !== PHONES[0]) return;
+            for (const stack of STACKS.filter((x) => x.screen === 'dm')) {
+                const thread = Math.round(stack.thread(p, 1.3, false));
+                expect(need, `${stack.name}: in ${thread} dp of thread`).toBeLessThanOrEqual(thread);
+                expect(dragCloses(thread, open.height), `${stack.name}: all in view, a drag closes the menu`).toBe(true);
+            }
+        });
+    }
+    it('the room is the least whole dp that holds the tallest of them and the walk\'s own line grown to four lines', () => {
+        const s = st();
+        // Walk 146's line on the phone (its dump, scratch/walks/emulator-146/r1 shot 15): two lines of words, 83 dp, with Copy
+        // and Report under it, 174 dp in all. Two lines more (22 dp × 1.3 each) and the round buttons' line under it (32 dp
+        // and the row's 6-dp gap), on the list's padding: 277.2 dp. Yoga's tallest above, someone else's, is 274.4.
+        const walk = 174 + 2 * s.messageText.lineHeight * 1.3 + s.circleActionButton.height + s.lineRow.rowGap + LIST_BOTTOM;
+        const yoga = Math.max(...MENU_ROOM_LINES.map((l) => openLine(l, PHONES[0], 1.3).height + LIST_BOTTOM));
+        expect(walk).toBeCloseTo(277.2, 5);
+        expect(yoga).toBeCloseTo(274.4, 3); // Yoga counts in 32-bit floats
+        // Whole as the thread counts it: within the half dp chatLineInView gives the fractions of a measure. One dp more would
+        // take the tall phone's last dp of bars with the walk's DM and a menu open (market-dm-fit-render: it moves nothing).
+        expect(CHAT_MENU_ROOM).toBe(Math.ceil(Math.max(walk, yoga) - 0.5));
+        const walkLine = { thread: CHAT_MENU_ROOM, offset: 0, y: LIST_BOTTOM, height: walk - LIST_BOTTOM, above: 0, below: 0 };
+        expect(chatLineInView(walkLine), 'the walk\'s line grown to four lines, whole in the room').toBe('all');
+        expect(dragCloses(CHAT_MENU_ROOM, walk - LIST_BOTTOM), 'all of it in view: a drag closes the menu').toBe(true);
+        expect(chatLineInView({ ...walkLine, thread: CHAT_MENU_ROOM - 1 }), 'a dp less cuts it').toBe('part');
+    });
+    it('the check can fail: the room it replaces (240 dp, for the buttons beside the line) left someone else\'s first line of words a scroll away', () => {
+        const OLD_ROOM = 240;
+        const open = openLine(MENU_ROOM_LINES[0], PHONES[0], 1.3);
+        expect(open.height + LIST_BOTTOM).toBeGreaterThan(OLD_ROOM);
+        expect(open.bubble!.top, 'its first line of words above the thread').toBeLessThan(open.height + LIST_BOTTOM - OLD_ROOM);
+        // Part of it out of view: a drag keeps the menu open (#3288), and the line's top is a scroll away.
+        expect(dragCloses(OLD_ROOM, open.height)).toBe(false);
+        // Mine past the edit window, likewise.
+        const mine = openLine(MENU_ROOM_LINES[2], PHONES[0], 1.3);
+        expect(mine.height + LIST_BOTTOM).toBeGreaterThan(OLD_ROOM);
+    });
 });
 
 describe('the outside chat\'s actions and the forum\'s ⋯', () => {

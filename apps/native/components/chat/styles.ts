@@ -70,7 +70,8 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
     /**
      * A line with its round buttons beside it (ChatMessageRow): they wrap to a line of their own, under it, when the two don't
      * fit. Mine come first in the row (left of my line), so my row wraps in reverse to put them under it too: never between my
-     * line and the one over it, and never under the emoji row, which opens over the line.
+     * line and the one over it, and never under the emoji row, which opens over the line. Their line (32 dp and the 6-dp gap)
+     * counts in the DM's room for an open line and its menu (utils/chat-column-fit CHAT_MENU_ROOM).
      */
     lineRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', rowGap: 6, maxWidth: '85%' },
     lineRowMe: { justifyContent: 'flex-end', flexWrap: 'wrap-reverse' },

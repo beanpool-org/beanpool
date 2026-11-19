@@ -25,11 +25,12 @@
  * the thread. Nothing in either page is shorter than that (every bar and the About chip's ✕ are 44 dp or more), so a page
  * that would fit is never folded.
  *
- * While a line's menu is open (tapped or held: Reply, React, Edit and Delete beside it, Copy and Report under it, or the
- * emoji row), the thread's floor is CHAT_MENU_ROOM instead of one line, so the line and its menu are in view: the bars and
- * then the About chip give way to it as they do to the composer, and come back when the menu closes. In one line of thread
- * only Copy showed, and dragging the thread to reach Reply or Edit closes the menu (emulator walk 146, 17 Nov: the walk's
- * market DM at 320 dp and 1.3×, both themes). A phone with room for it all moves nothing.
+ * While a line's menu is open (tapped or held: Reply, React, Edit and Delete beside it, or on a line of their own under it
+ * when the two don't fit, Copy and Report under those, or the emoji row), the thread's floor is CHAT_MENU_ROOM instead of
+ * one line, so the line and its menu are in view: the bars and then the About chip give way to it as they do to the
+ * composer, and come back when the menu closes. In one line of thread only Copy showed, and dragging the thread to reach
+ * Reply or Edit closes the menu (emulator walk 146, 17 Nov: the walk's market DM at 320 dp and 1.3×, both themes). A phone
+ * with room for it all moves nothing.
  *
  * While the key card is up (sending paused) the thread gives way: the card's page takes the bars with it in the room
  * dmKeyBannerMaxHeight gives it (#3278), and the About chip has all the composer and the banner leave.
@@ -46,19 +47,26 @@ import { CHAT_INPUT_MAX_HEIGHT, CHAT_INPUT_MIN_HEIGHT } from '../components/chat
 export const CHAT_THREAD_LINE = 44;
 
 /**
- * The thread's floor while a line's menu is open: a line and its menu at 320 dp and 1.3× text. The walk's two-line line
- * (83 dp) with Copy (44) and Report (43) under it took 174 dp (emulator walk 146); this holds a line of four lines with
- * them, or one of mine with the "You can edit a message for 15 minutes" note and Copy. The menu's buttons sit beside the
- * line, so a longer line keeps them in view with its top cut.
+ * The thread's floor while a line's menu is open: a line of four lines of words and its menu at 320 dp and 1.3× text, whole,
+ * on the list's 8-dp padding under the newest line. At 320 dp a line that wide has its round buttons on a line of their own
+ * under it (32 dp and the row's 6-dp gap, components/chat/styles lineRow, #3307), then Copy and Report. The walk's two-line
+ * line (83 dp) with Copy (44) and Report (43) under it took 174 dp (emulator walk 146); two lines more (2 × 22 dp × 1.3) and
+ * the buttons' line make it 269.2, 277.2 on the padding. Yoga's table (utils/__tests__/chat-line-menu-render) lays four-line
+ * lines out, on the padding, at 274.4 for someone else's with Reply, React, Copy and Report, 272.8 for mine past the edit
+ * window with its "You can edit a message for 15 minutes" note and Copy, and 224.4 for mine with Reply, React, Edit, Delete
+ * and Copy. This is the least whole dp that holds them all, whole as the thread counts it (within the half dp chatLineInView
+ * gives a measure's fractions), so it takes no more from the bars than that: one dp more and a tall phone at 1.3× with the
+ * walk's bars, the About chip and a menu open would scroll its bars by that dp. It was 240 while the buttons sat beside the
+ * line. A longer line keeps its whole menu in view, at the bottom of its cell, its top cut.
  */
-export const CHAT_MENU_ROOM = 240;
+export const CHAT_MENU_ROOM = 277;
 
 /**
  * Where the open line is in its thread, as the phone lays them out. The thread is inverted (the newest line at its bottom), so
  * every figure counts up from the bottom of the list's content: the thread shows `offset` to `offset + thread`, the open line's
- * cell (the line with Reply, React, Edit, Delete beside it and Copy, Report under it) is `y` to `y + height`, and its emoji row,
- * while it is up, reaches `above` past the cell's top or `below` past its bottom: it is drawn outside the cell, so the cell's
- * own height leaves it out (components/chat/styles CHAT_EMOJI_ROW_PAST_CELL).
+ * cell (the line with Reply, React, Edit, Delete beside it or under it, and Copy, Report under those) is `y` to `y + height`,
+ * and its emoji row, while it is up, reaches `above` past the cell's top or `below` past its bottom: it is drawn outside the
+ * cell, so the cell's own height leaves it out (components/chat/styles CHAT_EMOJI_ROW_PAST_CELL).
  */
 export interface ChatOpenLine { thread: number; offset: number; y: number; height: number; above: number; below: number }
 

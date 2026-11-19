@@ -28,7 +28,7 @@ import { isPushNoticeKind, PUSH_NOTICE_LIFETIME_SECONDS, pushCommunityTag, pushN
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../push-notice-check';
 import {
     clearActiveCount, countNotice, dropCounts, forgetNoticeCounts, noteServerUnread, noticeCountFor, noticeCountsSum, NOTICE_COUNTS_STORE_KEY,
-    onNoticeCounts, readNoticeCounts, watchNoticeCounts,
+    onNoticeCounts, readNoticeCounts, readNoticeRequests, watchNoticeCounts,
 } from '../notice-counts';
 import { communitySwitched } from '../community-switch';
 import { PUSH_ALERTS_OFF_STORE_KEY, PUSH_PINS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -244,6 +244,21 @@ describe('a community\'s number goes back to nothing as it becomes the one in us
         switchTo(MULLUM);
         await receive(push(data));
         expect(await counts()).toEqual({});
+    });
+});
+
+describe('message requests waiting at another community (Marty, 19 Nov 2026): Chat\'s line alone, never a number or the badge', () => {
+    it('keeps what a round said beside the number, in no count and no sum, and drops it with the number', async () => {
+        await noteServerUnread(storage, BYRON, 0, 0, 2);
+        await noteServerUnread(storage, OLDTOWN, 1, 1, 0);
+        expect(await readNoticeRequests(storage)).toEqual({ [BYRON]: 2 });
+        expect(await counts()).toEqual({ [OLDTOWN]: 1 });
+        expect(await noticeCountsSum(storage)).toBe(1);
+        // A request alone rings nothing: no rise in alerts, so no notice is due.
+        expect(await noteServerUnread(storage, BYRON, 0, 0, 3)).toBe(false);
+        expect(await readNoticeRequests(storage)).toEqual({ [BYRON]: 3 });
+        await dropCounts(storage, [BYRON]);
+        expect(await readNoticeRequests(storage)).toEqual({});
     });
 });
 

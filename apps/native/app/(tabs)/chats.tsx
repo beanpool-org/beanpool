@@ -168,12 +168,13 @@ export default function ChatsScreen() {
     // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
     const [switchNote, setSwitchNote] = useState<string | null>(null);
 
-    const openOtherCommunity = async (url: string) => {
+    const openOtherCommunity = async (url: string, what: 'messages' | 'requests' = 'messages') => {
         if (!identity?.publicKey || switchingCommunity) return;
         setSwitchNote(null);
         setSwitchingCommunity(true);
         try {
-            const result = await openNoticeIn(url, null, async () => CHAT_MESSAGES_ROUTE, {
+            // A line about message requests lands on that community's Message requests, as the push-free row's own tap does.
+            const result = await openNoticeIn(url, null, async () => (what === 'requests' ? '/(tabs)/chats?filter=requests' : CHAT_MESSAGES_ROUTE), {
                 storage: AsyncStorage,
                 publicKey: identity.publicKey,
                 joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
@@ -1083,7 +1084,7 @@ export default function ChatsScreen() {
             )}
             {/* One row per other community where messages wait (design R6): lands in that community's Talk. */}
             {messagesFilter !== 'requests' && (
-                <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
+                <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url, what) => void openOtherCommunity(url, what)} note={switchNote} />
             )}
             {/* One row for every kind of outside request (Marty, 1 Nov 2026). Marty, 19 Nov 2026, after Damo's global test ("I
                 thought that was a heading for the chat not a menu!!!"): it shows how many wait and a small red dot until the list

@@ -5,7 +5,7 @@ import { t } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
 import { rowTime } from '../utils/your-groups';
-import type { HeldChatRow as HeldChat } from '../utils/held-chats';
+import { heldChatOpensInPlace, type HeldChatRow as HeldChat } from '../utils/held-chats';
 
 /**
  * A chat in another community this phone holds, in Chat's one list (slice S1, DESIGN-no-switch-messaging-fable.md §1, §6):
@@ -17,6 +17,8 @@ import type { HeldChatRow as HeldChat } from '../utils/held-chats';
  */
 export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: boolean; onOpen: (item: HeldChat) => void }) {
     const { colors } = useTheme();
+    // A direct chat opens in place (slice S2): its community's name alone, nothing switches. Any other still moves there.
+    const inPlace = heldChatOpensInPlace(item);
     const styles = useStyles(({ colors: c }) => StyleSheet.create({
         row: {
             flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12,
@@ -36,7 +38,7 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
             accessibilityRole="button"
             // No label: the row's name is the words it shows ("Kai", the time, "Hilltop · Switch"), so "tap Hilltop Switch" works by
             // voice (WCAG 2.5.3, label in name); the sentence is the hint.
-            accessibilityHint={t('Chat with {name} in {community}. Opens that community.', { name: item.peer, community: item.communityName })}
+            accessibilityHint={inPlace ? undefined : t('Chat with {name} in {community}. Opens that community.', { name: item.peer, community: item.communityName })}
             testID="held-chat-row"
             style={styles.row}
             disabled={busy}
@@ -52,7 +54,7 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
                 </View>
                 <View style={styles.where}>
                     <MaterialCommunityIcons name="home-group" size={14} color={colors.text.secondary} />
-                    <Text style={styles.whereText} testID="held-chat-community">{t('{community} · Switch', { community: item.communityName })}</Text>
+                    <Text style={styles.whereText} testID="held-chat-community">{inPlace ? item.communityName : t('{community} · Switch', { community: item.communityName })}</Text>
                 </View>
             </View>
         </Pressable>

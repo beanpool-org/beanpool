@@ -20,6 +20,7 @@ export function MessageRequestsRow({ count, unseen, onPress }: { count: number; 
             alignItems: 'center',
             minHeight: 52,
             marginHorizontal: 16,
+            marginTop: 8,
             marginBottom: 10,
             paddingHorizontal: 14,
             paddingVertical: 8,

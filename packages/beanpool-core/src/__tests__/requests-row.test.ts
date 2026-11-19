@@ -133,6 +133,7 @@ describe('a new request always lights the dot; a seen one never does on a reload
     const SHUT = false;
     const A = line(T + 60 * MIN, T + 65 * MIN);   // written 11:00 by its sender, here 11:05
     const B = line(T, T + 120 * MIN);             // written 10:00 by a sender offline, held, here at 12:00
+    const THREE = 'one waits and is seen, answered elsewhere to none, then a new one (PR #3301 review)';
 
     const rows: Array<[kind: string, what: string, steps: Step[]]> = [
         ['here', 'opened, then reloads', [[here(T), SHUT, true], [here(T), OPEN, false], [here(T), SHUT, false], [here(T), SHUT, false]]],
@@ -184,6 +185,21 @@ describe('a new request always lights the dot; a seen one never does on a reload
         ['elsewhere', 'a fall in one community moves nothing of another', [
             [away({ [HILL]: 2, [VALE]: 2 }), OPEN, false], [away({ [HILL]: 1, [VALE]: 2 }), SHUT, false], [away({ [HILL]: 1, [VALE]: 2 }), SHUT, false], [away({ [HILL]: 1, [VALE]: 3 }), SHUT, true]]],
         ['elsewhere', 'seen while the list shows, with the counts read only then', [[away(null), OPEN, false], [away({ [HILL]: 1 }), OPEN, false], [away({ [HILL]: 1 }), SHUT, false]]],
+
+        // The reviewer's three steps (PR #3301), for every kind: one waits and the list is opened; it is answered elsewhere (on
+        // global's web app, another phone, or it expired), so none waits; then a NEW one comes, which must light the dot. A
+        // count known to be 0 is a fall; a count not known (null, or a community missing from `elsewhere`) is not.
+        ['here', THREE, [[here(T), OPEN, false], [here(), SHUT, false], [here(T + MIN), SHUT, true]]],
+        ['global', THREE, [[global(1), OPEN, false], [global(0), SHUT, false], [global(1), SHUT, true]]],
+        ['global', `${THREE}, with not known between`, [
+            [global(1), OPEN, false], [global(null), SHUT, false], [global(0), SHUT, false], [global(undefined), SHUT, false], [global(1), SHUT, true]]],
+        ['outside', THREE, [[outside(A), OPEN, false], [outside(), SHUT, false], [outside(line(T, T + 200 * MIN)), SHUT, true]]],
+        ['guest', THREE, [[guest(invite(T)), OPEN, false], [guest(), SHUT, false], [guest(invite(T + MIN)), SHUT, true]]],
+        ['elsewhere', THREE, [[away({ [HILL]: 1 }), OPEN, false], [away({ [HILL]: 0 }), SHUT, false], [away({ [HILL]: 1 }), SHUT, true]]],
+        ['elsewhere', `${THREE}, with not known between`, [
+            [away({ [HILL]: 1 }), OPEN, false], [away({}), SHUT, false], [away({ [HILL]: 0 }), SHUT, false], [away(null), SHUT, false], [away({ [HILL]: 1 }), SHUT, true]]],
+        ['elsewhere', `${THREE}, in one community while another's stays seen`, [
+            [away({ [HILL]: 1, [VALE]: 2 }), OPEN, false], [away({ [HILL]: 0, [VALE]: 2 }), SHUT, false], [away({ [HILL]: 1, [VALE]: 2 }), SHUT, true]]],
     ];
 
     // This device's own clock never enters: the same steps give the same dots with it a day out either way.

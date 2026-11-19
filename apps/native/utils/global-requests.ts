@@ -34,25 +34,28 @@ export async function noteQuestionsOpened(publicKey: string): Promise<void> {
 }
 
 /**
- * How many wait on global for this key. 0 on a phone that has opened no door, and on global itself, whose own list has them: and
- * whatever the member answers there changes the count, so the one kept here goes, or the row is still there when they get home.
- * With no answer it says what it last heard, and null where it has heard nothing: not known.
+ * How many wait on global for this key: a number is global's own answer, 0 included (none waiting), or what it last heard
+ * when global doesn't answer. Null is not known, and never a 0: no key on this phone, no door ticked here (nothing is asked),
+ * global itself or no community at all (its own list has them, so nothing is asked either), or no answer with nothing heard
+ * before. The row's red dot follows a 0 as a fall and leaves a null out (core dm-requests.ts RequestsWaiting): a "not asked"
+ * read as 0 would throw the real 0 away with it, and the dot could never come back for the next one (PR #3301 review). On
+ * global, whatever the member answers there changes the count, so the one kept here goes, or the row is still there when
+ * they get home.
  */
 export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity | null | undefined, now: number = Date.now()): Promise<number | null> {
-    if (!identity?.privateKey) return 0;
+    if (!identity?.privateKey) return null;
     // No answer from global (or from this phone's own storage), with nothing heard before: null, not known. The row's red dot
-    // leaves that out, where a 0 would read as a fall and bring the dot back on every start (core dm-requests.ts
-    // RequestsWaiting; PR #3298 review).
+    // leaves that out, where a 0 would read as a fall and bring the dot back on every start (PR #3298 review).
     const heard = () => (asked?.key === identity.publicKey ? asked.count : null);
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url').then((v) => v, () => undefined);
     if (anchor === undefined) return heard();
     if (!anchor || audienceOf(anchor) === audienceOf(GLOBAL_NODE_URL)) {
         asked = null;
-        return 0;
+        return null;
     }
     const ticked = await AsyncStorage.getItem(QUESTIONS_OPENED_STORE_KEY).then((v) => v, () => undefined);
     if (ticked === undefined) return heard();
-    if (ticked !== identity.publicKey) return 0;
+    if (ticked !== identity.publicKey) return null;
     if (asked?.key === identity.publicKey && now - asked.at < ASK_EVERY_MS) return asked.count;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);

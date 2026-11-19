@@ -85,22 +85,85 @@ describe('what the row counts from the phone\'s other communities', () => {
         expect(requestsElsewhere(read({ ...kept, counts: { [GLOBAL]: 4 } }), 3)?.[0].count).toBe(4);
     });
 
-    it('takes nothing from a door count of 0 or not known: its 0 also means no door ticked here, which must not read as a fall', () => {
-        for (const onGlobal of [0, null, undefined, -1, Number.NaN]) {
+    it('takes nothing from a door count not known (no door ticked here, no key, no answer yet): no card, no fall', () => {
+        for (const onGlobal of [null, undefined, -1, 1.5, Number.NaN]) {
             expect(requestsElsewhere(read({}), onGlobal)).toEqual([]);
             expect(requestsElsewhere(read({ counts: { [GLOBAL]: 2 } }), onGlobal)?.[0].count).toBe(2);
         }
-        // Seen 2 on global; a start where the door says 0 (no door here) before the round answers: no fall followed.
+        // Seen 2 on global; a start with no door ticked here (null), before the round answers after a visit to global: no
+        // fall followed, and the same 2 a moment later lights nothing.
         const seen = requestsSeenNext({ here: null, onGlobal: null, outside: [], guestInvites: [], elsewhere: { [GLOBAL]: 2 } }, null, true)!;
-        const before = elsewhereCounts(requestsElsewhere(read({}), 0));
+        const before = elsewhereCounts(requestsElsewhere(read({}), null));
         expect(requestsSeenNext({ here: null, onGlobal: null, outside: [], guestInvites: [], elsewhere: before }, seen, false)).toBeNull();
         expect(requestsUnseen({ here: null, onGlobal: null, outside: [], guestInvites: [], elsewhere: { [GLOBAL]: 2 } }, seen)).toBe(false);
+    });
+
+    it('takes a known door count of 0 (global\'s own "none waiting"), told apart from not known: the mark follows the fall (PR #3301 review)', () => {
+        // Global not kept by this phone: global at 0 (Chat shows a card only above 0, and the row counts none), so the mark can fall.
+        expect(requestsElsewhere(read({}), 0)).toEqual([{ address: GLOBAL, url: GLOBAL, name: 'Global community', count: 0 }]);
+        expect(elsewhereCounts(requestsElsewhere(read({}), 0))).toEqual({ [GLOBAL]: 0 });
+        expect(elsewhereCounts(requestsElsewhere(read({}), null))).toEqual({});
+        // Seen 1 on global, then the door says 0 (answered on global's web app): the mark falls there.
+        const seen = requestsSeenNext({ here: null, onGlobal: null, outside: [], guestInvites: [], elsewhere: { [GLOBAL]: 1 } }, null, true)!;
+        const after = requestsSeenNext({ here: null, onGlobal: null, outside: [], guestInvites: [], elsewhere: elsewhereCounts(requestsElsewhere(read({}), 0)) }, seen, false);
+        expect(after).not.toBeNull();
+        expect(after?.elsewhere?.[GLOBAL] ?? 0).toBe(0);
+        // Where the round knows global too, the larger stands until it hears the fall as well.
+        expect(requestsElsewhere(read({ counts: { [GLOBAL]: 1 } }), 0)?.[0].count).toBe(1);
+        expect(requestsElsewhere(read({ counts: { [GLOBAL]: 0 } }), 0)?.[0].count).toBe(0);
     });
 
     it('takes no door count where global\'s alerts are off, or where global is the community in use', () => {
         expect(requestsElsewhere(read({ off: [`${GLOBAL}/`] }), 2)).toEqual([]);
         expect(requestsElsewhere(read({ anchor: GLOBAL }), 2)).toEqual([]);
+        // A known 0 neither.
+        expect(requestsElsewhere(read({ off: [`${GLOBAL}/`] }), 0)).toEqual([]);
+        expect(requestsElsewhere(read({ anchor: GLOBAL }), 0)).toEqual([]);
     });
+});
+
+/**
+ * The reviewer's three steps (PR #3301), for every way a community's count reaches the row on the phone: one waits and the
+ * list is opened; it is answered elsewhere (global's web app, another phone, or it expired), so the count says 0; then a NEW
+ * request comes. The dot must light for it. Each step goes as Chat's does: the fold (requestsElsewhere, with the door count
+ * as global-requests.ts gives it), then core's mark and dot (onGlobal null, as chats.tsx passes it).
+ */
+describe('a new request in another community always lights the dot, whichever way its count comes (PR #3301 review)', () => {
+    type Source = { counts?: Record<string, number>; door?: number | null };
+    type Step = [source: Source, opened: boolean, dot: boolean];
+    const OPEN = true;
+    const SHUT = false;
+    const keptGlobal = [{ url: `${GLOBAL}/` }];
+    const rows: Array<[kind: string, saved: HeldRequestsRead['saved'], steps: Step[]]> = [
+        ['global by its door count alone (the phone keeps no global)', [], [
+            [{ door: 1 }, OPEN, false], [{ door: 0 }, SHUT, false], [{ door: 1 }, SHUT, true]]],
+        ['global by its door count alone, a start with no door known yet between', [], [
+            [{ door: 1 }, OPEN, false], [{ door: null }, SHUT, false], [{ door: 1 }, SHUT, false], [{ door: 0 }, SHUT, false], [{ door: null }, SHUT, false], [{ door: 1 }, SHUT, true]]],
+        ['global by its round alone (no door ticked here)', keptGlobal, [
+            [{ counts: { [GLOBAL]: 1 }, door: null }, OPEN, false], [{ counts: { [GLOBAL]: 0 }, door: null }, SHUT, false], [{ counts: { [GLOBAL]: 1 }, door: null }, SHUT, true]]],
+        ['global by its door count and its round together', keptGlobal, [
+            [{ counts: { [GLOBAL]: 1 }, door: 1 }, OPEN, false], [{ counts: { [GLOBAL]: 0 }, door: 0 }, SHUT, false], [{ counts: { [GLOBAL]: 0 }, door: 1 }, SHUT, true]]],
+        ['global by its door count and its round, the round hearing the fall a round later', keptGlobal, [
+            [{ counts: { [GLOBAL]: 1 }, door: 1 }, OPEN, false], [{ counts: { [GLOBAL]: 1 }, door: 0 }, SHUT, false], [{ counts: { [GLOBAL]: 0 }, door: 0 }, SHUT, false],
+            [{ counts: { [GLOBAL]: 1 }, door: 0 }, SHUT, true]]],
+        ['another community by its round', [{ url: HILL }], [
+            [{ counts: { [HILL]: 1 } }, OPEN, false], [{ counts: { [HILL]: 0 } }, SHUT, false], [{ counts: { [HILL]: 1 } }, SHUT, true]]],
+        ['another community by its round, global\'s door count beside it', [{ url: HILL }], [
+            [{ counts: { [HILL]: 1 }, door: 0 }, OPEN, false], [{ counts: { [HILL]: 0 }, door: 0 }, SHUT, false], [{ counts: { [HILL]: 1 }, door: 0 }, SHUT, true]]],
+    ];
+
+    for (const [kind, saved, steps] of rows) {
+        it(kind, () => {
+            let mark: ReturnType<typeof requestsSeenNext> = null;
+            const dots = steps.map(([source, opened]) => {
+                const places = requestsElsewhere(read({ saved, counts: source.counts ?? {} }), source.door ?? null);
+                const w = { here: null, onGlobal: null, outside: [], guestInvites: [], elsewhere: elsewhereCounts(places) };
+                mark = requestsSeenNext(w, mark, opened) ?? mark;
+                return requestsUnseen(w, mark);
+            });
+            expect(dots).toEqual(steps.map(([, , dot]) => dot));
+        });
+    }
 });
 
 describe('a card\'s tap', () => {

@@ -149,7 +149,8 @@ export default function ChatsScreen() {
     const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
     // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row,
     // as global's card among the other communities' (utils/requests-elsewhere.ts). Null until global has answered (or while an ask
-    // with nothing heard before goes unanswered): not known, which the row's red dot leaves out (PR #3298 review).
+    // with nothing heard before goes unanswered, or with no door ticked on this phone): not known, which the row's red dot leaves
+    // out (PR #3298 review). A 0 is global's own answer: a fall the dot follows (PR #3301 review).
     const [onGlobal, setOnGlobal] = useState<number | null>(null);
     // Chats with people in other communities, on this phone only; a request among them waits behind the same row.
     const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);

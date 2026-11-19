@@ -34,15 +34,26 @@ beforeEach(() => {
 });
 
 describe('what waits on global', () => {
-    it('a phone that has never ticked a door asks global nothing', async () => {
-        expect(await requestsWaitingOnGlobal(me)).toBe(0);
+    // Not asked is not known (null), never a 0: the row's dot follows a 0 as a fall, so a "not asked" 0 would throw away
+    // global's real 0 with it (PR #3301 review).
+    it('a phone that has never ticked a door asks global nothing, and knows nothing (null, not 0)', async () => {
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
         expect(net.get).not.toHaveBeenCalled();
     });
 
-    it('a mark left by another account asks nothing either', async () => {
+    it('a mark left by another account asks nothing either, and knows nothing', async () => {
         await noteQuestionsOpened('ef'.repeat(32));
-        expect(await requestsWaitingOnGlobal(me)).toBe(0);
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
         expect(net.get).not.toHaveBeenCalled();
+    });
+
+    it('a door ticked here and global says none waiting: 0, a known count, told apart from not known (PR #3301 review)', async () => {
+        await noteQuestionsOpened(me.publicKey);
+        net.get.mockImplementation(async () => answer(0));
+        expect(await requestsWaitingOnGlobal(me, 1_000)).toBe(0);
+        // And once heard, a blip says that 0, not null.
+        net.get.mockImplementation(async () => { throw new TypeError('Network request failed'); });
+        expect(await requestsWaitingOnGlobal(me, 400_000)).toBe(0);
     });
 
     it('after a tick it asks for the counts alone, of global, signed', async () => {
@@ -51,10 +62,14 @@ describe('what waits on global', () => {
         expect(net.get.mock.calls[0].slice(0, 3)).toEqual(['https://global.beanpool.org', '/api/me/unread', me]);
     });
 
-    it('on global itself it asks nothing: its own list has them', async () => {
+    it('on global itself (or with no community at all) it asks nothing, and knows nothing: its own list has them', async () => {
         await noteQuestionsOpened(me.publicKey);
         store.set('beanpool_anchor_url', 'https://global.beanpool.org/');
-        expect(await requestsWaitingOnGlobal(me)).toBe(0);
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
+        store.set('beanpool_anchor_url', '');
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
+        store.delete('beanpool_anchor_url');
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
         expect(net.get).not.toHaveBeenCalled();
     });
 
@@ -62,8 +77,9 @@ describe('what waits on global', () => {
         await noteQuestionsOpened(me.publicKey);
         expect(await requestsWaitingOnGlobal(me, 1_000)).toBe(2);
         store.set('beanpool_anchor_url', 'https://global.beanpool.org/');
-        expect(await requestsWaitingOnGlobal(me, 2_000)).toBe(0);
+        expect(await requestsWaitingOnGlobal(me, 2_000)).toBeNull();
         store.set('beanpool_anchor_url', HOME);
+        // Both answered there: global's own 0, a known count.
         net.get.mockImplementation(async () => answer(0));
         expect(await requestsWaitingOnGlobal(me, 3_000)).toBe(0);
         expect(net.get).toHaveBeenCalledTimes(2);
@@ -115,9 +131,11 @@ describe('what waits on global', () => {
         expect(net.get).toHaveBeenCalledTimes(1);
     });
 
-    it('no key on this phone: nothing', async () => {
-        expect(await requestsWaitingOnGlobal(null)).toBe(0);
-        expect(await requestsWaitingOnGlobal({ publicKey: me.publicKey } as any)).toBe(0);
+    it('no key on this phone: nothing asked, nothing known (null)', async () => {
+        await noteQuestionsOpened(me.publicKey);
+        expect(await requestsWaitingOnGlobal(null)).toBeNull();
+        expect(await requestsWaitingOnGlobal({ publicKey: me.publicKey } as any)).toBeNull();
+        expect(net.get).not.toHaveBeenCalled();
     });
 });
 

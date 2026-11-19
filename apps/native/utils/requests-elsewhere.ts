@@ -9,9 +9,10 @@
  *   phone may send alerts from, so never one with its alerts off, a guest's look, or one that said the account isn't theirs.
  * - **The door count on global** (global-requests.ts `requestsWaitingOnGlobal`, for a phone that ticked a door) is one more
  *   such count, for global's address: the larger of the two where the rounds know global too, as both are global's own
- *   answer for this key at two moments. Only a count above 0 is taken from it: its 0 also means "not asked" (no door ticked
- *   on this phone), which must not read as a fall. Left out where global's alerts are off, and where global is the
- *   community in use, whose own list has them.
+ *   answer for this key at two moments. Any count it knows is taken, 0 included: its 0 is global's own "none waiting", so the
+ *   row's mark follows that fall and the next request there lights the dot (PR #3301 review). Where it isn't known (no door
+ *   ticked on this phone, no key, or no answer with nothing heard before) it is null, and nothing is taken. Left out where
+ *   global's alerts are off, and where global is the community in use, whose own list has them.
  * - **No push, no badge, no unread count** (Marty, 1 Nov 2026, kept on 19 Nov): these counts are the row's alone.
  * - **A tap on a card** moves the phone there through the one switch and opens that community's Message requests
  *   (app/(tabs)/chats.tsx `openOtherCommunity`), as a tapped notice does. No community is named here but global's one
@@ -87,7 +88,7 @@ export function requestsElsewhere(read: HeldRequestsRead | null, onGlobal: numbe
     if (!read) return null;
     const counts: Record<string, number> = { ...read.counts };
     const g = communityAddress(global);
-    if (g && typeof onGlobal === 'number' && Number.isSafeInteger(onGlobal) && onGlobal > 0
+    if (g && typeof onGlobal === 'number' && Number.isSafeInteger(onGlobal) && onGlobal >= 0
         && !sameCommunity(g, read.anchor) && !read.off.some((c) => sameCommunity(c, g))) {
         const key = Object.keys(counts).find((c) => sameCommunity(c, g)) ?? g;
         counts[key] = Math.max(counts[key] ?? 0, onGlobal);

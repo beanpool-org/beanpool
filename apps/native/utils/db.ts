@@ -7290,7 +7290,7 @@ async function lockForConversation(conversationId: string, text: string, line: D
     // or refused, whatever its row or the node now call it. With the group path asked first, a pinned DM the node relisted
     // as an unlocked group went out readable.
     if (!(await isHeldGroupChat(conversationId)) && await isKnownDmConversation(conversationId, { pinsMustRead: true })) {
-        return lockWith(await requireDmKeyContext(conversationId), text, line);
+        return lockWith(await requireDmKeyContext(conversationId, community), text, line);
     }
     // A group's chat is locked since group chats step 2 (slice 3 here): sealed under the group's key, with its epoch in the
     // metadata the node checks. Only a node from before locked chats, which this phone never saw locked, still reads it.
@@ -7304,7 +7304,7 @@ async function lockForConversation(conversationId: string, text: string, line: D
         if (await nodeChatIsUnlocked(conversationId)) return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
         throw new DmNotLockedError();
     }
-    return lockWith(await requireDmKeyContext(conversationId), text, line);
+    return lockWith(await requireDmKeyContext(conversationId, community), text, line);
 }
 
 /**

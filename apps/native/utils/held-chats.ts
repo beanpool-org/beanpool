@@ -28,18 +28,7 @@ export interface HeldChatRow extends HeldConversation {
     communityName: string;
 }
 
-/**
- * Whether a tap on this held row opens its chat in place, with no switch (slice S2): a direct chat only. A group's, a
- * deal's or an event's chat in place is slice S6; until then the tap moves the phone there (S1).
- */
-export function heldChatOpensInPlace(chat: Pick<HeldConversation, 'type'>): boolean {
-    return (chat.type || 'dm') === 'dm';
-}
-
-/** The chat screen's params for a held direct chat opened in place: its id, its community by address, and that community's name. */
-export function heldChatInPlaceParams(chat: Pick<HeldChatRow, 'id' | 'community' | 'communityName'>): { id: string; community: string; communityName: string } {
-    return { id: chat.id, community: chat.community, communityName: chat.communityName };
-}
+export { heldChatInPlaceParams, heldChatOpensInPlace } from './held-chat-in-place';
 
 /** One stretch of Chat in view (its focus effect), as {@link heldChatsInView} hands it out. */
 export interface HeldChatsView {

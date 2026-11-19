@@ -251,11 +251,11 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
         const closed = () => new InPlaceClosedError(deps.closedText ?? `The copy ${file} open in place was closed.`);
         return new Proxy(handle, {
             get(target, prop) {
-                const value = Reflect.get(target, prop, target);
-                if (typeof value !== 'function') return value;
                 if (prop === 'closeAsync' || prop === 'closeSync' || prop === 'prepareAsync' || prop === 'prepareSync') {
                     return () => { throw new InPlaceClosedError(`A copy open in place takes no ${String(prop)} from a caller.`); };
                 }
+                const value = Reflect.get(target, prop, target);
+                if (typeof value !== 'function') return value;
                 return (...args: unknown[]) => {
                     // Counted in with no await since this check: a close that began has the statement refused, never cut.
                     if (entry.handle !== target || refused(entry)) {

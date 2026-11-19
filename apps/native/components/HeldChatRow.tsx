@@ -5,13 +5,14 @@ import { t } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
 import { rowTime } from '../utils/your-groups';
-import { heldChatOpensInPlace, type HeldChatRow as HeldChat } from '../utils/held-chats';
+import type { HeldChatRow as HeldChat } from '../utils/held-chats';
+import { heldChatOpensInPlace } from '../utils/held-chat-in-place';
 
 /**
  * A chat in another community this phone holds, in Chat's one list (slice S1, DESIGN-no-switch-messaging-fable.md §1, §6):
- * the other person, the time of the newest line the phone holds, and that community's name in grey with "· Switch", since a
- * tap still moves the phone there and opens the chat (reading it in place is slice S2). No preview of its lines yet (S2
- * opens them with that community's own pins). The photo is that community's (utils/db.ts getHeldConversations), never one
+ * the other person, the time of the newest line the phone holds, and that community's name in grey. A direct chat opens in
+ * place (slice S2), so its row says the community's name alone; any other still moves the phone there, so its row says
+ * "· Switch". No preview of its lines (the PR of S2 says what that costs and where it went). The photo is that community's (utils/db.ts getHeldConversations), never one
  * from the community in use. Drawn apart from the screen so the render tests draw this very row; at 320 dp with 1.3× text
  * the community's line wraps, never cut.
  */

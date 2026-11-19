@@ -155,7 +155,11 @@ vi.mock('../db', () => ({
     createConversationApi: vi.fn(async () => ({ id: 'conv-1' })),
     getChattedWithMembers: async () => mem.chats,
     getFriendsLocal: async () => mem.friends,
+    // db.ts's refusal of a chat in place with no copy of that community to open (slice S2): tagged here as `noCopy`.
+    isNoCopyInPlace: (e: unknown) => !!(e as { noCopy?: boolean } | null)?.noCopy,
 }));
+/** What db.ts throws when that community's copy can't be opened in place (not on the phone yet, a move or a delete under way). */
+const NO_COPY_IN_PLACE = Object.assign(new Error('This phone has switched community since this chat was opened.'), { noCopy: true });
 // The old copy's requests (utils/contacts-former.ts, its own suite contacts-former.test.ts): no network here.
 vi.mock('../contacts-former', async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
@@ -272,6 +276,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(t).toContain('@sam_j · Riverside');
         expect(t).toContain('0412 345 678');
         expect(button('Message')).toBeDefined();
+        // Riverbend is not held here (nothing saved but the anchor): it still asks first.
         expect(button('Open Riverbend ›')).toBeDefined();
         expect(t).toContain('Blocked');
         expect(button('Unblock')).toBeDefined();
@@ -302,7 +307,24 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         // Mutation: switchCommunity(...).catch(() => {}) → the tap does nothing, and the last alert is still the question.
     });
 
-    it('a contact in another community this phone holds: Open <community> › moves there with no question, and the chat opens where it lands (S0, Marty 19 Nov 2026)', async () => {
+    it('a contact in another community this phone holds: Message starts the chat there and opens it in place, with no question and no switch (S2, Marty 19 Nov 2026)', async () => {
+        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: `${RIVERBEND}/` }]));
+        await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+        await render();
+        vi.mocked(switchCommunity).mockClear();
+        const { createConversationApi } = await import('../db');
+        vi.mocked(createConversationApi).mockClear();
+        expect(button('Open Riverbend ›')).toBeUndefined();
+        await press('Message');
+        expect(mem.alerts).toEqual([]);
+        expect(switchCommunity).not.toHaveBeenCalled();
+        // Started in Riverbend by the address its saved list gives (this file's nodes stand-in), and opened there in place.
+        expect(vi.mocked(createConversationApi).mock.calls).toEqual([['dm', [ME.publicKey, ANA], ME.publicKey, undefined, undefined, RIVERBEND]]);
+        expect(mem.pushed).toEqual([{ pathname: '/chat/[id]', params: { id: 'conv-1', community: RIVERBEND, communityName: 'Riverbend' } }]);
+        // Mutation: the S0 move kept for held communities -> switchCommunity is called and nothing is pushed.
+    });
+
+    it('that community\'s copy can\'t be opened in place (not on the phone yet): Message moves there with no question, and the chat opens where it lands (S0, Marty 19 Nov 2026)', async () => {
         // The phone holds Riverbend too (saved, and not a guest's look), under a spelling with a slash.
         mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: `${RIVERBEND}/` }]));
         await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
@@ -310,11 +332,13 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         vi.mocked(switchCommunity).mockClear();
         const { createConversationApi } = await import('../db');
         vi.mocked(createConversationApi).mockClear();
-        await press('Open Riverbend ›');
-        // No question: the one switch, to the address the phone saved, and no chat started in the community left.
+        vi.mocked(createConversationApi).mockRejectedValueOnce(NO_COPY_IN_PLACE);
+        await press('Message');
+        // No question: the one switch, to the address the phone saved, and no chat started anywhere but the one try in place.
         expect(mem.alerts).toEqual([]);
         expect(vi.mocked(switchCommunity).mock.calls.map((c) => c[0])).toEqual([`${RIVERBEND}/`]);
-        expect(createConversationApi).not.toHaveBeenCalled();
+        expect(vi.mocked(createConversationApi).mock.calls).toEqual([['dm', [ME.publicKey, ANA], ME.publicKey, undefined, undefined, RIVERBEND]]);
+        vi.mocked(createConversationApi).mockClear();
         // The phone is in Riverbend now, and Contacts opens over the tabs where the guard lands, naming Ana: her chat opens, once.
         mem.store.set('beanpool_anchor_url', RIVERBEND);
         mem.params = { message: ANA };
@@ -335,8 +359,9 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
         await render();
         const { createConversationApi } = await import('../db');
+        vi.mocked(createConversationApi).mockRejectedValueOnce(NO_COPY_IN_PLACE);
+        await press('Message');
         vi.mocked(createConversationApi).mockClear();
-        await press('Open Riverbend ›');
         mem.store.set('beanpool_anchor_url', RIVERBEND);
         mem.params = { message: ANA };
         mem.blocked = [ANA];
@@ -352,8 +377,9 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
         await render();
         const { createConversationApi } = await import('../db');
+        vi.mocked(createConversationApi).mockRejectedValueOnce(NO_COPY_IN_PLACE);
+        await press('Message');
         vi.mocked(createConversationApi).mockClear();
-        await press('Open Riverbend ›');
         // The guard held the member elsewhere (no landing), and they open Contacts themselves: no `message` named.
         mem.store.set('beanpool_anchor_url', RIVERBEND);
         await act(async () => { root?.unmount(); });

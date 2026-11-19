@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
- * Chat's row for a chat held in another community (components/HeldChatRow.tsx, slice S1), rendered for real in light and
- * dark: the other person, that community's name in grey with "· Switch" (a tap still moves the phone there), the screen
- * reader's words naming both, the photo from that community's server as the row was given it, and a tap handing the row
- * itself back, so the screen moves to that row's community and chat (app/(tabs)/chats.tsx openHeldChat). Busy: no tap.
+ * Chat's row for a chat held in another community (components/HeldChatRow.tsx, slices S1 and S2), rendered for real in
+ * light and dark: the other person, that community's name in grey, the photo from that community's server as the row was
+ * given it, and a tap handing the row itself back (app/(tabs)/chats.tsx openHeldChat). A direct chat opens in place (S2): its
+ * row says the community's name alone and nothing of a switch. Any other chat still moves the phone there (S1): "· Switch",
+ * and the screen reader's sentence saying so. Busy: no tap.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -64,12 +65,30 @@ beforeEach(() => {
 const render = async (el: unknown) => { await act(async () => { root.render(el as any); }); };
 const styleOf = (el: Element | null) => JSON.parse(el?.getAttribute('data-style') ?? '{}');
 
+/** A held chat that isn't a direct one (a kind S2 doesn't open in place): its tap still moves the phone there. */
+const NOT_DIRECT: HeldChat = { ...ROW, id: 'b-other', key: 'held:community_hilltop.example_x.db:b-other', type: 'marketplace' };
+
 describe('a chat held in another community, in Chat\'s list', () => {
     for (const dark of [false, true]) {
         const colors = dark ? darkColors : lightColors;
-        it(`${dark ? 'dark' : 'light'}: the person, that community's name in grey with "· Switch", and the screen reader hears both`, async () => {
+        it(`${dark ? 'dark' : 'light'}: a direct chat (opened in place, S2): the person, that community's name alone in grey, no switch said`, async () => {
             theme.dark = dark;
             await render(createElement(HeldChatRow, { item: ROW, busy: false, onOpen: () => {} }));
+            const row = host.querySelector('[data-testid="held-chat-row"]')!;
+            expect(row.textContent).toContain('Kai');
+            const where = host.querySelector('[data-testid="held-chat-community"]')!;
+            expect(where.textContent).toBe('Hilltop');
+            expect(row.textContent).not.toContain('Switch');
+            expect(styleOf(where).color).toBe(colors.text.secondary);
+            // No label of its own: the name is the words the row shows (WCAG 2.5.3); no sentence of a switch it doesn't make.
+            expect(row.getAttribute('aria-label')).toBeNull();
+            expect(row.getAttribute('aria-description')).toBeNull();
+            expect(seen.avatars).toEqual(['https://hilltop.example/uploads/kai.jpg']);
+        });
+
+        it(`${dark ? 'dark' : 'light'}: any other chat (S1): the person, that community's name in grey with "· Switch", and the screen reader hears both`, async () => {
+            theme.dark = dark;
+            await render(createElement(HeldChatRow, { item: NOT_DIRECT, busy: false, onOpen: () => {} }));
             const row = host.querySelector('[data-testid="held-chat-row"]')!;
             expect(row.textContent).toContain('Kai');
             const where = host.querySelector('[data-testid="held-chat-community"]')!;

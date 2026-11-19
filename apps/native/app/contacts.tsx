@@ -35,6 +35,7 @@ import { communityLabel, contactsOf, contactsWhereWords, shareContactsFile, useC
 import { checkContactsHere, contactsKeptAt, editContacts, syncContacts } from '../utils/contacts-sync';
 import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
+import { getSavedNodes } from '../utils/nodes';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
 import { createConversationApi, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace } from '../utils/db';
 import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
@@ -396,10 +397,12 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
     const messageThere = async (key: string, community: string) => {
         if (opening) return;
         setOpening(key);
+        // The community as this phone saved it (its copy's address), however the contact's link spells it.
+        const saved = (await getSavedNodes().catch(() => [])).find((n) => sameCommunity(n.url, community))?.url ?? community;
         try {
-            const conv = await createConversationApi('dm', [me, key], me, undefined, undefined, community);
+            const conv = await createConversationApi('dm', [me, key], me, undefined, undefined, saved);
             setOpening(null);
-            router.push({ pathname: '/chat/[id]', params: { id: String(conv.id), community, communityName: communityLabel(view, community) } });
+            router.push({ pathname: '/chat/[id]', params: { id: String(conv.id), community: saved, communityName: communityLabel(view, community) } });
             return;
         } catch (e: any) {
             if (!isNoCopyInPlace(e)) {

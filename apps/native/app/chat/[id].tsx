@@ -1071,7 +1071,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                             }
                             
                             // Refresh conversation state
-                            syncSingleConversation(id as string).then(() => {
+                            syncSingleConversation(id as string, at).then(() => {
                                 loadConversationData();
                                 loadDeals();
                                 loadMessages(true);
@@ -1089,6 +1089,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     };
 
     const handleCancelEscrow = async () => {
+        // A deal is the community in use's: never cancelled from a chat in place (slice S2).
+        if (at) return;
         if (!pendingTx || !identity?.publicKey) return;
         await KeyboardController.dismiss();
         Alert.alert(
@@ -1105,7 +1107,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                             await cancelMarketplaceTransaction(pendingTx.id, identity.publicKey);
                             hapticWarning();
                             Alert.alert(t('Cancelled'), t('The hold has been cancelled and the Beans refunded.'));
-                            syncSingleConversation(id as string).then(() => {
+                            syncSingleConversation(id as string, at).then(() => {
                                 loadConversationData();
                                 loadDeals();
                                 loadMessages(true);
@@ -1201,7 +1203,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                     await completeMarketplaceTransaction(txId, identity.publicKey);
                     hapticSuccess();
                     if (peerPubkey) setPromptReviewForTx({ txId, targetPubkey: peerPubkey, targetCallsign: peerName });
-                    await syncSingleConversation(id as string);
+                    await syncSingleConversation(id as string, at);
                     await loadDeals();
                     loadMessages(true);
                 } catch (e: any) {
@@ -1222,7 +1224,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 try {
                     await cancelMarketplaceTransaction(txId, identity.publicKey);
                     hapticWarning();
-                    await syncSingleConversation(id as string);
+                    await syncSingleConversation(id as string, at);
                     await loadDeals();
                     loadMessages(true);
                 } catch (e: any) {

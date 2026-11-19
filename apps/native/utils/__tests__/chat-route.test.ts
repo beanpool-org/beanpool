@@ -161,18 +161,32 @@ describe('the screens\' wiring', () => {
         expect(chatRoute).not.toMatch(/isHeldGroupChat\(|isKnownDmConversation\(|knownDmConversationId\(|getConversationKind\(|askHeldGroup|askKnownDm|askRouteKind/);
     });
 
+    /**
+     * The one exception (slice S2): a direct chat of another community this phone holds, opened in place by its own id in
+     * that community (Chat's held rows, Contacts there). routeChat's facts (the held group, the DM guard, the kind) are the
+     * community in use's, so they are never asked of another community's chat; only the DM screen draws in place, and only
+     * a DM is ever linked so (utils/held-chat-in-place.ts; utils/db.ts seals in place to that community's pin or refuses).
+     */
+    const IN_PLACE_BRANCH = "if (id && community) return <ChatScreen id={String(id)} inPlace={{ community: String(community), name: communityName ? String(communityName) : '' }} />;";
+
     it('every node-readable screen gets routeChat\'s id, and only an answer for this id draws', () => {
         expect(chatRoute).toMatch(/if \(!id \|\| !route \|\| route\.for !== String\(id\)\) return null;/);
         expect(chatRoute.match(/<GroupChatView kind="group" id=\{screenId\}/g)?.length).toBe(1);
         expect(chatRoute).toMatch(/<EventChatView eventId=\{screenId\} \/>/);
         expect(chatRoute).toMatch(/<GroupChatView kind="enterprise" id=\{screenId\}/);
-        expect(chatRoute).not.toMatch(/id=\{(?!screenId\})|eventId=\{(?!screenId\})/);
+        // Every screen but the DM one in place (below), whose branch is the only other id given.
+        expect(chatRoute.split(IN_PLACE_BRANCH).length).toBe(2);
+        expect(chatRoute.replace(IN_PLACE_BRANCH, '')).not.toMatch(/id=\{(?!screenId\})|eventId=\{(?!screenId\})/);
     });
 
-    it('the DM screen gets routeChat\'s id too, and never reads the link\'s spelling itself', () => {
+    it('the DM screen gets routeChat\'s id too, and never reads the link\'s spelling itself; in place, only with its community, before routeChat is asked', () => {
         expect(chatRoute).toMatch(/return <ChatScreen id=\{screenId\} \/>;/);
+        // In place: drawn before any route answer, and routeChat never asked (its effect returns at once with a community).
+        expect(chatRoute.indexOf(IN_PLACE_BRANCH)).toBeLessThan(chatRoute.indexOf('if (!id || !route || route.for !== String(id)) return null;'));
+        expect(chatRoute).toMatch(/useEffect\(\(\) => \{\s*if \(!id \|\| community\) return;/);
+        expect(chatRoute).not.toMatch(/<(GroupChatView|EventChatView)[^>]*inPlace/);
         const dmScreen = route.slice(route.indexOf('function ChatScreen('));
-        expect(dmScreen).toMatch(/^function ChatScreen\(\{ id \}: \{ id: string \}\) \{/);
+        expect(dmScreen).toMatch(/^function ChatScreen\(\{ id, inPlace \}: \{ id: string; inPlace\?: \{ community: string; name: string \} \}\) \{/);
         expect(dmScreen).not.toMatch(/useLocalSearchParams<\{ id\?|const \{ id[,\s]/);
     });
 

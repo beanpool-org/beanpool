@@ -22,7 +22,9 @@
  *      left out, each named with why) and sends nothing out (no Expo push, no web push, no call to any outside host; mail
  *      for another community is a table, so it is watched with the rest). Where that body never reaches the write, the
  *      refusal is the body's, not the gate's: section 5's control and OWN_STATE say which bodies do. A STRANGER_MAY write
- *      is answered as done, changes only its named tables, and sends out only where it says so.
+ *      is answered as done, changes only its named tables, and sends out only where it says so. The AI assistant switch
+ *      is on for the sweeps (off by default, risk 3), so the OAuth door's writes meet the stranger themselves; one row
+ *      measures them with it off: each answers 404 and changes nothing.
  *   3. A key with an open request to join (a knock, the door every stranger may use): the same sweep, each key knocking
  *      first through the real door. A knock is no membership: it may act on its own request, phone and browser, and
  *      nothing else; Kim's request is still waiting at the end.
@@ -32,7 +34,8 @@
  *      on many of the writes (the bodies reach real data, so a stranger's "nothing changed" is a refusal), and a row a
  *      stranger planted would be seen by the same snapshot. Among them every write in OWN_STATE (the signer's own switches,
  *      marks, profile, phone and channels), the class where bodies that missed once hid two holes and a write in the wrong
- *      list; each it can't reach says why.
+ *      list; each it can't reach says why. And an assistant's consent page, whose ticks live in memory where no snapshot
+ *      sees them: its own browser's body sets them, a stranger's same body moves none.
  *
  * The engines the inventory had not traced (pausePost, resumePost, publishKnowledge, deleteGroupPost,
  * removeGroupThreadMessage, skipEventDate, names step-back) are among the swept writes, each with a body that reaches them.
@@ -295,7 +298,11 @@ const STRANGER_REFUSED = new Set<string>([
     'POST /api/treasury/:treasury/wind-up/cancel', 'POST /api/treasury/:treasury/wind-up/finalise',
     'POST /api/treasury/:treasury/wind-up/initiate', 'POST /api/trust/profile', 'POST /api/vouch', 'POST /api/vouchers/ask',
     'POST /api/web-push', 'POST /app/auth/apple', 'POST /mcp', 'POST /mcp/photos', 'POST /mcp/photos/u/:token',
-    'POST /oauth/authorize/:id/confirm', 'POST /oauth/authorize/:id/wait', 'POST /oauth/register', 'POST /oauth/token', 'PUT /api/contacts/copy',
+    // The consent page's poll, digits and ticks (agent/oauth-route.ts; inside OAUTH_DOOR_PATH, so 404 with the assistant
+    // switch off): each answers only the browser holding the request's SameSite cookie, which a stranger never has (403).
+    // The ticks are the page's own: set before the phone looks, shown to it and signed by it (section 5's control).
+    'POST /oauth/authorize/:id/asks', 'POST /oauth/authorize/:id/confirm', 'POST /oauth/authorize/:id/wait',
+    'POST /oauth/register', 'POST /oauth/token', 'PUT /api/contacts/copy',
     'PUT /api/enterprise/:treasury/profile', 'PUT /api/events/:postId/reminder', 'PUT /api/marketplace/posts/:id/feature', 'PUT /api/names/copy',
     'PUT /api/names/entries/:id', 'PUT /api/profile/privacy', 'PUT /api/shops/mine', 'PUT /api/tools/:tool',
     'PUT /api/treasury/:treasury/profile', 'PUT /api/treasury/:treasury/shop', 'PUT /api/treasury/:treasury/tools/:tool',
@@ -424,10 +431,10 @@ function newId(name = 'Stranger'): Id {
 let BASE = '';
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 interface Res { status: number; body: any; text: string }
-async function call(method: Method, id: Id | null, urlPath: string, body?: unknown): Promise<Res> {
+async function call(method: Method, id: Id | null, urlPath: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
     const bodiless = method === 'GET';
     const raw = bodiless ? '' : JSON.stringify(body ?? {});
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...extra };
     if (!bodiless) headers['Content-Type'] = 'application/json';
     if (id) {
         const ts = Date.now();
@@ -501,6 +508,13 @@ async function main(): Promise<void> {
 
     await initTls();
     se.initStateEngine();
+    // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov). With the switch off, the door's writes
+    // (/oauth/register, token, revoke and the consent page's wait, confirm and asks) answer 404 before any handler
+    // (agent/oauth-route.ts oauthDoorOff), so the sweep would measure the switch, not the door. It is turned on here, so
+    // the door meets a stranger as it does on a node whose owners allowed assistants (the larger surface); the last row
+    // of section 2 measures the switch off.
+    const { updateLocalConfig } = await import('./config/local-config.js');
+    updateLocalConfig({ aiAssistantsAllowed: true });
     const port = await https.startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
@@ -593,6 +607,28 @@ async function main(): Promise<void> {
     // An item of the price guide, which every node seeds at boot (db/pricing-guide-db.ts seedPricingGuideIfEmpty).
     const priceItem = (db.prepare('SELECT id FROM pricing_guide_items ORDER BY id LIMIT 1').get() as { id: string } | undefined)?.id;
     if (!priceItem) throw new Error('setup: the price guide has no items');
+    // An assistant asking to connect, registered through the door as one registers. Its consent page, opened as a browser
+    // opens it, holds a live request bound to that browser by a SameSite cookie (agent/oauth-route.ts GET /oauth/authorize).
+    // The page's three writes (its poll, its digits, its ticks) are swept against a request opened just before each
+    // (PATHS), so a stranger's refusal is the cookie's, never an id that names no request.
+    const ASSISTANT_REDIRECT = 'https://assistant.example/oauth/callback';
+    const assistant = await call('POST', null, '/oauth/register', { client_name: 'Swept assistant', redirect_uris: [ASSISTANT_REDIRECT] });
+    const assistantId = assistant.body?.client_id as string;
+    if (assistant.status !== 201 || !assistantId) throw new Error(`setup: the assistant's registration was answered ${show(assistant)}`);
+    const openConsent = async (): Promise<{ id: string; cookie: string }> => {
+        const u = new URL(`${BASE}/oauth/authorize`);
+        const challenge = crypto.createHash('sha256').update(crypto.randomBytes(32).toString('base64url')).digest('base64url');
+        for (const [k, v] of Object.entries({ response_type: 'code', client_id: assistantId, redirect_uri: ASSISTANT_REDIRECT, state: 'sw',
+            code_challenge: challenge, code_challenge_method: 'S256', scope: 'agent' })) u.searchParams.set(k, v);
+        const res = await fetch(u, { redirect: 'manual' });
+        const html = await res.text();
+        const id = /var id="([0-9a-f]{64})"/.exec(html)?.[1] ?? '';
+        const cookie = res.headers.getSetCookie().map(c => c.split(';')[0]).find(c => c.startsWith('bp_signin_')) ?? '';
+        if (res.status !== 200 || !id || !cookie) throw new Error(`setup: the consent page was answered ${res.status}`);
+        return { id, cookie };
+    };
+    /** The ticks the phone is shown a consent page asks for (its lookup, as the app reads it before it approves). */
+    const asksShown = async (id: string) => (await call('GET', null, `/api/local/admin/auth/pairing/${id}`)).body?.agent?.asks;
     await settle(200);
 
     // ── 1. the writes, and the two lists ─────────────────────────────────────────────────────────────
@@ -690,9 +726,16 @@ async function main(): Promise<void> {
         const text = pushLeaveText(signedForHost(), x.pk, token, leftAt);
         return { token, leftAt, signedFor: signedForHost(), signature: crypto.sign(null, signedRequestBytes(text), x.priv).toString('base64') };
     };
-    /** A write's own path, where the route's key names the signer itself (materialise names Alice). */
-    const PATHS: Record<string, (signer: Id) => string> = {
+    /**
+     * A write's own path, where the route's key names the signer itself (materialise names Alice), or a live request the
+     * route acts on. Made before the write's snapshot, so making it is not counted as the write's.
+     */
+    const PATHS: Record<string, (signer: Id) => string | Promise<string>> = {
         'POST /api/push-tokens/leave/:publicKey': (x) => `/api/push-tokens/leave/${x.pk}`,
+        // A live consent request's page, its own browser's: the sweep's caller holds no cookie of it.
+        'POST /oauth/authorize/:id/asks': async () => `/oauth/authorize/${(await openConsent()).id}/asks`,
+        'POST /oauth/authorize/:id/confirm': async () => `/oauth/authorize/${(await openConsent()).id}/confirm`,
+        'POST /oauth/authorize/:id/wait': async () => `/oauth/authorize/${(await openConsent()).id}/wait`,
     };
     /** A write's own body, where BAIT won't reach the part of it a stranger would want. */
     const BODIES: Record<string, (signer: Id) => Record<string, unknown>> = {
@@ -783,6 +826,12 @@ async function main(): Promise<void> {
         'POST /api/mail/device/forget': (x) => { if (x === alice) noteMailDevice(alice.pk, MAIL_DEVICE); return { device: MAIL_DEVICE }; },
         // One tap, no words (a body that says anything is refused before the engine is asked).
         'POST /api/vouchers/ask': () => ({}),
+        // Both of a consent page's ticks on, as the page sends them (BAIT names neither, so it would ask for none): the
+        // request's own browser sets what the phone is shown (section 5's control); a stranger's same body is refused.
+        'POST /oauth/authorize/:id/asks': () => ({ canPost: true, canModerate: true }),
+        // The page's six digits (BAIT has no code), and its poll without the long wait.
+        'POST /oauth/authorize/:id/confirm': () => ({ code: '123456' }),
+        'POST /oauth/authorize/:id/wait': () => ({ wait: false }),
     };
     const unservedBodies = [...Object.keys(BODIES), ...Object.keys(PATHS)].filter(r => !writes.includes(r));
     assert(unservedBodies.length === 0, `every body written for a route is for one the node serves, so none goes unsent${unservedBodies.length ? ` — not served: ${unservedBodies.join(', ')}` : ''}`);
@@ -833,10 +882,11 @@ async function main(): Promise<void> {
     const measure = async (route: string, signer: Id, withoutStamp = false) => {
         const [method, routePath] = route.split(' ') as [Method, string];
         const body = (BODIES[route] ?? bait)(signer);
+        const urlPath = await (PATHS[route]?.(signer) ?? materialise(routePath));
         resetLimits();
         const before = snapshot(withoutStamp);
         const sent = outside.length;
-        const r = await call(method, signer, PATHS[route]?.(signer) ?? materialise(routePath), body);
+        const r = await call(method, signer, urlPath, body);
         await settle();
         const after = snapshot(withoutStamp);
         return { r, changed: changedTables(before, after), config: differing(before, after).filter(t => t.startsWith('node_config.')), left: outside.slice(sent) };
@@ -889,6 +939,35 @@ async function main(): Promise<void> {
         const missed = notCounted(ADDRESS_CAPPED.filter(a => a.who === 'stranger'), got);
         assert(missed.length === 0, `its body reaches each write a stranger may make charged to its address, so what those change was measured `
             + `(writes_by_address moved)${missed.length ? ` — not reached: ${missed.join(', ')}` : ''}`);
+    }
+    {
+        // The assistant switch off, as it is until an owner turns assistants on: every write of the door answers 404 before
+        // any handler (agent/oauth-route.ts oauthDoorOff), sent by a live request's own browser too (its cookie, its id), and
+        // changes nothing: no table, no call out, and not the request's ticks either, which live in memory.
+        const page = await openConsent();
+        const door = writes.filter(r => r.split(' ')[1].startsWith('/oauth/'));
+        tidyNow();
+        updateLocalConfig({ aiAssistantsAllowed: false });
+        const before = snapshot();
+        const sent = outside.length;
+        const notOff: string[] = [];
+        for (const route of door) {
+            const [method, routePath] = route.split(' ') as [Method, string];
+            const x = newId();
+            resetLimits();
+            const r = await call(method, x, routePath.replace(':id', page.id), (BODIES[route] ?? bait)(x), { Cookie: page.cookie });
+            if (r.status !== 404) notOff.push(`${route} → ${show(r)}`);
+        }
+        await settle();
+        const changed = changedTables(before, snapshot());
+        const left = outside.slice(sent);
+        updateLocalConfig({ aiAssistantsAllowed: true });
+        resetLimits();
+        const ticks = await asksShown(page.id);
+        assert(door.length >= 6 && notOff.length === 0 && changed.length === 0 && left.length === 0 && ticks?.canPost === false && ticks?.canModerate === false,
+            `the assistant switch off: each of the door's ${door.length} writes (${door.join(', ')}) answers 404, from the page's own browser too, `
+            + `and nothing changes (the phone is still shown ${JSON.stringify(ticks)})${notOff.length ? ` — not 404: ${notOff.join('; ')}` : ''}`
+            + `${changed.length ? `; changed: ${changed.join(', ')}` : ''}${left.length ? `; sent: ${left.join(', ')}` : ''}`);
     }
 
     // ── 3. a key with an open request to join ──────────────────────────────────────────────────────────
@@ -1014,6 +1093,20 @@ async function main(): Promise<void> {
         const before = snapshot();
         db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(newId().pk, alice.pk);
         assert(changedTables(before, snapshot()).includes('friends'), 'a row a stranger added would be seen: the snapshot names its table');
+        // The consent page's ticks live in memory, not in a table, so the snapshot alone can't tell a refusal from a body
+        // that missed. The sweep's body, sent by the request's own browser (its cookie), reaches the write: the phone is
+        // shown both ticks. The same body signed by a stranger without the cookie is refused (403) and moves none.
+        const page = await openConsent();
+        const ticksBody = BODIES['POST /oauth/authorize/:id/asks'](newId());
+        resetLimits();
+        const stranger = await call('POST', newId(), `/oauth/authorize/${page.id}/asks`, ticksBody);
+        const afterStranger = await asksShown(page.id);
+        const own = await call('POST', null, `/oauth/authorize/${page.id}/asks`, ticksBody, { Cookie: page.cookie });
+        const afterOwn = await asksShown(page.id);
+        assert(stranger.status === 403 && stranger.body?.status === 'wrong-browser' && afterStranger?.canPost === false && afterStranger?.canModerate === false
+            && own.status === 200 && afterOwn?.canPost === true && afterOwn?.canModerate === true,
+            `a consent page's ticks: a stranger's signed body without the page's cookie is refused and the phone is shown none (${show(stranger)}; `
+            + `${JSON.stringify(afterStranger)}); the page's own browser, the same body, sets both (${show(own)}; ${JSON.stringify(afterOwn)})`);
     }
 
     globalThis.setTimeout = realSetTimeout;

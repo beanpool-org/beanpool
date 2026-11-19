@@ -37,7 +37,7 @@ const IN_PLACE = [
     'acceptOfferedPeer', 'callsignOfKey', 'createConversationApi', 'decideMessageRequest', 'deleteLocalMessage', 'deleteMessageApi',
     'editMessage', 'getConversation', 'getDecryptedAttachment', 'getDecryptedVoice', 'getDmKeyChange', 'getDmKeyCodeInfo',
     'getDmKeyContext', 'getMessages', 'insertMessage', 'lineToWriteAfter', 'lockForConversation', 'markConversationRead',
-    'markConversationReadLocally', 'markDmPeerVerified', 'muteChatApi', 'refreshConversationFromNode', 'removeDmPeerVerification',
+    'markConversationReadLocally', 'markDmPeerVerified', 'muteChatApi', 'pinsCopyFor', 'refreshConversationFromNode', 'removeDmPeerVerification',
     'requireDmKeyContext', 'sealOfLine', 'syncSingleConversation', 'syncSingleConversationOnce', 'toggleMessageReactionApi',
     'unplacedKeyChange',
 ].sort();

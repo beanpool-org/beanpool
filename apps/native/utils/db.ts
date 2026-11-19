@@ -1082,7 +1082,8 @@ const dmFactsParams = (me: string, id: string): string[] => [id, `${me}/${id.toL
 function holdsAsDm(conversationId: string, facts: any, pins: DmPeerPins | null, seen: readonly string[] | null): boolean {
     if (!facts || Number(facts.highest ?? 0) > 0 || Number(facts.wrapped ?? 0) > 0) return false;
     if (facts.type === 'dm') return true;
-    if (pins && dmSightFor(pins, conversationId)) return true;
+    // The pins keep an id folded (dmPinId): they vouch only for the id as they keep it, never for another spelling of it.
+    if (pins && dmPinId(conversationId) === conversationId && dmSightFor(pins, conversationId)) return true;
     return !!seen?.includes(conversationId);
 }
 
@@ -1107,6 +1108,39 @@ async function heldAsDmThrough(database: SQLite.SQLiteDatabase, conversationId: 
     } catch {
         return false;
     }
+}
+
+/**
+ * A chat request's copy, for an in-place write about `conversationId` (#3305 review F1): only a direct chat that
+ * community's own copy already holds; anything else is refused (NoCopyInPlaceError) before anything is asked or written.
+ * The community in use: as before, untouched.
+ */
+async function onlyDmInPlace(here: ChatRequestCopy, conversationId: string): Promise<ChatRequestCopy> {
+    if (here.inPlace && !(await heldAsDmThrough(here.database, conversationId))) throw new NoCopyInPlaceError();
+    return here;
+}
+
+/**
+ * The copy a key-code mark of `community`'s chat writes its pins through (the member's Mark as verified, Remove
+ * verification, Continue with the new key): in place, only for the id of a direct chat that copy holds as it holds it
+ * (#3305 review F1: the pins fold an id's case, and a link can carry any spelling), else null and nothing is written.
+ */
+async function pinsCopyFor(community: ChatCommunity, conversationId: string): Promise<SQLite.SQLiteDatabase | null> {
+    const copy = await chatReadFor(community);
+    if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return null;
+    return copy.database;
+}
+
+/** Whether the copy `database` reads holds the line `messageId`, in a direct chat it holds ({@link heldAsDmThrough}). */
+async function dmLineHeldThrough(database: SQLite.SQLiteDatabase, messageId: string): Promise<boolean> {
+    const row = await database.getFirstAsync<{ conversation_id: string }>('SELECT conversation_id FROM messages WHERE id = ?', [messageId]).catch(() => null);
+    return !!row?.conversation_id && await heldAsDmThrough(database, row.conversation_id);
+}
+
+/** As {@link onlyDmInPlace}, for a write that names a line: in place, a line of a direct chat that copy holds, else refused. */
+async function onlyDmLineInPlace(here: ChatRequestCopy, messageId: string): Promise<ChatRequestCopy> {
+    if (here.inPlace && !(await dmLineHeldThrough(here.database, messageId))) throw new NoCopyInPlaceError();
+    return here;
 }
 
 /**
@@ -2021,7 +2055,10 @@ const _lastReadPushAt: Record<string, number> = {};
 
 /** The phone's own read marker (the Talk tab's badge counts from it); no request. */
 export async function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity) {
-    const database = await chatDbFor(community);
+    const copy = await chatReadFor(community);
+    // In place, only a direct chat that community's copy holds (#3305 review F1): nothing marked for any other id.
+    if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return;
+    const database = copy.database;
     const hasUnread = await database.getFirstAsync<{ id: string }>(
         `SELECT m.id FROM messages m
          JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
@@ -2050,6 +2087,7 @@ export async function markConversationRead(conversationId: string, myPubkey: str
     if (Date.now() - lastPush > 10_000) {
         _lastReadPushAt[conversationId] = Date.now();
         chatCopyForRequest(community)
+            .then((here) => onlyDmInPlace(here, conversationId))
             .then((here) => _signedRequest('/api/messages/mark-read', { pubkey: myPubkey, conversationId }, here.anchorUrl))
             .catch(() => { _lastReadPushAt[conversationId] = 0; /* offline — retry on next call */ });
     }
@@ -7203,7 +7241,8 @@ export async function getDmKeyCodeInfo(conversationId: string, community?: ChatC
 export async function markDmPeerVerified(conversationId: string, expectedPeer: string, community?: ChatCommunity): Promise<boolean> {
     const me = (await loadIdentity())?.publicKey;
     if (!me) return false;
-    const database = await chatDbFor(community);
+    const database = await pinsCopyFor(community, conversationId);
+    if (!database) return false;
     const now = new Date().toISOString();
     let marked = false;
     await dmPins.update(me, database, (pins) => (marked = markVerified(pins, conversationId, expectedPeer, now)));
@@ -7217,7 +7256,8 @@ export async function markDmPeerVerified(conversationId: string, expectedPeer: s
 export async function removeDmPeerVerification(conversationId: string, community?: ChatCommunity): Promise<boolean> {
     const me = (await loadIdentity())?.publicKey;
     if (!me) return false;
-    const database = await chatDbFor(community);
+    const database = await pinsCopyFor(community, conversationId);
+    if (!database) return false;
     const now = new Date().toISOString();
     let removed = false;
     await dmPins.update(me, database, (pins) => (removed = removeVerified(pins, conversationId, now)));
@@ -7266,7 +7306,8 @@ export async function acceptOfferedPeer(conversationId: string, expectedPeer: st
     if (!identity?.publicKey || !expected) return false;
     const me = identity.publicKey;
     // One handle for the pin and the rows (§3.4 amendment 5): the community this tap is in, never the one open afterwards.
-    const database = await chatDbFor(community);
+    const database = await pinsCopyFor(community, conversationId);
+    if (!database) return false;
     const change = await getDmKeyChange(conversationId, community);
     if (!change || change.offeredPeer !== expected) return false;
     const now = new Date().toISOString();
@@ -7790,8 +7831,9 @@ const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 
 export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string, about?: ChatAboutChip | null, community?: ChatCommunity) {
     // The community the line goes to and its file, taken together (chatCopyForRequest): the line is written there and sent
-    // there, never written into one community's file and sent to another's node. `community`: a chat open in place (S2).
-    const here = await chatCopyForRequest(community);
+    // there, never written into one community's file and sent to another's node. `community`: a chat open in place (S2),
+    // and only a direct one that community's copy holds (#3305 review F1).
+    const here = await onlyDmInPlace(await chatCopyForRequest(community), conversationId);
 
     // The id is chosen first: a DM line is sealed and signed to it (e2e-crypto, format 4), so the node must store the line under
     // exactly this id. Lower case, as the node keeps it. A resend keeps its failed row's id (see below).
@@ -7975,7 +8017,10 @@ async function requestDecided(here: ChatRequestCopy, conversationId: string, req
  * optimistic send, and by Cancel request, which takes the opener's own lines off: PR #2540 review 4397153864).
  */
 export async function deleteLocalMessage(messageId: string, community?: ChatCommunity) {
-    const database = await chatDbFor(community);
+    const copy = await chatReadFor(community);
+    // In place, only a line of a direct chat that community's copy holds (#3305 review F1): nothing taken off otherwise.
+    if (copy.inPlace && !(await dmLineHeldThrough(copy.database, messageId))) return;
+    const database = copy.database;
     await database.runAsync('DELETE FROM messages WHERE id = ?', [messageId]);
     await forgetCachedChatImage(messageId);
 }
@@ -7987,8 +8032,9 @@ export async function deleteLocalMessage(messageId: string, community?: ChatComm
  * was already in flight (with the pre-edit content) can't revert the change.
  */
 export async function editMessage(conversationId: string, messageId: string, newText: string, community?: ChatCommunity) {
-    // The community the edit goes to and its file, taken together (chatCopyForRequest). `community`: a chat open in place.
-    const here = await chatCopyForRequest(community);
+    // The community the edit goes to and its file, taken together (chatCopyForRequest). `community`: a chat open in place,
+    // and only a direct one that community's copy holds (#3305 review F1).
+    const here = await onlyDmInPlace(await chatCopyForRequest(community), conversationId);
     const database = here.database;
     const identity = await loadIdentity();
 
@@ -9101,7 +9147,8 @@ export async function saveMessageRequests(myPubkey: string, file: string, reques
  * reads the decided request, and so does every reread of the row after it (PR #2540 review 4395706539).
  */
 export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel', community?: ChatCommunity): Promise<{ success: boolean; request?: any }> {
-    const here = await chatCopyForRequest(community);
+    // In place, only a direct chat that community's copy holds (#3305 review F1).
+    const here = await onlyDmInPlace(await chatCopyForRequest(community), conversationId);
     const answer = await _signedRequest('/api/messages/request', { conversationId, decision }, here.anchorUrl);
     await requestDecided(here, conversationId, answer?.request);
     return answer;
@@ -9206,7 +9253,8 @@ export async function recordOnboardingEvent(event: string, variant = ''): Promis
 
 export async function toggleMessageReactionApi(messageId: string, authorPubkey: string, emoji: string, community?: ChatCommunity) {
     // The community the reaction goes to and its file, taken together (chatCopyForRequest): shown and sent in the same one.
-    const here = await chatCopyForRequest(community);
+    // In place, only on a line of a direct chat that community's copy holds (#3305 review F1).
+    const here = await onlyDmLineInPlace(await chatCopyForRequest(community), messageId);
     const anchorUrl = here.anchorUrl;
     if (!anchorUrl) throw new Error('Offline');
 
@@ -10986,8 +11034,9 @@ export async function getInvitablePeople(options?: { membersOnDemand?: boolean }
  * as a group-like chat, so the ⋮ menu is the same menu in both.
  */
 export async function muteChatApi(conversationId: string, duration: '8h' | '1w' | 'always' | 'off', community?: ChatCommunity): Promise<any> {
-    // Kept by the chat's own community (slice S2: a chat open in place is muted there, by its own server).
-    const here = await chatCopyForRequest(community);
+    // Kept by the chat's own community (slice S2: a chat open in place is muted there, by its own server), and in place only
+    // a direct chat that community's copy holds (#3305 review F1): nothing asked or remembered for any other id.
+    const here = await onlyDmInPlace(await chatCopyForRequest(community), conversationId);
     const res = await _signedRequest('/api/messages/mute', { conversationId, duration }, here.anchorUrl);
     rememberChatMute(conversationId, duration === 'off' ? null : (res?.mute ?? { conversationId, mutedUntil: null, always: duration === 'always' }));
     return res;
@@ -11020,8 +11069,9 @@ export function getKnownChatMute(conversationId: string): import('./your-groups'
  * `metadata.removedBy`.
  */
 export async function deleteMessageApi(messageId: string, community?: ChatCommunity): Promise<any> {
-    // Asked of the community whose file holds the line, and mirrored there only (chatCopyForRequest).
-    const here = await chatCopyForRequest(community);
+    // Asked of the community whose file holds the line, and mirrored there only (chatCopyForRequest). In place, only a line
+    // of a direct chat that community's copy holds (#3305 review F1).
+    const here = await onlyDmLineInPlace(await chatCopyForRequest(community), messageId);
     const res = await _signedRequest('/api/messages/delete', { messageId }, here.anchorUrl);
     // Mirror the tombstone locally at once (a DM's row is on this phone) so the bubble changes under the
     // finger rather than at the next 3s poll. A group chat has no local row and simply re-reads. Once the phone has

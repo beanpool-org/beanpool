@@ -872,3 +872,258 @@ describe('a chat in place keeps its own community\'s key pins, notices and pause
         await db.leaveChatInPlace(A);
     });
 });
+
+// ── A link naming another community with an id its copy holds as no DM (#3305 review F1, F2, F3) ─────────────────────
+
+/** A readable line on the node: a group's, an event's or an enterprise's chat is node-readable by design. */
+function readableLine(conv: Conv, author: Person, text: string, metadata: string | null = null, type = 'text'): Line {
+    const line: Line = { id: randomUUID(), conversationId: conv.id, authorPubkey: author.publicKey, ciphertext: Buffer.from(text, 'utf8').toString('base64'), nonce: 'plaintext-v1', type, metadata, timestamp: tick(), editedAt: null };
+    node.lines.push(line);
+    return line;
+}
+
+/** Into `file` straight, as a visit there when the phone was set to it left it: the chat's row (typed `type`), its people, a line. */
+function keptIn(file: string, conv: Conv, line: Line, type = conv.type): void {
+    const sql = new DatabaseSync(fileOn(file));
+    try {
+        sql.prepare('INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, ?, ?, ?)').run(conv.id, type, conv.participants[0], line.timestamp);
+        for (const pk of conv.participants) sql.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(conv.id, pk);
+        sql.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(line.id, conv.id, line.authorPubkey, line.ciphertext, line.nonce, line.type, line.metadata, line.timestamp);
+    } finally {
+        sql.close();
+    }
+}
+
+/**
+ * Every kind of id a link (beanpool://chat/<id>?community=<A>) can name that A's own copy holds as no DM. `id` is the chat,
+ * `line` one of its lines (what a reaction, an edit or a delete names).
+ */
+const NOT_A_DM_IN_A: Array<{ name: string; make: () => { id: string; line: string } }> = [
+    {
+        // The reviewer's: an enterprise's discussion is its own key, "no secret", and A's server answers its page to every member.
+        name: 'an enterprise\'s discussion (its id the enterprise\'s key), not on the phone',
+        make: () => {
+            const conv: Conv = { id: person().publicKey, type: 'enterprise_thread', participants: [me.publicKey, peer.publicKey] };
+            node.convs.push(conv);
+            return { id: conv.id, line: readableLine(conv, peer, 'an offer in the discussion').id };
+        },
+    },
+    {
+        name: 'a group\'s chat A\'s copy keeps (read there when the phone was set to A)',
+        make: () => {
+            const conv: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, peer.publicKey, third.publicKey] };
+            node.convs.push(conv);
+            const line = readableLine(conv, peer, 'words in the group');
+            keptIn(A_FILE, conv, line);
+            return { id: conv.id, line: line.id };
+        },
+    },
+    {
+        name: 'an event\'s chat, not on the phone',
+        make: () => {
+            const conv: Conv = { id: randomUUID(), type: 'event_thread', participants: [me.publicKey, peer.publicKey] };
+            node.convs.push(conv);
+            return { id: conv.id, line: readableLine(conv, peer, 'see you at the hall').id };
+        },
+    },
+    {
+        // The held guard: a group whose keys this copy holds stays its group, whatever its row there says.
+        name: 'a group whose keys A\'s copy holds, its row there typed a DM',
+        make: () => {
+            const conv: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, peer.publicKey, third.publicKey] };
+            node.convs.push(conv);
+            const line = readableLine(conv, peer, 'a held group\'s words');
+            keptIn(A_FILE, conv, line, 'dm');
+            const sql = new DatabaseSync(fileOn(A_FILE));
+            sql.prepare('INSERT INTO group_chat_key_state (group_id, highest) VALUES (?, 1)').run(`${me.publicKey}/${conv.id.toLowerCase()}`);
+            sql.close();
+            return { id: conv.id, line: line.id };
+        },
+    },
+    {
+        name: 'a direct chat A\'s server lists that A\'s copy doesn\'t hold yet',
+        make: () => {
+            const conv: Conv = { id: randomUUID(), type: 'dm', participants: [me.publicKey, third.publicKey] };
+            node.convs.push(conv);
+            return { id: conv.id, line: nodeLine(conv, third, 'not on this phone yet').id };
+        },
+    },
+    {
+        name: 'the DM\'s own id in other capitals',
+        make: () => ({ id: dm.id.toUpperCase(), line: randomUUID() }),
+    },
+];
+
+/**
+ * Every in-place call that can write, of the phone's memory (A's DM guard list, A's pins, the deleted accounts' memory,
+ * the mute memory) or of A's file, or ask A's server: each, for an id A's copy holds as no DM, refuses before anything
+ * (NoCopyInPlaceError) or does nothing (false, nothing).
+ */
+const IN_PLACE_WRITES: Array<[string, (x: { id: string; line: string }) => Promise<unknown>]> = [
+    ['the poll (syncSingleConversation)', (x) => db.syncSingleConversation(x.id, A)],
+    ['mark read (markConversationRead)', (x) => db.markConversationRead(x.id, me.publicKey, A)],
+    ['mute (muteChatApi)', (x) => db.muteChatApi(x.id, '8h', A)],
+    ['reply (insertMessage)', (x) => db.insertMessage(x.id, me.publicKey, 'a reply', undefined, undefined, undefined, A)],
+    ['edit (editMessage)', (x) => db.editMessage(x.id, x.line, 'edited', A)],
+    ['delete (deleteMessageApi)', (x) => db.deleteMessageApi(x.line, A)],
+    ['react (toggleMessageReactionApi)', (x) => db.toggleMessageReactionApi(x.line, me.publicKey, '👍', A)],
+    ['take a line off (deleteLocalMessage)', (x) => db.deleteLocalMessage(x.line, A)],
+    ['Accept a request (decideMessageRequest)', (x) => db.decideMessageRequest(x.id, 'accept', A)],
+    ['mark the key verified (markDmPeerVerified)', (x) => db.markDmPeerVerified(x.id, peer.publicKey, A)],
+    ['the route\'s check (heldChatIsDm)', (x) => db.heldChatIsDm(me.publicKey, A, x.id)],
+];
+
+describe('a link naming another community with an id its copy holds as no DM: nothing of it is asked or written in place (#3305 review F1)', () => {
+    const cases = NOT_A_DM_IN_A.flatMap((k) => IN_PLACE_WRITES.map(([w, run]) => [k.name, w, k, run] as const));
+    it.each(cases)('%s x %s: refused or nothing, nothing asked, nothing of A\'s or B\'s memory or files changed', async (_k, _w, kind, run) => {
+        const x = kind.make();
+        // The chat screen holds A as it would (so nothing below is refused for a chat left), its copy open on a DM's read.
+        db.enterChatInPlace(A);
+        expect((await db.getMessages(dm.id, { community: A })).some((m: any) => m.text === PEER_WORDS)).toBe(true);
+        const before = { A: rowsOf(A_FILE), B: rowsOf(B_FILE), storedA: storedFor(A_FILE), storedB: storedFor(B_FILE), mute: db.getKnownChatMute(x.id) };
+        asked = [];
+        const outcome = await run(x).then((v) => ({ v }), (e) => ({ e }));
+        await settle();
+        if ('e' in outcome) expect(db.isNoCopyInPlace(outcome.e), String((outcome.e as any)?.message ?? outcome.e)).toBe(true);
+        else expect(outcome.v ?? false).toBe(false);
+        expect(asked.map((r) => `${r.method} ${r.url}`), 'nothing asked of any server').toEqual([]);
+        expect({ A: rowsOf(A_FILE), B: rowsOf(B_FILE), storedA: storedFor(A_FILE), storedB: storedFor(B_FILE), mute: db.getKnownChatMute(x.id) }).toEqual(before);
+        await db.leaveChatInPlace(A);
+    });
+
+    it('control: the same calls for the DM A\'s copy holds do reach A (the rows above are not refusing everything)', async () => {
+        db.enterChatInPlace(A);
+        expect(await db.heldChatIsDm(me.publicKey, A, dm.id)).toBe(true);
+        asked = [];
+        expect(await db.syncSingleConversation(dm.id, A)).toBe(true);
+        await db.muteChatApi(dm.id, '8h', A);
+        await db.toggleMessageReactionApi(mine, me.publicKey, '👍', A);
+        await settle();
+        expect(asked.map((r) => `${r.method} ${new URL(r.url).origin}${new URL(r.url).pathname}`)).toEqual(expect.arrayContaining([
+            `GET ${A}/api/messages/${dm.id}`, `POST ${A}/api/messages/mute`, `POST ${A}/api/messages/react`,
+        ]));
+        expect(db.getKnownChatMute(dm.id)?.mutedUntil).toBe('2026-11-20T08:00:00.000Z');
+        await db.leaveChatInPlace(A);
+    });
+
+    it('the reviewer\'s sequence: an enterprise\'s key polled in place on A writes nothing, and set to A its discussion, Offers and decisions still go to the node', async () => {
+        const key = person().publicKey;
+        const conv: Conv = { id: key, type: 'enterprise_thread', participants: [me.publicKey, peer.publicKey] };
+        node.convs.push(conv);
+        readableLine(conv, peer, 'an offer in the discussion');
+        const aBefore = { rows: rowsOf(A_FILE), stored: storedFor(A_FILE) };
+        // The route's check first: A's copy holds no DM under the key (and does under the DM's own id).
+        expect(await db.heldChatIsDm(me.publicKey, A, key)).toBe(false);
+        expect(await db.heldChatIsDm(me.publicKey, A, dm.id)).toBe(true);
+        // The chat's poll in place, had anything opened it: nothing asked, nothing written, A's DM guard list as it was.
+        db.enterChatInPlace(A);
+        asked = [];
+        expect(await db.syncSingleConversation(key, A)).toBe(false);
+        await settle();
+        expect(asked).toEqual([]);
+        expect({ rows: rowsOf(A_FILE), stored: storedFor(A_FILE) }).toEqual(aBefore);
+        await db.leaveChatInPlace(A);
+        // Set to A: nothing knows the key as a DM, and the enterprise's discussion, an Offer and a decision are each asked of A.
+        await switchPhoneTo(A);
+        expect(await db.isKnownDmConversation(key)).toBe(false);
+        expect(await db.getConversationKind(key)).not.toBe('dm');
+        const tries: Array<[string, () => Promise<unknown>, string]> = [
+            ['its discussion', () => db.postEnterpriseThreadMessage(key, 'hello the enterprise'), `/api/treasury/${key}/thread/message`],
+            ['an Offer', () => db.treasuryPostOffer(key, { category: 'tools', title: 'A long ladder', price_c: 100 }), `/api/treasury/${key}/offer`],
+            ['a decision', () => db.proposeEnterpriseDecision(key, { title: 'Buy a ladder', description: 'For the shed', effect: 'spend' as any }), `/api/enterprise/${key}/decisions`],
+        ];
+        for (const [what, tryIt, pathname] of tries) {
+            asked = [];
+            const thrown: any = await tryIt().then(() => null, (e) => e);
+            expect(String(thrown?.message ?? ''), what).not.toContain('as a direct message');
+            expect(asked.map((r) => new URL(r.url).pathname), what).toContain(pathname);
+        }
+        // Mutation (the review's): the poll's gate off and `|| here.inPlace` back in its remember -> A's stored list holds the
+        // key, isKnownDmConversation answers true, and each of the three is refused before asking ("... as a direct message").
+    });
+
+    it('a group\'s page with a deleted account\'s tombstone, polled in place on A: B\'s own blanking of that account is untouched', async () => {
+        const gone = person();
+        const tombstone = (conv: Conv) => readableLine(conv, gone, 'This message was deleted',
+            JSON.stringify({ accountDeleted: true, removedBy: gone.publicKey, removedAt: tick() }), 'removed');
+        const groupA: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, gone.publicKey] };
+        const groupB: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, gone.publicKey] };
+        node.convs.push(groupA, groupB);
+        tombstone(groupA);
+        // B holds an older line of theirs in a group of its own, still holding its words; B's page of it names the tombstone.
+        const older: Line = { id: randomUUID(), conversationId: groupB.id, authorPubkey: gone.publicKey, ciphertext: Buffer.from('my old words', 'utf8').toString('base64'), nonce: 'plaintext-v1', type: 'text', metadata: null, timestamp: tick(), editedAt: null };
+        keptIn(B_FILE, groupB, older);
+        tombstone(groupB);
+        db.enterChatInPlace(A);
+        expect(await db.syncSingleConversation(groupA.id, A)).toBe(false);
+        await db.leaveChatInPlace(A);
+        // B's own poll of its group: its older line of that account is blanked, as with no poll in place at all.
+        expect(await db.syncSingleConversation(groupB.id)).toBe(true);
+        const row = (rowsOf(B_FILE)!.messages as any[]).find((m) => m.id === older.id);
+        expect({ type: row?.type, nonce: row?.nonce }).toEqual({ type: 'removed', nonce: 'plaintext-v1' });
+        // Mutations: the poll's gate off -> still green (the memory is kept by the copy's file); the gate off AND the memory
+        // kept by the community in use (currentDbName) -> B's line keeps its words (the review's second effect).
+    });
+});
+
+describe('a chat in place is reached by the community as the phone saved it, never a link\'s spelling (#3305 review F2)', () => {
+    const SPELLINGS = ['https://Riverside.EXAMPLE', 'https://riverside.example/some/path', 'HTTPS://RIVERSIDE.EXAMPLE/'];
+
+    it('a guest mark in any spelling: refused before anything opens or is asked, whichever spelling the call names', async () => {
+        h.store.set('beanpool_guest_nodes', JSON.stringify(['https://RIVERSIDE.example/']));
+        for (const where of [A, ...SPELLINGS]) {
+            asked = [];
+            const before = rowsOf(A_FILE);
+            await expect(db.insertMessage(dm.id, me.publicKey, 'not on a look', undefined, undefined, undefined, where)).rejects.toSatisfy((e: unknown) => db.isNoCopyInPlace(e));
+            expect(asked, where).toEqual([]);
+            expect(rowsOf(A_FILE)).toEqual(before);
+            expect(db.heldCopyFiles(), where).not.toContain(A_FILE);
+        }
+        // Mutation: the guest mark compared by its exact string (isGuestNode) -> the capitals and the trailing path open A's
+        // copy writable and send.
+    });
+
+    it('a link\'s own spelling of a community the phone keeps: every request goes to the saved address, every line to A\'s file', async () => {
+        for (const where of SPELLINGS) {
+            db.enterChatInPlace(where);
+            asked = [];
+            const id = await db.insertMessage(dm.id, me.publicKey, `by ${where}`, undefined, undefined, undefined, where);
+            expect(await db.syncSingleConversation(dm.id, where)).toBe(true);
+            await settle();
+            const chat = asked.filter((r) => new URL(r.url).pathname.startsWith('/api/messages'));
+            expect(chat.length).toBeGreaterThan(0);
+            for (const r of chat) expect(r.url.startsWith(`${A}/api/messages`), r.url).toBe(true);
+            expect((rowsOf(A_FILE)!.messages as any[]).some((m) => m.id === id)).toBe(true);
+            await db.leaveChatInPlace(where);
+        }
+        // Mutation: copyInPlaceFor's `anchorUrl: community` (the link's spelling) -> requests go to the spelling asked.
+    });
+});
+
+describe('a chat in place reads its photos from A\'s own server (#3305 review F3: D26, D27)', () => {
+    function photoOf(file: string, key: string, url: string): void {
+        const sql = new DatabaseSync(fileOn(file));
+        sql.prepare('INSERT OR REPLACE INTO members (public_key, callsign, avatar_url) VALUES (?, ?, ?)').run(key, 'Kofi', url);
+        sql.close();
+    }
+
+    it('the other person\'s photo at the top is A\'s, by the path A\'s node stored, never the community in use\'s (D26)', async () => {
+        photoOf(A_FILE, peer.publicKey, '/uploads/kofi-in-a.jpg');
+        photoOf(B_FILE, peer.publicKey, '/uploads/kofi-in-b.jpg');
+        const there = await db.getConversation(dm.id, me.publicKey, A);
+        expect(there?.otherAvatar).toBe(`${A}/uploads/kofi-in-a.jpg`);
+        await db.leaveChatInPlace(A);
+        // Mutation: getConversation without its onCommunity in place -> '/uploads/kofi-in-a.jpg', which the screen would
+        // load from the community in use.
+    });
+
+    it('a line\'s photo is asked of A\'s server, for A\'s line, and of no other (D27)', async () => {
+        const line = node.lines.find((l) => l.authorPubkey === peer.publicKey)!;
+        asked = [];
+        await db.getDecryptedAttachment(dm.id, line.id, false, A);
+        expect(asked.filter((r) => r.url.includes('/attachment')).map((r) => r.url)).toEqual([`${A}/api/messages/${line.id}/attachment`]);
+        await db.leaveChatInPlace(A);
+        // Mutation: the attachment's signedGet without its anchorUrl -> asked of the community in use (B).
+    });
+});

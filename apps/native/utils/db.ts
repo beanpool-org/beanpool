@@ -822,14 +822,19 @@ const SWITCHED_SINCE_CHAT_OPENED_TEXT = 'This phone has switched community since
  * - `anchorUrl`: where the request goes, passed to signedGet / _signedRequest or built into the fetch's URL. Null with no
  *   community set: the caller says it is off-grid, as it always did.
  * - `file` and `database`: that community's copy, open as the request starts.
- * - `handle()`: the only way a write that follows a network await reaches the copy. The copy open then when it is still
- *   `file`'s; null once the phone is on another community's, and the answer is then dropped (nothing written, nothing
- *   thrown at the member: that community's next sync reads it again).
+ * - `openNow()`: `database` while it is still the copy open (no switch, swap, move or close since), else null. Read with
+ *   no await, so a write made in the same tick lands in that copy before anything can switch it: the send's delivery
+ *   adopts the node's answer this way in the tick its 200 arrives, as it did before the switch guard, so no read of the
+ *   chat comes between them and finds the line still sending, under this phone's clock.
+ * - `handle()`: the only way a write that follows a network await reaches the copy. `openNow()` when it has it; after a
+ *   close or a swap, the copy open then when it is still `file`'s; null once the phone is on another community's, and
+ *   the answer is then dropped (nothing written, nothing thrown at the member: that community's next sync reads it again).
  */
 export interface ChatRequestCopy {
     anchorUrl: string | null;
     file: string;
     database: SQLite.SQLiteDatabase;
+    openNow(): SQLite.SQLiteDatabase | null;
     handle(): Promise<SQLite.SQLiteDatabase | null>;
 }
 
@@ -846,7 +851,12 @@ export async function chatCopyForRequest(): Promise<ChatRequestCopy> {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         const file = getDatabaseFilenameForNode(anchorUrl);
         const database = await getDb();
-        if (dbFileOf.get(database) === file) return { anchorUrl, file, database, handle: () => copyStillFor(file) };
+        if (dbFileOf.get(database) === file) {
+            // A copy keeps its file for its life (dbFileOf), and every switch, swap, move or close takes it out of `db`
+            // the moment it starts (openCopy, closeOpenCopy): while it is `db`, it is still `file`'s copy open.
+            const openNow = () => (db === database ? database : null);
+            return { anchorUrl, file, database, openNow, handle: async () => openNow() ?? copyStillFor(file) };
+        }
     }
     throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
 }
@@ -7474,7 +7484,9 @@ async function _deliverPendingMessage(
         const data = await res.json();
         const serverMsg = data.message;
 
-        const database = await here.handle();
+        // In the tick the 200 arrives when the copy is still open (openNow): no read of the chat comes between the node
+        // taking the line and this row saying so.
+        const database = here.openNow() ?? await here.handle();
         if (!database) return;
         // Adopt the server-vetted id + timestamp and drop the sending flag.
         // OR REPLACE: a 3s poll may have already synced the server's copy of this
@@ -7487,7 +7499,7 @@ async function _deliverPendingMessage(
     } catch (deliverErr: any) {
         console.warn(`[Messaging] Delivery failed for message ${tempId.slice(0, 8)}:`, deliverErr?.message || deliverErr);
         try {
-            const database = await here.handle();
+            const database = here.openNow() ?? await here.handle();
             if (!database) return;
             const row = await database.getFirstAsync<any>('SELECT metadata FROM messages WHERE id=?', [tempId]);
             let meta: any = {};

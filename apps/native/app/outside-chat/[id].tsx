@@ -27,7 +27,7 @@ import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { blockUser } from '../../utils/blocklist';
 import { enterChatInPlace, leaveChatInPlace } from '../../utils/db';
-import { OutsideMailError, reportOutsideLine, sendFromBox, sendOutsideChange } from '../../utils/outside-mail';
+import { OutsideMailError, outsideQuiet, reportOutsideLine, sendFromBox, sendOutsideChange, setOutsideQuiet } from '../../utils/outside-mail';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
 import { OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
@@ -73,6 +73,8 @@ export default function OutsideChatScreen() {
     const [editing, setEditing] = useState<OutsideLine | null>(null);
     // What was typed in the box when an edit began: set aside, and back in the box after Save or Cancel, never lost.
     const [typedAside, setTypedAside] = useState('');
+    // The across mute (slice S4): their lines ring nothing, as this phone keeps it and my server was told.
+    const [quiet, setQuiet] = useState(false);
     const listRef = useRef<FlatList<OutsideLine>>(null);
 
     // Held open in place for as long as this screen is up, before its first read (slice S4); closed as it goes.
@@ -90,6 +92,7 @@ export default function OutsideChatScreen() {
         setChat(c);
         setLines(c ? await ctx.store.lines(c.id).catch(() => []) : []);
         setChanges(c ? await ctx.store.changes(c.id).catch(() => []) : []);
+        setQuiet(c ? await outsideQuiet(ctx.store, c.peerKey).catch(() => false) : false);
     }, [id, where]);
 
     useEffect(() => {
@@ -166,6 +169,18 @@ export default function OutsideChatScreen() {
         await ctx.store.decide(ctx.identity.publicKey, chat.id, state);
         if (state === 'declined') { router.back(); return; }
         await load();
+    };
+
+    /** Their lines ring nothing, or ring again: my server told first, then kept here (utils/outside-mail.ts setOutsideQuiet). */
+    const toggleQuiet = async () => {
+        const ctx = await outsideContext(where);
+        if (!ctx || !chat) return;
+        try {
+            await setOutsideQuiet(ctx, chat.peerKey, !quiet);
+            setQuiet(!quiet);
+        } catch (e) {
+            Alert.alert(t('Not sent'), e instanceof OutsideMailError && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('That did not go through. Please try again.'));
+        }
     };
 
     const block = () => {
@@ -264,6 +279,12 @@ export default function OutsideChatScreen() {
                             </Text>
                         )}
                     </View>
+                    {chat && chat.state === 'open' && (
+                        <Pressable style={styles.backBtn} onPress={() => void toggleQuiet()} accessibilityRole="button" testID="outside-chat-quiet"
+                            accessibilityLabel={quiet ? t('Unmute') : t('Mute notifications')} accessibilityState={{ selected: quiet }}>
+                            <MaterialCommunityIcons name={quiet ? 'bell-off-outline' : 'bell-outline'} size={22} color={colors.text.secondary} />
+                        </Pressable>
+                    )}
                     {chat && chat.state !== 'request' && (
                         <Pressable style={styles.backBtn} onPress={block} accessibilityRole="button" accessibilityLabel={t('Block {name}', { name })}>
                             <MaterialCommunityIcons name="account-cancel-outline" size={22} color={colors.text.secondary} />

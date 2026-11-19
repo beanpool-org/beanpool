@@ -302,6 +302,25 @@ async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<A
  * blocks them for me, and tells their community, never naming me (server: engine/relay-complaint.ts). Throws
  * OutsideMailError with my server's words when it refuses.
  */
+/** The across mute's mark, kept with the chats by the other person's key (slice S4). */
+const quietMeta = (key: string) => `quiet:${key}`;
+
+/** Whether the member made `key` quiet on this phone (slice S4, the across mute). */
+export async function outsideQuiet(store: OutsideChatStore, key: string): Promise<boolean> {
+    return (await store.getMeta(quietMeta(key))) === '1';
+}
+
+/**
+ * The across mute (slice S4, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Mutes"): my server told first,
+ * "no push for this key" (POST /api/mail/quiet, routes/relay.ts), then kept on this phone with the chats, so what the chat
+ * shows is what my server holds. Throws OutsideMailError with my server's words when it refuses (a server from before S4
+ * has no such route), and nothing is kept.
+ */
+export async function setOutsideQuiet(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'store' | 'signal'>, key: string, quiet: boolean): Promise<void> {
+    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/quiet', { key, quiet }, ctx.identity as BeanPoolIdentity, ctx.signal));
+    await ctx.store.setMeta(quietMeta(key), quiet ? '1' : '0');
+}
+
 export async function reportOutsideLine(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'store' | 'signal'>, lineId: string, reason: string): Promise<void> {
     const kept = await ctx.store.kept(lineId);
     let item: unknown = null;

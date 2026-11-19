@@ -121,6 +121,9 @@ const mail = vi.hoisted(() => ({
     asked: [] as Array<{ origin: string; method: string; path: string }>,
     /** The next request matching `matches` waits for `release` (an action on its way while something happens). */
     hold: null as null | { matches: (method: string, p: string) => boolean; seenNow: () => void; released: Promise<void>; taken: boolean },
+    /** What each server was told of the across mute (POST /api/mail/quiet), and whether it refuses one. */
+    quiet: [] as Array<{ origin: string; key: string; quiet: boolean }>,
+    refuseQuiet: false,
 }));
 vi.mock('../node-post', async (orig) => {
     const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
@@ -150,6 +153,11 @@ vi.mock('../node-post', async (orig) => {
                 return answer(200, { confirmed: body.ids.length });
             }
             if (p === '/api/mail/send') return answer(200, { items: body.items.map((i: RelayItem) => ({ itemId: i.envelope.itemId, state: 'sent' })) });
+            if (p === '/api/mail/quiet') {
+                if (mail.refuseQuiet) return answer(404, { error: 'Not found' });
+                mail.quiet.push({ origin, key: body.key, quiet: body.quiet });
+                return answer(200, { quiet: body.quiet });
+            }
             return answer(404, { error: 'not here' });
         }),
     };
@@ -163,7 +171,7 @@ import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { heldChatsInView, heldOutsideChatsShown, outsideChatHref } from '../held-chats';
 import { _forgetMailHeardForTests, noteMailHeard, outsideContext, syncHeldMailNow, syncOutsideMailNow } from '../outside-chat-live';
-import { chatsShown, sendFromBox, sendOutsideChange } from '../outside-mail';
+import { chatsShown, outsideQuiet, sendFromBox, sendOutsideChange, setOutsideQuiet } from '../outside-mail';
 
 // A finished write may end with require('react-native') for a DeviceEventEmitter nudge: answered at node's loader.
 const realLoad = (Module as any)._load;
@@ -434,6 +442,30 @@ describe('rounds and `mail`: a held community\'s round is skipped only when its 
         await syncHeldMailNow(30_000);
         expect(acrossRowsOf(A_FILE)!.outside_lines.some((l: any) => l.text === 'after the zero')).toBe(true);
         expect(db.heldCopyFiles()).not.toContain(A_FILE);
+    });
+});
+
+describe('the across mute: told to the carrying community\'s server, kept in its file, wherever the phone is set', () => {
+    it.each([['set to the carrying community', A], ['set elsewhere', B]])('%s', async (_name, setTo) => {
+        await phone(setTo);
+        mail.quiet = [];
+        mail.refuseQuiet = false;
+        const bBefore = acrossRowsOf(B_FILE);
+        if (setTo !== A) db.enterChatInPlace(A);
+        const ctx = (await outsideContext(A))!;
+        await setOutsideQuiet(ctx, peer.publicKey, true);
+        expect(mail.quiet).toEqual([{ origin: A, key: peer.publicKey, quiet: true }]);
+        expect(await outsideQuiet(ctx.store, peer.publicKey)).toBe(true);
+        // A server that refuses (one from before S4 has no such route): nothing kept, the chat still says quiet.
+        mail.refuseQuiet = true;
+        await expect(setOutsideQuiet(ctx, peer.publicKey, false)).rejects.toThrow();
+        expect(await outsideQuiet(ctx.store, peer.publicKey)).toBe(true);
+        mail.refuseQuiet = false;
+        await setOutsideQuiet(ctx, peer.publicKey, false);
+        expect(await outsideQuiet(ctx.store, peer.publicKey)).toBe(false);
+        if (setTo !== A) await db.leaveChatInPlace(A);
+        expect(acrossRowsOf(B_FILE), 'B\'s file').toEqual(bBefore);
+        expect(mail.asked.every((r) => r.origin === A)).toBe(true);
     });
 });
 

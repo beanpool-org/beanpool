@@ -238,6 +238,24 @@ export async function setDoor(ctx: Pick<OutsideMailContext, 'store' | 'identity'
     await ctx.store.setMeta(ctx.identity.publicKey, DOOR_META, open ? 'open' : 'closed');
 }
 
+/** The across mute's mark, kept with the chats by the other person's key (slice S4; the phone's utils/outside-mail.ts). */
+const quietMeta = (key: string) => `quiet:${key}`;
+
+/** Whether the member made `key` quiet in this browser (slice S4, the across mute). */
+export async function outsideQuiet(ctx: Pick<OutsideMailContext, 'store' | 'identity'>, key: string): Promise<boolean> {
+    return (await ctx.store.getMeta(ctx.identity.publicKey, quietMeta(key))) === '1';
+}
+
+/**
+ * The across mute (slice S4, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Mutes"), the phone's rule: my
+ * server told first, "no push for this key" (POST /api/mail/quiet), then kept here with the chats. Throws OutsideMailError
+ * with my server's words when it refuses, and nothing is kept.
+ */
+export async function setOutsideQuiet(ctx: OutsideMailContext, key: string, quiet: boolean): Promise<void> {
+    await post(ctx, '/api/mail/quiet', { key, quiet });
+    await ctx.store.setMeta(ctx.identity.publicKey, quietMeta(key), quiet ? '1' : '0');
+}
+
 // ── Finding someone in another community by name (N1, @beanpool/core find-by-name.ts; the phone's utils/outside-mail.ts) ──
 
 /** Whether people in other communities can find me by name: my community's switch, the same on every device. */

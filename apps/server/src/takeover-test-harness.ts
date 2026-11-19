@@ -20,7 +20,7 @@ import path from 'node:path';
 import http from 'node:http';
 import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
-import type { AddressInfo } from 'node:net';
+import net, { type AddressInfo } from 'node:net';
 
 // ── Orchestrator side ──────────────────────────────────────────────────────────────────────
 
@@ -149,6 +149,30 @@ export function spawnNode(
         };
         return node;
     });
+}
+
+/**
+ * Keep a killed node's address leading nowhere until the suite ends, as a dead server's does: its HTTP port stays taken
+ * here, so no node the suite starts later can be given it. Each start listens on port 0, and the OS hands out any free
+ * port, one freed a moment ago included. A standby that still copies the dead main server then finds a server at the main
+ * server's address, and in a take-over suite that is often the standby that took over: the same key at a newer identity
+ * epoch, so the next take-over there is refused 409 "Another server already took over" (merge-queue run 44583847282:
+ * test-takeover-by-phone's main server and the standby promoted after it were both on :44527, and 6c was refused).
+ *
+ * Call it straight after the node's kill, before the suite starts another node. Every connection is closed at once,
+ * unread: the checks that ask the main server's address (services/takeover.ts mainServerAnswers, services/identity-epoch.ts
+ * newerTakeoverAnswering) read that as "does not answer", as they read a refused connection. Unref'd: it never keeps the
+ * orchestrator running.
+ */
+export async function holdDeadAddress(node: NodeProc): Promise<void> {
+    if (node.proc.exitCode === null && node.proc.signalCode === null) throw new Error(`holdDeadAddress: the node on :${node.port} is still running`);
+    const port = node.port;
+    const holder = net.createServer((socket) => socket.destroy());
+    await new Promise<void>((resolve, reject) => {
+        holder.once('error', reject);
+        holder.listen(port, '127.0.0.1', () => { holder.off('error', reject); resolve(); });
+    });
+    holder.unref();
 }
 
 export async function post(base: string, route: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: any }> {

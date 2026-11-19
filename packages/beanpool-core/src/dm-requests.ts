@@ -200,12 +200,19 @@ export function requestPendingRefusal(e: unknown): string | null {
  * before. Both apps read the mark before global answers, so a 0 there would read as a fall, the mark would follow it, and
  * the same count from global a moment later would light the dot on every visit (PR #3298 review). While it isn't known, the
  * global part is left out of the dot and the mark alike.
+ *
+ * `elsewhere` is the phone's alone (Marty, 19 Nov 2026, decision 4 of DESIGN-no-switch-messaging-fable.md, slice S0): how
+ * many wait in each other community the phone holds, by its address, as each last answered the phone's rounds (counts
+ * alone, like global's). A community missing from it isn't known (not asked since it was last the one in use, its "Alerts
+ * from this community" off, or never answered): it is left out of the count, the dot and the mark, as global is before it
+ * answers. The whole of it is absent (or null) until the phone has read it. The web, one community per address, has none.
  */
 export interface RequestsWaiting {
     here: { count: number; conversations: ReadonlyArray<{ request?: { at?: string | null } | null }> } | null | undefined;
     onGlobal: number | null | undefined;
     outside: ReadonlyArray<{ updatedAt?: number | null }>;
     guestInvites: ReadonlyArray<{ updatedAt?: number | null }>;
+    elsewhere?: Readonly<Record<string, number>> | null;
 }
 
 /**
@@ -217,20 +224,37 @@ export interface RequestsWaiting {
  * (PR #3298 review). And the count waiting on global then, which has no time.
  *
  * Global gives a count alone, no times: one answered there and another come between two reads leave the count the same, and
- * the new one has no dot until the count moves.
+ * the new one has no dot until the count moves. So does each of the phone's other communities (`elsewhere`, by address:
+ * the count seen there, written only where one was, and left out of the mark altogether where none was).
  */
-export interface RequestsSeen { here: number; outside: number; guest: number; global: number }
+export interface RequestsSeen { here: number; outside: number; guest: number; global: number; elsewhere?: Record<string, number> }
 
 const NO_SEEN: RequestsSeen = { here: 0, outside: 0, guest: 0, global: 0 };
 
 const whole = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.floor(x) : 0);
 
-/** How many wait behind the row, all kinds added up (none on global while that count isn't known). */
-export function requestsRowCount(w: RequestsWaiting): number {
-    return whole(w.here?.count) + whole(w.onGlobal) + w.outside.length + w.guestInvites.length;
+/** `map`'s own count for `key`, else 0: an address is never read off the object's prototype. */
+const countOf = (map: Readonly<Record<string, number>> | null | undefined, key: string) => (map && Object.prototype.hasOwnProperty.call(map, key) ? whole(map[key]) : 0);
+
+/** The other communities' counts as known now, each a whole number; undefined while the phone hasn't read them. */
+function elsewhereNow(w: RequestsWaiting): Record<string, number> | undefined {
+    const e = w.elsewhere;
+    if (!e || typeof e !== 'object') return undefined;
+    const out: Record<string, number> = {};
+    for (const key of Object.keys(e)) out[key] = countOf(e, key);
+    return out;
 }
 
-/** The newest of each kind now, as {@link RequestsSeen} keeps it; the global count null while it isn't known. */
+/** How many wait behind the row, all kinds added up (none on global, nor in another community, while its count isn't known). */
+export function requestsRowCount(w: RequestsWaiting): number {
+    const elsewhere = Object.values(elsewhereNow(w) ?? {}).reduce((sum, n) => sum + n, 0);
+    return whole(w.here?.count) + whole(w.onGlobal) + w.outside.length + w.guestInvites.length + elsewhere;
+}
+
+/**
+ * The newest of each kind now, as {@link RequestsSeen} keeps it; the global count null while it isn't known, and the other
+ * communities' counts absent until the phone has read them.
+ */
 export function requestsNewest(w: RequestsWaiting): Omit<RequestsSeen, 'global'> & { global: number | null } {
     const most = (xs: number[]) => xs.reduce((m, x) => (Number.isFinite(x) && x > m ? x : m), 0);
     return {
@@ -238,32 +262,70 @@ export function requestsNewest(w: RequestsWaiting): Omit<RequestsSeen, 'global'>
         outside: most(w.outside.map((c) => Number(c.updatedAt ?? NaN))),
         guest: most(w.guestInvites.map((c) => Number(c.updatedAt ?? NaN))),
         global: typeof w.onGlobal === 'number' && Number.isFinite(w.onGlobal) ? whole(w.onGlobal) : null,
+        elsewhere: elsewhereNow(w),
     };
 }
 
 /**
  * The red dot: something waits that came after the member last opened the list. With no mark kept (never opened on this
- * device, or a mark that can't be read), anything waiting is new. A global count not known yet lights nothing.
+ * device, or a mark that can't be read), anything waiting is new. A global count not known yet lights nothing, and nor does
+ * another community's.
  */
 export function requestsUnseen(w: RequestsWaiting, seen: RequestsSeen | null): boolean {
     if (requestsRowCount(w) === 0) return false;
     if (!seen) return true;
     const now = requestsNewest(w);
-    return now.here > seen.here || now.outside > seen.outside || now.guest > seen.guest || (now.global !== null && now.global > seen.global);
+    return now.here > seen.here || now.outside > seen.outside || now.guest > seen.guest || (now.global !== null && now.global > seen.global)
+        || Object.entries(now.elsewhere ?? {}).some(([c, n]) => n > countOf(seen.elsewhere, c));
+}
+
+/**
+ * The other communities' part of the next mark: each community known now takes its count where the list is `opened`, or
+ * where it fell (an answer given there, or a request expired); one not known now keeps what was seen. Only counts above 0
+ * are written.
+ */
+function elsewhereNext(seen: RequestsSeen['elsewhere'], now: Record<string, number> | undefined, opened: boolean): Record<string, number> {
+    const next: Record<string, number> = {};
+    for (const c of Object.keys(seen ?? {})) if (countOf(seen, c) > 0) next[c] = countOf(seen, c);
+    for (const [c, n] of Object.entries(now ?? {})) {
+        if (!opened && n >= countOf(seen, c)) continue;
+        if (n > 0) next[c] = n;
+        else delete next[c];
+    }
+    return next;
+}
+
+/** `mark` with the other communities' counts, left out where there are none (so a mark with none reads as it always has). */
+function withElsewhere(mark: Omit<RequestsSeen, 'elsewhere'>, elsewhere: Record<string, number>): RequestsSeen {
+    return Object.keys(elsewhere).length > 0 ? { ...mark, elsewhere } : { ...mark };
+}
+
+function sameSeen(a: RequestsSeen, b: RequestsSeen): boolean {
+    const keys = new Set([...Object.keys(a.elsewhere ?? {}), ...Object.keys(b.elsewhere ?? {})]);
+    return a.here === b.here && a.outside === b.outside && a.guest === b.guest && a.global === b.global
+        && [...keys].every((c) => countOf(a.elsewhere, c) === countOf(b.elsewhere, c));
 }
 
 /**
  * The mark to keep, or null when nothing changes (so nothing is written). `opened`: the list shows, so everything in it is
- * seen (each kind's newest, never moving back). Otherwise only the global count follows a fall (an answer given on global
- * itself), so the next one there shows the dot. Only a count read from global moves the mark's: one not known yet keeps it.
+ * seen (each kind's newest, never moving back; each count as it is now). Otherwise only the counts follow a fall (an answer
+ * given on global, or in that other community, itself), so the next one there shows the dot. Only a count read moves the
+ * mark's: one not known yet keeps it.
  */
 export function requestsSeenNext(w: RequestsWaiting, seen: RequestsSeen | null, opened: boolean): RequestsSeen | null {
     const now = requestsNewest(w);
-    if (!opened) return seen && now.global !== null && now.global < seen.global ? { ...seen, global: now.global } : null;
+    if (!opened) {
+        if (!seen) return null;
+        const global = now.global !== null && now.global < seen.global ? now.global : seen.global;
+        const next = withElsewhere({ here: seen.here, outside: seen.outside, guest: seen.guest, global }, elsewhereNext(seen.elsewhere, now.elsewhere, false));
+        return sameSeen(next, seen) ? null : next;
+    }
     const s = seen ?? NO_SEEN;
-    const next = { here: Math.max(s.here, now.here), outside: Math.max(s.outside, now.outside), guest: Math.max(s.guest, now.guest), global: now.global ?? s.global };
-    const same = !!seen && next.here === seen.here && next.outside === seen.outside && next.guest === seen.guest && next.global === seen.global;
-    return same ? null : next;
+    const next = withElsewhere(
+        { here: Math.max(s.here, now.here), outside: Math.max(s.outside, now.outside), guest: Math.max(s.guest, now.guest), global: now.global ?? s.global },
+        elsewhereNext(s.elsewhere, now.elsewhere, true),
+    );
+    return seen && sameSeen(next, seen) ? null : next;
 }
 
 /** A kept mark, as storage gave it; null for none or one that can't be read. */
@@ -273,7 +335,16 @@ export function parseRequestsSeen(raw: string | null | undefined): RequestsSeen 
         if (!v || typeof v !== 'object') return null;
         const ok = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 0;
         if (!ok(v.here) || !ok(v.outside) || !ok(v.guest) || !ok(v.global)) return null;
-        return { here: v.here, outside: v.outside, guest: v.guest, global: v.global };
+        const mark = { here: v.here, outside: v.outside, guest: v.guest, global: v.global };
+        if (v.elsewhere === undefined) return mark;
+        const e = v.elsewhere;
+        if (!e || typeof e !== 'object' || Array.isArray(e)) return null;
+        const elsewhere: Record<string, number> = {};
+        for (const [c, n] of Object.entries(e as Record<string, unknown>)) {
+            if (!ok(n)) return null;
+            if (whole(n) > 0) elsewhere[c] = whole(n);
+        }
+        return withElsewhere(mark, elsewhere);
     } catch {
         return null;
     }

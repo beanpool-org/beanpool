@@ -5,7 +5,8 @@
  * community would otherwise never show it. The row is for the device that ticked, not every device they have (below).
  *
  * - **Counts alone** (GET /api/me/unread): nothing of who wrote, and nothing of a line. Accept, Decline and Report are global's
- *   own list, one tap on: this phone's chats are kept per community, and a line is read where it is kept.
+ *   own list, one tap on: this phone's chats are kept per community, and a line is read where it is kept. The count is global's
+ *   card among the phone's other communities' (utils/requests-elsewhere.ts, Marty 19 Nov 2026), and its tap is theirs.
  * - **Nothing is asked of global until the member has asked for questions on this device**, by the director's ruling on #2741: a
  *   phone never asks global what waits for a key unless the member ticked a door here. It keeps a mark from the first tick
  *   ({@link noteQuestionsOpened}), which stays after an Off or a Stop showing, since a request already sent is still theirs
@@ -33,41 +34,28 @@ export async function noteQuestionsOpened(publicKey: string): Promise<void> {
 }
 
 /**
- * The tap on the row: the phone moves to global, as a tapped notice does, and its Message requests open there. `recheck` is the
- * root layout's recognition (app/NodeStatusContext.tsx), asked again before the bounce: the guard opens a screen only for the
- * community it knows the phone is on (member-landing.ts), and without this it still reads the one just left.
- */
-export async function openGlobalRequests(publicKey: string | null | undefined, recheck: () => Promise<unknown>): Promise<void> {
-    if (!publicKey) return;
-    const { communitySwitchUnderWay, switchCommunity } = await import('./use-communities');
-    const { openAfterLanding } = await import('./member-landing');
-    if (communitySwitchUnderWay()) return;
-    await switchCommunity(GLOBAL_NODE_URL, async () => {
-        await recheck().catch(() => 'unknown');
-        openAfterLanding('/(tabs)/chats?filter=requests', GLOBAL_NODE_URL, publicKey);
-    }).catch((e) => console.warn('[Requests] Could not move to the global community', e));
-}
-
-/**
- * How many wait on global for this key. 0 on a phone that has opened no door, and on global itself, whose own list has them: and
- * whatever the member answers there changes the count, so the one kept here goes, or the row is still there when they get home.
- * With no answer it says what it last heard, and null where it has heard nothing: not known.
+ * How many wait on global for this key: a number is global's own answer, 0 included (none waiting), or what it last heard
+ * when global doesn't answer. Null is not known, and never a 0: no key on this phone, no door ticked here (nothing is asked),
+ * global itself or no community at all (its own list has them, so nothing is asked either), or no answer with nothing heard
+ * before. The row's red dot follows a 0 as a fall and leaves a null out (core dm-requests.ts RequestsWaiting): a "not asked"
+ * read as 0 would throw the real 0 away with it, and the dot could never come back for the next one (PR #3301 review). On
+ * global, whatever the member answers there changes the count, so the one kept here goes, or the row is still there when
+ * they get home.
  */
 export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity | null | undefined, now: number = Date.now()): Promise<number | null> {
-    if (!identity?.privateKey) return 0;
+    if (!identity?.privateKey) return null;
     // No answer from global (or from this phone's own storage), with nothing heard before: null, not known. The row's red dot
-    // leaves that out, where a 0 would read as a fall and bring the dot back on every start (core dm-requests.ts
-    // RequestsWaiting; PR #3298 review).
+    // leaves that out, where a 0 would read as a fall and bring the dot back on every start (PR #3298 review).
     const heard = () => (asked?.key === identity.publicKey ? asked.count : null);
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url').then((v) => v, () => undefined);
     if (anchor === undefined) return heard();
     if (!anchor || audienceOf(anchor) === audienceOf(GLOBAL_NODE_URL)) {
         asked = null;
-        return 0;
+        return null;
     }
     const ticked = await AsyncStorage.getItem(QUESTIONS_OPENED_STORE_KEY).then((v) => v, () => undefined);
     if (ticked === undefined) return heard();
-    if (ticked !== identity.publicKey) return 0;
+    if (ticked !== identity.publicKey) return null;
     if (asked?.key === identity.publicKey && now - asked.at < ASK_EVERY_MS) return asked.count;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);

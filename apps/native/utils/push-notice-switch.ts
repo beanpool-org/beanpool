@@ -19,9 +19,8 @@
  *   held, its row on the BeanPool sheet shows it. The app's own notice from a round (other-communities-unread.ts) comes
  *   with no id and counts nothing: its number is already the community's own.
  */
-import type { NoticeRoute } from './push-notice-check';
 import { countNotice } from './notice-counts';
-import { openAfterLanding } from './member-landing';
+import { openAfterLanding, type LandingRoute } from './member-landing';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 
 interface Storage {
@@ -69,7 +68,7 @@ export type NoticeSwitch = 'switched' | 'held' | 'failed';
  * Notice `id`, tapped, from `community`: counted, then the phone moves there and the guard is asked to open `route()`
  * (asked only once the phone is moving, so a held switch asks that community nothing). Never throws.
  */
-export async function openNoticeIn(community: string, id: string | null, route: () => Promise<NoticeRoute>, deps: NoticeSwitchDeps): Promise<NoticeSwitch> {
+export async function openNoticeIn(community: string, id: string | null, route: () => Promise<LandingRoute>, deps: NoticeSwitchDeps): Promise<NoticeSwitch> {
     if (id !== null) await countNotice(deps.storage, community, id);
     try {
         if (deps.switchUnderWay() || await deps.joinUnderWay()) {
@@ -77,7 +76,7 @@ export async function openNoticeIn(community: string, id: string | null, route: 
             return 'held';
         }
         // Asked of that community while the phone moves; its answer is wanted only before the bounce.
-        const landing = route().catch((): NoticeRoute => '/(tabs)');
+        const landing = route().catch((): LandingRoute => '/(tabs)');
         await deps.switchTo(await savedAddressOf(deps.storage, community), async () => {
             const answer = await deps.recheck().catch(() => 'unknown');
             // The guard lets the member in only for these (app/_layout.tsx); any other answer holds them where it does, and

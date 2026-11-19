@@ -293,8 +293,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [requests, setRequests] = useState<{ count: number; conversations: DmRequestEntry[] } | null>(null);
     // Requests waiting on the global community for a member who takes questions there (lib/show-on-global.ts): behind the same row.
     // Undefined until global has answered (or while an ask with nothing heard before goes unanswered): not known, which the
-    // row's red dot leaves out, where a 0 would read as a fall and bring the dot back on every visit (PR #3298 review).
-    const [onGlobal, setOnGlobal] = useState<{ count: number; href: string } | null | undefined>(undefined);
+    // row's red dot leaves out, where a 0 would read as a fall and bring the dot back on every visit (PR #3298 review). Kept
+    // with the account it was asked for, so another account on this page reads not known from its first render, never the
+    // last one's count (the dot's mark is written in that same commit).
+    const [globalHeard, setGlobalHeard] = useState<{ publicKey: string; found: { count: number; href: string } | null } | null>(null);
+    const onGlobal = globalHeard?.publicKey === identity.publicKey ? globalHeard.found : undefined;
     // When global was last asked. The card opens global in a new tab and this page stays up, so what the member answers there is
     // heard when the tab comes back. Going to global lets go of this, or a quick answer would wait out the 5 minutes.
     const askedGlobalAt = useRef(0);
@@ -308,7 +311,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             void requestsWaitingOnGlobal(identity, shown).then((found) => {
                 if (gone || asking !== newest) return;
                 shown = found;
-                setOnGlobal(found);
+                setGlobalHeard(found === undefined ? null : { publicKey: identity.publicKey, found });
             });
         };
         const tabBack = () => {

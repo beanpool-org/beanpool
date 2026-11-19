@@ -380,6 +380,22 @@ describe('requests waiting on the global community, behind the same row', () => 
             expect(await dotNow()).toBeNull();
         });
 
+        it('another account on the same page: the count before was the last one\'s, so its own mark moves on nothing until global answers', async () => {
+            localStorage.clear();
+            localStorage.setItem(requestsSeenStoreKey(bo.publicKey), JSON.stringify({ here: 0, outside: 0, guest: 0, global: 3 }));
+            node.list = annListWith([]);
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            const { rerender } = render(<MessagesPage identity={idOf(ann)} />);
+            expect(await screen.findByTestId('message-requests-row')).toBeInTheDocument();
+            let answer: (found: typeof THERE) => void = () => {};
+            waitingOnGlobal.answer.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+            rerender(<MessagesPage identity={idOf(bo)} />);
+            await act(async () => {});
+            expect(JSON.parse(localStorage.getItem(requestsSeenStoreKey(bo.publicKey))!).global).toBe(3);
+            await act(async () => { answer({ ...THERE, count: 3 }); });
+            expect(await dotNow()).toBeNull();
+        });
+
         it('a real fall there (one answered on global) is followed, so the next one there shows the dot', async () => {
             await seenWithTwo();
             waitingOnGlobal.answer.mockResolvedValue({ ...THERE, count: 1 });

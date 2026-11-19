@@ -332,6 +332,23 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         // Mutation: the S0 move kept for held communities -> switchCommunity is called and nothing is pushed.
     });
 
+    it('a contact whose link spells that community otherwise (a trailing slash): the chat starts and opens there by the address the phone saved (#3305 review F3, C3)', async () => {
+        const SPELT = `${RIVERBEND}/`;
+        // Contacts knows Riverbend as held (its saved list in storage); the nodes stand-in saved it with no slash.
+        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: SPELT }]));
+        await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, SPELT, 'ana')] })));
+        await render();
+        const { createConversationApi } = await import('../db');
+        vi.mocked(createConversationApi).mockClear();
+        holds.log.length = 0;
+        await press('Message');
+        // Held, started and opened by the saved address (this file's nodes stand-in: https://riverbend.example), never the link's.
+        expect(holds.log).toEqual([`enter ${RIVERBEND}`, `start ${RIVERBEND}`, `leave ${RIVERBEND}`]);
+        expect(vi.mocked(createConversationApi).mock.calls.map((c) => c[5])).toEqual([RIVERBEND]);
+        expect((mem.pushed.at(-1) as any)?.params?.community).toBe(RIVERBEND);
+        // Mutation (C3): messageThere using the contact's own spelling -> every entry above reads https://riverbend.example/.
+    });
+
     it('that community\'s copy can\'t be opened in place (not on the phone yet): Message moves there with no question, and the chat opens where it lands (S0, Marty 19 Nov 2026)', async () => {
         // The phone holds Riverbend too (saved, and not a guest's look), under a spelling with a slash.
         mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: `${RIVERBEND}/` }]));

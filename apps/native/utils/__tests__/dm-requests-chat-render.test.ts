@@ -162,6 +162,9 @@ vi.mock('../blocklist', () => ({
 // Which screen /chat/:id draws is utils/chat-route's call (tested there); here the test names it.
 const route = vi.hoisted(() => ({ now: { view: 'dm', screenId: 'dm1' } as { view: string; screenId: string } }));
 vi.mock('../chat-route', () => ({ routeChat: async () => route.now }));
+// The move a chat that doesn't open in place offers (utils/push-notice-switch.ts openNoticeIn): recorded, nothing switches.
+const moveTo = vi.hoisted(() => ({ run: null as null | ((...a: unknown[]) => Promise<unknown>) }));
+vi.mock('../push-notice-switch', async (orig) => ({ ...(await orig<Record<string, unknown>>()), openNoticeIn: (...a: unknown[]) => moveTo.run?.(...a) ?? Promise.resolve('held') }));
 // The group's key code (group-chat-keys.ts) is off the words layer; the screen's keyring answers "never held".
 vi.mock('../group-chat-keys', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), groupKeysLookUnopenable: () => false }));
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
@@ -989,5 +992,127 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
         await tapEverything();
         const to = went.map(([, where]) => (typeof where === 'string' ? where : (where as { pathname: string }).pathname));
         expect(to).toEqual(expect.arrayContaining(['/post/p-ladder', '/public-profile', '/post/[id]', '/chat/key-code']));
+    });
+});
+
+describe('a chat named with another community: only a DM its copy holds opens in place, at its saved address and name (#3305 review F1, F2, F4)', () => {
+    const RIVER = 'https://riverside.example';
+    const KOFI_THERE = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: null, listed: 1 };
+    /** The calls of a chat drawn in place: none of them is made unless that community's copy holds the id as a DM. */
+    const IN_PLACE_CALLS = ['enterChatInPlace', 'getConversation', 'getMessages', 'syncSingleConversation', 'markConversationRead', 'getDmKeyChange', 'getDmKeyCodeInfo'];
+    let asked: unknown[][];
+    let moves: unknown[][];
+    beforeEach(() => {
+        asked = [];
+        moves = [];
+        moveTo.run = (...args: unknown[]) => { moves.push(args); return Promise.resolve('switched'); };
+    });
+    async function openLink(link: Record<string, string>, over: Answers = {}): Promise<void> {
+        params.now = link;
+        standIn({
+            getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true,
+            heldChatIsDm: (...args: unknown[]) => { asked.push(args); return Promise.resolve(true); },
+            ...over,
+        });
+        await open();
+    }
+    const madeInPlace = () => IN_PLACE_CALLS.filter((n) => callsOf(n) > 0);
+    /** A button by the words it shows (the move's button is named by its words, as Contacts' is). */
+    const reading = (words: string) => Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.trim() === words) ?? null;
+
+    it('the reviewer\'s link: an enterprise\'s key named with a community the phone keeps opens nothing there in place; one tap moves there', async () => {
+        holdsCommunity(RIVER, 'Riverside');
+        await openLink({ id: 'enterprise-key-0123', community: RIVER, communityName: 'Riverside Official' }, {
+            heldChatIsDm: (...args: unknown[]) => { asked.push(args); return Promise.resolve(false); },
+        });
+        // Asked of that community's copy, by the address the phone saved, for the id the link names.
+        expect(asked).toEqual([[ME.publicKey, RIVER, 'enterprise-key-0123']]);
+        expect(madeInPlace(), 'nothing held, read, polled or marked in place').toEqual([]);
+        expect(host.querySelector('[data-testid="chat-not-in-place"]')).not.toBeNull();
+        expect(host.textContent).toContain('Could not open this chat.');
+        // The community's own saved name, never the link's.
+        expect(host.textContent).not.toContain('Riverside Official');
+        const go = reading('Open Riverside ›');
+        expect(go, 'the move\'s button').not.toBeNull();
+        await act(async () => { go!.click(); });
+        // The move's modules load on the tap (a dynamic import): wait for it, bounded.
+        for (let i = 0; i < 400 && moves.length === 0; i++) await settle(1);
+        expect(moves.length).toBe(1);
+        const [community, id, route] = moves[0] as [string, unknown, () => Promise<string>];
+        expect([community, id, await route()]).toEqual([RIVER, null, '/chat/enterprise-key-0123']);
+        expect(madeInPlace()).toEqual([]);
+        // Mutation (the review's): ChatRoute draws the chat in place on `id && community` alone -> enterChatInPlace,
+        // getConversation and the poll are made for the enterprise's key, and the header reads "Riverside Official".
+    });
+
+    it('a direct chat that community\'s copy holds: in place, under the name the phone saved, whatever name the link carries', async () => {
+        holdsCommunity(RIVER, 'Riverside');
+        await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside Official' });
+        expect(host.textContent).toContain('Kofi');
+        expect(host.textContent).toContain('Riverside');
+        expect(host.textContent).not.toContain('Riverside Official');
+        expect(host.querySelector('[data-testid="chat-not-in-place"]')).toBeNull();
+    });
+
+    it('a link spelling the community otherwise (capitals, a path): in place at the address the phone saved, and only there', async () => {
+        holdsCommunity(RIVER, 'Riverside');
+        const at: unknown[] = [];
+        await openLink({ id: 'dm1', community: 'HTTPS://Riverside.EXAMPLE/some/path', communityName: 'Riverside' }, {
+            enterChatInPlace: (c: unknown) => { at.push(c); return undefined; },
+            syncSingleConversation: (...args: unknown[]) => { at.push(args[1]); return Promise.resolve(true); },
+        });
+        expect(asked).toEqual([[ME.publicKey, RIVER, 'dm1']]);
+        expect(at.length).toBeGreaterThan(1);
+        expect(new Set(at)).toEqual(new Set([RIVER]));
+    });
+
+    it('a community the phone doesn\'t keep, or keeps only as a guest\'s look: nothing opens, nothing is asked, no way to move there', async () => {
+        for (const guest of [false, true]) {
+            net.calls.length = 0;
+            asked = [];
+            if (guest) {
+                holdsCommunity(RIVER, 'Riverside');
+                store.map.set('beanpool_guest_nodes', JSON.stringify(['https://RIVERSIDE.example/']));
+            } else {
+                store.map.delete('beanpool_saved_nodes');
+                store.map.delete('beanpool_guest_nodes');
+            }
+            await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside' });
+            expect(asked, guest ? 'a guest\'s look' : 'not kept').toEqual([]);
+            expect(madeInPlace()).toEqual([]);
+            expect(host.textContent).toContain('Could not open this chat.');
+            expect(reading('Open Riverside ›')).toBeNull();
+            expect(Array.from(host.querySelectorAll('button')).some((b) => b.textContent?.startsWith('Open '))).toBe(false);
+            await act(async () => { root.unmount(); });
+            root = createRoot(host);
+        }
+    });
+
+    it('the community in use named: the chat\'s ordinary route, nothing held or asked in place', async () => {
+        const named: unknown[] = [];
+        await openLink({ id: 'dm1', community: `${NODE}/`, communityName: 'Somewhere' }, {
+            getConversation: (...args: unknown[]) => { named.push(args[2]); return Promise.resolve(KOFI_THERE); },
+        });
+        expect(host.textContent).toContain('Kofi');
+        expect(asked).toEqual([]);
+        expect(callsOf('enterChatInPlace')).toBe(0);
+        expect(named.length).toBeGreaterThan(0);
+        expect(new Set(named)).toEqual(new Set([undefined]));
+        expect(host.textContent).not.toContain('Somewhere');
+    });
+
+    it('F4: the first read refused in place (that community\'s copy can\'t be opened now): the chat says so, and its name never stays "Loading..."', async () => {
+        holdsCommunity(RIVER, 'Riverside');
+        const refused = () => Promise.reject(new Error('This phone has switched community since this chat was opened.'));
+        await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside' }, { getConversation: refused, getMessages: refused });
+        expect(host.textContent).not.toContain('Loading...');
+        expect(host.textContent).toContain('This phone has switched community since this chat was opened.');
+        // Only the conversation's read refused: its name is the chat's short id, never "Loading..." for good.
+        await act(async () => { root.unmount(); });
+        root = createRoot(host);
+        await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside' }, { getConversation: refused });
+        expect(host.textContent).not.toContain('Loading...');
+        // Mutation: no catch around getConversation in loadConversationData -> the name stays "Loading..." (an unhandled
+        // rejection on a phone).
     });
 });

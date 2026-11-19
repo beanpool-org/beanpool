@@ -4,8 +4,8 @@ import { useFocusEffect, router } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
-import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests, closeHeldCopies } from '../../utils/db';
-import { heldChatRows, type HeldChatRow as HeldChat } from '../../utils/held-chats';
+import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
+import { heldChatsInView, heldChatsShown, type HeldChatRow as HeldChat } from '../../utils/held-chats';
 import { HeldChatRow } from '../../components/HeldChatRow';
 import { requestsWaitingOnGlobal } from '../../utils/global-requests';
 import { elsewhereCounts, requestsElsewhere, useHeldRequests } from '../../utils/requests-elsewhere';
@@ -226,28 +226,27 @@ export default function ChatsScreen() {
     // Read as Chat opens, when the phone moves to another community and when a block changes: a held copy changes only
     // while the member is there, so a sync tick here never reads them again. Closed as Chat is left.
     useFocusEffect(React.useCallback(() => {
-        let active = true;
+        // Chat in view (utils/held-chats.ts): every held handle closes as it is left, one a list on its way opened after that too.
+        const view = heldChatsInView();
         const loadHeld = async () => {
             if (!identity?.publicKey) {
-                if (active) setHeldChats([]);
+                if (view.inView()) setHeldChats([]);
                 return;
             }
             try {
-                const [blocked, rows] = await Promise.all([getBlockedUsers(), heldChatRows(identity.publicKey)]);
-                // A DM with someone the member blocked, under any key the chat names them by, is not listed (dm-blocked.ts).
-                const shown = rows.filter((c) => talkShowsChat(c, blocked));
-                if (active) setHeldChats((prev) => (JSON.stringify(prev) === JSON.stringify(shown) ? prev : shown));
+                // A DM with someone the member blocked, under any key that chat names them by there, is not listed.
+                const shown = await heldChatsShown(identity.publicKey, view);
+                if (view.inView()) setHeldChats((prev) => (JSON.stringify(prev) === JSON.stringify(shown) ? prev : shown));
             } catch (e) {
                 console.warn('[Held] Could not list the chats of the other communities', e);
-                if (active) setHeldChats([]);
+                if (view.inView()) setHeldChats([]);
             }
         };
         void loadHeld();
         const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); });
         return () => {
-            active = false;
             blockSub.remove();
-            void closeHeldCopies();
+            void view.leave();
         };
     }, [identity, communityUrl]));
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way

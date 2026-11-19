@@ -156,7 +156,7 @@ let copyMoving: Promise<void> | null = null;
  * while a copy moves; closed wherever the copy in use is closed (closeOpenCopy), before the copy in use opens that file
  * (openAndMakeCopy), and around every move or delete of a copy (whileCopyMoves, closeDB's `heldClosedUntil`).
  */
-const heldCopies = createHeldCopies<SQLite.SQLiteDatabase>({
+const heldCopies = createHeldCopies<SQLite.SQLiteDatabase, HeldStatement>({
     renamed: () => communityCachesRenamed(),
     exists: async (file) => {
         const directory = typeof SQLite.defaultDatabaseDirectory === 'string'
@@ -172,11 +172,18 @@ const heldCopies = createHeldCopies<SQLite.SQLiteDatabase>({
     open: (file) => SQLite.openDatabaseAsync(file, { useNewConnection: true }),
     register: (handle, file) => { dbFileOf.set(handle, file); },
     get schema() { return COPY_SCHEMA; },
+    // A getter, as `schema`: the statements are constants declared further down this file.
+    get statements() { return HELD_STATEMENTS; },
 });
 
-/** The files a held handle is open (or opening) on now: for tests. */
+/** The files a held handle is open, opening or closing on now: for tests. */
 export function heldCopyFiles(): string[] {
     return heldCopies.openFiles();
+}
+
+/** For tests: the community file a handle is registered under (dbFileOf), as the DM pins and the DM guard read it. */
+export function _fileOfHandleForTests(handle: object): string | undefined {
+    return dbFileOf.get(handle);
 }
 
 /** Close every held handle once its reads have settled: Chat closes them as it is left (about 1 MB and 2 files each). */
@@ -1668,6 +1675,11 @@ const HELD_CONVERSATIONS_SQL = `
     ORDER BY timestamp DESC
 `;
 
+/** The names of the statements a held copy runs (utils/held-copies.ts takes no SQL from a caller, only one of these). */
+type HeldStatement = 'conversations';
+/** Every statement a held copy runs: one plain SELECT each (held-copies.ts isOneRead), refused at its use otherwise. */
+const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({ conversations: HELD_CONVERSATIONS_SQL });
+
 /** A photo's address on `community`'s server: a path its node stored ("/uploads/…") is that server's, never the one in use. */
 function onCommunity(community: string, value: unknown): string | null {
     if (typeof value !== 'string' || !value.trim() || value === 'null' || value === 'undefined') return null;
@@ -1688,12 +1700,17 @@ export async function getHeldConversations(myPubkey: string, community: string):
     if (!(await AsyncStorage.getItem(syncedCursorKeyOf(file)))) return null;
     let rows: any[] | null;
     try {
-        rows = await heldCopies.all<any>(file, HELD_CONVERSATIONS_SQL, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+        rows = await heldCopies.all<any>(file, 'conversations', [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
     } catch (e) {
         console.warn(`[Held] Could not list the chats held for ${file}`, e);
         return null;
     }
     if (!rows) return null;
+    // The keys a DM's other person is known by in THAT file, as Talk's own list has them (getConversations): its rows' keys
+    // and its pin's key, former keys and offered key, so a block holds across their re-key (dm-blocked.ts dmPeerKeys).
+    // The pins as stored for that file, never seeded from here (no held handle reaches the pin book); none stored, or
+    // unreadable: the rows' keys, as getConversations has them when its pins can't be read.
+    const pins = await dmPins.peek(myPubkey, file);
     return rows.map((row) => {
         let postPhoto: string | null = null;
         if (row.postPhotos) {
@@ -1712,7 +1729,7 @@ export async function getHeldConversations(myPubkey: string, community: string):
             peerAvatar: onCommunity(community, row.otherAvatar),
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
-            peerKeys: typeof row.otherKeys === 'string' && row.otherKeys ? row.otherKeys.split(',') : [],
+            peerKeys: dmPeerKeys(typeof row.otherKeys === 'string' ? row.otherKeys : null, isDmType(row.convType) && pins ? dmPinFor(pins, String(row.id)) : null),
             rawTimestamp: row.timestamp || null,
             createdAt: row.createdAt || null,
         };

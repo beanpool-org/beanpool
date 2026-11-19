@@ -60,8 +60,9 @@ export function useRequestsInPlace(myPubkey: string | null | undefined, places: 
     const [groups, setGroups] = useState<RequestsInPlaceGroup[]>([]);
     const [round, setRound] = useState(0);
     const wanted = placesToReadInPlace(places);
-    // The effect's key: the addresses only, so the rounds' changing counts don't let go and hold again for nothing.
-    const key = shown && myPubkey ? wanted.map((p) => p.url).join('\n') : '';
+    // The effect's key: each address with its count, so a request that arrives there while the list shows is read too (its
+    // S0 card is not drawn beside the group read in place). The same counts again keep the same key: nothing is read again.
+    const key = shown && myPubkey ? wanted.map((p) => `${p.url}#${p.count}`).join('\n') : '';
     const placesRef = useRef(wanted);
     placesRef.current = wanted;
     useEffect(() => {

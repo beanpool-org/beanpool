@@ -1056,14 +1056,17 @@ describe('a link naming another community with an id its copy holds as no DM: no
         keptIn(B_FILE, groupB, older);
         tombstone(groupB);
         db.enterChatInPlace(A);
-        expect(await db.syncSingleConversation(groupA.id, A)).toBe(false);
+        const polledInPlace = await db.syncSingleConversation(groupA.id, A);
         await db.leaveChatInPlace(A);
         // B's own poll of its group: its older line of that account is blanked, as with no poll in place at all.
         expect(await db.syncSingleConversation(groupB.id)).toBe(true);
         const row = (rowsOf(B_FILE)!.messages as any[]).find((m) => m.id === older.id);
-        expect({ type: row?.type, nonce: row?.nonce }).toEqual({ type: 'removed', nonce: 'plaintext-v1' });
-        // Mutations: the poll's gate off -> still green (the memory is kept by the copy's file); the gate off AND the memory
-        // kept by the community in use (currentDbName) -> B's line keeps its words (the review's second effect).
+        expect({ type: row?.type, nonce: row?.nonce }, 'B blanks its own line of the deleted account').toEqual({ type: 'removed', nonce: 'plaintext-v1' });
+        // And the group's page was never polled in place (A's copy holds no DM under its id).
+        expect(polledInPlace, 'the group\'s page refused in place').toBe(false);
+        // Mutations: the poll's gate off -> red only at the line above (B still blanks: the memory is kept by the copy's
+        // file); the gate off AND the memory kept by the community in use (currentDbName) -> red at B's line, which keeps its
+        // words (the review's second effect).
     });
 });
 

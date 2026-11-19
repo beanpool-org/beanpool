@@ -76,8 +76,8 @@ describe('a chat held in another community, in Chat\'s list', () => {
             expect(where.textContent).toBe('Hilltop · Switch');
             // Grey: the theme's secondary text, never the body's or a raw colour.
             expect(styleOf(where).color).toBe(colors.text.secondary);
-            // The name starts with the words the row shows (WCAG 2.5.3), "Switch" included; the longer sentence is the hint.
-            expect(row.getAttribute('aria-label')).toBe('Kai, Hilltop · Switch');
+            // No label of its own: the name is the words the row shows (WCAG 2.5.3), "Switch" included; the longer sentence is the hint.
+            expect(row.getAttribute('aria-label')).toBeNull();
             expect(row.getAttribute('aria-description')).toBe('Chat with Kai in Hilltop. Opens that community.');
             // The row's own photo, an address on that community's server, as getHeldConversations made it.
             expect(seen.avatars).toEqual(['https://hilltop.example/uploads/kai.jpg']);

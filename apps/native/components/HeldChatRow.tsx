@@ -34,8 +34,8 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
     return (
         <Pressable
             accessibilityRole="button"
-            // The visible words first, as the name (WCAG 2.5.3, label in name: "tap Hilltop Switch" works by voice); the sentence is the hint.
-            accessibilityLabel={`${item.peer}, ${t('{community} · Switch', { community: item.communityName })}`}
+            // No label: the row's name is the words it shows ("Kai", the time, "Hilltop · Switch"), so "tap Hilltop Switch" works by
+            // voice (WCAG 2.5.3, label in name); the sentence is the hint.
             accessibilityHint={t('Chat with {name} in {community}. Opens that community.', { name: item.peer, community: item.communityName })}
             testID="held-chat-row"
             style={styles.row}

@@ -1,9 +1,10 @@
 /**
- * One row of the thread: the bubble, the action buttons beside it and the emoji picker above it.
+ * One row of the thread: the bubble, the action buttons beside it (or under it, when the two don't fit) and the emoji
+ * picker above it.
  *
  * The layout is the DM screen's — buttons on the inside of the bubble (left of my own, right of someone
- * else's), the picker overflowing the row by 45dp — and it is here so a group chat gets exactly the same
- * gestures rather than an approximation of them.
+ * else's; on a line of their own under a line too wide for them, #3307), the picker overflowing the row by
+ * 45dp — and it is here so a group chat gets exactly the same gestures rather than an approximation of them.
  */
 
 import React from 'react';
@@ -79,7 +80,10 @@ export function ChatMessageRow({
             {showEmojiPicker && (
                 <ChatEmojiPicker isMe={isMe} styles={styles} position={pickerPosition} onPick={onPickEmoji} />
             )}
-            <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: '85%' }}>
+            {/* The round buttons beside the line, or, when the two don't fit (a wide line at 320 dp), on their own line under
+                it, mine and theirs alike, over Copy: the line keeps its width and stays whole (emulator walk 147, 20 Nov 2026:
+                Reply, React, Edit and Delete pushed my line past the screen's edge, its words cut). Mine stay at the right. */}
+            <View style={[styles.lineRow, isMe && styles.lineRowMe]}>
                 {isMe && actionBar}
                 <ChatBubble
                     item={item}

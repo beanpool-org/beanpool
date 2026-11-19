@@ -75,7 +75,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatMessageList } from '../../components/chat/ChatMessageList';
 import { ForumMenu } from '../../components/forum/ForumBits';
 import { CHAT_INPUT_MIN_HEIGHT, makeChatStyles } from '../../components/chat/styles';
-import { CHAT_THREAD_LINE, chatColumnFit } from '../chat-column-fit';
+import { CHAT_MENU_ROOM, CHAT_THREAD_LINE, chatColumnFit, chatLineInView } from '../chat-column-fit';
 import type { ChatKind, ChatMessage, MessageActions } from '../chat-actions';
 import { layOut } from './yoga-dom-layout';
 
@@ -138,7 +138,11 @@ const STACKS: Stack[] = [
 ];
 
 /** The lines, each with every action it allows (utils/chat-actions decides which a screen offers; here, the most). */
-interface Line { name: string; kind: ChatKind; isMe: boolean; text: string; actions: MessageActions; onReport: boolean; photo?: boolean }
+interface Line {
+    name: string; kind: ChatKind; isMe: boolean; text: string; actions: MessageActions; onReport: boolean; photo?: boolean;
+    /** A group's or an event chat's name over someone else's line (ChatBubble's authorLabel), and a line quoting another. */
+    author?: string; quote?: boolean;
+}
 const TWO = 'Yes, the trays are ready. Come by after four and bring the twine.';
 const FOUR = 'The trays are ready on the back step. Come by after four, bring the twine if you have it, and the pots too; I will leave the gate open for you.';
 const LINES: Line[] = [
@@ -165,7 +169,7 @@ const LABELS: [keyof MessageActions, string][] = [
  * The open line, laid out at the phone's width inside the list's padding: its height, where each action sits in it, and how far
  * its emoji row (when it is up) reaches past the cell, over it or under it, as Yoga places it (it is absolutely positioned).
  */
-function openLine(line: Line, p: Phone, s: Scale, emojiRow: EmojiRow = null) {
+function openLine(line: Line, p: { width: number; window: number }, s: Scale, emojiRow: EmojiRow = null) {
     flat.window = { width: p.width, height: p.window, fontScale: s };
     const styles = makeChatStyles({ theme: theme.name, colors: theme.colors } as any) as any;
     const item = { id: 'line-1', text: line.text, senderId: line.isMe ? 'me' : 'ben', timestamp: Date.now(), type: line.photo ? 'image' : 'text' } as unknown as ChatMessage;
@@ -177,6 +181,8 @@ function openLine(line: Line, p: Phone, s: Scale, emojiRow: EmojiRow = null) {
                 attachment: line.photo ? createElement('div', { 'data-style': JSON.stringify({ width: 220, height: 220 }) }) : undefined,
                 onPressBubble: () => {}, onReply: () => {}, onToggleEmojiPicker: () => {}, onEdit: () => {}, onDelete: () => {}, onRemove: () => {},
                 onReport: line.onReport ? () => {} : undefined, onPickEmoji: () => {},
+                authorLabel: line.author ?? null,
+                quote: line.quote ? { author: 'Bartholomew', text: 'Are the trays still there, and could I bring the twine on Saturday?' } : null,
             }))) as Parameters<Root['render']>[0]));
     const cell = host.querySelector('[data-testid="cell"]')!;
     const layout = layOut(host.querySelector('[data-testid="list"]')!, { width: p.width, height: 4000 }, { fontScale: s });
@@ -186,10 +192,19 @@ function openLine(line: Line, p: Phone, s: Scale, emojiRow: EmojiRow = null) {
         return { k, label, el, top: el ? topIn(el) : NaN, height: el ? layout.height(el) : 0 };
     });
     const height = layout.height(cell);
+    // Across the screen, in the list's coordinates (its padding is 16 on each side): the bubble and each round button.
+    const list = host.querySelector('[data-testid="list"]')!;
+    const across = (el: Element) => { let x = 0; for (let e: Element | null = el; e && e !== list; e = e.parentElement) x += layout.box(e).left; return { left: x, right: x + layout.width(el), top: topIn(el), bottom: topIn(el) + layout.height(el) }; };
+    const bubbleEl = Array.from(host.querySelectorAll('[data-style]')).find((e) => { const st = JSON.parse(e.getAttribute('data-style') ?? '{}'); return st.maxWidth === '80%' && st.borderRadius === 12; });
+    const bubble = bubbleEl ? across(bubbleEl) : null;
+    const round = actions.filter((a) => a.el && ['reply', 'react', 'edit', 'delete', 'remove'].includes(a.k)).map((a) => ({ label: a.label, ...across(a.el!) }));
     const picker = host.querySelector('[aria-label^="React with"]')?.parentElement;
     if (emojiRow) expect(picker, 'the emoji row drawn').toBeTruthy();
     const reach = picker ? { above: Math.max(0, -topIn(picker)), below: Math.max(0, topIn(picker) + layout.height(picker) - height) } : { above: 0, below: 0 };
-    return { height, actions, reach };
+    // The emoji row across the screen too, and what is drawn under the line's round buttons (Copy, Report, the edit-window note).
+    const emoji = picker ? across(picker) : null;
+    const under = actions.filter((a) => a.el && (a.k === 'copy' || a.k === 'report')).length > 0 || !!line.actions.editClosed;
+    return { height, actions, reach, bubble, round, emoji, under };
 }
 type OpenLine = ReturnType<typeof openLine>;
 
@@ -299,6 +314,178 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('every ch
             if (open.height + LIST_BOTTOM <= thread) expect(closes, 'all in view: a drag closes the menu').toBe(true);
         });
     }
+});
+
+/**
+ * Across the screen (emulator walk 147, 20 Nov 2026, 320 dp at 1.3× text, Light and Dark, a DM in place and one in the
+ * community in use): Reply, React, Edit and Delete beside my two-line line pushed it past the screen's right edge, its words
+ * cut, because the line kept its width beside them. Now they go to a line of their own under the line when the two don't
+ * fit, mine and someone else's alike (mine at the right), over Copy and Report, and stay beside a short line as before.
+ *
+ * Every chat that draws a line's menu with ChatMessageRow: the DM (in place too: the same screen), a group (the name over
+ * someone else's line, a convenor's Remove), an enterprise thread (its keeper's Remove, nothing else) and an event chat (its
+ * host's Remove); a guest chat draws no menu (below). Every phone and a wide screen, both text sizes, light and dark: the
+ * bubble and each round button lie inside the list's padding and never over each other, and the emoji row, opened over the
+ * line, never lies on buttons that have a line of their own. (#3307's first head put mine over my line: there the emoji row
+ * lay on the top 7 dp of Reply, React, Edit and Delete at 1.3×, and a dragged thread showed them between my line and the
+ * one over it, walk 147 r8fix/02.)
+ */
+const MINE: MessageActions = { reply: true, react: true, edit: true, delete: true, remove: false, copy: true };
+const SHORT: Line[] = [
+    { name: 'my short line', kind: 'dm', isMe: true, text: 'Yes.', onReport: false, actions: MINE },
+    { name: 'someone else\'s short line', kind: 'dm', isMe: false, text: 'Yes.', onReport: true, actions: OTHERS },
+    { name: 'my one-letter line', kind: 'dm', isMe: true, text: 'k', onReport: false, actions: MINE },
+];
+/** What each screen hands ChatMessageRow for a line (GroupChatView, EventChatView, app/chat/[id].tsx; utils/chat-actions). */
+const KEEPER: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: true, copy: true };
+const SCREEN_LINES: Line[] = [
+    { name: 'a group: someone else\'s line under their name, a convenor\'s menu', kind: 'group', isMe: false, text: TWO, author: 'Bartholomew Riverside-Hilltop', onReport: true, actions: { reply: true, react: true, edit: false, delete: false, remove: true, report: true, copy: true } },
+    { name: 'a group: my four-line line', kind: 'group', isMe: true, text: FOUR, onReport: false, actions: MINE },
+    { name: 'an enterprise thread: someone else\'s line under their name, its keeper\'s Remove', kind: 'enterprise', isMe: false, text: FOUR, author: 'Bartholomew', onReport: false, actions: KEEPER },
+    { name: 'an enterprise thread: the keeper\'s own line', kind: 'enterprise', isMe: true, text: TWO, onReport: false, actions: KEEPER },
+    { name: 'an event chat: someone else\'s line under their name, its host\'s Remove', kind: 'event', isMe: false, text: FOUR, author: 'Bartholomew', onReport: false, actions: KEEPER },
+    { name: 'an event chat: the host\'s own line', kind: 'event', isMe: true, text: TWO, onReport: false, actions: KEEPER },
+    { name: 'a DM: my line quoting another', kind: 'dm', isMe: true, text: TWO, quote: true, onReport: false, actions: MINE },
+    { name: 'a DM: someone else\'s line quoting mine', kind: 'dm', isMe: false, text: 'Yes.', quote: true, onReport: true, actions: OTHERS },
+    { name: 'a DM: my photo', kind: 'dm', isMe: true, text: '', photo: true, onReport: false, actions: { reply: true, react: true, edit: false, delete: true, remove: false } },
+    { name: 'someone else\'s photo', kind: 'dm', isMe: false, text: '', photo: true, onReport: true, actions: { ...OTHERS, copy: false } },
+];
+/** A wide screen: a phone turned on its side (app.json's orientation is "default"), an unfolded phone or a tablet. */
+const WIDE = { name: 'a wide screen, 800 × 1280', width: 800, window: 1280 };
+describe.each([['light', lightColors], ['dark', darkColors]] as const)('a line and its round buttons stay inside the screen, %s', (name, colors) => {
+    beforeEach(() => { theme.colors = colors; theme.name = name; });
+    const overlap = (a: { left: number; right: number; top: number; bottom: number }, b: typeof a) =>
+        Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
+    for (const p of [...PHONES, WIDE]) for (const s of [1, 1.3] as const) for (const line of [...LINES, ...TALL.slice(0, 2), ...SHORT, ...SCREEN_LINES]) {
+        it(`${p.name} at ${s}×: ${line.name}`, () => {
+            const open = openLine(line, p, s);
+            const inner = { left: 16, right: p.width - 16 };
+            expect(open.bubble, 'the bubble drawn').not.toBeNull();
+            const b = open.bubble!;
+            expect(b.left, 'the line starts inside the list').toBeGreaterThanOrEqual(inner.left - 0.5);
+            expect(b.right, `the line ends inside the list (${b.right.toFixed(1)} of ${inner.right})`).toBeLessThanOrEqual(inner.right + 0.5);
+            expect(open.round.length, 'round buttons drawn').toBeGreaterThan(0);
+            for (const r of open.round) {
+                expect(r.left, `${r.label} starts inside the list`).toBeGreaterThanOrEqual(inner.left - 0.5);
+                expect(r.right, `${r.label} ends inside the list (${r.right.toFixed(1)} of ${inner.right})`).toBeLessThanOrEqual(inner.right + 0.5);
+                expect(overlap(r, b), `${r.label} clear of the line`).toBe(false);
+            }
+            // Mine stay at the right: my line keeps to the list's right edge.
+            if (line.isMe) expect(b.right, 'my line at the right').toBeGreaterThan(inner.right - 1);
+            // Beside the line when the two fit in its row (85% of the list, the buttons' 8-dp margin included), as before; else
+            // on a line of their own under it, mine and someone else's alike, never beside it and cut.
+            const bar = { left: Math.min(...open.round.map((r) => r.left)), right: Math.max(...open.round.map((r) => r.right)), top: Math.min(...open.round.map((r) => r.top)), bottom: Math.max(...open.round.map((r) => r.bottom)) };
+            const fits = (b.right - b.left) + (bar.right - bar.left) + 8 <= 0.85 * (p.width - 32) + 0.5;
+            if (fits) {
+                expect(bar.top < b.bottom && bar.bottom > b.top, 'beside the line: on its band').toBe(true);
+                if (line.isMe) expect(bar.right, 'left of my line').toBeLessThanOrEqual(b.left + 0.5);
+                else expect(bar.left, 'right of their line').toBeGreaterThanOrEqual(b.right - 0.5);
+            } else {
+                expect(bar.top, 'under the line').toBeGreaterThanOrEqual(b.bottom - 0.5);
+                // Mine at the right, in from its edge by the buttons' own 8-dp margin (styles actionButtonsMe); theirs at the left.
+                if (line.isMe) expect(bar.right, 'at the right, under my line').toBeGreaterThan(inner.right - 8 - 1);
+                else expect(bar.left, 'at the left, under their line').toBeLessThan(inner.left + 8 + 1);
+                // Over Copy and Report: the line's menu is one block under it.
+                for (const a of open.actions) if (a.k === 'copy' || a.k === 'report') expect(a.top, `${a.label} under the round buttons`).toBeGreaterThanOrEqual(bar.bottom - 0.5);
+            }
+            // The emoji row (React, where the chat has it). Over the line, where it opens unless the line is held in the screen's top
+            // 230 dp: never on buttons that have their own line. Under it: never on them while Copy, Report or the edit-window note
+            // is under them (it lies on the last of those, as before). With nothing under them (my photo, no words to copy) it lies
+            // on their lowest 7 dp at 1.3× (a 52-dp row set 45 dp past the cell), as it lay on the line's before; where the emoji row
+            // goes is a design of its own (walk 147's second finding). Beside the line the buttons are where they always were, and
+            // so is the emoji row.
+            if (!line.actions.react || fits) return;
+            for (const at of ['top', 'bottom'] as const) {
+                const withRow = openLine(line, p, s, at);
+                const row = withRow.emoji!;
+                if (at === 'bottom' && !withRow.under) continue;
+                for (const r of withRow.round) expect(overlap(r, row), `the emoji row ${at === 'top' ? 'over' : 'under'} the line clear of ${r.label}`).toBe(false);
+            }
+        });
+    }
+});
+
+/**
+ * The DM's room for a line and its menu (utils/chat-column-fit CHAT_MENU_ROOM) at 320 dp and 1.3× text, now that a full-width
+ * line's round buttons have a line of their own under it (#3307 deciding review: the room was 240 dp, sized for them beside the
+ * line, and someone else's four-line line with its menu needed about 269 dp on walk 146's figures, so where the screen cuts the
+ * thread down to the room its first line of words was a scroll away). Lines Yoga lays out in four lines of words: someone
+ * else's, Reply and React under it, then Copy and Report; mine, Reply, React, Edit and Delete under it, then Copy; mine past the
+ * edit window, Reply, React and Delete, its note and Copy. Each, with its menu and the list's padding under the newest line,
+ * fits the room whole: in a thread of that room, and in the walk's market DM with the keyboard down, its first line of words
+ * and every action are in view, so a drag closes the menu as on any line all in view. The room is the least whole dp that holds
+ * the tallest of them and the walk's own line grown the same way, so it takes no more from the bars than the line needs.
+ */
+const FOUR_YOGA_LINES = 'Yes, the trays are ready after four.';
+const MENU_ROOM_LINES: Line[] = [
+    { name: 'someone else\'s four-line line: Reply and React under it, Copy and Report', kind: 'dm', isMe: false, text: FOUR_YOGA_LINES, onReport: true, actions: OTHERS },
+    { name: 'my four-line line: Reply, React, Edit and Delete under it, Copy', kind: 'dm', isMe: true, text: FOUR_YOGA_LINES, onReport: false, actions: MINE },
+    { name: 'my four-line line past the edit window: its note and Copy', kind: 'dm', isMe: true, text: FOUR_YOGA_LINES, onReport: false, actions: { reply: true, react: true, edit: false, delete: true, remove: false, editClosed: true, copy: true } },
+];
+describe('the DM\'s menu room holds a four-line line and its menu whole at 320 dp and 1.3× (#3307 review)', () => {
+    // Where things are doesn't change with the theme: the dark one, as below.
+    beforeEach(() => { theme.colors = darkColors; theme.name = 'dark'; });
+    const st = () => makeChatStyles({ theme: 'dark', colors: darkColors } as any) as any;
+    /** The bubble's lines of words, from its height: its padding, its border (someone else's) and a line of 22 dp × the text size. */
+    const wordLines = (open: OpenLine, isMe: boolean) => {
+        const s = st();
+        const frame = 2 * s.messageBubble.paddingVertical + (isMe ? 0 : 2 * s.messageOther.borderWidth);
+        return (open.bubble!.bottom - open.bubble!.top - frame) / (s.messageText.lineHeight * 1.3);
+    };
+    for (const p of PHONES.filter((x) => x.width === 320)) for (const line of MENU_ROOM_LINES) {
+        it(`${p.name}: ${line.name}`, () => {
+            const open = openLine(line, p, 1.3);
+            expect(open.bubble, 'the bubble drawn').not.toBeNull();
+            expect(wordLines(open, line.isMe), 'four lines of words').toBeCloseTo(4, 5);
+            // The round buttons on a line of their own under it: the layout #3307 brought.
+            expect(Math.min(...open.round.map((r) => r.top)), 'its round buttons under it').toBeGreaterThanOrEqual(open.bubble!.bottom - 0.5);
+            // The line, its menu and the list's padding under the newest line fit the room.
+            const need = open.height + LIST_BOTTOM;
+            expect(need, `${need.toFixed(1)} dp in the room's ${CHAT_MENU_ROOM}`).toBeLessThanOrEqual(CHAT_MENU_ROOM);
+            // In a thread of that room: its first line of words and every action in view, so a drag closes the menu.
+            const viewTop = need - CHAT_MENU_ROOM;
+            expect(open.bubble!.top, 'its first line of words in view').toBeGreaterThanOrEqual(viewTop - 0.5);
+            for (const a of open.actions) expect(a.top, `${a.label} in view`).toBeGreaterThanOrEqual(viewTop - 0.5);
+            expect(dragCloses(CHAT_MENU_ROOM, open.height), 'all of it in view: a drag closes the menu').toBe(true);
+            // The walk's market DM with the keyboard down, its box as it stands with the About chip, Replying to or Editing: the
+            // thread chatColumnFit leaves it holds the line whole.
+            if (p !== PHONES[0]) return;
+            for (const stack of STACKS.filter((x) => x.screen === 'dm')) {
+                const thread = Math.round(stack.thread(p, 1.3, false));
+                expect(need, `${stack.name}: in ${thread} dp of thread`).toBeLessThanOrEqual(thread);
+                expect(dragCloses(thread, open.height), `${stack.name}: all in view, a drag closes the menu`).toBe(true);
+            }
+        });
+    }
+    it('the room is the least whole dp that holds the tallest of them and the walk\'s own line grown to four lines', () => {
+        const s = st();
+        // Walk 146's line on the phone (its dump, scratch/walks/emulator-146/r1 shot 15): two lines of words, 83 dp, with Copy
+        // and Report under it, 174 dp in all. Two lines more (22 dp × 1.3 each) and the round buttons' line under it (32 dp
+        // and the row's 6-dp gap), on the list's padding: 277.2 dp. Yoga's tallest above, someone else's, is 274.4.
+        const walk = 174 + 2 * s.messageText.lineHeight * 1.3 + s.circleActionButton.height + s.lineRow.rowGap + LIST_BOTTOM;
+        // flake-ok(clock-per-row): each openLine renders one line alone, in no list, so nothing sorts by its time
+        const yoga = Math.max(...MENU_ROOM_LINES.map((l) => openLine(l, PHONES[0], 1.3).height + LIST_BOTTOM));
+        expect(walk).toBeCloseTo(277.2, 5);
+        expect(yoga).toBeCloseTo(274.4, 3); // Yoga counts in 32-bit floats
+        // Whole as the thread counts it: within the half dp chatLineInView gives the fractions of a measure. One dp more would
+        // take the tall phone's last dp of bars with the walk's DM and a menu open (market-dm-fit-render: it moves nothing).
+        expect(CHAT_MENU_ROOM).toBe(Math.ceil(Math.max(walk, yoga) - 0.5));
+        const walkLine = { thread: CHAT_MENU_ROOM, offset: 0, y: LIST_BOTTOM, height: walk - LIST_BOTTOM, above: 0, below: 0 };
+        expect(chatLineInView(walkLine), 'the walk\'s line grown to four lines, whole in the room').toBe('all');
+        expect(dragCloses(CHAT_MENU_ROOM, walk - LIST_BOTTOM), 'all of it in view: a drag closes the menu').toBe(true);
+        expect(chatLineInView({ ...walkLine, thread: CHAT_MENU_ROOM - 1 }), 'a dp less cuts it').toBe('part');
+    });
+    it('the check can fail: the room it replaces (240 dp, for the buttons beside the line) left someone else\'s first line of words a scroll away', () => {
+        const OLD_ROOM = 240;
+        const open = openLine(MENU_ROOM_LINES[0], PHONES[0], 1.3);
+        expect(open.height + LIST_BOTTOM).toBeGreaterThan(OLD_ROOM);
+        expect(open.bubble!.top, 'its first line of words above the thread').toBeLessThan(open.height + LIST_BOTTOM - OLD_ROOM);
+        // Part of it out of view: a drag keeps the menu open (#3288), and the line's top is a scroll away.
+        expect(dragCloses(OLD_ROOM, open.height)).toBe(false);
+        // Mine past the edit window, likewise.
+        const mine = openLine(MENU_ROOM_LINES[2], PHONES[0], 1.3);
+        expect(mine.height + LIST_BOTTOM).toBeGreaterThan(OLD_ROOM);
+    });
 });
 
 describe('the outside chat\'s actions and the forum\'s ⋯', () => {

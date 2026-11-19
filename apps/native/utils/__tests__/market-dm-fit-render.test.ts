@@ -396,18 +396,32 @@ describe('the walk\'s case on the walk\'s phone (320 × 569, 1.3×), the numbers
         expect(r.bars.height).toBe(0);
         expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_THREAD_LINE - 0.5);
     });
-    it('keyboard down, a line\'s menu open (walk 146): the thread holds the walk\'s line and its menu, the bars scroll in what is left at their end, the About chip whole', () => {
+    it('keyboard down, a line\'s menu open (walk 146): the thread holds the line and its menu, the bars fold away in the less than a page left, the About chip whole', () => {
         const r = settle(PHONES[0], 1.3, ROWS.find((x) => x.menu && x.about && !x.reply)!, false);
         expect(r.thread.height).toBeGreaterThanOrEqual(WALK_LINE_WITH_MENU);
         expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_MENU_ROOM - 0.5);
         expect(r.about!.height).toBe(r.about!.content);
-        // 425 dp less the box (the About chip and the composer) less the menu's room: a page of the release bar's end.
-        expect(r.bars.height).toBe(PHONES[0].column - Math.round(r.box.height) - CHAT_MENU_ROOM);
-        expect(r.bars.height).toBeGreaterThanOrEqual(CHAT_PAGE_MIN);
-        expect(r.bars.atEnd).toBeGreaterThan(r.bars.sized);
+        // 425 dp less the box (the About chip and the composer) less the menu's room, which holds a four-line line with its
+        // round buttons on a line of their own (#3307 review): less than a page, so the bars fold away while the menu is open
+        // (a sliver nobody can scroll or tap is never shown) and the thread has their room. While the round buttons sat beside
+        // the line the room was 240, and the bars were a page of the release bar's end.
+        const left = PHONES[0].column - Math.round(r.box.height) - CHAT_MENU_ROOM;
+        expect(left).toBeGreaterThan(0);
+        expect(left).toBeLessThan(CHAT_PAGE_MIN);
+        expect(r.bars.height).toBe(0);
+        expect(r.thread.height).toBeGreaterThanOrEqual(PHONES[0].column - Math.round(r.box.height) - 0.5);
         // The menu closed: the bars have their page back, the thread its line.
         const closed = settle(PHONES[0], 1.3, ROWS[3], false);
         expect(closed.bars.height).toBe(PHONES[0].column - Math.round(closed.box.height) - CHAT_THREAD_LINE);
+    });
+    it('keyboard down, a line\'s menu open with the walk\'s bars and no About chip: the bars scroll in what is left at their end', () => {
+        const r = settle(PHONES[0], 1.3, { name: 'the walk\'s bars and a line\'s menu', bars: ['deals', 'listing', 'release'], menu: true }, false);
+        expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_MENU_ROOM - 0.5);
+        // 425 dp less the composer less the menu's room: a page of the release bar's end.
+        expect(r.bars.height).toBe(PHONES[0].column - Math.round(r.box.height) - CHAT_MENU_ROOM);
+        expect(r.bars.height).toBeGreaterThanOrEqual(CHAT_PAGE_MIN);
+        expect(r.bars.height).toBeLessThan(r.bars.content);
+        expect(r.bars.atEnd).toBeGreaterThan(r.bars.sized);
     });
     it('a tall phone with a line\'s menu open moves nothing: the bars and the About chip stay whole', () => {
         const r = settle(PHONES[2], 1.3, ROWS.find((x) => x.menu && x.about && !x.reply)!, false);

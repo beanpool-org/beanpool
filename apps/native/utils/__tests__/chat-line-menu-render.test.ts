@@ -186,10 +186,16 @@ function openLine(line: Line, p: Phone, s: Scale, emojiRow: EmojiRow = null) {
         return { k, label, el, top: el ? topIn(el) : NaN, height: el ? layout.height(el) : 0 };
     });
     const height = layout.height(cell);
+    // Across the screen, in the list's coordinates (its padding is 16 on each side): the bubble and each round button.
+    const list = host.querySelector('[data-testid="list"]')!;
+    const across = (el: Element) => { let x = 0; for (let e: Element | null = el; e && e !== list; e = e.parentElement) x += layout.box(e).left; return { left: x, right: x + layout.width(el), top: topIn(el), bottom: topIn(el) + layout.height(el) }; };
+    const bubbleEl = Array.from(host.querySelectorAll('[data-style]')).find((e) => { const st = JSON.parse(e.getAttribute('data-style') ?? '{}'); return st.maxWidth === '80%' && st.borderRadius === 12; });
+    const bubble = bubbleEl ? across(bubbleEl) : null;
+    const round = actions.filter((a) => a.el && ['reply', 'react', 'edit', 'delete', 'remove'].includes(a.k)).map((a) => ({ label: a.label, ...across(a.el!) }));
     const picker = host.querySelector('[aria-label^="React with"]')?.parentElement;
     if (emojiRow) expect(picker, 'the emoji row drawn').toBeTruthy();
     const reach = picker ? { above: Math.max(0, -topIn(picker)), below: Math.max(0, topIn(picker) + layout.height(picker) - height) } : { above: 0, below: 0 };
-    return { height, actions, reach };
+    return { height, actions, reach, bubble, round };
 }
 type OpenLine = ReturnType<typeof openLine>;
 
@@ -297,6 +303,57 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('every ch
             }
             // A line and its menu all in view: a drag still closes it, as before.
             if (open.height + LIST_BOTTOM <= thread) expect(closes, 'all in view: a drag closes the menu').toBe(true);
+        });
+    }
+});
+
+/**
+ * Across the screen (emulator walk 147, 20 Nov 2026, 320 dp at 1.3× text, Light and Dark, a DM in place and one in the
+ * community in use): Reply, React, Edit and Delete beside my two-line line pushed it past the screen's right edge, its words
+ * cut, because the line kept its width beside them. Now they go to a line of their own over mine (under someone else's) when
+ * the two don't fit, and stay beside a short line as before. Every line of the table, every phone, both text sizes: the
+ * bubble and each round button lie inside the list's padding, and never over each other.
+ */
+const SHORT: Line[] = [
+    { name: 'my short line', kind: 'dm', isMe: true, text: 'Yes.', onReport: false, actions: { reply: true, react: true, edit: true, delete: true, remove: false, copy: true } },
+    { name: 'someone else\'s short line', kind: 'dm', isMe: false, text: 'Yes.', onReport: true, actions: OTHERS },
+    { name: 'my one-letter line', kind: 'dm', isMe: true, text: 'k', onReport: false, actions: { reply: true, react: true, edit: true, delete: true, remove: false, copy: true } },
+];
+describe.each([['light', lightColors], ['dark', darkColors]] as const)('a line and its round buttons stay inside the screen, %s', (name, colors) => {
+    beforeEach(() => { theme.colors = colors; theme.name = name; });
+    const overlap = (a: { left: number; right: number; top: number; bottom: number }, b: typeof a) =>
+        Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
+    for (const p of PHONES) for (const s of [1, 1.3] as const) for (const line of [...LINES, ...TALL.slice(0, 2), ...SHORT]) {
+        it(`${p.name} at ${s}×: ${line.name}`, () => {
+            const open = openLine(line, p, s);
+            const inner = { left: 16, right: p.width - 16 };
+            expect(open.bubble, 'the bubble drawn').not.toBeNull();
+            const b = open.bubble!;
+            expect(b.left, 'the line starts inside the list').toBeGreaterThanOrEqual(inner.left - 0.5);
+            expect(b.right, `the line ends inside the list (${b.right.toFixed(1)} of ${inner.right})`).toBeLessThanOrEqual(inner.right + 0.5);
+            expect(open.round.length, 'round buttons drawn').toBeGreaterThan(0);
+            for (const r of open.round) {
+                expect(r.left, `${r.label} starts inside the list`).toBeGreaterThanOrEqual(inner.left - 0.5);
+                expect(r.right, `${r.label} ends inside the list (${r.right.toFixed(1)} of ${inner.right})`).toBeLessThanOrEqual(inner.right + 0.5);
+                expect(overlap(r, b), `${r.label} clear of the line`).toBe(false);
+            }
+            // Mine stay at the right: my line keeps to the list's right edge.
+            if (line.isMe) expect(b.right, 'my line at the right').toBeGreaterThan(inner.right - 1);
+            // Beside the line when the two fit in its row (85% of the list, the buttons' 8-dp margin included), as before; else
+            // on a line of their own, over mine or under someone else's, never beside it and cut.
+            const bar = { left: Math.min(...open.round.map((r) => r.left)), right: Math.max(...open.round.map((r) => r.right)), top: Math.min(...open.round.map((r) => r.top)), bottom: Math.max(...open.round.map((r) => r.bottom)) };
+            const fits = (b.right - b.left) + (bar.right - bar.left) + 8 <= 0.85 * (p.width - 32) + 0.5;
+            if (fits) {
+                expect(bar.top < b.bottom && bar.bottom > b.top, 'beside the line: on its band').toBe(true);
+                if (line.isMe) expect(bar.right, 'left of my line').toBeLessThanOrEqual(b.left + 0.5);
+                else expect(bar.left, 'right of their line').toBeGreaterThanOrEqual(b.right - 0.5);
+            } else if (line.isMe) {
+                expect(bar.bottom, 'over my line').toBeLessThanOrEqual(b.top + 0.5);
+                // At the right, in from its edge by the buttons' own 8-dp margin (styles actionButtonsMe).
+                expect(bar.right, 'at the right, over my line').toBeGreaterThan(inner.right - 8 - 1);
+            } else {
+                expect(bar.top, 'under their line').toBeGreaterThanOrEqual(b.bottom - 0.5);
+            }
         });
     }
 });

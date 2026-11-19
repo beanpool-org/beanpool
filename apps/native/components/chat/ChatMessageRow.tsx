@@ -79,7 +79,10 @@ export function ChatMessageRow({
             {showEmojiPicker && (
                 <ChatEmojiPicker isMe={isMe} styles={styles} position={pickerPosition} onPick={onPickEmoji} />
             )}
-            <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: '85%' }}>
+            {/* The round buttons beside the line, or, when the two don't fit (a wide line at 320 dp), on their own line over
+                mine or under theirs: the line keeps its width and stays whole (emulator walk 147, 20 Nov 2026: Reply, React,
+                Edit and Delete pushed my line past the screen's edge, its words cut). Mine stay at the right. */}
+            <View style={[styles.lineRow, isMe && styles.lineRowMe]}>
                 {isMe && actionBar}
                 <ChatBubble
                     item={item}

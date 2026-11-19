@@ -94,9 +94,12 @@ describe('"(key changed)" at 320dp with 1.3× text', () => {
 
     it('the bubble: at its widest the mark fits on one line, and it could wrap word by word in any narrower one', () => {
         // Chat list padding, the row's maxWidth, the bubble's maxWidth and padding (styles.ts, ChatMessageRow.tsx).
+        // The row's style is styles.lineRow (it wraps the round buttons to a line of their own when they don't fit beside the
+        // bubble, emulator walk 147), and ChatMessageRow draws the bubble in it.
         const rowSource = fs.readFileSync(path.resolve(__dirname, '../../components/chat/ChatMessageRow.tsx'), 'utf-8');
-        expect(rowSource).toMatch(/flexDirection: 'row', alignItems: 'center', maxWidth: '85%'/);
-        const bubble = (SCREEN - 2 * styles.listContent.padding) * 0.85 * pct(styles.messageBubble.maxWidth) - 2 * styles.messageBubble.paddingHorizontal;
+        expect(rowSource).toMatch(/<View style=\{\[styles\.lineRow, isMe && styles\.lineRowMe\]\}>/);
+        expect(styles.lineRow).toMatchObject({ flexDirection: 'row', alignItems: 'center', maxWidth: '85%' });
+        const bubble = (SCREEN - 2 * styles.listContent.padding) * pct(styles.lineRow.maxWidth) * pct(styles.messageBubble.maxWidth) - 2 * styles.messageBubble.paddingHorizontal;
         expect(Math.round(bubble)).toBe(176); // the reviewer's replica measured 176px
         const font = styles.messageAuthorHint.fontSize;
         expect(widthOf(KEY_CHANGED_HINT, font)).toBeLessThanOrEqual(bubble);

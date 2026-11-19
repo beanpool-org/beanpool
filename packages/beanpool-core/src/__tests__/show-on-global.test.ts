@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { COPY_IDS_LOOKED_AT, copyIdOf, copyResultLine, ed25519Signer, makeCopyKeeper, OFF_RETRY_FIRST_MS, OFF_RETRY_MOST_MS, owesOff, POST_ID_TAKEN_CODE, toEd25519Pkcs8, type CopyDeps, type CopyPair, type CopyStore, type HomeEvent } from '../index.js';
+import { COPY_ADOPT_EVERY_MS, COPY_IDS_LOOKED_AT, copyIdOf, copyResultLine, ed25519Signer, makeCopyKeeper, OFF_RETRY_FIRST_MS, OFF_RETRY_MOST_MS, owesOff, POST_ID_TAKEN_CODE, toEd25519Pkcs8, type CopyDeps, type CopyPair, type CopyStore, type HomeEvent } from '../index.js';
 
 const seed = new Uint8Array(32).fill(7);
 const pkcs8 = toEd25519Pkcs8(seed);
@@ -20,7 +20,7 @@ const sign = ed25519Signer(seed);
 const GLOBAL = 'https://global.test';
 const HOME = 'https://home.test';
 
-interface Row { id: string; type: string; status: string; hiddenByReportsAt?: string; title: string; takesQuestions?: boolean }
+interface Row { id: string; type: string; status: string; hiddenByReportsAt?: string; title: string; takesQuestions?: boolean; eventRepeatSkips?: string[] }
 
 /** What a read by id shows of a row: `active = 1`, or a cancelled event. */
 const readable = (r: Row) => r.status === 'active' || (r.status === 'cancelled' && r.type === 'event');
@@ -49,6 +49,8 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
     const bodies: any[] = [];
     const reads: string[][] = [];
     const removes: string[] = [];
+    /** Each read of the key's own posts, by the community it went to. */
+    const authorReads: string[] = [];
     const home: HomeEvent = {
         id: 'home-1', type: 'offer', category: 'food', title: 'Tomatoes', price_c: 2000, priceType: 'fixed', authorPublicKey: publicKey, audienceScope: 'public',
         lat: -28.68731, lng: 153.52219, photos: [], status: 'active', active: true,
@@ -60,7 +62,15 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
             const q = new URL(`${url}${path}`).searchParams;
             if (url === HOME) {
                 asked.push('home');
+                if (q.get('author')) authorReads.push(HOME);
                 return homeAnswer?.(path) ?? (path.startsWith('/api/members/preferences') ? json({ holiday_mode: String(holiday) }) : json([home]));
+            }
+            // The author's own read: every copy of theirs that is up, as global marks one (engine/event-copy.ts readOfCopy).
+            if (q.get('author')) {
+                authorReads.push(GLOBAL);
+                if (lostRead) throw new TypeError('Network request failed');
+                if (silentRead?.(q)) return json({ error: 'Busy' }, 503);
+                return json([...rows.values()].filter((r) => r.status === 'active').map((r) => ({ ...r, shownCopy: true })));
             }
             const ids = q.get('ids')?.split(',') ?? [q.get('id') as string];
             reads.push(ids);
@@ -112,11 +122,15 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
         fetchPhoto: async () => { photoFetches++; return { failed: 'gone' as const }; },
         hostOf: () => 'home.test',
     };
-    const device = () => {
+    /** `homes`: the member's communities this device may look for its copies from (CopyKeeperSetup.homesOf); none, it looks nowhere. */
+    const device = ({ homes }: { homes?: string[] } = {}) => {
         let pairs: CopyPair[] = [];
         const store: CopyStore = { read: async () => pairs, change: async (edit) => { pairs = edit(pairs); } };
         return {
-            ...makeCopyKeeper({ store, deps, copyId: (homeId, generation) => copyIdOf(homeId, generation, sign), plainOrigin: (url) => url, isEventEnded: () => false }),
+            ...makeCopyKeeper({
+                store, deps, copyId: (homeId, generation) => copyIdOf(homeId, generation, sign), plainOrigin: (url) => url, isEventEnded: () => false,
+                ...(homes ? { homesOf: async () => homes } : {}),
+            }),
             pairs: () => pairs,
         };
     };
@@ -145,7 +159,7 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
         /** Which was asked in what order, a community's reads and global's door. */
         asked,
         /** The ids of each read of global, and of each remove, in order. */
-        reads, removes,
+        reads, removes, authorReads,
         json,
         up: () => [...rows.values()].filter((r) => r.status === 'active'),
     };
@@ -1316,7 +1330,7 @@ describe('what a Stop and a tend cost: the look is bounded, and only where somet
         expect(w.reads).toHaveLength(1);
     });
 
-    it('no pair on this device: a Stop or a removal at home asks global nothing', async () => {
+    it('no pair on this device, and not told what went: a Stop or a removal at home asks global nothing', async () => {
         const w = world();
         expect(await w.device().stopShowing('home-1', identity)).toBe(true);
         expect(w.reads).toEqual([]);
@@ -2025,5 +2039,193 @@ describe('the door on a copy', () => {
         const phone = w.device();
         expect(typeof await phone.takeQuestions('home-1', true, identity, w.deps)).toBe('object');
         expect(w.doorSends).toEqual([]);
+    });
+});
+
+/** The member's listing at home, as the device that deleted it last had it. */
+const goneOf = (w: ReturnType<typeof world>) => ({ ...w.home });
+
+describe('a delete on a device that holds no pair (Damo, 16 Nov: an offer deleted on test stayed on global)', () => {
+    it('takes the copy down: the listing\'s ids are the same on every device of the key', async () => {
+        const w = world();
+        await w.device().showOnGlobal(w.home, HOME, identity);
+        expect(w.up()).toHaveLength(1);
+        const other = w.device();
+        expect(await other.stopShowing('home-1', identity, undefined, goneOf(w))).toBe(true);
+        expect(w.up()).toEqual([]);
+        expect(other.pairs()).toEqual([]);
+    });
+
+    it('after a rest and a return, the copy is at a later id: that one comes down too', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        expect(phone.pairs()[0].generation).toBe(1);
+        expect(w.up()).toHaveLength(1);
+        expect(await w.device().stopShowing('home-1', identity, undefined, goneOf(w))).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('two copies of one listing up at once both come down, not only the newest', async () => {
+        const w = world();
+        for (const g of [0, 3]) {
+            const id = await copyIdOf('home-1', g, sign);
+            w.rows.set(id, { id, type: 'offer', status: 'active', title: 'Tomatoes' });
+        }
+        expect(await w.device().stopShowing('home-1', identity, undefined, goneOf(w))).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('costs one remove of the first id, one read of COPY_IDS_LOOKED_AT ids, and a remove for each found up', async () => {
+        const w = world();
+        await w.device().showOnGlobal(w.home, HOME, identity);
+        w.reads.length = 0;
+        await w.device().stopShowing('home-1', identity, undefined, goneOf(w));
+        expect(w.reads.map((ids) => ids.length)).toEqual([COPY_IDS_LOOKED_AT]);
+        expect(w.reads[0][0]).toBe(await copyIdOf('home-1', 0, sign));
+        expect(w.removes).toEqual([await copyIdOf('home-1', 0, sign)]);
+    });
+
+    it('global not answering: it is kept on its way out, shows as not shown, and the next tend takes the copy down', async () => {
+        const w = world();
+        await w.device().showOnGlobal(w.home, HOME, identity);
+        const other = w.device();
+        w.removeAnswers(() => w.json({ error: 'Busy' }, 503));
+        expect(await other.stopShowing('home-1', identity, undefined, goneOf(w))).toBe(false);
+        expect(w.up()).toHaveLength(1);
+        expect(other.pairs()).toMatchObject([{ homeId: 'home-1', leaving: true }]);
+        expect(await other.pairOf('home-1', publicKey)).toBeNull();
+        w.removeAnswers(null);
+        await other.tendCopies(identity);
+        expect(w.up()).toEqual([]);
+        expect(other.pairs()).toEqual([]);
+    });
+
+    it('a listing that could have had no copy asks global nothing: a group\'s, someone else\'s, online, or with no place', async () => {
+        const w = world();
+        const nots = [
+            { ...goneOf(w), audienceScope: 'group' },
+            { ...goneOf(w), authorPublicKey: 'someone-else' },
+            { ...goneOf(w), lat: null },
+            { ...goneOf(w), type: 'event', eventOnline: true },
+        ];
+        for (const gone of nots) expect(await w.device().stopShowing('home-1', identity, undefined, gone)).toBe(true);
+        expect(w.reads).toEqual([]);
+        expect(w.removes).toEqual([]);
+    });
+
+    it('the listing it is told of must be the one named: another id asks nobody', async () => {
+        const w = world();
+        expect(await w.device().stopShowing('home-2', identity, undefined, goneOf(w))).toBe(true);
+        expect(w.reads).toEqual([]);
+    });
+
+    it('a device that holds the pair goes by its pair, as before', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity);
+        w.reads.length = 0;
+        w.removes.length = 0;
+        expect(await phone.stopShowing('home-1', identity, undefined, goneOf(w))).toBe(true);
+        expect(w.removes).toEqual([phone.pairs()[0]?.copyId ?? await copyIdOf('home-1', 0, sign)]);
+        expect(w.up()).toEqual([]);
+    });
+});
+
+describe('a device restored from 12 words finds its copies and tends them', () => {
+    it('takes up the copy its other device made, at its id, and the next edit at home reaches it', async () => {
+        const w = world();
+        const before = w.device();
+        await before.showOnGlobal(w.home, HOME, identity);
+        const id = before.pairs()[0].copyId;
+        const restored = w.device({ homes: [HOME] });
+        await restored.tendCopies(identity);
+        expect(restored.pairs()).toMatchObject([{ homeId: 'home-1', copyId: id, generation: 0, home: HOME }]);
+        expect(await restored.pairOf('home-1', publicKey)).not.toBeNull();
+        expect(w.creates()).toBe(1);
+        w.home.title = 'Ripe tomatoes';
+        await restored.tendCopies(identity);
+        expect(w.rows.get(id)?.title).toBe('Ripe tomatoes');
+    });
+
+    it('then its Stop showing takes the copy down', async () => {
+        const w = world();
+        await w.device().showOnGlobal(w.home, HOME, identity);
+        const restored = w.device({ homes: [HOME] });
+        await restored.tendCopies(identity);
+        expect(await restored.stopShowing('home-1', identity)).toBe(true);
+        expect(w.up()).toEqual([]);
+    });
+
+    it('takes up the newest id after a rest, and the door as global has it', async () => {
+        const w = world();
+        const phone = w.device();
+        await phone.showOnGlobal(w.home, HOME, identity, undefined, true);
+        w.home.status = 'paused';
+        await phone.tendCopies(identity);
+        w.home.status = 'active';
+        await phone.tendCopies(identity);
+        const restored = w.device({ homes: [HOME] });
+        await restored.tendCopies(identity);
+        expect(restored.pairs()).toMatchObject([{ copyId: phone.pairs()[0].copyId, generation: 1, questions: true }]);
+    });
+
+    it('takes up nothing that isn\'t one of its listing\'s ids, nor a copy that is down', async () => {
+        const w = world();
+        w.rows.set('not-one-of-ours', { id: 'not-one-of-ours', type: 'offer', status: 'active', title: 'Tomatoes' });
+        const down = await copyIdOf('home-1', 0, sign);
+        w.rows.set(down, { id: down, type: 'offer', status: 'cancelled', title: 'Tomatoes' });
+        const restored = w.device({ homes: [HOME] });
+        await restored.tendCopies(identity);
+        expect(restored.pairs()).toEqual([]);
+    });
+
+    it('asks global nothing where no listing of theirs could have a copy, and nothing where it holds every pair', async () => {
+        const w = world();
+        w.homeAnswers((path) => (path.includes('author=') ? w.json([{ ...w.home, audienceScope: 'group' }]) : null));
+        await w.device({ homes: [HOME] }).tendCopies(identity);
+        expect(w.authorReads).toEqual([HOME]);
+        w.homeAnswers(null);
+        w.authorReads.length = 0;
+        const phone = w.device({ homes: [HOME] });
+        await phone.showOnGlobal(w.home, HOME, identity);
+        await phone.tendCopies(identity);
+        expect(w.authorReads).toEqual([HOME]);
+    });
+
+    it('looks at most once a day, and again the next day', async () => {
+        const w = world();
+        const restored = w.device({ homes: [HOME] });
+        const now = Date.now();
+        await restored.tendCopies(identity, undefined, now);
+        await restored.tendCopies(identity, undefined, now + 60 * 60 * 1000);
+        expect(w.authorReads).toEqual([HOME, GLOBAL]);
+        await restored.tendCopies(identity, undefined, now + COPY_ADOPT_EVERY_MS);
+        expect(w.authorReads).toEqual([HOME, GLOBAL, HOME, GLOBAL]);
+    });
+
+    it('a community or global that didn\'t answer is asked again at the next tend', async () => {
+        const w = world();
+        await w.device().showOnGlobal(w.home, HOME, identity);
+        const restored = w.device({ homes: [HOME] });
+        w.silentOn((q) => q.has('author'));
+        await restored.tendCopies(identity);
+        expect(restored.pairs()).toEqual([]);
+        w.silentOn(null);
+        await restored.tendCopies(identity);
+        expect(restored.pairs()).toHaveLength(1);
+    });
+
+    it('a device not told where to look (no homesOf) tends only its own pairs, and asks nobody for its posts', async () => {
+        const w = world();
+        await w.device().showOnGlobal(w.home, HOME, identity);
+        const plain = w.device();
+        await plain.tendCopies(identity);
+        expect(plain.pairs()).toEqual([]);
+        expect(w.authorReads).toEqual([]);
     });
 });

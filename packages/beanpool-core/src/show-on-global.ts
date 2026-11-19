@@ -14,8 +14,10 @@
  * - **Staying in step.** An edit, a cancel and a cancelled date repeat at the moment, and {@link CopyKeeper.tendCopies} catches
  *   up on what that missed: a device offline, a change made in the other app, an event moderated at home.
  *   An unchanged copy is sent again now and then, so a device still tending it keeps it past global's 90-day retention, and
- *   one that can't falls off by itself. The pairs live on the device alone: a new one tends nothing, and the copy stays the
- *   member's to take down from My posts on global.
+ *   one that can't falls off by itself. The pairs live on the device alone, but the copy's ids don't ({@link copyIdOf}): a
+ *   device that holds no pair works out every id a listing can have, so a delete or a cancel there still takes the copy down
+ *   ({@link CopyKeeper.stopShowing}), and a device restored from its 12 words finds its copies and tends them
+ *   (`adoptCopies`). Neither tells the member's community anything.
  * - **A holiday at home.** The member's listings leave their community's board, and the copy leaves global with them. The
  *   pair stays, and when the holiday ends the copy goes back up as a new one ({@link CopyPair.resting}). So does an Offer or
  *   a Need that is off the board for now: paused, in a deal, out on loan, hidden by reports (`restsAtHome`).
@@ -61,6 +63,10 @@ export const COPY_TIMEOUT_MS = 60_000;
 export const COPY_KEEP_ALIVE_MS = 30 * 24 * 60 * 60 * 1000;
 /** A first send looks this many ids on from its own for a copy that is already there (`placeOf`), and tries at most this many. */
 export const COPY_IDS_LOOKED_AT = 16;
+/** A device looks for copies of its key's listings that it holds no pair for (`adoptCopies`) at most this often. */
+export const COPY_ADOPT_EVERY_MS = 24 * 60 * 60 * 1000;
+/** The most rows one read gives (apps/server https-server.ts MAX_PAGE_LIMIT): a member's own listings, and their posts on global. */
+const OWN_READ_MOST = 200;
 /**
  * A node's word that a new post's id is held by a row it has (apps/server engine/posts.ts). In a code, because a device goes by
  * it and the words around it can change. It is the only word a device gets of a removed Offer or Need: a read by id answers
@@ -151,6 +157,9 @@ export interface CopyPair {
  */
 export type CopyResult = 'shown' | 'shown-no-name' | 'shown-name-off' | 'later' | { refused: string };
 
+/** What says whether a post could have had a copy ({@link CopyKeeper.mayShowOnGlobal}). */
+export type ShowableListing = Pick<HomeEvent, 'eventOnline' | 'audienceScope' | 'authorPublicKey'> & Partial<Pick<HomeEvent, 'type' | 'lat' | 'lng' | 'originNode'>>;
+
 /** The key a copy goes by. An app's own identity has more, and each signs in its own way. */
 export interface CopyIdentity {
     publicKey: string;
@@ -185,16 +194,21 @@ export interface CopyKeeperSetup<I extends CopyIdentity> {
     plainOrigin(url: string): string | null;
     /** Has this date's end passed? */
     isEventEnded(home: HomeEvent): boolean;
+    /**
+     * The member's own communities a tend may look for copies from (`adoptCopies`): none where the device has no reason to
+     * think the key is on global. Without it, a device tends only the pairs it holds.
+     */
+    homesOf?(identity: I): Promise<string[]>;
 }
 
 export interface CopyKeeper<I extends CopyIdentity> {
     pairOf(homeId: string, publicKey: string): Promise<CopyPair | null>;
-    mayShowOnGlobal(home: Pick<HomeEvent, 'eventOnline' | 'audienceScope' | 'authorPublicKey'> & Partial<Pick<HomeEvent, 'type' | 'lat' | 'lng' | 'originNode'>>, publicKey: string): boolean;
+    mayShowOnGlobal(home: ShowableListing, publicKey: string): boolean;
     copyFields(home: HomeEvent, publicKey: string): Record<string, unknown>;
     showOnGlobal(home: HomeEvent, homeUrl: string, identity: I, deps?: CopyDeps<I>, takesQuestions?: boolean): Promise<CopyResult>;
     takeQuestions(homeId: string, on: boolean, identity: I, deps?: CopyDeps<I>): Promise<CopyResult>;
     repeatOnCopy(home: HomeEvent, identity: I, deps?: CopyDeps<I>): Promise<void>;
-    stopShowing(id: string, identity: I, deps?: CopyDeps<I>): Promise<boolean>;
+    stopShowing(id: string, identity: I, deps?: CopyDeps<I>, gone?: ShowableListing & { id: string }): Promise<boolean>;
     tendCopies(identity: I, deps?: CopyDeps<I>, now?: number): Promise<void>;
     tendOwedOffs(identity: I, deps?: CopyDeps<I>, now?: number): Promise<number | null>;
 }
@@ -438,6 +452,16 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         return Array.isArray(rows) ? rows.some((row) => row?.status !== 'cancelled') : 'later';
     }
 
+    /** This listing's ids from `from` on, `count` of them: the same on every device of the key. */
+    function idsFrom(homeId: string, from: number, identity: I, count = COPY_IDS_LOOKED_AT): Promise<string[]> {
+        return Promise.all(Array.from({ length: count }, (_, i) => setup.copyId(homeId, from + i, identity)));
+    }
+
+    /** The pair's own id and the ones after it: what a read of where the listing stands asks global about. */
+    async function idsOfPair(pair: CopyPair, identity: I): Promise<string[]> {
+        return [pair.copyId, ...await idsFrom(pair.homeId, (pair.generation ?? 0) + 1, identity, COPY_IDS_LOOKED_AT - 1)];
+    }
+
     /**
      * Where a first send stands, from global's own word. This listing's ids run on from a copy taken down to the next one, so
      * the newest id global shows says it: up, and this send takes it up, wherever it was made; down, and the one after it is
@@ -447,8 +471,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
      */
     async function placeOf(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<{ generation: number; id: string; up: boolean } | 'later'> {
         const first = pair.generation ?? 0;
-        const later = await Promise.all(Array.from({ length: COPY_IDS_LOOKED_AT - 1 }, (_, i) => setup.copyId(pair.homeId, first + 1 + i, identity)));
-        const ids = [pair.copyId, ...later];
+        const ids = await idsOfPair(pair, identity);
         const rows = await readJson(deps.global, `${POSTS_PATH}?ids=${ids.map(encodeURIComponent).join(',')}`, identity, deps);
         if (!Array.isArray(rows)) return 'later';
         const held = new Map<unknown, any>(rows.map((row) => [row?.id, row]));
@@ -779,18 +802,22 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     }
 
     /**
-     * Is nothing of this listing left up, from this pair's id on? A copy found up comes down. False where global didn't say, or
-     * wouldn't take it down. One read, of at most {@link COPY_IDS_LOOKED_AT} ids. A new tick on this device is left alone: what is
-     * up past a pair on its way out is what the member has asked for since.
+     * Is nothing of this listing left up, from this pair's id on? Every copy found up comes down, not only the newest: a device
+     * with no pair made one too, and one id behind another can still be up. False where global didn't say, or wouldn't take one
+     * down. One read, of at most {@link COPY_IDS_LOOKED_AT} ids. A new tick on this device is left alone: what is up past a pair
+     * on its way out is what the member has asked for since.
      */
     async function nothingLeftUp(pair: CopyPair, identity: I, deps: CopyDeps<I>): Promise<boolean> {
         const ticked = (await readPairs()).some((p) => p.homeId === pair.homeId && p.publicKey === pair.publicKey && p.copyId !== pair.copyId && !p.leaving);
         if (ticked) return true;
-        const place = await placeOf(pair, identity, deps).catch(() => 'later' as const);
-        if (place === 'later') return false;
-        if (!place.up) return true;
-        const answer = await askRemove(place.id, identity, deps);
-        return answer !== 'later' && !('refused' in answer);
+        const ids = await idsOfPair(pair, identity);
+        const rows = await readJson(deps.global, `${POSTS_PATH}?ids=${ids.map(encodeURIComponent).join(',')}`, identity, deps).catch(() => null);
+        if (!Array.isArray(rows)) return false;
+        for (const id of rows.filter((row) => ids.includes(row?.id) && row?.status !== 'cancelled').map((row) => row.id as string)) {
+            const answer = await askRemove(id, identity, deps);
+            if (answer === 'later' || 'refused' in answer) return false;
+        }
+        return true;
     }
 
     /**
@@ -845,12 +872,22 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
      * global didn't answer, and it is tried again. `id` is the home event's from the host's page and the copy's from its own
      * (a deletion hands on whichever it was given), which may be an id from before a rest. A pair already on its way out is
      * asked after again: its copy may still be up, so it can't answer true by being out of sight.
+     *
+     * `gone`: the listing a delete or a cancel at home took away, as the device last had it. With no pair here, a copy made by
+     * the member's other device, or before a 12-word restore, has one of this listing's ids all the same ({@link copyIdOf}), so
+     * every id it can have is asked after and what is up comes down. Only for a listing that could have had one: anything else
+     * asks nobody. A pair is kept for it, on its way out, so a tend asks again where global didn't answer.
      */
-    async function stopShowing(id: string, identity: I, deps: CopyDeps<I> = liveDeps): Promise<boolean> {
+    async function stopShowing(id: string, identity: I, deps: CopyDeps<I> = liveDeps, gone?: ShowableListing & { id: string }): Promise<boolean> {
         const named = (await readPairs()).filter((p) => p.publicKey === identity.publicKey
             && (p.homeId === id || p.copyId === id || p.earlierIds?.includes(id)));
         const pair = named.find(stillTheirs) ?? named[0];
-        return pair ? takeDown(pair, identity, deps) : true;
+        if (pair) return takeDown(pair, identity, deps);
+        if (gone?.id !== id || !mayShowOnGlobal(gone, identity.publicKey)) return true;
+        return takeDown({
+            publicKey: identity.publicKey, home: '', homeId: id, copyId: await setup.copyId(id, 0, identity), generation: 0,
+            sent: '', sentAt: 0, photo: '', skips: [], leaving: true,
+        }, identity, deps);
     }
 
     /** The event from its community, null where it is gone, `later` where the community didn't say. */
@@ -907,6 +944,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         // An Off needs nothing but global, so all of them go before any community is asked. In the loop below, a community that
         // hangs would hold up the next pair's by a timeout for each pair before it.
         await sendOffs(identity, deps, now);
+        await adoptCopies(identity, deps, now).catch(() => {});
         for (const { copyId } of await mine()) {
             try {
                 let pair = await storedPair(copyId);
@@ -961,6 +999,53 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                 }
             } catch { /* the next time round */ }
         }
+    }
+
+    /** When each key last looked for copies it holds no pair for, by the tend's clock. */
+    const lookedAt = new Map<string, number>();
+
+    /**
+     * Copies of this key's listings that this device holds no pair for, found and taken up: made by the member's other device,
+     * or before a 12-word restore. The member's own listings come from their communities (`homesOf`), which learn nothing new;
+     * only where one could have a copy and has no pair here is global asked, once, for the key's own posts there. A copy is that
+     * listing's when its id is one of the listing's ({@link copyIdOf}), so nothing goes by what the copy says. Taken up, a pair
+     * holds the copy as up and out of step, and the same tend sends it in step. At most once a day; a community or global that
+     * didn't answer is asked at the next tend.
+     */
+    async function adoptCopies(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
+        const key = identity.publicKey;
+        if (!setup.homesOf || now - (lookedAt.get(key) ?? -Infinity) < COPY_ADOPT_EVERY_MS) return;
+        const held = (await readPairs()).filter((p) => p.publicKey === key);
+        const unpaired: { home: HomeEvent; url: string }[] = [];
+        for (const url of await setup.homesOf(identity)) {
+            const rows = await readJson(url, `${POSTS_PATH}?author=${encodeURIComponent(key)}&limit=${OWN_READ_MOST}`, identity, deps);
+            if (!Array.isArray(rows)) return;
+            for (const home of rows as HomeEvent[]) {
+                if (mayHaveCopy(home, key) && !held.some((p) => p.homeId === home.id)) unpaired.push({ home, url });
+            }
+        }
+        if (unpaired.length > 0) {
+            const mine = await readJson(deps.global, `${POSTS_PATH}?author=${encodeURIComponent(key)}&limit=${OWN_READ_MOST}`, identity, deps);
+            if (!Array.isArray(mine)) return;
+            const known = new Set(held.flatMap((p) => [p.copyId, ...(p.earlierIds ?? [])]));
+            const copies = new Map<string, any>(mine.filter((row: any) => row?.shownCopy === true && row?.status !== 'cancelled' && !known.has(row?.id)).map((row: any) => [row.id, row]));
+            for (const { home, url } of unpaired) {
+                if (copies.size === 0) break;
+                const ids = await idsFrom(home.id, 0, identity);
+                const generation = ids.reduce((found, id, i) => (copies.has(id) ? i : found), -1);
+                if (generation < 0) continue;
+                const copy = copies.get(ids[generation]);
+                copies.delete(ids[generation]);
+                const pair: CopyPair = {
+                    publicKey: key, home: setup.plainOrigin(url) ?? url, homeId: home.id, copyId: ids[generation], generation,
+                    sent: 'lost', sentAt: 0, photo: firstPhoto(home), skips: Array.isArray(copy?.eventRepeatSkips) ? copy.eventRepeatSkips : [],
+                    questions: copy?.takesQuestions === true,
+                };
+                // A tick on this device since the read stands.
+                await store.change((pairs) => (pairs.some((p) => p.publicKey === key && p.homeId === home.id) ? pairs : [...pairs, pair]));
+            }
+        }
+        lookedAt.set(key, now);
     }
 
     return { pairOf, mayShowOnGlobal, copyFields, showOnGlobal, takeQuestions, repeatOnCopy, stopShowing, tendCopies, tendOwedOffs };

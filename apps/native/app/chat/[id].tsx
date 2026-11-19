@@ -614,12 +614,12 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
             try {
                 res = await getConversation(id as string, identity.publicKey, at);
             } catch (e: any) {
-                // A read refused (in place: that community's copy can't be opened now, or the chat was left meanwhile): the
-                // chat's not-available state, never "Loading..." for good (#3305 review F4). Nothing more is read or asked.
+                // A read refused (in place: that community's copy can't be opened now, or the chat was left meanwhile): its
+                // name is never "Loading..." for good (#3305 review F4), and nothing more is read or asked. The thread's own
+                // read, refused the same way, shows the chat's not-available words (loadMessages).
                 if (!inViewRef.current) return;
                 console.warn('[Chat] Could not read this conversation:', e?.message || e);
                 setPeerName(String(id).slice(0, 8));
-                setLoadError(e?.message || t('Could not open this chat.'));
                 return;
             }
             if (res) {

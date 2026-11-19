@@ -5,7 +5,7 @@ import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
-import { heldChatsInView, heldChatsShown, type HeldChatRow as HeldChat } from '../../utils/held-chats';
+import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsInView, heldChatsShown, type HeldChatRow as HeldChat } from '../../utils/held-chats';
 import { HeldChatRow } from '../../components/HeldChatRow';
 import { requestsWaitingOnGlobal } from '../../utils/global-requests';
 import { elsewhereCounts, requestsElsewhere, useHeldRequests } from '../../utils/requests-elsewhere';
@@ -203,10 +203,15 @@ export default function ChatsScreen() {
             setSwitchingCommunity(false);
         }
     };
-    // A held community's chat (slice S1): the phone moves there through the one switch and lands in that chat, as a tapped
-    // notice does. Reading it in place, with no switch, is slice S2.
+    // A held community's chat. A direct one opens in place (slice S2, utils/held-chats.ts heldChatOpensInPlace): read and
+    // answered there, nothing switches. Any other (a group's, a deal's or an event's chat in place is slice S6): the phone
+    // moves there through the one switch and lands in that chat, as a tapped notice does (S1).
     const openHeldChat = async (chat: HeldChat) => {
         if (!identity?.publicKey || switchingCommunity) return;
+        if (heldChatOpensInPlace(chat)) {
+            router.push({ pathname: '/chat/[id]', params: heldChatInPlaceParams(chat) });
+            return;
+        }
         setSwitchNote(null);
         setSwitchingCommunity(true);
         try {

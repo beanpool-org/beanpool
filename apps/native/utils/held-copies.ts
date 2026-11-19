@@ -26,6 +26,17 @@
  * - `PRAGMA query_only = 1` straight after the open: a write through a held handle fails ("attempt to write a readonly
  *   database");
  * - registered under its own file (`register`), so the DM pins and the DM guard read that file's, never the anchor's.
+ *
+ * Slice S2 (a chat read and written in place, without a switch) adds ONE more kind of handle here, so every closer above
+ * still covers it: a copy open in place ({@link HeldCopies.inPlace}), a writable connection on one other community's file
+ * while a chat of it is on screen. The read-only handles stay as they are. A copy open in place is handed out only as a
+ * counted stand-in for the handle: every statement on it (one getAllAsync, one runAsync, one whole withTransactionAsync)
+ * is counted in and out as a held read is, so a close waits for the statement under way (rule 1) and every statement after
+ * a close began is refused, never run on a handle closing or closed. It writes only the file it was opened on (a
+ * connection is one file's for its life), it opens under the same refusals as a read (never a missing file, never the
+ * community in use, never another schema number, never during a pause) and one of its own (`placeRefused`: db.ts, a chat
+ * left), an open asked while a close of it is under way waits for that close and then opens anew or is refused (#3305
+ * review), and nothing but this module can close it.
  */
 
 /** What this module needs of a database handle (expo-sqlite's SQLiteDatabase has all of it). */
@@ -54,9 +65,16 @@ export interface HeldCopiesDeps<H extends HeldHandle, S extends string> {
      * ({@link isOneRead}): one that isn't is refused at its every use, before it reaches a copy.
      */
     statements: Readonly<Record<S, string>>;
+    /** What a statement refused on a copy open in place says (db.ts: the chat's own "switched community" sentence). */
+    closedText?: string;
+    /**
+     * True while no copy of `file` may open in place (db.ts: its chat was left, #3305 review). Asked with no await before
+     * every open in place begins, a wait for a close under way included, so nothing asked after the leave opens it again.
+     */
+    placeRefused?(file: string): boolean;
 }
 
-export interface HeldCopies<S extends string = string> {
+export interface HeldCopies<S extends string = string, H = HeldHandle> {
     /**
      * The statement named `statement` (one of `statements`) on `file`'s held copy, counted in and out. Null when there is
      * none to read (no such file, the community in use, a copy at another schema number, a pause, a close under way).
@@ -78,8 +96,40 @@ export interface HeldCopies<S extends string = string> {
      * resolves, and none opens until `done` settles (community-cache.ts removeCommunityCaches, through db.ts closeDB).
      */
     pauseUntil(done: Promise<unknown>): Promise<void>;
-    /** The files a handle is open, opening or closing on, for tests and logs. */
+    /** The files a handle is open, opening or closing on, for tests and logs (a copy open in place included). */
     openFiles(): string[];
+    /**
+     * `file`'s copy open in place (slice S2): a writable connection, opened on the first ask under the same refusals as a
+     * read, handed out as a counted stand-in (`handle`) whose every statement a close waits for, and which refuses every
+     * statement once a close of it began (`open()` false from then). Null when there is none to open: no such file, the
+     * community in use, a copy at another schema number, a pause, `placeRefused`. A close of it under way (or one that cuts
+     * this open) is waited for, then the copy opens again under the same refusals (#3305 review: the key code screen asked
+     * while the chat's close still ran, and was refused for good). Closed by every closer above.
+     */
+    inPlace(file: string): Promise<InPlaceCopy<H> | null>;
+    /** Close every read-only held handle (Chat is left): a copy open in place stays, its chat is still on screen. */
+    closeReads(): Promise<void>;
+    /**
+     * Resolves once a close of `file`'s read-only handle under way is done; at once when none is (#3305 round 5: a read
+     * asked as Chat is left, whose close answers it null, can wait for that close and ask once more). Closes nothing.
+     */
+    readsSettled(file: string): Promise<void>;
+}
+
+/** A copy open in place ({@link HeldCopies.inPlace}). */
+export interface InPlaceCopy<H> {
+    /** The counted stand-in for the connection: the only way to it. Its every statement is refused once a close began. */
+    handle: H;
+    /** True until a close of it began: a statement asked from then is refused. */
+    open(): boolean;
+}
+
+/** A statement asked of a copy open in place once its close began, or its handle's close asked by a caller. */
+export class InPlaceClosedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'InPlaceClosedError';
+    }
 }
 
 /**
@@ -106,14 +156,18 @@ export function isOneRead(sql: unknown): boolean {
     return typeof sql === 'string' && /^\s*SELECT\b[^;]*;?\s*$/i.test(sql);
 }
 
-export function createHeldCopies<H extends HeldHandle, S extends string>(deps: HeldCopiesDeps<H, S>): HeldCopies<S> {
+export function createHeldCopies<H extends HeldHandle, S extends string>(deps: HeldCopiesDeps<H, S>): HeldCopies<S, H> {
     const entries = new Map<string, Entry<H>>();
+    /** The copies open in place (slice S2), by file: one writable connection each, beside any read-only one. */
+    const places = new Map<string, Entry<H>>();
+    /** Each copy open in place's one stand-in, made once per connection (its entry). */
+    const stand = new Map<string, { entry: Entry<H>; handle: H }>();
     let pauses = 0;
 
     /** No await from this check to what follows it: a close or a pause that starts later waits for this entry. */
     const refused = (entry: Entry<H>) => pauses > 0 || entry.closing;
 
-    async function openFor(file: string, entry: Entry<H>): Promise<H | null> {
+    async function openFor(file: string, entry: Entry<H>, writable = false): Promise<H | null> {
         await deps.renamed();
         if (refused(entry) || await deps.inUse(file)) return null;
         if (!(await deps.exists(file))) return null;
@@ -123,7 +177,8 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
         const handle = await deps.open(file);
         deps.register(handle, file);
         try {
-            await handle.execAsync('PRAGMA query_only = 1; PRAGMA busy_timeout = 5000;');
+            // A copy open in place writes (S2); a held read handle never does.
+            await handle.execAsync(writable ? 'PRAGMA busy_timeout = 5000;' : 'PRAGMA query_only = 1; PRAGMA busy_timeout = 5000;');
             const version = await handle.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
             if (!version || version.user_version !== deps.schema) throw new Error(`held copy ${file} is at schema ${version?.user_version ?? '?'}, not ${deps.schema}`);
             const busyNow = await deps.inUse(file);
@@ -138,16 +193,16 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
         return handle;
     }
 
-    function handleFor(file: string): Promise<H | null> {
+    function handleFor(file: string, map: Map<string, Entry<H>> = entries): Promise<H | null> {
         if (pauses > 0) return Promise.resolve(null);
-        const held = entries.get(file);
+        const held = map.get(file);
         if (held) {
             if (held.closing) return Promise.resolve(null);
             return held.handle ? Promise.resolve(held.handle) : (held.opening ?? Promise.resolve(null));
         }
         const entry: Entry<H> = { handle: null, opening: null, inFlight: 0, idle: [], closing: false, closed: null };
-        entries.set(file, entry);
-        const opening = openFor(file, entry)
+        map.set(file, entry);
+        const opening = openFor(file, entry, map === places)
             .catch((e) => {
                 console.warn(`[Held] Could not open the copy ${file}`, e);
                 return null;
@@ -155,7 +210,7 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
             .then((handle) => {
                 entry.opening = null;
                 // A close under way takes the entry out itself, once it is done.
-                if (!handle && !entry.closing && entries.get(file) === entry) entries.delete(file);
+                if (!handle && !entry.closing && map.get(file) === entry) map.delete(file);
                 return handle;
             });
         entry.opening = opening;
@@ -167,7 +222,7 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
      * returns before the native close is done (#3302 review F1: a second closer returned at once while the first one's
      * close still ran, and its caller could delete or open the file beside it). The entry leaves the map only then.
      */
-    function closeEntry(file: string, entry: Entry<H>): Promise<void> {
+    function closeEntry(file: string, entry: Entry<H>, map: Map<string, Entry<H>> = entries): Promise<void> {
         if (entry.closed) return entry.closed;
         entry.closing = true;
         entry.closed = (async () => {
@@ -178,14 +233,93 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
                 entry.handle = null;
                 if (handle) await handle.closeAsync().catch((e) => console.warn(`[Held] Close warning for ${file}:`, e));
             } finally {
-                if (entries.get(file) === entry) entries.delete(file);
+                if (map.get(file) === entry) map.delete(file);
+                if (map === places && stand.get(file)?.entry === entry) stand.delete(file);
             }
         })();
         return entry.closed;
     }
 
-    async function closeAll(): Promise<void> {
+    async function closeReads(): Promise<void> {
         await Promise.all([...entries].map(([file, entry]) => closeEntry(file, entry)));
+    }
+
+    /** Every held handle, a copy open in place included: each closed when this resolves. */
+    async function closeAll(): Promise<void> {
+        await Promise.all([closeReads(), ...[...places].map(([file, entry]) => closeEntry(file, entry, places))]);
+    }
+
+    /** Settle one statement on `entry`: a close waiting for the last one goes on. */
+    function settle(entry: Entry<H>): void {
+        entry.inFlight--;
+        if (entry.inFlight === 0) for (const settled of entry.idle.splice(0)) settled();
+    }
+
+    /**
+     * The counted stand-in for a copy open in place: each method call on it is one statement counted in and out on its
+     * entry (a whole withTransactionAsync is one: its own statements are counted inside it), refused once a close began
+     * or once the connection under it is not the entry's any more. Its close (and a statement prepared to outlive the
+     * count) is refused: only this module closes it.
+     */
+    function standIn(file: string, entry: Entry<H>, handle: H): H {
+        const closed = () => new InPlaceClosedError(deps.closedText ?? `The copy ${file} open in place was closed.`);
+        return new Proxy(handle, {
+            get(target, prop) {
+                if (prop === 'closeAsync' || prop === 'closeSync' || prop === 'prepareAsync' || prop === 'prepareSync') {
+                    return () => { throw new InPlaceClosedError(`A copy open in place takes no ${String(prop)} from a caller.`); };
+                }
+                const value = Reflect.get(target, prop, target);
+                if (typeof value !== 'function') return value;
+                return (...args: unknown[]) => {
+                    // Counted in with no await since this check: a close that began has the statement refused, never cut.
+                    if (entry.handle !== target || refused(entry)) {
+                        if (/Sync$/.test(String(prop))) throw closed();
+                        return Promise.reject(closed());
+                    }
+                    entry.inFlight++;
+                    let out: unknown;
+                    try {
+                        out = (value as (...a: unknown[]) => unknown).apply(target, args);
+                    } catch (e) {
+                        settle(entry);
+                        throw e;
+                    }
+                    if (out && typeof (out as Promise<unknown>).then === 'function') {
+                        return (out as Promise<unknown>).finally(() => settle(entry));
+                    }
+                    settle(entry);
+                    return out;
+                };
+            },
+        }) as H;
+    }
+
+    /**
+     * `file`'s copy open in place and its entry, open and not closing as this returns (no await after its last check), or
+     * null when there is none to open. A close of it under way, or one that cuts this open, with no pause, is waited for
+     * and the copy asked again: it opens anew, or is refused (`placeRefused`, a pause, the file gone, the community in use).
+     */
+    async function placeOpenFor(file: string): Promise<{ entry: Entry<H>; handle: H } | null> {
+        for (;;) {
+            const closing = places.get(file);
+            if (closing?.closing && pauses === 0) {
+                await closing.closed;
+                continue;
+            }
+            // No await from this check to the open's start: handleFor makes its entry in the same turn.
+            if (deps.placeRefused?.(file)) return null;
+            const asked = handleFor(file, places);
+            const mine = places.get(file);
+            const handle = await asked;
+            const entry = places.get(file);
+            if (handle && entry && entry === mine && entry.handle === handle && !refused(entry)) return { entry, handle };
+            // Cut by a close that began meanwhile (no pause): waited for as above. Any other refusal is final.
+            if (mine?.closing && pauses === 0) {
+                await mine.closed;
+                continue;
+            }
+            return null;
+        }
     }
 
     return {
@@ -201,15 +335,20 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
             try {
                 return await handle.getAllAsync<T>(sql, [...params]);
             } finally {
-                entry.inFlight--;
-                if (entry.inFlight === 0) for (const settled of entry.idle.splice(0)) settled();
+                settle(entry);
             }
         },
         async close(file: string): Promise<void> {
             const entry = entries.get(file);
-            if (entry) await closeEntry(file, entry);
+            const place = places.get(file);
+            await Promise.all([entry ? closeEntry(file, entry) : null, place ? closeEntry(file, place, places) : null]);
         },
         closeAll,
+        closeReads,
+        readsSettled(file: string): Promise<void> {
+            const entry = entries.get(file);
+            return entry?.closing && entry.closed ? entry.closed : Promise.resolve();
+        },
         async paused<T>(fn: () => Promise<T>): Promise<T> {
             pauses++;
             try {
@@ -224,6 +363,20 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
             void done.catch(() => {}).finally(() => { pauses--; });
             await closeAll();
         },
-        openFiles: () => [...entries.keys()],
+        openFiles: () => [...new Set([...entries.keys(), ...places.keys()])],
+        async inPlace(file: string): Promise<InPlaceCopy<H> | null> {
+            const opened = await placeOpenFor(file);
+            if (!opened) return null;
+            const { entry, handle } = opened;
+            // No await from placeOpenFor's last check to the hand-out: a close that begins later refuses the stand-in's statements.
+            let made = stand.get(file);
+            if (!made || made.entry !== entry) {
+                made = { entry, handle: standIn(file, entry, handle) };
+                stand.set(file, made);
+                // The stand-in reads that file's DM pins and guard list, never the anchor's (db.ts dbFileOf).
+                deps.register(made.handle, file);
+            }
+            return { handle: made.handle, open: () => entry.handle === handle && !refused(entry) && places.get(file) === entry };
+        },
     };
 }

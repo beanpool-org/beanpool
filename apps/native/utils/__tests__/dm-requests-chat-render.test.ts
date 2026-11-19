@@ -162,6 +162,9 @@ vi.mock('../blocklist', () => ({
 // Which screen /chat/:id draws is utils/chat-route's call (tested there); here the test names it.
 const route = vi.hoisted(() => ({ now: { view: 'dm', screenId: 'dm1' } as { view: string; screenId: string } }));
 vi.mock('../chat-route', () => ({ routeChat: async () => route.now }));
+// The move a chat that doesn't open in place offers (utils/push-notice-switch.ts openNoticeIn): recorded, nothing switches.
+const moveTo = vi.hoisted(() => ({ run: null as null | ((...a: unknown[]) => Promise<unknown>) }));
+vi.mock('../push-notice-switch', async (orig) => ({ ...(await orig<Record<string, unknown>>()), openNoticeIn: (...a: unknown[]) => moveTo.run?.(...a) ?? Promise.resolve('held') }));
 // The group's key code (group-chat-keys.ts) is off the words layer; the screen's keyring answers "never held".
 vi.mock('../group-chat-keys', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), groupKeysLookUnopenable: () => false }));
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
@@ -172,6 +175,7 @@ import { setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import ChatRoute from '../../app/chat/[id]';
 import { router } from 'expo-router';
+import { PUSH_RECEIVED_EVENT } from '../app-events';
 
 const NODE = 'https://mullum.example';
 const now = Date.now();
@@ -185,6 +189,9 @@ function standIn(over: Answers): void {
         getConversation: null, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null,
         markConversationRead: undefined,
         getDb: { getAllAsync: async () => [], getFirstAsync: async () => null, runAsync: async () => ({}) },
+        // The route's check before a chat opens in place (#3305 review F1): that community's copy holds it as a DM. A row
+        // about another id says otherwise; the check's read-only handle then closes.
+        heldChatIsDm: true, closeHeldCopies: undefined,
         ...over,
     };
     net.answer = (name, args) => {
@@ -218,6 +225,10 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const settle = async (n = 12) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+/** The phone keeps `url` as a community it is a member of, under the name it saved (Chat's held rows, a contact there). */
+function holdsCommunity(url: string, name: string): void {
+    store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url, name }]));
+}
 async function open(): Promise<void> {
     await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(ChatRoute)) as any); });
     await settle();
@@ -582,7 +593,8 @@ describe("the opener's first line, on the phone", () => {
             await act(async () => { composer.send!(); });
             await settle();
 
-            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi']]);
+            // The fourth: the chat's community, none named for the community in use (slice S2).
+            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi', undefined]]);
             expect(sent()).toBe(0);
             expect(host.querySelector('[data-testid="request-waiting"]')).not.toBeNull();
             expect(box()).toBeNull();
@@ -594,7 +606,7 @@ describe("the opener's first line, on the phone", () => {
             await tap('Edit message');
             await typeAndSend('hello Kofi, it is Ana');
 
-            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi, it is Ana']]);
+            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi, it is Ana', undefined]]);
             expect(sent()).toBe(0);
         });
     });
@@ -701,9 +713,431 @@ describe('old chat on the phone\'s chat screen', () => {
         });
         await open();
         expect(host.textContent).toContain('the old ladder');
-        expect(asked).toEqual(expect.arrayContaining([['dm1', 'o1', true], ['dm1', 'n1', false]]));
+        // The fourth: the chat's community, none named for the community in use (slice S2).
+        expect(asked).toEqual(expect.arrayContaining([['dm1', 'o1', true, undefined], ['dm1', 'n1', false, undefined]]));
         expect(asked).toHaveLength(2);
         // Neither opened here (the stand-in answers null): each keeps the locked bubble.
         expect(host.textContent?.match(/Image unavailable/g)).toHaveLength(2);
+    });
+});
+
+describe('a chat in place, left while its poll, a push or a read is on its way (slice S2, #3305 review)', () => {
+    const RIVER = 'https://riverside.example';
+    const KOFI_THERE = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: null, listed: 1 };
+    /** Calls held until the test answers them, as a node still answering does. */
+    const heldCalls: Array<(v: unknown) => void> = [];
+    const later = () => new Promise((resolve) => { heldCalls.push(resolve); });
+    /** Each hold and let-go of the chat in place, by the community the screen named. */
+    const placeLog: string[] = [];
+    const callsSince = (n: number) => net.calls.slice(n).filter((c) => c !== 'db.getKnownChatMute');
+    const leave = async () => { await act(async () => { root.unmount(); }); };
+
+    async function openInPlace(over: Answers): Promise<void> {
+        heldCalls.length = 0;
+        placeLog.length = 0;
+        params.now = { id: 'dm1', community: RIVER, communityName: 'Riverside' };
+        holdsCommunity(RIVER, 'Riverside');
+        standIn({
+            getConversation: KOFI_THERE, getMessages: [], markConversationRead: true,
+            enterChatInPlace: (c: unknown) => { placeLog.push(`enter ${String(c)}`); return undefined; },
+            leaveChatInPlace: (c: unknown) => { placeLog.push(`leave ${String(c)}`); return undefined; },
+            ...over,
+        });
+        await open();
+        // Held before the first read, by the chat's own community, once: the peer's key read runs the focus effect again only
+        // for an ordinary chat, so the copy is never let go and held again under its first poll (#3305 review).
+        expect(net.calls.indexOf('db.enterChatInPlace')).toBeLessThan(net.calls.indexOf('db.getConversation'));
+        expect(placeLog).toEqual([`enter ${RIVER}`]);
+    }
+    /** As many let-goes as holds: none left behind once the chat is left. */
+    const balanced = () => placeLog.filter((x) => x.startsWith('enter')).length === placeLog.filter((x) => x.startsWith('leave')).length;
+
+    it('opening, its first poll on its way as the peer\'s key is read: held once, never let go while it shows, and that poll\'s line shows', async () => {
+        const LINE = { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'the newest line', rawTimestamp: iso(now), timestamp: '' };
+        let polled = false;
+        await openInPlace({ syncSingleConversation: later, getMessages: () => Promise.resolve(polled ? [LINE] : []) });
+        // The peer's key is read (getConversation answered it) and the chat still holds its copy, from one hold.
+        expect(host.textContent).toContain('Kofi');
+        expect(callsOf('syncSingleConversation'), 'one first poll, not a second one deduped onto the first').toBe(1);
+        expect(heldCalls).toHaveLength(1);
+        const before = net.calls.length;
+        polled = true;
+        heldCalls[0](true);
+        await settle();
+        // The first poll's answer is followed up: the thread is read again and the line it brought shows, with no let-go.
+        expect(callsSince(before)).toContain('db.getMessages');
+        expect(host.textContent).toContain('the newest line');
+        expect(placeLog).toEqual([`enter ${RIVER}`]);
+        await leave();
+        expect(placeLog).toEqual([`enter ${RIVER}`, `leave ${RIVER}`]);
+        // Mutation: put loadDeals back in the focus effect's deps in place -> the key read lets go and holds again
+        // (placeLog enter, leave, enter), a second poll is asked, and the first poll's answer runs nothing: no line shown.
+    });
+
+    it('control: an ordinary chat still runs its focus effect again once the peer\'s key is read (its first poll asked twice, as before)', async () => {
+        standIn({ getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true });
+        await open();
+        expect(host.textContent).toContain('Kofi');
+        expect(callsOf('syncSingleConversation')).toBe(2);
+        expect(callsOf('enterChatInPlace') + callsOf('leaveChatInPlace')).toBe(0);
+    });
+
+    it('the poll answers once the chat is left: nothing after it is read, marked or asked; the hold is let go once', async () => {
+        await openInPlace({ syncSingleConversation: later });
+        expect(heldCalls.length, 'a poll is on its way').toBeGreaterThan(0);
+        const before = net.calls.length;
+        await leave();
+        for (const answer of heldCalls) answer(true);
+        await settle();
+        expect(callsSince(before)).toEqual(['db.leaveChatInPlace']);
+        expect(placeLog.at(-1)).toBe(`leave ${RIVER}`);
+        expect(balanced()).toBe(true);
+        // Mutation: drop the `active` check in the poll's follow-up -> getConversation, getDmKeyChange, getDmKeyCodeInfo,
+        // getMessages and markConversationRead are called after the leave (the review's late mark read to A).
+    });
+
+    it('a push\'s poll answers once the chat is left: the same, nothing after it', async () => {
+        let holdNext = false;
+        await openInPlace({ syncSingleConversation: () => (holdNext ? later() : Promise.resolve(true)) });
+        await settle();
+        holdNext = true;
+        await act(async () => { for (const fn of events.on[PUSH_RECEIVED_EVENT] ?? []) fn(); });
+        expect(heldCalls.length, 'the push\'s poll is on its way').toBe(1);
+        const before = net.calls.length;
+        await leave();
+        heldCalls[0](true);
+        await settle();
+        expect(callsSince(before)).toEqual(['db.leaveChatInPlace']);
+        expect(balanced()).toBe(true);
+        // A push after the leave starts nothing: its listener went with the chat.
+        expect(events.on[PUSH_RECEIVED_EVENT]?.size ?? 0).toBe(0);
+    });
+
+    it('a read mid-flight as the chat is left (its thread still on its way): not marked read, nothing shown, nothing asked', async () => {
+        let holdReads = false;
+        await openInPlace({ syncSingleConversation: () => Promise.resolve(true), getMessages: () => (holdReads ? later() : Promise.resolve([])) });
+        await settle();
+        holdReads = true;
+        await act(async () => { for (const fn of events.on[PUSH_RECEIVED_EVENT] ?? []) fn(); });
+        await settle();
+        expect(heldCalls.length, 'the thread\'s read is on its way').toBeGreaterThan(0);
+        const before = net.calls.length;
+        await leave();
+        for (const answer of heldCalls) answer([{ id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'late', rawTimestamp: iso(now), timestamp: '' }]);
+        await settle();
+        expect(callsSince(before)).toEqual(['db.leaveChatInPlace']);
+        // Mutation: drop the in-view check after the thread's read -> markConversationRead is called after the leave.
+    });
+});
+
+describe('a chat in place opens nothing of the community in use: no listing, profile or deal of its (slice S2, #3305 review)', () => {
+    const RIVER = 'https://riverside.example';
+    const KOFI_THERE = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: null, listed: 1 };
+    /** A deal's notice, as the node posts it into the pair's own chat: it names the listing (metadata.postId). */
+    const notice = (systemType: string, text: string) => ({
+        id: `n-${systemType}`, type: 'system', senderId: 'SYSTEM', systemType, text, metadata: { postId: 'p-ladder' }, rawTimestamp: iso(now - 60_000), timestamp: '',
+    });
+    const FUNDED = notice('ESCROW_FUNDED', 'The Beans are held in trust.');
+    const RELEASED = notice('ESCROW_RELEASED', 'The Beans were released.');
+    const CANCELLED = notice('ESCROW_CANCELLED', 'The deal was cancelled.');
+    /** A line sent from a listing (Message on a listing): its card names the listing. */
+    const ABOUT_LINE = {
+        id: 'a1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'is it still free?', rawTimestamp: iso(now - 30_000), timestamp: '',
+        about: { postId: 'p-ladder', title: 'Borrow a long ladder', kind: 'offer' },
+    };
+    /** The chat's own listing, with a deal on it whose Beans are mine to release: the sticky header and the release bar. */
+    const ON_A_LISTING = {
+        ...KOFI_THERE, postId: 'p-ladder', postTitle: 'Borrow a long ladder', postStatus: 'pending', price_c: 500, price_type: 'fixed',
+        pendingTxId: 'tx-held', pendingAmount_c: 500, txBuyerPubkey: ME.publicKey,
+    };
+    const HELD_DEAL = { txId: 'tx-held', postId: 'p-ladder', postTitle: 'Borrow a long ladder', status: 'pending', buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key', iAmBuyer: true, amount_c: 500 };
+    /** A deal of theirs on my listing: the strip's card, which opens the listing at that deal. */
+    const STRIP_DEAL = { txId: 'tx-eggs', postId: 'p-eggs', postTitle: 'Duck eggs', status: 'pending', buyerPubkey: 'kofi-key', sellerPubkey: ME.publicKey, iAmBuyer: false, amount_c: 300 };
+
+    let went: Array<[string, unknown]>;
+    beforeEach(() => {
+        went = [];
+        for (const how of ['push', 'replace', 'navigate'] as const) vi.spyOn(router, how).mockImplementation(((to: unknown) => { went.push([how, to]); }) as never);
+    });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    async function openChat(inPlace: boolean, over: Answers): Promise<void> {
+        params.now = inPlace ? { id: 'dm1', community: RIVER, communityName: 'Riverside' } : { id: 'dm1' };
+        if (inPlace) holdsCommunity(RIVER, 'Riverside');
+        standIn({ getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true, ...over });
+        await open();
+        expect(host.textContent).toContain('Kofi');
+    }
+    const buttonReading = (words: string) => (): HTMLElement | null =>
+        Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.trim() === words) ?? null;
+    const buttonHolding = (words: string) => (): HTMLElement | null =>
+        Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.includes(words)) ?? null;
+    const openMenu = async () => { await tap('More options'); };
+
+    /**
+     * Every tap target of the DM screen that opens a listing, a profile, a deal or a route of a community (the class closed
+     * after #3305's deciding review of 465fb8f9). `goes`: where it leads in an ordinary chat, the community in use's (null:
+     * no move; `asks`, what it reads of that community's copy). In place it is not there (`absent`), or there with a tap that
+     * opens nothing (`inert`), or it goes where it does named by the chat's own community (`named`, `inPlaceGoes`).
+     */
+    interface Row {
+        name: string; over: Answers; open?: () => Promise<void>; find: () => HTMLElement | null;
+        goes: [string, unknown] | null; asks?: string; inPlace: 'absent' | 'inert' | 'named'; inPlaceGoes?: [string, unknown];
+    }
+    const ROWS: Row[] = [
+        ...[FUNDED, RELEASED, CANCELLED].map((line): Row => ({
+            name: `View Post on a deal's notice (${line.systemType})`, over: { getMessages: [line] }, find: buttonReading('View Post'),
+            goes: ['push', '/post/p-ladder'], inPlace: 'absent',
+        })),
+        {
+            name: "Rate your partner on a deal's notice (ESCROW_RELEASED)", over: { getMessages: [RELEASED] }, find: buttonReading('Rate your partner'),
+            goes: null, asks: 'db.getDb', inPlace: 'absent',
+        },
+        {
+            name: "a listing's card on a line", over: { getMessages: [ABOUT_LINE] }, find: () => host.querySelector<HTMLElement>('[data-testid="chat-about-card"]'),
+            goes: ['push', '/post/p-ladder'], inPlace: 'inert',
+        },
+        {
+            name: "the person's name at the top (their profile)", over: {}, find: buttonHolding('End-to-end encrypted'),
+            goes: ['push', { pathname: '/public-profile', params: { publicKey: 'kofi-key', callsign: 'Kofi' } }], inPlace: 'inert',
+        },
+        {
+            name: 'View profile in the menu', over: {}, open: openMenu, find: buttonReading('View profile'),
+            goes: ['push', { pathname: '/public-profile', params: { publicKey: 'kofi-key', callsign: 'Kofi' } }], inPlace: 'absent',
+        },
+        {
+            name: "the listing's header over the chat", over: { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL] },
+            find: buttonHolding('Borrow a long ladder'), goes: ['push', '/post/p-ladder'], inPlace: 'absent',
+        },
+        {
+            name: 'Release on the bar under it', over: { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL] },
+            find: () => (host.textContent?.includes('Action needed: release the Beans')
+                ? Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.startsWith('Release')) ?? null
+                : null),
+            goes: null, inPlace: 'absent',
+        },
+        {
+            name: "a deal's card on the strip", over: { getDealsBetween: [STRIP_DEAL] }, find: buttonHolding('Duck eggs'),
+            goes: ['push', { pathname: '/post/[id]', params: { id: 'p-eggs', txId: 'tx-eggs' } }], inPlace: 'absent',
+        },
+        {
+            name: 'Key code in the menu', over: {}, open: openMenu, find: buttonReading('Key code'),
+            goes: ['push', { pathname: '/chat/key-code', params: { id: 'dm1' } }],
+            inPlace: 'named', inPlaceGoes: ['push', { pathname: '/chat/key-code', params: { id: 'dm1', community: RIVER } }],
+        },
+    ];
+
+    for (const row of ROWS) it(`${row.name}: in an ordinary chat it is offered, and leads to the community in use`, async () => {
+        await openChat(false, row.over);
+        await row.open?.();
+        const target = row.find();
+        expect(target, 'offered in an ordinary chat (so its in-place row is not vacuous)').not.toBeNull();
+        const before = net.calls.length;
+        await act(async () => { target!.click(); });
+        await settle();
+        if (row.goes) expect(went).toEqual([row.goes]);
+        if (row.asks) expect(net.calls.slice(before)).toContain(row.asks);
+    });
+
+    for (const row of ROWS) it(`${row.name}: in place it opens nothing of the community in use`, async () => {
+        await openChat(true, row.over);
+        await row.open?.();
+        const target = row.find();
+        if (row.inPlace === 'absent') expect(target, 'not offered in place').toBeNull();
+        else {
+            expect(target, 'shown in place').not.toBeNull();
+            await act(async () => { target!.click(); });
+            await settle();
+        }
+        expect(went).toEqual(row.inPlace === 'named' ? [row.inPlaceGoes] : []);
+        // Nothing of a deal or a listing is read in place, from the copy in use or any other.
+        expect(net.calls.filter((c) => ['db.getDealsBetween', 'db.getDb', 'db.lookupAboutListing'].includes(c))).toEqual([]);
+        // Mutation: drop `!at &&` from the notice's View Post -> its three rows find View Post in place.
+    });
+
+    /** Taps every button the screen shows: the menu's (opened again as each row closes it) and each line's actions included. */
+    async function tapEverything(): Promise<string[]> {
+        const tapped = new Set<string>();
+        const keyOf = (b: HTMLElement) => b.getAttribute('aria-label') ?? b.textContent?.trim() ?? '';
+        const untapped = () => Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => !tapped.has(keyOf(b))) ?? null;
+        for (let i = 0; i < 120; i++) {
+            let next = untapped();
+            if (!next) {
+                // Each menu row closes the menu: open it again, and stop once it holds nothing new.
+                await openMenu();
+                next = untapped();
+                if (!next) break;
+            }
+            tapped.add(keyOf(next));
+            const b = next;
+            await act(async () => { b.click(); });
+            await settle(3);
+        }
+        return [...tapped];
+    }
+    const EVERYTHING: Answers = { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL, STRIP_DEAL], getMessages: [FUNDED, RELEASED, CANCELLED, ABOUT_LINE] };
+
+    it('every button of a chat in place, with all of these there to show: the one move is Key code, named by its community', async () => {
+        await openChat(true, EVERYTHING);
+        const tapped = await tapEverything();
+        expect(tapped).toEqual(expect.arrayContaining(['More options', 'Key code', 'Back']));
+        expect(tapped.length).toBeGreaterThan(8);
+        expect(went).toEqual([['push', { pathname: '/chat/key-code', params: { id: 'dm1', community: RIVER } }]]);
+        expect(net.calls.filter((c) => ['db.getDealsBetween', 'db.getDb', 'db.lookupAboutListing', 'db.completeMarketplaceTransaction', 'db.cancelMarketplaceTransaction', 'db.reportDmLine'].includes(c))).toEqual([]);
+        // Mutation: drop `!at &&` from the notice's View Post -> went holds ['push', '/post/p-ladder'].
+    });
+
+    it('control: the same taps in an ordinary chat open the listing, the person and the deal (so the sweep above would see them)', async () => {
+        await openChat(false, EVERYTHING);
+        await tapEverything();
+        const to = went.map(([, where]) => (typeof where === 'string' ? where : (where as { pathname: string }).pathname));
+        expect(to).toEqual(expect.arrayContaining(['/post/p-ladder', '/public-profile', '/post/[id]', '/chat/key-code']));
+    });
+});
+
+describe('a chat named with another community: only a DM its copy holds opens in place, at its saved address and name (#3305 review F1, F2, F4)', () => {
+    const RIVER = 'https://riverside.example';
+    const KOFI_THERE = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: null, listed: 1 };
+    /** The calls of a chat drawn in place: none of them is made unless that community's copy holds the id as a DM. */
+    const IN_PLACE_CALLS = ['enterChatInPlace', 'getConversation', 'getMessages', 'syncSingleConversation', 'markConversationRead', 'getDmKeyChange', 'getDmKeyCodeInfo'];
+    let asked: unknown[][];
+    let moves: unknown[][];
+    beforeEach(() => {
+        asked = [];
+        moves = [];
+        moveTo.run = (...args: unknown[]) => { moves.push(args); return Promise.resolve('switched'); };
+    });
+    async function openLink(link: Record<string, string>, over: Answers = {}): Promise<void> {
+        params.now = link;
+        standIn({
+            getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true,
+            heldChatIsDm: (...args: unknown[]) => { asked.push(args); return Promise.resolve(true); },
+            ...over,
+        });
+        await open();
+    }
+    const madeInPlace = () => IN_PLACE_CALLS.filter((n) => callsOf(n) > 0);
+    /** A button by the words it shows (the move's button is named by its words, as Contacts' is). */
+    const reading = (words: string) => Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.trim() === words) ?? null;
+
+    it('the reviewer\'s link: an enterprise\'s key named with a community the phone keeps opens nothing there in place; one tap moves there', async () => {
+        holdsCommunity(RIVER, 'Riverside');
+        await openLink({ id: 'enterprise-key-0123', community: RIVER, communityName: 'Riverside Official' }, {
+            heldChatIsDm: (...args: unknown[]) => { asked.push(args); return Promise.resolve(false); },
+        });
+        // Asked of that community's copy, by the address the phone saved, for the id the link names.
+        expect(asked).toEqual([[ME.publicKey, RIVER, 'enterprise-key-0123']]);
+        expect(madeInPlace(), 'nothing held, read, polled or marked in place').toEqual([]);
+        expect(host.querySelector('[data-testid="chat-not-in-place"]')).not.toBeNull();
+        expect(host.textContent).toContain('Could not open this chat.');
+        // The community's own saved name, never the link's.
+        expect(host.textContent).not.toContain('Riverside Official');
+        const go = reading('Open Riverside ›');
+        expect(go, 'the move\'s button').not.toBeNull();
+        await act(async () => { go!.click(); });
+        // The move's modules load on the tap (a dynamic import): wait for it, bounded.
+        for (let i = 0; i < 400 && moves.length === 0; i++) await settle(1);
+        expect(moves.length).toBe(1);
+        const [community, id, route] = moves[0] as [string, unknown, () => Promise<string>];
+        expect([community, id, await route()]).toEqual([RIVER, null, '/chat/enterprise-key-0123']);
+        expect(madeInPlace()).toEqual([]);
+        // Mutation (the review's): ChatRoute draws the chat in place on `id && community` alone -> enterChatInPlace,
+        // getConversation and the poll are made for the enterprise's key, and the header reads "Riverside Official".
+    });
+
+    it.each(['held', 'failed'] as const)('the move answered \'%s\' (a join or a switch under way, or a switch that failed): the screen says so, as Chat\'s held rows do; a move made says nothing', async (answered) => {
+        holdsCommunity(RIVER, 'Riverside');
+        const NOTE = 'Something went wrong. Try again in a moment.';
+        const answers: string[] = [answered, 'switched'];
+        moveTo.run = (...args: unknown[]) => { moves.push(args); return Promise.resolve(answers.shift()); };
+        await openLink({ id: 'group-chat-1', community: RIVER, communityName: 'Riverside' }, {
+            heldChatIsDm: (...args: unknown[]) => { asked.push(args); return Promise.resolve(false); },
+        });
+        expect(host.textContent).not.toContain(NOTE);
+        const tap = async (n: number) => {
+            await act(async () => { reading('Open Riverside ›')!.click(); });
+            for (let i = 0; i < 400 && moves.length < n; i++) await settle(1);
+            await settle(3);
+            expect(moves.length).toBe(n);
+        };
+        await tap(1);
+        expect(host.textContent, 'the tap moved nothing: it says so').toContain(NOTE);
+        expect(madeInPlace()).toEqual([]);
+        // Tapped again, and moved: the note goes.
+        await tap(2);
+        expect(host.textContent).not.toContain(NOTE);
+        // Mutation (#3305 max review r2 N3, the head before this): moveThere ignores openNoticeIn's answer -> no note after
+        // the first tap.
+    });
+
+    it('a direct chat that community\'s copy holds: in place, under the name the phone saved, whatever name the link carries', async () => {
+        holdsCommunity(RIVER, 'Riverside');
+        await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside Official' });
+        expect(host.textContent).toContain('Kofi');
+        expect(host.textContent).toContain('Riverside');
+        expect(host.textContent).not.toContain('Riverside Official');
+        expect(host.querySelector('[data-testid="chat-not-in-place"]')).toBeNull();
+    });
+
+    it('a link spelling the community otherwise (capitals, a path): in place at the address the phone saved, and only there', async () => {
+        holdsCommunity(RIVER, 'Riverside');
+        const at: unknown[] = [];
+        await openLink({ id: 'dm1', community: 'HTTPS://Riverside.EXAMPLE/some/path', communityName: 'Riverside' }, {
+            enterChatInPlace: (c: unknown) => { at.push(c); return undefined; },
+            syncSingleConversation: (...args: unknown[]) => { at.push(args[1]); return Promise.resolve(true); },
+        });
+        expect(asked).toEqual([[ME.publicKey, RIVER, 'dm1']]);
+        expect(at.length).toBeGreaterThan(1);
+        expect(new Set(at)).toEqual(new Set([RIVER]));
+    });
+
+    it('a community the phone doesn\'t keep, or keeps only as a guest\'s look: nothing opens, nothing is asked, no way to move there', async () => {
+        for (const guest of [false, true]) {
+            net.calls.length = 0;
+            asked = [];
+            if (guest) {
+                holdsCommunity(RIVER, 'Riverside');
+                store.map.set('beanpool_guest_nodes', JSON.stringify(['https://RIVERSIDE.example/']));
+            } else {
+                store.map.delete('beanpool_saved_nodes');
+                store.map.delete('beanpool_guest_nodes');
+            }
+            await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside' });
+            expect(asked, guest ? 'a guest\'s look' : 'not kept').toEqual([]);
+            expect(madeInPlace()).toEqual([]);
+            expect(host.textContent).toContain('Could not open this chat.');
+            expect(reading('Open Riverside ›')).toBeNull();
+            expect(Array.from(host.querySelectorAll('button')).some((b) => b.textContent?.startsWith('Open '))).toBe(false);
+            await act(async () => { root.unmount(); });
+            root = createRoot(host);
+        }
+    });
+
+    it('the community in use named: the chat\'s ordinary route, nothing held or asked in place', async () => {
+        const named: unknown[] = [];
+        await openLink({ id: 'dm1', community: `${NODE}/`, communityName: 'Somewhere' }, {
+            getConversation: (...args: unknown[]) => { named.push(args[2]); return Promise.resolve(KOFI_THERE); },
+        });
+        expect(host.textContent).toContain('Kofi');
+        expect(asked).toEqual([]);
+        expect(callsOf('enterChatInPlace')).toBe(0);
+        expect(named.length).toBeGreaterThan(0);
+        expect(new Set(named)).toEqual(new Set([undefined]));
+        expect(host.textContent).not.toContain('Somewhere');
+    });
+
+    it('F4: the first read refused in place (that community\'s copy can\'t be opened now): the chat says so, and its name never stays "Loading..."', async () => {
+        holdsCommunity(RIVER, 'Riverside');
+        const refused = () => Promise.reject(new Error('This phone has switched community since this chat was opened.'));
+        await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside' }, { getConversation: refused, getMessages: refused });
+        expect(host.textContent).not.toContain('Loading...');
+        expect(host.textContent).toContain('This phone has switched community since this chat was opened.');
+        // Only the conversation's read refused: its name is the chat's short id, never "Loading..." for good.
+        await act(async () => { root.unmount(); });
+        root = createRoot(host);
+        await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside' }, { getConversation: refused });
+        expect(host.textContent).not.toContain('Loading...');
+        // Mutation: no catch around getConversation in loadConversationData -> the name stays "Loading..." (an unhandled
+        // rejection on a phone).
     });
 });

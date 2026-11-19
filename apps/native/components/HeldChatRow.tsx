@@ -6,17 +6,20 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
 import { rowTime } from '../utils/your-groups';
 import type { HeldChatRow as HeldChat } from '../utils/held-chats';
+import { heldChatOpensInPlace } from '../utils/held-chat-in-place';
 
 /**
  * A chat in another community this phone holds, in Chat's one list (slice S1, DESIGN-no-switch-messaging-fable.md §1, §6):
- * the other person, the time of the newest line the phone holds, and that community's name in grey with "· Switch", since a
- * tap still moves the phone there and opens the chat (reading it in place is slice S2). No preview of its lines yet (S2
- * opens them with that community's own pins). The photo is that community's (utils/db.ts getHeldConversations), never one
+ * the other person, the time of the newest line the phone holds, and that community's name in grey. A direct chat opens in
+ * place (slice S2), so its row says the community's name alone; any other still moves the phone there, so its row says
+ * "· Switch". No preview of its lines (the PR of S2 says what that costs and where it went). The photo is that community's (utils/db.ts getHeldConversations), never one
  * from the community in use. Drawn apart from the screen so the render tests draw this very row; at 320 dp with 1.3× text
  * the community's line wraps, never cut.
  */
 export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: boolean; onOpen: (item: HeldChat) => void }) {
     const { colors } = useTheme();
+    // A direct chat opens in place (slice S2): its community's name alone, nothing switches. Any other still moves there.
+    const inPlace = heldChatOpensInPlace(item);
     const styles = useStyles(({ colors: c }) => StyleSheet.create({
         row: {
             flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12,
@@ -36,7 +39,7 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
             accessibilityRole="button"
             // No label: the row's name is the words it shows ("Kai", the time, "Hilltop · Switch"), so "tap Hilltop Switch" works by
             // voice (WCAG 2.5.3, label in name); the sentence is the hint.
-            accessibilityHint={t('Chat with {name} in {community}. Opens that community.', { name: item.peer, community: item.communityName })}
+            accessibilityHint={inPlace ? undefined : t('Chat with {name} in {community}. Opens that community.', { name: item.peer, community: item.communityName })}
             testID="held-chat-row"
             style={styles.row}
             disabled={busy}
@@ -52,7 +55,7 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
                 </View>
                 <View style={styles.where}>
                     <MaterialCommunityIcons name="home-group" size={14} color={colors.text.secondary} />
-                    <Text style={styles.whereText} testID="held-chat-community">{t('{community} · Switch', { community: item.communityName })}</Text>
+                    <Text style={styles.whereText} testID="held-chat-community">{inPlace ? item.communityName : t('{community} · Switch', { community: item.communityName })}</Text>
                 </View>
             </View>
         </Pressable>

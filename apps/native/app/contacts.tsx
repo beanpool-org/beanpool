@@ -35,8 +35,9 @@ import { communityLabel, contactsOf, contactsWhereWords, shareContactsFile, useC
 import { checkContactsHere, contactsKeptAt, editContacts, syncContacts } from '../utils/contacts-sync';
 import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
+import { getSavedNodes } from '../utils/nodes';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
-import { createConversationApi, getChattedWithMembers, getFriendsLocal } from '../utils/db';
+import { createConversationApi, enterChatInPlace, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace, leaveChatInPlace } from '../utils/db';
 import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { communitySwitchUnderWay, switchCommunity } from '../utils/use-communities';
 import { messageInHeldCommunity, takeMessageAfterSwitch } from '../utils/message-after-switch';
@@ -390,9 +391,32 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
         void getBlockedUsers().catch(() => [] as string[]).then((list) => { if (!list.includes(key)) void message(key); });
         // Only the community the phone landed in and the person named matter; `message` is this render's.
     }, [me, view.anchor, messageAsked]);
+    // A contact in another community this phone holds: the chat starts and opens there in place, nothing switches (slice
+    // S2). Only when that community's copy can't be opened in place (not on the phone yet, a move or a delete under way)
+    // does Message move the phone there as before (S0, utils/message-after-switch.ts).
     const messageThere = async (key: string, community: string) => {
         if (opening) return;
         setOpening(key);
+        // The community as this phone saved it (its copy's address), however the contact's link spells it.
+        const saved = (await getSavedNodes().catch(() => [])).find((n) => sameCommunity(n.url, community))?.url ?? community;
+        // Held in place while the chat starts there (utils/db.ts enterChatInPlace): a chat of that community left a moment
+        // ago doesn't refuse it, and the copy closes as this lets go unless the chat it opens holds it by then.
+        enterChatInPlace(saved);
+        try {
+            const conv = await createConversationApi('dm', [me, key], me, undefined, undefined, saved);
+            setOpening(null);
+            router.push({ pathname: '/chat/[id]', params: { id: String(conv.id), community: saved, communityName: communityLabel(view, community) } });
+            return;
+        } catch (e: any) {
+            if (!isNoCopyInPlace(e)) {
+                setOpening(null);
+                const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
+                Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : signedRequestWords(e.message));
+                return;
+            }
+        } finally {
+            void leaveChatInPlace(saved);
+        }
         const moved = await messageInHeldCommunity(key, community, {
             storage: AsyncStorage,
             publicKey: me,
@@ -418,8 +442,8 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
         }
         if (!here(link.community) && holds(link.community)) {
             return (
-                <Pressable accessibilityRole="button" style={styles.btn} disabled={opening !== null} onPress={() => void messageThere(link.key, link.community)}>
-                    <Text style={styles.btnText}>{t('Open {community} ›', { community: communityLabel(view, link.community) })}</Text>
+                <Pressable accessibilityRole="button" style={styles.go} disabled={opening !== null} onPress={() => void messageThere(link.key, link.community)}>
+                    <Text style={styles.goText}>{t('Message', undefined, 'button: write to')}</Text>
                 </Pressable>
             );
         }

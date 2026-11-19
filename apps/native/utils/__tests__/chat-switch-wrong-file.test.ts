@@ -97,6 +97,7 @@ import { switchPhoneTo } from '../reconnect';
 import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { sealDmLine } from '../e2e-crypto';
+import { dmPeerPinsStoreKey } from '../storage-keys';
 
 // A finished sync ends with require('react-native') for a DeviceEventEmitter nudge: answered at node's loader for the file.
 const realLoad = (Module as any)._load;
@@ -128,7 +129,8 @@ function person(): Person {
 
 interface Line { id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; type: string; metadata: string | null; timestamp: string; editedAt: string | null }
 interface Conv { id: string; type: string; participants: string[] }
-const node = { convs: [] as Conv[], lines: [] as Line[] };
+/** `deleted`: the keys the conversation list names as deleted accounts. `pageAs`: a page asked by one id, answered as another conversation (a push for an id the phone doesn't hold). */
+const node = { convs: [] as Conv[], lines: [] as Line[], deleted: [] as string[], pageAs: new Map<string, Conv>() };
 let clock = Date.parse('2026-11-19T00:00:00.000Z');
 const tick = () => new Date((clock += 1000)).toISOString();
 
@@ -176,11 +178,14 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     }
     const list = u.pathname.match(/^\/api\/messages\/conversations\/([^/]+)$/);
     if (list) {
-        return answer(200, { conversations: node.convs.filter((c) => c.participants.includes(list[1])).map(view), totalUnread: 0, deletedAccounts: [], requests: { count: 0, conversations: [] } });
+        return answer(200, { conversations: node.convs.filter((c) => c.participants.includes(list[1])).map(view), totalUnread: 0, deletedAccounts: node.deleted, requests: { count: 0, conversations: [] } });
     }
     const page = u.pathname.match(/^\/api\/messages\/([^/]+)$/);
     if (page && method === 'GET') {
-        const conv = node.convs.find((c) => c.id === decodeURIComponent(page[1]));
+        const asked = decodeURIComponent(page[1]);
+        const as = node.pageAs.get(asked);
+        if (as) return answer(200, { conversation: view(as), messages: [] });
+        const conv = node.convs.find((c) => c.id === asked);
         if (!conv) return answer(404, { error: 'Conversation not found' });
         return answer(200, { conversation: view(conv), messages: node.lines.filter((l) => l.conversationId === conv.id).map((l) => ({ ...l })) });
     }
@@ -246,6 +251,8 @@ async function phoneOnAWithBCopied(): Promise<void> {
     dm = { id: randomUUID(), type: 'dm', participants: [me.publicKey, peer.publicKey] };
     node.convs = [dm];
     node.lines = [];
+    node.deleted = [];
+    node.pageAs.clear();
     nodeLine(dm, peer, 'hello from the other side');
     hold = null;
     (globalThis as any).fetch = fetchMock;
@@ -410,5 +417,163 @@ describe('a chat answer held while the phone switches community lands only in th
         await switchPhoneTo(A);
         expect(await db.syncMessages(me.publicKey)).toBe(true);
         expect([count(A_FILE), count(B_FILE)]).toEqual([1, 0]);
+    });
+});
+
+// ── The DM pin gate, through the same guarded paths ─────────────────────────────────────────────────────────────────
+//
+// The switch guard sits in the passes the DM pin gate stops (DESIGN-dm-peer-key-pin-fable.md §3.4 amendments 5 and 6):
+// with this community's pin store unreadable, nothing of the node's goes into a DM here. One row per branch of the gate
+// in the functions the guard changed, each run with no switch and under both switches, and once with the pins readable
+// (the control: the node's answer does change the DM then, so a guard change that skipped the gate fails the row).
+
+/** A line of a group's chat on the node, in plain text as the node keeps a group's lines. */
+function groupLine(conv: Conv, author: Person, text: string, extra: Partial<Line> = {}): Line {
+    const line: Line = {
+        id: randomUUID(), conversationId: conv.id, authorPubkey: author.publicKey, ciphertext: Buffer.from(text).toString('base64'),
+        nonce: 'plaintext-v1', type: 'text', metadata: null, timestamp: tick(), editedAt: null, ...extra,
+    };
+    node.lines.push(line);
+    return line;
+}
+/** The tombstone the node writes over a deleted account's line in a group. */
+const accountDeletedBy = (who: Person): Partial<Line> => ({
+    type: 'removed', ciphertext: Buffer.from('This message was deleted').toString('base64'),
+    metadata: JSON.stringify({ removed: true, accountDeleted: true, removedBy: who.publicKey, removedAt: tick() }),
+});
+const aGroup = (): Conv => ({ id: randomUUID(), type: 'group_thread', participants: [me.publicKey, peer.publicKey, third.publicKey] });
+/** A group's row in A's file, as an open group chat already holds it (its poll asks the node for its page). */
+function groupHeldInA(g: Conv): void {
+    const sql = new DatabaseSync(path.join(h.dir, A_FILE));
+    try {
+        sql.prepare("INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, 'group_thread', ?, '2026-11-19T00:00:00.000Z')").run(g.id, peer.publicKey);
+    } finally {
+        sql.close();
+    }
+}
+/** Each DM's rows in A's file (its row, its people, its lines), read on a connection of the test's own. */
+function dmRowsInA(ids: string[]): Record<string, unknown> {
+    const sql = new DatabaseSync(path.join(h.dir, A_FILE));
+    const all = (q: string, id: string) => sql.prepare(q).all(id).map((r) => ({ ...(r as object) }));
+    try {
+        return Object.fromEntries(ids.map((id) => [id, {
+            conversation: all('SELECT * FROM conversations WHERE id = ?', id),
+            people: all('SELECT * FROM conversation_participants WHERE conversation_id = ? ORDER BY public_key', id),
+            lines: all('SELECT * FROM messages WHERE conversation_id = ? ORDER BY id', id),
+        }]));
+    } finally {
+        sql.close();
+    }
+}
+const pinsOfA = () => dmPeerPinsStoreKey(me.publicKey, A_FILE);
+/** A's pin store unreadable (a value that doesn't parse: DmPinStoreError), read afresh as a new app session reads it. */
+function pinsUnreadableInA(): void {
+    h.store.set(pinsOfA(), '{ this is not a pin store');
+    db._resetDmPeerPinsForTests();
+}
+
+interface GateRow {
+    name: string;
+    /** What the node serves that changes a DM here when the gate is open; returns the DMs to watch. */
+    arrange: () => string[];
+    held: (method: string, pathname: string) => boolean;
+    act: () => Promise<unknown>;
+}
+const listHeld = (m: string, p: string) => m === 'GET' && p.startsWith('/api/messages/conversations/');
+/** The group an open group chat's poll asks for (the syncSingleConversation rows). */
+let groupAsked = '';
+/** A group on the node whose page carries a line under each id of the DM's lines, the DM's own lines gone from the node. */
+function groupOverTheDmsIds(g: Conv): void {
+    node.convs.push(g);
+    for (const l of node.lines.filter((x) => x.conversationId === dm.id)) groupLine(g, third, `group line over ${l.id.slice(0, 4)}`, { id: l.id });
+    node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+}
+const GATE_ROWS: GateRow[] = [
+    {
+        name: "syncMessages' prune (G1): the node no longer lists the DM",
+        arrange: () => { node.convs = []; return [dm.id]; },
+        held: listHeld, act: () => db.syncMessages(me.publicKey),
+    },
+    {
+        name: "syncMessages' blanking of the listing's deletedAccounts (G2)",
+        arrange: () => { node.deleted = [peer.publicKey]; return [dm.id]; },
+        held: listHeld, act: () => db.syncMessages(me.publicKey),
+    },
+    {
+        name: "syncMessages: the DM's own page (its new lines)",
+        arrange: () => { nodeLine(dm, peer, 'a line the gate holds back'); return [dm.id]; },
+        held: listHeld, act: () => db.syncMessages(me.publicKey),
+    },
+    {
+        name: "syncMessages' blanking of an account-deleted tombstone on a group's page (G3)",
+        arrange: () => { const g = aGroup(); node.convs.push(g); groupLine(g, peer, '', accountDeletedBy(peer)); return [dm.id]; },
+        held: listHeld, act: () => db.syncMessages(me.publicKey),
+    },
+    {
+        name: "syncMessages: a group's page reusing the DM's line ids (G8, the narrow gate)",
+        arrange: () => { groupOverTheDmsIds(aGroup()); return [dm.id]; },
+        held: listHeld, act: () => db.syncMessages(me.publicKey),
+    },
+    {
+        name: 'syncSingleConversation of an open group: an account-deleted tombstone on its page (G7)',
+        arrange: () => { const g = aGroup(); groupAsked = g.id; groupHeldInA(g); node.convs.push(g); groupLine(g, peer, '', accountDeletedBy(peer)); return [dm.id]; },
+        held: (m, p) => m === 'GET' && p === `/api/messages/${groupAsked}`, act: () => db.syncSingleConversation(groupAsked),
+    },
+    {
+        name: "syncSingleConversation of an open group: its page reusing the DM's line ids (G8, the poll)",
+        arrange: () => { const g = aGroup(); groupAsked = g.id; groupHeldInA(g); groupOverTheDmsIds(g); return [dm.id]; },
+        held: (m, p) => m === 'GET' && p === `/api/messages/${groupAsked}`, act: () => db.syncSingleConversation(groupAsked),
+    },
+    {
+        name: "refreshConversationFromNode (a push for an id the phone doesn't hold), answered with a new DM (G6)",
+        arrange: () => {
+            const fresh: Conv = { id: randomUUID(), type: 'dm', participants: [me.publicKey, third.publicKey] };
+            node.pageAs.set('riverside-pushed-chat', fresh);
+            return [fresh.id];
+        },
+        held: (m, p) => m === 'GET' && p === '/api/messages/riverside-pushed-chat',
+        act: () => db.getConversationKind('riverside-pushed-chat', { askNode: true }),
+    },
+];
+
+describe('the DM pin gate holds in every pass the switch guard changed (§3.4 amendments 5 and 6)', () => {
+    it.each(GATE_ROWS.map((r) => [r.name, r] as const))("%s: the control, the pins readable: the node's answer reaches the DM", async (_name, row) => {
+        const watched = row.arrange();
+        const before = dmRowsInA(watched);
+        await row.act();
+        await settle();
+        expect(dmRowsInA(watched), 'the row changes the DM when the gate is open (so the gated runs below are not vacuous)').not.toEqual(before);
+    });
+
+    const cases = GATE_ROWS.flatMap((r) => [['no switch', null] as const, ...Object.entries(SWITCHES)].map(([how, sw]) => [r.name, how, r, sw] as const));
+    it.each(cases)("%s, the pins unreadable, %s: nothing of the node's goes into the DM", async (_name, _how, row, switchToB) => {
+        const watched = row.arrange();
+        pinsUnreadableInA();
+        const before = dmRowsInA(watched);
+        const pinsBefore = h.store.get(pinsOfA());
+        hold = holdFor(row.held);
+        let thrown: unknown = null;
+        const running = row.act().catch((e) => { thrown = e; });
+        await hold.seen;
+        let bBefore: Record<string, unknown[]> | null = null;
+        let bStoredBefore: Record<string, string> | null = null;
+        if (switchToB) {
+            await switchToB();
+            await settle();
+            bBefore = rowsOf(B_FILE);
+            bStoredBefore = storedFor(B_FILE);
+        }
+        hold.release();
+        await running;
+        await settle();
+
+        expect(new URL(hold.url!).origin, 'asked of A').toBe(A);
+        expect(dmRowsInA(watched), "A's DM is as it was: the gate held").toEqual(before);
+        expect(h.store.get(pinsOfA()), "A's pin store is as it was").toBe(pinsBefore);
+        if (bBefore) {
+            expect(rowsOf(B_FILE), "B's file is as it was").toEqual(bBefore);
+            expect(storedFor(B_FILE), "B's pins, guard list and requests are as they were").toEqual(bStoredBefore);
+        }
+        expect(thrown, 'a sync never throws at the member').toBeNull();
     });
 });

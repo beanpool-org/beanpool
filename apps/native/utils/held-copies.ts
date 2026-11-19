@@ -67,7 +67,7 @@ export interface HeldCopiesDeps<H extends HeldHandle, S extends string> {
     closedText?: string;
 }
 
-export interface HeldCopies<S extends string = string> {
+export interface HeldCopies<S extends string = string, H = HeldHandle> {
     /**
      * The statement named `statement` (one of `statements`) on `file`'s held copy, counted in and out. Null when there is
      * none to read (no such file, the community in use, a copy at another schema number, a pause, a close under way).
@@ -142,7 +142,7 @@ export function isOneRead(sql: unknown): boolean {
     return typeof sql === 'string' && /^\s*SELECT\b[^;]*;?\s*$/i.test(sql);
 }
 
-export function createHeldCopies<H extends HeldHandle, S extends string>(deps: HeldCopiesDeps<H, S>): HeldCopies<S> {
+export function createHeldCopies<H extends HeldHandle, S extends string>(deps: HeldCopiesDeps<H, S>): HeldCopies<S, H> {
     const entries = new Map<string, Entry<H>>();
     /** The copies open in place (slice S2), by file: one writable connection each, beside any read-only one. */
     const places = new Map<string, Entry<H>>();

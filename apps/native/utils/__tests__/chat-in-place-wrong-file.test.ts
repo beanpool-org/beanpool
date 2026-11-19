@@ -439,7 +439,7 @@ describe('a chat in place: every action lands in the file and on the server of t
         await settle();
         const sent = node.lines.find((l) => l.id === id)!;
         expect(sent).toBeTruthy();
-        const opened = openDmLine({ ciphertext: sent.ciphertext, nonce: sent.nonce }, { myEdPrivHex: peer.privateKey, peerEdPubHex: me.publicKey, conversationId: dm.id },
+        const opened = openDmLine({ ciphertext: sent.ciphertext, nonce: sent.nonce }, { myEdPrivHex: peer.privateKey, peerEdPubHex: me.publicKey },
             { conversationId: dm.id, senderPubHex: me.publicKey, messageId: id, part: 'body', metadata: sent.metadata });
         expect(opened.text).toBe('can you read this?');
         await db.leaveChatInPlace(A);
@@ -529,7 +529,7 @@ describe('a chat in place keeps its own community\'s key pins, notices and pause
         const id = await db.insertMessage(dm.id, me.publicKey, 'to the new key', undefined, undefined, undefined, A);
         await settle();
         const sent = node.lines.find((l) => l.id === id)!;
-        const opened = openDmLine({ ciphertext: sent.ciphertext, nonce: sent.nonce }, { myEdPrivHex: renewed.privateKey, peerEdPubHex: me.publicKey, conversationId: dm.id },
+        const opened = openDmLine({ ciphertext: sent.ciphertext, nonce: sent.nonce }, { myEdPrivHex: renewed.privateKey, peerEdPubHex: me.publicKey },
             { conversationId: dm.id, senderPubHex: me.publicKey, messageId: id, part: 'body', metadata: sent.metadata });
         expect(opened.text).toBe('to the new key');
         expect(pinsOf(B_FILE)).toBe(bBefore);

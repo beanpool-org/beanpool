@@ -582,7 +582,8 @@ describe("the opener's first line, on the phone", () => {
             await act(async () => { composer.send!(); });
             await settle();
 
-            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi']]);
+            // The fourth: the chat's community, none named for the community in use (slice S2).
+            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi', undefined]]);
             expect(sent()).toBe(0);
             expect(host.querySelector('[data-testid="request-waiting"]')).not.toBeNull();
             expect(box()).toBeNull();
@@ -594,7 +595,7 @@ describe("the opener's first line, on the phone", () => {
             await tap('Edit message');
             await typeAndSend('hello Kofi, it is Ana');
 
-            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi, it is Ana']]);
+            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi, it is Ana', undefined]]);
             expect(sent()).toBe(0);
         });
     });
@@ -701,7 +702,8 @@ describe('old chat on the phone\'s chat screen', () => {
         });
         await open();
         expect(host.textContent).toContain('the old ladder');
-        expect(asked).toEqual(expect.arrayContaining([['dm1', 'o1', true], ['dm1', 'n1', false]]));
+        // The fourth: the chat's community, none named for the community in use (slice S2).
+        expect(asked).toEqual(expect.arrayContaining([['dm1', 'o1', true, undefined], ['dm1', 'n1', false, undefined]]));
         expect(asked).toHaveLength(2);
         // Neither opened here (the stand-in answers null): each keeps the locked bubble.
         expect(host.textContent?.match(/Image unavailable/g)).toHaveLength(2);

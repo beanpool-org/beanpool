@@ -26,6 +26,7 @@ import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode } from './node
 import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
+import { createHeldCopies } from './held-copies';
 import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
@@ -150,6 +151,40 @@ let getDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let copyMoving: Promise<void> | null = null;
 
 /**
+ * Read-only handles on other communities' copies, beside the one in use (slice S1, utils/held-copies.ts): the one owner of
+ * them all. Opened only for a file that is on the phone, never the community in use, one being opened (currentDbName) or
+ * while a copy moves; closed wherever the copy in use is closed (closeOpenCopy), before the copy in use opens that file
+ * (openAndMakeCopy), and around every move or delete of a copy (whileCopyMoves, closeDB's `heldClosedUntil`).
+ */
+const heldCopies = createHeldCopies<SQLite.SQLiteDatabase>({
+    renamed: () => communityCachesRenamed(),
+    exists: async (file) => {
+        const directory = typeof SQLite.defaultDatabaseDirectory === 'string'
+            ? SQLite.defaultDatabaseDirectory.replace(/^file:\/\//, '').replace(/\/+$/, '')
+            : '';
+        if (!directory) return false;
+        return (await FileSystem.getInfoAsync(encodeURI(`file://${directory}/${file}`))).exists;
+    },
+    inUse: async (file) => {
+        if (copyMoving || currentDbName === file || (db && dbFileOf.get(db) === file)) return true;
+        return getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) === file;
+    },
+    open: (file) => SQLite.openDatabaseAsync(file, { useNewConnection: true }),
+    register: (handle, file) => { dbFileOf.set(handle, file); },
+    get schema() { return COPY_SCHEMA; },
+});
+
+/** The files a held handle is open (or opening) on now: for tests. */
+export function heldCopyFiles(): string[] {
+    return heldCopies.openFiles();
+}
+
+/** Close every held handle once its reads have settled: Chat closes them as it is left (about 1 MB and 2 files each). */
+export function closeHeldCopies(): Promise<void> {
+    return heldCopies.closeAll();
+}
+
+/**
  * Resolves once this phone's community copies have the names that give every community its own file
  * (cache-file-migration.ts). Nothing opens a copy or reads its sync cursors before then.
  */
@@ -250,6 +285,10 @@ async function openAndMakeCopy(file: string, url: string | null, clear: CopyClea
     // (node-url.ts): addSavedNode refuses it, and that must not stop the database opening.
     if (url && isPlainNodeAddress(url)) await addSavedNode(url);
 
+    // A held handle on this file (another community's copy until now) closes first, once its reads have settled: the copy
+    // in use never shares its file with one, and none opens on it from here (heldCopies `inUse`: currentDbName). It takes
+    // no lock, so this open still waits for none.
+    await heldCopies.close(file);
     const handle = await SQLite.openDatabaseAsync(file, { useNewConnection: true });
     dbFileOf.set(handle, file);
     try {
@@ -273,9 +312,14 @@ async function openAndMakeCopy(file: string, url: string | null, clear: CopyClea
     return handle;
 }
 
-export async function closeDB() {
+/**
+ * `heldClosedUntil`: the caller deletes copies once this returns (community-cache.ts removeCommunityCaches): no held handle
+ * (heldCopies) opens on any community's copy until it settles, so none reads a copy on its way off the phone.
+ */
+export async function closeDB(opts: { heldClosedUntil?: Promise<unknown> } = {}) {
     await acquireSyncLock({ urgent: true });
     try {
+        if (opts.heldClosedUntil) await heldCopies.pauseUntil(opts.heldClosedUntil);
         // An open on its way finishes first, and its copy is closed with the rest (the copies a swap left too): none is left
         // open after this.
         await untilNoOpenOnItsWay();
@@ -301,9 +345,12 @@ async function untilNoOpenOnItsWay(): Promise<void> {
 
 /**
  * Close the copy open, if one is, and every copy a swap left that is still open (its own close waits for the lock this
- * caller holds). The caller holds the sync lock (closeDB, whileCopyMoves, clearDB).
+ * caller holds). The caller holds the sync lock (closeDB, whileCopyMoves, clearDB). Every held handle on another
+ * community's copy closes first, once its reads in flight have settled (utils/held-copies.ts): a close, a clear or a
+ * move never leaves one open on a file about to change.
  */
 async function closeOpenCopy() {
+    await heldCopies.closeAll();
     if (db) {
         const oldDb = db;
         db = null;
@@ -342,10 +389,13 @@ export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Pro
     let moved!: () => void;
     copyMoving = new Promise<void>((resolve) => { moved = resolve; });
     try {
-        await closeOpenCopy();
-        newCopyGeneration();
-        await Promise.all([dmPins.idle(), dmSeen.idle()]);
-        return await move();
+        // No held handle on any copy while it moves, and none opened until it has (utils/held-copies.ts).
+        return await heldCopies.paused(async () => {
+            await closeOpenCopy();
+            newCopyGeneration();
+            await Promise.all([dmPins.idle(), dmSeen.idle()]);
+            return await move();
+        });
     } finally {
         dmPins.forgetFile(toFile);
         for (const key of [...dmLinesHeldAtUpdate.keys()]) if (key.endsWith(`\n${toFile}`)) dmLinesHeldAtUpdate.delete(key);
@@ -1569,6 +1619,102 @@ export async function getConversations(myPubkey: string) {
             hasRated: row.hasRated > 0,
             dealCount: row.dealCount || 0,
             request: parsedRequest,
+        };
+    });
+}
+
+/**
+ * A chat this member has in another community the phone holds (getHeldConversations), as its own copy last had it. No
+ * preview of its lines (slice S2 opens them, with that file's pins): S1 lists the chat, and a tap moves there.
+ */
+export interface HeldConversation {
+    id: string;
+    type: string;
+    postId: string | null;
+    postTitle: string | null;
+    /** The listing's first photo, on THAT community's server: never an address of the community in use. */
+    postPhoto: string | null;
+    peer: string;
+    /** The other person's photo, on that community's server. */
+    peerAvatar: string | null;
+    peerUpdatedAt: string | null;
+    peerPubkey: string | null;
+    /** Every other key in the chat (dm-blocked.ts talkShowsChat hides it when any is blocked). */
+    peerKeys: string[];
+    rawTimestamp: string | null;
+    createdAt: string | null;
+}
+
+/**
+ * The held copy's chat rows, one statement (utils/held-copies.ts takes no more): its Talk chats (a group's, an event's and an
+ * enterprise's live under Groups), none that is a request for this member, each with its newest line's time and the other
+ * person as getConversations names them. Binds my key seven times: five for the other person's columns, then the
+ * participant row and the request.
+ */
+const HELD_CONVERSATIONS_SQL = `
+    SELECT c.id, c.name, c.post_id, c.type as convType, c.created_at as createdAt,
+           COALESCE(p.title, c.post_title) as postTitle, COALESCE(p.photos, c.post_photo) as postPhotos,
+           (SELECT MAX(msg.timestamp) FROM messages msg WHERE msg.conversation_id = c.id) as timestamp,
+           ${otherParticipantSql('callsign')} as otherCallsign,
+           ${otherParticipantSql('avatar_url')} as otherAvatar,
+           ${otherParticipantSql('profile_updated_at')} as otherProfileUpdatedAt,
+           ${otherParticipantSql('public_key')} as otherPubkey,
+           ${otherKeysSql()} as otherKeys
+    FROM conversations c
+    LEFT JOIN posts p ON c.post_id = p.id
+    WHERE c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
+      AND (c.type IS NULL OR c.type NOT IN ('group_thread', 'event_thread', 'enterprise_thread'))
+      AND ${NOT_A_REQUEST_FOR_ME('c.request')} = 1
+    ORDER BY timestamp DESC
+`;
+
+/** A photo's address on `community`'s server: a path its node stored ("/uploads/…") is that server's, never the one in use. */
+function onCommunity(community: string, value: unknown): string | null {
+    if (typeof value !== 'string' || !value.trim() || value === 'null' || value === 'undefined') return null;
+    return value.startsWith('/') ? `${community.replace(/\/+$/, '')}${value}` : value;
+}
+
+/**
+ * The chats this member has in `community`, another community this phone holds (slice S1,
+ * scratch/fable-design/DESIGN-no-switch-messaging-fable.md §6): read from that community's own copy through a held,
+ * read-only handle (utils/held-copies.ts), never through getDb() nor the address in use. Null when there is nothing to
+ * show: the copy isn't on the phone, it is the community in use, its copy hasn't synced since it was made or cleared
+ * (its cursor gone: an emptied copy reads as no chats), it is at another schema number, or a move or a delete is under way.
+ * Every photo is that community's (onCommunity). As fresh as the member's last visit there: nothing syncs a held copy.
+ */
+export async function getHeldConversations(myPubkey: string, community: string): Promise<HeldConversation[] | null> {
+    const file = getDatabaseFilenameForNode(community);
+    const { syncedCursorKeyOf } = await import('../services/pillar-sync');
+    if (!(await AsyncStorage.getItem(syncedCursorKeyOf(file)))) return null;
+    let rows: any[] | null;
+    try {
+        rows = await heldCopies.all<any>(file, HELD_CONVERSATIONS_SQL, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+    } catch (e) {
+        console.warn(`[Held] Could not list the chats held for ${file}`, e);
+        return null;
+    }
+    if (!rows) return null;
+    return rows.map((row) => {
+        let postPhoto: string | null = null;
+        if (row.postPhotos) {
+            try {
+                const arr = Array.isArray(row.postPhotos) ? row.postPhotos : JSON.parse(row.postPhotos);
+                postPhoto = Array.isArray(arr) ? onCommunity(community, arr[0]) : null;
+            } catch { postPhoto = null; }
+        }
+        return {
+            id: String(row.id),
+            type: row.convType || 'dm',
+            postId: row.post_id ?? null,
+            postTitle: row.postTitle ?? null,
+            postPhoto,
+            peer: dmPeerName(row),
+            peerAvatar: onCommunity(community, row.otherAvatar),
+            peerUpdatedAt: row.otherProfileUpdatedAt || null,
+            peerPubkey: row.otherPubkey || null,
+            peerKeys: typeof row.otherKeys === 'string' && row.otherKeys ? row.otherKeys.split(',') : [],
+            rawTimestamp: row.timestamp || null,
+            createdAt: row.createdAt || null,
         };
     });
 }

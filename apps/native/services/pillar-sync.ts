@@ -154,6 +154,15 @@ export function syncCursorKeysOf(dbFilename: string): string[] {
         .map(id => `pillar_sync_${dbFilename}_${id}`);
 }
 
+/**
+ * The key of one community copy's main cursor (one of syncCursorKeysOf): kept once a sync of that copy has run, and gone with
+ * a wipe, a reset or a clear of it. A held copy's chats show only while it is there (utils/db.ts getHeldConversations): an
+ * emptied copy reads as no chats at all.
+ */
+export function syncedCursorKeyOf(dbFilename: string): string {
+    return `pillar_sync_${dbFilename}_${StorageKeysConfig.LAST_SYNC}`;
+}
+
 /** Forget the sync cursors of the community the phone is on (syncCursorKeysOf): for a wipe of its copy. */
 export async function forgetSyncCursors(): Promise<void> {
     await communityCachesRenamed();

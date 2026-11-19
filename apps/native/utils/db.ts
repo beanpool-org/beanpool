@@ -822,13 +822,15 @@ const SWITCHED_SINCE_CHAT_OPENED_TEXT = 'This phone has switched community since
  * - `anchorUrl`: where the request goes, passed to signedGet / _signedRequest or built into the fetch's URL. Null with no
  *   community set: the caller says it is off-grid, as it always did.
  * - `file` and `database`: that community's copy, open as the request starts.
- * - `openNow()`: `database` while it is still the copy open (no switch, swap, move or close since), else null. Read with
- *   no await, so a write made in the same tick lands in that copy before anything can switch it: the send's delivery
- *   adopts the node's answer this way in the tick its 200 arrives, as it did before the switch guard, so no read of the
- *   chat comes between them and finds the line still sending, under this phone's clock.
- * - `handle()`: the only way a write that follows a network await reaches the copy. `openNow()` when it has it; after a
- *   close or a swap, the copy open then when it is still `file`'s; null once the phone is on another community's, and
- *   the answer is then dropped (nothing written, nothing thrown at the member: that community's next sync reads it again).
+ * - `handle()`: the only way a write that follows a network await reaches the copy. The copy open then when it is still
+ *   `file`'s; null once the phone is on another community's, its address included (written with nothing swapped yet),
+ *   and the answer is then dropped (nothing written, nothing thrown at the member: that community's next sync reads it
+ *   again).
+ * - `openNow()`: `database` while it is still the copy open (no switch, swap, move or close since), else null, read with
+ *   no await. Only for the send's delivery (_deliverPendingMessage): its row is already in this copy, written before the
+ *   POST, and the node's 200 only names its id and time; adopted in the tick the 200 arrives, as before the switch guard,
+ *   no read of the chat comes between them and finds the line still sending under this phone's clock. Never another
+ *   community's copy; while the address alone has moved, it is still the copy the line was written into.
  */
 export interface ChatRequestCopy {
     anchorUrl: string | null;
@@ -854,8 +856,7 @@ export async function chatCopyForRequest(): Promise<ChatRequestCopy> {
         if (dbFileOf.get(database) === file) {
             // A copy keeps its file for its life (dbFileOf), and every switch, swap, move or close takes it out of `db`
             // the moment it starts (openCopy, closeOpenCopy): while it is `db`, it is still `file`'s copy open.
-            const openNow = () => (db === database ? database : null);
-            return { anchorUrl, file, database, openNow, handle: async () => openNow() ?? copyStillFor(file) };
+            return { anchorUrl, file, database, openNow: () => (db === database ? database : null), handle: () => copyStillFor(file) };
         }
     }
     throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
@@ -7484,8 +7485,8 @@ async function _deliverPendingMessage(
         const data = await res.json();
         const serverMsg = data.message;
 
-        // In the tick the 200 arrives when the copy is still open (openNow): no read of the chat comes between the node
-        // taking the line and this row saying so.
+        // In the tick the 200 arrives while the copy the row was written into is still open (openNow): no read of the chat
+        // comes between the node taking the line and this row saying so. After a swap or a close, handle() decides.
         const database = here.openNow() ?? await here.handle();
         if (!database) return;
         // Adopt the server-vetted id + timestamp and drop the sending flag.

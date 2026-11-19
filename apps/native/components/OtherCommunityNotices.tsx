@@ -7,8 +7,10 @@ import { tn } from '@beanpool/core';
 
 /**
  * Chat's row for each other community where messages wait (design R6): its name and count, and a tap lands in that
- * community's Talk (app/(tabs)/chats.tsx `openOtherCommunity`). The row wraps its line at any text size, so a long
- * community name at 320 dp with 1.3× text is never cut. A tap that moved nothing says so under the rows, in `note`.
+ * community's Talk (app/(tabs)/chats.tsx `openOtherCommunity`). Message requests waiting there are not here: they are in
+ * the one Message requests row's count, with a card "In {community}" in its list (Marty, 19 Nov 2026, decision 4 of
+ * DESIGN-no-switch-messaging-fable.md; utils/requests-elsewhere.ts), so a request never reads as a new message.
+ * The row wraps its line at any text size, so a long community name at 320 dp with 1.3× text is never cut. A tap that moved nothing says so under the rows, in `note`.
  * Drawn here, apart from the screen, so the 320 dp harness (e2e/chat-s1-45-320.mjs) and the render tests draw this very row.
  */
 export function OtherCommunityNotices({ notices, busy, onOpen, note }: {

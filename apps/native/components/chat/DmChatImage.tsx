@@ -31,8 +31,8 @@ export function dmKeyContextOf(change: Pick<DmKeyChange, 'offeredPeer' | 'firstS
  * `oldLine`: a line from before 1.4.0, shown read-only; its photo opens as part of its words
  * (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
  */
-export function ChatImage({ conversationId, messageId, onOpen, oldLine = false, keyContext = '' }:
-    { conversationId: string; messageId: string; onOpen?: (uri: string) => void; oldLine?: boolean; keyContext?: string }) {
+export function ChatImage({ conversationId, messageId, onOpen, oldLine = false, keyContext = '', community }:
+    { conversationId: string; messageId: string; onOpen?: (uri: string) => void; oldLine?: boolean; keyContext?: string; community?: string }) {
     const { colors } = useTheme();
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
@@ -42,11 +42,12 @@ export function ChatImage({ conversationId, messageId, onOpen, oldLine = false, 
         let latest = true;
         setUri(null);
         setFailed(false);
-        getDecryptedAttachment(conversationId, messageId, oldLine)
+        // `community`: a chat open in place (slice S2): the photo is that community's.
+        getDecryptedAttachment(conversationId, messageId, oldLine, community)
             .then(u => { if (latest) { if (u) { setUri(u); } else { setFailed(true); } } })
             .catch(() => { if (latest) setFailed(true); });
         return () => { latest = false; };
-    }, [conversationId, messageId, oldLine, keyContext]);
+    }, [conversationId, messageId, oldLine, keyContext, community]);
     if (failed) return <Text style={{ color: colors.text.muted, fontStyle: 'italic', padding: 8 }}>{t('🔒 Image unavailable')}</Text>;
     if (!uri) return <View style={{ width: 220, height: 220, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={colors.text.muted} /></View>;
     return (

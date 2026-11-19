@@ -11,7 +11,21 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { closeDB } from './db';
 import { COPY_LANDING_SUFFIX } from './cache-file-migration';
 import { getDatabaseFilenameForNode, legacyDatabaseFilenameForNode } from './nodes';
-import { resetSyncFingerprints } from '../services/pillar-sync';
+import { resetSyncFingerprints, syncCursorKeysOf } from '../services/pillar-sync';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+/**
+ * Settings → Forget (app/(tabs)/settings.tsx): one community's copy off this phone, a community the phone is not on (the
+ * active one's Forget moves the phone off it first). Its sync cursors go first, so a held read (db.ts
+ * getHeldConversations, which lists only a copy with its cursor) lists nothing of it from here, and a copy a failed delete
+ * leaves is read whole at a rejoin. Then its files go through {@link removeCommunityCaches}: every held handle closed, and
+ * none opened, until they have gone, in expo-sqlite's own directory with the write-ahead log and its index (#3302 review
+ * F2: Forget deleted by a path of its own, nothing at all on Android and only the `.db` on iOS, with held handles open).
+ */
+export async function forgetCommunityCopy(community: string): Promise<void> {
+    await AsyncStorage.multiRemove(syncCursorKeysOf(getDatabaseFilenameForNode(community)));
+    await removeCommunityCaches([community]);
+}
 
 /**
  * SQLite's own files beside each database: the write-ahead log (db.ts opens every copy in WAL mode), its index, a
@@ -48,10 +62,26 @@ export async function removeCommunityCaches(
     communities: readonly string[],
     opts: { everyCopy?: boolean; beforeRemoving?: (copies: string[]) => Promise<void> } = {},
 ): Promise<void> {
+    // No held handle on another community's copy (db.ts heldCopies, utils/held-copies.ts) is open while the copies go,
+    // and none opens until they have: one left open would go on showing a deleted copy's chats (the S1 probe, measured).
+    let removed!: () => void;
+    const done = new Promise<void>((resolve) => { removed = resolve; });
+    try {
+        await removeCopies(communities, opts, done);
+    } finally {
+        removed();
+    }
+}
+
+async function removeCopies(
+    communities: readonly string[],
+    opts: { everyCopy?: boolean; beforeRemoving?: (copies: string[]) => Promise<void> },
+    done: Promise<void>,
+): Promise<void> {
     // What the sync last applied belonged to the copies going now: the next account's sync must not skip a payload
     // because it matches one of them (pillar-sync.ts).
     resetSyncFingerprints();
-    await closeDB();
+    await closeDB({ heldClosedUntil: done });
 
     const directory = typeof defaultDatabaseDirectory === 'string'
         ? defaultDatabaseDirectory.replace(/^file:\/\//, '').replace(/\/+$/, '')

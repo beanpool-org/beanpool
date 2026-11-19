@@ -48,7 +48,7 @@ deploy.sh replaces everything in the server folder except the data folder and .e
 
 The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**: press **Check Release Updates**, and Settings says which version your server runs and whether a newer one is out. Settings shows your server's real version on the Node Version tile, and your server's address followed by /api/version does too.
 
-To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and /api/version no longer says whether an update is out.
+To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and Settings no longer says on its own whether an update is out.
 
 ### The phone app's newest version
 
@@ -69,8 +69,8 @@ To stop the daily check, put DISABLE_APK_UPDATE_CHECK=true in .env and run docke
 
 These addresses answer without signing in, so a monitoring service or a phone browser can check them:
 
-- your address followed by **/api/version**: the version, and whether an update is available (unless you turned the update check off);
-- your address followed by **/api/community/health**: the community's name, version and activity, and the watchdog's last report if you run one.
+- your address followed by **/api/version**: the version. Which commit it runs and whether an update is out are for owners and admins: Settings shows them when you are signed in;
+- your address followed by **/api/community/health**: the community's name and version. Its member, listing and trade totals only while **Share Member Count** is on, and its activity and the watchdog's last report (if you run one) only while **Share Node Health & Version** is on. Members' apps always see them.
 
 If neither answers, the server is down or unreachable. See Troubleshooting.
 

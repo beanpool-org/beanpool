@@ -40,7 +40,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { spawnNode, post, copyDir, runNodeChild, inspectNode, recoverySealCommands, type NodeProc } from './takeover-test-harness.js';
+import { spawnNode, post, copyDir, runNodeChild, inspectNode, recoverySealCommands, holdDeadAddress, type NodeProc } from './takeover-test-harness.js';
 import { fixtureWords } from './recovery-seal-test-http.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
@@ -192,6 +192,9 @@ async function main(): Promise<void> {
         copyDir(dirs.standby, dirs.probeOld);
         assert(!fs.existsSync(path.join(dirs.standby, SEAL_KEY)), 'S2: the standby holds no recovery-seal key of its own');
         await mainNode.kill('SIGKILL');
+        // Its address stays dead to the end: the standby promoted in 5 must not be given its port, or 6c's standby, which
+        // still copies the main server, would find a take-over there and refuse (takeover-test-harness.ts holdDeadAddress).
+        await holdDeadAddress(mainNode);
 
         // ── 2. Start the phone session ──
         console.log('\n— 2. "Take over with an owner\'s phone" on the standby —');
@@ -379,7 +382,7 @@ async function main(): Promise<void> {
             assert(oStart.status === 200 && oStart.body.envelope.envelopeId === oldId, `a phone session on the keys locked before (${oStart.status})`);
             const oAnna = await phone(oStart.body.qr, ownerSeedHex, { communityId, nodePeerId: mainPeerId });
             const oUnlocked = await send(oAnna.qr, oAnna.request);
-            assert(oUnlocked.status === 200, `@Anna's phone unlocks them (${oUnlocked.status})`);
+            assert(oUnlocked.status === 200, `@Anna's phone unlocks them (${oUnlocked.status}${oUnlocked.body?.error ? ` ${oUnlocked.body.error}` : ''})`);
             const oWait = await post(old.base, '/api/local/admin/takeover/phone/wait', { sessionId: oStart.body.sessionId }, oldOwner);
             const opv = oWait.body.preview;
             assert(opv?.recoverySealKey === false && opv.missing.some((m: string) => /^members' sign-in recovery copies: these keys were locked before they carried the key/.test(m)),

@@ -26,12 +26,14 @@ export function useNoticeCounts(): Record<string, number> {
 export interface OtherCommunityNotice {
     url: string;
     name: string;
+    /** Unread messages there (its number on the sheet and in the badge). */
     count: number;
 }
 
 /**
- * Other communities where unread messages wait, with their display name and count (design R6): for Talk's row at the top
- * of ChatsScreen. Empty until read or when none wait.
+ * Other communities where unread messages wait, with their display name and count (design R6): for Talk's rows at the top
+ * of ChatsScreen. Message requests waiting there are the Message requests row's (utils/requests-elsewhere.ts). Empty until
+ * read or when none wait.
  */
 export function useOtherCommunitiesNotices(): OtherCommunityNotice[] {
     const [notices, setNotices] = useState<OtherCommunityNotice[]>([]);

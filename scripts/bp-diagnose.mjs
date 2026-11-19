@@ -418,10 +418,12 @@ async function runNetworkSweep(nodes) {
 
             try {
                 const info = await fetchJSON(`${nodeUrl}/api/community/info`);
-                result.status = info.memberCount > 1 ? '🟢 UP' : '🟡 NEW';
-                result.rawStatus = info.memberCount > 1 ? 'up' : 'new';
-                result.members = String(info.memberCount);
-                result.posts = String(info.postCount);
+                // A community whose owners turned "Share Member Count" off answers without its counts (risk 10): it is up.
+                const counted = typeof info.memberCount === 'number';
+                result.status = !counted || info.memberCount > 1 ? '🟢 UP' : '🟡 NEW';
+                result.rawStatus = !counted || info.memberCount > 1 ? 'up' : 'new';
+                result.members = counted ? String(info.memberCount) : 'not shared';
+                result.posts = typeof info.postCount === 'number' ? String(info.postCount) : 'not shared';
             } catch {
                 return result;
             }

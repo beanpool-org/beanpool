@@ -246,8 +246,12 @@ export default function NamesListScreen() {
 
     // ── the key: each of these asks first ──────────────────────────────────────────────────────
 
-    const ask = (title: string, message: string, confirm: string, onConfirm: () => void, destructive = true) => {
-        Alert.alert(say(title), say(message), [
+    const ask = (title: string, message: string, confirm: string, onConfirm: () => void, destructive = true) =>
+        askUnder(say(title), message, confirm, onConfirm, destructive);
+
+    /** ask(), under a title already in the member's language. */
+    const askUnder = (title: string, message: string, confirm: string, onConfirm: () => void, destructive = true) => {
+        Alert.alert(title, say(message), [
             { text: t('Cancel'), style: 'cancel' },
             { text: say(confirm), style: destructive ? 'destructive' : 'default', onPress: onConfirm },
         ]);
@@ -269,7 +273,9 @@ export default function NamesListScreen() {
     /** A Remove that couldn't be kept stops with its words, and isn't opened as if it had been (round 16, :186). */
     const removeKey = (admin: Pick<NamesAdminRow, 'pubkey' | 'callsign'>) => {
         if (!identity || !anchor) return;
-        ask(COPY.removeKeyTitle(admin.callsign), COPY.removeKey(admin.callsign), COPY.removeKeyButton(admin.callsign), () => {
+        // The title names no one: Android cuts a title at two lines, and a callsign can be any length (#3284,
+        // utils/__tests__/alert-words-in-message.test.ts). The message opens with the same question, name and all.
+        askUnder(t('Remove'), COPY.removeKey(admin.callsign), COPY.removeKeyButton(admin.callsign), () => {
             void run((url) => removeOldKeyAndOpen(url, identity, STORE, admin));
         });
     };

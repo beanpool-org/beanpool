@@ -45,9 +45,11 @@ log(){ printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >> "$LOG"; }
 # Host path of the container's /data mount, so we can drop a status file the
 # node itself serves via /api/community/health — this is how watchdog activity
 # becomes visible + alertable without the node being able to reach the manager.
-# (The fleet manager reads it from POST /api/local/admin/data, not from here;
-# the public endpoint is what lets plain uptime monitoring see it without
-# admin credentials.)
+# (The fleet manager reads it from POST /api/local/admin/data, not from here.
+# The public health answer gives it to someone who is not a member only while
+# the owners keep "Share Node Health & Version" on; with it off, plain uptime
+# monitoring without credentials no longer sees it, and a member's signed read
+# or the admin health does.)
 data_dir(){ docker inspect "$1" --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}' 2>/dev/null; }
 
 # Write a heartbeat + recovery tally into the node's data dir. The node reads

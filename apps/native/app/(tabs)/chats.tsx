@@ -5,7 +5,10 @@ import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
-import { openGlobalRequests, requestsWaitingOnGlobal } from '../../utils/global-requests';
+import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsInView, heldChatsShown, type HeldChatRow as HeldChat } from '../../utils/held-chats';
+import { HeldChatRow } from '../../components/HeldChatRow';
+import { requestsWaitingOnGlobal } from '../../utils/global-requests';
+import { elsewhereCounts, requestsElsewhere, useHeldRequests } from '../../utils/requests-elsewhere';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { talkShowsChat } from '../../utils/dm-blocked';
@@ -27,6 +30,8 @@ import { chatPreviewWords } from '../../utils/chat-line-words';
 import { listingStatusWords } from '../../utils/listing-status-words';
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { MessageRequestsPane } from '../../components/MessageRequestsPane';
+import { MessageRequestsRow } from '../../components/MessageRequestsRow';
+import { useRequestsUnseen } from '../../utils/requests-seen';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,7 +41,7 @@ import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-commun
 import { getPendingOnboarding } from '../../utils/onboarding-state';
 import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
 import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
-import { chatSides, chatSideShown, formatHundredths, homeTail, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
+import { chatSides, chatSideShown, formatHundredths, homeTail, requestsRowCount, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
 import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
 import { OUTSIDE_CHATS_UPDATED, outsideContext, syncOutsideMailNow } from '../../utils/outside-chat-live';
@@ -144,27 +149,48 @@ export default function ChatsScreen() {
     // (requests off on the node, a community not synced yet, or after Sign Out or Replace).
     const [requests, setRequests] = useState<{ count: number; conversations: any[] } | null | undefined>(undefined);
     const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
-    // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row.
-    const [onGlobal, setOnGlobal] = useState(0);
+    // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row,
+    // as global's card among the other communities' (utils/requests-elsewhere.ts). Null until global has answered (or while an ask
+    // with nothing heard before goes unanswered, or with no door ticked on this phone): not known, which the row's red dot leaves
+    // out (PR #3298 review). A 0 is global's own answer: a fall the dot follows (PR #3301 review).
+    const [onGlobal, setOnGlobal] = useState<number | null>(null);
     // Chats with people in other communities, on this phone only; a request among them waits behind the same row.
     const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);
     const outsideRequests = React.useMemo(() => outsideChats.filter((c) => c.state === 'request'), [outsideChats]);
     // Group chats hosted by other communities, as a guest, on this phone only (G2); an invitation waits behind the same row.
     const [guestChats, setGuestChats] = useState<GuestChat[]>([]);
     const guestInvites = React.useMemo(() => guestChats.filter((c) => c.state === 'invited'), [guestChats]);
-    const { recheck } = useNodeStatus();
+    const { recheck, nodeUrl: communityUrl } = useNodeStatus();
+    // Chats in the other communities this phone holds (slice S1, utils/held-chats.ts): each read from that community's own
+    // copy, its name in grey; a tap moves there and opens the chat (openHeldChat).
+    const [heldChats, setHeldChats] = useState<HeldChat[]>([]);
     const otherNotices = useOtherCommunitiesNotices();
-    const requestsHere = requests ?? (onGlobal > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
+    // Requests waiting in every other community this phone holds, global's door count among them (Marty, 19 Nov 2026,
+    // decision 4 of DESIGN-no-switch-messaging-fable.md, S0; utils/requests-elsewhere.ts): in the row's count and dot, and a
+    // card "In {community}" each. Null until read; never a push, a badge or the unread count.
+    const [heldRequests, readHeldAgain] = useHeldRequests();
+    const placesElsewhere = React.useMemo(() => requestsElsewhere(heldRequests, onGlobal), [heldRequests, onGlobal]);
+    const waitingElsewhere = React.useMemo(() => (placesElsewhere ?? []).filter((p) => p.count > 0), [placesElsewhere]);
+    const requestsHere = requests ?? (waitingElsewhere.length > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
+    // The row's count and red dot (core dm-requests.ts requestsRowCount, utils/requests-seen.ts): every kind behind the row.
+    // Global's count is one of the other communities' here (onGlobal null: the phone keeps none of its own for it).
+    const requestsWaitingNow = React.useMemo(
+        () => ({ here: requestsHere, onGlobal: null, outside: outsideRequests, guestInvites, elsewhere: elsewhereCounts(placesElsewhere) }),
+        [requestsHere, outsideRequests, guestInvites, placesElsewhere],
+    );
+    const requestsCount = requestsRowCount(requestsWaitingNow);
+    const requestsUnseenNow = useRequestsUnseen(identity?.publicKey, communityUrl, requestsWaitingNow, messagesFilter === 'requests' && !!requestsHere);
     const [switchingCommunity, setSwitchingCommunity] = useState(false);
     // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
     const [switchNote, setSwitchNote] = useState<string | null>(null);
 
-    const openOtherCommunity = async (url: string) => {
+    const openOtherCommunity = async (url: string, what: 'messages' | 'requests' = 'messages') => {
         if (!identity?.publicKey || switchingCommunity) return;
         setSwitchNote(null);
         setSwitchingCommunity(true);
         try {
-            const result = await openNoticeIn(url, null, async () => CHAT_MESSAGES_ROUTE, {
+            // A card about message requests there lands on that community's Message requests, as a tapped notice lands.
+            const result = await openNoticeIn(url, null, async () => (what === 'requests' ? '/(tabs)/chats?filter=requests' : CHAT_MESSAGES_ROUTE), {
                 storage: AsyncStorage,
                 publicKey: identity.publicKey,
                 joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
@@ -177,11 +203,62 @@ export default function ChatsScreen() {
             setSwitchingCommunity(false);
         }
     };
+    // A held community's chat. A direct one opens in place (slice S2, utils/held-chats.ts heldChatOpensInPlace): read and
+    // answered there, nothing switches. Any other (a group's, a deal's or an event's chat in place is slice S6): the phone
+    // moves there through the one switch and lands in that chat, as a tapped notice does (S1).
+    const openHeldChat = async (chat: HeldChat) => {
+        if (!identity?.publicKey || switchingCommunity) return;
+        if (heldChatOpensInPlace(chat)) {
+            router.push({ pathname: '/chat/[id]', params: heldChatInPlaceParams(chat) });
+            return;
+        }
+        setSwitchNote(null);
+        setSwitchingCommunity(true);
+        try {
+            const result = await openNoticeIn(chat.community, null, async () => `/chat/${chat.id}` as const, {
+                storage: AsyncStorage,
+                publicKey: identity.publicKey,
+                joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
+                switchUnderWay: communitySwitchUnderWay,
+                switchTo: switchCommunity,
+                recheck,
+            });
+            if (result !== 'switched') setSwitchNote(t("Something went wrong. Try again in a moment."));
+        } finally {
+            setSwitchingCommunity(false);
+        }
+    };
+    // Read as Chat opens, when the phone moves to another community and when a block changes: a held copy changes only
+    // while the member is there, so a sync tick here never reads them again. Closed as Chat is left.
+    useFocusEffect(React.useCallback(() => {
+        // Chat in view (utils/held-chats.ts): every held handle closes as it is left, one a list on its way opened after that too.
+        const view = heldChatsInView();
+        const loadHeld = async () => {
+            if (!identity?.publicKey) {
+                if (view.inView()) setHeldChats([]);
+                return;
+            }
+            try {
+                // A DM with someone the member blocked, under any key that chat names them by there, is not listed.
+                const shown = await heldChatsShown(identity.publicKey, view);
+                if (view.inView()) setHeldChats((prev) => (JSON.stringify(prev) === JSON.stringify(shown) ? prev : shown));
+            } catch (e) {
+                console.warn('[Held] Could not list the chats of the other communities', e);
+                if (view.inView()) setHeldChats([]);
+            }
+        };
+        void loadHeld();
+        const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); });
+        return () => {
+            blockSub.remove();
+            void view.leave();
+        };
+    }, [identity, communityUrl]));
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
-        if (requests === null && onGlobal === 0 && outsideRequests.length === 0 && guestInvites.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
-    }, [requests, onGlobal, outsideRequests.length, guestInvites.length, messagesFilter]);
+        if (requests === null && waitingElsewhere.length === 0 && outsideRequests.length === 0 && guestInvites.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
+    }, [requests, waitingElsewhere.length, outsideRequests.length, guestInvites.length, messagesFilter]);
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
     // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
     // and a leftover view=messages would reach People (mounted inside Talk, reading this route's params).
@@ -349,21 +426,6 @@ export default function ChatsScreen() {
         resetBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         closeBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.border.default },
         closeBtnText: { color: colors.text.secondary, fontSize: 13, fontWeight: '700' },
-        requestsRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            minHeight: 48,
-            paddingHorizontal: 16,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border.default,
-        },
-        requestsRowText: {
-            flex: 1,
-            fontSize: 15,
-            fontWeight: '600',
-            color: colors.text.body,
-        },
         contactsLine: { marginHorizontal: 16, marginBottom: 10, padding: 12, borderRadius: 12, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         contactsLineText: { fontSize: 14, lineHeight: 20, color: colors.text.body },
         contactsLineBold: { fontWeight: '800' },
@@ -385,7 +447,7 @@ export default function ChatsScreen() {
                 id: c.id, outside: true, guest: true, peer: c.name, peerPubkey: c.id, outsideHome: c.host,
                 lastMessage: last?.text ?? '', rawTimestamp: new Date(last?.at ?? c.updatedAt).toISOString(), unread: 0,
             };
-        })];
+        }), ...heldChats.map((c) => ({ ...c, id: c.key, heldChat: c, lastMessage: '', unread: 0 }))];
 
         // 1. Text Search Filter
         if (searchQuery.trim() !== '') {
@@ -450,7 +512,7 @@ export default function ChatsScreen() {
         regular = orderTalkRows(regular, sortBy);
 
         return { actionRequired, regularConversations: regular };
-    }, [conversations, outsideChats, guestChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
+    }, [conversations, outsideChats, guestChats, heldChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
 
     const resetFilters = () => {
         setSearchQuery('');
@@ -505,6 +567,7 @@ export default function ChatsScreen() {
                     requestsWaitingOnGlobal(identity)
                         .then(count => { if (active) setOnGlobal(count); })
                         .catch(console.error);
+                    readHeldAgain();
                     getFriendsLocal(identity.publicKey)
                         .then(res => {
                             if (active) setFriendPubkeys(prev => {
@@ -605,6 +668,8 @@ export default function ChatsScreen() {
     );
 
     const renderItem = ({ item }: { item: any }) => {
+        // A chat in another community this phone holds (slice S1): that community's name in grey, and a tap moves there.
+        if (item.heldChat) return <HeldChatRow item={item.heldChat} busy={switchingCommunity} onOpen={(c) => void openHeldChat(c)} />;
         if (item.outside) {
             // Someone in another community: their community always shows (joint design §2.6), the chat is this phone's own. The
             // name is the sender's own choice (up to 60 characters, new with each line), so the community never shares its line:
@@ -1091,26 +1156,23 @@ export default function ChatsScreen() {
             {messagesFilter !== 'requests' && (
                 <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
             )}
-            {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
-            {requestsHere && requestsHere.count + onGlobal + outsideRequests.length + guestInvites.length > 0 && messagesFilter !== 'requests' && (
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('Message requests')}
-                    testID="message-requests-row"
-                    style={styles.requestsRow}
-                    onPress={() => setMessagesFilter('requests')}
-                >
-                    <Text style={styles.requestsRowText}>{t('Message requests')}</Text>
-                    <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
-                </Pressable>
+            {/* One row for every kind of outside request (Marty, 1 Nov 2026). Marty, 19 Nov 2026, after Damo's global test ("I
+                thought that was a heading for the chat not a menu!!!"): it shows how many wait and a small red dot until the list
+                is opened, which replaced his 1 Nov "no count and no badge until one is accepted" for this row alone. Still no
+                push, and nothing in the app-icon badge, the tab's badge or the unread count: a stranger's line must not ring a
+                phone set to another community (components/MessageRequestsRow.tsx). */}
+            {requestsHere && messagesFilter !== 'requests' && (
+                <MessageRequestsRow count={requestsCount} unseen={requestsUnseenNow} onPress={() => setMessagesFilter('requests')} />
             )}
             </QuickReturnBlock>
             {messagesFilter === 'requests' && requestsHere ? (
                 <MessageRequestsPane
                     entries={requestsHere.conversations}
                     count={requestsHere.count}
-                    onGlobal={onGlobal}
-                    onOpenGlobal={() => void openGlobalRequests(identity?.publicKey, recheck)}
+                    elsewhere={waitingElsewhere}
+                    onOpenElsewhere={(place) => void openOtherCommunity(place.url, 'requests')}
+                    elsewhereBusy={switchingCommunity}
+                    elsewhereNote={switchNote}
                     outside={outsideRequests}
                     onOpenOutside={(c) => router.push(`/outside-chat/${c.id}`)}
                     guestInvites={guestInvites}

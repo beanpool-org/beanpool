@@ -28,7 +28,7 @@ import { isPushNoticeKind, PUSH_NOTICE_LIFETIME_SECONDS, pushCommunityTag, pushN
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../push-notice-check';
 import {
     clearActiveCount, countNotice, dropCounts, forgetNoticeCounts, noteServerUnread, noticeCountFor, noticeCountsSum, NOTICE_COUNTS_STORE_KEY,
-    onNoticeCounts, readNoticeCounts, watchNoticeCounts,
+    onNoticeCounts, readNoticeCounts, readNoticeRequests, watchNoticeCounts,
 } from '../notice-counts';
 import { communitySwitched } from '../community-switch';
 import { PUSH_ALERTS_OFF_STORE_KEY, PUSH_PINS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -244,6 +244,53 @@ describe('a community\'s number goes back to nothing as it becomes the one in us
         switchTo(MULLUM);
         await receive(push(data));
         expect(await counts()).toEqual({});
+    });
+});
+
+describe('message requests waiting at another community (Marty, 19 Nov 2026): the Message requests row alone, never a number or the badge', () => {
+    it('keeps what a round said beside the number, in no count and no sum, and drops it with the number', async () => {
+        const home = new Community('https://riverside.example');
+        const hill = new Community('https://hillside.example');
+        const vale = new Community('https://valley.example');
+        keep(home, hill, vale);
+        await noteServerUnread(storage, hill.url, 0, 0, 2);
+        await noteServerUnread(storage, vale.url, 1, 1, 0);
+        // A community that answered with none waiting is known to have none (S0: the row's dot follows a fall to 0).
+        expect(await readNoticeRequests(storage)).toEqual({ [hill.url]: 2, [vale.url]: 0 });
+        expect(await counts()).toEqual({ [vale.url]: 1 });
+        expect(await noticeCountsSum(storage)).toBe(1);
+        // A request alone rings nothing: no rise in alerts, so no notice is due.
+        expect(await noteServerUnread(storage, hill.url, 0, 0, 3)).toBe(false);
+        expect(await readNoticeRequests(storage)).toEqual({ [hill.url]: 3, [vale.url]: 0 });
+        // Dropped (alerts off, a guest's look, not theirs): not known any more, so not in it at all.
+        await dropCounts(storage, [hill.url]);
+        expect(await readNoticeRequests(storage)).toEqual({ [vale.url]: 0 });
+    });
+
+    it('leaves out the community in use, one never asked, one with alerts off, and one forgotten (S0)', async () => {
+        const home = new Community('https://riverside.example');
+        const hill = new Community('https://hillside.example');
+        const vale = new Community('https://valley.example');
+        const dale = new Community('https://dale.example');
+        keep(home, hill, vale, dale);
+        await noteServerUnread(storage, hill.url, 0, 0, 2);
+        await noteServerUnread(storage, vale.url, 0, 0, 1);
+        // Asked nothing yet: dale is not known.
+        expect(await readNoticeRequests(storage)).toEqual({ [hill.url]: 2, [vale.url]: 1 });
+        // Alerts off for vale: out at once, before any round drops it.
+        mem.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([vale.url]));
+        expect(await readNoticeRequests(storage)).toEqual({ [hill.url]: 2 });
+        mem.delete(PUSH_ALERTS_OFF_STORE_KEY);
+        // The phone moves to hill: its own list has them, and what it last said goes with the switch.
+        mem.set(ANCHOR, hill.url);
+        await clearActiveCount(storage);
+        expect(await readNoticeRequests(storage)).toEqual({ [vale.url]: 1 });
+        // Back home, hill is not known until its next round answers.
+        mem.set(ANCHOR, home.url);
+        expect(await readNoticeRequests(storage)).toEqual({ [vale.url]: 1 });
+        // Forgotten by the phone: gone.
+        mem.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: home.url }, { url: hill.url }, { url: dale.url }]));
+        expect(await readNoticeRequests(storage)).toEqual({});
     });
 });
 

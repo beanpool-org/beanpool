@@ -10,6 +10,8 @@ import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import type { OutsideChat } from '../utils/outside-chat-store';
+import type { RequestsPlace } from '../utils/requests-elsewhere';
+import { RequestsElsewhereCards } from './RequestsElsewhereCards';
 
 const REQUEST_CARDS_SHOWN = 50;
 const IGNORE_ALL_FROM = 6;
@@ -321,9 +323,16 @@ interface MessageRequestsPaneProps {
     onChanged: () => void;
     /** Back to the chats: the row at the top of Chat opened this. */
     onBack: () => void;
-    /** How many wait on the global community (utils/global-requests.ts). Their cards are there: this row is the way. */
-    onGlobal?: number;
-    onOpenGlobal?: () => void;
+    /**
+     * The phone's other communities where requests wait, global among them (utils/requests-elsewhere.ts; Marty, 19 Nov 2026,
+     * S0): a card "In {community}" each. Their requests are read there: a tap moves the phone there and opens them.
+     */
+    elsewhere?: readonly RequestsPlace[];
+    onOpenElsewhere?: (place: RequestsPlace) => void;
+    /** A move under way: the cards wait. */
+    elsewhereBusy?: boolean;
+    /** A tap that moved nothing says so under the cards (app/(tabs)/chats.tsx `switchNote`). */
+    elsewhereNote?: string | null;
     /** Requests from people in other communities, kept on this phone (utils/outside-chat-store.ts): each opens its chat. */
     outside?: OutsideChat[];
     onOpenOutside?: (chat: OutsideChat) => void;
@@ -332,7 +341,7 @@ interface MessageRequestsPaneProps {
     onOpenGuest?: (chat: GuestChat) => void;
 }
 
-export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, onGlobal = 0, onOpenGlobal, outside = [], onOpenOutside, guestInvites = [], onOpenGuest }: MessageRequestsPaneProps) {
+export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, elsewhere = [], onOpenElsewhere, elsewhereBusy = false, elsewhereNote, outside = [], onOpenOutside, guestInvites = [], onOpenGuest }: MessageRequestsPaneProps) {
     const { theme, colors } = useTheme();
     const [ignoringAll, setIgnoringAll] = useState(false);
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
@@ -441,13 +450,7 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                 <Text aria-hidden={true} importantForAccessibility="no" style={styles.backText}>‹ </Text>
                 <Text style={styles.backText}>{t('Back to chats')}</Text>
             </Pressable>
-            {onGlobal > 0 && (
-                <Pressable accessibilityRole="button" testID="message-requests-on-global" style={styles.emptyCard} onPress={onOpenGlobal}>
-                    <Text style={styles.title}>{tn(onGlobal, '{n} person wants to message you', '{n} people want to message you')}</Text>
-                    <Text style={styles.emptyText}>{t('on the global community')}</Text>
-                    <Text style={styles.backText}>{t('Open their requests there')}</Text>
-                </Pressable>
-            )}
+            <RequestsElsewhereCards places={elsewhere} busy={elsewhereBusy} note={elsewhereNote} onOpen={(place) => onOpenElsewhere?.(place)} />
             {outside.map((c) => (
                 <Pressable key={c.id} accessibilityRole="button" testID="outside-request-card" style={styles.emptyCard} onPress={() => onOpenOutside?.(c)}>
                     <Text style={styles.title}>{t('{name} · {community}', { name: c.peerName ?? t('Someone in another community'), community: c.peerHome })}</Text>
@@ -463,7 +466,7 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                     <Text style={styles.backText}>{t('Open to accept or decline')}</Text>
                 </Pressable>
             ))}
-            {count === 0 && (onGlobal > 0 || outside.length > 0 || guestInvites.length > 0) ? null : count === 0 ? (
+            {count === 0 && (elsewhere.length > 0 || outside.length > 0 || guestInvites.length > 0) ? null : count === 0 ? (
                 <View style={styles.emptyCard}>
                     <Text style={styles.emptyText}>
                         {t("No requests. A first message from someone you haven't added or talked to arrives here.")}

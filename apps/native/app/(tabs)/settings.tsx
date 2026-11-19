@@ -35,6 +35,7 @@ import { claimNodeOrigin } from '../../utils/claim-link';
 import { NoOwnerCard, type OwnerlessServer } from '../../components/NoOwnerCard';
 import { fetchMembership } from '../../utils/membership-probe';
 import { remoteOwnTransactionCount } from '../../utils/diagnostics-own-count';
+import { inSyncWith, remoteStatsFrom, type RemoteStats } from '../../utils/shared-figure';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -574,7 +575,7 @@ export default function SettingsScreen() {
     const [dbStats, setDbStats] = useState<{ members: number, posts: number, transactions: number, messages: number, integrity: string } | null>(null);
     const [diagLoading, setDiagLoading] = useState(false);
     const [dbSize, setDbSize] = useState<string>(() => t('{size} MB', { size: formatNumber(0, 1) }));
-    const [remoteStats, setRemoteStats] = useState<{ members: number, posts: number, transactions: number } | null>(null);
+    const [remoteStats, setRemoteStats] = useState<RemoteStats | null>(null);
     const params = useLocalSearchParams<{ section?: string }>();
 
     // Location permission (relocated here from the global header)
@@ -964,17 +965,10 @@ export default function SettingsScreen() {
                     const res = await fetch(`${cleanUrl}/api/community/info?_t=${Date.now()}`);
                      if (res.ok) {
                         const data = await res.json();
-                        let remoteTxCount = data.transactionCount || 0;
-                        
                         // The member's own ledger is Beans: never asked where they are a preview (the global node).
                         const ownCount = await remoteOwnTransactionCount(cleanUrl, data, identity?.publicKey);
-                        if (ownCount !== null) remoteTxCount = ownCount;
-
-                        setRemoteStats({
-                            members: data.memberCount || 0,
-                            posts: data.postCount || 0,
-                            transactions: remoteTxCount
-                        });
+                        // A count the node left out stays null and is not compared (utils/shared-figure.ts): never a 0.
+                        setRemoteStats(remoteStatsFrom(data, ownCount));
                     }
                 } catch (err) {
                     console.warn('[Diagnostics] Could not fetch remote stats for comparison:', err);
@@ -1480,22 +1474,25 @@ export default function SettingsScreen() {
                         onPress: () => forgetCommunityPush(identity, anchorUrl, async () => {
                             for (const url of everySpelling) await removeSavedNode(url);
                             setSavedNodes(remainingNodes);
-                            try {
-                                const filename = getDatabaseFilenameForNode(targetUrl);
-                                const paths = getDatabaseFilePaths(filename);
-                                for (const p of paths) {
-                                    await FileSystem.deleteAsync(p, { idempotent: true });
-                                }
-                                // Its cursors go with its copy, so a rejoin reads it whole.
-                                const { syncCursorKeysOf } = await import('../../services/pillar-sync');
-                                await AsyncStorage.multiRemove(syncCursorKeysOf(filename));
-                            } catch(e) {}
-                            
+
                             // Automatically pivot to the next available node
                             await handleSwitchNode(remainingNodes[0].url);
                             // Any read of the list before the phone moved put the community in use back on it
                             // (nodes.ts getSavedNodes), and a community on the list gets the push token.
                             for (const url of everySpelling) await removeSavedNode(url);
+                            // Its copy goes once the phone is off it, never while it is the copy in use (a sync tick
+                            // would open it again under the address still set): with its cursors, held handles closed
+                            // first, the WAL too (utils/community-cache.ts forgetCommunityCopy). A switch that failed
+                            // (it says so) leaves the phone there, and its copy with it.
+                            const now = await AsyncStorage.getItem('beanpool_anchor_url');
+                            if (!now || !sameCommunity(now, targetUrl)) {
+                                try {
+                                    const { forgetCommunityCopy } = await import('../../utils/community-cache');
+                                    await forgetCommunityCopy(targetUrl);
+                                } catch (e) {
+                                    console.warn('[Settings] Could not delete the forgotten community\'s copy', e);
+                                }
+                            }
                         })
                     }
                 ]
@@ -1514,17 +1511,15 @@ export default function SettingsScreen() {
                     onPress: () => forgetCommunityPush(identity, targetUrl, async () => {
                         await removeSavedNode(targetUrl);
                         setSavedNodes(prev => prev.filter(n => n.url !== targetUrl));
-                        // Physically delete the dormant .db file from the OS folder
+                        // Its copy off the phone, with its cursors so a rejoin reads it whole: every held handle closed
+                        // first and none opened until it has gone, the WAL too, in expo-sqlite's own directory
+                        // (utils/community-cache.ts forgetCommunityCopy).
                         try {
-                            const filename = getDatabaseFilenameForNode(targetUrl);
-                            const paths = getDatabaseFilePaths(filename);
-                            for (const p of paths) {
-                                    await FileSystem.deleteAsync(p, { idempotent: true });
-                            }
-                            // Its cursors go with its copy, so a rejoin reads it whole.
-                            const { syncCursorKeysOf } = await import('../../services/pillar-sync');
-                            await AsyncStorage.multiRemove(syncCursorKeysOf(filename));
-                        } catch(e) {}
+                            const { forgetCommunityCopy } = await import('../../utils/community-cache');
+                            await forgetCommunityCopy(targetUrl);
+                        } catch (e) {
+                            console.warn('[Settings] Could not delete the forgotten community\'s copy', e);
+                        }
                     })
                 }
             ]
@@ -3077,9 +3072,7 @@ export default function SettingsScreen() {
                                       <Text style={{ fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>{t("Database Status:")}</Text>
                                       {(() => {
                                           const hasIntegrityError = dbStats && dbStats.integrity !== 'ok';
-                                          const isSynced = !remoteStats || (dbStats && 
-                                              dbStats.members === remoteStats.members &&
-                                              dbStats.posts === remoteStats.posts);
+                                          const isSynced = inSyncWith(dbStats, remoteStats);
 
                                           let pillBg: string = palette.emerald100;
                                           let pillBorder: string = palette.emerald400;
@@ -3121,7 +3114,7 @@ export default function SettingsScreen() {
                                     <Text style={{ fontSize: 24, marginBottom: 2 }}>👥</Text>
                                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{formatNumber(dbStats?.members ?? 0)}</Text>
                                     <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>{t('Cached Members')}</Text>
-                                    {remoteStats && (
+                                    {remoteStats && remoteStats.members !== null && (
                                         <Text style={{ fontSize: 10, color: dbStats?.members === remoteStats.members ? colors.brand.primary : colors.feedback.warning.fg, fontWeight: 'bold', marginTop: 4 }}>
                                             {dbStats?.members === remoteStats.members ? t('🟢 Node In Sync') : t('⚠️ Node has {n}', { n: remoteStats.members })}
                                         </Text>
@@ -3131,7 +3124,7 @@ export default function SettingsScreen() {
                                     <Text style={{ fontSize: 24, marginBottom: 2 }}>🛒</Text>
                                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{formatNumber(dbStats?.posts ?? 0)}</Text>
                                     <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>{t('Active Posts')}</Text>
-                                    {remoteStats && (
+                                    {remoteStats && remoteStats.posts !== null && (
                                         <Text style={{ fontSize: 10, color: dbStats?.posts === remoteStats.posts ? colors.brand.primary : colors.feedback.warning.fg, fontWeight: 'bold', marginTop: 4 }}>
                                             {dbStats?.posts === remoteStats.posts ? t('🟢 Node In Sync') : t('⚠️ Node has {n}', { n: remoteStats.posts })}
                                         </Text>
@@ -3141,7 +3134,7 @@ export default function SettingsScreen() {
                                     <Text style={{ fontSize: 24, marginBottom: 2 }}>💸</Text>
                                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{formatNumber(dbStats?.transactions ?? 0)}</Text>
                                     <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>{t('Your Ledger Deals')}</Text>
-                                    {remoteStats && (
+                                    {remoteStats && remoteStats.transactions !== null && (
                                         <Text style={{ fontSize: 10, color: colors.brand.primary, fontWeight: 'bold', marginTop: 4 }}>
                                             {t('🟢 Node History ({n})', { n: remoteStats.transactions })}
                                         </Text>

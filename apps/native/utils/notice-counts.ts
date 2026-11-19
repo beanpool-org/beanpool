@@ -44,9 +44,11 @@ interface Storage {
 /**
  * A community's count, the notices it has seen (id → when the phone noted it, whole seconds), its own unread count as it
  * last answered a round, and what a rise is measured from: how many of those lines it said a push would have told
- * ({@link noteServerUnread}). The last two are absent until it answers, and again after a switch to it.
+ * ({@link noteServerUnread}). The last two are absent until it answers, and again after a switch to it. `requests`: the
+ * message requests it said wait there, for the Message requests row alone ({@link readNoticeRequests}): never in its number
+ * or the badge, and never a notice (Marty, 1 Nov 2026; in the row, 19 Nov 2026).
  */
-interface Tally { n: number; seen: Record<string, number>; server?: number; alerts?: number }
+interface Tally { n: number; seen: Record<string, number>; server?: number; alerts?: number; requests?: number }
 type Tallies = Record<string, Tally>;
 
 function parse(raw: string | null): Tallies {
@@ -56,7 +58,7 @@ function parse(raw: string | null): Tallies {
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return out;
         for (const [community, v] of Object.entries(parsed as Record<string, unknown>)) {
             const at = communityAddress(community);
-            const tally = v && typeof v === 'object' ? v as { n?: unknown; seen?: unknown; server?: unknown; alerts?: unknown } : null;
+            const tally = v && typeof v === 'object' ? v as { n?: unknown; seen?: unknown; server?: unknown; alerts?: unknown; requests?: unknown } : null;
             if (!at || !tally) continue;
             const seen: Record<string, number> = {};
             if (tally.seen && typeof tally.seen === 'object') {
@@ -68,6 +70,7 @@ function parse(raw: string | null): Tallies {
             out[at] = { n, seen };
             if (typeof tally.server === 'number' && Number.isSafeInteger(tally.server) && tally.server >= 0) out[at].server = tally.server;
             if (typeof tally.alerts === 'number' && Number.isSafeInteger(tally.alerts) && tally.alerts >= 0) out[at].alerts = tally.alerts;
+            if (typeof tally.requests === 'number' && Number.isSafeInteger(tally.requests) && tally.requests >= 0) out[at].requests = tally.requests;
         }
     } catch {
         // Counts that can't be read are none: a number shown wrong is worse than none.
@@ -166,17 +169,18 @@ export async function countNotice(storage: Storage, community: string, id: strin
  * tells nobody. Nothing for a community with alerts off, whenever the answer came. A community that has said nothing since it was last in use is compared with none waiting. Nothing for the
  * community in use (the member moved there while it answered) or one the phone doesn't keep. Never throws.
  */
-export async function noteServerUnread(storage: Storage, community: string, unread: number, alerts: number = unread): Promise<boolean> {
+export async function noteServerUnread(storage: Storage, community: string, unread: number, alerts: number = unread, requests: number = 0): Promise<boolean> {
     let rose = false;
     const held = await update(storage, (tallies, active, kept, off) => {
         const at = communityAddress(community);
         // Not for a community whose alerts went off while it answered: the switch has already cleared its number.
         if (!at || at === active || !kept?.has(at) || off.has(at)) return false;
         const tally = tallies[at] ?? { n: 0, seen: {} };
-        const same = tally.server === unread && tally.alerts === alerts && tally.n === 0;
+        const same = tally.server === unread && tally.alerts === alerts && (tally.requests ?? 0) === requests && tally.n === 0;
         rose = alerts > (tally.alerts ?? 0);
         tally.server = unread;
         tally.alerts = alerts;
+        tally.requests = requests;
         tally.n = 0;
         tallies[at] = tally;
         return !same;
@@ -198,6 +202,7 @@ export async function dropCounts(storage: Storage, communities: readonly string[
             tally.n = 0;
             delete tally.server;
             delete tally.alerts;
+            delete tally.requests;
             dirty = true;
         }
         return dirty;
@@ -215,6 +220,7 @@ export async function clearActiveCount(storage: Storage): Promise<void> {
         tally.n = 0;
         delete tally.server;
         delete tally.alerts;
+        delete tally.requests;
         return true;
     });
 }
@@ -235,6 +241,31 @@ export async function readNoticeCounts(storage: Pick<Storage, 'getItem'>): Promi
         for (const [c, tally] of Object.entries(tallies)) {
             const number = Math.max(tally.n, tally.server ?? 0);
             if (c !== anchor && number > 0 && (!kept || kept.has(c)) && !off.has(c)) out[c] = number;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * The message requests each other community said wait there as it last answered a round, by its address, on the same terms
+ * as {@link readNoticeCounts} (kept, not in use, alerts on), 0 included: for the Message requests row's count and its
+ * "In {community}" cards (utils/requests-elsewhere.ts; Marty, 19 Nov 2026, decision 4 of DESIGN-no-switch-messaging-fable.md).
+ * A community that hasn't answered since it was last the one in use, or since its alerts went off, is not in it: not known,
+ * which the row's red dot keeps apart from none waiting. Never in {@link noticeCountsSum}: a request makes no badge (Marty,
+ * 1 Nov 2026). Empty when they can't be read.
+ */
+export async function readNoticeRequests(storage: Pick<Storage, 'getItem'>): Promise<Record<string, number>> {
+    await writes;
+    try {
+        const tallies = parse(await storage.getItem(NOTICE_COUNTS_STORE_KEY));
+        const anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
+        const kept = keptCommunities(anchor, await storage.getItem(SAVED_NODES_STORE_KEY));
+        const off = new Set(await communitiesWithAlertsOff(storage));
+        const out: Record<string, number> = {};
+        for (const [c, tally] of Object.entries(tallies)) {
+            if (c !== anchor && tally.requests !== undefined && (!kept || kept.has(c)) && !off.has(c)) out[c] = tally.requests;
         }
         return out;
     } catch {

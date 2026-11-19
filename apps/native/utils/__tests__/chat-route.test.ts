@@ -161,18 +161,52 @@ describe('the screens\' wiring', () => {
         expect(chatRoute).not.toMatch(/isHeldGroupChat\(|isKnownDmConversation\(|knownDmConversationId\(|getConversationKind\(|askHeldGroup|askKnownDm|askRouteKind/);
     });
 
+    /**
+     * The one exception (slice S2): a direct chat of another community this phone holds, opened in place by its own id in
+     * that community (Chat's held rows, Contacts there). routeChat's facts (the held group, the DM guard, the kind) are the
+     * community in use's, so they are never asked of another community's chat; only the DM screen draws in place, and only
+     * for an id that community's own copy holds as a DM, at the address and under the name the phone saved (#3305 review F1,
+     * F2: utils/held-chats.ts chatInPlaceRoute; a link can name any id and any spelling). Anything else named with a
+     * community draws the screen that opens nothing (ChatNotInPlace), which reads nothing of any copy.
+     */
+    const IN_PLACE_BRANCH = "if (id && placedNow?.open === 'in-place') return <ChatScreen id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;";
+    const NOT_IN_PLACE_BRANCH = "if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;";
+    const WAITS_FOR_THE_ANSWER = 'if (id && community && !placedNow) return null;';
+
     it('every node-readable screen gets routeChat\'s id, and only an answer for this id draws', () => {
         expect(chatRoute).toMatch(/if \(!id \|\| !route \|\| route\.for !== String\(id\)\) return null;/);
         expect(chatRoute.match(/<GroupChatView kind="group" id=\{screenId\}/g)?.length).toBe(1);
         expect(chatRoute).toMatch(/<EventChatView eventId=\{screenId\} \/>/);
         expect(chatRoute).toMatch(/<GroupChatView kind="enterprise" id=\{screenId\}/);
-        expect(chatRoute).not.toMatch(/id=\{(?!screenId\})|eventId=\{(?!screenId\})/);
+        // Every screen but the DM one in place and the one that opens nothing (below), whose branches are the only other ids given.
+        expect(chatRoute.split(IN_PLACE_BRANCH).length).toBe(2);
+        expect(chatRoute.split(NOT_IN_PLACE_BRANCH).length).toBe(2);
+        expect(chatRoute.replace(IN_PLACE_BRANCH, '').replace(NOT_IN_PLACE_BRANCH, '')).not.toMatch(/id=\{(?!screenId\})|eventId=\{(?!screenId\})/);
     });
 
-    it('the DM screen gets routeChat\'s id too, and never reads the link\'s spelling itself', () => {
+    it('the DM screen gets routeChat\'s id too, and never reads the link\'s spelling itself; in place, only with its community, before routeChat is asked', () => {
         expect(chatRoute).toMatch(/return <ChatScreen id=\{screenId\} \/>;/);
+        // Named with a community: nothing draws until chatInPlaceRoute has answered for this id and community; in place, or
+        // opening nothing, before any route answer; routeChat asked only for the ordinary route (no community, or the one in use).
+        const routeNull = chatRoute.indexOf('if (!id || !route || route.for !== String(id)) return null;');
+        expect(chatRoute.indexOf(WAITS_FOR_THE_ANSWER)).toBeGreaterThan(-1);
+        expect(chatRoute.indexOf(WAITS_FOR_THE_ANSWER)).toBeLessThan(chatRoute.indexOf(IN_PLACE_BRANCH));
+        expect(chatRoute.indexOf(IN_PLACE_BRANCH)).toBeLessThan(routeNull);
+        expect(chatRoute.indexOf(NOT_IN_PLACE_BRANCH)).toBeLessThan(routeNull);
+        expect(chatRoute).toMatch(/const placedNow = placeKey && placed\?\.for === placeKey \? placed\.answer : null;/);
+        expect(chatRoute).toMatch(/const ordinary = !community \|\| placedNow\?\.open === 'here';/);
+        expect(chatRoute).toMatch(/useEffect\(\(\) => \{\s*if \(!id \|\| !ordinary\) return;/);
+        // The link's own community name is never read: the name drawn is the saved one.
+        const readsParams = chatRoute.match(/const \{([^}]*)\} = useLocalSearchParams/);
+        expect(readsParams?.[1]).toMatch(/\bcommunity\b/);
+        expect(readsParams?.[1]).not.toMatch(/\bcommunityName\b/);
+        // The screen that opens nothing reads no copy and asks no server: no function of utils/db.ts.
+        const notInPlace = route.slice(route.indexOf('function ChatNotInPlace('), route.indexOf('function ChatScreen('));
+        expect(notInPlace.length).toBeGreaterThan(0);
+        expect(notInPlace).not.toMatch(/\b(getConversation|getMessages|syncSingleConversation|enterChatInPlace|markConversationRead|getDb|heldChatIsDm)\(/);
+        expect(chatRoute).not.toMatch(/<(GroupChatView|EventChatView)[^>]*inPlace/);
         const dmScreen = route.slice(route.indexOf('function ChatScreen('));
-        expect(dmScreen).toMatch(/^function ChatScreen\(\{ id \}: \{ id: string \}\) \{/);
+        expect(dmScreen).toMatch(/^function ChatScreen\(\{ id, inPlace \}: \{ id: string; inPlace\?: \{ community: string; name: string \} \}\) \{/);
         expect(dmScreen).not.toMatch(/useLocalSearchParams<\{ id\?|const \{ id[,\s]/);
     });
 

@@ -697,10 +697,12 @@ async function main(): Promise<void> {
     // there (the body names Alice's line in its DM), Beans (sections 3 and 4). Section 3 checks each, and that a line outside its
     // DM is answered as for a key with no row. And deleting its own row (test-removed-member-delete), which the sweeps below
     // must not do to Vera or Zed. And a message request sent to it, accepted or ignored, or all of them ignored (the director's
-    // option b on PR #2392 review 4355750376; test-dm-requests section 12b checks each).
+    // option b on PR #2392 review 4355750376; test-dm-requests section 12b checks each). And which pushes it wants: its row
+    // reaches the route's own checks, where a key with no row is refused 403 not_a_member before them (routes/community.ts,
+    // test-strangers-cant-write); section 5 checks that only push switches are saved for it.
     const MAY = new Set(['POST /api/messages/send', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/ledger/transfer',
         'POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react', 'POST /api/member/purge',
-        'POST /api/messages/request', 'POST /api/messages/request/ignore-all']);
+        'POST /api/messages/request', 'POST /api/messages/request/ignore-all', 'POST /api/members/preferences']);
     const materialise = (p: string, treasury = enterpriseKey) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
         if (name === 'id') return p.startsWith('/api/groups/') ? group.id : p.startsWith('/api/marketplace/') ? event.id
             : p.startsWith('/api/crowdfund/') ? project : p.startsWith('/api/commons/decisions/') ? decision.id : 'sweep';

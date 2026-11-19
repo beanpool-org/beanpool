@@ -46,6 +46,7 @@ import { wrapLng } from './listings-near';
 import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeCommunity } from './home-cards';
 import { ringProfileSaved } from './profile-saved';
 import { refuseIfNodeTooOld } from './node-version-gate';
+import { sharedFigure } from './shared-figure';
 import { rememberLastPhoto } from './last-photo';
 import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
@@ -2432,9 +2433,10 @@ export async function commissionListing(postId: string, amount_c?: number): Prom
     return request('POST', '/api/federation/commission', amount_c === undefined ? { postId } : { postId, amount_c });
 }
 
-export async function removeMarketplacePost(id: string, authorPublicKey: string): Promise<{ success: boolean }> {
+/** `post`: the listing as the page had it, so its copy on global comes down even where this browser holds no pair for it. */
+export async function removeMarketplacePost(id: string, authorPublicKey: string, post?: MarketplacePost): Promise<{ success: boolean }> {
     const answer = await request<{ success: boolean }>('POST', '/api/marketplace/posts/remove', { id, authorPublicKey });
-    onGlobalCopy((copy, identity) => copy.stopShowing(id, identity));
+    onGlobalCopy((copy, identity) => copy.stopShowing(id, identity, post?.id === id ? post : undefined));
     return answer;
 }
 
@@ -3923,16 +3925,20 @@ export async function saveHomePreferences(publicKey: string, preferences: { 'hom
 
 // ===================== DIAGNOSTICS & NODE STATS =====================
 
-export async function getNodeStats(): Promise<{ members: number; posts: number; transactions: number } | null> {
+/**
+ * The node's counts for Settings → Diagnostics, or null where the node did not answer. Each count is null where the node
+ * left it out (Share Member Count off, and this reader not answered as a member: lib/shared-figure.ts), never 0.
+ */
+export async function getNodeStats(): Promise<{ members: number | null; posts: number | null; transactions: number | null } | null> {
     try {
         const health = await request<{
-            tree?: { totalMembers?: number };
-            activity?: { totalPosts?: number; totalTransactions?: number };
+            tree?: { totalMembers?: unknown };
+            activity?: { totalPosts?: unknown; totalTransactions?: unknown };
         }>('GET', '/api/community/health');
         return {
-            members: health?.tree?.totalMembers ?? 0,
-            posts: health?.activity?.totalPosts ?? 0,
-            transactions: health?.activity?.totalTransactions ?? 0,
+            members: sharedFigure(health?.tree?.totalMembers),
+            posts: sharedFigure(health?.activity?.totalPosts),
+            transactions: sharedFigure(health?.activity?.totalTransactions),
         };
     } catch {
         return null;

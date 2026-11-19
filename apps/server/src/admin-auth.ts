@@ -100,6 +100,20 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     return checkBreakGlassCodeAuth(ctx);
 }
 
+/**
+ * Whether this request rides a live key session of an owner or admin (Settings' `admin_session` cookie, or its
+ * X-Admin-Session header), checked without answering the request: for a public read that tells owners and admins more
+ * than anyone else (GET /api/version's commit and update check, risk 10). A moderator's session, a token, an ended
+ * session or none is false. validateAdminSession is the same check checkAdminAuth makes (live role, epoch, idle window).
+ */
+export function holdsOwnerOrAdminSession(ctx: any): boolean {
+    const token = (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null)
+        || (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) || null;
+    if (!token) return false;
+    const res = validateAdminSession(token);
+    return !!(res.valid && res.session && (res.session.role === 'owner' || res.session.role === 'admin'));
+}
+
 /** The enrol routes, the only ones a break-glass code opens (docs/admin-surface.md §2.2: "enrol a new admin key"). */
 const BREAK_GLASS_ENROL_ROUTES: readonly string[] = ['/api/local/admin/auth/enrol', '/api/local/admin/auth/break-glass/enrol'];
 

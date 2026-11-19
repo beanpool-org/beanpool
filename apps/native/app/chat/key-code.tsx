@@ -19,13 +19,15 @@ import { Alert } from '../../utils/keyboard-alert';
 import { useStyles, useTheme } from '../ThemeContext';
 import { dmKeyChangeStyleSpec, dmKeyCodeCopy, dmKeyCodeShowsVerified, dmKeyCodeState } from '../../utils/dm-key-change';
 import { keyCodeOf, keyCodeSpoken } from '../../utils/key-code';
-import { getDmKeyCodeInfo, markDmPeerVerified, removeDmPeerVerification, type DmKeyCodeInfo } from '../../utils/db';
+import { enterChatInPlace, getDmKeyCodeInfo, leaveChatInPlace, markDmPeerVerified, removeDmPeerVerification, type DmKeyCodeInfo } from '../../utils/db';
 import { DM_PINS_WORDS } from '../../utils/dm-peer-pins';
 
 export { ErrorBoundary };
 
 export default function DmKeyCodeScreen() {
-    const { id } = useLocalSearchParams<{ id: string }>();
+    // `community`: a chat of another community this phone holds, open in place (slice S2): its pins are that community's.
+    const { id, community } = useLocalSearchParams<{ id: string; community?: string }>();
+    const at = community ? String(community) : undefined;
     const styles = useStyles(({ colors }) => StyleSheet.create(dmKeyChangeStyleSpec(colors)));
     const { colors } = useTheme();
     const [info, setInfo] = useState<DmKeyCodeInfo | null | undefined>(undefined);
@@ -33,14 +35,22 @@ export default function DmKeyCodeScreen() {
     const [moved, setMoved] = useState(false);
     const [busy, setBusy] = useState(false);
 
+    // In place (slice S2): this screen holds the chat's community while it shows, before its first read (an effect runs in
+    // the order written). Opened over the chat, which lets go as it is covered: its copy stays open, or opens again once
+    // the chat's close is done, and closes as the last of the two lets go (utils/db.ts enterChatInPlace, #3305 review).
+    useEffect(() => {
+        if (!at) return;
+        enterChatInPlace(at);
+        return () => { void leaveChatInPlace(at); };
+    }, [at]);
     const load = useCallback(async () => {
         try {
-            setInfo(await getDmKeyCodeInfo(String(id)));
+            setInfo(await getDmKeyCodeInfo(String(id), at));
             setUnread(false);
         } catch {
             setUnread(true);
         }
-    }, [id]);
+    }, [id, at]);
     useEffect(() => { void load(); }, [load]);
 
     const copy = dmKeyCodeCopy(info?.name, !!info?.offersKey);
@@ -56,7 +66,7 @@ export default function DmKeyCodeScreen() {
         setBusy(true);
         try {
             // The key whose code this screen shows: a sync that moved it since writes nothing, and the screen shows the new one.
-            const marked = await markDmPeerVerified(String(id), info.peer);
+            const marked = await markDmPeerVerified(String(id), info.peer, at);
             setMoved(!marked);
         } catch {
             Alert.alert(copy.title, t(DM_PINS_WORDS.storeUnread));
@@ -73,7 +83,7 @@ export default function DmKeyCodeScreen() {
                 text: copy.remove, style: 'destructive', onPress: async () => {
                     setBusy(true);
                     try {
-                        await removeDmPeerVerification(String(id));
+                        await removeDmPeerVerification(String(id), at);
                     } catch {
                         Alert.alert(copy.title, t(DM_PINS_WORDS.storeUnread));
                     } finally {

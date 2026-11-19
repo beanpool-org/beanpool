@@ -95,7 +95,7 @@ const copyBody = (id: string, me: Id, extra: Record<string, unknown> = {}) => ({
 
 async function onGlobal(member: Id, db: any): Promise<void> {
     console.log('── the preflights ──');
-    for (const [path, method] of [[POSTS, 'POST'], [`${POSTS}/update`, 'POST'], [`${POSTS}/remove`, 'POST'], [`${POSTS}/takes-questions`, 'POST'], [`${POSTS}?id=x`, 'GET'], ['/api/events/x/skip', 'POST'], ['/api/events/x/skip?date=2030-01-01', 'DELETE'], [`/api/community/membership/${member.pk}`, 'GET'], ['/api/me/unread', 'GET']] as const) {
+    for (const [path, method] of [[POSTS, 'POST'], [`${POSTS}/update`, 'POST'], [`${POSTS}/remove`, 'POST'], [`${POSTS}/takes-questions`, 'POST'], [`${POSTS}/copies/confirm`, 'POST'], [`${POSTS}?id=x`, 'GET'], ['/api/events/x/skip', 'POST'], ['/api/events/x/skip?date=2030-01-01', 'DELETE'], [`/api/community/membership/${member.pk}`, 'GET'], ['/api/me/unread', 'GET']] as const) {
         const pre = await preflight(path, method);
         assert(pre.status === 204 && acao(pre) === '*', `${method} ${path}: allowed from another origin (${pre.status}, ${acao(pre)})`);
         assert(lower(pre.headers.get('access-control-allow-methods')).includes(method.toLowerCase()), `${method} ${path}: its method is named`);
@@ -155,6 +155,11 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     assert(readBoth.res.status === 403, `and a read that takes one along (${readBoth.res.status})`);
     const skipOther = await signed(member, 'POST', `/api/events/${plainId}/skip`, { date: '2030-01-04' });
     assert(skipOther.res.status === 403, `and a date of it (${skipOther.res.status})`);
+    // The daily word that the copies are still in step (engine/copy-lease.ts): a browser at the member's community sends it too.
+    const confirmCopy = await signed(member, 'POST', `${POSTS}/copies/confirm`, { ids: [id] });
+    assert(confirmCopy.res.status === 200 && confirmCopy.body?.confirmed === 1 && acao(confirmCopy.res) === '*', `a confirm of the copy opens from another site (${confirmCopy.res.status}, ${acao(confirmCopy.res)})`);
+    const confirmOther = await signed(member, 'POST', `${POSTS}/copies/confirm`, { ids: [id, plainId] });
+    assert(confirmOther.res.status === 403, `and one that takes an ordinary post along is refused (${confirmOther.res.status})`);
     // The driver binds a list as its items, so `[x]` reaches post x as `x` does. The guard can't read that as "names no post".
     const rowOf = () => db.prepare('SELECT title, status FROM posts WHERE id = ?').get(plainId) as { title: string; status: string };
     const asFound = rowOf();
@@ -231,7 +236,7 @@ async function onGlobal(member: Id, db: any): Promise<void> {
 }
 
 async function onLocal(member: Id): Promise<void> {
-    for (const [path, method] of [[POSTS, 'POST'], [`${POSTS}/update`, 'POST'], [`${POSTS}/remove`, 'POST'], [`${POSTS}/takes-questions`, 'POST'], [`${POSTS}?id=x`, 'GET'], ['/api/events/x/skip', 'POST'], [`/api/community/membership/${member.pk}`, 'GET'], ['/api/me/unread', 'GET']] as const) {
+    for (const [path, method] of [[POSTS, 'POST'], [`${POSTS}/update`, 'POST'], [`${POSTS}/remove`, 'POST'], [`${POSTS}/takes-questions`, 'POST'], [`${POSTS}/copies/confirm`, 'POST'], [`${POSTS}?id=x`, 'GET'], ['/api/events/x/skip', 'POST'], [`/api/community/membership/${member.pk}`, 'GET'], ['/api/me/unread', 'GET']] as const) {
         const pre = await preflight(path, method);
         assert(acao(pre) === null && pre.headers.get('access-control-allow-headers') === null, `${method} ${path}: a local community allows no other origin (${acao(pre)})`);
     }

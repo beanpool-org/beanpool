@@ -32,6 +32,8 @@ import {
 import { platformRequest, readPlatformIdentity, IdentityUnavailable, type PlatformIdentity } from '../engine/platform-identity.js';
 import type { RouteDeps } from './types.js';
 import { respondIfMuted } from './profile-feature-gate.js';
+import { isNodeMember } from '../state-engine.js';
+import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { word } from '@beanpool/core';
 
 export function getPulseOAuthConfig(): {
@@ -431,6 +433,14 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
             return;
         }
 
+        // The relay spends the node's own TikTok and Instagram app (its client secret, and the hourly allowance every member
+        // shares), so it is a member's: a key with no member row here is refused before it counts, or fresh keys could use the
+        // node's 120 an hour up and leave members unable to connect (test-strangers-cant-write).
+        if (!isNodeMember(actor)) {
+            ctx.status = 403;
+            ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
+            return;
+        }
         if (!relayAllowed(actor)) {
             ctx.status = 429;
             ctx.body = { error: 'rate_limited', message: 'Too many connection attempts. Try again in an hour.' };

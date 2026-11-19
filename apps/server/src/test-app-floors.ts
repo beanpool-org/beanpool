@@ -3,7 +3,7 @@
  * operator sees. The app's half is apps/native/utils/__tests__/force-update.test.ts.
  *
  *   1. the env: MIN_APP_VERSION_IOS / _ANDROID fall back to MIN_APP_VERSION and the default; a floor set below the
- *      default (1.4.1) is ignored, the default applies, and one start-up line names each one ignored; MIN_APP_VERSION_FROM
+ *      default (1.4.6) is ignored, the default applies, and one start-up line names each one ignored; MIN_APP_VERSION_FROM
  *      (and its per-platform forms) read a date or a date and time, and anything else is `invalid`, never a date
  *   2. the held floor: a floor is enforced only once that platform's store has a build that meets it. An unknown store
  *      enforces nothing; a store behind the floor holds it, and the log says so once, not on every read
@@ -19,8 +19,9 @@
  *      date, and a request with no header (the web app) are answered; so are the ways out of "Update required", from
  *      the app below the floor: the push token's DELETE (Leave this community's, and Sign Out's with the leave's stamp)
  *      and a leave statement, while a push token registration stays refused
- *   8. the built-in floor as the stores stand (both 1.4.1), nothing in .env: a 1.4.0 app on either kind of phone is
- *      refused, 426 app_too_old with the floor 1.4.1; a 1.4.1 app is answered
+ *   8. the built-in floor as the stores stand (both 1.4.6), nothing in .env: a 1.4.1 or 1.4.5 app on either kind of
+ *      phone is refused, 426 app_too_old with the floor 1.4.6; a 1.4.6 app is answered; a store still on 1.4.1 holds
+ *      its platform's floor
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-app-floors.ts
  */
@@ -137,7 +138,7 @@ async function main(): Promise<void> {
     // ── 1. the env ──────────────────────────────────────────────────────────────────────────────
     console.log('--- 1. the env ---');
     __resetAppStoreVersionsForTest();
-    assert(getPlatformFloor('ios') === '1.4.1' && getPlatformFloor('android') === '1.4.1', 'no floor set: both platforms have the default, 1.4.1 (the release that offers Each)');
+    assert(getPlatformFloor('ios') === '1.4.6' && getPlatformFloor('android') === '1.4.6', 'no floor set: both platforms have the default, 1.4.6 (the phone build that goes with this release)');
     setEnv({ MIN_APP_VERSION: '1.5.0' });
     assert(getPlatformFloor('ios') === '1.5.0' && getPlatformFloor('android') === '1.5.0', 'MIN_APP_VERSION alone: both platforms have it');
     setEnv({ MIN_APP_VERSION_IOS: 'v1.5.2' });
@@ -153,45 +154,45 @@ async function main(): Promise<void> {
     assert(floorsBelowBuiltIn().length === 0 && noteFloorsBelowBuiltIn() === null && startLines() === 0,
         'no floor set: nothing is ignored, and the start says nothing');
     setEnv({ MIN_APP_VERSION: 'v1.2.60' });
-    assert(getMinAppVersion() === '1.4.1' && getPlatformFloor('ios') === '1.4.1' && getPlatformFloor('android') === '1.4.1',
-        `MIN_APP_VERSION=1.2.60, below the built-in floor: both platforms keep 1.4.1 (got ${getPlatformFloor('ios')} / ${getPlatformFloor('android')})`);
-    assert(getUnnamedAppFloor() === '1.4.1', 'and so does an app that names no platform');
+    assert(getMinAppVersion() === '1.4.6' && getPlatformFloor('ios') === '1.4.6' && getPlatformFloor('android') === '1.4.6',
+        `MIN_APP_VERSION=1.2.60, below the built-in floor: both platforms keep 1.4.6 (got ${getPlatformFloor('ios')} / ${getPlatformFloor('android')})`);
+    assert(getUnnamedAppFloor() === '1.4.6', 'and so does an app that names no platform');
     let startLine = noteFloorsBelowBuiltIn();
     assert(startLines() === 1 && !!startLine && startLine === warnings[warnings.length - 1]
-        && startLine.includes('MIN_APP_VERSION=1.2.60 in .env is below') && startLine.includes('so it is ignored and 1.4.1 applies'),
+        && startLine.includes('MIN_APP_VERSION=1.2.60 in .env is below') && startLine.includes('so it is ignored and 1.4.6 applies'),
         `one line in the log names it and what applies instead (${startLine})`);
     setEnv({ MIN_APP_VERSION: '1.5.0', MIN_APP_VERSION_IOS: '1.3.9', MIN_APP_VERSION_ANDROID: 'v1.2.8' });
-    assert(getPlatformFloor('ios') === '1.4.1' && getPlatformFloor('android') === '1.4.1' && getMinAppVersion() === '1.5.0',
-        'MIN_APP_VERSION raises it to 1.5.0, while each platform held back below 1.4.1 stops at 1.4.1, never under it');
+    assert(getPlatformFloor('ios') === '1.4.6' && getPlatformFloor('android') === '1.4.6' && getMinAppVersion() === '1.5.0',
+        'MIN_APP_VERSION raises it to 1.5.0, while each platform held back below 1.4.6 stops at 1.4.6, never under it');
     startLine = noteFloorsBelowBuiltIn();
     assert(startLines() === 2 && JSON.stringify(floorsBelowBuiltIn()) === '["MIN_APP_VERSION_ANDROID=1.2.8","MIN_APP_VERSION_IOS=1.3.9"]'
         && !!startLine?.startsWith('[AppVersions] MIN_APP_VERSION_ANDROID=1.2.8, MIN_APP_VERSION_IOS=1.3.9 in .env are below'),
         `the two ignored ones, in one line; MIN_APP_VERSION=1.5.0 is no part of it (${startLine})`);
-    setEnv({ MIN_APP_VERSION: '1.4.1', MIN_APP_VERSION_IOS: undefined, MIN_APP_VERSION_ANDROID: undefined });
-    assert(getPlatformFloor('android') === '1.4.1' && noteFloorsBelowBuiltIn() === null && startLines() === 2,
-        'MIN_APP_VERSION=1.4.1, the built-in floor itself: applied, and nothing to say');
-    // A node that set the last release's floor, 1.4.0, in .env: below this one now, so ignored, and the start says so.
-    setEnv({ MIN_APP_VERSION: '1.4.0' });
+    setEnv({ MIN_APP_VERSION: '1.4.6', MIN_APP_VERSION_IOS: undefined, MIN_APP_VERSION_ANDROID: undefined });
+    assert(getPlatformFloor('android') === '1.4.6' && noteFloorsBelowBuiltIn() === null && startLines() === 2,
+        'MIN_APP_VERSION=1.4.6, the built-in floor itself: applied, and nothing to say');
+    // A node that set the last release's floor, 1.4.1, in .env: below this one now, so ignored, and the start says so.
+    setEnv({ MIN_APP_VERSION: '1.4.1' });
     startLine = noteFloorsBelowBuiltIn();
-    assert(getPlatformFloor('android') === '1.4.1' && getPlatformFloor('ios') === '1.4.1' && startLines() === 3
-        && !!startLine?.includes('MIN_APP_VERSION=1.4.0 in .env is below') && !!startLine?.includes('so it is ignored and 1.4.1 applies'),
-        `MIN_APP_VERSION=1.4.0, the floor before this release: ignored, 1.4.1 applies, and one line says so (${startLine})`);
+    assert(getPlatformFloor('android') === '1.4.6' && getPlatformFloor('ios') === '1.4.6' && startLines() === 3
+        && !!startLine?.includes('MIN_APP_VERSION=1.4.1 in .env is below') && !!startLine?.includes('so it is ignored and 1.4.6 applies'),
+        `MIN_APP_VERSION=1.4.1, the floor before this release: ignored, 1.4.6 applies, and one line says so (${startLine})`);
     setEnv({ MIN_APP_VERSION: undefined });
 
     // An app that can't say which kind of phone it is on (every build before the full-screen update): the lower of the
     // two platforms' floors, never one above its own platform's (#1415's deciding review: with only per-platform floors
     // set, those apps got no banner at all).
-    assert(getUnnamedAppFloor() === '1.4.1', 'no floor set: an app that names no platform has the default');
-    setEnv({ MIN_APP_VERSION: '1.4.5' });
-    assert(getUnnamedAppFloor() === '1.4.5', 'MIN_APP_VERSION alone: it, as always');
-    setEnv({ MIN_APP_VERSION: undefined, MIN_APP_VERSION_ANDROID: '1.4.3' });
-    assert(getUnnamedAppFloor() === '1.4.1', 'Android raised alone: an app that names no platform may be an iPhone, so its floor stays');
-    setEnv({ MIN_APP_VERSION_IOS: '1.4.2' });
-    assert(getUnnamedAppFloor() === '1.4.2', 'both raised: the lower of the two, which every platform has reached');
-    setEnv({ MIN_APP_VERSION_IOS: '1.4.4' });
-    assert(getUnnamedAppFloor() === '1.4.3', 'whichever platform is the lower one');
-    setEnv({ MIN_APP_VERSION: '1.5.0', MIN_APP_VERSION_ANDROID: undefined, MIN_APP_VERSION_IOS: '1.4.5' });
-    assert(getUnnamedAppFloor() === '1.4.5', 'a platform held below MIN_APP_VERSION: the unnamed app is held to no more than it');
+    assert(getUnnamedAppFloor() === '1.4.6', 'no floor set: an app that names no platform has the default');
+    setEnv({ MIN_APP_VERSION: '1.4.9' });
+    assert(getUnnamedAppFloor() === '1.4.9', 'MIN_APP_VERSION alone: it, as always');
+    setEnv({ MIN_APP_VERSION: undefined, MIN_APP_VERSION_ANDROID: '1.4.8' });
+    assert(getUnnamedAppFloor() === '1.4.6', 'Android raised alone: an app that names no platform may be an iPhone, so its floor stays');
+    setEnv({ MIN_APP_VERSION_IOS: '1.4.7' });
+    assert(getUnnamedAppFloor() === '1.4.7', 'both raised: the lower of the two, which every platform has reached');
+    setEnv({ MIN_APP_VERSION_IOS: '1.4.9' });
+    assert(getUnnamedAppFloor() === '1.4.8', 'whichever platform is the lower one');
+    setEnv({ MIN_APP_VERSION: '1.5.0', MIN_APP_VERSION_ANDROID: undefined, MIN_APP_VERSION_IOS: '1.4.9' });
+    assert(getUnnamedAppFloor() === '1.4.9', 'a platform held below MIN_APP_VERSION: the unnamed app is held to no more than it');
     setEnv({ MIN_APP_VERSION: undefined, MIN_APP_VERSION_IOS: undefined, MIN_APP_VERSION_ANDROID: undefined });
 
     assert(getFloorFrom().iso === null && !getFloorFrom().invalid && getMinAppVersionFrom() === null, 'no grace date: null, and not invalid');
@@ -248,7 +249,7 @@ async function main(): Promise<void> {
     // ── 4. per platform ─────────────────────────────────────────────────────────────────────────
     console.log('\n--- 4. each platform answers for itself ---');
     __resetAppStoreVersionsForTest();
-    setEnv({ MIN_APP_VERSION: '1.4.5', MIN_APP_VERSION_IOS: '1.5.0', MIN_APP_VERSION_ANDROID: '1.5.0', MIN_APP_VERSION_FROM_ANDROID: '2026-10-01' });
+    setEnv({ MIN_APP_VERSION: '1.4.9', MIN_APP_VERSION_IOS: '1.5.0', MIN_APP_VERSION_ANDROID: '1.5.0', MIN_APP_VERSION_FROM_ANDROID: '2026-10-01' });
     applyCheckResult({ android: '1.5.0', ios: '1.4.61' }); // Apple still reviewing 1.5.0
     const floors = getAppFloors(new Date('2026-10-05T00:00:00Z'));
     assert(floors.android.min === '1.5.0' && floors.android.blocking,
@@ -313,35 +314,35 @@ async function main(): Promise<void> {
 
     __resetAppStoreVersionsForTest();
     __resetAppVersionCountsForTest();
-    applyCheckResult({ android: '1.4.3', ios: '1.4.2' });
-    setEnv({ MIN_APP_VERSION_ANDROID: '1.4.3', MIN_APP_VERSION_IOS: '1.4.3', MIN_APP_VERSION_FROM: '2026-01-01' });
+    applyCheckResult({ android: '1.4.8', ios: '1.4.7' });
+    setEnv({ MIN_APP_VERSION_ANDROID: '1.4.8', MIN_APP_VERSION_IOS: '1.4.8', MIN_APP_VERSION_FROM: '2026-01-01' });
 
     let r = await get('/api/community/health', null);
     assert(r.status === 200, `health answers (got ${r.status})`);
-    assert(r.body.minAppVersion === '1.4.3', `minAppVersion, for builds before this one: both platforms raised to 1.4.3, so 1.4.3 (got ${r.body.minAppVersion})`);
+    assert(r.body.minAppVersion === '1.4.8', `minAppVersion, for builds before this one: both platforms raised to 1.4.8, so 1.4.8 (got ${r.body.minAppVersion})`);
     assert(r.body.minAppVersionFrom === '2026-01-01T00:00:00.000Z', 'minAppVersionFrom is served');
-    assert(JSON.stringify(r.body.appFloors?.android) === '{"min":"1.4.3","blocking":true}',
+    assert(JSON.stringify(r.body.appFloors?.android) === '{"min":"1.4.8","blocking":true}',
         `Android: enforced and blocking (got ${JSON.stringify(r.body.appFloors?.android)})`);
     assert(JSON.stringify(r.body.appFloors?.ios) === '{"min":null,"blocking":false}',
         `iOS: held for its store, blocking nobody (got ${JSON.stringify(r.body.appFloors?.ios)})`);
     assert(r.text.length < 800, `the public payload stays small (${r.text.length} bytes)`);
     // The banner's number: an app naming its platform gets that platform's floor; anything else the generic one.
-    setEnv({ MIN_APP_VERSION_IOS: '1.4.2' });
+    setEnv({ MIN_APP_VERSION_IOS: '1.4.7' });
     r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: '1.2.57 android' });
-    assert(r.body.minAppVersion === '1.4.3', `an Android app's minAppVersion is the Android floor (got ${r.body.minAppVersion})`);
+    assert(r.body.minAppVersion === '1.4.8', `an Android app's minAppVersion is the Android floor (got ${r.body.minAppVersion})`);
     r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: '1.2.57 ios' });
-    assert(r.body.minAppVersion === '1.4.2', `an iPhone app's is the iOS floor (got ${r.body.minAppVersion})`);
+    assert(r.body.minAppVersion === '1.4.7', `an iPhone app's is the iOS floor (got ${r.body.minAppVersion})`);
     assert(String(r.headers?.vary ?? '').toLowerCase().includes('x-beanpool-app'), `the answer varies by the header (Vary: ${r.headers?.vary})`);
     r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: 'nonsense' });
-    assert(r.body.minAppVersion === '1.4.2', `a garbled header gets the lower of the two floors (got ${r.body.minAppVersion})`);
+    assert(r.body.minAppVersion === '1.4.7', `a garbled header gets the lower of the two floors (got ${r.body.minAppVersion})`);
     r = await get('/api/community/health', null);
-    assert(r.body.minAppVersion === '1.4.2', `and so does a request without one (an older app, the web app) (got ${r.body.minAppVersion})`);
+    assert(r.body.minAppVersion === '1.4.7', `and so does a request without one (an older app, the web app) (got ${r.body.minAppVersion})`);
     setEnv({ MIN_APP_VERSION_IOS: undefined });
     r = await get('/api/community/health', null);
-    assert(r.body.minAppVersion === '1.4.1', `Android alone raised: an app that names no platform keeps the built-in floor, 1.4.1 (got ${r.body.minAppVersion})`);
+    assert(r.body.minAppVersion === '1.4.6', `Android alone raised: an app that names no platform keeps the built-in floor, 1.4.6 (got ${r.body.minAppVersion})`);
     r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: '1.2.57 android' });
-    assert(r.body.minAppVersion === '1.4.3', `while an Android app that names itself gets Android's (got ${r.body.minAppVersion})`);
-    setEnv({ MIN_APP_VERSION_IOS: '1.4.3' });
+    assert(r.body.minAppVersion === '1.4.8', `while an Android app that names itself gets Android's (got ${r.body.minAppVersion})`);
+    setEnv({ MIN_APP_VERSION_IOS: '1.4.8' });
     assert(r.body.flags === undefined, 'and still carries no flags');
 
     // Counting, from the verified signer only.
@@ -373,9 +374,9 @@ async function main(): Promise<void> {
     r = await get(route, null, managerToken);
     assert(r.status === 200, `the owner's automation token: 200 (got ${r.status})`);
     const a = r.body?.platforms?.android, i = r.body?.platforms?.ios;
-    assert(a?.floor === '1.4.3' && a?.store === '1.4.3' && a?.enforced === '1.4.3' && a?.held === false && a?.blocking === true,
+    assert(a?.floor === '1.4.8' && a?.store === '1.4.8' && a?.enforced === '1.4.8' && a?.held === false && a?.blocking === true,
         `Android's floor as set, its store and its enforcement (got ${JSON.stringify(a)})`);
-    assert(i?.floor === '1.4.3' && i?.store === '1.4.2' && i?.enforced === null && i?.held === true && i?.blocking === false,
+    assert(i?.floor === '1.4.8' && i?.store === '1.4.7' && i?.enforced === null && i?.held === true && i?.blocking === false,
         `iOS held for its store (got ${JSON.stringify(i)})`);
     assert(JSON.stringify(a?.versions) === '[{"version":"1.2.57","members":1}]' && JSON.stringify(i?.versions) === '[{"version":"1.2.61","members":1}]',
         `the counts per version (got ${JSON.stringify(a?.versions)} / ${JSON.stringify(i?.versions)})`);
@@ -393,13 +394,13 @@ async function main(): Promise<void> {
     const balancePath = `/api/ledger/balance/${ann.pub}`;
     const plain = await get(balancePath, ann);
     assert(plain.status === 200, `Ann's own balance, from a request with no header (the web app): 200 (got ${plain.status})`);
-    const below = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.4.2 android' });
-    assert(below.status === 426 && below.body?.code === 'app_too_old' && below.body?.minAppVersion === '1.4.3'
+    const below = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.4.7 android' });
+    assert(below.status === 426 && below.body?.code === 'app_too_old' && below.body?.minAppVersion === '1.4.8'
         && typeof below.body?.error === 'string' && below.headers['cache-control'] === 'no-store' && !below.text.includes('balance'),
         `Ann's balance from an Android app below its blocking floor: 426 app_too_old with the floor, no balance (got ${below.status} ${below.text})`);
     const far = await get(balancePath, ann, { [APP_VERSION_HEADER]: '0.0.1 android' });
-    assert(far.status === 426 && far.body?.minAppVersion === '1.4.3', `and from one far below it (got ${far.status})`);
-    const atFloor = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.4.3 android' });
+    assert(far.status === 426 && far.body?.minAppVersion === '1.4.8', `and from one far below it (got ${far.status})`);
+    const atFloor = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.4.8 android' });
     assert(atFloor.status === 200 && atFloor.text === plain.text, `at the floor: answered exactly as without the header (got ${atFloor.status})`);
     const heldBelow = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.2.57 ios' });
     assert(heldBelow.status === 200 && heldBelow.text === plain.text,
@@ -407,13 +408,13 @@ async function main(): Promise<void> {
     const garbled = await get(balancePath, ann, { [APP_VERSION_HEADER]: 'nonsense' });
     assert(garbled.status === 200, `a header that isn't one refuses nothing (got ${garbled.status})`);
     const healthBelow = await get('/api/community/health', ann, { [APP_VERSION_HEADER]: '0.0.1 android' });
-    assert(healthBelow.status === 200 && healthBelow.body?.minAppVersion === '1.4.3',
+    assert(healthBelow.status === 200 && healthBelow.body?.minAppVersion === '1.4.8',
         `her health ping, a public read: answered, with the floor her app shows (got ${healthBelow.status} ${healthBelow.body?.minAppVersion})`);
     // A write is refused before its signature is looked at: unsigned, the same POST is 401 without the header.
     const writeOf = (extra: Record<string, string>) => fetch(`${BASE}/api/ledger/transfer`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...extra }, body: '{}',
     });
-    const writeBelow = await writeOf({ [APP_VERSION_HEADER]: '1.4.2 android' });
+    const writeBelow = await writeOf({ [APP_VERSION_HEADER]: '1.4.7 android' });
     const writeBelowBody = await writeBelow.json().catch(() => null) as any;
     assert(writeBelow.status === 426 && writeBelowBody?.code === 'app_too_old', `a write from an app below the floor: 426 (got ${writeBelow.status})`);
     const writePlain = await writeOf({});
@@ -425,13 +426,13 @@ async function main(): Promise<void> {
     // is Sign Out, which asks it with the leave's stamp (unregisterPushToken); a phone that couldn't reach it then
     // presents the leave statement, unsigned (push-leave.ts). Refused, the node would go on pushing her alerts to a phone
     // that left. A registration is no way out.
-    const belowFloor = { [APP_VERSION_HEADER]: '1.4.2 android' };
+    const belowFloor = { [APP_VERSION_HEADER]: '1.4.7 android' };
     const registered = (token: string) => !!db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token_id = ?').get(ann.pub, pushTokenId(token));
     const LEAVE = 'ExponentPushToken[ann-leave]', SIGN_OUT = 'ExponentPushToken[ann-sign-out]';
     const LATER = 'ExponentPushToken[ann-statement]', SLASH = 'ExponentPushToken[ann-slash]', NEW = 'ExponentPushToken[ann-new]';
     for (const token of [LEAVE, SIGN_OUT, LATER, SLASH]) {
         const reg = await send('POST', '/api/push-tokens', { publicKey: ann.pub, token, platform: 'android', registeredAt: 1000 }, ann,
-            { [APP_VERSION_HEADER]: '1.4.3 android' });
+            { [APP_VERSION_HEADER]: '1.4.8 android' });
         assert(reg.status === 200 && registered(token), `Ann's phone registers ${token} from an app at the floor (got ${reg.status} ${reg.text})`);
     }
     const regBelow = await send('POST', '/api/push-tokens', { publicKey: ann.pub, token: NEW, platform: 'android' }, ann, belowFloor);
@@ -456,34 +457,43 @@ async function main(): Promise<void> {
         `and everything else from that app is still refused (got ${stillRefused.status})`);
     // Before Android's own grace date the block doesn't apply yet, so nothing is refused.
     setEnv({ MIN_APP_VERSION_FROM_ANDROID: new Date(Date.now() + 7 * DAY_MS).toISOString().slice(0, 10) });
-    const graced = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.4.2 android' });
+    const graced = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.4.7 android' });
     assert(graced.status === 200 && graced.text === plain.text, `before the grace date: answered (got ${graced.status})`);
     setEnv({ MIN_APP_VERSION_FROM_ANDROID: undefined });
 
-    assert(JSON.stringify(counted('android')) === '{"1.4.2":1}', 'Ann counts on the version her last answered request sent (a refused one is never counted)');
+    assert(JSON.stringify(counted('android')) === '{"1.4.7":1}', 'Ann counts on the version her last answered request sent (a refused one is never counted)');
 
-    // ── 8. the built-in floor, as the stores stand (13 Nov 2026: Google Play and the App Store both have 1.4.1) ────────
-    // Nothing set in .env: the floor is the built-in one, 1.4.1, and both stores meet it, so a phone still on 1.4.0 is
-    // told "Update required" (its gated reads and writes 426 app_too_old), on either kind of phone; one on 1.4.1 is answered.
-    console.log('\n--- 8. the built-in floor, both stores at 1.4.1 ---');
+    // ── 8. the built-in floor, as the stores stand when this release ships (Google Play and the App Store both have 1.4.6) ─
+    // Nothing set in .env: the floor is the built-in one, 1.4.6, and both stores meet it, so a phone still on 1.4.1 (the
+    // last production build) or 1.4.5 (the build before 1.4.6) is told "Update required" (its gated reads and writes 426
+    // app_too_old), on either kind of phone; one on 1.4.6 is answered.
+    console.log('\n--- 8. the built-in floor, both stores at 1.4.6 ---');
     setEnv({ MIN_APP_VERSION: undefined, MIN_APP_VERSION_ANDROID: undefined, MIN_APP_VERSION_IOS: undefined, MIN_APP_VERSION_FROM: undefined });
     __resetAppStoreVersionsForTest();
-    applyCheckResult({ android: '1.4.1', ios: '1.4.1' });
+    applyCheckResult({ android: '1.4.6', ios: '1.4.6' });
     r = await get('/api/community/health', null);
-    assert(r.body.minAppVersion === '1.4.1'
-        && JSON.stringify(r.body.appFloors) === '{"android":{"min":"1.4.1","blocking":true},"ios":{"min":"1.4.1","blocking":true}}',
-        `health: the floor 1.4.1, enforced and blocking on both (got ${r.body.minAppVersion} ${JSON.stringify(r.body.appFloors)})`);
+    assert(r.body.minAppVersion === '1.4.6'
+        && JSON.stringify(r.body.appFloors) === '{"android":{"min":"1.4.6","blocking":true},"ios":{"min":"1.4.6","blocking":true}}',
+        `health: the floor 1.4.6, enforced and blocking on both (got ${r.body.minAppVersion} ${JSON.stringify(r.body.appFloors)})`);
     for (const platform of ['android', 'ios'] as const) {
-        const old = await get(balancePath, ann, { [APP_VERSION_HEADER]: `1.4.0 ${platform}` });
-        assert(old.status === 426 && old.body?.code === 'app_too_old' && old.body?.minAppVersion === '1.4.1' && !old.text.includes('balance'),
-            `a 1.4.0 ${platform} app's balance read: 426 app_too_old with the floor 1.4.1, so it puts up "Update required" (got ${old.status} ${old.text})`);
-        const current = await get(balancePath, ann, { [APP_VERSION_HEADER]: `1.4.1 ${platform}` });
-        assert(current.status === 200 && current.text === plain.text, `a 1.4.1 ${platform} app: answered (got ${current.status})`);
+        for (const older of ['1.4.1', '1.4.5']) {
+            const old = await get(balancePath, ann, { [APP_VERSION_HEADER]: `${older} ${platform}` });
+            assert(old.status === 426 && old.body?.code === 'app_too_old' && old.body?.minAppVersion === '1.4.6' && !old.text.includes('balance'),
+                `a ${older} ${platform} app's balance read: 426 app_too_old with the floor 1.4.6, so it puts up "Update required" (got ${old.status} ${old.text})`);
+        }
+        const current = await get(balancePath, ann, { [APP_VERSION_HEADER]: `1.4.6 ${platform}` });
+        assert(current.status === 200 && current.text === plain.text, `a 1.4.6 ${platform} app: answered (got ${current.status})`);
     }
-    const oldWrite = await writeOf({ [APP_VERSION_HEADER]: '1.4.0 android' });
+    const oldWrite = await writeOf({ [APP_VERSION_HEADER]: '1.4.1 android' });
     const oldWriteBody = await oldWrite.json().catch(() => null) as any;
-    assert(oldWrite.status === 426 && oldWriteBody?.code === 'app_too_old' && oldWriteBody?.minAppVersion === '1.4.1',
-        `and a write from a 1.4.0 app: 426 app_too_old with the floor 1.4.1 (got ${oldWrite.status})`);
+    assert(oldWrite.status === 426 && oldWriteBody?.code === 'app_too_old' && oldWriteBody?.minAppVersion === '1.4.6',
+        `and a write from a 1.4.1 app: 426 app_too_old with the floor 1.4.6 (got ${oldWrite.status})`);
+    // Until a store has 1.4.6 (Apple still reviewing it, say), that platform's floor is held: a 1.4.1 iPhone is answered.
+    applyCheckResult({ android: '1.4.6', ios: '1.4.1' });
+    const heldIos = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.4.1 ios' });
+    const blockedAndroid = await get(balancePath, ann, { [APP_VERSION_HEADER]: '1.4.1 android' });
+    assert(heldIos.status === 200 && heldIos.text === plain.text && blockedAndroid.status === 426,
+        `the App Store still on 1.4.1: a 1.4.1 iPhone app answered, a 1.4.1 Android app still refused (got ${heldIos.status} / ${blockedAndroid.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

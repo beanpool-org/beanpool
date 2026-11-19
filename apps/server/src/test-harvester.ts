@@ -44,7 +44,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { openEnvelope, readSealedHeader, verifySealedHeader, sealEnvelope } from '@beanpool/core';
 import {
     nodeSlug, getNodes, saveNodes, loadHarvestState, harvestNode, listSealedBackups, sealOldBackups, backoffDelayMs,
-    listPlainHistory, imagesDirFor, missingManifestFor, pullBackupForNode,
+    listPlainHistory, imagesDirFor, missingManifestFor, pullBackupForNode, UNSHARED_COUNTS_PULL_MS,
     type FleetNodeConfig,
 } from './services/harvester.js';
 import { sealFileVerified, MISSING_MEMBER } from './services/sealed-backup.js';
@@ -228,7 +228,7 @@ async function harvestLocalNode(): Promise<void> {
     };
     // Two stand-in nodes beside the real one: an old node (a BeanPool older than locked backups: a readable archive,
     // no X-Backup-Locked header) and a node whose /backup fails. Each counts its /backup hits; both report counts.
-    const hits = { old: 0, down: 0, short: 0 };
+    const hits = { old: 0, down: 0, short: 0, unshared: 0 };
     const oldStateDb = crypto.randomBytes(4000);
     // The archive a node of this version sends: the database AND the objects its rows name. Before round 3 the
     // harvester extracted this, kept state.db and deleted the rest.
@@ -304,6 +304,19 @@ async function harvestLocalNode(): Promise<void> {
             ctx.set('X-Backup-Images', '3/3');
             ctx.set('Content-Type', 'application/gzip');
             ctx.body = oldTar;
+            return;
+        }
+        if (ctx.path === '/unshared-node/api/local/admin/backup') {
+            hits.unshared++;
+            ctx.set('X-Backup-Contents', 'database+images');
+            ctx.set('X-Backup-Images', '3/3');
+            ctx.set('Content-Type', 'application/gzip');
+            ctx.body = oldTar;
+            return;
+        }
+        if (ctx.path === '/unshared-node/api/community/info') {
+            // Its owners turned "Share Member Count" off: the info carries no counts (risk 10).
+            ctx.body = { currency: { type: 'image', value: 'bean' } };
             return;
         }
         if (ctx.path === '/down-node/api/local/admin/backup') {
@@ -591,6 +604,24 @@ async function harvestLocalNode(): Promise<void> {
         assert(o3.status === 'ok' && o3.backupLock?.locked === false && /older than locked backups/.test(o3.sealedBackup?.message || '') && o2.status === 'ok',
             `an old node: the status says why it is not locked ("${o3.sealedBackup?.message}")`);
         assert(/not locked yet/.test(o3.sealOld?.error || '') && fs.existsSync(path.join(oldDir, 'state.db')), 'an old node: seal-old deletes nothing');
+
+        // ── A node that shares no counts (risk 10): pulled once, then hourly, never every minute and never not again ──
+        {
+            const unshared: FleetNodeConfig = { id: 'unshared-node', name: 'Unshared Node', url: url + '/unshared-node', automationToken: fleetTok.token };
+            const u1 = await harvestNode(unshared, false);
+            await harvestNode(unshared, false);
+            await harvestNode(unshared, false);
+            assert(hits.unshared === 1 && u1.status === 'ok' && typeof u1.lastPullAt === 'string',
+                `a node that shares no counts: pulled once over three harvests a minute apart (${hits.unshared} pulls, ${u1.status}: ${u1.error})`);
+            const stateFile = path.join(dataDir, 'harvester-state.json');
+            const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+            const hourAgo = new Date(Date.now() - UNSHARED_COUNTS_PULL_MS - 1000).toISOString();
+            for (const k of Object.keys(state)) if (state[k]?.nodeId === 'unshared-node') state[k].lastPullAt = hourAgo;
+            fs.writeFileSync(stateFile, JSON.stringify(state));
+            const u4 = await harvestNode(unshared, false);
+            assert(hits.unshared === 2 && u4.status === 'ok' && Date.parse(u4.lastPullAt!) > Date.parse(hourAgo),
+                `…and pulled again once ${UNSHARED_COUNTS_PULL_MS / 60_000} minutes have passed since the last pull (${hits.unshared} pulls)`);
+        }
 
         // ── A readable backup is kept WHOLE: every hop carries the images, byte for byte ──
         //

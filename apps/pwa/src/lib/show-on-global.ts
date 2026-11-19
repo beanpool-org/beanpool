@@ -7,9 +7,15 @@
  * has no tick, and nothing here asks anyone anything until the member taps or already has a copy to tend.
  *
  * A phone on the same account keeps its own pairs and the two find one copy: core's header says what happens.
+ *
+ * A browser with no pair still finds its copies by their ids. A delete or a cancel asks after every id the listing can have,
+ * for a listing that could have had a copy ({@link stopShowing}'s `gone`): the copy may be a phone's. The daily look for copies
+ * to tend (core adoptCopies) runs only for a key this browser last heard is on global ({@link readGlobalStanding}): a
+ * browser asks global nothing about a member it has no reason to think is there.
  */
 import {
     audienceOf, copyResultLine, fetchedPhotoOf, makeCopyKeeper, owesOff, type CopyDeps, type CopyPair, type CopyResult, type FetchedPhoto, type HomeEvent,
+    type ShowableListing,
 } from '@beanpool/core';
 import { copyIdFor, getNodeApiUrl, signedCopyFetch } from './api';
 import { copyPairs } from './copy-pairs';
@@ -43,8 +49,14 @@ export const hostHere = () => audienceOf(homeAddress());
 
 /** The global community this web app's community names, or null: never a fixed name of ours. */
 export async function globalAddress(): Promise<string | null> {
-    const info = await communityInfoOnce().catch(() => null);
-    return globalCommunityLink(info ?? null, hostHere())?.href.replace(/\/+$/, '') ?? null;
+    return (await globalAddressRead()) ?? null;
+}
+
+/** As {@link globalAddress}, and undefined where this community gave no answer, so which global it names isn't known. */
+async function globalAddressRead(): Promise<string | null | undefined> {
+    const read = await communityInfoOnce().then((info) => ({ info }), () => null);
+    if (!read) return undefined;
+    return globalCommunityLink(read.info ?? null, hostHere())?.href.replace(/\/+$/, '') ?? null;
 }
 
 function dataUrlOf(blob: Blob): Promise<string> {
@@ -98,7 +110,15 @@ const keeper = makeCopyKeeper<BeanPoolIdentity>({
         const end = eventEndMs({ eventStartAt: home.eventStartAt, eventEndAt: home.eventEndAt });
         return Number.isFinite(end) && end <= Date.now();
     },
+    // A tend runs inside withGlobal, so this community names a global and isn't it.
+    homesOf: async (identity, now) => (adoptsFor(identity.publicKey, now) ? [homeAddress()] : []),
 });
+
+/**
+ * Whether a tend here looks for copies this browser holds no pair for: only for a key it last heard is on global. `now` is the
+ * tend's own clock, the one it judges everything else by.
+ */
+const adoptsFor = (publicKey: string, now: number): boolean => keptStanding(publicKey, now) === 'member';
 
 async function withGlobal<T>(run: (deps: CopyDeps<BeanPoolIdentity>) => Promise<T>, none: T): Promise<T> {
     const global = await globalAddress();
@@ -151,16 +171,20 @@ function noteQuestionsOpened(publicKey: string): void {
 
 /**
  * How many wait on global for this key, in a count alone, and where they are. Null where nothing does. `kept` is what a page is
- * showing: where global gives no answer it stands, as the phone's count does, so a blip doesn't take the row away.
+ * showing: where global (or this community, which names it) gives no answer it stands, as the phone's count does, so a blip
+ * doesn't take the row away. Undefined while the page has heard nothing yet, so a first ask with no answer says not known,
+ * never a 0 the row's red dot would read as a fall (core dm-requests.ts RequestsWaiting; PR #3298 review).
  */
-export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity, kept: GlobalRequests | null = null): Promise<GlobalRequests | null> {
+export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity, kept?: GlobalRequests | null): Promise<GlobalRequests | null | undefined> {
     try {
         if (localStorage.getItem(QUESTIONS_KEY) !== identity.publicKey) return null;
     } catch {
         return null;
     }
-    const global = await globalAddress();
-    if (!global || !identity.privateKey) return null;
+    if (!identity.privateKey) return null;
+    const global = await globalAddressRead();
+    if (global === undefined) return kept;
+    if (!global) return null;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);
     try {
@@ -181,15 +205,19 @@ export async function repeatOnCopy(post: HomeEvent, identity: BeanPoolIdentity):
     await withGlobal((deps) => (post.type === 'offer' || post.type === 'need' ? keeper.tendCopies(identity, deps) : keeper.repeatOnCopy(post, identity, deps)), undefined);
 }
 
-/** Stop showing, and a removal at home. False: global didn't answer, and it is tried again. */
-export async function stopShowing(id: string, identity: BeanPoolIdentity): Promise<boolean> {
-    if ((await copyPairs.read()).length === 0) return true;
-    return withGlobal((deps) => keeper.stopShowing(id, identity, deps), true);
+/**
+ * Stop showing, and a removal at home. False: global didn't answer, and it is tried again. `gone`: the listing a removal took
+ * away, as the page had it, so a copy this browser holds no pair for comes down too (core stopShowing).
+ */
+export async function stopShowing(id: string, identity: BeanPoolIdentity, gone?: ShowableListing & { id: string }): Promise<boolean> {
+    if (!gone && (await copyPairs.read()).length === 0) return true;
+    return withGlobal((deps) => keeper.stopShowing(id, identity, deps, gone), true);
 }
 
-/** Every copy brought into step: a pause, a holiday, a return. */
-export async function tendCopies(identity: BeanPoolIdentity): Promise<void> {
-    if ((await copyPairs.read()).some((p) => p.publicKey === identity.publicKey)) await withGlobal((deps) => keeper.tendCopies(identity, deps), undefined);
+/** Every copy brought into step: a pause, a holiday, a return; and, once a day, copies made elsewhere taken up. */
+export async function tendCopies(identity: BeanPoolIdentity, now: number = Date.now()): Promise<void> {
+    const mine = (await copyPairs.read()).some((p) => p.publicKey === identity.publicKey);
+    if (mine || adoptsFor(identity.publicKey, now)) await withGlobal((deps) => keeper.tendCopies(identity, deps, now), undefined);
 }
 
 /**
@@ -204,7 +232,7 @@ export async function tendCopiesSoon(identity: BeanPoolIdentity | null | undefin
         due = now - Number(localStorage.getItem(TENDED_KEY) ?? 0) >= TEND_EVERY_MS;
         if (due) localStorage.setItem(TENDED_KEY, String(now));
     } catch { /* storage off: this load tends */ }
-    if (due) await tendCopies(identity).catch(() => {});
+    if (due) await tendCopies(identity, now).catch(() => {});
     await keepTryingOffs(identity);
 }
 

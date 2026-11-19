@@ -278,7 +278,11 @@ describe('the names list in the pseudo-locale', () => {
         expect(unfit(host, 320 - 32 - 24, WRITTEN)).toEqual([]);
         await click(host.querySelector(`[aria-label="${pseudoLocalise('Back to the list')}"]`), 'Back');
         await click(buttonSaying(at('Remove {who}’s old key', { who: '@Wren' })), 'Remove @Wren');
-        expect(alerts.said[0]).toBe(at('Remove {who}’s old key?', { who: '@Wren' }));
+        // The title names no one (#3284's rule: Android cuts a title at two lines, and a callsign can be any length); the
+        // message opens with the question, name and all. Before (main): the title was "Remove @Wren’s old key?".
+        expect(alerts.said[0]).toBe(pseudoLocalise('Remove'));
+        expect(alerts.said[0]).not.toContain('Wren');
+        expect(alerts.said[1]).toBe(at(NAMES_COPY.removeKey('{who}').split('@{who}').join('{who}'), { who: '@Wren' }));
         expect(bypassing(host, [...WRITTEN, LOCKED], alerts.said)).toEqual([]);
     });
 

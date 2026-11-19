@@ -486,7 +486,7 @@ async function doorOnWeb(ctx, { page, shot, tall, noSideways, post, dark }) {
     await words.waitFor({ timeout: 20000 });
     await words.fill('Are the loaves still warm?');
     await r.getByTitle('Send message').last().click();
-    await r.getByText(/Sent as a request/).waitFor({ timeout: 20000 });
+    await r.getByText(/Sent as a message request/).waitFor({ timeout: 20000 });
     await readerShot('reader-request-sent');
     const waiting = await global_.ask({ op: 'sql', sql: "SELECT COUNT(*) AS c FROM dm_requests WHERE state = 'pending'", all: true });
     check(waiting[0].c >= 1, `the first line waits as a request on global (${waiting[0].c})`);

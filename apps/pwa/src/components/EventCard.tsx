@@ -840,7 +840,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
         setCancelling(true);
         setCancelError(null);
         try {
-            await removeMarketplacePost(p.id, p.authorPublicKey);
+            await removeMarketplacePost(p.id, p.authorPublicKey, p);
             // Stay on the page: the host re-reads the event (the node still serves a cancelled one to its host
             // by id) and sees it marked CANCELLED, rather than being dropped back on a feed it has left.
             let after: MarketplacePost | null = null;

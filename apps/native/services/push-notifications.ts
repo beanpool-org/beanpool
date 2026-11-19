@@ -17,6 +17,7 @@ import { notificationChannels } from '../utils/notification-channels';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 import { toolReminderRoute } from '../tools/reminders';
+import { emitAppEvent, PUSH_RECEIVED_EVENT } from '../utils/app-events';
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 let Notifications: typeof import('expo-notifications') | null = null;
@@ -116,6 +117,8 @@ if (!isExpoGo) {
                 const recipient = (await loadIdentity().catch(() => null))?.publicKey ?? null;
                 const decision = await checkWhileOpen(incoming(notification), { storage: AsyncStorage, recipient });
                 void countForItsCommunity(incoming(notification), recipient).then(showBadgeSum);
+                // A chat open in place reads its community again (slice S2): it has no socket of its own.
+                emitAppEvent(PUSH_RECEIVED_EVENT);
                 if (decision.kind === 'replace') {
                     postLocalNotice(decision).catch((e) => console.warn('[Push] Could not show a notification in its own words', e));
                 }

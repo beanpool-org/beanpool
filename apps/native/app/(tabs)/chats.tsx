@@ -9,6 +9,7 @@ import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsInView, heldChats
 import { HeldChatRow } from '../../components/HeldChatRow';
 import { requestsWaitingOnGlobal } from '../../utils/global-requests';
 import { elsewhereCounts, requestsElsewhere, useHeldRequests } from '../../utils/requests-elsewhere';
+import { useRequestsInPlace } from '../../utils/requests-in-place';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { talkShowsChat } from '../../utils/dm-blocked';
@@ -179,6 +180,15 @@ export default function ChatsScreen() {
         [requestsHere, outsideRequests, guestInvites, placesElsewhere],
     );
     const requestsCount = requestsRowCount(requestsWaitingNow);
+    // The other communities' requests, read and answered there in place while Message requests shows (slice S3,
+    // utils/requests-in-place.ts); a place that can't be read in place keeps its card that moves the phone there (S0).
+    const [requestsInPlace, readInPlaceAgain] = useRequestsInPlace(identity?.publicKey, waitingElsewhere, messagesFilter === 'requests');
+    const movesElsewhere = React.useMemo(
+        () => waitingElsewhere.filter((p) => !requestsInPlace.some((g) => g.place.address === p.address)),
+        [waitingElsewhere, requestsInPlace],
+    );
+    const openRequestInPlace = (entry: any, place: { url: string; name: string }) =>
+        router.push({ pathname: '/chat/[id]', params: heldChatInPlaceParams({ id: String(entry.id), community: place.url, communityName: place.name }) });
     const requestsUnseenNow = useRequestsUnseen(identity?.publicKey, communityUrl, requestsWaitingNow, messagesFilter === 'requests' && !!requestsHere);
     const [switchingCommunity, setSwitchingCommunity] = useState(false);
     // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
@@ -1169,8 +1179,14 @@ export default function ChatsScreen() {
                 <MessageRequestsPane
                     entries={requestsHere.conversations}
                     count={requestsHere.count}
-                    elsewhere={waitingElsewhere}
+                    elsewhere={movesElsewhere}
                     onOpenElsewhere={(place) => void openOtherCommunity(place.url, 'requests')}
+                    inPlace={requestsInPlace}
+                    onOpenInPlace={openRequestInPlace}
+                    onAcceptedInPlace={(entry, place) => {
+                        setMessagesFilter('all');
+                        openRequestInPlace(entry, place);
+                    }}
                     elsewhereBusy={switchingCommunity}
                     elsewhereNote={switchNote}
                     outside={outsideRequests}
@@ -1187,6 +1203,7 @@ export default function ChatsScreen() {
                     }}
                     onChanged={() => {
                         if (identity?.publicKey) void syncMessages(identity.publicKey);
+                        readInPlaceAgain();
                     }}
                     onBack={() => setMessagesFilter('all')}
                 />

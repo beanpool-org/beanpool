@@ -6078,10 +6078,10 @@ async function syncSingleConversationOnce(conversationId: string, community?: Ch
         // pins are unread: the gate above.
         let withdrawn = 0;
         const req = msgData.conversation?.request;
-        // Never in place: a request for this reader is answered in its own community (requests in place are slice S3).
-        if (here.inPlace && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity?.publicKey) {
-            // Nothing of it is written here.
-        } else if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity.publicKey) {
+        // In place too (slice S3): the gate above let only a chat that community's copy holds as a direct one through (a request
+        // listed for this member by that community's own server is written there as one: requestsInPlace), so its people and
+        // its withdrawn lines are written into that copy exactly as when the phone is set there.
+        if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity.publicKey) {
             try {
                 const mine = await database.getFirstAsync('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?', [conversationId, myIdentity.publicKey]);
                 if (!mine) await writeConversationFromNode(database, { ...msgData.conversation, id: conversationId }, decidedBefore);
@@ -9176,6 +9176,84 @@ export async function decideMessageRequest(conversationId: string, decision: 'ac
     return answer;
 }
 
+/**
+ * The message requests waiting for this member in `community`, another community this phone holds (slice S3,
+ * scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Message requests", §6 S3): its "In {community}" cards act
+ * there in place, with no switch.
+ * - Asked of that community's own server (its saved address, signed for its name) through the chat request copy in place
+ *   (chatCopyForRequest): the same list its own sync reads when the phone is set there, which only the member can read.
+ *   One read per open of the requests and per decision; at 500 chats there it is the one answer the phone's round asks
+ *   of the community in use every 120 s.
+ * - Each listed request for this member that is a direct chat (the node types it `dm`, two people, the member one of them,
+ *   the other its opener) is written into THAT community's copy as a DM row with its request and its people, as the poll
+ *   writes a request when the phone is set there (`conv.type || 'dm'`), and never over a group whose keys that copy holds
+ *   or a row of another kind (newDmFitsIn, #3305 review F1). A link can't reach this: only that server's list of the
+ *   member's own requests. From then on S2's path (the preview's poll, the chat in place, Accept, Decline, Report) holds it.
+ * - The list is kept for that community's file alone (saveMessageRequests), where the phone set there reads it.
+ * - Written after the answer only through `here.handle()`: a switch, a removal, the account leaving or a close while the
+ *   list was on its way writes nothing anywhere (that copy's next read brings it).
+ * Null: no copy in place to read (the community in use, one not saved, a guest's look, a copy not on the phone), or no
+ * answer; the card then moves the phone there, as in S0.
+ */
+export async function requestsInPlace(myPubkey: string, community: string): Promise<{ count: number; conversations: any[] } | null> {
+    if (!myPubkey || !community) return null;
+    let here: ChatRequestCopy;
+    try {
+        here = await chatCopyForRequest(community);
+    } catch {
+        return null;
+    }
+    if (!here.inPlace || !here.anchorUrl) return null;
+    let data: any;
+    try {
+        const res = await signedGet(`/api/messages/conversations/${myPubkey}`, { anchorUrl: here.anchorUrl });
+        if (!res.ok) return null;
+        data = await res.json();
+    } catch {
+        return null;
+    }
+    const listed = data?.requests;
+    const requests = listed && typeof listed === 'object' && Array.isArray(listed.conversations)
+        ? {
+            count: Number.isSafeInteger(listed.count) && listed.count >= 0 ? listed.count : listed.conversations.length,
+            conversations: listed.conversations.filter((c: any) => isDirectRequestFor(c, myPubkey)),
+        }
+        : null;
+    const database = await here.handle();
+    if (!database) return null;
+    for (const conv of requests?.conversations ?? []) {
+        try {
+            await admitRequestInto(database, conv);
+        } catch (e: any) {
+            console.warn(`[Requests] Could not keep a request in place: ${e?.message || e}`);
+        }
+    }
+    await saveMessageRequests(myPubkey, here.file, requests);
+    return requests;
+}
+
+/** A listed request that is a direct chat for `me`: the node types it `dm`, two people, `me` one, the other its opener. */
+function isDirectRequestFor(conv: any, me: string): boolean {
+    const people = Array.isArray(conv?.participants) ? conv.participants : [];
+    const from = conv?.request?.from;
+    return typeof conv?.id === 'string' && !!conv.id && conv.type === 'dm' && people.length === 2
+        && people.every((p: unknown) => typeof p === 'string' && !!p) && people.includes(me)
+        && typeof from === 'string' && from !== me && people.includes(from);
+}
+
+/** One listed request's row and people, into the copy `database` (requestsInPlace): nothing over a row it doesn't fit. */
+async function admitRequestInto(database: SQLite.SQLiteDatabase, conv: any): Promise<void> {
+    if (!(await newDmFitsIn(database, conv.id))) return;
+    await database.runAsync(
+        `INSERT INTO conversations (id, type, post_id, name, created_by, created_at, request) VALUES (?, 'dm', NULL, ?, ?, ?, ?)
+         ON CONFLICT(id) DO NOTHING`,
+        [conv.id, conv.name ?? null, conv.createdBy ?? '', conv.createdAt ?? new Date().toISOString(), JSON.stringify(conv.request)]
+    );
+    for (const p of conv.participants) {
+        await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, p]);
+    }
+}
+
 export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ignored: number }> {
     return _signedRequest('/api/messages/request/ignore-all', {});
 }
@@ -11129,15 +11207,18 @@ export async function removeGroupChatMessage(groupId: string, messageId: string)
  * Report one line of a direct message to the community's moderators (core dm-line-report.ts): the sealed line as this phone
  * holds it, its sender's signature, and `words`, what it reads as here. No key goes, and nothing else of the chat.
  */
-export async function reportDmLine(conversationId: string, messageId: string, words: string, reason: string): Promise<any> {
-    const database = await getDb();
-    const row = await database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?', [messageId]);
-    if (!row) throw new Error('Message not found');
+export async function reportDmLine(conversationId: string, messageId: string, words: string, reason: string, community?: ChatCommunity): Promise<any> {
+    // `community`: a request or chat of another community this phone holds (slice S3): the line is read from that
+    // community's copy, only a line of a direct chat it holds (#3305 review F1), and the report goes to its moderators.
+    const here = community ? await onlyDmLineInPlace(await onlyDmInPlace(await chatCopyForRequest(community), conversationId), messageId) : null;
+    const database = here ? here.database : await getDb();
+    const row = await database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata, conversation_id FROM messages WHERE id = ?', [messageId]);
+    if (!row || (here && row.conversation_id !== conversationId)) throw new Error('Message not found');
     try {
         return await _signedRequest('/api/messages/report', {
             messageId, reason,
             disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId }, words),
-        });
+        }, here ? here.anchorUrl : undefined);
     } catch (e: any) {
         throw reportRefusal(e);
     }

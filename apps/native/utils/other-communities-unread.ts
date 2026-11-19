@@ -27,9 +27,9 @@
  * (utils/node-version-gate.ts), so its round is refused before it leaves the phone and counts as no answer.
  *
  * **What the phone does with an answer.** Its `unread` is that community's number on the BeanPool sheet (notice-counts.ts).
- * `requests` is kept beside it (notice-counts.ts `readNoticeRequests`) for Chat's line "1 message request in {community}"
- * alone (Marty, 19 Nov 2026): it is in no number, no badge and no notice, as a message request makes no alert until it is
- * accepted (Marty, 1 Nov).
+ * `requests` is kept beside it (notice-counts.ts `readNoticeRequests`) for Chat's Message requests row alone, its count and
+ * an "In {community}" card in its list (Marty, 19 Nov 2026; utils/requests-elsewhere.ts): it is in no number, no badge and
+ * no notice, as a message request makes no alert until it is accepted (Marty, 1 Nov).
  *
  * **Its own notice, where no push can have said it** (R5). A rise in `alerts` posts one notice, written down before it is
  * posted so it is never posted twice: "You have new messages in {community}", in the phone's own words, with the name the

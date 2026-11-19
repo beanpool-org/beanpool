@@ -5,7 +5,8 @@
  * community would otherwise never show it. The row is for the device that ticked, not every device they have (below).
  *
  * - **Counts alone** (GET /api/me/unread): nothing of who wrote, and nothing of a line. Accept, Decline and Report are global's
- *   own list, one tap on: this phone's chats are kept per community, and a line is read where it is kept.
+ *   own list, one tap on: this phone's chats are kept per community, and a line is read where it is kept. The count is global's
+ *   card among the phone's other communities' (utils/requests-elsewhere.ts, Marty 19 Nov 2026), and its tap is theirs.
  * - **Nothing is asked of global until the member has asked for questions on this device**, by the director's ruling on #2741: a
  *   phone never asks global what waits for a key unless the member ticked a door here. It keeps a mark from the first tick
  *   ({@link noteQuestionsOpened}), which stays after an Off or a Stop showing, since a request already sent is still theirs
@@ -30,22 +31,6 @@ let asked: { key: string; at: number; count: number } | null = null;
 /** The member has ticked a door on this phone. */
 export async function noteQuestionsOpened(publicKey: string): Promise<void> {
     await AsyncStorage.setItem(QUESTIONS_OPENED_STORE_KEY, publicKey).catch(() => {});
-}
-
-/**
- * The tap on the row: the phone moves to global, as a tapped notice does, and its Message requests open there. `recheck` is the
- * root layout's recognition (app/NodeStatusContext.tsx), asked again before the bounce: the guard opens a screen only for the
- * community it knows the phone is on (member-landing.ts), and without this it still reads the one just left.
- */
-export async function openGlobalRequests(publicKey: string | null | undefined, recheck: () => Promise<unknown>): Promise<void> {
-    if (!publicKey) return;
-    const { communitySwitchUnderWay, switchCommunity } = await import('./use-communities');
-    const { openAfterLanding } = await import('./member-landing');
-    if (communitySwitchUnderWay()) return;
-    await switchCommunity(GLOBAL_NODE_URL, async () => {
-        await recheck().catch(() => 'unknown');
-        openAfterLanding('/(tabs)/chats?filter=requests', GLOBAL_NODE_URL, publicKey);
-    }).catch((e) => console.warn('[Requests] Could not move to the global community', e));
 }
 
 /**

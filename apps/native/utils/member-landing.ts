@@ -17,6 +17,13 @@
  */
 import type { NoticeRoute } from './push-notice-check';
 
+/**
+ * What opens over the tabs' index after a move ({@link openAfterLanding}): a tapped notice's screen, or Contacts, for its
+ * Message on someone in another community the phone holds (utils/message-after-switch.ts). Contacts is never a notice's or
+ * a link's: it opens only over the tabs, never as the first screen.
+ */
+export type LandingRoute = NoticeRoute | '/contacts';
+
 export type MemberLanding = '/(tabs)' | '/(tabs)/settings';
 
 /** The tabs' index: every landing from welcome but the one a screen asked for. */
@@ -88,7 +95,7 @@ export function guestRedirect(segments: readonly string[], publicKey: string | n
  */
 export const NOTICE_LANDING_MS = 60_000;
 
-let notice: { route: NoticeRoute; community: string; publicKey: string; until: number } | null = null;
+let notice: { route: LandingRoute; community: string; publicKey: string; until: number } | null = null;
 
 const sameCommunity = (a: string | null, b: string | null) => !!a && !!b && a.trim().replace(/\/+$/, '') === b.trim().replace(/\/+$/, '');
 
@@ -99,7 +106,7 @@ const sameCommunity = (a: string | null, b: string | null) => !!a && !!b && a.tr
  * not-recognised screen, a recovery prompt, a claim or a landing a screen asked for), it doesn't. The latest ask
  * replaces any before it. Call it before the bounce, and don't navigate: the guard does.
  */
-export function openAfterLanding(route: NoticeRoute, community: string, publicKey: string, now: number = Date.now()): void {
+export function openAfterLanding(route: LandingRoute, community: string, publicKey: string, now: number = Date.now()): void {
     notice = { route, community, publicKey, until: now + NOTICE_LANDING_MS };
 }
 
@@ -108,7 +115,7 @@ export function openAfterLanding(route: NoticeRoute, community: string, publicKe
  * it, taken once, when it was asked for this account and `community` is the one the phone is in now (the node status's
  * address, read again before the bounce). Null otherwise; one for another account, or out of time, is dropped.
  */
-export function takeOpenAfterLanding(publicKey: string, community: string | null, now: number = Date.now()): NoticeRoute | null {
+export function takeOpenAfterLanding(publicKey: string, community: string | null, now: number = Date.now()): LandingRoute | null {
     if (notice && (notice.publicKey !== publicKey || !(now < notice.until))) notice = null;
     if (!notice || !sameCommunity(notice.community, community)) return null;
     const { route } = notice;

@@ -5,7 +5,8 @@ import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
-import { openGlobalRequests, requestsWaitingOnGlobal } from '../../utils/global-requests';
+import { requestsWaitingOnGlobal } from '../../utils/global-requests';
+import { elsewhereCounts, requestsElsewhere, useHeldRequests } from '../../utils/requests-elsewhere';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { talkShowsChat } from '../../utils/dm-blocked';
@@ -146,9 +147,9 @@ export default function ChatsScreen() {
     // (requests off on the node, a community not synced yet, or after Sign Out or Replace).
     const [requests, setRequests] = useState<{ count: number; conversations: any[] } | null | undefined>(undefined);
     const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
-    // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row.
-    // Null until global has answered (or while an ask with nothing heard before goes unanswered): not known, which the row's red
-    // dot leaves out, where a 0 would read as a fall and bring the dot back on every start (PR #3298 review).
+    // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row,
+    // as global's card among the other communities' (utils/requests-elsewhere.ts). Null until global has answered (or while an ask
+    // with nothing heard before goes unanswered): not known, which the row's red dot leaves out (PR #3298 review).
     const [onGlobal, setOnGlobal] = useState<number | null>(null);
     // Chats with people in other communities, on this phone only; a request among them waits behind the same row.
     const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);
@@ -158,11 +159,18 @@ export default function ChatsScreen() {
     const guestInvites = React.useMemo(() => guestChats.filter((c) => c.state === 'invited'), [guestChats]);
     const { recheck, nodeUrl: communityUrl } = useNodeStatus();
     const otherNotices = useOtherCommunitiesNotices();
-    const requestsHere = requests ?? ((onGlobal ?? 0) > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
+    // Requests waiting in every other community this phone holds, global's door count among them (Marty, 19 Nov 2026,
+    // decision 4 of DESIGN-no-switch-messaging-fable.md, S0; utils/requests-elsewhere.ts): in the row's count and dot, and a
+    // card "In {community}" each. Null until read; never a push, a badge or the unread count.
+    const [heldRequests, readHeldAgain] = useHeldRequests();
+    const placesElsewhere = React.useMemo(() => requestsElsewhere(heldRequests, onGlobal), [heldRequests, onGlobal]);
+    const waitingElsewhere = React.useMemo(() => (placesElsewhere ?? []).filter((p) => p.count > 0), [placesElsewhere]);
+    const requestsHere = requests ?? (waitingElsewhere.length > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
     // The row's count and red dot (core dm-requests.ts requestsRowCount, utils/requests-seen.ts): every kind behind the row.
+    // Global's count is one of the other communities' here (onGlobal null: the phone keeps none of its own for it).
     const requestsWaitingNow = React.useMemo(
-        () => ({ here: requestsHere, onGlobal, outside: outsideRequests, guestInvites }),
-        [requestsHere, onGlobal, outsideRequests, guestInvites],
+        () => ({ here: requestsHere, onGlobal: null, outside: outsideRequests, guestInvites, elsewhere: elsewhereCounts(placesElsewhere) }),
+        [requestsHere, outsideRequests, guestInvites, placesElsewhere],
     );
     const requestsCount = requestsRowCount(requestsWaitingNow);
     const requestsUnseenNow = useRequestsUnseen(identity?.publicKey, communityUrl, requestsWaitingNow, messagesFilter === 'requests' && !!requestsHere);
@@ -175,7 +183,7 @@ export default function ChatsScreen() {
         setSwitchNote(null);
         setSwitchingCommunity(true);
         try {
-            // A line about message requests lands on that community's Message requests, as the push-free row's own tap does.
+            // A card about message requests there lands on that community's Message requests, as a tapped notice lands.
             const result = await openNoticeIn(url, null, async () => (what === 'requests' ? '/(tabs)/chats?filter=requests' : CHAT_MESSAGES_ROUTE), {
                 storage: AsyncStorage,
                 publicKey: identity.publicKey,
@@ -192,8 +200,8 @@ export default function ChatsScreen() {
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
-        if (requests === null && !onGlobal && outsideRequests.length === 0 && guestInvites.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
-    }, [requests, onGlobal, outsideRequests.length, guestInvites.length, messagesFilter]);
+        if (requests === null && waitingElsewhere.length === 0 && outsideRequests.length === 0 && guestInvites.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
+    }, [requests, waitingElsewhere.length, outsideRequests.length, guestInvites.length, messagesFilter]);
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
     // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
     // and a leftover view=messages would reach People (mounted inside Talk, reading this route's params).
@@ -502,6 +510,7 @@ export default function ChatsScreen() {
                     requestsWaitingOnGlobal(identity)
                         .then(count => { if (active) setOnGlobal(count); })
                         .catch(console.error);
+                    readHeldAgain();
                     getFriendsLocal(identity.publicKey)
                         .then(res => {
                             if (active) setFriendPubkeys(prev => {
@@ -1086,7 +1095,7 @@ export default function ChatsScreen() {
             )}
             {/* One row per other community where messages wait (design R6): lands in that community's Talk. */}
             {messagesFilter !== 'requests' && (
-                <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url, what) => void openOtherCommunity(url, what)} note={switchNote} />
+                <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
             )}
             {/* One row for every kind of outside request (Marty, 1 Nov 2026). Marty, 19 Nov 2026, after Damo's global test ("I
                 thought that was a heading for the chat not a menu!!!"): it shows how many wait and a small red dot until the list
@@ -1101,8 +1110,10 @@ export default function ChatsScreen() {
                 <MessageRequestsPane
                     entries={requestsHere.conversations}
                     count={requestsHere.count}
-                    onGlobal={onGlobal ?? 0}
-                    onOpenGlobal={() => void openGlobalRequests(identity?.publicKey, recheck)}
+                    elsewhere={waitingElsewhere}
+                    onOpenElsewhere={(place) => void openOtherCommunity(place.url, 'requests')}
+                    elsewhereBusy={switchingCommunity}
+                    elsewhereNote={switchNote}
                     outside={outsideRequests}
                     onOpenOutside={(c) => router.push(`/outside-chat/${c.id}`)}
                     guestInvites={guestInvites}

@@ -167,7 +167,9 @@ vi.mock('../contacts-former', async (importOriginal) => ({
     }),
 }));
 vi.mock('../blocklist', () => ({ BLOCKLIST_UPDATED_EVENT: 'blocklist', getBlockedUsers: async () => mem.blocked, unblockUser: vi.fn(async () => true) }));
-vi.mock('../use-communities', () => ({ switchCommunity: vi.fn(async () => {}) }));
+vi.mock('../use-communities', () => ({ switchCommunity: vi.fn(async () => {}), communitySwitchUnderWay: () => false }));
+// The root layout's recognition, asked again before a move (Message on a contact in a held community: S0).
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'member' }) }));
 vi.mock('../../components/signed-request-lines', () => ({ signedRequestWords: (m: string) => m }));
 vi.mock('../contacts-sync', async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
@@ -298,6 +300,58 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(switchCommunity).toHaveBeenCalledWith(RIVERBEND);
         expect(mem.alerts.at(-1)?.slice(0, 2)).toEqual(["Couldn't switch community", 'Please try again.']);
         // Mutation: switchCommunity(...).catch(() => {}) → the tap does nothing, and the last alert is still the question.
+    });
+
+    it('a contact in another community this phone holds: Open <community> › moves there with no question, and the chat opens where it lands (S0, Marty 19 Nov 2026)', async () => {
+        // The phone holds Riverbend too (saved, and not a guest's look), under a spelling with a slash.
+        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: `${RIVERBEND}/` }]));
+        await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+        await render();
+        vi.mocked(switchCommunity).mockClear();
+        const { createConversationApi } = await import('../db');
+        vi.mocked(createConversationApi).mockClear();
+        await press('Open Riverbend ›');
+        // No question: the one switch, to the address the phone saved, and no chat started in the community left.
+        expect(mem.alerts).toEqual([]);
+        expect(vi.mocked(switchCommunity).mock.calls.map((c) => c[0])).toEqual([`${RIVERBEND}/`]);
+        expect(createConversationApi).not.toHaveBeenCalled();
+        // The phone is in Riverbend now, and Contacts opens over the tabs where the guard lands: the chat with Ana opens, once.
+        mem.store.set('beanpool_anchor_url', RIVERBEND);
+        await act(async () => { root?.unmount(); });
+        host.remove();
+        await render();
+        expect(vi.mocked(createConversationApi).mock.calls).toEqual([['dm', [ME.publicKey, ANA], ME.publicKey]]);
+        expect(mem.pushed).toContain('/chat/conv-1');
+        await act(async () => { root?.unmount(); });
+        host.remove();
+        await render();
+        expect(createConversationApi).toHaveBeenCalledTimes(1);
+        // Mutation: the Alert kept for held communities → mem.alerts has the question and nothing moves.
+    });
+
+    it('a contact the member blocked in the community the phone lands in: no chat opens; their row says Blocked there (S0)', async () => {
+        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: RIVERBEND }]));
+        await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+        await render();
+        const { createConversationApi } = await import('../db');
+        vi.mocked(createConversationApi).mockClear();
+        await press('Open Riverbend ›');
+        mem.store.set('beanpool_anchor_url', RIVERBEND);
+        mem.blocked = [ANA];
+        await act(async () => { root?.unmount(); });
+        host.remove();
+        await render();
+        expect(createConversationApi).not.toHaveBeenCalled();
+        expect(text()).toContain('Blocked');
+    });
+
+    it('a community the phone only looks at as a guest is not held: Open <community> › still asks first (S0)', async () => {
+        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: RIVERBEND }]));
+        mem.store.set('beanpool_guest_nodes', JSON.stringify([RIVERBEND]));
+        await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+        await render();
+        await press('Open Riverbend ›');
+        expect(mem.alerts.at(-1)?.[1]).toBe('Ana Li is in Riverbend. Switch to Riverbend to message them?');
     });
 
     it('Add by hand: nothing typed says what is needed; a name and a number are kept, locked, on the phone', async () => {

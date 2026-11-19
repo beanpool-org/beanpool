@@ -1045,6 +1045,31 @@ describe('a chat named with another community: only a DM its copy holds opens in
         // getConversation and the poll are made for the enterprise's key, and the header reads "Riverside Official".
     });
 
+    it.each(['held', 'failed'] as const)('the move answered \'%s\' (a join or a switch under way, or a switch that failed): the screen says so, as Chat\'s held rows do; a move made says nothing', async (answered) => {
+        holdsCommunity(RIVER, 'Riverside');
+        const NOTE = 'Something went wrong. Try again in a moment.';
+        const answers: string[] = [answered, 'switched'];
+        moveTo.run = (...args: unknown[]) => { moves.push(args); return Promise.resolve(answers.shift()); };
+        await openLink({ id: 'group-chat-1', community: RIVER, communityName: 'Riverside' }, {
+            heldChatIsDm: (...args: unknown[]) => { asked.push(args); return Promise.resolve(false); },
+        });
+        expect(host.textContent).not.toContain(NOTE);
+        const tap = async (n: number) => {
+            await act(async () => { reading('Open Riverside ›')!.click(); });
+            for (let i = 0; i < 400 && moves.length < n; i++) await settle(1);
+            await settle(3);
+            expect(moves.length).toBe(n);
+        };
+        await tap(1);
+        expect(host.textContent, 'the tap moved nothing: it says so').toContain(NOTE);
+        expect(madeInPlace()).toEqual([]);
+        // Tapped again, and moved: the note goes.
+        await tap(2);
+        expect(host.textContent).not.toContain(NOTE);
+        // Mutation (#3305 max review r2 N3, the head before this): moveThere ignores openNoticeIn's answer -> no note after
+        // the first tap.
+    });
+
     it('a direct chat that community\'s copy holds: in place, under the name the phone saved, whatever name the link carries', async () => {
         holdsCommunity(RIVER, 'Riverside');
         await openLink({ id: 'dm1', community: RIVER, communityName: 'Riverside Official' });

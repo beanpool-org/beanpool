@@ -180,6 +180,9 @@ function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) 
     const { identity } = useIdentity();
     const { recheck } = useNodeStatus();
     const [moving, setMoving] = useState(false);
+    // A tap that moved nothing says so, as Chat's held rows do (app/(tabs)/chats.tsx switchNote): a join or a switch under
+    // way (openNoticeIn's 'held'), or a switch that failed.
+    const [moveNote, setMoveNote] = useState<string | null>(null);
     const move = where.open === 'move' ? where : null;
     // As Contacts' own move button (app/contacts.tsx `go`): central tokens, readable light and dark, 44 dp and wrapping.
     const styles = useStyles(({ colors: c }) => StyleSheet.create({
@@ -193,13 +196,14 @@ function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) 
     }));
     const moveThere = async () => {
         if (!move || !identity?.publicKey || moving) return;
+        setMoveNote(null);
         setMoving(true);
         try {
             // Asked only on the tap: the switch and its guards, as Chat's held rows move (app/(tabs)/chats.tsx openHeldChat).
             const [{ openNoticeIn }, { switchCommunity, communitySwitchUnderWay }, { getPendingOnboarding }] = await Promise.all([
                 import('../../utils/push-notice-switch'), import('../../utils/use-communities'), import('../../utils/onboarding-state'),
             ]);
-            await openNoticeIn(move.community, null, async () => `/chat/${id}` as const, {
+            const result = await openNoticeIn(move.community, null, async () => `/chat/${id}` as const, {
                 storage: AsyncStorage,
                 publicKey: identity.publicKey,
                 joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
@@ -207,6 +211,7 @@ function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) 
                 switchTo: switchCommunity,
                 recheck,
             });
+            if (result !== 'switched') setMoveNote(t("Something went wrong. Try again in a moment."));
         } finally {
             setMoving(false);
         }
@@ -225,6 +230,7 @@ function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) 
                         <Text style={styles.goText}>{t('Open {community} ›', { community: move.name })}</Text>
                     </Pressable>
                 ) : null}
+                {move && moveNote ? <Text style={styles.words} accessibilityRole="alert">{moveNote}</Text> : null}
             </View>
         </SafeAreaView>
     );

@@ -769,12 +769,16 @@ describe('Talk opened on Requests (review 4395541801)', () => {
     const NO_REQUESTS = "No requests. A first message from someone you haven't added or talked to arrives here.";
     const ROSA_ASKS = { count: 1, conversations: [{ id: 'req-rosa', peerCallsign: 'Rosa', participants: [ME.publicKey, 'rosa-key'], request: { state: 'pending', from: 'rosa-key', at: iso(now - 60_000) } }] };
 
-    it('the row at the top of Chat is plain: the words alone, no count and no badge, and it opens the requests', async () => {
+    // Marty, 19 Nov 2026: the row shows how many wait, in a pill (it replaced his 1 Nov "no count and no badge until one
+    // is accepted" for this row alone; components/MessageRequestsRow.tsx, requests-row-render.test.ts for the dot).
+    it('the row at the top of Chat says Message requests with how many wait, and it opens the requests', async () => {
         net.answer = community({ getMessageRequests: ROSA_ASKS });
         await renderIn('en');
 
-        const row = buttonWithText('Message requests');
-        expect(row?.textContent).toBe('Message requests');
+        const row = host.querySelector('[data-testid="message-requests-row"]');
+        expect(row?.getAttribute('role')).toBe('button');
+        expect(row?.textContent).toBe('Message requests1');
+        expect(row?.querySelector('[data-testid="message-requests-count"]')?.textContent).toBe('1');
         await click(row, 'the Message requests row');
         expect(host.textContent).toContain('1 person wants to message you');
     });

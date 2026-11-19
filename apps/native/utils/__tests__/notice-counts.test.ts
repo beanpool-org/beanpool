@@ -249,15 +249,19 @@ describe('a community\'s number goes back to nothing as it becomes the one in us
 
 describe('message requests waiting at another community (Marty, 19 Nov 2026): Chat\'s line alone, never a number or the badge', () => {
     it('keeps what a round said beside the number, in no count and no sum, and drops it with the number', async () => {
-        await noteServerUnread(storage, BYRON, 0, 0, 2);
-        await noteServerUnread(storage, OLDTOWN, 1, 1, 0);
-        expect(await readNoticeRequests(storage)).toEqual({ [BYRON]: 2 });
-        expect(await counts()).toEqual({ [OLDTOWN]: 1 });
+        const home = new Community('https://riverside.example');
+        const hill = new Community('https://hillside.example');
+        const vale = new Community('https://valley.example');
+        keep(home, hill, vale);
+        await noteServerUnread(storage, hill.url, 0, 0, 2);
+        await noteServerUnread(storage, vale.url, 1, 1, 0);
+        expect(await readNoticeRequests(storage)).toEqual({ [hill.url]: 2 });
+        expect(await counts()).toEqual({ [vale.url]: 1 });
         expect(await noticeCountsSum(storage)).toBe(1);
         // A request alone rings nothing: no rise in alerts, so no notice is due.
-        expect(await noteServerUnread(storage, BYRON, 0, 0, 3)).toBe(false);
-        expect(await readNoticeRequests(storage)).toEqual({ [BYRON]: 3 });
-        await dropCounts(storage, [BYRON]);
+        expect(await noteServerUnread(storage, hill.url, 0, 0, 3)).toBe(false);
+        expect(await readNoticeRequests(storage)).toEqual({ [hill.url]: 3 });
+        await dropCounts(storage, [hill.url]);
         expect(await readNoticeRequests(storage)).toEqual({});
     });
 });

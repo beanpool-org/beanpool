@@ -186,20 +186,50 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('the Message requests row', () => {
-    it('is one plain row at the top of Chat: no count and no badge, and no filter pill', async () => {
+    // Marty, 19 Nov 2026: the row shows how many wait and a small red dot until the list is opened (it replaced his 1 Nov
+    // "no count and no badge until one is accepted" for this row alone). Still no filter pill, chip count or unread count.
+    it('is one row at the top of Chat with the count in a pill and a red dot while unopened, and no filter pill', async () => {
+        localStorage.clear();
         node.list = annListWith([requestEntry(bo, CONV)]);
         render(<MessagesPage identity={idOf(ann)} />);
         const row = await screen.findByTestId('message-requests-row');
-        expect(row).toHaveAccessibleName('Message requests');
-        expect(row.textContent).not.toMatch(/\d/);
+        expect(row).toHaveAccessibleName('Message requests: 1 waiting');
+        expect(within(row).getByTestId('message-requests-count').textContent).toBe('1');
+        expect(within(row).getByTestId('message-requests-dot')).toBeInTheDocument();
+        expect(row.getAttribute('aria-description')).toBe('New since you last looked');
         expect(screen.queryByTestId('conversation-filter-count-requests')).toBeNull();
         expect(Array.from((await chips()).querySelectorAll('button')).map(b => b.textContent)).toEqual(['All', 'Transactions', 'Direct', 'Groups']);
     });
 
-    it('shows no number however many wait', async () => {
+    it('counts what the node says waits, more than it lists, as 99+ past 99', async () => {
         node.list = annListWith([requestEntry(bo, CONV)], 120);
         render(<MessagesPage identity={idOf(ann)} />);
-        expect((await screen.findByTestId('message-requests-row')).textContent).not.toMatch(/\d/);
+        const row = await screen.findByTestId('message-requests-row');
+        expect(within(row).getByTestId('message-requests-count').textContent).toBe('99+');
+        expect(row).toHaveAccessibleName('Message requests: 120 waiting');
+    });
+
+    it('loses the dot once the list has been opened, and gets it back for a newer request', async () => {
+        localStorage.clear();
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        const { unmount } = render(<MessagesPage identity={idOf(ann)} />);
+        expect(within(await screen.findByTestId('message-requests-row')).queryByTestId('message-requests-dot')).not.toBeNull();
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Back to chats' }));
+        const row = await screen.findByTestId('message-requests-row');
+        expect(within(row).queryByTestId('message-requests-dot')).toBeNull();
+        expect(row.getAttribute('aria-description')).toBeNull();
+        unmount();
+        // Next visit, a newer request has come: the dot is back.
+        const cy = person('Cy');
+        const NEWER = new Date(Date.parse(REQUESTED_AT) + 60_000).toISOString();
+        node.list = annListWith([
+            requestEntry(cy, 'conv-cy', { request: { state: 'pending', from: cy.publicKey, at: NEWER }, participants: [ann.publicKey, cy.publicKey] }),
+            requestEntry(bo, CONV),
+        ]);
+        render(<MessagesPage identity={idOf(ann)} />);
+        const again = await screen.findByTestId('message-requests-row');
+        expect(within(again).getByTestId('message-requests-count').textContent).toBe('2');
+        expect(within(again).queryByTestId('message-requests-dot')).not.toBeNull();
     });
 
     it('opens a view of its own, as a chat does: Back to chats at its top, with no Chats · Forum switch, title or filter chips above it (walk 2)', async () => {
@@ -1134,7 +1164,7 @@ describe('the sender\'s side', () => {
         node.list = { ...boList(hers), conversations: [{ ...boList(hers).conversations[0], peerCallsign: 'Bo' }] };
         node.reads[CONV] = readOf(hers, [herLine]);
         render(<MessagesPage identity={idOf(ann)} openConversationId={CONV} />);
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Bo will see it under Message requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a message request. Bo will see it under Message requests, without a notification. You can write again once they accept.');
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
         expect(screen.queryByText('Are you still there?')).toBeNull();
     });

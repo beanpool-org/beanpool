@@ -249,8 +249,9 @@ async function main(): Promise<void> {
         console.log('\n— 2. the main server is killed —');
         await main.kill('SIGKILL');
         assert(main.proc.signalCode === 'SIGKILL', 'the main server is gone');
-        // Its address stays dead to the end: the standby promoted in 5 must not be given its port, or the probes in 9, which
-        // still copy the main server, would find a take-over there and refuse (takeover-test-harness.ts holdDeadAddress).
+        // Its address stays dead to the end: the standby promoted in 5 (and started again in 6) must not be given its port, or
+        // the probes in 8, 10 and 11, which still copy the main server, would find a take-over there and refuse
+        // (takeover-test-harness.ts holdDeadAddress).
         await holdDeadAddress(main);
 
         // ── 3. Codes: typos, the wrong number, the brake ──

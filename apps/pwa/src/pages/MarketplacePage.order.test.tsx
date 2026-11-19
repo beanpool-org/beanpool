@@ -107,7 +107,7 @@ const eventOldRsvped = {
     // Relative to now, never a fixed day: a fixed 2026-11-20 start came within the page's 24-hour 'starting soon' lift on 19 Nov
     // 10:00 UTC and turned this test red on every queue run (#3302's). Thirty days out keeps it an ordinary later event.
     eventStartAt: new Date(Date.now() + 30 * 24 * 3600_000).toISOString(),
-    eventEndAt: '2026-11-20T12:00:00.000Z',
+    eventEndAt: new Date(Date.now() + 30 * 24 * 3600_000 + 2 * 3600_000).toISOString(), // two hours after its start
     eventState: 'scheduled',
 };
 

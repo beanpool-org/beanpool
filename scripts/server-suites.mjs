@@ -723,6 +723,7 @@ export const SUITES = [
     'test-federation-hardening',
     'test-node-signature',
     'test-relay-mail',
+    'test-mail-ring',
     'test-relay-complaint',
     'test-find-by-name',
     'test-group-guests',

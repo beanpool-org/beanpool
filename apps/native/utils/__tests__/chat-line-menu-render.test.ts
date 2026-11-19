@@ -463,6 +463,7 @@ describe('the DM\'s menu room holds a four-line line and its menu whole at 320 d
         // and Report under it, 174 dp in all. Two lines more (22 dp × 1.3 each) and the round buttons' line under it (32 dp
         // and the row's 6-dp gap), on the list's padding: 277.2 dp. Yoga's tallest above, someone else's, is 274.4.
         const walk = 174 + 2 * s.messageText.lineHeight * 1.3 + s.circleActionButton.height + s.lineRow.rowGap + LIST_BOTTOM;
+        // flake-ok(clock-per-row): each openLine renders one line alone, in no list, so nothing sorts by its time
         const yoga = Math.max(...MENU_ROOM_LINES.map((l) => openLine(l, PHONES[0], 1.3).height + LIST_BOTTOM));
         expect(walk).toBeCloseTo(277.2, 5);
         expect(yoga).toBeCloseTo(274.4, 3); // Yoga counts in 32-bit floats

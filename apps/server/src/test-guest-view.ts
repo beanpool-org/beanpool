@@ -311,6 +311,9 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
+    // The AI-assistant door is OFF unless an owner turns it on (risk 3, 18 Nov): the sweep opens it, so its routes are swept
+    // as a guest finds them on a node whose owners allowed assistants (the larger surface).
+    (await import('./config/local-config.js')).updateLocalConfig({ aiAssistantsAllowed: true });
     const port = await https.startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     // This suite reads the whole directory as a member, to compare what a member and a guest get of the people. Where `openMembership` is on (the global node's default) those reads are refused, which
@@ -1597,10 +1600,10 @@ async function main(): Promise<void> {
             'GET /api/local/admin/agent/suggestions', 'POST /api/local/admin/agent/suggestions/:id/decline',
             // What an owner's assistant took down (agent/takedowns-route.ts): a person's own session only.
             'GET /api/local/admin/agent/takedowns', 'POST /api/local/admin/agent/takedowns/put-back', 'POST /api/local/admin/agent/takedowns/:id/remove-now',
-            // The OAuth door (agent/oauth-route.ts): metadata, registration, the consent page and its two calls, token, revoke.
+            // The OAuth door (agent/oauth-route.ts): metadata, registration, the consent page and its three calls, token, revoke.
             'GET /.well-known/oauth-protected-resource', 'GET /.well-known/oauth-protected-resource/mcp', 'GET /.well-known/oauth-authorization-server',
             'POST /oauth/register', 'GET /oauth/authorize', 'POST /oauth/authorize/:id/wait', 'POST /oauth/authorize/:id/confirm',
-            'POST /oauth/token', 'POST /oauth/revoke',
+            'POST /oauth/authorize/:id/asks', 'POST /oauth/token', 'POST /oauth/revoke',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
             [/^\/api\/shops\//, aliceShop],

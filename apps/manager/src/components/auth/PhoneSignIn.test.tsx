@@ -220,48 +220,47 @@ describe('phone-signin helpers', () => {
         expect(await waitForPhone(ID1)).toEqual({ kind: 'signed-in', session: { memberPubkey: 'x', role: 'moderator' }, csrfToken: 'y' });
     });
 
-    it('asks for the two digits the phone shows, and signs in only when they are right', async () => {
+    it('asks for the six digits the phone shows, and signs in only when they are right', async () => {
         const { typed } = fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 30 } }] }, undefined, [
-            { status: 400, body: { status: 'wrong', triesLeft: 2 } },
             { body: { status: 'signed-in', memberPubkey: 'f'.repeat(64), role: 'owner', csrfToken: 'csrf-1' } },
         ]);
         const onSignedIn = vi.fn();
         render(<PhoneSignIn onSignedIn={onSignedIn} />);
-        const box = await screen.findByLabelText(/Type the two digits your phone shows/i);
+        const box = await screen.findByLabelText(/Type the six digits your phone shows/i);
         expect(screen.queryByTestId('phone-signin-qr')).toBeNull();
-        fireEvent.change(box, { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: /^Confirm$/ }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(/not the digits on your phone.*2 tries left/i);
-        expect(onSignedIn).not.toHaveBeenCalled();
-        fireEvent.change(box, { target: { value: '47' } });
+        fireEvent.change(box, { target: { value: '04719' } });
+        expect((screen.getByRole('button', { name: /^Confirm$/ }) as HTMLButtonElement).disabled).toBe(true);
+        // Typed as the phone groups them ("047 193"): the space is dropped.
+        fireEvent.change(box, { target: { value: '047 193' } });
         fireEvent.click(screen.getByRole('button', { name: /^Confirm$/ }));
         await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith({ memberPubkey: 'f'.repeat(64), role: 'owner' }, 'csrf-1'));
-        expect(typed).toEqual(['12', '47']);
+        expect(typed).toEqual(['047193']);
     });
 
     it("ends the box honestly when the 30 seconds run out, rather than sitting at 0:00 (4171995318)", async () => {
         const { typed } = fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 1 } }] });
         const onSignedIn = vi.fn();
         render(<PhoneSignIn onSignedIn={onSignedIn} />);
-        await screen.findByLabelText(/Type the two digits your phone shows/i);
-        await waitFor(() => expect(screen.queryByLabelText(/Type the two digits/i)).toBeNull(), { timeout: 3_000 });
+        await screen.findByLabelText(/Type the six digits your phone shows/i);
+        await waitFor(() => expect(screen.queryByLabelText(/Type the six digits/i)).toBeNull(), { timeout: 3_000 });
         expect(screen.getByText(PHONE_SIGNIN_MESSAGES.confirmLate)).toBeTruthy();
         expect(screen.queryByText(/0:00 left/)).toBeNull();
         expect(onSignedIn).not.toHaveBeenCalled();
         expect(typed).toEqual([]);
     });
 
-    it('three wrong digits, or too late, end the sign-in with no session', async () => {
-        fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 30 } }] }, undefined, [
+    it('one wrong try ends that code with no session, and the card starts a new one, saying why (risk 2)', async () => {
+        const { calls } = fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 30 } }] }, undefined, [
             { status: 410, body: { status: 'refused' } },
         ]);
         const onSignedIn = vi.fn();
         render(<PhoneSignIn onSignedIn={onSignedIn} />);
-        const box = await screen.findByLabelText(/Type the two digits your phone shows/i);
-        fireEvent.change(box, { target: { value: '99' } });
+        const box = await screen.findByLabelText(/Type the six digits your phone shows/i);
+        fireEvent.change(box, { target: { value: '999999' } });
         fireEvent.click(screen.getByRole('button', { name: /^Confirm$/ }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(PHONE_SIGNIN_MESSAGES.refused);
+        expect(await screen.findByText(PHONE_SIGNIN_MESSAGES.wrongDigits)).toBeTruthy();
         expect(onSignedIn).not.toHaveBeenCalled();
-        expect(screen.queryByLabelText(/Type the two digits/i)).toBeNull();
+        expect(screen.queryByLabelText(/Type the six digits/i)).toBeNull();
+        await waitFor(() => expect(calls.filter((c) => c === 'POST /api/local/admin/auth/pairing').length).toBe(2));
     });
 });

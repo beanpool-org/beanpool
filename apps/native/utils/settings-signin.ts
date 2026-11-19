@@ -20,7 +20,8 @@
 import { parseSettingsSigninQr, isSameNode, nodeOrigin, type SettingsSigninQr } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import { requireDeviceUnlock } from './node-admin';
-import { signPairing } from './member-statements';
+import { signAssistantApproval, signPairing } from './member-statements';
+import type { AssistantTicks } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { plainOriginOf } from './node-url';
 import { heldAddress, type ProveAtScan } from './pair-device-target';
@@ -83,19 +84,23 @@ export function formatShortCode(code: string): string {
 
 const pairingPath = (id: string) => `/api/local/admin/auth/pairing/${id}`;
 
-/** The assistant behind a consent code: its own name (anyone can register any name) and where what it reads goes. */
-export interface AgentAsking { name: string; sendsTo: string }
+/**
+ * The assistant behind a consent code: its own name (anyone can register any name), where what it reads goes, and what the
+ * computer's page asks it may do beyond reading (its two ticks): this screen shows them and the approval signs them.
+ */
+export interface AgentAsking { name: string; sendsTo: string; asks: AssistantTicks }
 
 const HOST_SHAPE = /^[a-z0-9.\-:[\]]{1,253}$/i;
 
 /** The node's `agent`, or null: a host that isn't a host shape is not shown (nor approved: the screen would mislead). */
 export function readAgent(v: unknown): AgentAsking | null {
     if (!v || typeof v !== 'object') return null;
-    const a = v as { name?: unknown; sendsTo?: unknown };
+    const a = v as { name?: unknown; sendsTo?: unknown; asks?: unknown };
     if (typeof a.sendsTo !== 'string' || !HOST_SHAPE.test(a.sendsTo)) return null;
     // eslint-disable-next-line no-control-regex -- removing control characters is the point
     const name = typeof a.name === 'string' ? a.name.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 60) : '';
-    return { name, sendsTo: a.sendsTo.toLowerCase() };
+    const asks = (a.asks && typeof a.asks === 'object' ? a.asks : {}) as { canPost?: unknown; canModerate?: unknown };
+    return { name, sendsTo: a.sendsTo.toLowerCase(), asks: { canPost: asks.canPost === true, canModerate: asks.canModerate === true } };
 }
 
 export type PairingLookup =
@@ -108,6 +113,8 @@ export type PairingLookup =
         fromAddress: string | null;
         /** The node saw this phone's lookup come from the computer's network. */
         sameNetwork: boolean;
+        /** The node could compare both addresses and they differ: the computer is on another network (the loud line). */
+        otherNetwork: boolean;
         /**
          * An AI assistant asking to connect for you (admin MCP S2), not a computer signing in: the name it gave itself and
          * the host its answers go to. Null for a Settings sign-in.
@@ -129,7 +136,7 @@ export async function lookupPairing(qr: SettingsSigninQr, identity?: BeanPoolIde
         const res = await fetch(url, { headers: { Accept: 'application/json', ...signed } });
         const body = await res.json().catch(() => ({})) as {
             shortCode?: unknown; browser?: unknown; expiresAt?: unknown; error?: unknown;
-            expiresInSeconds?: unknown; askedSecondsAgo?: unknown; fromAddress?: unknown; sameNetwork?: unknown; agent?: unknown;
+            expiresInSeconds?: unknown; askedSecondsAgo?: unknown; fromAddress?: unknown; sameNetwork?: unknown; otherNetwork?: unknown; agent?: unknown;
         };
         if (res.ok) {
             if (body.shortCode !== qr.shortCode) {
@@ -143,6 +150,7 @@ export async function lookupPairing(qr: SettingsSigninQr, identity?: BeanPoolIde
                 askedSecondsAgo: seconds(body.askedSecondsAgo),
                 fromAddress: typeof body.fromAddress === 'string' && body.fromAddress && body.fromAddress !== 'unknown' ? body.fromAddress.slice(0, 64) : null,
                 sameNetwork: body.sameNetwork === true,
+                otherNetwork: body.otherNetwork === true && body.sameNetwork !== true,
                 agent: readAgent(body.agent),
             };
         }
@@ -168,8 +176,21 @@ export function agentLines(a: AgentAsking): string[] {
         a.name ? `Assistant: “${a.name}” (the name it gave itself)` : 'Assistant: no name given',
         `Sends what it reads to: ${a.sendsTo}`,
         'It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.',
+        ...asksLines(a.asks),
     ];
 }
+
+/** What the computer's page asks the assistant may do (its ticks): the approval covers exactly these. */
+export function asksLines(asks: AssistantTicks): string[] {
+    const lines: string[] = [];
+    if (asks.canPost) lines.push('Ticked on the computer: May post for me. An owner\'s assistant posts Offers, Needs, events and polls as you, at once.');
+    if (asks.canModerate) lines.push('Ticked on the computer: May take down posts for me, at once.');
+    if (!lines.length) lines.push('Nothing ticked on the computer: it posts nothing and takes nothing down.');
+    return lines;
+}
+
+/** The loud line when the node saw the computer on another network than this phone (risk 2). */
+export const OTHER_NETWORK_WARNING = 'The computer is on a different network from this phone. If it is not your own computer, in front of you, tap No.';
 
 /** "1:35 left" */
 export function formatTimeLeft(secondsLeft: number): string {
@@ -198,6 +219,11 @@ export function confirmDigitsLine(code: string): string {
     return `On the computer, type ${code}`;
 }
 
+/** "123 456": six digits in two groups, as the eye reads them across a desk. The computer takes them with or without the space. */
+export function formatDigits(code: string): string {
+    return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+}
+
 /** Under the digits: the one move left to someone who sent the QR is to ask for them (4171995285). */
 export const DIGITS_PRIVATE = 'Never read them out or send them to anyone: type them yourself, on the computer you just opened.';
 
@@ -215,9 +241,12 @@ export function digitsDone(msLeft: number): { enabled: boolean; label: string } 
  * Signed for the host it is POSTed to (`qr.nodeUrl`, which readSigninScan has checked is this app's node).
  */
 export async function buildSigninRequest(
-    action: 'approve' | 'decline', qr: SettingsSigninQr, identity: BeanPoolIdentity, totpCode?: string, agentShown = false,
+    action: 'approve' | 'decline', qr: SettingsSigninQr, identity: BeanPoolIdentity, totpCode?: string, agentShown = false, ticks?: AssistantTicks,
 ): Promise<{ url: string; init: RequestInit }> {
-    const signed = await signPairing(qr.nodeUrl, action, qr.pairingId, qr.shortCode, identity.privateKey);
+    // An assistant's approval names the ticks this screen showed (risk 3); a sign-in and any decline do not.
+    const signed = action === 'approve' && agentShown && ticks
+        ? await signAssistantApproval(qr.nodeUrl, qr.pairingId, qr.shortCode, ticks, identity.privateKey)
+        : await signPairing(qr.nodeUrl, action, qr.pairingId, qr.shortCode, identity.privateKey);
     return {
         url: `${qr.nodeUrl}${pairingPath(qr.pairingId)}/${action}`,
         init: {
@@ -228,10 +257,11 @@ export async function buildSigninRequest(
                 signature: signed.signature,
                 ...(signed.signedFor ? { signedFor: signed.signedFor } : {}),
                 ...(action === 'approve' && totpCode ? { totpCode: totpCode.trim() } : {}),
-                // This app shows the node's two digits, so the computer must type them (number matching).
-                ...(action === 'approve' ? { confirm: true } : {}),
-                // This screen showed an AI assistant's name and where it sends (the node refuses an assistant's approval without it).
-                ...(action === 'approve' && agentShown ? { agentShown: true } : {}),
+                // This app shows the node's six digits, so the computer must type them (number matching, risk 2).
+                ...(action === 'approve' ? { confirm: 'six-digits' } : {}),
+                // This screen showed an AI assistant's name, where it sends and what it asks to do (the node refuses an
+                // assistant's approval without them, and grants only the ticks signed here).
+                ...(action === 'approve' && agentShown ? { agentShown: true, ...(ticks ? { ticks: { canPost: ticks.canPost === true, canModerate: ticks.canModerate === true } } : {}) } : {}),
             }),
         },
     };
@@ -256,6 +286,8 @@ export async function approveComputerSignin(opts: {
     communityName: string;
     /** The sheet showed lookupPairing's `agent`: this approval connects that assistant. */
     agentShown?: boolean;
+    /** The ticks the sheet showed for that assistant (its `asks`): the approval signs them. */
+    ticks?: AssistantTicks;
 }): Promise<ApproveOutcome> {
     const unlock = await requireDeviceUnlock(opts.communityName);
     if (unlock === 'no-device-lock') return { kind: 'no-device-lock' };
@@ -263,11 +295,11 @@ export async function approveComputerSignin(opts: {
 
     const attempt = async (totpCode?: string): Promise<ApproveOutcome> => {
         try {
-            const { url, init } = await buildSigninRequest('approve', opts.qr, opts.identity, totpCode, opts.agentShown === true);
+            const { url, init } = await buildSigninRequest('approve', opts.qr, opts.identity, totpCode, opts.agentShown === true, opts.ticks);
             const res = await fetch(url, init);
             const body = await res.json().catch(() => ({})) as { success?: boolean; totpRequired?: boolean; error?: string; reason?: string; confirmCode?: unknown };
             if (res.ok && body.success) {
-                return typeof body.confirmCode === 'string' && /^\d{2}$/.test(body.confirmCode)
+                return typeof body.confirmCode === 'string' && /^\d{6}$/.test(body.confirmCode)
                     ? { kind: 'approved', confirmCode: body.confirmCode }
                     : { kind: 'approved' };
             }

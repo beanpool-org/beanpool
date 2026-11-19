@@ -250,6 +250,7 @@ export const SUITES = [
     'test-mcp-owner-seeds',
     'test-mcp-photo-link',
     'test-settings-qr-signin',
+    'test-approval-number-match',
     'test-challenge-token-leak',
     'test-moderator-routes',
     'test-backend-monitors',

@@ -342,7 +342,7 @@ describe('an owner\'s 12 words check in the pseudo-locale', () => {
 describe('signing a computer in, in the pseudo-locale', () => {
     const qr = { nodeUrl: 'https://mullum.example', pairingId: 'p1', shortCode: 'K7F3QX' };
     const look = (agent: unknown = null) => ({
-        kind: 'ok', browser: 'Firefox on Linux', expiresAt: 0, expiresInSeconds: 95, askedSecondsAgo: 12, fromAddress: '203.0.113.7', sameNetwork: true, agent,
+        kind: 'ok', browser: 'Firefox on Linux', expiresAt: 0, expiresInSeconds: 95, askedSecondsAgo: 12, fromAddress: '203.0.113.7', sameNetwork: true, otherNetwork: false, agent,
     });
 
     it('a code it can\'t read: the alert', async () => {
@@ -359,7 +359,7 @@ describe('signing a computer in, in the pseudo-locale', () => {
         nav.params = { community: 'Riverbend' };
         signin.scan = { kind: 'ok', qr };
         signin.look = look();
-        signin.outcome = { kind: 'approved', confirmCode: '42' };
+        signin.outcome = { kind: 'approved', confirmCode: '047193' };
         await renderIn('xx', SettingsSigninScreen);
         await scan();
         expect(host.textContent).toContain(pseudoLocalise(SIGNIN_QUESTION));
@@ -368,20 +368,33 @@ describe('signing a computer in, in the pseudo-locale', () => {
         // 320 - 2 × 20 (the sheet's padding) - 2 × 12 (the box's).
         expect(unfit(host, 320 - 40 - 24, WRITTEN)).toEqual([]);
         await click(buttonWith('Sign in'), 'Sign in');
-        expect(host.textContent).toContain(pseudoLocalise('On the computer, type {code}').replace('{code}', '42'));
+        expect(host.textContent).toContain(pseudoLocalise('On the computer, type {code}').replace('{code}', '047 193'));
         expect(host.textContent).toContain(pseudoLocalise("The computer opens {name}'s Settings only when these are typed there, within 30 seconds. If no computer in front of you is asking for them, do nothing: nobody gets in.").replace('{name}', 'Riverbend'));
         expect(clean()).toEqual([]);
+    });
+
+    it('a computer on another network than the phone: the loud line, in words, at 320 dp (risk 2)', async () => {
+        nav.params = { community: 'Riverbend' };
+        signin.scan = { kind: 'ok', qr };
+        signin.look = { ...look(), sameNetwork: false, otherNetwork: true };
+        await renderIn('xx', SettingsSigninScreen);
+        await scan();
+        expect(host.textContent).toContain(pseudoLocalise('The computer is on a different network from this phone. If it is not your own computer, in front of you, tap No.'));
+        expect(clean()).toEqual([]);
+        expect(unfit(host, 320 - 40, WRITTEN)).toEqual([]);
     });
 
     it('an assistant asking to connect, and a screen lock missing', async () => {
         nav.params = { community: 'Riverbend' };
         signin.scan = { kind: 'ok', qr };
-        signin.look = look({ name: 'Claude', sendsTo: 'api.example.com' });
+        signin.look = look({ name: 'Claude', sendsTo: 'api.example.com', asks: { canPost: true, canModerate: true } });
         signin.outcome = { kind: 'no-device-lock' };
         await renderIn('xx', SettingsSigninScreen);
         await scan();
         expect(host.textContent).toContain(pseudoLocalise('Sends what it reads to: {host}').replace('{host}', 'api.example.com'));
+        expect(host.textContent).toContain(pseudoLocalise('Ticked on the computer: May take down posts for me, at once.'));
         expect(clean()).toEqual([]);
+        expect(unfit(host, 320 - 40 - 24, WRITTEN)).toEqual([]);
         await click(buttonWith('Connect'), 'Connect');
         expect(alerts.said).toEqual(expect.arrayContaining([pseudoLocalise('Set a screen lock first'), pseudoLocalise(NO_DEVICE_LOCK_MESSAGE)]));
         expect(clean()).toEqual([]);

@@ -438,7 +438,22 @@ export function agentLinesWords(a: AgentAsking): string[] {
         a.name ? t('Assistant: “{name}” (the name it gave itself)', { name: a.name }) : t('Assistant: no name given'),
         t('Sends what it reads to: {host}', { host: a.sendsTo }),
         t('It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs, events and polls for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.'),
+        ...asksLinesWords(a.asks),
     ];
+}
+
+/** asksLines: what the computer's page asks the assistant may do; the approval covers exactly these. */
+export function asksLinesWords(asks: AgentAsking['asks']): string[] {
+    const lines: string[] = [];
+    if (asks.canPost) lines.push(t("Ticked on the computer: May post for me. An owner's assistant posts Offers, Needs, events and polls as you, at once."));
+    if (asks.canModerate) lines.push(t('Ticked on the computer: May take down posts for me, at once.'));
+    if (!lines.length) lines.push(t('Nothing ticked on the computer: it posts nothing and takes nothing down.'));
+    return lines;
+}
+
+/** OTHER_NETWORK_WARNING: the loud line when the computer is on another network than this phone. */
+export function otherNetworkWords(): string {
+    return t('The computer is on a different network from this phone. If it is not your own computer, in front of you, tap No.');
 }
 
 /** "1:35", as a count-down. */

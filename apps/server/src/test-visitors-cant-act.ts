@@ -296,6 +296,11 @@ async function main(): Promise<void> {
     // Granting or taking a role above moderator, and enrolling such a key, ask the owner's fresh proof (design case 18, C6,
     // C8): those calls go under a session from the phone's Manage, pressed just now, one each.
     const roleChange = (path: string) => /^\/api\/local\/admin\/(node-roles|auth\/enrol)/.test(path);
+    // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov). With the switch off, the door's writes
+    // (/oauth/register, token, revoke and the consent page's wait, confirm and asks) answer 404 before the middleware
+    // (agent/oauth-route.ts oauthDoorOff; test-admin-mcp-oauth). The sweeps open it, so those routes meet the middleware
+    // as they do on a node whose owners allowed assistants (the larger surface).
+    (await import('./config/local-config.js')).updateLocalConfig({ aiAssistantsAllowed: true });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     // The signature middleware refuses every signed write from a visitor's row that VISITOR_WRITES doesn't name

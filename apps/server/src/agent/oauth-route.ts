@@ -5,12 +5,15 @@
  *   GET  /.well-known/oauth-authorization-server      RFC 8414: issuer = this node's public URL; S256 only; scope agent
  *   POST /oauth/register                              RFC 7591: public clients; https or localhost redirects; braked
  *   GET  /oauth/authorize                             the consent page: who asks, where its answers go, what it reads,
- *                                                     then the phone's QR sign-in with the two-digit number match
- *   POST /oauth/authorize/:id/wait | /confirm         the page's poll and its digits (bound to the page by a cookie); the
- *                                                     digits carry the page's "May post for me" and "May take down posts
- *                                                     for me" ticks (each off by default), which the grant keeps
- *                                                     (agent/owner-posts.ts, agent/owner-takedowns.ts: only then does it
+ *                                                     its two ticks, then the phone's QR sign-in with the six-digit match
+ *   POST /oauth/authorize/:id/asks                    the page's "May post for me" and "May take down posts for me" ticks
+ *                                                     (each off by default), set BEFORE the phone approves: the phone shows
+ *                                                     them and signs them, and the grant gets only those (risk 3, 18 Nov;
+ *                                                     agent/owner-posts.ts, agent/owner-takedowns.ts: only then does it
  *                                                     post, or take posts down)
+ *   POST /oauth/authorize/:id/wait | /confirm         the page's poll and its six digits (bound to the page by a cookie);
+ *                                                     one wrong try ends the request, and a tick sent with the digits that
+ *                                                     the phone did not approve ends it too
  *   POST /oauth/token                                 code → tokens (PKCE S256, exact redirect, resource), refresh rotation
  *   POST /oauth/revoke                                RFC 7009
  *
@@ -36,7 +39,8 @@ import { logger } from '../logger.js';
 import { logAddressTag } from '../log-address.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import {
-    bindingCookieName, confirmPairing, createPairing, isPairingId, redeemPairing, waitForPairing, type RedeemResult,
+    bindingCookieName, confirmPairing, createPairing, isPairingId, readTicks, redeemPairing, setPairingAsks, waitForPairing,
+    type RedeemResult,
 } from '../settings-signin-pairing.js';
 import { cleanMemberText } from './fence.js';
 import { forgetAgentGrant } from './limits.js';
@@ -86,7 +90,7 @@ function off(ctx: any): boolean {
 }
 
 /** The door's paths (the routes below, any verb). */
-export const OAUTH_DOOR_PATH = /^\/(?:\.well-known\/oauth-(?:protected-resource(?:\/mcp)?|authorization-server)|oauth\/(?:register|authorize(?:\/[^/]+\/(?:wait|confirm))?|token|revoke))\/?$/;
+export const OAUTH_DOOR_PATH = /^\/(?:\.well-known\/oauth-(?:protected-resource(?:\/mcp)?|authorization-server)|oauth\/(?:register|authorize(?:\/[^/]+\/(?:wait|confirm|asks))?|token|revoke))\/?$/;
 
 /** Switch off: 404 for every verb on the door's paths, before the CORS layer answers OPTIONS or a router answers 405. */
 export function oauthDoorOff() {
@@ -200,7 +204,8 @@ export function consentWords(clientName: string, sendsTo: string, community: str
                 // Local knowledge K6 (agent/knowledge.ts), where Learn is on: drafts, which publish nothing.
                 + (knowledge ? ' It can also draft Local knowledge, which shows to nobody until an owner or admin approves it in the app.' : ''),
             'It can never read messages, balances, keys, addresses, photos or logs, or change settings, roles, keys or money.',
-            `To connect it, scan it inside the BeanPool app, not with the phone's camera: Settings tab → COMMUNITY ADMIN → the last row, “Manage this community from a computer”. Check that the phone names ${sendsTo}, and type the two digits it shows.`,
+            'Tick what it may do below BEFORE you scan: your phone shows the ticks, and approves only those.',
+            `To connect it, scan it inside the BeanPool app, not with the phone's camera: Settings tab → COMMUNITY ADMIN → the last row, “Manage this community from a computer”. Check that the phone names ${sendsTo} and your ticks, and type the six digits it shows. One wrong try ends this request.`,
         ],
     };
 }
@@ -367,6 +372,8 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
             case 'wrong': ctx.status = 400; ctx.body = { status: 'wrong', triesLeft: res.triesLeft, error: 'Those are not the digits on the phone.' }; return;
             case 'agent-approved': {
                 if (!r || !aiAssistantsAllowed()) { ctx.status = 410; ctx.body = { status: 'expired' }; return; }
+                // The grant gets the ticks the phone showed and signed (settings-signin-pairing.ts approvedTicks), never the page's.
+                setConsentTicks(id, res.ticks);
                 const code = issueCode(r, res.memberPubkey);
                 ctx.cookies.set(bindingCookieName(id), '', { maxAge: 0, path: OAUTH_COOKIE_PATH });
                 ctx.body = { status: 'approved', redirect: codeRedirect(ctx, r.redirectUri, code, r.state) };
@@ -398,15 +405,34 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
         answer(ctx, id, res);
     });
 
+    /**
+     * The page's two ticks, while the phone has not approved (this browser's, by its cookie). The phone's lookup shows them
+     * and its approval signs them; after that they are frozen (409), and only a JSON true turns one on.
+     */
+    router.post('/oauth/authorize/:id/asks', async (ctx) => {
+        if (off(ctx)) return;
+        const id = ctx.params.id;
+        ctx.set('Cache-Control', 'no-store');
+        if (!isPairingId(id) || !consentRequest(id)) { ctx.status = 404; ctx.body = { status: 'unknown' }; return; }
+        const b = (ctx as any).requestBody;
+        const res = setPairingAsks(id, ctx.cookies.get(bindingCookieName(id)) || undefined, readTicks(b) ?? { canPost: false, canModerate: false });
+        if (res.ok) { ctx.body = { status: 'ok', asks: res.asks }; return; }
+        if (res.kind === 'wrong-browser') { ctx.status = 403; ctx.body = { status: 'wrong-browser', error: 'This request belongs to the page that showed the code.' }; return; }
+        if (res.kind === 'unknown') { ctx.status = 404; ctx.body = { status: 'unknown' }; return; }
+        // Run out: nobody answered, and nothing can be ticked now (410, as the page's poll answers an expired request).
+        if (res.kind === 'expired') { ctx.status = 410; ctx.body = { status: 'expired', error: 'This request has run out: nothing was connected. Start again from your assistant.' }; return; }
+        ctx.status = 409;
+        ctx.body = { status: res.kind, error: 'Your phone has already answered: what it approved stays as it was.' };
+    });
+
     router.post('/oauth/authorize/:id/confirm', async (ctx) => {
         if (off(ctx)) return;
         const id = ctx.params.id;
         if (!isPairingId(id) || !consentRequest(id)) { ctx.status = 404; ctx.body = { status: 'unknown' }; return; }
-        // The page's two ticks go with its digits (this browser's, right): the code, and the grant, carry them (each off by default,
-        // and only a JSON true turns one on).
+        // The grant's ticks are the ones the phone approved. A tick the page sends here that the phone did not approve is
+        // refused, and ends the request (confirmPairing's pageTicks).
         const b = (ctx as any).requestBody;
-        const res = confirmPairing(id, ctx.cookies.get(bindingCookieName(id)) || undefined, b?.code);
-        if (res.kind === 'agent-approved') setConsentTicks(id, { canPost: b?.canPost === true, canModerate: b?.canModerate === true });
+        const res = confirmPairing(id, ctx.cookies.get(bindingCookieName(id)) || undefined, b?.code, Date.now(), readTicks(b));
         answer(ctx, id, res);
     });
 
@@ -456,29 +482,41 @@ function consentPage(p: { words: { heading: string; lines: string[] }; svg: stri
 @media (prefers-color-scheme:dark){:root{--bg:#1c1917;--fg:#f5f5f4;--muted:#d6d3d1;--line:#57534e}}
 body{background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;max-width:34rem;margin:1.5rem auto;padding:0 1rem;line-height:1.45}
 h1{font-size:1.2rem}p{margin:.6rem 0}.qr{background:#fff;display:inline-block;padding:.5rem;border-radius:.5rem}
-.code{font-family:ui-monospace,monospace;font-size:1.1rem;letter-spacing:.1em}#digits{font-size:1.4rem;width:4ch;text-align:center}
-.muted{color:var(--muted)}button{font-size:1rem;padding:.4rem .9rem}
+.code{font-family:ui-monospace,monospace;font-size:1.1rem;letter-spacing:.1em}#digits{font-size:1.4rem;width:8ch;max-width:100%;text-align:center;letter-spacing:.1em}
+.muted{color:var(--muted)}button{font-size:1rem;padding:.4rem .9rem}fieldset{border:1px solid var(--line);border-radius:.5rem;margin:.6rem 0}
 </style></head><body>
 <h1 id="who">${escapeHtml(p.words.heading)}</h1>${lines}
+<fieldset id="asks"><legend>Before you scan</legend><p><label><input type="checkbox" id="canpost"> May post for me: an owner's assistant posts Offers, Needs, events and polls as you, at once, with no approval. Without it, the assistant posts nothing.</label></p><p><label><input type="checkbox" id="canmoderate"> May take down posts for me: an owner's assistant takes posts down at once, one or many; an admin's, one post a call. Each is hidden from everyone else at once, and a person can put it back in Settings for ${TAKEDOWN.holdDays} days. Without it, the assistant takes nothing down.</label></p><p class="muted" id="asksnote">Your phone shows these ticks and approves only them. Change them before you scan.</p></fieldset>
 <div class="qr">${p.svg}</div>
 <p class="muted">The phone should show the code <span class="code">${escapeHtml(p.shortCode)}</span>.</p>
-<form id="confirm" hidden><p><label><input type="checkbox" id="canpost"> May post for me: an owner's assistant posts Offers, Needs, events and polls as you, at once, with no approval. Without it, the assistant posts nothing.</label></p><p><label><input type="checkbox" id="canmoderate"> May take down posts for me: an owner's assistant takes posts down at once, one or many; an admin's, one post a call. Each is hidden from everyone else at once, and a person can put it back in Settings for ${TAKEDOWN.holdDays} days. Without it, the assistant takes nothing down.</label></p><label for="digits">Type the two digits your phone shows: </label><input id="digits" inputmode="numeric" maxlength="2" autocomplete="off"> <button type="submit">Connect</button></form>
+<form id="confirm" hidden><label for="digits">Type the six digits your phone shows (one try): </label><input id="digits" inputmode="numeric" maxlength="7" autocomplete="one-time-code"> <button type="submit">Connect</button></form>
 <p id="status" role="status" class="muted">Waiting for your phone…</p>
 <script nonce="${p.nonce}">
 (function(){
-var id=${JSON.stringify(p.pairingId)},base='/oauth/authorize/'+id,st=document.getElementById('status'),form=document.getElementById('confirm');
+var id=${JSON.stringify(p.pairingId)},base='/oauth/authorize/'+id,st=document.getElementById('status'),form=document.getElementById('confirm'),cp=document.getElementById('canpost'),cm=document.getElementById('canmoderate'),last={canPost:false,canModerate:false};
+var APPROVED='Your phone approved these ticks: they can no longer change.';
+function ended(s){return s==='declined'?'Declined on the phone: these ticks were not given.':s==='expired'?'This request ran out before it was approved: these ticks were not given.':s==='refused'?'This request was refused: these ticks were not given.':s==='not-waiting'?'Your phone has already answered: these ticks stay as they were when it looked.':'This request ended: these ticks were not given.'}
+function freeze(note){cp.disabled=true;cm.disabled=true;document.getElementById('asksnote').textContent=note}
 function go(r){if(r&&r.redirect){location.replace(r.redirect);return true}return false}
 function show(r){
  if(!r){st.textContent='Lost touch with the server: reload to try again.';return}
- if(r.status==='confirm'){form.hidden=false;st.textContent='Approved on the phone: type its two digits here.';document.getElementById('digits').focus();return}
- if(r.status==='approved'){st.textContent='Connected. Taking you back to your assistant…';go(r);return}
+ if(r.status==='confirm'){freeze(APPROVED);form.hidden=false;st.textContent='Approved on the phone: type its six digits here.';document.getElementById('digits').focus();return}
+ if(r.status==='approved'){freeze(APPROVED);st.textContent='Connected. Taking you back to your assistant…';go(r);return}
  if(r.status==='wrong'){st.textContent=r.error+' Tries left: '+r.triesLeft;return}
  if(r.status==='waiting'){st.textContent=r.notice==='not-admin'?'That phone is not an owner or admin here. Waiting…':'Waiting for your phone…';poll();return}
- form.hidden=true;st.textContent=r.status==='declined'?'Declined on the phone: nothing was connected.':'This request ended: nothing was connected. Start again from your assistant.';
+ freeze(ended(r.status));form.hidden=true;st.textContent=r.status==='declined'?'Declined on the phone: nothing was connected.':'This request ended: nothing was connected. Start again from your assistant.';
 }
 function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{}),credentials:'same-origin'}).then(function(x){return x.json()}).catch(function(){return null})}
 function poll(){post(base+'/wait').then(show)}
-form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value,canPost:document.getElementById('canpost').checked===true,canModerate:document.getElementById('canmoderate').checked===true}).then(show)});
+function asks(){post(base+'/asks',{canPost:cp.checked===true,canModerate:cm.checked===true}).then(function(r){
+ if(r&&r.asks){last=r.asks;cp.checked=last.canPost===true;cm.checked=last.canModerate===true;return}
+ if(!r){st.textContent='Lost touch with the server: tick again before you scan.';return}
+ cp.checked=last.canPost===true;cm.checked=last.canModerate===true;
+ freeze(ended(r.status))})}
+cp.addEventListener('change',asks);cm.addEventListener('change',asks);
+form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value.replace(/\\D/g,'')}).then(function(r){
+ if(r&&r.status==='refused'){freeze(ended('refused'));form.hidden=true;st.textContent='Those are not the digits on the phone, so this request ended: nothing was connected. Start again from your assistant.';return}
+ show(r)})});
 poll();
 })();
 </script></body></html>`;

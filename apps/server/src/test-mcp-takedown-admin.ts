@@ -31,7 +31,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { audienceOf, signSettingsSignin } from '@beanpool/core';
+import { audienceOf, signAssistantConsent } from '@beanpool/core';
 import { setMemberPhoto } from '@beanpool/engine';
 import { initTls } from './services/tls.js';
 import { createPost, initStateEngine, runLedgerAudit, seedGenesisMember } from './state-engine.js';
@@ -103,20 +103,23 @@ function authorizeUrl(clientId: string, verifier: string): string {
 }
 
 /**
- * Register, open the consent page, approve on the phone, send the digits with the page's ticks (`ticks` is what the page's script
- * sends: left out, neither), and exchange the code. The access token, the grant's id, and the page.
+ * Register, open the consent page, set the page's ticks (`ticks` is what the page's script sends to /asks: left out, neither),
+ * approve on the phone over the ticks it is shown (risk 3: the phone signs them), send the digits, and exchange the code. The
+ * access token, the grant's id, and the page.
  */
 async function connectByOAuth(k: Key, name: string, ticks: Record<string, unknown> = {}): Promise<{ access: string; grantId: string; html: string }> {
     const reg = await call('POST', '/oauth/register', { body: { client_name: name, redirect_uris: [REDIRECT] } });
     const clientId = reg.body?.client_id ?? '';
     const verifier = crypto.randomBytes(32).toString('base64url');
     const page = await openConsent(authorizeUrl(clientId, verifier));
-    const approve = await call('POST', `/api/local/admin/auth/pairing/${page.id}/approve`, {
-        body: { memberPubkey: k.pub, signature: await signSettingsSignin(BASE, 'approve', page.id, page.shortCode, signer(k)), signedFor: HOST, confirm: true, agentShown: true },
-    });
     const cookie = { Cookie: page.cookie };
+    await call('POST', `/oauth/authorize/${page.id}/asks`, { body: { ...ticks }, headers: cookie });
+    const shown = (await call('GET', `/api/local/admin/auth/pairing/${page.id}`)).body?.agent?.asks ?? { canPost: false, canModerate: false };
+    const approve = await call('POST', `/api/local/admin/auth/pairing/${page.id}/approve`, {
+        body: { memberPubkey: k.pub, signature: await signAssistantConsent(BASE, page.id, page.shortCode, shown, signer(k)), signedFor: HOST, confirm: 'six-digits', agentShown: true, ticks: shown },
+    });
     await call('POST', `/oauth/authorize/${page.id}/wait`, { body: { wait: false }, headers: cookie });
-    const done = await call('POST', `/oauth/authorize/${page.id}/confirm`, { body: { code: approve.body?.confirmCode, ...ticks }, headers: cookie });
+    const done = await call('POST', `/oauth/authorize/${page.id}/confirm`, { body: { code: approve.body?.confirmCode }, headers: cookie });
     const code = done.body?.redirect ? new URL(done.body.redirect).searchParams.get('code') ?? '' : '';
     const token = await call('POST', '/oauth/token', { form: { grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: verifier, resource: `${BASE}/mcp` } });
     const access = token.body?.access_token ?? '';
@@ -181,6 +184,7 @@ async function main(): Promise<void> {
     grantNodeRole(otto.pub, 'owner', 'SYSTEM');
     grantNodeRole(admin.pub, 'admin', 'SYSTEM');
     updateLocalConfig({ gateway: { ...(getLocalConfig().gateway ?? {}), rateLimiting: { enabled: true, maxRequestsPerMinute: 100000 } } as any });
+    updateLocalConfig({ aiAssistantsAllowed: true }); // off unless an owner turns it on (risk 3): these tests are of a node that did
 
     const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
     const port = await startHttpsServer(0);
@@ -221,7 +225,8 @@ async function main(): Promise<void> {
             'its words say what an owner\'s and an admin\'s may take, and that a person puts it back for 7 days');
         assert(/Only if you tick “May take down posts for me” below, it takes posts down for you at once, with no approval: an owner&#39;s assistant one post or many, an admin&#39;s one post a call\./.test(unticked.html),
             'the page says so before anyone approves, beside what it says of posting');
-        assert(/canModerate:document\.getElementById\('canmoderate'\)\.checked===true/.test(unticked.html), "the page's script sends the tick with the digits, true only when ticked");
+        assert(/canModerate:cm\.checked===true/.test(unticked.html) && /post\(base\+'\/asks'/.test(unticked.html),
+            "the page's script sends the tick to /asks before the phone approves, true only when ticked (risk 3: never with the digits)");
 
         // ── 2. Off unless ticked ─────────────────────────────────────────────────────────────────────
         console.log('── 2. An admin connected without the tick takes nothing down ──');

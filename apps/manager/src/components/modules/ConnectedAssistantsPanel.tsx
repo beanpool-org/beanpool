@@ -12,7 +12,12 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  * connects their OWN AI assistant (Claude, ChatGPT, Cursor) to this server's `/mcp`: it reads health, backups, totals,
  * reports and join requests, redacted by the server, and never messages, balances, keys, photos or logs. An owner sees
  * every connected assistant and can disconnect any; an admin sees and disconnects their own. "What it sees" runs the very
- * tools the assistant would, so the answer shown is the answer it gets. An owner can turn AI assistants off.
+ * tools the assistant would, so the answer shown is the answer it gets. AI assistants are off until an owner turns them on
+ * (security inventory risk 3, 18 Nov), and an owner can turn them off again.
+ *
+ * Connecting from the assistant (OAuth): the consent page's ticks are set FIRST, before the phone scans it; the phone shows
+ * them and signs them, the page locks them once the phone answers, and the page then takes the phone's six digits, one try
+ * (server agent/oauth-route.ts, settings-signin-pairing.ts). The steps on the card say so, in that order.
  *
  * Only an owner's KEY session connects one (an assistant acts for a member; a token is nobody's). Admins connect
  * theirs with the phone's approval once that lands (S2, OAuth); until then the card tells them so and offers no Connect
@@ -22,7 +27,7 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  * command line with it at the moment of copying; the line on screen shows a placeholder.
  *
  * An owner's assistant posts Offers, Needs, events and polls for them only if "May post for me" was ticked when it was connected
- * (here on the token form, or on the consent page; default off), and each row says whether it was. The "Owner and admin
+ * (here on the token form, or on the consent page before the phone approves; default off), and each row says whether it was. The "Owner and admin
  * limit" (first "Assistant posts a day"; Marty, 31 Oct: owners' and admins' own content limits in the apps too, server
  * engine/owner-admin-limit.ts) is the owners' number (100 unless an owner sets 1 to 1,000), shown to every viewer, changed
  * by an owner with a fresh proof each time (FreshProofBox: a code, or the phone's Manage).
@@ -531,12 +536,14 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'token' 
                                 </li>
                                 <li>In Claude or ChatGPT: Settings → Connectors → Add custom connector → paste it.</li>
                                 <li>
-                                    Approve on your phone when it asks: check it names the assistant&rsquo;s address, then type the two digits.
-                                    {isOwner ? ' Tick “May post for me” on that page only if it should post for you.' : ''}
-                                    {/* MCP-MODERATION S3: the page's second tick, for an owner's assistant or an admin's (one post a call). */}
+                                    {/* The ticks come FIRST (risk 3, 18 Nov): the phone shows them and approves only those, and the page
+                                        locks them once the phone answers. MCP-MODERATION S3: the takedown tick is an owner's assistant's or
+                                        an admin's (one post a call); posting is an owner's only. */}
                                     {isOwner
-                                        ? ' Tick “May take down posts for me” only if it should take posts down for you.'
-                                        : ' Tick “May take down posts for me” on that page only if it should take posts down for you, one post a call.'}
+                                        ? 'On the page your assistant opens, first tick “May post for me” or “May take down posts for me”, only if it should do that for you.'
+                                        : 'On the page your assistant opens, first tick “May take down posts for me”, only if it should take posts down for you, one post a call.'}
+                                    {' '}Then scan the page&rsquo;s code in the BeanPool app: check your phone names the assistant&rsquo;s address and your ticks,
+                                    and type the six digits it shows (one try).
                                 </li>
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
@@ -546,12 +553,12 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'token' 
                             </p>
                         </div>
                     )}
-                    {/* The owner switch (design pick 5: on, inert until someone connects; an owner can turn it off). */}
+                    {/* The owner switch: OFF until an owner turns it on (security inventory risk 3, 18 Nov; it was on by default). */}
                     <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-switch">
                         <p className="text-xs text-white m-0 break-words">
                             {data.allowed
                                 ? 'AI assistants may connect to this server.'
-                                : 'AI assistants are turned off on this server: none can connect, and connected ones are refused.'}
+                                : 'AI assistants are turned off on this server until an owner turns them on: none can connect, and connected ones are refused.'}
                         </p>
                         {isOwner ? (
                             <button

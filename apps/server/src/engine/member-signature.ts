@@ -26,7 +26,7 @@
 
 import crypto from 'node:crypto';
 import {
-    adminSigninText, inviteTicketText, reEnrollText, settingsSigninText, signedRequestBytes, signedRequestText, word,
+    adminSigninText, assistantConsentText, inviteTicketText, reEnrollText, settingsSigninText, signedRequestBytes, signedRequestText, word,
 } from '@beanpool/core';
 import { isLiveVisitor, isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -820,7 +820,7 @@ export function verifyStatementSignature(params: {
 }
 
 /** The format-2 statements, as the verifiers above build them (the app builds the same in @beanpool/core). */
-export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
+export { adminSigninText, assistantConsentText, settingsSigninText, reEnrollText, inviteTicketText };
 
 // ─── Counting (Settings) ────────────────────────────────────────────────────────────────────
 

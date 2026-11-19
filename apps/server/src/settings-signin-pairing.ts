@@ -18,11 +18,18 @@
  *      gets the same admin_session a key sign-in gets. A photographed QR is useless elsewhere: without the
  *      binding secret a browser can only be told "this sign-in belongs to another browser".
  *
- *   2b. Number matching, always. The app sends `confirm: true` and gets two digits back from its approval; the page
- *      must type them (confirmPairing) within 30 s before the held token is redeemed. Someone who only sent the owner
- *      a QR never sees the phone, so a fooled "Sign in" still gives them nothing. Three wrong tries burn the pairing.
- *      An app that sends no flag (built before #1527) is refused, 426 app_too_old (fable-security-signin finding 2):
- *      letting it through would sign in whoever made the QR. No app was in the stores when this changed.
+ *   2b. Number matching, always. The app sends `confirm: 'six-digits'` and gets six digits back from its approval
+ *      (crypto.randomInt, the node's CSPRNG); the page must type them (confirmPairing) within 30 s before the held
+ *      token is redeemed. Someone who only sent the owner a QR never sees the phone, so a fooled "Sign in" still gives
+ *      them nothing. ONE wrong try burns the pairing, and the page starts a new one: a relayed QR the owner approves
+ *      lets its sender guess once in a million (security inventory risk 2, 18 Nov; it was 2 digits and 3 tries, 3%).
+ *      An app that does not say it shows six (any app before this, `confirm: true` or nothing) is refused, 426
+ *      app_too_old: it could not show the six digits whole, and would tell its member the computer was signed in.
+ *   2c. An AI assistant's consent (agent/oauth-route.ts) names what the assistant may do beyond reading, the page's two
+ *      ticks, chosen there BEFORE the phone looks (setPairingAsks). The phone shows them, signs them into its approval
+ *      (@beanpool/core assistantConsentText), and the node grants only those: ticks the page changed after the phone
+ *      looked are refused at the approval, and a tick the page sends with its digits that the phone did not approve
+ *      ends the pairing (risk 3).
  *
  * The phone is also shown where and when the computer asked: the address the node saw the request from, how long
  * ago, the time left, and "same network" when the phone's own address is the computer's (describePairing).
@@ -41,7 +48,8 @@ import {
     mintHandshakeToken,
     consumeHandshakeToken,
 } from './admin-key-auth.js';
-import { settingsSigninText, verifyStatementSignature } from './engine/member-signature.js';
+import { assistantConsentText, settingsSigninText, verifyStatementSignature } from './engine/member-signature.js';
+import type { AssistantTicks } from '@beanpool/core';
 import { logger } from './logger.js';
 import { limiterKeyForIp, standsForMany } from './client-ip.js';
 
@@ -54,10 +62,15 @@ export const PAIRING_CREATES_PER_MINUTE = 10;
 export const PAIRING_MAX_REFUSALS = 5;
 /** Long-poll waiters per pairing: one page, plus a reload or two. */
 export const PAIRING_MAX_WAITERS = 3;
-/** Time the page has to type the phone's two digits after the approval. */
+/** Time the page has to type the phone's six digits after the approval. */
 export const PAIRING_CONFIRM_TTL_MS = 30_000;
-/** Wrong digits before the pairing is burned. */
-export const PAIRING_CONFIRM_TRIES = 3;
+/** How many digits the phone shows and the page types (Marty, 18 Nov: six, one try). */
+export const PAIRING_CONFIRM_DIGITS = 6;
+/** Wrong digits before the pairing is burned: one. A wrong code ends that pairing; the browser starts a new one. */
+export const PAIRING_CONFIRM_TRIES = 1;
+/** What an app that shows six digits sends with its approval (`confirm`). Anything else is an app too old to show them. */
+export const PAIRING_CONFIRM_SIX = 'six-digits';
+const SIX_DIGITS = new RegExp(`^\\d{${PAIRING_CONFIRM_DIGITS}}$`);
 
 /** No 0/O, 1/I/L: read aloud or squinted at across a desk. */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -83,12 +96,16 @@ interface Pairing {
     handshakeExpiresAt?: number;
     approvedBy?: string;
     role?: MemberNodeRole;
-    /** Number matching: the two digits the phone shows, until the page types them. */
+    /** Number matching: the six digits the phone shows, until the page types them. */
     confirmCode?: string;
     confirmExpiresAt?: number;
     confirmTries?: number;
     /** An AI assistant asking to connect (agent/oauth-route.ts): the phone shows this, and the approval is no session. */
     agent?: PairingAgent;
+    /** An assistant's consent: the ticks the page asks for now (setPairingAsks), shown to the phone. Off until set. */
+    asks?: AssistantTicks;
+    /** The ticks the phone showed and signed: the only ones the grant gets. Set at the approval, never after. */
+    approvedTicks?: AssistantTicks;
 }
 
 /**
@@ -96,6 +113,15 @@ interface Pairing {
  * alone: `sendsTo` is the host its answers go to, from the redirect address it registered (design appendix point 4).
  */
 export interface PairingAgent { name: string; sendsTo: string }
+
+const NO_TICKS: AssistantTicks = Object.freeze({ canPost: false, canModerate: false });
+/** Ticks from a request body: each on only for a JSON true. Null when the value is not an object (an app too old to sign them). */
+export function readTicks(v: unknown): AssistantTicks | null {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const t = v as { canPost?: unknown; canModerate?: unknown };
+    return { canPost: t.canPost === true, canModerate: t.canModerate === true };
+}
+const sameTicks = (a: AssistantTicks, b: AssistantTicks) => a.canPost === b.canPost && a.canModerate === b.canModerate;
 
 const pairings = new Map<string, Pairing>();
 const waiters = new Map<string, Set<() => void>>();
@@ -222,8 +248,13 @@ export interface PairingDescription {
      * that stands for many people (standsForMany: a proxy the node can't see past, loopback, a private address).
      */
     sameNetwork: boolean;
-    /** An AI assistant asking to connect for the member who approves: its name and where its answers go. */
-    agent?: PairingAgent;
+    /**
+     * Both addresses can be compared and they differ: the computer is on another network than the phone. False when they
+     * can't be compared (either stands for many), so the phone's loud line never fires on a guess.
+     */
+    otherNetwork: boolean;
+    /** An AI assistant asking to connect for the member who approves: its name, where its answers go, and what it asks to do. */
+    agent?: PairingAgent & { asks: AssistantTicks };
 }
 
 /**
@@ -237,6 +268,8 @@ export function describePairing(pairingId: string, now = Date.now(), viewerAddre
     if (!p) return { ok: false, status: 404, error: 'That code is not known here. Get a new code on the computer.' };
     if (expired(p, now)) return { ok: false, status: 410, error: 'That code has expired. Get a new code on the computer.' };
     if (p.status !== 'waiting') return { ok: false, status: 410, error: 'That code was already used. Get a new code on the computer.' };
+    const comparable = !!viewerAddress && !standsForMany(viewerAddress) && !standsForMany(p.requesterAddress);
+    const same = comparable && limiterKeyForIp(viewerAddress!) === limiterKeyForIp(p.requesterAddress);
     return {
         ok: true,
         shortCode: p.shortCode,
@@ -245,20 +278,39 @@ export function describePairing(pairingId: string, now = Date.now(), viewerAddre
         expiresInSeconds: Math.max(0, Math.round((p.expiresAt - now) / 1000)),
         askedSecondsAgo: Math.max(0, Math.round((now - p.createdAt) / 1000)),
         fromAddress: p.requesterAddress,
-        sameNetwork: !!viewerAddress && !standsForMany(viewerAddress) && !standsForMany(p.requesterAddress)
-            && limiterKeyForIp(viewerAddress) === limiterKeyForIp(p.requesterAddress),
-        ...(p.agent ? { agent: { ...p.agent } } : {}),
+        sameNetwork: same,
+        otherNetwork: comparable && !same,
+        ...(p.agent ? { agent: { ...p.agent, asks: { ...(p.asks ?? NO_TICKS) } } } : {}),
     };
+}
+
+/**
+ * The assistant's consent page sets what it asks for (its two ticks), only while the phone has not approved: the browser
+ * holding the binding secret, an assistant's pairing, still waiting. After the approval the ticks are the phone's and
+ * nothing here moves them.
+ */
+export function setPairingAsks(pairingId: string, secret: string | undefined, ticks: AssistantTicks, now = Date.now()):
+    { ok: true; asks: AssistantTicks } | { ok: false; kind: 'unknown' | 'wrong-browser' | 'expired' | 'not-waiting' } {
+    const p = boundPairing(pairingId, secret);
+    if (!p) return { ok: false, kind: 'unknown' };
+    if (p === 'wrong-browser') return { ok: false, kind: 'wrong-browser' };
+    if (!p.agent) return { ok: false, kind: 'unknown' };
+    if (expired(p, now)) return { ok: false, kind: 'expired' };
+    if (p.status !== 'waiting') return { ok: false, kind: 'not-waiting' };
+    p.asks = { canPost: ticks.canPost === true, canModerate: ticks.canModerate === true };
+    return { ok: true, asks: { ...p.asks } };
 }
 
 export type ApproveResult =
     | { ok: true; role: MemberNodeRole; confirmCode?: string; confirmExpiresAt?: number }
-    | { ok: false; status: number; error: string; code?: string; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'refused' | 'wrong-community' | 'app-too-old' | 'not-owner-or-admin' };
+    | { ok: false; status: number; error: string; code?: string; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'refused' | 'wrong-community' | 'app-too-old' | 'not-owner-or-admin' | 'asks-changed' };
 
-/** An app that sends no `confirm` cannot show the two digits: it cannot approve a sign-in (finding 2). */
-export const SIGNIN_APP_TOO_OLD = 'Update the BeanPool app to sign in on a computer: this version cannot show you the two digits to type there.';
-/** An app that can show which assistant asks sends this with its approval; an older one cannot approve an assistant. */
-export const AGENT_APP_TOO_OLD = 'Update the BeanPool app to connect an AI assistant: this version cannot show you which assistant is asking.';
+/** An app that does not say it shows six digits cannot show them whole: it cannot approve a sign-in (risk 2). */
+export const SIGNIN_APP_TOO_OLD = 'Update the BeanPool app to sign in on a computer: this version cannot show you the six digits to type there.';
+/** An app that shows which assistant asks, what it asks to do, and six digits sends all three; an older one cannot approve an assistant. */
+export const AGENT_APP_TOO_OLD = 'Update the BeanPool app to connect an AI assistant: this version cannot show you which assistant is asking and what it may do.';
+/** The page changed its ticks after the phone looked: the phone signed what it showed, which is no longer what is asked. */
+export const ASKS_CHANGED = 'What the assistant asks to do changed on the computer after your phone showed it. Nothing was approved: scan the code again.';
 
 function refuse(p: Pairing): void {
     p.refusals++;
@@ -281,11 +333,12 @@ function who(pubkey: string): string {
  * approved there is never an approval at B: a hostile A could otherwise show a QR carrying B's pairing id and its own
  * address, and sign in to B's Settings as the member.
  */
-function pairingSignature(p: Pairing, action: 'approve' | 'decline', memberPubkey: string, signature: string, signedFor: unknown) {
+function pairingSignature(p: Pairing, action: 'approve' | 'decline', memberPubkey: string, signature: string, signedFor: unknown, ticks?: AssistantTicks) {
     return verifyStatementSignature({
         signature,
         pubKeyHex: memberPubkey,
-        boundText: (host) => settingsSigninText(host, action, p.id, p.shortCode),
+        // An assistant's approval names the ticks the phone showed (risk 3); a Settings sign-in and any decline do not.
+        boundText: (host) => (ticks ? assistantConsentText(host, p.id, p.shortCode, ticks) : settingsSigninText(host, action, p.id, p.shortCode)),
         signedFor,
         oldShapeTooOld: true,
     });
@@ -297,10 +350,12 @@ export function approvePairing(params: {
     signature: string;
     /** The host the phone signed for (format 2); absent from an old app. */
     signedFor?: unknown;
-    /** The app shows two digits for the page to type (number matching). Absent from an older app, which is refused. */
-    confirm?: boolean;
+    /** `'six-digits'`: the app shows six digits for the page to type (number matching). Anything else is an older app, refused. */
+    confirm?: unknown;
     /** The app showed the assistant's name and where its answers go (describePairing's `agent`). */
     agentShown?: boolean;
+    /** An assistant's consent: the ticks the phone showed, which its signature covers (readTicks of the body). */
+    ticks?: AssistantTicks | null;
     now?: number;
 }): ApproveResult {
     const now = params.now ?? Date.now();
@@ -310,20 +365,22 @@ export function approvePairing(params: {
     if (p.status === 'refused') return { ok: false, status: 410, error: 'Too many refused attempts on that code. Get a new code on the computer.', reason: 'refused' };
     if (p.status !== 'waiting') return { ok: false, status: 409, error: 'That code was already used. Get a new code on the computer.', reason: 'used' };
 
-    // An assistant's consent needs an app that showed it AND the two digits: an app that shows only "a computer wants to
-    // sign in" must not hand an assistant the member's role (a phishing link would look like a Settings sign-in).
-    if (p.agent && (params.confirm !== true || params.agentShown !== true)) {
+    // An assistant's consent needs an app that showed it, what it asks to do (signed), AND the six digits: an app that shows
+    // only "a computer wants to sign in" must not hand an assistant the member's role (a phishing link would look like a
+    // Settings sign-in), and one that can't show the ticks must not grant them.
+    const ticks = p.agent ? params.ticks ?? null : undefined;
+    if (p.agent && (params.confirm !== PAIRING_CONFIRM_SIX || params.agentShown !== true || !ticks)) {
         return { ok: false, status: 426, error: AGENT_APP_TOO_OLD, code: 'agent_app_too_old', reason: 'app-too-old' };
     }
-    // Every sign-in needs an app that shows the two digits (finding 2): without them, a member fooled into tapping
-    // Sign in on a QR someone sent them would sign that someone's browser in.
-    if (params.confirm !== true) {
+    // Every sign-in needs an app that shows the six digits (risk 2): without them, a member fooled into tapping Sign in on
+    // a QR someone sent them would sign that someone's browser in, and an app that can show only two would say it had.
+    if (params.confirm !== PAIRING_CONFIRM_SIX) {
         return { ok: false, status: 426, error: SIGNIN_APP_TOO_OLD, code: 'app_too_old', reason: 'app-too-old' };
     }
     const memberPubkey = String(params.memberPubkey || '').trim();
     // The signature is checked FIRST here (authorizeKeySigner checks it after the role): only a real key holder
     // may cause a "holds no role here" notice on the waiting page.
-    const signed = pairingSignature(p, 'approve', memberPubkey, params.signature, params.signedFor);
+    const signed = pairingSignature(p, 'approve', memberPubkey, params.signature, params.signedFor, ticks ?? undefined);
     if (!signed.ok) {
         refuse(p);
         if (signed.status === 421) return { ok: false, status: 421, error: signed.error, code: signed.code, reason: 'wrong-community' };
@@ -349,6 +406,11 @@ export function approvePairing(params: {
         refuse(p);
         return { ok: false, status: 403, error: 'Only an owner or an admin of this community can connect an AI assistant.', reason: 'not-owner-or-admin' };
     }
+    // The phone signed the ticks it showed; the page may have changed them since. Only what the phone showed is approved,
+    // so a change means nothing is (the member scans again and sees the new ones). Not a refusal: the pairing still waits.
+    if (p.agent && ticks && !sameTicks(ticks, p.asks ?? NO_TICKS)) {
+        return { ok: false, status: 409, error: ASKS_CHANGED, code: 'asks_changed', reason: 'asks-changed' };
+    }
     // An assistant's consent signs no browser in: no session token is minted for it (the page gets a code, agent/oauth.ts).
     if (!p.agent) {
         const { handshakeToken, expiresAt } = mintHandshakeToken(memberPubkey, signer.role, now);
@@ -357,9 +419,10 @@ export function approvePairing(params: {
     }
     p.approvedBy = memberPubkey;
     p.role = signer.role;
+    if (p.agent && ticks) p.approvedTicks = { ...ticks };
     p.notice = undefined;
     p.status = 'confirming';
-    p.confirmCode = String(crypto.randomInt(100)).padStart(2, '0');
+    p.confirmCode = sixDigits();
     p.confirmExpiresAt = now + PAIRING_CONFIRM_TTL_MS;
     p.confirmTries = 0;
     logger.security('AUTH', `Settings sign-in by phone APPROVED by ${who(memberPubkey)} as ${signer.role} for pairing ${p.id.slice(0, 8)} (${p.browser})${p.confirmCode ? ', waiting for the digits on the computer' : ''}`);
@@ -399,12 +462,17 @@ export function declinePairing(params: { pairingId: string; memberPubkey: string
     return { ok: true };
 }
 
+/** Six digits from the node's CSPRNG (crypto.randomInt: uniform, no modulo bias), zero-padded. */
+export function sixDigits(): string {
+    return String(crypto.randomInt(10 ** PAIRING_CONFIRM_DIGITS)).padStart(PAIRING_CONFIRM_DIGITS, '0');
+}
+
 // ===================== 3. THE BROWSER WAITS, THEN REDEEMS =====================
 
 export type RedeemResult =
     | { kind: 'waiting'; expiresAt: number; notice?: PairingNotice }
     | { kind: 'confirm'; confirmExpiresAt: number }
-    | { kind: 'agent-approved'; memberPubkey: string; role: MemberNodeRole }
+    | { kind: 'agent-approved'; memberPubkey: string; role: MemberNodeRole; ticks: AssistantTicks }
     | { kind: 'signed-in'; sessionId: string; csrfToken?: string; memberPubkey: string; role: MemberNodeRole; hardExpiresAt?: number; idleExpiresAt?: number }
     | { kind: 'expired' | 'declined' | 'refused' | 'used' | 'unknown' }
     | { kind: 'wrong-browser' }
@@ -444,10 +512,12 @@ function boundPairing(pairingId: string, secret: string | undefined): Pairing | 
 }
 
 /**
- * The page types the two digits the phone shows. Right digits within 30 s redeem the held token, once; three wrong
- * tries burn the pairing. Only the browser holding the binding secret may try, so nobody else can use up its tries.
+ * The page types the six digits the phone shows. Right digits within 30 s redeem the held token, once; one wrong try
+ * burns the pairing (PAIRING_CONFIRM_TRIES). Only the browser holding the binding secret may try, so nobody else can use
+ * up its try. An assistant's page that sends a tick with its digits the phone did not approve (`pageTicks`) ends the
+ * pairing too: a tick added in the browser after approval is never granted.
  */
-export function confirmPairing(pairingId: string, secret: string | undefined, digits: unknown, now = Date.now()):
+export function confirmPairing(pairingId: string, secret: string | undefined, digits: unknown, now = Date.now(), pageTicks?: AssistantTicks | null):
     RedeemResult | { kind: 'wrong'; triesLeft: number } {
     const p = boundPairing(pairingId, secret);
     if (!p || p === 'wrong-browser') return p ? { kind: 'wrong-browser' } : { kind: 'unknown' };
@@ -458,15 +528,24 @@ export function confirmPairing(pairingId: string, secret: string | undefined, di
     if (p.status !== 'confirming') {
         return p.status === 'waiting' ? { kind: 'waiting', expiresAt: p.expiresAt } : { kind: p.status === 'approved' ? 'used' : p.status as 'declined' | 'refused' | 'used' };
     }
-    const given = Buffer.from(String(digits ?? '').trim().padEnd(2, ' ').slice(0, 8));
-    const want = Buffer.from(p.confirmCode!.padEnd(2, ' '));
-    if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) {
+    const approved = p.approvedTicks ?? NO_TICKS;
+    if (p.agent && pageTicks && ((pageTicks.canPost && !approved.canPost) || (pageTicks.canModerate && !approved.canModerate))) {
+        p.status = 'refused';
+        p.confirmCode = undefined;
+        logger.security('AUTH', `AI assistant consent: pairing ${p.id.slice(0, 8)} ended — the page sent a tick the phone did not approve (approved by ${who(p.approvedBy || '')}), nothing granted`);
+        notify(p.id);
+        return { kind: 'refused' };
+    }
+    // As the phone groups them ("047 193"), or not: spaces never cost the one try.
+    const typed = String(digits ?? '').replace(/\s+/g, '');
+    const right = SIX_DIGITS.test(typed) && crypto.timingSafeEqual(Buffer.from(typed), Buffer.from(p.confirmCode!));
+    if (!right) {
         p.confirmTries = (p.confirmTries ?? 0) + 1;
         if (p.confirmTries >= PAIRING_CONFIRM_TRIES) {
             p.status = 'refused';
             p.handshakeToken = undefined;
             p.confirmCode = undefined;
-            logger.security('AUTH', `Settings sign-in by phone: pairing ${p.id.slice(0, 8)} burned after ${p.confirmTries} wrong digits typed on the computer (${p.browser}) — approved by ${who(p.approvedBy || '')}, no session`);
+            logger.security('AUTH', `Settings sign-in by phone: pairing ${p.id.slice(0, 8)} burned: wrong digits typed on the computer (${p.browser}) — approved by ${who(p.approvedBy || '')}, no session`);
             notify(p.id);
             return { kind: 'refused' };
         }
@@ -481,7 +560,7 @@ function issue(p: Pairing, now: number): RedeemResult {
     if (p.agent) {
         p.status = 'used';
         logger.security('AUTH', `AI assistant approved by phone: ${who(p.approvedBy || '')} (${p.role}) for an assistant sending to ${p.agent.sendsTo} (pairing ${p.id.slice(0, 8)})`);
-        return { kind: 'agent-approved', memberPubkey: p.approvedBy!, role: p.role! };
+        return { kind: 'agent-approved', memberPubkey: p.approvedBy!, role: p.role!, ticks: { ...(p.approvedTicks ?? NO_TICKS) } };
     }
     const token = p.handshakeToken!;
     p.status = 'used';

@@ -147,6 +147,8 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
+    // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov): section 14c reads an assistant's suggestion.
+    (await import('./config/local-config.js')).updateLocalConfig({ aiAssistantsAllowed: true });
     BASE = `https://localhost:${await startHttpsServer(0)}`;
     // Members sign for the community's own name, as their apps do (BEANPOOL_ADDRESSES).
     setSignedForHost('b.example');

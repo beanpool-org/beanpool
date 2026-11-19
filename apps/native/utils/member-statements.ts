@@ -14,9 +14,9 @@
  */
 
 import {
-    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, signReEnroll, signStandingAuthorisation,
+    audienceOf, signAdminSignin, signAssistantConsent, signSettingsSignin, buildInviteTicket, signPushLeave, signReEnroll, signStandingAuthorisation,
     signAddressCard, signRelayEnvelope,
-    type AddressCard, type RelayEnvelope, type RelayEnvelopeFields, type StandingAuthorisationFields, type StandingStartBody,
+    type AddressCard, type AssistantTicks, type RelayEnvelope, type RelayEnvelopeFields, type StandingAuthorisationFields, type StandingStartBody,
 } from '@beanpool/core';
 import { memberSigner } from './crypto';
 import { hallAudienceFor } from './hall-state';
@@ -65,6 +65,19 @@ export async function signPairing(
     const host = audienceOf(nodeUrl);
     if (!host) throw new Error('Cannot sign in: the node address names no host');
     return { signature: await signSettingsSignin(nodeUrl, action, pairingId, shortCode, memberSigner(privateKeyHex)), signedFor: host };
+}
+
+/**
+ * The approval of an AI assistant's connection, naming the ticks this screen showed (security inventory risk 3): the node
+ * grants only those, so a tick the browser adds afterwards is never granted.
+ */
+export async function signAssistantApproval(
+    nodeUrl: string, pairingId: string, shortCode: string, ticks: AssistantTicks, privateKeyHex: string,
+): Promise<SignedStatement> {
+    assertPlainNodeAddress(nodeUrl);
+    const host = audienceOf(nodeUrl);
+    if (!host) throw new Error('Cannot connect the assistant: the node address names no host');
+    return { signature: await signAssistantConsent(nodeUrl, pairingId, shortCode, ticks, memberSigner(privateKeyHex)), signedFor: host };
 }
 
 /**

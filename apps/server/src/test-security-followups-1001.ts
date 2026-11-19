@@ -251,10 +251,11 @@ async function part2KeySignin2fa(owner: Key): Promise<void> {
     const pairing = (await req('/api/local/admin/auth/pairing', { method: 'POST', headers: viaTunnel(freshIp()), body: {} })).json;
     const qr = await req(`/api/local/admin/auth/pairing/${pairing.pairingId}/approve`, {
         method: 'POST', headers: viaTunnel(freshIp()),
-        // As the app sends it (confirm: true, so it shows the two digits); an approval without it is refused (426).
-        body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', pairing.pairingId, pairing.shortCode, HOME), confirm: true },
+        // As the app sends it (confirm: 'six-digits', so it shows the six digits); an approval without it is refused (426).
+        body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', pairing.pairingId, pairing.shortCode, HOME), confirm: 'six-digits' },
     });
-    assert(qr.status === 200, `the QR sign-in approves with no code (${show(qr)})`);
+    assert(qr.status === 200 && /^\d{6}$/.test(String(qr.json?.confirmCode ?? '')),
+        `the QR sign-in approves with no code, and the phone gets its six digits (${qr.status} ${qr.json?.confirmCode ? 'six digits' : show(qr)})`);
     resetAdminAuthTarpit();
 }
 

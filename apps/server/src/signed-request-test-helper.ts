@@ -17,7 +17,7 @@
 
 import crypto from 'node:crypto';
 import {
-    REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, adminSigninText, ed25519Signer, inviteTicketText, settingsSigninText,
+    REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, adminSigninText, assistantConsentText, ed25519Signer, inviteTicketText, settingsSigninText,
     signedRequestBytes, signedRequestText,
 } from '@beanpool/core';
 
@@ -108,6 +108,20 @@ export function settingsSigninFields(
     return {
         signature: signBytes(key, signedRequestBytes(settingsSigninText(host, action, pairingId, shortCode))).toString(encoding),
         signedFor: host,
+    };
+}
+
+/**
+ * A phone's approval of an AI assistant's connection (settings-signin-pairing.ts, risk 3) as today's app signs it: format 2
+ * over core's assistantConsentText, naming the ticks the phone showed. The body carries the same ticks.
+ */
+export function assistantConsentFields(
+    key: TestSigningKey, pairingId: string, shortCode: string, ticks: { canPost: boolean; canModerate: boolean }, host: string = signedFor,
+): SignedStatement & { ticks: { canPost: boolean; canModerate: boolean } } {
+    return {
+        signature: signBytes(key, signedRequestBytes(assistantConsentText(host, pairingId, shortCode, ticks))).toString('base64'),
+        signedFor: host,
+        ticks: { canPost: ticks.canPost === true, canModerate: ticks.canModerate === true },
     };
 }
 

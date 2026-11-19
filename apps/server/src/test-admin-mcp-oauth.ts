@@ -42,13 +42,13 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
-import { audienceOf, signSettingsSignin } from '@beanpool/core';
+import { audienceOf, signAssistantConsent, signSettingsSignin } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, submitReport } from './state-engine.js';
 import { updateLocalConfig, getLocalConfig, redactLocalConfig } from './config/local-config.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
-import { resetPairingsForTests } from './settings-signin-pairing.js';
+import { PAIRING_TTL_MS, resetPairingsForTests } from './settings-signin-pairing.js';
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
 import { db } from './db/db.js';
 import { getAlertsStatus } from './services/alerts.js';
@@ -141,20 +141,34 @@ async function openConsent(url: string): Promise<{ status: number; html: string;
     return { status: res.status, html, id, shortCode, cookie, location: res.headers.get('location') };
 }
 
-/** The phone: look at the pairing, then approve it signed for this host (agentShown and confirm unless told otherwise). */
-async function phoneApproves(k: Key, id: string, shortCode: string, extra: Record<string, unknown> = { confirm: true, agentShown: true }): Promise<Reply> {
+/**
+ * The phone as this app is: look at the pairing, then approve it signed for this host over the ticks it was shown (risk 3),
+ * saying it shows six digits and the assistant. `older` is an older app's body instead: signed as a Settings sign-in, no ticks.
+ */
+async function phoneApproves(k: Key, id: string, shortCode: string, older?: Record<string, unknown>): Promise<Reply> {
+    if (older) {
+        return call('POST', `/api/local/admin/auth/pairing/${id}/approve`, {
+            body: { memberPubkey: k.pub, signature: await signSettingsSignin(BASE, 'approve', id, shortCode, signer(k)), signedFor: HOST, ...older },
+        });
+    }
+    const shown = (await call('GET', `/api/local/admin/auth/pairing/${id}`)).body?.agent?.asks ?? { canPost: false, canModerate: false };
     return call('POST', `/api/local/admin/auth/pairing/${id}/approve`, {
-        body: { memberPubkey: k.pub, signature: await signSettingsSignin(BASE, 'approve', id, shortCode, signer(k)), signedFor: HOST, ...extra },
+        body: {
+            memberPubkey: k.pub, signature: await signAssistantConsent(BASE, id, shortCode, shown, signer(k)), signedFor: HOST,
+            confirm: 'six-digits', agentShown: true, ticks: shown,
+        },
     });
 }
 
 /** The whole consent: page → phone → digits → the redirect back with a code. */
 async function consent(url: string, k: Key, canPost?: boolean): Promise<{ redirect: URL | null; page: Awaited<ReturnType<typeof openConsent>>; approve: Reply }> {
     const page = await openConsent(url);
-    const approve = await phoneApproves(k, page.id, page.shortCode);
     const cookie = { Cookie: page.cookie };
+    // The page's tick goes BEFORE the phone looks (risk 3): the phone shows it and signs it.
+    if (canPost !== undefined) await call('POST', `/oauth/authorize/${page.id}/asks`, { body: { canPost }, headers: cookie });
+    const approve = await phoneApproves(k, page.id, page.shortCode);
     await call('POST', `/oauth/authorize/${page.id}/wait`, { body: { wait: false }, headers: cookie });
-    const done = await call('POST', `/oauth/authorize/${page.id}/confirm`, { body: { code: approve.body?.confirmCode, ...(canPost !== undefined ? { canPost } : {}) }, headers: cookie });
+    const done = await call('POST', `/oauth/authorize/${page.id}/confirm`, { body: { code: approve.body?.confirmCode }, headers: cookie });
     return { redirect: done.body?.redirect ? new URL(done.body.redirect) : null, page, approve };
 }
 
@@ -241,6 +255,18 @@ async function main(): Promise<void> {
     setSecurityAlertHandler((n) => { notes.push({ key: n.key, detail: n.detail ?? '', high: n.high }); });
 
     try {
+        // ── 0. The switch left unset: the door is OFF (risk 3, 18 Nov). Nothing here answers until an owner turns it on. ──
+        assert(getLocalConfig().aiAssistantsAllowed === undefined, 'a new node has never set the switch');
+        const unsetMcp = await call('POST', '/mcp', { body: rpc('tools/list'), headers: MCP_HEADERS });
+        const unsetMeta = await call('GET', '/.well-known/oauth-authorization-server');
+        const unsetReg = await call('POST', '/oauth/register', { body: { client_name: 'Too Early', redirect_uris: [REDIRECT] } });
+        assert(unsetMcp.status === 404 && unsetMeta.status === 404 && unsetReg.status === 404,
+            `with the switch unset, /mcp and the OAuth door answer 404 (${unsetMcp.status} ${unsetMeta.status} ${unsetReg.status})`);
+        const unsetSwitch = await call('GET', '/api/local/admin/agent/switch', { headers: { 'X-Admin-Session': (await keySignIn(owner)) ?? '' } });
+        assert(unsetSwitch.status === 200 && unsetSwitch.body?.allowed === false, `Settings shows the switch off (${show(unsetSwitch)})`);
+        updateLocalConfig({ aiAssistantsAllowed: true });
+        resetLimits();
+
         // ── 1. Metadata ──
         const prm = await call('GET', '/.well-known/oauth-protected-resource/mcp');
         const prmRoot = await call('GET', '/.well-known/oauth-protected-resource');
@@ -270,8 +296,8 @@ async function main(): Promise<void> {
             "the consent page says, before anyone approves, that an owner's assistant takes a backup and, ticked \"May post for me\" (off until ticked), posts at once with no approval (MCP-OWNER-POSTS)");
         assert(!!page && /script-src 'nonce-/.test(String((await fetch(claude.authUrl!.toString(), { redirect: 'manual' })).headers.get('content-security-policy'))),
             'the consent page carries its own nonce CSP');
-        assert(e2e.approve.status === 200 && /^\d{2}$/.test(String(e2e.approve.body?.confirmCode)) && e2e.approve.body?.role === 'admin',
-            `the admin's phone approves and is shown two digits (${show(e2e.approve)})`);
+        assert(e2e.approve.status === 200 && /^\d{6}$/.test(String(e2e.approve.body?.confirmCode)) && e2e.approve.body?.role === 'admin',
+            `the admin's phone approves and is shown six digits (${show(e2e.approve)})`);
         assert(!!e2e.redirect && e2e.redirect.origin + e2e.redirect.pathname === REDIRECT && !!e2e.redirect.searchParams.get('code')
             && e2e.redirect.searchParams.get('iss') === BASE, `the page sends the browser back with a code, the state and iss (${e2e.redirect?.toString().slice(0, 120)})`);
         let toolNames: string[] = [];
@@ -322,10 +348,13 @@ async function main(): Promise<void> {
         const describe = await call('GET', `/api/local/admin/auth/pairing/${oldApp.id}`);
         assert(describe.status === 200 && describe.body?.agent?.name === 'Old App Check' && describe.body?.agent?.sendsTo === 'assistant.example',
             `the phone is told the assistant's name AND where its answers go (${JSON.stringify(describe.body?.agent)})`);
-        const noShown = await phoneApproves(admin, oldApp.id, oldApp.shortCode, { confirm: true });
+        const noShown = await phoneApproves(admin, oldApp.id, oldApp.shortCode, { confirm: 'six-digits' });
         const noConfirm = await phoneApproves(admin, oldApp.id, oldApp.shortCode, { agentShown: true });
-        assert(noShown.status === 426 && noShown.body?.code === 'agent_app_too_old' && noConfirm.status === 426,
-            `an app that cannot show the assistant, or the digits, cannot approve one (${show(noShown)})`);
+        const twoDigits = await phoneApproves(admin, oldApp.id, oldApp.shortCode, { confirm: true, agentShown: true });
+        const noTicks = await phoneApproves(admin, oldApp.id, oldApp.shortCode, { confirm: 'six-digits', agentShown: true });
+        assert(noShown.status === 426 && noShown.body?.code === 'agent_app_too_old' && noConfirm.status === 426 && twoDigits.status === 426
+            && noTicks.status === 426 && noTicks.body?.code === 'agent_app_too_old',
+            `an app that cannot show the assistant, six digits, or what it asks to do cannot approve one (${show(noShown)}; ${show(twoDigits)}; ${show(noTicks)})`);
         const mod = await phoneApproves(moderator, oldApp.id, oldApp.shortCode);
         const plain = await phoneApproves(member, oldApp.id, oldApp.shortCode);
         assert(mod.status === 403 && mod.body?.reason === 'not-owner-or-admin' && plain.status === 403,
@@ -577,7 +606,8 @@ async function main(): Promise<void> {
         // Finding 7: the switch off → 404 for every verb on every OAuth path, OPTIONS included.
         updateLocalConfig({ aiAssistantsAllowed: false });
         const doorPaths = ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp', '/.well-known/oauth-authorization-server',
-            '/oauth/register', '/oauth/authorize', `/oauth/authorize/${'a'.repeat(64)}/wait`, `/oauth/authorize/${'a'.repeat(64)}/confirm`, '/oauth/token', '/oauth/revoke'];
+            '/oauth/register', '/oauth/authorize', `/oauth/authorize/${'a'.repeat(64)}/wait`, `/oauth/authorize/${'a'.repeat(64)}/confirm`,
+            `/oauth/authorize/${'a'.repeat(64)}/asks`, '/oauth/token', '/oauth/revoke'];
         const notFound: string[] = [];
         for (const p of doorPaths) {
             for (const v of ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
@@ -587,7 +617,7 @@ async function main(): Promise<void> {
             }
         }
         updateLocalConfig({ aiAssistantsAllowed: true });
-        assert(notFound.length === 0, `the switch off: all 7 verbs on all 9 OAuth paths → 404 (${notFound.slice(0, 6).join('; ')})`);
+        assert(notFound.length === 0, `the switch off: all 7 verbs on all ${doorPaths.length} OAuth paths → 404 (${notFound.slice(0, 6).join('; ')})`);
         const preflight = await fetch(`${BASE}/oauth/token`, { method: 'OPTIONS', headers: { Origin: 'https://claude.ai' } });
         await preflight.arrayBuffer();
         assert(preflight.status !== 404, `switched on, the door answers its preflight again (${preflight.status})`);
@@ -602,7 +632,7 @@ async function main(): Promise<void> {
             && notes.filter(n => n.high).length === highBefore + 1,
         `two refreshes at once: the strict rule holds, the grant revoked and the owners told, high (${both.map(r => r.status).join(',')})`);
 
-        // ── 10b. "May post for me" (design Q1): the page's tick, sent with its digits, is what the grant keeps; off unless ticked ──
+        // ── 10b. "May post for me" (design Q1): the page's tick, set before the phone approves and signed by it, is what the grant keeps; off unless ticked ──
         resetOAuthForTests();
         resetLimits();
         const tickedC = await manualConnect(owner, 'Ticked', true);
@@ -612,6 +642,63 @@ async function main(): Promise<void> {
         const keptTicks = Object.fromEntries(listOAuthGrants().map(g => [g.clientName, g.canPost]));
         assert(tickedC.token.status === 200 && plainC.token.status === 200 && keptTicks['Ticked'] === true && keptTicks['Not ticked'] === false,
             `the consent page's "May post for me" is kept on the grant, and is off when not ticked (${JSON.stringify(keptTicks)})`);
+
+        // ── 10c. Risk 3 (18 Nov): the ticks are the ones the phone showed and signed, never the browser's after it ──
+        resetOAuthForTests();
+        resetLimits();
+        {
+            const reg = await call('POST', '/oauth/register', { body: { client_name: 'Tick Check', redirect_uris: [REDIRECT] } });
+            const pg = await openConsent(authorizeUrl(reg.body.client_id));
+            const cookie = { Cookie: pg.cookie };
+            const set = await call('POST', `/oauth/authorize/${pg.id}/asks`, { body: { canPost: true }, headers: cookie });
+            const look = await call('GET', `/api/local/admin/auth/pairing/${pg.id}`);
+            assert(set.status === 200 && look.body?.agent?.asks?.canPost === true && look.body?.agent?.asks?.canModerate === false,
+                `the phone is shown what the page asks the assistant may do (${JSON.stringify(look.body?.agent?.asks)})`);
+            const foreign = await call('POST', `/oauth/authorize/${pg.id}/asks`, { body: { canModerate: true } });
+            assert(foreign.status === 403 && (await call('GET', `/api/local/admin/auth/pairing/${pg.id}`)).body?.agent?.asks?.canModerate === false,
+                `a browser without the page's cookie cannot change them (${show(foreign)})`);
+            // The page adds a tick after the phone looked: the phone's approval names what it saw, so nothing is approved.
+            const shown = look.body.agent.asks;
+            await call('POST', `/oauth/authorize/${pg.id}/asks`, { body: { canPost: true, canModerate: true }, headers: cookie });
+            const stale = await call('POST', `/api/local/admin/auth/pairing/${pg.id}/approve`, {
+                body: { memberPubkey: owner.pub, signature: await signAssistantConsent(BASE, pg.id, pg.shortCode, shown, signer(owner)), signedFor: HOST, confirm: 'six-digits', agentShown: true, ticks: shown },
+            });
+            assert(stale.status === 409 && stale.body?.reason === 'asks-changed' && !stale.body?.confirmCode,
+                `ticks the page changed after the phone looked are refused at the approval (${show(stale)})`);
+            // A phone body claiming ticks its signature does not cover is a bad signature.
+            const forged = await call('POST', `/api/local/admin/auth/pairing/${pg.id}/approve`, {
+                body: { memberPubkey: owner.pub, signature: await signAssistantConsent(BASE, pg.id, pg.shortCode, shown, signer(owner)), signedFor: HOST, confirm: 'six-digits', agentShown: true, ticks: { canPost: true, canModerate: true } },
+            });
+            assert(forged.status === 403 && forged.body?.reason === 'bad-signature', `ticks the phone did not sign are refused (${show(forged)})`);
+            // Back to what the phone is shown now, and approved over it: then the page can move nothing.
+            await call('POST', `/oauth/authorize/${pg.id}/asks`, { body: { canPost: true }, headers: cookie });
+            const ok = await phoneApproves(owner, pg.id, pg.shortCode);
+            assert(ok.status === 200 && /^\d{6}$/.test(String(ok.body?.confirmCode)), `approved over the ticks it showed (${show(ok)})`);
+            const late = await call('POST', `/oauth/authorize/${pg.id}/asks`, { body: { canPost: true, canModerate: true }, headers: cookie });
+            assert(late.status === 409, `after the phone's approval the page cannot change the ticks (${show(late)})`);
+            // A tick the page adds with its digits that the phone did not approve: refused, the request ends, no grant.
+            const added = await call('POST', `/oauth/authorize/${pg.id}/confirm`, { body: { code: ok.body?.confirmCode, canModerate: true }, headers: cookie });
+            assert(added.status === 410 && added.body?.status === 'refused' && !added.body?.redirect && !listOAuthGrants().some(g => g.clientName === 'Tick Check'),
+                `a tick added in the browser after approval is refused and nothing is granted (${show(added)})`);
+        }
+        resetLimits();
+        {
+            // The phone approved "May post": the grant has it, and only it, whatever else the page sends with its digits.
+            const m = await manualConnect(owner, 'Phone Ticked', true);
+            const g = listOAuthGrants().find(x => x.clientName === 'Phone Ticked');
+            assert(m.token.status === 200 && g?.canPost === true && g?.canModerate === false, `the grant keeps the phone's ticks (${JSON.stringify(g && { canPost: g.canPost, canModerate: g.canModerate })})`);
+        }
+        resetLimits();
+        {
+            // Nobody answered in time: a tick now is told the request ran out (410, as the page's poll is), never that the phone answered.
+            const reg = await call('POST', '/oauth/register', { body: { client_name: 'Ran Out', redirect_uris: [REDIRECT] } });
+            const pg = await openConsent(authorizeUrl(reg.body.client_id));
+            skew = PAIRING_TTL_MS + 1000;
+            const ranOut = await call('POST', `/oauth/authorize/${pg.id}/asks`, { body: { canPost: true }, headers: { Cookie: pg.cookie } });
+            skew = 0;
+            assert(ranOut.status === 410 && ranOut.body?.status === 'expired' && /run out/.test(String(ranOut.body?.error)) && !/already answered/.test(String(ranOut.body?.error)),
+                `a tick after the request ran out: 410, in words that say it ran out, not that the phone answered (${show(ranOut)})`);
+        }
 
         // ── 11. Lifetimes and the pins finding 9 asked for ──
         resetOAuthForTests();

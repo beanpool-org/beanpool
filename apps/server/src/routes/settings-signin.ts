@@ -4,13 +4,15 @@
  *   POST /api/local/admin/auth/pairing              browser: new pairing; sets the binding cookie
  *   POST /api/local/admin/auth/pairing/:id/wait     browser: long-poll (≤25 s) with the binding cookie;
  *                                                   on approval, the admin_session cookie + a CSRF token,
- *                                                   or { status: 'confirm' } when the phone shows two digits
- *   POST /api/local/admin/auth/pairing/:id/confirm  browser: { code } — the phone's two digits, with the binding cookie
+ *                                                   or { status: 'confirm' } when the phone shows six digits
+ *   POST /api/local/admin/auth/pairing/:id/confirm  browser: { code } — the phone's six digits, with the binding cookie;
+ *                                                   one wrong try ends the pairing
  *   GET  /api/local/admin/auth/pairing/:id          phone: the short code, "Firefox on Windows", how long ago it asked and
  *                                                   the time left; signed by a member who holds a role here, also the
- *                                                   computer's address and "same network"
- *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, confirm?, agentShown? } (agentShown: the
- *                                                   phone showed an AI assistant's name and where it sends, agent/oauth-route.ts)
+ *                                                   computer's address, "same network" and "other network"
+ *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, confirm: 'six-digits', agentShown?, ticks? }
+ *                                                   (agentShown: the phone showed an AI assistant's name and where it sends;
+ *                                                   ticks: what it showed the assistant asks to do, signed, agent/oauth-route.ts)
  *   POST /api/local/admin/auth/pairing/:id/decline  phone: { memberPubkey, signature }
  *
  * The phone's calls go through the auth limiter (15 a minute per client). The browser's creation has its own
@@ -35,6 +37,7 @@ import {
     waitForPairing,
     bindingCookieName,
     isPairingId,
+    readTicks,
     PAIRING_TTL_MS,
 } from '../settings-signin-pairing.js';
 
@@ -84,7 +87,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
         const res = confirmPairing(id, ctx.cookies.get(bindingCookieName(id)) || undefined, bodyOf(ctx).code);
         if (res.kind === 'wrong') {
             ctx.status = 400;
-            ctx.body = { status: 'wrong', triesLeft: res.triesLeft, error: 'Those are not the digits on the phone.' };
+            ctx.body = { status: 'wrong', triesLeft: res.triesLeft, error: 'Those are not the digits on the phone. Get a new code.' };
             return;
         }
         answer(ctx, id, res);
@@ -138,11 +141,11 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
         const res = describePairing(ctx.params.id, Date.now(), clientIp(ctx as any));
         ctx.set('Cache-Control', 'no-store');
         if (!res.ok) { ctx.status = res.status; ctx.body = { error: res.error }; return; }
-        const { ok: _ok, fromAddress, sameNetwork, ...shown } = res;
+        const { ok: _ok, fromAddress, sameNetwork, otherNetwork, ...shown } = res;
         // The pairing id is in the QR, so anyone who saw the screen can look it up: the computer's address, and whether
         // they share its network, go only to a member who could approve it (4171995201).
         const signer = signedBy(ctx);
-        ctx.body = signer && nodeRoleOf(signer) ? { ...shown, fromAddress, sameNetwork } : shown;
+        ctx.body = signer && nodeRoleOf(signer) ? { ...shown, fromAddress, sameNetwork, otherNetwork } : shown;
     });
 
     /**
@@ -169,7 +172,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/auth/pairing/:id/approve', async (ctx) => {
         if (!deps.rateLimit(ctx as any)) return;
-        const { memberPubkey, signature, signedFor, confirm, agentShown } = bodyOf(ctx);
+        const { memberPubkey, signature, signedFor, confirm, agentShown, ticks } = bodyOf(ctx);
         if (typeof memberPubkey !== 'string' || typeof signature !== 'string' || !memberPubkey || !signature) {
             ctx.status = 400;
             ctx.body = { error: 'memberPubkey and signature are required' };
@@ -180,8 +183,9 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             memberPubkey,
             signature,
             signedFor,
-            confirm: confirm === true,
+            confirm,
             agentShown: agentShown === true,
+            ticks: readTicks(ticks),
         });
         if (!res.ok) {
             ctx.status = res.status;

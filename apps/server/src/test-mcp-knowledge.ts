@@ -143,6 +143,8 @@ async function main(): Promise<void> {
     await ensureGenesis();
     await initTls();
     initStateEngine();
+    // AI assistants are OFF unless an owner turns them on (risk 3, 18 Nov): this suite tests a node whose owners did.
+    (await import('./config/local-config.js')).updateLocalConfig({ aiAssistantsAllowed: true });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 

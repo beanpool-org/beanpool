@@ -565,6 +565,13 @@ export type DmPinsReset = 'set-aside' | 'nothing-stored' | 'unreadable-removed';
 export interface DmPinBook<H> {
     /** This account's pins in `at`'s file (read from storage the first time), once that file is seeded. */
     read(myPubkey: string, at: H): Promise<DmPeerPins>;
+    /**
+     * This account's pins in `file` as they stand (the copy held, else storage), never seeded, waiting for no turn, and
+     * not to be changed: for a read of a community whose copy is not the one in use (db.ts getHeldConversations, slice S1),
+     * which no handle of this book's reads. Null when that file has none stored (not seeded since the update, or a reset's
+     * marker in their place) or storage can't be read.
+     */
+    peek(myPubkey: string, file: string): Promise<DmPeerPins | null>;
     /** Run `change` on those pins after every change queued before it, once `at`'s file is seeded; written through when it returns true. */
     update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean): Promise<boolean>;
     /**
@@ -745,6 +752,13 @@ export function createDmPinBook<H>(
             return !readable ? 'unreadable-removed' : raw != null && !marked ? 'set-aside' : 'nothing-stored';
         });
     }
+    async function peek(myPubkey: string, file: string): Promise<DmPeerPins | null> {
+        try {
+            return (await load(myPubkey, file)).pins;
+        } catch {
+            return null;
+        }
+    }
     async function idle(): Promise<void> {
         await Promise.all([...queues.values()].map((turn) => turn.catch(() => {})));
     }
@@ -754,7 +768,7 @@ export function createDmPinBook<H>(
         for (const key of [...copies.keys()]) if (key.endsWith(tail)) copies.delete(key);
         for (const key of [...seeds.keys()]) if (key.endsWith(tail)) seeds.delete(key);
     }
-    return { read, update, reset, idle, forgetFile, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
+    return { read, peek, update, reset, idle, forgetFile, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
 }
 
 /** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */

@@ -10,11 +10,13 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getHeldConversations, type HeldConversation } from './db';
+import { closeHeldCopies, getHeldConversations, type HeldConversation } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { sameCommunity } from './push-pins';
 import { communityName } from './community-name';
+import { getBlockedUsers } from './blocklist';
+import { talkShowsChat } from './dm-blocked';
 
 export interface HeldChatRow extends HeldConversation {
     /** The row's key in Chat's list: never that of a chat in the community in use, nor of the same id in another. */
@@ -26,7 +28,65 @@ export interface HeldChatRow extends HeldConversation {
     communityName: string;
 }
 
-export async function heldChatRows(myPubkey: string): Promise<HeldChatRow[]> {
+/** One stretch of Chat in view (its focus effect), as {@link heldChatsInView} hands it out. */
+export interface HeldChatsView {
+    /** True until Chat is left. */
+    inView(): boolean;
+    /** Chat is left: every held handle closes, unless Chat is in view again by then. Once only. */
+    leave(): Promise<void>;
+}
+
+/** How many stretches of Chat are in view now: one, but a quick move away and back can have the next begin first. */
+let viewsInView = 0;
+
+/** Close every held handle, unless Chat is in view again: the handles are Chat's, and only Chat reads them (slice S1). */
+function closeUnlessInView(): Promise<void> {
+    return viewsInView === 0 ? closeHeldCopies() : Promise.resolve();
+}
+
+/**
+ * Chat in view, from its focus to its blur (app/(tabs)/chats.tsx): its held reads go through it, so no handle opened after
+ * Chat is left stays open (#3302 review F3). As Chat is left (`leave`) every held handle closes; a list still on its way
+ * then reads no community more ({@link heldChatRows}) and closes once more as it ends, for a handle it opened after that
+ * close. Neither close runs while Chat is in view again.
+ */
+export function heldChatsInView(): HeldChatsView {
+    viewsInView++;
+    let shown = true;
+    return {
+        inView: () => shown,
+        leave: () => {
+            if (!shown) return Promise.resolve();
+            shown = false;
+            viewsInView--;
+            return closeUnlessInView();
+        },
+    };
+}
+
+/**
+ * The held rows Chat lists: {@link heldChatRows} less every DM with someone the member blocked, under any key that chat
+ * names them by in its own community, its pin's former and offered keys included (db.ts getHeldConversations peerKeys), as
+ * Talk's own list leaves them out (dm-blocked.ts talkShowsChat).
+ */
+export async function heldChatsShown(myPubkey: string, view?: HeldChatsView): Promise<HeldChatRow[]> {
+    const [blocked, rows] = await Promise.all([getBlockedUsers(), heldChatRows(myPubkey, view)]);
+    return rows.filter((c) => talkShowsChat(c, blocked));
+}
+
+/**
+ * Chat's held rows. `view`: Chat in view ({@link heldChatsInView}); once it is left, no further community is read, and
+ * what this list opened closes as it ends (unless Chat is in view again).
+ */
+export async function heldChatRows(myPubkey: string, view?: HeldChatsView): Promise<HeldChatRow[]> {
+    try {
+        return await heldChatRowsWhile(myPubkey, view ? view.inView : () => true);
+    } finally {
+        if (view && !view.inView()) await closeUnlessInView();
+    }
+}
+
+async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promise<HeldChatRow[]> {
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
     const rows: HeldChatRow[] = [];
     const files = new Set<string>();
@@ -37,6 +97,8 @@ export async function heldChatRows(myPubkey: string): Promise<HeldChatRow[]> {
         const file = getDatabaseFilenameForNode(url);
         if (files.has(file)) continue;
         files.add(file);
+        // Chat left: no further community's copy is opened (one opened since the close as it was left closes as this ends).
+        if (!inView()) break;
         const chats = await getHeldConversations(myPubkey, url);
         if (!chats) continue;
         const savedName = (node as { name?: unknown }).name;

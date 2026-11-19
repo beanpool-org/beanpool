@@ -7,11 +7,15 @@
  * Its rules are the S1 probe's five conditions (scratch/walks/RESULT-s1-second-handle-probe.md "Verdict" and (5), measured
  * on the API 26 emulator):
  * 1. Never close a handle with a read in flight: that read's promise never settles. {@link HeldCopies.close},
- *    {@link HeldCopies.closeAll} and {@link HeldCopies.paused} wait for the reads in flight, then close.
+ *    {@link HeldCopies.closeAll} and {@link HeldCopies.paused} wait for the reads in flight, then close. A closer that
+ *    comes while another one's close is under way waits for that same close, its native close included, before it
+ *    returns: a caller that deletes, moves or opens the file next never does so beside a held connection still closing.
  * 2. Never open a file that isn't there: the open makes one. The file is looked for first, and a pause (before a copy is
  *    deleted or moved) waits for an open on its way, so none is opened between the look and the delete.
  * 3. No long read transactions: one holds back the WAL of the community in use. Every read is one statement
- *    ({@link HeldCopies.all}), and a transaction statement or a second statement is refused.
+ *    ({@link HeldCopies.all}): one of the statements this module was made with (`statements`), asked for by name, never
+ *    SQL a caller hands it, and each is let through only as one plain SELECT ({@link isOneRead}), so no transaction
+ *    statement, PRAGMA, ATTACH, write or second statement ever reaches a held copy.
  * 4. Every held handle closes wherever the main copy is closed, cleared or deleted (db.ts closeOpenCopy, whileCopyMoves,
  *    community-cache.ts removeCommunityCaches): otherwise it goes on showing a deleted copy's chats.
  * (5, the switch-during-sync write, is #3300's chatCopyForRequest; a held handle writes nothing at all.)
@@ -32,7 +36,7 @@ export interface HeldHandle {
     closeAsync(): Promise<void>;
 }
 
-export interface HeldCopiesDeps<H extends HeldHandle> {
+export interface HeldCopiesDeps<H extends HeldHandle, S extends string> {
     /** Resolves once the phone's copies have their own names (cache-file-migration.ts communityCachesRenamed). */
     renamed(): Promise<unknown>;
     /** Whether `file`'s copy is on the phone. Asked before every open: an open makes a file that isn't there. */
@@ -45,18 +49,27 @@ export interface HeldCopiesDeps<H extends HeldHandle> {
     register(handle: H, file: string): void;
     /** This build's copy schema number (db.ts COPY_SCHEMA): a held copy at another is not opened. */
     schema: number;
+    /**
+     * The only statements a held copy runs, by name (db.ts: constants of its own). Each must be one plain SELECT
+     * ({@link isOneRead}): one that isn't is refused at its every use, before it reaches a copy.
+     */
+    statements: Readonly<Record<S, string>>;
 }
 
-export interface HeldCopies {
+export interface HeldCopies<S extends string = string> {
     /**
-     * One statement on `file`'s held copy, counted in and out. Null when there is none to read (no such file, the community
-     * in use, a copy at another schema number, a pause, a close under way). Rejects on a statement SQLite refuses, and on a
-     * transaction statement or more than one statement (refused before it reaches the copy).
+     * The statement named `statement` (one of `statements`) on `file`'s held copy, counted in and out. Null when there is
+     * none to read (no such file, the community in use, a copy at another schema number, a pause, a close under way).
+     * Rejects on a statement SQLite refuses, and on a name with no statement or one that isn't one plain SELECT (refused
+     * before it reaches the copy).
      */
-    all<T>(file: string, sql: string, params: readonly unknown[]): Promise<T[] | null>;
-    /** Close `file`'s held handle, once its reads in flight have settled (db.ts: before the copy in use opens that file). */
+    all<T>(file: string, statement: S, params: readonly unknown[]): Promise<T[] | null>;
+    /**
+     * Close `file`'s held handle, once its reads in flight have settled (db.ts: before the copy in use opens that file).
+     * Resolves once its native close is done, a close another closer began included.
+     */
     close(file: string): Promise<void>;
-    /** Close every held handle, once its reads in flight have settled (db.ts closeOpenCopy). */
+    /** Close every held handle, once its reads in flight have settled (db.ts closeOpenCopy), each closed when this resolves. */
     closeAll(): Promise<void>;
     /** Close every held handle and open none until `fn` is done: around anything that moves or deletes a copy. */
     paused<T>(fn: () => Promise<T>): Promise<T>;
@@ -65,23 +78,35 @@ export interface HeldCopies {
      * resolves, and none opens until `done` settles (community-cache.ts removeCommunityCaches, through db.ts closeDB).
      */
     pauseUntil(done: Promise<unknown>): Promise<void>;
-    /** The files a handle is open (or opening) on, for tests and logs. */
+    /** The files a handle is open, opening or closing on, for tests and logs. */
     openFiles(): string[];
 }
 
-/** One held handle: the open on its way, the handle once open, its reads in flight, and whether a close has begun. */
+/**
+ * One held handle: the open on its way, the handle once open, its reads in flight, and its close once one has begun. The
+ * entry stays in the map until that close is done, so a closer that comes later finds it and waits for the same close.
+ */
 interface Entry<H> {
     handle: H | null;
     opening: Promise<H | null> | null;
     inFlight: number;
     idle: Array<() => void>;
     closing: boolean;
+    /** Set by the first closer, in the same turn as `closing`: every closer awaits it. Settles once the native close is done. */
+    closed: Promise<void> | null;
 }
 
-/** A transaction statement, or a second statement after the first: never run on a held handle (rule 3). */
-const NOT_ONE_READ = /^\s*(?:BEGIN|SAVEPOINT|COMMIT|END|ROLLBACK|RELEASE)\b|;\s*\S/i;
+/**
+ * One plain SELECT: the only statement a held copy runs (rule 3). An allowlist: it starts with SELECT (after white space
+ * only, so no comment hides a statement before it) and holds no `;` but one at its very end, so it is one statement, and
+ * no transaction statement, PRAGMA (`query_only = 0` would lift the read-only rule), ATTACH or write. WITH is not let
+ * through: SQLite takes `WITH … DELETE`.
+ */
+export function isOneRead(sql: unknown): boolean {
+    return typeof sql === 'string' && /^\s*SELECT\b[^;]*;?\s*$/i.test(sql);
+}
 
-export function createHeldCopies<H extends HeldHandle>(deps: HeldCopiesDeps<H>): HeldCopies {
+export function createHeldCopies<H extends HeldHandle, S extends string>(deps: HeldCopiesDeps<H, S>): HeldCopies<S> {
     const entries = new Map<string, Entry<H>>();
     let pauses = 0;
 
@@ -120,7 +145,7 @@ export function createHeldCopies<H extends HeldHandle>(deps: HeldCopiesDeps<H>):
             if (held.closing) return Promise.resolve(null);
             return held.handle ? Promise.resolve(held.handle) : (held.opening ?? Promise.resolve(null));
         }
-        const entry: Entry<H> = { handle: null, opening: null, inFlight: 0, idle: [], closing: false };
+        const entry: Entry<H> = { handle: null, opening: null, inFlight: 0, idle: [], closing: false, closed: null };
         entries.set(file, entry);
         const opening = openFor(file, entry)
             .catch((e) => {
@@ -129,21 +154,34 @@ export function createHeldCopies<H extends HeldHandle>(deps: HeldCopiesDeps<H>):
             })
             .then((handle) => {
                 entry.opening = null;
-                if (!handle && entries.get(file) === entry) entries.delete(file);
+                // A close under way takes the entry out itself, once it is done.
+                if (!handle && !entry.closing && entries.get(file) === entry) entries.delete(file);
                 return handle;
             });
         entry.opening = opening;
         return opening;
     }
 
-    async function closeEntry(file: string, entry: Entry<H>): Promise<void> {
+    /**
+     * Close `entry`, or wait for the close already under way: one close per entry, which every closer awaits, so none
+     * returns before the native close is done (#3302 review F1: a second closer returned at once while the first one's
+     * close still ran, and its caller could delete or open the file beside it). The entry leaves the map only then.
+     */
+    function closeEntry(file: string, entry: Entry<H>): Promise<void> {
+        if (entry.closed) return entry.closed;
         entry.closing = true;
-        if (entry.opening) await entry.opening;
-        while (entry.inFlight > 0) await new Promise<void>((resolve) => { entry.idle.push(resolve); });
-        const handle = entry.handle;
-        entry.handle = null;
-        if (entries.get(file) === entry) entries.delete(file);
-        if (handle) await handle.closeAsync().catch((e) => console.warn(`[Held] Close warning for ${file}:`, e));
+        entry.closed = (async () => {
+            try {
+                if (entry.opening) await entry.opening;
+                while (entry.inFlight > 0) await new Promise<void>((resolve) => { entry.idle.push(resolve); });
+                const handle = entry.handle;
+                entry.handle = null;
+                if (handle) await handle.closeAsync().catch((e) => console.warn(`[Held] Close warning for ${file}:`, e));
+            } finally {
+                if (entries.get(file) === entry) entries.delete(file);
+            }
+        })();
+        return entry.closed;
     }
 
     async function closeAll(): Promise<void> {
@@ -151,8 +189,9 @@ export function createHeldCopies<H extends HeldHandle>(deps: HeldCopiesDeps<H>):
     }
 
     return {
-        async all<T>(file: string, sql: string, params: readonly unknown[]): Promise<T[] | null> {
-            if (NOT_ONE_READ.test(sql)) throw new Error('A held copy takes one read statement at a time, never a transaction.');
+        async all<T>(file: string, statement: S, params: readonly unknown[]): Promise<T[] | null> {
+            const sql = Object.prototype.hasOwnProperty.call(deps.statements, statement) ? deps.statements[statement] : undefined;
+            if (typeof sql !== 'string' || !isOneRead(sql)) throw new Error('A held copy takes one read statement at a time, never a transaction.');
             const handle = await handleFor(file);
             if (!handle) return null;
             const entry = entries.get(file);

@@ -1474,22 +1474,25 @@ export default function SettingsScreen() {
                         onPress: () => forgetCommunityPush(identity, anchorUrl, async () => {
                             for (const url of everySpelling) await removeSavedNode(url);
                             setSavedNodes(remainingNodes);
-                            try {
-                                const filename = getDatabaseFilenameForNode(targetUrl);
-                                const paths = getDatabaseFilePaths(filename);
-                                for (const p of paths) {
-                                    await FileSystem.deleteAsync(p, { idempotent: true });
-                                }
-                                // Its cursors go with its copy, so a rejoin reads it whole.
-                                const { syncCursorKeysOf } = await import('../../services/pillar-sync');
-                                await AsyncStorage.multiRemove(syncCursorKeysOf(filename));
-                            } catch(e) {}
-                            
+
                             // Automatically pivot to the next available node
                             await handleSwitchNode(remainingNodes[0].url);
                             // Any read of the list before the phone moved put the community in use back on it
                             // (nodes.ts getSavedNodes), and a community on the list gets the push token.
                             for (const url of everySpelling) await removeSavedNode(url);
+                            // Its copy goes once the phone is off it, never while it is the copy in use (a sync tick
+                            // would open it again under the address still set): with its cursors, held handles closed
+                            // first, the WAL too (utils/community-cache.ts forgetCommunityCopy). A switch that failed
+                            // (it says so) leaves the phone there, and its copy with it.
+                            const now = await AsyncStorage.getItem('beanpool_anchor_url');
+                            if (!now || !sameCommunity(now, targetUrl)) {
+                                try {
+                                    const { forgetCommunityCopy } = await import('../../utils/community-cache');
+                                    await forgetCommunityCopy(targetUrl);
+                                } catch (e) {
+                                    console.warn('[Settings] Could not delete the forgotten community\'s copy', e);
+                                }
+                            }
                         })
                     }
                 ]
@@ -1508,17 +1511,15 @@ export default function SettingsScreen() {
                     onPress: () => forgetCommunityPush(identity, targetUrl, async () => {
                         await removeSavedNode(targetUrl);
                         setSavedNodes(prev => prev.filter(n => n.url !== targetUrl));
-                        // Physically delete the dormant .db file from the OS folder
+                        // Its copy off the phone, with its cursors so a rejoin reads it whole: every held handle closed
+                        // first and none opened until it has gone, the WAL too, in expo-sqlite's own directory
+                        // (utils/community-cache.ts forgetCommunityCopy).
                         try {
-                            const filename = getDatabaseFilenameForNode(targetUrl);
-                            const paths = getDatabaseFilePaths(filename);
-                            for (const p of paths) {
-                                    await FileSystem.deleteAsync(p, { idempotent: true });
-                            }
-                            // Its cursors go with its copy, so a rejoin reads it whole.
-                            const { syncCursorKeysOf } = await import('../../services/pillar-sync');
-                            await AsyncStorage.multiRemove(syncCursorKeysOf(filename));
-                        } catch(e) {}
+                            const { forgetCommunityCopy } = await import('../../utils/community-cache');
+                            await forgetCommunityCopy(targetUrl);
+                        } catch (e) {
+                            console.warn('[Settings] Could not delete the forgotten community\'s copy', e);
+                        }
                     })
                 }
             ]

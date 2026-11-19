@@ -181,8 +181,10 @@ vi.mock('../node-post', () => ({
     signedGet: (origin: string) => knockReads.answers.get(origin)?.() ?? new Promise(() => {}), signedPost: () => new Promise(() => {}),
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
+/** The keys this account blocked, as Talk's lists read them: none unless a test says so. */
+const blocks = vi.hoisted(() => ({ talk: [] as string[] }));
 vi.mock('../blocklist', () => ({
-    getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated',
+    getBlockedUsers: async () => blocks.talk, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated',
     blockUser: async (key: string) => { outside.blocked.push(key); return true; },
 }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
@@ -313,6 +315,8 @@ beforeEach(() => {
     outside.sent = [];
     outside.reported = [];
     outside.decided = [];
+    blocks.talk = [];
+    openNoticeCalls.calls.length = 0;
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -749,6 +753,52 @@ describe('the Chat tab at 320 dp × 569 dp with text at 1.3×', () => {
         }
         // English draws whole, at full size.
         expect(worst.filter(([lang]) => lang === 'en').map(([, , s]) => s)).toEqual([1, 1]);
+    });
+});
+
+describe("Chat's own held wiring (slice S1, #3302 review F6): the rows, the block filter, the tap, the close as Chat is left", () => {
+    const HILL = 'https://hilltop.example';
+    /** What another community's copy holds, as db.ts getHeldConversations reads it: Kai, and Rowan, re-keyed and blocked under the old key. */
+    const HELD = [
+        { id: 'h-kai', type: 'dm', postId: null, postTitle: null, postPhoto: null, peer: 'Kai', peerAvatar: null, peerUpdatedAt: null, peerPubkey: 'kai-key', peerKeys: ['kai-key'], rawTimestamp: iso(now - 120_000), createdAt: null },
+        { id: 'h-rowan', type: 'dm', postId: null, postTitle: null, postPhoto: null, peer: 'Rowan', peerAvatar: null, peerUpdatedAt: null, peerPubkey: 'rowan-new', peerKeys: ['rowan-new', 'rowan-old'], rawTimestamp: iso(now - 180_000), createdAt: null },
+    ];
+    const heldRows = () => Array.from(host.querySelectorAll('[data-testid="held-chat-row"]'));
+    const closes = () => net.calls.filter((c) => c === 'db.closeHeldCopies').length;
+    beforeEach(() => {
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: HILL, alias: 'Hilltop' }]));
+        rememberProfile(LOCAL);
+        net.answer = community({ getHeldConversations: HELD, closeHeldCopies: undefined });
+    });
+
+    it("lists the other community's chats under its name, and none with someone blocked under any key that chat names them by", async () => {
+        blocks.talk = ['rowan-old'];
+        await renderIn('en');
+        expect(net.calls).toContain('db.getHeldConversations');
+        expect(heldRows().map((r) => r.textContent)).toEqual([expect.stringContaining('Kai')]);
+        expect(heldRows()[0].querySelector('[data-testid="held-chat-community"]')?.textContent).toBe('Hilltop · Switch');
+        expect(host.textContent).not.toContain('Rowan');
+    });
+
+    it('with no block, both are listed', async () => {
+        await renderIn('en');
+        expect(heldRows().length).toBe(2);
+    });
+
+    it("a tap moves the phone to that row's community through the one switch, and lands in that chat by its own id", async () => {
+        await renderIn('en');
+        await click(heldRows()[0], 'Kai, held');
+        expect(openNoticeCalls.calls.map((c) => [c.url, c.id])).toEqual([[HILL, null]]);
+        expect(await (openNoticeCalls.calls[0].route as () => Promise<string>)()).toBe('/chat/h-kai');
+    });
+
+    it('every held handle closes as Chat is left', async () => {
+        await renderIn('en');
+        const before = closes();
+        act(() => root.unmount());
+        await new Promise((r) => setTimeout(r, 0));
+        expect(closes()).toBeGreaterThan(before);
+        root = createRoot(host);
     });
 });
 

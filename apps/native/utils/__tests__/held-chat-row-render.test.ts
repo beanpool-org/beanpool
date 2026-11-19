@@ -15,10 +15,11 @@ import { createRoot, type Root } from 'react-dom/client';
 vi.mock('react-native', () => {
     const flat = (s: unknown): Record<string, unknown> => Object.assign({}, ...[s].flat(3).filter(Boolean));
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, testID, style, accessibilityLabel, onPress, disabled } = props;
+        const { children, testID, style, accessibilityLabel, accessibilityHint, onPress, disabled } = props;
         const attrs: Record<string, unknown> = { 'data-style': JSON.stringify(flat(style)) };
         if (testID) attrs['data-testid'] = testID;
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (accessibilityHint) attrs['aria-description'] = accessibilityHint;
         if (onPress) attrs.onClick = disabled ? undefined : onPress;
         if (disabled) attrs.disabled = true;
         return createElement(tag, attrs, children);
@@ -75,7 +76,9 @@ describe('a chat held in another community, in Chat\'s list', () => {
             expect(where.textContent).toBe('Hilltop · Switch');
             // Grey: the theme's secondary text, never the body's or a raw colour.
             expect(styleOf(where).color).toBe(colors.text.secondary);
-            expect(row.getAttribute('aria-label')).toBe('Chat with Kai in Hilltop. Opens that community.');
+            // The name starts with the words the row shows (WCAG 2.5.3), "Switch" included; the longer sentence is the hint.
+            expect(row.getAttribute('aria-label')).toBe('Kai, Hilltop · Switch');
+            expect(row.getAttribute('aria-description')).toBe('Chat with Kai in Hilltop. Opens that community.');
             // The row's own photo, an address on that community's server, as getHeldConversations made it.
             expect(seen.avatars).toEqual(['https://hilltop.example/uploads/kai.jpg']);
         });

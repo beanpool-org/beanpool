@@ -49,7 +49,7 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
     const bodies: any[] = [];
     const reads: string[][] = [];
     const removes: string[] = [];
-    /** Each read of the key's own posts, by the community it went to. */
+    /** Each read of the key's own listings at their community. */
     const authorReads: string[] = [];
     const home: HomeEvent = {
         id: 'home-1', type: 'offer', category: 'food', title: 'Tomatoes', price_c: 2000, priceType: 'fixed', authorPublicKey: publicKey, audienceScope: 'public',
@@ -64,13 +64,6 @@ function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 's
                 asked.push('home');
                 if (q.get('author')) authorReads.push(HOME);
                 return homeAnswer?.(path) ?? (path.startsWith('/api/members/preferences') ? json({ holiday_mode: String(holiday) }) : json([home]));
-            }
-            // The author's own read: every copy of theirs that is up, as global marks one (engine/event-copy.ts readOfCopy).
-            if (q.get('author')) {
-                authorReads.push(GLOBAL);
-                if (lostRead) throw new TypeError('Network request failed');
-                if (silentRead?.(q)) return json({ error: 'Busy' }, 503);
-                return json([...rows.values()].filter((r) => r.status === 'active').map((r) => ({ ...r, shownCopy: true })));
             }
             const ids = q.get('ids')?.split(',') ?? [q.get('id') as string];
             reads.push(ids);
@@ -2196,12 +2189,25 @@ describe('a device restored from 12 words finds its copies and tends them', () =
         w.homeAnswers((path) => (path.includes('author=') ? w.json([{ ...w.home, audienceScope: 'group' }]) : null));
         await w.device({ homes: [HOME] }).tendCopies(identity);
         expect(w.authorReads).toEqual([HOME]);
+        expect(w.reads).toEqual([]);
         w.homeAnswers(null);
         w.authorReads.length = 0;
         const phone = w.device({ homes: [HOME] });
         await phone.showOnGlobal(w.home, HOME, identity);
+        w.reads.length = 0;
         await phone.tendCopies(identity);
         expect(w.authorReads).toEqual([HOME]);
+        expect(w.reads).toEqual([]);
+    });
+
+    it('asks by the listings\' ids alone, whole listings to a read and under global\'s 100: seven listings are two reads', async () => {
+        const w = world();
+        const seven = Array.from({ length: 7 }, (_, i) => ({ ...w.home, id: `home-${i + 1}` }));
+        w.homeAnswers((path) => (path.includes('author=') ? w.json(seven) : null));
+        await w.device({ homes: [HOME] }).tendCopies(identity);
+        expect(w.reads.map((ids) => ids.length)).toEqual([96, 16]);
+        const asked = new Set(w.reads.flat());
+        for (const listing of seven) expect(asked.has(await copyIdOf(listing.id, COPY_IDS_LOOKED_AT - 1, sign))).toBe(true);
     });
 
     it('looks at most once a day, and again the next day', async () => {
@@ -2210,16 +2216,18 @@ describe('a device restored from 12 words finds its copies and tends them', () =
         const now = Date.now();
         await restored.tendCopies(identity, undefined, now);
         await restored.tendCopies(identity, undefined, now + 60 * 60 * 1000);
-        expect(w.authorReads).toEqual([HOME, GLOBAL]);
+        expect(w.authorReads).toEqual([HOME]);
+        expect(w.reads).toHaveLength(1);
         await restored.tendCopies(identity, undefined, now + COPY_ADOPT_EVERY_MS);
-        expect(w.authorReads).toEqual([HOME, GLOBAL, HOME, GLOBAL]);
+        expect(w.authorReads).toEqual([HOME, HOME]);
+        expect(w.reads).toHaveLength(2);
     });
 
     it('a community or global that didn\'t answer is asked again at the next tend', async () => {
         const w = world();
         await w.device().showOnGlobal(w.home, HOME, identity);
         const restored = w.device({ homes: [HOME] });
-        w.silentOn((q) => q.has('author'));
+        w.silentOn((q) => q.has('ids'));
         await restored.tendCopies(identity);
         expect(restored.pairs()).toEqual([]);
         w.silentOn(null);

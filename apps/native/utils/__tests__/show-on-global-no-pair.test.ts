@@ -61,12 +61,12 @@ describe('a delete on a phone that holds no pair', () => {
 });
 
 describe('the look for copies made elsewhere', () => {
-    it('on a phone that holds global as a member: its own listings here, then its posts there', async () => {
+    it('on a phone that holds global as a member: its own listings here, then their ids there', async () => {
         here.saved = [{ url: 'https://home.test' }, { url: 'https://global.test' }];
         const { tendCopies } = await fresh();
         await tendCopies(me);
         expect(asked('https://home.test').filter((p) => p.includes('author='))).toHaveLength(1);
-        expect(asked('https://global.test').filter((p) => p.includes('author='))).toHaveLength(1);
+        expect(asked('https://global.test').filter((p) => p.includes('ids='))).toHaveLength(1);
     });
 
     it('on a phone that holds global only as a guest\'s look, or not at all, or away from a local community: nobody is asked', async () => {

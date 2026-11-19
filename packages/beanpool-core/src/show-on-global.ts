@@ -65,8 +65,10 @@ export const COPY_KEEP_ALIVE_MS = 30 * 24 * 60 * 60 * 1000;
 export const COPY_IDS_LOOKED_AT = 16;
 /** A device looks for copies of its key's listings that it holds no pair for (`adoptCopies`) at most this often. */
 export const COPY_ADOPT_EVERY_MS = 24 * 60 * 60 * 1000;
-/** The most rows one read gives (apps/server https-server.ts MAX_PAGE_LIMIT): a member's own listings, and their posts on global. */
+/** The most rows one read gives (apps/server https-server.ts MAX_PAGE_LIMIT): a member's own listings at their community. */
 const OWN_READ_MOST = 200;
+/** The ids one read of global names when a device looks for its copies: whole listings' worth, under global's 100 (`ids=`). */
+const IDS_READ_MOST = Math.floor(100 / COPY_IDS_LOOKED_AT) * COPY_IDS_LOOKED_AT;
 /**
  * A node's word that a new post's id is held by a row it has (apps/server engine/posts.ts). In a code, because a device goes by
  * it and the words around it can change. It is the only word a device gets of a removed Offer or Need: a read by id answers
@@ -1008,10 +1010,11 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
     /**
      * Copies of this key's listings that this device holds no pair for, found and taken up: made by the member's other device,
      * or before a 12-word restore. The member's own listings come from their communities (`homesOf`), which learn nothing new;
-     * only where one could have a copy and has no pair here is global asked, once, for the key's own posts there. A copy is that
-     * listing's when its id is one of the listing's ({@link copyIdOf}), so nothing goes by what the copy says. Taken up, a pair
-     * holds the copy as up and out of step, and the same tend sends it in step. At most once a day; a community or global that
-     * didn't answer is asked at the next tend.
+     * only where one could have a copy and has no pair here is global asked, by the ids each such listing can have
+     * ({@link copyIdOf}), {@link IDS_READ_MOST} to a read: the read a browser may make from another site, and one that names
+     * nothing but ids of the key's own listings. The newest one up is the listing's copy. Taken up, a pair holds the copy as up
+     * and out of step, and the same tend sends it in step. At most once a day; a community or global that didn't answer is
+     * asked at the next tend.
      */
     async function adoptCopies(identity: I, deps: CopyDeps<I>, now: number): Promise<void> {
         const key = identity.publicKey;
@@ -1029,17 +1032,20 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
             }
         }
         if (unpaired.length > 0) {
-            const mine = await readJson(deps.global, `${POSTS_PATH}?author=${encodeURIComponent(key)}&limit=${OWN_READ_MOST}`, identity, deps);
-            if (!Array.isArray(mine)) return;
             const known = new Set(held.flatMap((p) => [p.copyId, ...(p.earlierIds ?? [])]));
-            const copies = new Map<string, any>(mine.filter((row: any) => row?.shownCopy === true && row?.status !== 'cancelled' && !known.has(row?.id)).map((row: any) => [row.id, row]));
-            for (const { home, url } of unpaired) {
-                if (copies.size === 0) break;
-                const ids = await idsFrom(home.id, 0, identity);
+            const looked = await Promise.all(unpaired.map(async (u) => ({ ...u, ids: await idsFrom(u.home.id, 0, identity) })));
+            const all = looked.flatMap((l) => l.ids);
+            const copies = new Map<string, any>();
+            for (let at = 0; at < all.length; at += IDS_READ_MOST) {
+                const ids = all.slice(at, at + IDS_READ_MOST);
+                const rows = await readJson(deps.global, `${POSTS_PATH}?ids=${ids.map(encodeURIComponent).join(',')}`, identity, deps);
+                if (!Array.isArray(rows)) return;
+                for (const row of rows) if (ids.includes(row?.id) && row?.status !== 'cancelled' && !known.has(row.id)) copies.set(row.id, row);
+            }
+            for (const { home, url, ids } of looked) {
                 const generation = ids.reduce((found, id, i) => (copies.has(id) ? i : found), -1);
                 if (generation < 0) continue;
                 const copy = copies.get(ids[generation]);
-                copies.delete(ids[generation]);
                 const pair: CopyPair = {
                     publicKey: key, home: setup.plainOrigin(url) ?? url, homeId: home.id, copyId: ids[generation], generation,
                     sent: 'lost', sentAt: 0, photo: firstPhoto(home), skips: Array.isArray(copy?.eventRepeatSkips) ? copy.eventRepeatSkips : [],

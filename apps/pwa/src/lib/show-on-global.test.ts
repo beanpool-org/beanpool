@@ -280,14 +280,14 @@ describe('a copy this browser holds no pair for: made on the member\'s phone, or
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('a tend for a key this browser last heard is on global looks for them: its own listings here, then its posts there', async () => {
+    it('a tend for a key this browser last heard is on global looks for them: its own listings here, then their ids there', async () => {
         setNodeApiUrl('https://home.test');
         localStorage.setItem('beanpool_global_standing', JSON.stringify({ publicKey: me.publicKey, standing: 'member', at: NOW }));
         fetchMock.mockImplementation(async (url: unknown) => new Response(String(url).startsWith('https://home.test')
             ? JSON.stringify([{ ...gone, title: 'Tomatoes', status: 'active', active: true }]) : '[]'));
         await tendCopiesSoon(me, NOW);
         expect(urlsTo('https://home.test/api/marketplace/posts?author=')).toHaveLength(1);
-        expect(urlsTo('https://global.test/api/marketplace/posts?author=')).toHaveLength(1);
+        expect(urlsTo('https://global.test/api/marketplace/posts?ids=')).toHaveLength(1);
     });
 
     it('a tend for a key heard a stranger there, or not heard of, asks nobody', async () => {

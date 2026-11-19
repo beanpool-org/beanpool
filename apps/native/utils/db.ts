@@ -814,6 +814,53 @@ export function newCopyGeneration(): void {
     copyGeneration++;
 }
 
+/** Said when a chat action started as the phone was switching community: nothing was sent (chat-line-words.ts translates it). */
+const SWITCHED_SINCE_CHAT_OPENED_TEXT = 'This phone has switched community since this chat was opened.';
+
+/**
+ * The community a chat request is for (chatCopyForRequest): its address and its copy, taken at one moment.
+ * - `anchorUrl`: where the request goes, passed to signedGet / _signedRequest or built into the fetch's URL. Null with no
+ *   community set: the caller says it is off-grid, as it always did.
+ * - `file` and `database`: that community's copy, open as the request starts.
+ * - `handle()`: the only way a write that follows a network await reaches the copy. The copy open then when it is still
+ *   `file`'s; null once the phone is on another community's, and the answer is then dropped (nothing written, nothing
+ *   thrown at the member: that community's next sync reads it again).
+ */
+export interface ChatRequestCopy {
+    anchorUrl: string | null;
+    file: string;
+    database: SQLite.SQLiteDatabase;
+    handle(): Promise<SQLite.SQLiteDatabase | null>;
+}
+
+/**
+ * The file this request is for: the community's address and its copy, read together before a chat request goes out, so
+ * the answer is written only into the file it was asked for. Every chat write that follows a network await takes its handle
+ * from here (utils/__tests__/chat-write-after-await-source.test.ts). Before this, syncMessages took getDb() after the
+ * answer came back, and a switch while it was on its way wrote community A's conversation into B's file (the S1 probe,
+ * measured on the API 26 emulator: scratch/walks/RESULT-s1-second-handle-probe.md (4), run 6). Throws
+ * SWITCHED_SINCE_CHAT_OPENED_TEXT when the phone keeps switching while the copy opens (three tries).
+ */
+export async function chatCopyForRequest(): Promise<ChatRequestCopy> {
+    for (let tries = 0; tries < 3; tries++) {
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        const file = getDatabaseFilenameForNode(anchorUrl);
+        const database = await getDb();
+        if (dbFileOf.get(database) === file) return { anchorUrl, file, database, handle: () => copyStillFor(file) };
+    }
+    throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
+}
+
+/**
+ * The copy open now when the phone is still on `file`'s community, else null: never another community's copy, and none is
+ * opened for a community the phone has left. A chat write after a network await asks this (ChatRequestCopy.handle).
+ */
+export async function copyStillFor(file: string): Promise<SQLite.SQLiteDatabase | null> {
+    if (getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) !== file) return null;
+    const database = await getDb();
+    return dbFileOf.get(database) === file ? database : null;
+}
+
 /**
  * Simple Drop util if the User needs to wipe memory.
  *
@@ -3473,7 +3520,7 @@ async function heldInKeyMemory(conversationId: string, myPub?: string | null): P
  * knows it as a DM and the DM list can't be read: the caller writes no row from the node's type (§3.4 amendment 7 §3 iii).
  * `listedLater`: the caller remembers every conversation the node lists as a DM itself, in one write (a sync pass).
  */
-async function heldConversationType(conversationId: string, nodeType: string | null | undefined, myPub?: string | null, listedLater = false): Promise<string> {
+async function heldConversationType(conversationId: string, nodeType: string | null | undefined, myPub?: string | null, listedLater = false, database?: SQLite.SQLiteDatabase): Promise<string> {
     const t = nodeType || 'dm';
     let held: boolean | null;
     try { held = await heldInKeyMemory(conversationId, myPub); } catch { held = null; }
@@ -3482,12 +3529,12 @@ async function heldConversationType(conversationId: string, nodeType: string | n
         return 'group_thread';
     }
     if (t === 'dm') {
-        if (held !== null && !listedLater) await rememberDmConversations([conversationId]);
+        if (held !== null && !listedLater) await rememberDmConversations([conversationId], database);
         return 'dm';
     }
     if (await isKnownDmConversation(conversationId, { me: myPub })) {
         console.warn(`[DM guard] the node calls DM ${String(conversationId).slice(0, 8)} a ${t}: ignored, it stays a DM`);
-        await rememberDmConversations([conversationId]);
+        await rememberDmConversations([conversationId], database);
         return 'dm';
     }
     return t;
@@ -5014,18 +5061,20 @@ async function blankLinesOfDeletedAccounts(database: SQLite.SQLiteDatabase, keys
  */
 export async function syncMessages(publicKey: string): Promise<boolean> {
     try {
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        // The community asked and its file, taken together: every answer below is written into that file only, and none
+        // once the phone has moved to another community while it was out (the pass then writes nothing more).
+        const here = await chatCopyForRequest();
+        const anchorUrl = here.anchorUrl;
         if (!anchorUrl) return false;
+        const onThisCopy = async (database: SQLite.SQLiteDatabase) => (await here.handle()) === database;
         
-        await communityCachesRenamed();
-        const expectedDbName = getDatabaseFilenameForNode(anchorUrl);
+        const expectedDbName = here.file;
         const kLastMembersSync = `pillar_sync_${expectedDbName}_members_last_sync`;
         const lastMembersSync = await AsyncStorage.getItem(kLastMembersSync);
         
         let localMembersCount = 0;
         try {
-            const database = await getDb();
-            const membersRow = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM members');
+            const membersRow = await here.database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM members');
             localMembersCount = membersRow?.count || 0;
         } catch (e) {}
 
@@ -5048,7 +5097,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         let convRes;
         const decidedBefore = _requestDecisions;
         try {
-            convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { signal: controller1.signal });
+            convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { signal: controller1.signal, anchorUrl });
         } catch (e) {
             console.warn('[DB] conversations fetch failed:', e);
             clearTimeout(timeout1);
@@ -5061,7 +5110,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         const dirTimeout = setTimeout(() => dirController.abort(), 10000);
         if (shouldFetchMembers) {
             try {
-                dirRes = await signedGet('/api/members', { signal: dirController.signal });
+                dirRes = await signedGet('/api/members', { signal: dirController.signal, anchorUrl });
             } catch (e) {
                 console.warn('[DB] members fetch failed:', e);
             }
@@ -5102,7 +5151,10 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
 
         // Identity, so we can attribute the peer's read cursor (read receipts).
         const myIdentity = await loadIdentity();
-        const database = await getDb();
+        // The list's community's copy, or nothing at all: the member switched while it was on its way (dropped, never
+        // written into the community the phone is on now).
+        const database = await here.handle();
+        if (!database) return false;
 
         // The people in these chats who deleted their accounts: the older lines of theirs this phone holds are blanked here,
         // since no page below brings them again (blankLinesOfDeletedAccounts). A node from before this sends none.
@@ -5165,13 +5217,15 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         // writing the offered key in and each read taking it out again: #1872 ultrareview, U7).
         const pinsNow = myIdentity?.publicKey && !pinsUnread ? await dmPins.read(myIdentity.publicKey, database).catch(() => null) : null;
         // Kept for the community the list came from, and not at all if the phone has moved to another while it was out.
-        if (myIdentity?.publicKey && await stillOnCommunity(anchorUrl)) {
+        if (myIdentity?.publicKey && await onThisCopy(database)) {
             await saveMessageRequests(myIdentity.publicKey, expectedDbName, convData.requests ?? null);
         }
         // Whether every chat's page this pass asked for came back: one that didn't may hold the line a doorbell rang for. A
         // chat left out of the pass to wait for the next one counts as not read too, so the next tick reads it.
         let everyPageRead = true;
         for (const conv of convData.conversations) {
+            // Each chat's page is a network await: once the phone has moved to another community, nothing more is written.
+            if (!(await onThisCopy(database))) return false;
             // Decide WITHOUT the lock whether this conversation row actually needs
             // writing. This loop runs on every full message-sync (badge backstop,
             // inbox focus, WS nudges); unconditionally rewriting every conv row was
@@ -5236,7 +5290,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             // the guard can't decide (its list unreadable: §3.4 amendment 7 §3 iii) writes nothing of this conversation's this pass.
             let heldType: string;
             try {
-                heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey, true) : (conv.type || 'dm');
+                heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey, true, database) : (conv.type || 'dm');
             } catch (e) {
                 console.warn(`[DM guard] Could not tell whether ${String(conv.id).slice(0, 8)} is a DM: it waits for the next pass`, e);
                 everyPageRead = false;
@@ -5309,7 +5363,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             const timeout2 = setTimeout(() => controller2.abort(), 5000);
             let msgRes;
             try {
-                msgRes = await signedGet(`/api/messages/${conv.id}`, { signal: controller2.signal });
+                msgRes = await signedGet(`/api/messages/${conv.id}`, { signal: controller2.signal, anchorUrl });
             } catch (err) {
                 clearTimeout(timeout2);
                 everyPageRead = false;
@@ -5321,6 +5375,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             const msgData = await msgRes.json();
             const messages = msgData.messages;
             if (!Array.isArray(messages)) continue;
+            if (!(await onThisCopy(database))) return false;
             for (const m of messages) {
                 const gone = accountDeletedAuthor(m, conv.type);
                 if (gone && !deletedAccounts.has(gone)) seenDeleted.add(gone);
@@ -5344,6 +5399,8 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             }
         }
 
+        // The last page was a network await too.
+        if (!(await onThisCopy(database))) return false;
         if (seenDeleted.size > 0 && !pinsUnread) {
             try {
                 await blankLinesOfDeletedAccounts(database, seenDeleted, myIdentity?.publicKey);
@@ -5454,7 +5511,9 @@ export function syncSingleConversation(conversationId: string): Promise<boolean>
 
 async function syncSingleConversationOnce(conversationId: string): Promise<boolean> {
     try {
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        // The community asked and its file, taken together (chatCopyForRequest): the page is written into that file only.
+        const here = await chatCopyForRequest();
+        const anchorUrl = here.anchorUrl;
         if (!anchorUrl) return false;
         const takenBefore = _ownLinesTaken.get(conversationId) ?? 0;
         const decidedBefore = _requestDecisions;
@@ -5466,7 +5525,7 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
         const timeout = setTimeout(() => controller.abort(), 12000);
         let msgRes;
         try {
-            msgRes = await signedGet(`/api/messages/${conversationId}`, { signal: controller.signal });
+            msgRes = await signedGet(`/api/messages/${conversationId}`, { signal: controller.signal, anchorUrl });
         } catch (e: any) {
             console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} fetch failed/timed out: ${e?.message || e}`);
             return false;
@@ -5486,7 +5545,9 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
         const messages = msgData.messages;
         if (!Array.isArray(messages)) return false;
 
-        const database = await getDb();
+        // The page's community's copy, or nothing: the member switched while it was on its way (dropped, not an error).
+        const database = await here.handle();
+        if (!database) return false;
 
         // This runs every 3s while a chat is open (plus on every WS nudge), so the
         // no-change fast path matters: diff BEFORE taking the lock, and bail without
@@ -6509,11 +6570,15 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     const decidedBefore = _requestDecisions;
     try {
-        const res = await signedGet(`/api/messages/${encodeURIComponent(conversationId)}?limit=1`, { signal: controller.signal });
+        // Written into the file of the community asked, and nowhere once the phone has switched (chatCopyForRequest).
+        const here = await chatCopyForRequest();
+        const res = await signedGet(`/api/messages/${encodeURIComponent(conversationId)}?limit=1`, { signal: controller.signal, anchorUrl: here.anchorUrl });
         if (!res.ok) return;
         const conv = (await res.json())?.conversation;
         if (!conv?.id || typeof conv.type !== 'string') return;
-        await writeConversationFromNode(await getDb(), conv, decidedBefore);
+        const database = await here.handle();
+        if (!database) return;
+        await writeConversationFromNode(database, conv, decidedBefore);
     } catch {
         // Offline or refused: the lock simply fails, and says so.
     } finally {
@@ -6543,7 +6608,7 @@ async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: 
     // Its request as a read asked for when `asOf` decisions had been taken here leaves it (requestAfterReadHere), worked out
     // just before each write: a decision landing between them is never written over (PR #2540 review 4395706539).
     const read = 'request' in conv;
-    const type = await heldConversationType(conv.id, conv.type);
+    const type = await heldConversationType(conv.id, conv.type, undefined, false, database);
     await database.runAsync(
         'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, request) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [conv.id, type, conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString(), read ? requestAfterReadHere(conv.id, null, conv.request, asOf) ?? null : null]
@@ -7292,7 +7357,9 @@ function withKeyChangedNotices<T extends { rawTimestamp?: string | null }>(shown
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string, about?: ChatAboutChip | null) {
-    const database = await getDb();
+    // The community the line goes to and its file, taken together (chatCopyForRequest): the line is written there and sent
+    // there, never written into one community's file and sent to another's node.
+    const here = await chatCopyForRequest();
 
     // The id is chosen first: a DM line is sealed and signed to it (e2e-crypto, format 4), so the node must store the line under
     // exactly this id. Lower case, as the node keeps it. A resend keeps its failed row's id (see below).
@@ -7322,7 +7389,7 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         metadata = metadataWithAbout(metadata, sealChatAbout(about, ctx, { senderPubHex: authorPubkey, messageId: tempId, replyToId: replyToIdOf(metadata) }));
     }
 
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const anchorUrl = here.anchorUrl;
     if (!anchorUrl) {
         throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
     }
@@ -7349,7 +7416,10 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         try { baseMeta = JSON.parse(metadata) || {}; } catch {}
     }
     // A resend replaces its failed row only now, with the words locked: one that can't be locked (or finds no node)
-    // leaves the failed bubble where it was, to be tried again.
+    // leaves the failed bubble where it was, to be tried again. Nor once the phone has switched community while the words
+    // were locked: nothing is written or sent, and the chat says so.
+    const database = await here.handle();
+    if (!database) throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
     if (reuseId) await database.runAsync('DELETE FROM messages WHERE id = ?', [reuseId]);
     await database.runAsync(
         'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -7357,21 +7427,23 @@ export async function insertMessage(conversationId: string, authorPubkey: string
     );
 
     // Fire-and-forget: the returned promise is intentionally not awaited.
-    _deliverPendingMessage(anchorUrl, identity, tempId, { id: tempId, conversationId, authorPubkey, ciphertext, nonce, metadata });
+    _deliverPendingMessage(here, anchorUrl, identity, tempId, { id: tempId, conversationId, authorPubkey, ciphertext, nonce, metadata });
     // The line's id, which the node keeps: the chat follows it to the node's answer (a request's line waits for the 200).
     return tempId;
 }
 
 /** Background half of the optimistic send: POST to the node, then either adopt the
  *  server id/timestamp or mark the local row failed. Always emits sync_data_updated
- *  so any mounted thread re-renders the tick state. */
+ *  so any mounted thread re-renders the tick state. Sent to `here`'s community (`anchorUrl`, its address), and its
+ *  answer written into `here`'s file only: once the phone has switched community, nothing is written (that community's
+ *  next sync brings the node's row, which replaces the one still sending). */
 async function _deliverPendingMessage(
+    here: ChatRequestCopy,
     anchorUrl: string,
     identity: { privateKey: string; publicKey: string },
     tempId: string,
     body: { id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; metadata?: string }
 ) {
-    const database = await getDb();
     const { DeviceEventEmitter } = require('react-native');
     try {
         const bodyString = JSON.stringify(body);
@@ -7402,6 +7474,8 @@ async function _deliverPendingMessage(
         const data = await res.json();
         const serverMsg = data.message;
 
+        const database = await here.handle();
+        if (!database) return;
         // Adopt the server-vetted id + timestamp and drop the sending flag.
         // OR REPLACE: a 3s poll may have already synced the server's copy of this
         // message — in that case the confirmed local row simply replaces it.
@@ -7413,6 +7487,8 @@ async function _deliverPendingMessage(
     } catch (deliverErr: any) {
         console.warn(`[Messaging] Delivery failed for message ${tempId.slice(0, 8)}:`, deliverErr?.message || deliverErr);
         try {
+            const database = await here.handle();
+            if (!database) return;
             const row = await database.getFirstAsync<any>('SELECT metadata FROM messages WHERE id=?', [tempId]);
             let meta: any = {};
             if (row?.metadata) {
@@ -7448,12 +7524,14 @@ async function requestLineTaken(database: SQLite.SQLiteDatabase, conversationId:
  * (requestAfterReadHere): an open chat's poll, or a card's preview, in flight when Accept was tapped answers the request
  * waiting, and a list from before Cancel request names its line waiting (PR #2540 review 4395706539). Never throws.
  */
-async function requestDecided(conversationId: string, request: unknown): Promise<void> {
+async function requestDecided(here: ChatRequestCopy, conversationId: string, request: unknown): Promise<void> {
     if (!request || typeof request !== 'object') return;
     try {
         const json = JSON.stringify(request);
         _requestDecided.set(conversationId, { n: ++_requestDecisions, request: json });
-        const database = await getDb();
+        // Into the file of the community that decided it only (chatCopyForRequest).
+        const database = await here.handle();
+        if (!database) return;
         await database.runAsync('UPDATE conversations SET request = ? WHERE id = ?', [json, conversationId]);
     } catch { /* the next poll brings the node's word */ }
 }
@@ -7475,7 +7553,9 @@ export async function deleteLocalMessage(messageId: string) {
  * was already in flight (with the pre-edit content) can't revert the change.
  */
 export async function editMessage(conversationId: string, messageId: string, newText: string) {
-    const database = await getDb();
+    // The community the edit goes to and its file, taken together (chatCopyForRequest).
+    const here = await chatCopyForRequest();
+    const database = here.database;
     const identity = await loadIdentity();
 
     // A locked group chat's line: re-sealed under its own epoch, never the current one (utils/group-chat-lines.ts).
@@ -7498,7 +7578,7 @@ export async function editMessage(conversationId: string, messageId: string, new
         ...(await sealOfLine(conversationId, messageId)),
     });
 
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const anchorUrl = here.anchorUrl;
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to edit messages.');
     if (!identity) throw new Error('No identity found.');
 
@@ -7515,7 +7595,11 @@ export async function editMessage(conversationId: string, messageId: string, new
     }
     const data = await res.json();
     const editedAt = data?.message?.editedAt || new Date().toISOString();
-    await database.runAsync(
+    // The node took it: mirrored in its community's file only, and not at all once the phone has switched (its next
+    // sync there brings the edit).
+    const copy = await here.handle();
+    if (!copy) return;
+    await copy.runAsync(
         'UPDATE messages SET ciphertext = ?, nonce = ?, edited_at = ? WHERE id = ?',
         [ciphertext, nonce, editedAt, messageId]
     );
@@ -7537,7 +7621,9 @@ const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "Photos can't be sent in this chat.";
  * (DESIGN-group-chat-photos-fable.md §5 S3). An event's or an enterprise's chat is refused, nothing sent.
  */
 export async function sendImageMessage(conversationId: string, dataUri: string, caption: string = '', metadata?: string) {
-    const database = await getDb();
+    // The community the photo goes to and its file, taken together (chatCopyForRequest).
+    const here = await chatCopyForRequest();
+    const database = here.database;
     // Asked first: a conversation not on this phone yet is asked of the node, and a held group's row is written group_thread.
     const nodeReadable = await isNodeReadableConversation(conversationId);
     const groupChat = await isHeldGroupChat(conversationId)
@@ -7554,7 +7640,7 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
     const encImg = lockWith(dmCtx, dataUri, { ...line, part: 'attachment' });   // big blob -> stored as attachment
     const encCap = lockWith(dmCtx, caption, { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });   // (optional) caption -> message body
 
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const anchorUrl = here.anchorUrl;
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
     if (!identity) throw new Error('No identity found.');
 
@@ -7578,11 +7664,14 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
     }
     ownLineTaken(conversationId);
     const serverMsg = (await res.json()).message;
-    await database.runAsync(
+    // Written into the photo's community's file only: once the phone has switched, its next sync there brings the line.
+    const copy = await here.handle();
+    if (!copy) return;
+    await copy.runAsync(
         'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [serverMsg.id, conversationId, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image', metadata || null, serverMsg.timestamp]
     );
-    await requestLineTaken(database, conversationId, identity.publicKey);
+    await requestLineTaken(copy, conversationId, identity.publicKey);
 }
 
 /**
@@ -7668,7 +7757,9 @@ const VOICE_GIVEN_UP_TEXT = 'Sending the voice message is taking too long — pl
  * while the recorder says it wasn't sent.
  */
 export async function sendVoiceMessage(conversationId: string, voice: VoiceInput, metadata?: string, opts: { messageId?: string; signal?: AbortSignal } = {}): Promise<void> {
-    const database = await getDb();
+    // The community the voice message goes to and its file, taken together (chatCopyForRequest).
+    const here = await chatCopyForRequest();
+    const database = here.database;
     const nodeReadable = await isNodeReadableConversation(conversationId);
     const groupChat = await isHeldGroupChat(conversationId)
         || (nodeReadable && (await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]))?.type === 'group_thread');
@@ -7692,7 +7783,7 @@ export async function sendVoiceMessage(conversationId: string, voice: VoiceInput
     // Never after itself: a try that landed may already be on this phone.
     const encBody = lockWith(dmCtx, '', { ...line, part: 'body', after: await lineToWriteAfter(conversationId, messageId) });
 
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const anchorUrl = here.anchorUrl;
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
     const bodyString = JSON.stringify({
         id: messageId, conversationId, authorPubkey: identity.publicKey, ciphertext: encBody.ciphertext, nonce: encBody.nonce,
@@ -7711,12 +7802,16 @@ export async function sendVoiceMessage(conversationId: string, voice: VoiceInput
     ownLineTaken(conversationId);
     // A retry the node answered with the line it stored: that line's own seal, and a row already here (the sync's) stays.
     const stored = typeof serverMsg?.ciphertext === 'string' && typeof serverMsg?.nonce === 'string';
-    await database.runAsync(
-        'INSERT OR IGNORE INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [serverMsg.id, conversationId, identity.publicKey, stored ? serverMsg.ciphertext : encBody.ciphertext, stored ? serverMsg.nonce : encBody.nonce,
-            'voice', (stored ? (typeof serverMsg.metadata === 'string' ? serverMsg.metadata : null) : metadata) || null, serverMsg.timestamp]
-    );
-    await requestLineTaken(database, conversationId, identity.publicKey);
+    // Written into the voice message's community's file only: once the phone has switched, its next sync there brings it.
+    const copy = await here.handle();
+    if (copy) {
+        await copy.runAsync(
+            'INSERT OR IGNORE INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [serverMsg.id, conversationId, identity.publicKey, stored ? serverMsg.ciphertext : encBody.ciphertext, stored ? serverMsg.nonce : encBody.nonce,
+                'voice', (stored ? (typeof serverMsg.metadata === 'string' ? serverMsg.metadata : null) : metadata) || null, serverMsg.timestamp]
+        );
+        await requestLineTaken(copy, conversationId, identity.publicKey);
+    }
     await keepVoice(serverMsg.id, voice);
 }
 
@@ -7840,7 +7935,9 @@ function keySetOf(keys: unknown[]): string[] {
 
 // Only DMs are created here: the old chat group was removed (2026-09-19); a group chat is a Commons group's.
 export async function createConversationApi(type: 'dm', participants: string[], createdBy: string, name?: string, postId?: string): Promise<any> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    // The community the chat is started in and its file, taken together (chatCopyForRequest).
+    const here = await chatCopyForRequest();
+    const anchorUrl = here.anchorUrl;
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a node first.');
 
     const identity = await loadIdentity();
@@ -7858,7 +7955,9 @@ export async function createConversationApi(type: 'dm', participants: string[], 
     }
     // The pins before the node's answer is written, through the handle it is written with (see refreshConversationFromNode):
     // its rows are never the update's seed. With the pins unread, nothing is asked or written (§3.4 amendment 5's gate).
-    const database = await getDb();
+    // Asked after the notification ask, which can wait on the member: never once the phone has switched meanwhile.
+    const database = await here.handle();
+    if (!database) throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
     await dmPins.read(identity.publicKey, database);
 
     const body: any = { type, participants, createdBy };
@@ -7903,17 +8002,20 @@ export async function createConversationApi(type: 'dm', participants: string[], 
         // Persist the conv + participants locally so the Inbox sees it
         // immediately, without waiting for the next syncMessages cycle.
         if (conv?.id) {
+            // The answer goes into the file of the community asked, never another's: switched meanwhile, nothing is written.
+            const copy = await here.handle();
+            if (!copy) throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
             let postTitle: string | null = null;
             let postStatus: string | null = null;
             let postPhoto: string | null = null;
             let postPrice_c: number | null = null;
             // This phone asked for a DM: it is one, whatever type the answer names (the DM guard).
-            const convType = await heldConversationType(conv.id, type);
+            const convType = await heldConversationType(conv.id, type, undefined, false, copy);
             if (conv.type && conv.type !== convType) console.warn(`[DM guard] the node answered a new DM as a ${conv.type}: ignored`);
             const pid = convType === 'dm' ? null : (conv.postId || conv.post_id || postId);
             const lookupPid = conv.postId || conv.post_id || postId;
             if (lookupPid) {
-                const post = await database.getFirstAsync<{ title: string, status: string, photos: string, price_c: number | null }>('SELECT title, status, photos, price_c FROM posts WHERE id = ?', [lookupPid]);
+                const post = await copy.getFirstAsync<{ title: string, status: string, photos: string, price_c: number | null }>('SELECT title, status, photos, price_c FROM posts WHERE id = ?', [lookupPid]);
                 if (post) {
                     postTitle = post.title;
                     postStatus = post.status;
@@ -7926,7 +8028,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
                     }
                 }
             }
-            await database.runAsync(
+            await copy.runAsync(
                 'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_price_c) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     conv.id,
@@ -7951,12 +8053,12 @@ export async function createConversationApi(type: 'dm', participants: string[], 
             const others = participants.filter((k) => typeof k === 'string' && k.toLowerCase() !== identity.publicKey.toLowerCase());
             if (convType === 'dm' && others.length === 1) {
                 const now = new Date().toISOString();
-                const heldLine = await database.getFirstAsync<any>('SELECT 1 AS y FROM messages WHERE conversation_id = ? LIMIT 1', [conv.id]).catch(() => ({ y: 1 }));
-                await dmPins.update(identity.publicKey, database, (pins) => pinAtFirstSight(pins, conv.id, others[0], now, undefined, !heldLine));
+                const heldLine = await copy.getFirstAsync<any>('SELECT 1 AS y FROM messages WHERE conversation_id = ? LIMIT 1', [conv.id]).catch(() => ({ y: 1 }));
+                await dmPins.update(identity.publicKey, copy, (pins) => pinAtFirstSight(pins, conv.id, others[0], now, undefined, !heldLine));
             }
             const partList: string[] = participants;
             for (const pub of partList) {
-                await database.runAsync(
+                await copy.runAsync(
                     'INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)',
                     [conv.id, pub]
                 );
@@ -8407,8 +8509,12 @@ function _isProfilePhotoError(msg: string): boolean {
     return typeof msg === 'string' && /set a profile photo/i.test(msg);
 }
 
-async function _signedRequest(endpoint: string, payload: any) {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+/**
+ * A signed POST to the community the phone is on, or to `to` (a chat request's own community, chatCopyForRequest), so the
+ * answer belongs to the file it is written into. Null `to`: no community, off-grid as before.
+ */
+async function _signedRequest(endpoint: string, payload: any, to?: string | null) {
+    const anchorUrl = to !== undefined ? to : await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to perform this action.');
 
     const identity = await loadIdentity();
@@ -8545,8 +8651,9 @@ export async function saveMessageRequests(myPubkey: string, file: string, reques
  * reads the decided request, and so does every reread of the row after it (PR #2540 review 4395706539).
  */
 export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel'): Promise<{ success: boolean; request?: any }> {
-    const answer = await _signedRequest('/api/messages/request', { conversationId, decision });
-    await requestDecided(conversationId, answer?.request);
+    const here = await chatCopyForRequest();
+    const answer = await _signedRequest('/api/messages/request', { conversationId, decision }, here.anchorUrl);
+    await requestDecided(here, conversationId, answer?.request);
     return answer;
 }
 
@@ -8557,9 +8664,10 @@ export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ig
 /**
  * Replay-proof signed GET request helper.
  * Under ENFORCE_READ_AUTH=true, gated GET endpoints require signed headers with an empty body.
+ * `anchorUrl`: the community asked (a chat request's own, chatCopyForRequest); left out, the one the phone is on now.
  */
-export async function signedGet(path: string, options?: { signal?: AbortSignal; customHeaders?: Record<string, string> }): Promise<Response> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+export async function signedGet(path: string, options?: { signal?: AbortSignal; customHeaders?: Record<string, string>; anchorUrl?: string | null }): Promise<Response> {
+    const anchorUrl = options?.anchorUrl !== undefined ? options.anchorUrl : await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
     // One ask: signed afresh each time (a signature carries its own nonce, so an ask is never sent twice as it was).
@@ -8647,11 +8755,13 @@ export async function recordOnboardingEvent(event: string, variant = ''): Promis
 }
 
 export async function toggleMessageReactionApi(messageId: string, authorPubkey: string, emoji: string) {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    // The community the reaction goes to and its file, taken together (chatCopyForRequest): shown and sent in the same one.
+    const here = await chatCopyForRequest();
+    const anchorUrl = here.anchorUrl;
     if (!anchorUrl) throw new Error('Offline');
 
     // 1. Optimistic local update
-    const database = await getDb();
+    const database = here.database;
     const row = await database.getFirstAsync<any>('SELECT * FROM messages WHERE id=?', [messageId]);
     if (row) {
         let metadata: any = {};
@@ -8674,7 +8784,7 @@ export async function toggleMessageReactionApi(messageId: string, authorPubkey: 
     }
 
     // 2. Transmit to server via secure signed request
-    return _signedRequest('/api/messages/react', { messageId, authorPubkey, emoji });
+    return _signedRequest('/api/messages/react', { messageId, authorPubkey, emoji }, anchorUrl);
 }
 
 /**
@@ -9815,12 +9925,16 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
     if (filter?.search) params.set('q', filter.search);
 
     try {
-        const res = await signedGet(`/api/groups${params.toString() ? '?' + params.toString() : ''}`);
+        // The groups of the community asked, kept in its file only (chatCopyForRequest): switched meanwhile, they are
+        // shown and not kept.
+        const here = await chatCopyForRequest();
+        const res = await signedGet(`/api/groups${params.toString() ? '?' + params.toString() : ''}`, { anchorUrl: here.anchorUrl });
         if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data)) {
                 // Update local cache
-                const database = await getDb();
+                const database = await here.handle();
+                if (!database) return data;
                 const identity = await loadIdentity();
                 for (const g of data) {
                     await database.runAsync(`
@@ -10072,8 +10186,9 @@ export async function leaveGroupApi(groupId: string, memberPubkey: string, onPro
         }, onProgress ? { onProgress } : undefined);
     if (res?.success) {
         try {
-            const database = await getDb();
-            await database.runAsync('DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?', [groupId, memberPubkey]);
+            // In the file of the group's community only (nodeUrl, which the request went to): none once the phone switched.
+            const database = await copyStillFor(getDatabaseFilenameForNode(nodeUrl));
+            if (database) await database.runAsync('DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?', [groupId, memberPubkey]);
         } catch (dbErr) {
             console.warn('[SQLite] Failed to remove group member locally:', dbErr);
         }
@@ -10449,13 +10564,16 @@ export function getKnownChatMute(conversationId: string): import('./your-groups'
  * `metadata.removedBy`.
  */
 export async function deleteMessageApi(messageId: string): Promise<any> {
-    const res = await _signedRequest('/api/messages/delete', { messageId });
+    // Asked of the community whose file holds the line, and mirrored there only (chatCopyForRequest).
+    const here = await chatCopyForRequest();
+    const res = await _signedRequest('/api/messages/delete', { messageId }, here.anchorUrl);
     // Mirror the tombstone locally at once (a DM's row is on this phone) so the bubble changes under the
-    // finger rather than at the next 3s poll. A group chat has no local row and simply re-reads.
+    // finger rather than at the next 3s poll. A group chat has no local row and simply re-reads. Once the phone has
+    // switched community meanwhile, nothing is mirrored: that community's next sync brings the tombstone.
     try {
-        const database = await getDb();
-        const row = await database.getFirstAsync<any>('SELECT metadata, author_pubkey FROM messages WHERE id = ?', [messageId]);
-        if (row) {
+        const database = await here.handle();
+        const row = !database ? null : await database.getFirstAsync<any>('SELECT metadata, author_pubkey FROM messages WHERE id = ?', [messageId]);
+        if (row && database) {
             let meta: any = {};
             if (row.metadata) { try { meta = JSON.parse(row.metadata) || {}; } catch { meta = {}; } }
             delete meta.reactions; delete meta.mentions; delete meta.replyToId;

@@ -151,6 +151,20 @@ let getDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let copyMoving: Promise<void> | null = null;
 
 /**
+ * The screens holding a chat in place now, by its community's file (slice S2): the chat while it is in view, its key code
+ * screen while it shows, and Contacts while it starts a chat there (enterChatInPlace ... leaveChatInPlace). The copy open
+ * in place closes as the last of them lets go.
+ */
+const chatsInPlaceHeld = new Map<string, number>();
+/**
+ * The files whose chat in place was left and not entered again (#3305 review): from leaveChatInPlace to the next
+ * enterChatInPlace no copy of them opens in place (copyInPlaceFor, and heldCopies' `placeRefused` after every await), so
+ * nothing still on its way as the chat was left (a poll's follow-up, a read, a late mark read, from the screen or outside
+ * it) opens that copy again or asks that community's server anything.
+ */
+const chatsInPlaceLeft = new Set<string>();
+
+/**
  * Read-only handles on other communities' copies, beside the one in use (slice S1, utils/held-copies.ts): the one owner of
  * them all. Opened only for a file that is on the phone, never the community in use, one being opened (currentDbName) or
  * while a copy moves; closed wherever the copy in use is closed (closeOpenCopy), before the copy in use opens that file
@@ -176,6 +190,8 @@ const heldCopies = createHeldCopies<SQLite.SQLiteDatabase, HeldStatement>({
     get statements() { return HELD_STATEMENTS; },
     // A statement on a copy open in place once its close began (slice S2): the chat's own sentence, translated where shown.
     get closedText() { return SWITCHED_SINCE_CHAT_OPENED_TEXT; },
+    // A chat left (leaveChatInPlace): its copy opens in place again only once a screen holds it again (enterChatInPlace).
+    placeRefused: (file) => chatsInPlaceLeft.has(file),
 });
 
 /** The files a held handle is open, opening or closing on now: for tests. */
@@ -954,10 +970,13 @@ export async function chatCopyForRequest(community?: ChatCommunity): Promise<Cha
  * - `handle()`, for a write after a network await: the copy open in place while it is still open; once it closed, the copy
  *   in use only if the phone is now on that same file (copyStillFor), else null and the answer is dropped (that
  *   community's next read brings it).
+ * - a chat left (leaveChatInPlace) and not entered again: refused, before anything is opened or asked (#3305 review),
+ *   here and again after every await on the way to the open (heldCopies' `placeRefused`).
  * Throws SWITCHED_SINCE_CHAT_OPENED_TEXT when there is no such copy to open.
  */
 async function copyInPlaceFor(community: string): Promise<ChatRequestCopy> {
     const file = getDatabaseFilenameForNode(community);
+    if (chatsInPlaceLeft.has(file)) throw new NoCopyInPlaceError();
     const saved = (await getSavedNodes().catch(() => [])).some((n) => getDatabaseFilenameForNode(n.url) === file);
     if (!saved || await isGuestNode(community).catch(() => true)) throw new NoCopyInPlaceError();
     const place = await heldCopies.inPlace(file);
@@ -1002,15 +1021,43 @@ async function chatReadFor(community: ChatCommunity): Promise<{ database: SQLite
 }
 
 /**
- * The chat of `community` open in place is left (slice S2): its copy open in place closes once the statement under way has
- * settled (and its read-only one with it, which Chat opens again). Nothing is written after this; a send still on its way
- * keeps its line in that copy as sending, which that community's next read settles. The community in use: nothing.
+ * A screen holds the chat of `community` in place (slice S2): the chat as its focus effect starts, its key code screen as
+ * it shows, Contacts as it starts a chat there. Ends a leave's refusal (#3305 review): from here that community's copy
+ * opens in place again, once a close of it still under way is done. One leaveChatInPlace for each, as that screen lets go.
+ * No await: held before the screen's first read is asked. No community (the one in use): nothing.
+ */
+export function enterChatInPlace(community: ChatCommunity): void {
+    if (!community) return;
+    const file = getDatabaseFilenameForNode(community);
+    chatsInPlaceHeld.set(file, (chatsInPlaceHeld.get(file) ?? 0) + 1);
+    chatsInPlaceLeft.delete(file);
+}
+
+/**
+ * A screen lets go of the chat of `community` in place (slice S2): the last to let go (the chat left, with no key code
+ * screen over it) closes its copy open in place once the statement under way has settled (and its read-only one with it,
+ * which Chat opens again), and from then no copy of it opens in place until a screen holds it again (enterChatInPlace):
+ * a poll, a read or a mark read still on its way as the chat was left is refused, nothing opened, nothing asked of that
+ * community's server (#3305 review). Marked and closing in the same turn as the call, with no await before. A send still
+ * on its way keeps its line in that copy as sending, which that community's next read settles. No community: nothing.
  */
 export async function leaveChatInPlace(community: ChatCommunity): Promise<void> {
     if (!community) return;
     const file = getDatabaseFilenameForNode(community);
-    if (getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) === file) return;
+    const holding = (chatsInPlaceHeld.get(file) ?? 0) - 1;
+    if (holding > 0) {
+        chatsInPlaceHeld.set(file, holding);
+        return;
+    }
+    chatsInPlaceHeld.delete(file);
+    chatsInPlaceLeft.add(file);
     await heldCopies.close(file);
+}
+
+/** For tests: a new phone (no chat held or left in place), as an app start has. */
+export function _resetChatsInPlaceForTests(): void {
+    chatsInPlaceHeld.clear();
+    chatsInPlaceLeft.clear();
 }
 
 /**

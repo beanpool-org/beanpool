@@ -37,7 +37,7 @@ import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
 import { getSavedNodes } from '../utils/nodes';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
-import { createConversationApi, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace } from '../utils/db';
+import { createConversationApi, enterChatInPlace, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace, leaveChatInPlace } from '../utils/db';
 import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { communitySwitchUnderWay, switchCommunity } from '../utils/use-communities';
 import { messageInHeldCommunity, takeMessageAfterSwitch } from '../utils/message-after-switch';
@@ -399,6 +399,9 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
         setOpening(key);
         // The community as this phone saved it (its copy's address), however the contact's link spells it.
         const saved = (await getSavedNodes().catch(() => [])).find((n) => sameCommunity(n.url, community))?.url ?? community;
+        // Held in place while the chat starts there (utils/db.ts enterChatInPlace): a chat of that community left a moment
+        // ago doesn't refuse it, and the copy closes as this lets go unless the chat it opens holds it by then.
+        enterChatInPlace(saved);
         try {
             const conv = await createConversationApi('dm', [me, key], me, undefined, undefined, saved);
             setOpening(null);
@@ -411,6 +414,8 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
                 Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : signedRequestWords(e.message));
                 return;
             }
+        } finally {
+            void leaveChatInPlace(saved);
         }
         const moved = await messageInHeldCommunity(key, community, {
             storage: AsyncStorage,

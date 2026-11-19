@@ -19,7 +19,7 @@ import { Alert } from '../../utils/keyboard-alert';
 import { useStyles, useTheme } from '../ThemeContext';
 import { dmKeyChangeStyleSpec, dmKeyCodeCopy, dmKeyCodeShowsVerified, dmKeyCodeState } from '../../utils/dm-key-change';
 import { keyCodeOf, keyCodeSpoken } from '../../utils/key-code';
-import { getDmKeyCodeInfo, markDmPeerVerified, removeDmPeerVerification, type DmKeyCodeInfo } from '../../utils/db';
+import { enterChatInPlace, getDmKeyCodeInfo, leaveChatInPlace, markDmPeerVerified, removeDmPeerVerification, type DmKeyCodeInfo } from '../../utils/db';
 import { DM_PINS_WORDS } from '../../utils/dm-peer-pins';
 
 export { ErrorBoundary };
@@ -35,6 +35,14 @@ export default function DmKeyCodeScreen() {
     const [moved, setMoved] = useState(false);
     const [busy, setBusy] = useState(false);
 
+    // In place (slice S2): this screen holds the chat's community while it shows, before its first read (an effect runs in
+    // the order written). Opened over the chat, which lets go as it is covered: its copy stays open, or opens again once
+    // the chat's close is done, and closes as the last of the two lets go (utils/db.ts enterChatInPlace, #3305 review).
+    useEffect(() => {
+        if (!at) return;
+        enterChatInPlace(at);
+        return () => { void leaveChatInPlace(at); };
+    }, [at]);
     const load = useCallback(async () => {
         try {
             setInfo(await getDmKeyCodeInfo(String(id), at));

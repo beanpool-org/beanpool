@@ -39,6 +39,8 @@ const h = vi.hoisted(() => ({
     dir: '',
     store: new Map<string, string>(),
     me: { publicKey: '', privateKey: '' },
+    /** The next native close of this file waits for `release` (a close still running, as a phone's can for a while). */
+    closeHold: null as null | { file: string; started: () => void; release: Promise<void> },
 }));
 
 /** expo-sqlite over node:sqlite, one real file per name in this test's directory, as expo-sqlite opens them in its own. */
@@ -59,7 +61,15 @@ vi.mock('expo-sqlite', async () => {
                 getAllAsync: async (q: string, p?: unknown) => sql.prepare(q).all(...params(p)),
                 getFirstAsync: async (q: string, p?: unknown) => sql.prepare(q).get(...params(p)) ?? null,
                 withTransactionAsync: async (cb: () => Promise<void>) => { await cb(); },
-                closeAsync: async () => { sql.close(); },
+                closeAsync: async () => {
+                    const held = h.closeHold;
+                    if (held && held.file === name) {
+                        h.closeHold = null;
+                        held.started();
+                        await held.release;
+                    }
+                    sql.close();
+                },
             };
         }),
     };
@@ -246,6 +256,9 @@ const storedFor = (file: string) => Object.fromEntries([...h.store.entries()].fi
 async function phoneOnBWithAAway(): Promise<void> {
     await db.closeDB();
     db._resetDmPeerPinsForTests();
+    // A new phone: no chat held or left in place yet (the marks are this run's memory, by file).
+    db._resetChatsInPlaceForTests();
+    h.closeHold = null;
     h.dir = path.join(root, `phone-${++phoneN}`);
     fs.mkdirSync(h.dir);
     h.store.clear();
@@ -498,6 +511,198 @@ describe('a chat in place: every action lands in the file and on the server of t
         expect(db.heldCopyFiles()).not.toContain(A_FILE);
         expect((rowsOf(A_FILE)!.messages as any[]).some((m) => m.id === id)).toBe(true);
         expect(asked.filter((r) => r.url.includes('/api/messages/send')).every((r) => new URL(r.url).origin === A)).toBe(true);
+    });
+});
+
+// ── Leaving a chat in place keeps its copy closed (#3305 review) ────────────────────────────────────────────────────
+
+/**
+ * What can be on its way as the chat is left (its focus effect's cleanup, leaveChatInPlace): each is begun with the chat
+ * held in place (enterChatInPlace), and its request held at the node (or, for a read, its first step done), when the chat
+ * is left. `rest` is what is still to come of it once the chat is left (a read's next steps), asked by the same caller.
+ */
+const ON_ITS_WAY: Array<{ name: string; held: ((method: string, pathname: string) => boolean) | null; start: () => Promise<unknown>; rest?: () => Promise<unknown> }> = [
+    {
+        // The reviewer's measured sequence, kept: a poll whose GET is still at the node.
+        name: 'a poll (its page still on its way)',
+        held: (m, p) => m === 'GET' && p === `/api/messages/${dm.id}`,
+        start: () => db.syncSingleConversation(dm.id, A),
+    },
+    {
+        name: 'a read mid-flight (loadMessages: the key check done, the code and the thread still to read)',
+        held: null,
+        start: () => db.getDmKeyChange(dm.id, A),
+        rest: async () => { await db.getDmKeyCodeInfo(dm.id, A); await db.getMessages(dm.id, { community: A, notices: true }); },
+    },
+    {
+        name: 'a mark read (its push to the node still on its way)',
+        held: (m, p) => m === 'POST' && p === '/api/messages/mark-read',
+        start: () => db.markConversationRead(dm.id, me.publicKey, A),
+    },
+    {
+        name: 'a reply (its send still on its way)',
+        held: (m, p) => m === 'POST' && p === '/api/messages/send',
+        start: () => db.insertMessage(dm.id, me.publicKey, 'sent as the chat was left', undefined, undefined, undefined, A),
+    },
+];
+
+/**
+ * What follows on the screen once a poll or a push lands (loadConversationData, loadMessages: the key check, the key code,
+ * the thread, the mark read), and every other in-place action a caller outside the screen could still ask: each is refused
+ * (NoCopyInPlaceError) with nothing opened and nothing asked, until a screen holds the chat again.
+ */
+const AFTER_LEAVING: Array<[string, () => Promise<unknown>]> = [
+    ['getConversation', () => db.getConversation(dm.id, me.publicKey, A)],
+    ['getDmKeyChange', () => db.getDmKeyChange(dm.id, A)],
+    ['getDmKeyCodeInfo', () => db.getDmKeyCodeInfo(dm.id, A)],
+    ['getMessages', () => db.getMessages(dm.id, { community: A, notices: true })],
+    ['markConversationRead', () => db.markConversationRead(dm.id, me.publicKey, A)],
+    ['syncSingleConversation (the next poll, or a push\'s)', () => db.syncSingleConversation(dm.id, A)],
+    ['insertMessage', () => db.insertMessage(dm.id, me.publicKey, 'after leaving', undefined, undefined, undefined, A)],
+    ['toggleMessageReactionApi', () => db.toggleMessageReactionApi(mine, me.publicKey, '👍', A)],
+    ['editMessage', () => db.editMessage(dm.id, mine, 'edited after leaving', A)],
+    ['deleteMessageApi', () => db.deleteMessageApi(mine, A)],
+    ['muteChatApi', () => db.muteChatApi(dm.id, '8h', A)],
+    ['markDmPeerVerified (the key code screen)', () => db.markDmPeerVerified(dm.id, peer.publicKey, A)],
+];
+
+describe('a chat in place, left: its copy stays closed and its community is asked nothing until the chat is back (#3305 review)', () => {
+    it.each(ON_ITS_WAY.map((w) => [w.name, w] as const))('%s as the chat is left: nothing after it opens the copy or asks A anything', async (_name, way) => {
+        db.enterChatInPlace(A);
+        expect((await db.getMessages(dm.id, { community: A })).some((m: any) => m.text === PEER_WORDS)).toBe(true);
+        expect(db.heldCopyFiles()).toContain(A_FILE);
+        // A line the node has that A's file doesn't yet: written by nothing still on its way once the chat is left.
+        const late = nodeLine(dm, peer, 'arrived as the chat was left').id;
+        if (way.held) hold = holdFor(way.held);
+        let thrown: unknown = null;
+        const running = way.start().then(() => {}, (e) => { thrown = e; });
+        if (hold) await hold.seen;
+        else await running;
+
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles(), 'left, the copy open in place is closed').not.toContain(A_FILE);
+        asked = [];
+        const aBefore = rowsOf(A_FILE);
+        const others = { B: rowsOf(B_FILE), storedB: storedFor(B_FILE) };
+        hold?.release();
+        await running;
+        if (way.rest) await expect(way.rest()).rejects.toSatisfy((e: unknown) => db.isNoCopyInPlace(e));
+        await settle();
+        expect(db.heldCopyFiles(), 'what was on its way opened nothing again').not.toContain(A_FILE);
+
+        for (const [what, call] of AFTER_LEAVING) {
+            // Refused before anything is opened or asked; a poll says so as every failed poll does (false, quietly).
+            if (what.startsWith('syncSingleConversation')) expect(await call(), what).toBe(false);
+            else await expect(call(), what).rejects.toSatisfy((e: unknown) => db.isNoCopyInPlace(e));
+            await settle();
+            expect(db.heldCopyFiles(), `${what} opened nothing`).not.toContain(A_FILE);
+        }
+        // Not one request after the leave, to A or anywhere; nothing written into A's file since, nor B's.
+        expect(asked).toEqual([]);
+        expect(rowsOf(A_FILE)!.messages.some((m: any) => m.id === late)).toBe(false);
+        expect(rowsOf(A_FILE)).toEqual(aBefore);
+        expect({ B: rowsOf(B_FILE), storedB: storedFor(B_FILE) }).toEqual(others);
+        void thrown;
+
+        // Back in the chat: its copy opens again, and its poll brings what the node had meanwhile into A's file.
+        hold = null;
+        db.enterChatInPlace(A);
+        expect(await db.syncSingleConversation(dm.id, A)).toBe(true);
+        expect(db.heldCopyFiles()).toContain(A_FILE);
+        expect(rowsOf(A_FILE)!.messages.some((m: any) => m.id === late)).toBe(true);
+        expect((await db.getMessages(dm.id, { community: A })).some((m: any) => m.text === 'arrived as the chat was left')).toBe(true);
+        expect(asked.filter((r) => new URL(r.url).pathname.startsWith('/api/messages')).every((r) => new URL(r.url).origin === A)).toBe(true);
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+    });
+
+    it('Key code opens while the chat\'s close is still running: it waits for that close and reads A\'s pins, no refusal', async () => {
+        db.enterChatInPlace(A);
+        await db.getMessages(dm.id, { community: A });
+        let started!: () => void;
+        let release!: () => void;
+        const closing = new Promise<void>((r) => { started = r; });
+        h.closeHold = { file: A_FILE, started: () => started(), release: new Promise<void>((r) => { release = r; }) };
+        // Chat -> Key code: the chat is covered and lets go first; its close runs (held here at the native close).
+        const chatLet = db.leaveChatInPlace(A);
+        await closing;
+        // The key code screen shows: it holds the chat, then reads.
+        db.enterChatInPlace(A);
+        let info: any = 'not yet';
+        let thrown: unknown = null;
+        const reading = db.getDmKeyCodeInfo(dm.id, A).then((i) => { info = i; }, (e) => { thrown = e; });
+        await settle();
+        expect(info, 'it waits for the close under way').toBe('not yet');
+        expect(thrown).toBeNull();
+        release();
+        await chatLet;
+        await reading;
+        expect(thrown, String((thrown as any)?.message ?? '')).toBeNull();
+        expect(info?.peer).toBe(peer.publicKey);
+        expect(db.heldCopyFiles()).toContain(A_FILE);
+        // Back to the chat: it holds again, Key code lets go: the copy stays open for the chat, and closes as it is left.
+        db.enterChatInPlace(A);
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).toContain(A_FILE);
+        expect((await db.getMessages(dm.id, { community: A })).some((m: any) => m.text === PEER_WORDS)).toBe(true);
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+    });
+
+    it('Key code holds the chat before it is let go (the other order): the copy is never closed, and reads on', async () => {
+        db.enterChatInPlace(A);
+        await db.getMessages(dm.id, { community: A });
+        db.enterChatInPlace(A);
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).toContain(A_FILE);
+        expect((await db.getDmKeyCodeInfo(dm.id, A))?.peer).toBe(peer.publicKey);
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+    });
+
+    it('a read asked while the close runs, by nothing that holds the chat: it waits, then is refused, and nothing opens', async () => {
+        db.enterChatInPlace(A);
+        await db.getMessages(dm.id, { community: A });
+        let started!: () => void;
+        let release!: () => void;
+        const closing = new Promise<void>((r) => { started = r; });
+        h.closeHold = { file: A_FILE, started: () => started(), release: new Promise<void>((r) => { release = r; }) };
+        const left = db.leaveChatInPlace(A);
+        await closing;
+        asked = [];
+        const late = db.getMessages(dm.id, { community: A }).then(() => 'read', (e) => (db.isNoCopyInPlace(e) ? 'refused' : e));
+        release();
+        await left;
+        expect(await late).toBe('refused');
+        await settle();
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+        expect(asked).toEqual([]);
+    });
+
+    it('a leave with no hold (a caller that never entered) closes it and refuses it as well; one hold left, the other screen keeps it', async () => {
+        await db.getMessages(dm.id, { community: A });
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+        await expect(db.getMessages(dm.id, { community: A })).rejects.toSatisfy((e: unknown) => db.isNoCopyInPlace(e));
+        // Two holds (the chat and Contacts starting one there): one let go, the copy stays for the other.
+        db.enterChatInPlace(A);
+        db.enterChatInPlace(A);
+        await db.getMessages(dm.id, { community: A });
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).toContain(A_FILE);
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+    });
+
+    it('a chat left in A refuses nothing of the community in use, nor of a third held community', async () => {
+        db.enterChatInPlace(A);
+        await db.getMessages(dm.id, { community: A });
+        await db.leaveChatInPlace(A);
+        // B, the community in use: as before, through its own copy.
+        expect(Array.isArray(await db.getMessages(dm.id))).toBe(true);
+        expect(Array.isArray(await db.getMessages(dm.id, { community: B }))).toBe(true);
+        await db.markConversationRead(dm.id, me.publicKey, B);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
     });
 });
 

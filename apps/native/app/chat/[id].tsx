@@ -18,7 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
 import { ChatScrollPage } from '../../components/chat/ChatScrollPage';
@@ -253,6 +253,9 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     // History-window paging. Refs (not state) because loadMessages is called from
     // long-lived closures (poll interval, ws listener) that must see current values.
     const msgLimitRef = useRef(MESSAGE_PAGE_SIZE);
+    // True from the focus effect's start to its cleanup: a read still on its way once the chat is left asks nothing more
+    // (no mark read, nothing shown), so nothing is asked of a chat in place's community after it is left (#3305 review).
+    const inViewRef = useRef(false);
     const messagesLenRef = useRef(0);
     const loadingOlderRef = useRef(false);
     // While the keyboard is up, KeyboardAvoidingView already lifts the input bar to sit
@@ -616,6 +619,12 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
             let interval: ReturnType<typeof setInterval> | null = null;
             let appStateSub: any = null;
             promptedRef.current = false;
+            // From here to the cleanup: a follow-up of anything begun meanwhile (a poll, a push, the first sync) that lands
+            // once the chat is left runs nothing (#3305 review). In place, db.ts refuses the copy too (enterChatInPlace).
+            let active = true;
+            inViewRef.current = true;
+            // Held in place (slice S2) before the first read: its copy opens again, once a close still under way is done.
+            if (at) enterChatInPlace(at);
 
             let sub: any = null;
             let wsSub: any = null;
@@ -626,8 +635,9 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 loadDeals();
                 loadMessages().then(() => {
                     // The whole sync is the community in use's: a chat in place polls its own community below.
-                    if (at) return;
+                    if (at || !active) return;
                     syncMessages(identity!.publicKey).then(() => {
+                        if (!active) return;
                         loadConversationData();
                         loadMessages(true);
                         loadRatedTransactions();
@@ -637,12 +647,15 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
 
                 // Background Poll. The chat is the node's word once its answer is read back here (nodeAnswered).
                 // In place (slice S2): every few seconds from that community's own server, no socket of its own.
+                // A poll or a push whose answer lands once the chat is left: nothing more is read or asked.
+                const afterSingle = async (answered: boolean) => {
+                    if (!active) return;
+                    loadDeals();
+                    await Promise.all([loadConversationData(), loadMessages(true)]);
+                    if (active && answered !== false) setNodeAnswered(true);
+                };
                 const pollSingle = () => {
-                    syncSingleConversation(id as string, at).then(async (answered) => {
-                        loadDeals();
-                        await Promise.all([loadConversationData(), loadMessages(true)]);
-                        if (answered !== false) setNodeAnswered(true);
-                    });
+                    syncSingleConversation(id as string, at).then(afterSingle);
                 };
 
                 const startPolling = () => {
@@ -674,6 +687,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 appStateSub = AppState.addEventListener('change', handleAppStateChange);
 
                 sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
+                    if (!active) return;
                     loadConversationData();
                     loadMessages(true);
                     loadRatedTransactions();
@@ -687,21 +701,20 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 // In place, the doorbell is a push from that community (utils/push-notifications.ts PUSH_RECEIVED_EVENT): the
                 // socket is the community in use's.
                 wsSub = DeviceEventEmitter.addListener(at ? PUSH_RECEIVED_EVENT : 'ws_activity', () => {
-                    if (AppState.currentState === 'active') {
-                        syncSingleConversation(id as string, at).then(async (answered) => {
-                            loadDeals();
-                            await Promise.all([loadConversationData(), loadMessages(true)]);
-                            if (answered !== false) setNodeAnswered(true);
-                        });
+                    if (active && AppState.currentState === 'active') {
+                        syncSingleConversation(id as string, at).then(afterSingle);
                     }
                 });
             }
             return () => {
+                active = false;
+                inViewRef.current = false;
                 if (interval) clearInterval(interval);
                 if (appStateSub) appStateSub.remove();
                 if (sub) sub.remove();
                 if (wsSub) wsSub.remove();
-                // Left: that community's copy open in place closes (opened again on the way back).
+                // Left: that community's copy open in place closes, and opens for nothing until the chat is back (or its key
+                // code screen holds it: then it closes as that screen goes).
                 if (at) void leaveChatInPlace(at);
             };
         }, [id, identity, loadConversationData, loadDeals, at])
@@ -717,6 +730,9 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
+        // Left (the focus effect's cleanup): nothing is read or asked, and one still on its way stops at the next step below
+        // (#3305 review). In place, db.ts refuses that community's copy from the leave on as well (leaveChatInPlace).
+        if (!inViewRef.current) return;
         // The key check first (DESIGN-dm-key-signal-model §7 S1): it applies the resting rule, so a person not marked
         // verified has already moved to the new key when the thread is read, and no frame shows the paused box or the
         // "Sent from the new key" line for them. Unreadable pins: the banner stays as it was (undefined), and a send says why
@@ -729,12 +745,16 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
             data = await getMessages(id as string, { limit: msgLimitRef.current, notices: true, community: at });
             setLoadError(null);
         } catch (e: any) {
+            // A read refused because the chat was left meanwhile (in place: its copy is closed) is not this chat's error.
+            if (!inViewRef.current) return;
             console.warn('[Chat] Could not read this conversation:', e?.message || e);
             setLoadError(e?.message || t('Could not open this chat.'));
             return;
         } finally {
             setFirstLoadDone(true);
         }
+        // Left while it read: not marked read, nothing asked of the chat's server, nothing shown.
+        if (!inViewRef.current) return;
         // Lines only: the key-changed notices are the phone's own and don't count toward the history window.
         messagesLenRef.current = data.filter((m: any) => !m.keyChangedNotice).length;
         if (change !== undefined) setKeyChange(change);

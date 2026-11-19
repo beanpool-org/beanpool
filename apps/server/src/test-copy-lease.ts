@@ -13,6 +13,7 @@
  *   6. a copy with no lease (made before it) is left to the 90-day rule
  *   7. nobody but the owner's key can take a copy down
  *   8. the confirm route: signed, a list of 1 to 100 ids
+ *   9. the 90-day archive counts from a device's last word: the lease's own pause (a change, for phones' sync) restarts nothing
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-copy-lease)
  */
@@ -80,6 +81,7 @@ async function main() {
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
     const { writeDirectoryRows, normaliseRegistryRow } = await import('./engine/directory-cache.js');
     const { COPY_LEASE_DAYS } = await import('./engine/copy-lease.js');
+    const { profileLimits } = await import('./config/node-profile.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
 
     await initTls();
@@ -204,6 +206,34 @@ async function main() {
     for (const [what, body] of [['no ids', {}], ['an empty list', { ids: [] }], ['a string', { ids: copy }], ['a number in it', { ids: [1] }], ['101 ids', { ids: Array.from({ length: 101 }, () => crypto.randomUUID()) }]] as const) {
         assert((await call('POST', CONFIRM, robin, body)).status === 400, `${what}: 400`);
     }
+
+    // ── 9. The 90-day archive ──
+    // A copy nobody tends goes for good 90 days after a device last spoke for it, as before the lease: the lease's pause is a
+    // change (it moves updated_at, which phones' sync reads), but no device's word, so the archive's clock is not restarted by it.
+    console.log('\n── 9. The 90-day archive counts from a device\'s last word ──');
+    const days = profileLimits().listingArchiveDays;
+    assert(days === 90, `the global community archives a listing 90 days after its last change (${days})`);
+    const updatedAt = (id: string) => (db.prepare('SELECT updated_at FROM posts WHERE id = ?').get(id) as { updated_at: string }).updated_at;
+    const lapsed = await postCopy('Nobody tends these');
+    const tended = await postCopy('Tended every day');
+    const rested = await postCopy('Paused at home for now');
+    ageLease(lapsed, COPY_LEASE_DAYS + 1);
+    se.sweepCopyLeases();
+    assert(status(lapsed) === 'paused' && Date.now() - Date.parse(updatedAt(lapsed)) < 60_000,
+        'the lease takes an untended copy off, and its pause is stamped as a change now, so phones\' sync takes it out');
+    // A copy its author's device rested (paused, as the listing is off the board at home for now): a resting copy is not
+    // confirmed, and its pause is the author's, so it counts from that change, as every listing does.
+    ageLease(rested, COPY_LEASE_DAYS + 1);
+    await call('POST', '/api/marketplace/posts/pause', robin, { postId: rested, authorPublicKey: robin.pubKeyHex });
+    assert(status(rested) === 'paused' && lease(rested)!.hidden_at === null, 'a copy its author\'s device rests is paused by its author, not the lease');
+    // The day the lapsed copy is 90 days past its last word: 90 - (COPY_LEASE_DAYS + 1) days from now.
+    const due = Date.now() + (days! - COPY_LEASE_DAYS - 1) * DAY;
+    se.archiveStaleListings(due - 60 * 60 * 1000);
+    assert(status(lapsed) === 'paused', 'an hour short of 90 days since a device last spoke for it: still kept');
+    se.archiveStaleListings(due + 60 * 60 * 1000);
+    assert(status(lapsed) === 'cancelled', `90 days after a device last spoke for it, not ${days! + COPY_LEASE_DAYS}: archived, its pause no new start`);
+    assert(status(tended) === 'active', 'a copy confirmed since, changed no longer ago, stays');
+    assert(status(rested) === 'paused', 'a copy its author rested counts from its pause, as before: it stays');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

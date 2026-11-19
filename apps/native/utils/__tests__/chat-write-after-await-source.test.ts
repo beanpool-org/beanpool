@@ -183,8 +183,9 @@ describe('a chat write after a network await goes through the file its request w
     });
 });
 
-// inPlace and closeReads: slice S2's copy open in place (its own rule, 9, is chat-in-place-source.test.ts).
-const HELD_METHODS = new Set(['all', 'close', 'closeAll', 'paused', 'pauseUntil', 'openFiles', 'inPlace', 'closeReads']);
+// inPlace and closeReads: slice S2's copy open in place (its own rule, 9, is chat-in-place-source.test.ts). readsSettled:
+// waits for a read handle's close under way and closes nothing (#3305 round 5, the route's check as Chat is left).
+const HELD_METHODS = new Set(['all', 'close', 'closeAll', 'paused', 'pauseUntil', 'openFiles', 'inPlace', 'closeReads', 'readsSettled']);
 const HELD_TAKES_NOW = new Set(['getDb', 'waitForInit', 'chatCopyForRequest', 'copyStillFor', 'getCachedAnchorUrl']);
 
 /** Each held-copy rule (5-7) broken in `source`, as "function (line): what". */

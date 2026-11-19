@@ -1079,9 +1079,11 @@ const dmFactsParams = (me: string, id: string): string[] => [id, `${me}/${id.toL
  * id's own spelling only. Nothing known, or nothing readable: not a DM, so nothing of it is read, written or asked there
  * in place (a link can name any id: an enterprise's discussion, whose id is its public key, or a group's or an event's).
  */
-function holdsAsDm(conversationId: string, facts: any, pins: DmPeerPins | null, seen: readonly string[] | null): boolean {
+async function holdsAsDm(conversationId: string, facts: any, memory: () => Promise<{ pins: DmPeerPins | null; seen: string[] | null }>): Promise<boolean> {
     if (!facts || Number(facts.highest ?? 0) > 0 || Number(facts.wrapped ?? 0) > 0) return false;
     if (facts.type === 'dm') return true;
+    // Read only when the row doesn't settle it (the poll asks every few seconds, and the list can be large).
+    const { pins, seen } = await memory();
     // The pins keep an id folded (dmPinId): they vouch only for the id as they keep it, never for another spelling of it.
     if (pins && dmPinId(conversationId) === conversationId && dmSightFor(pins, conversationId)) return true;
     return !!seen?.includes(conversationId);
@@ -1103,8 +1105,7 @@ async function heldAsDmThrough(database: SQLite.SQLiteDatabase, conversationId: 
     if (!me || !file || !conversationId) return false;
     try {
         const facts = await database.getFirstAsync<any>(DM_FACTS_SQL, dmFactsParams(me, conversationId));
-        const { pins, seen } = await dmMemoryOf(me, file);
-        return holdsAsDm(conversationId, facts, pins, seen);
+        return await holdsAsDm(conversationId, facts, () => dmMemoryOf(me, file));
     } catch {
         return false;
     }
@@ -1164,10 +1165,15 @@ export async function heldChatIsDm(myPubkey: string, community: string, conversa
     if (!myPubkey || !community || !conversationId) return false;
     const file = getDatabaseFilenameForNode(community);
     try {
-        const rows = await heldCopies.all<any>(file, 'dmFacts', dmFactsParams(myPubkey, conversationId));
+        let rows = await heldCopies.all<any>(file, 'dmFacts', dmFactsParams(myPubkey, conversationId));
+        // A tap on Chat's held row leaves Chat, whose read-only handles close (held-chats.ts): a read answered null by that
+        // close waits for it, then asks once more on a handle of its own.
+        if (!rows) {
+            await heldCopies.readsSettled(file);
+            rows = await heldCopies.all<any>(file, 'dmFacts', dmFactsParams(myPubkey, conversationId));
+        }
         if (!rows?.length) return false;
-        const { pins, seen } = await dmMemoryOf(myPubkey, file);
-        return holdsAsDm(conversationId, rows[0], pins, seen);
+        return await holdsAsDm(conversationId, rows[0], () => dmMemoryOf(myPubkey, file));
     } catch {
         return false;
     }

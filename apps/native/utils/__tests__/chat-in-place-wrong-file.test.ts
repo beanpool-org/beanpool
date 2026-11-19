@@ -1007,6 +1007,23 @@ describe('a link naming another community with an id its copy holds as no DM: no
         await db.leaveChatInPlace(A);
     });
 
+    it('the route asks as Chat is left (its read-only handle on A still closing): it waits for that close, then answers from A\'s copy', async () => {
+        // A tap on Chat's held row: Chat's read-only handle on A is open, and Chat's leave closes it as the chat's route asks.
+        expect(await db.heldChatIsDm(me.publicKey, A, dm.id)).toBe(true);
+        expect(db.heldCopyFiles()).toContain(A_FILE);
+        const close = holdCloseOf(A_FILE);
+        const leaving = db.closeHeldCopies();
+        await close.started;
+        const asking = db.heldChatIsDm(me.publicKey, A, dm.id);
+        await settle();
+        close.release();
+        await leaving;
+        expect(await asking, 'a DM A holds, asked during Chat\'s close').toBe(true);
+        await db.closeHeldCopies();
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+        // Mutation: no wait for the close under way (heldChatIsDm asks once) -> false, and the route would offer only a move.
+    });
+
     it('the reviewer\'s sequence: an enterprise\'s key polled in place on A writes nothing, and set to A its discussion, Offers and decisions still go to the node', async () => {
         const key = person().publicKey;
         const conv: Conv = { id: key, type: 'enterprise_thread', participants: [me.publicKey, peer.publicKey] };

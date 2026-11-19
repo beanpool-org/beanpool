@@ -109,6 +109,11 @@ export interface HeldCopies<S extends string = string, H = HeldHandle> {
     inPlace(file: string): Promise<InPlaceCopy<H> | null>;
     /** Close every read-only held handle (Chat is left): a copy open in place stays, its chat is still on screen. */
     closeReads(): Promise<void>;
+    /**
+     * Resolves once a close of `file`'s read-only handle under way is done; at once when none is (#3305 round 5: a read
+     * asked as Chat is left, whose close answers it null, can wait for that close and ask once more). Closes nothing.
+     */
+    readsSettled(file: string): Promise<void>;
 }
 
 /** A copy open in place ({@link HeldCopies.inPlace}). */
@@ -340,6 +345,10 @@ export function createHeldCopies<H extends HeldHandle, S extends string>(deps: H
         },
         closeAll,
         closeReads,
+        readsSettled(file: string): Promise<void> {
+            const entry = entries.get(file);
+            return entry?.closing && entry.closed ? entry.closed : Promise.resolve();
+        },
         async paused<T>(fn: () => Promise<T>): Promise<T> {
             pauses++;
             try {

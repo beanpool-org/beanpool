@@ -132,10 +132,11 @@ export default function ChatRoute() {
     const placeKey = id && community ? `${String(community)}\n${String(id)}` : null;
     const [placed, setPlaced] = useState<{ for: string; answer: ChatInPlaceRoute } | null>(null);
     useEffect(() => {
-        if (!placeKey) return;
+        // Asked once the account on the phone is known (a link can open the app before it has loaded): until then nothing draws.
+        if (!placeKey || !identity?.publicKey) return;
         let alive = true;
         setPlaced(null);
-        chatInPlaceRoute(identity?.publicKey, String(id), String(community))
+        chatInPlaceRoute(identity.publicKey, String(id), String(community))
             .catch((): ChatInPlaceRoute => ({ open: 'nothing' }))
             .then((answer) => { if (alive) setPlaced({ for: placeKey, answer }); });
         return () => { alive = false; };

@@ -64,7 +64,8 @@ export default function ContactsScreen() {
     const screenKeyboard = useScreenKeyboardOffset();
     const view = useContacts(identity);
     // Opened from Chat's "Import contacts" (no list yet), it starts on Import, and Back from there goes back to Chat.
-    const { start } = useLocalSearchParams<{ start?: string }>();
+    // Opened where the phone landed after Contacts' own Message moved it (utils/message-after-switch.ts): whom it was for.
+    const { start, message: messageAsked } = useLocalSearchParams<{ start?: string; message?: string }>();
     const startedOnImport = start === 'import';
     const [screen, setScreen] = useState<Screen>(startedOnImport ? { kind: 'import' } : { kind: 'list' });
     const [info, setInfo] = useState(false);
@@ -274,7 +275,7 @@ export default function ContactsScreen() {
         if (done && !yes) Alert.alert(t('Not linked'), contactInviteNoWords());
     };
     return shell(t('Contacts'), <>
-        <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
+        <ListScreen view={view} list={list} busy={busy} me={identity.publicKey} messageAsked={messageAsked ?? null}
             onOpen={(id) => { setCancelToo(false); setScreen({ kind: 'contact', id }); }} onAdd={() => setScreen({ kind: 'add' })} onImport={() => setScreen({ kind: 'import' })} onInfo={() => setInfo(true)}
             onRemoveAll={() => change((l) => removeEveryContact(l))} onAddPeople={anchor ? () => void addPeople() : null}
             onInvite={anchor ? setInviting : null} ask={(c) => (anchor ? contactInviteAsk(c, mine ?? [], isHere) : null)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />
@@ -324,8 +325,10 @@ function saveFile(list: ContactsList | null) {
     ]);
 }
 
-function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onRemoveAll, onAddPeople, onInvite, ask, onAnswer }: {
+function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImport, onInfo, onRemoveAll, onAddPeople, onInvite, ask, onAnswer }: {
     view: ContactsView; list: ContactsList | null; busy: boolean; me: string;
+    /** The person a move to this community was for, as the landing named them (utils/message-after-switch.ts). */
+    messageAsked: string | null;
     onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onRemoveAll: () => Promise<boolean>;
     /** "Add people I've chatted with and my friends" (C6); null where the phone is on no community of the member's. */
     onAddPeople: (() => void) | null;
@@ -382,11 +385,11 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
     // Landed here after Message moved the phone to this community: the chat with that person opens, once, unless the member
     // blocked them here (their row then says Blocked, with Unblock, as for anyone in the community in use).
     useEffect(() => {
-        const key = view.anchor ? takeMessageAfterSwitch(me, view.anchor) : null;
+        const key = view.anchor ? takeMessageAfterSwitch(me, view.anchor, messageAsked) : null;
         if (!key) return;
         void getBlockedUsers().catch(() => [] as string[]).then((list) => { if (!list.includes(key)) void message(key); });
-        // Only the community the phone landed in matters; `message` is this render's.
-    }, [me, view.anchor]);
+        // Only the community the phone landed in and the person named matter; `message` is this render's.
+    }, [me, view.anchor, messageAsked]);
     const messageThere = async (key: string, community: string) => {
         if (opening) return;
         setOpening(key);

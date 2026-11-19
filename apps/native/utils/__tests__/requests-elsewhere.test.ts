@@ -137,7 +137,7 @@ describe('Message on a contact in another community this phone holds', () => {
     });
     beforeEach(() => {
         switched.length = 0;
-        takeMessageAfterSwitch(ME, HILL, 0);
+        takeMessageAfterSwitch(ME, HILL, DEE, 0);
         takeOpenAfterLanding(ME, HILL);
         keep([HOME, `${HILL}/`]);
     });
@@ -147,23 +147,34 @@ describe('Message on a contact in another community this phone holds', () => {
         expect(await messageInHeldCommunity(DEE, HILL, deps(), T)).toBe('switched');
         // The one switch, to the address the phone saved it under.
         expect(switched).toEqual([`${HILL}/`]);
-        expect(takeOpenAfterLanding(ME, HILL, T)).toBe('/contacts');
-        // Contacts, landed in another community, or for another account: nothing.
-        expect(takeMessageAfterSwitch(ME, VALE, T + 1)).toBeNull();
-        expect(takeMessageAfterSwitch('b'.repeat(64), HILL, T + 1)).toBeNull();
+        expect(takeOpenAfterLanding(ME, HILL, T)).toBe(`/contacts?message=${DEE}`);
+        // Contacts, landed in another community: nothing.
+        expect(takeMessageAfterSwitch(ME, VALE, DEE, T + 1)).toBeNull();
+        expect(takeMessageAfterSwitch(ME, HILL, DEE, T + 1)).toBe(DEE);
+    });
+
+    it('opens nothing for another account, for Contacts opened by hand, or for a link naming someone no tap left waiting', async () => {
+        const T = 1_000_000;
+        expect(takeMessageAfterSwitch(ME, HILL, DEE, T)).toBeNull();
+        await messageInHeldCommunity(DEE, HILL, deps(), T);
+        expect(takeMessageAfterSwitch(ME, HILL, null, T + 1)).toBeNull();
+        expect(takeMessageAfterSwitch(ME, HILL, 'e'.repeat(64), T + 1)).toBeNull();
+        expect(takeMessageAfterSwitch('b'.repeat(64), HILL, DEE, T + 1)).toBeNull();
+        // Another account's ask drops the one waiting: it never opens for this one later either.
+        expect(takeMessageAfterSwitch(ME, HILL, DEE, T + 2)).toBeNull();
     });
 
     it('opens the chat once, in that community only, however its address is spelled', async () => {
         const T = 1_000_000;
         await messageInHeldCommunity(DEE, HILL, deps(), T);
-        expect(takeMessageAfterSwitch(ME, `${HILL}/`, T + 1)).toBe(DEE);
-        expect(takeMessageAfterSwitch(ME, HILL, T + 2)).toBeNull();
+        expect(takeMessageAfterSwitch(ME, `${HILL}/`, DEE, T + 1)).toBe(DEE);
+        expect(takeMessageAfterSwitch(ME, HILL, DEE, T + 2)).toBeNull();
     });
 
     it('opens nothing once the guard\'s time is out (the member was held elsewhere, then came to Contacts later)', async () => {
         const T = 1_000_000;
         await messageInHeldCommunity(DEE, HILL, deps(), T);
-        expect(takeMessageAfterSwitch(ME, HILL, T + NOTICE_LANDING_MS)).toBeNull();
+        expect(takeMessageAfterSwitch(ME, HILL, DEE, T + NOTICE_LANDING_MS)).toBeNull();
     });
 
     it('a join or a switch under way moves nothing and keeps nobody waiting; a switch that fails says so', async () => {
@@ -172,7 +183,7 @@ describe('Message on a contact in another community this phone holds', () => {
         expect(await messageInHeldCommunity(DEE, HILL, deps({ switchUnderWay: () => true }), T)).toBe('held');
         expect(await messageInHeldCommunity(DEE, HILL, deps({ switchTo: async () => { throw new Error('no'); } }), T)).toBe('failed');
         expect(switched).toEqual([]);
-        expect(takeMessageAfterSwitch(ME, HILL, T + 1)).toBeNull();
+        expect(takeMessageAfterSwitch(ME, HILL, DEE, T + 1)).toBeNull();
     });
 
     it('where the guard won\'t let the member in there, Contacts is not opened', async () => {

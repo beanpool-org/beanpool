@@ -20,9 +20,10 @@ import type { NoticeRoute } from './push-notice-check';
 /**
  * What opens over the tabs' index after a move ({@link openAfterLanding}): a tapped notice's screen, or Contacts, for its
  * Message on someone in another community the phone holds (utils/message-after-switch.ts). Contacts is never a notice's or
- * a link's: it opens only over the tabs, never as the first screen.
+ * a link's: it opens only over the tabs, never as the first screen, and the person it names is opened only if the tap left
+ * that very person waiting.
  */
-export type LandingRoute = NoticeRoute | '/contacts';
+export type LandingRoute = NoticeRoute | `/contacts?message=${string}`;
 
 export type MemberLanding = '/(tabs)' | '/(tabs)/settings';
 

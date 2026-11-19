@@ -315,8 +315,9 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(mem.alerts).toEqual([]);
         expect(vi.mocked(switchCommunity).mock.calls.map((c) => c[0])).toEqual([`${RIVERBEND}/`]);
         expect(createConversationApi).not.toHaveBeenCalled();
-        // The phone is in Riverbend now, and Contacts opens over the tabs where the guard lands: the chat with Ana opens, once.
+        // The phone is in Riverbend now, and Contacts opens over the tabs where the guard lands, naming Ana: her chat opens, once.
         mem.store.set('beanpool_anchor_url', RIVERBEND);
+        mem.params = { message: ANA };
         await act(async () => { root?.unmount(); });
         host.remove();
         await render();
@@ -337,12 +338,28 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         vi.mocked(createConversationApi).mockClear();
         await press('Open Riverbend ›');
         mem.store.set('beanpool_anchor_url', RIVERBEND);
+        mem.params = { message: ANA };
         mem.blocked = [ANA];
         await act(async () => { root?.unmount(); });
         host.remove();
         await render();
         expect(createConversationApi).not.toHaveBeenCalled();
         expect(text()).toContain('Blocked');
+    });
+
+    it('Contacts opened by hand in that community, while a move\'s person waits, opens no chat: only the landing names them (S0)', async () => {
+        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: RIVERBEND }]));
+        await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+        await render();
+        const { createConversationApi } = await import('../db');
+        vi.mocked(createConversationApi).mockClear();
+        await press('Open Riverbend ›');
+        // The guard held the member elsewhere (no landing), and they open Contacts themselves: no `message` named.
+        mem.store.set('beanpool_anchor_url', RIVERBEND);
+        await act(async () => { root?.unmount(); });
+        host.remove();
+        await render();
+        expect(createConversationApi).not.toHaveBeenCalled();
     });
 
     it('a community the phone only looks at as a guest is not held: Open <community> › still asks first (S0)', async () => {

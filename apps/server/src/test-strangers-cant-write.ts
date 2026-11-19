@@ -105,6 +105,9 @@ const STRANGER_MAY: Record<string, May> = {
     'POST /api/push-tokens/leave/:publicKey': { why: 'a phone\'s leave statement, signed by the key that left it (routes/community.ts): only that '
         + 'key\'s registration of that phone goes, charged to the address and the node\'s day (state-engine.ts STRANGER_LEAVE_RULES), never '
         + 'copied to a standby', tables: ['push_token_leaves', 'writes_by_address'] },
+    'POST /api/marketplace/posts/copies/confirm': { why: 'a device\'s word that the signer\'s own copies are still in step at home '
+        + '(engine/copy-lease.ts confirmCopies): only copies the signer wrote are taken, and a key with no row has none, so naming a '
+        + 'member\'s copy changes nothing (answered with a count of 0, which names no copy)', tables: [] },
 };
 
 /** What a key with an open request to join may also do, beyond STRANGER_MAY: its own request, its phone and its browser. */
@@ -531,6 +534,9 @@ async function main(): Promise<void> {
     offer(carol, 'Carol plums');
     const alicePaused = offer(alice, 'Alice winter squash');
     se.pausePost(alicePaused.id, alice.pk);
+    // A copy here of a listing of Alice's on another community (engine/event-copy.ts): its lease is kept by her device alone.
+    const aliceCopy = offer(alice, 'Alice jam, shown here');
+    db.prepare("UPDATE posts SET shown_from_host = 'riverside.example', shown_from_post_id = ? WHERE id = ?").run(crypto.randomUUID(), aliceCopy.id);
     const event = createPost('event', 'community', 'Alice working bee', 'Bring gloves', 0, 'fixed', alice.pk, -28.6, 153.6, [TINY_PNG],
         false, undefined, false, { eventStartAt: inHours(48), eventPlaceName: 'The hall' })!;
     se.rsvpEvent(event.id, bob.pk, 'going');
@@ -705,6 +711,8 @@ async function main(): Promise<void> {
         // Putting Alice's paused offer back up, and pausing her live one (the signer as the author, as the middleware holds it).
         'POST /api/marketplace/posts/resume': (x) => ({ postId: alicePaused.id, authorPublicKey: x.pk }),
         'POST /api/marketplace/posts/pause': (x) => ({ postId: aliceOffer.id, authorPublicKey: x.pk }),
+        // Alice's copy named in a device's confirm: the lease of the signer's own copies (only Alice's device keeps hers).
+        'POST /api/marketplace/posts/copies/confirm': () => ({ ids: [aliceCopy.id] }),
         // Alice's event moved, by its id: the answer would tell everyone going.
         'POST /api/marketplace/posts/update': (x) => ({ id: event.id, authorPublicKey: x.pk, title: 'Working bee moved', eventPlaceName: 'The car park' }),
         // Bob's ask for Alice's offer, decided by the signer as if they were its author.
@@ -985,7 +993,8 @@ async function main(): Promise<void> {
             + '(at least 45): the bodies reach real data');
         for (const must of ['POST /api/marketplace/posts/pause', 'POST /api/marketplace/posts/resume', 'POST /api/marketplace/posts/update',
             'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/marketplace/posts/:id/chat/remove',
-            'POST /api/join/knocks/:id/approve', 'POST /api/marketplace/polls/vote', 'POST /api/knowledge/posts', 'DELETE /api/groups/:id/posts/:postId']) {
+            'POST /api/join/knocks/:id/approve', 'POST /api/marketplace/polls/vote', 'POST /api/knowledge/posts', 'DELETE /api/groups/:id/posts/:postId',
+            'POST /api/marketplace/posts/copies/confirm']) {
             assert(reached.includes(must), `among them ${must}, which the stranger sweeps sent the same body to`);
         }
         // The class where review found two holes (a stranger's push switches, the node's TikTok relay) and a write in the wrong

@@ -2665,7 +2665,8 @@ type ArchiveRow = CancelledPostRow & { status: string | null };
  *
  * Changed means its row was: an edit (saving it unchanged counts), a pause, being put back up; or a member traded on it,
  * a deal on it asked for, accepted, declined or done inside the window (its marketplace_transactions row moved), which
- * leaves the listing's own row as it was. A message about it doesn't.
+ * leaves the listing's own row as it was. A message about it doesn't. A copy its lease took off (engine/copy-lease.ts) is
+ * the one exception: that pause is no device's word, so it counts from the last one (its lease's `confirmed_at`).
  *
  * The photos go as a listing's photos always go: each row DELETEd with its `post_photos` tombstone, so a standby deletes
  * its copy too, and a pricing guide picture taken from one forgotten. Their objects are then orphans, which the image
@@ -2693,20 +2694,26 @@ export function archiveStaleListings(broadcast: BroadcastFn, push?: PushFn, nowM
     const days = profileLimits().listingArchiveDays;
     if (days === null) return run;
     const cutoff = new Date(nowMs - days * DAY_MS).toISOString();
+    // A copy the lease took off the board (engine/copy-lease.ts, `hidden_at`) counts from the older of its last change and a
+    // device's last word for it: the lease's own pause is a change (phones' sync reads updated_at) but no device's word, so it
+    // restarts nothing, and an untended copy goes 90 days after a device last spoke for it. Every other listing, a copy its
+    // author paused or a device rested among them (a resting copy is not confirmed), counts from its last change, as before.
+    const lastWord = `MIN(COALESCE(p.updated_at, p.created_at), COALESCE(CASE WHEN l.hidden_at IS NOT NULL THEN l.confirmed_at END, p.updated_at, p.created_at))`;
     const due = db.prepare(`
         SELECT p.id, p.type, p.title, p.author_pubkey, p.target_group_id, p.audience_scope, p.target_pubkey, p.assigned_to, p.status
           FROM posts p
+          LEFT JOIN copy_leases l ON l.post_id = p.id
          WHERE (p.type IN ('offer', 'need') OR p.shown_from_host IS NOT NULL)
            AND p.origin_node IS NULL
            AND p.hidden_by_reports_at IS NULL
-           AND COALESCE(p.updated_at, p.created_at) < ?
+           AND ${lastWord} < ?
            AND (COALESCE(p.status, 'active') IN ('active', 'paused')
                 OR (p.status IN ('completed', 'cancelled') AND EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id)))
            AND NOT EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id
                             AND (t.status IN ('requested', 'pending') OR COALESCE(t.updated_at, t.completed_at, t.created_at) >= ?))
            AND NOT EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_post_id = p.id AND r.status = 'pending')
            AND NOT EXISTS (SELECT 1 FROM deferred_wage_claims w WHERE w.post_id = p.id AND w.status = 'pending')
-         ORDER BY COALESCE(p.updated_at, p.created_at), p.id
+         ORDER BY ${lastWord}, p.id
          LIMIT ?`).all(cutoff, cutoff, batch + 1) as ArchiveRow[];
     run.more = due.length > batch;
 

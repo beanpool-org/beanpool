@@ -515,6 +515,10 @@ export const TABLES: Record<string, TableEntry> = {
     // An older importer drops the badges: after a take-over from its copy a member shows the tier their own record reads
     // until an admin gives the badge again.
     member_badges: plain('member_pubkey tier set_by set_at updated_at'),
+    // A copy's lease on a node that keeps copies (engine/copy-lease.ts): a take-over keeps each copy's last word from its member's
+    // device, so the copies nobody tends still come off the board when they would have. An older importer drops the leases:
+    // after a take-over from its copy every copy is as one from before the lease, until a device next confirms it.
+    copy_leases: plain('post_id confirmed_at hidden_at updated_at'),
     // An empty duplicate an owner retired (engine/retire-duplicate.ts): a take-over keeps it retired, and Bring back's
     // delete reaches a standby as a tombstone. The account's 'disabled' travels in its members row, as every status does.
     // An older importer drops the mark: after a take-over from its copy the account stays 'disabled', acting as nothing,

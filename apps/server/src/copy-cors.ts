@@ -4,9 +4,9 @@
  * the phone sends here it can now send, and nothing more:
  *
  * - **Only a node that keeps copies** (`directoryMirror`, engine/event-copy.ts). A local community's CORS is as it was.
- * - **Only what the tick calls**: the copy's create, edit and remove, its door, a read by id, a cancelled date, and the signer's own
- *   "am I a member here?", which the tick asks at the tap. Each for its own methods. A photo needs nothing of its own: it
- *   travels inside the create and the edit, as the phone's does.
+ * - **Only what the tick calls**: the copy's create, edit and remove, its door, a read by id, a cancelled date, the daily word that
+ *   the copies are still in step (engine/copy-lease.ts), and the signer's own "am I a member here?", which the tick asks at the
+ *   tap. Each for its own methods. A photo needs nothing of its own: it travels inside the create and the edit, as the phone's does.
  * - **And the signer's own counts** (GET /api/me/unread): a question through a copy's door waits on global, and no alert rings for
  *   it, so the row at their own community is the only way a member hears of it.
  * - **Only a signed request**: the answer is readable for a call that carries the signature's headers, and a preflight is
@@ -34,6 +34,8 @@ export const COPY_ONLY_CODE = 'copy_only';
 const COPY_ONLY = word('Only a copy of your own post can be changed from another community.');
 
 const POSTS = '/api/marketplace/posts';
+/** The daily word that a device's copies are still in step (engine/copy-lease.ts): a list of ids, every one a copy. */
+const CONFIRM = `${POSTS}/copies/confirm`;
 const SKIP = /^\/api\/events\/([^/]+)\/skip$/;
 const MEMBERSHIP = /^\/api\/community\/membership\/[^/]+$/;
 /** The signer's own counts, for the one row of Message requests at their community (slice GD). Names nobody, and no post. */
@@ -41,7 +43,7 @@ const UNREAD = '/api/me/unread';
 
 function methodsAt(path: string): readonly string[] | null {
     if (path === POSTS) return ['GET', 'POST'];
-    if (path === `${POSTS}/update` || path === `${POSTS}/remove` || path === `${POSTS}/takes-questions`) return ['POST'];
+    if (path === `${POSTS}/update` || path === `${POSTS}/remove` || path === `${POSTS}/takes-questions` || path === CONFIRM) return ['POST'];
     if (SKIP.test(path)) return ['POST', 'DELETE'];
     return MEMBERSHIP.test(path) || path === UNREAD ? ['GET'] : null;
 }
@@ -93,6 +95,10 @@ function postsNamed(ctx: Koa.Context): string[] | null {
     if (ctx.path === POSTS) return ctx.method === 'GET' ? idsAsked(ctx.query) : [];
     const skip = SKIP.exec(ctx.path);
     if (skip) return [decodeURIComponent(skip[1])];
+    if (ctx.path === CONFIRM) {
+        const ids = ((ctx as any).requestBody as { ids?: unknown } | undefined)?.ids;
+        return Array.isArray(ids) && ids.every((x) => typeof x === 'string') ? ids : null;
+    }
     const id = ((ctx as any).requestBody as { id?: unknown } | undefined)?.id;
     if (id === undefined || id === null) return [];
     return typeof id === 'string' ? [id] : null;

@@ -21,6 +21,7 @@ import { placeAs, placeShownTo } from './config/community-place.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
 import { closeCopyDoors, readOfCopy, setCopyQuestions as setCopyQuestionsEngine, type CopyColumns } from './engine/event-copy.js';
+import { confirmCopies as confirmCopiesEngine, sweepCopyLeases as sweepCopyLeasesEngine } from './engine/copy-lease.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { dropOpenVoteWordsOf, pollWordsGoWithThePoll, POLL_ANSWER_REPORT_SUBJECT } from './engine/poll-other.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
@@ -1571,6 +1572,14 @@ export function runMarketplaceHygiene(): void {
         archiveStaleListings();
     } catch (e) {
         console.warn('[Retention] Listing archive failed:', e);
+    }
+
+    // 6b. A member's copy that no device of theirs has confirmed in 14 days comes off the board (engine/copy-lease.ts).
+    try {
+        const off = sweepCopyLeases();
+        if (off > 0) console.log(`🪧 Took ${off} copy(ies) off the board: no device of their member confirmed them in 14 days`);
+    } catch (e) {
+        console.warn('[Copies] Lease sweep failed:', e);
     }
 
     // 7. The pins that ended (engine/pins.ts): every read has already stopped treating them as pins, by the clock.
@@ -5951,6 +5960,16 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     // The push dispatcher is handed in rather than imported by the engine module (it imports this one), so
     // cancelling an event can notify everyone going (docs/events-on-the-map.md §2.2, slice 5).
     return removePostEngine(broadcast, id, authorPublicKey, dispatchPushNotification);
+}
+
+/** A device's word that the signer's copies are still in step at home (engine/copy-lease.ts), with this node's broadcast. */
+export function confirmCopies(ids: readonly string[], signer: string): string[] {
+    return confirmCopiesEngine(broadcast, ids, signer);
+}
+
+/** One run of the copies' lease (runMarketplaceHygiene step 6b), with this node's broadcast. */
+export function sweepCopyLeases(nowMs = Date.now()): number {
+    return sweepCopyLeasesEngine(broadcast, nowMs);
 }
 
 /** A member's copy takes questions, or stops (engine/event-copy.ts). Null for anything but the signer's own copy. */

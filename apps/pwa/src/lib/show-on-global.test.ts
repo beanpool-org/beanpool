@@ -8,7 +8,7 @@ import { ed25519Signer, makeCopyKeeper, toEd25519Pkcs8, type CopyPair } from '@b
 import { copyIdFor, setNodeApiUrl, signedCopyFetch } from './api';
 import { clearCopyPairs, copyPairs } from './copy-pairs';
 import { memoryIndexedDB } from './memory-indexeddb';
-import { askGlobalStanding, forgetGlobalStanding, readGlobalStanding, requestsWaitingOnGlobal, showPostOnGlobal, takeQuestions, tendCopiesSoon } from './show-on-global';
+import { askGlobalStanding, forgetGlobalStanding, readGlobalStanding, requestsWaitingOnGlobal, showPostOnGlobal, stopShowing, takeQuestions, tendCopiesSoon } from './show-on-global';
 import { communityInfoOnce } from './visitor-lobby-gate';
 import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 import type { BeanPoolIdentity } from './identity';
@@ -274,3 +274,42 @@ describe('what waits on global, for the one Message requests row (slice GD)', ()
     });
 });
 
+
+describe('a copy this browser holds no pair for: made on the member\'s phone, or before this browser signed in', () => {
+    const NOW = 1_800_000_000_000;
+    const gone = { id: 'home-1', type: 'offer', lat: -28.6, lng: 153.5, audienceScope: 'public', authorPublicKey: me.publicKey } as const;
+    const urlsTo = (origin: string) => fetchMock.mock.calls.map(([url]) => String(url)).filter((u) => u.startsWith(origin));
+
+    it('a removal told what went asks global after every id the listing can have, the one a phone works out among them', async () => {
+        fetchMock.mockImplementation(async () => new Response('[]'));
+        expect(await stopShowing('home-1', me, gone as never)).toBe(true);
+        expect(await copyPairs.read()).toEqual([]);
+        const reads = urlsTo('https://global.test');
+        expect(reads).toHaveLength(1);
+        expect(new URL(reads[0]).searchParams.get('ids')?.split(',')).toContain(await copyIdFor('home-1', 0, me));
+    });
+
+    it('not told what went, or on a community that names no global, it asks nobody', async () => {
+        expect(await stopShowing('home-1', me)).toBe(true);
+        vi.mocked(communityInfoOnce).mockResolvedValue({ profile: 'local', addresses: [] } as never);
+        expect(await stopShowing('home-1', me, gone as never)).toBe(true);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('a tend for a key this browser last heard is on global looks for them: its own listings here, then their ids there', async () => {
+        setNodeApiUrl('https://home.test');
+        localStorage.setItem('beanpool_global_standing', JSON.stringify({ publicKey: me.publicKey, standing: 'member', at: NOW }));
+        fetchMock.mockImplementation(async (url: unknown) => new Response(String(url).startsWith('https://home.test')
+            ? JSON.stringify([{ ...gone, title: 'Tomatoes', status: 'active', active: true }]) : '[]'));
+        await tendCopiesSoon(me, NOW);
+        expect(urlsTo('https://home.test/api/marketplace/posts?author=')).toHaveLength(1);
+        expect(urlsTo('https://global.test/api/marketplace/posts?ids=')).toHaveLength(1);
+    });
+
+    it('a tend for a key heard a stranger there, or not heard of, asks nobody', async () => {
+        setNodeApiUrl('https://home.test');
+        localStorage.setItem('beanpool_global_standing', JSON.stringify({ publicKey: me.publicKey, standing: 'stranger', at: NOW }));
+        await tendCopiesSoon(me, NOW);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+});

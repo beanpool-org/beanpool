@@ -142,7 +142,7 @@ describe('an event in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
 
         fireEvent.click(within(panel).getByRole('button', { name: xx('Cancel event') }));
-        await waitFor(() => expect(api.removeMarketplacePost).toHaveBeenCalledWith('ev-1', 'host-pk'));
+        await waitFor(() => expect(api.removeMarketplacePost).toHaveBeenCalledWith('ev-1', 'host-pk', expect.objectContaining({ id: 'ev-1' })));
         expect(said).toEqual([xx('Cancel this event? Everyone will see it as cancelled.')]);
         expect(await screen.findAllByText(xx('CANCELLED'))).not.toHaveLength(0);
         expect(screen.getByTestId('event-edit-blocked').textContent).toBe(xx('This event was cancelled, so it can no longer be edited.'));

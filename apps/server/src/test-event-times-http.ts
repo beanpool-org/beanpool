@@ -47,7 +47,7 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
-// The dates are in Y27 and Y28, years laid out as 2027 and 2028 are, always ahead (future-year-test-helper.ts): comments name them 2027 and 2028.
+// Event dates are in Y27, a year laid out as 2027 is, always ahead (future-year-test-helper.ts): comments name it 2027.
 import { Y27 } from './future-year-test-helper.js';
 
 let BASE = '';

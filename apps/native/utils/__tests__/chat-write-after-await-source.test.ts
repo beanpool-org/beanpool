@@ -11,7 +11,8 @@
  *   every getDb() is the fallback for a handle parameter (`database ?? await getDb()`) takes none when it is handed one;
  * - a "network call": signedGet, _signedRequest, signedRequest, signedRequestWithMethod or fetch.
  * The rules, for a function that makes a network call:
- * 1. With a chat write of its own, it takes no getDb()/waitForInit() after its first network call.
+ * 1. When it writes a chat table, itself or through a function of the file it calls (writeConversationFromNode, handed a
+ *    handle), it takes no getDb()/waitForInit() after its first network call.
  * 2. It calls no self-handle chat writer after its first network call (that writer's getDb() is the same hole), unless
  *    it hands that writer the handle its fallback stands in for.
  * 3. With a chat write of its own, it reads neither the address nor the copy itself (no 'beanpool_anchor_url', no
@@ -91,13 +92,25 @@ export function functionsOf(source: string): Fn[] {
 export function holesIn(source: string): string[] {
     const fns = functionsOf(source);
     const selfHandleWriters = new Map(fns.filter((f) => f.chatWrite && f.calls.some((c) => TAKES_THE_COPY_OPEN_NOW.has(c.name))).map((f) => [f.name, f.fallbackFor] as const));
+    // Writes a chat table itself, or calls a function of the file that does (to any depth).
+    const byName = new Map(fns.map((f) => [f.name, f] as const));
+    const writesChat = new Set(fns.filter((f) => f.chatWrite).map((f) => f.name));
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const f of fns) {
+            if (!writesChat.has(f.name) && f.calls.some((c) => c.name !== f.name && byName.has(c.name) && writesChat.has(c.name))) {
+                writesChat.add(f.name);
+                grew = true;
+            }
+        }
+    }
     const holes: string[] = [];
     for (const f of fns) {
         const firstNet = f.calls.find((c) => NETWORK.has(c.name));
         if (!firstNet) continue;
         const after = f.calls.filter((c) => c.pos > firstNet.pos);
         const at = `${f.name} (db.ts:${f.line})`;
-        if (f.chatWrite) {
+        if (writesChat.has(f.name)) {
             for (const c of after) if (TAKES_THE_COPY_OPEN_NOW.has(c.name)) holes.push(`${at}: rule 1, ${c.name}() after ${firstNet.name}()`);
         }
         for (const c of after) {
@@ -141,11 +154,14 @@ describe('a chat write after a network await goes through the file its request w
             async function handsNothing() { await signedGet('/s'); await fallbackWriter([]); }
             async function rule3() { const d = await getDb(); const a = await AsyncStorage.getItem('beanpool_anchor_url'); await fetch(a + '/z'); await d.runAsync('DELETE FROM messages WHERE id = ?', [1]); }
             async function rule4() { const here = await chatCopyForRequest(); await signedGet('/w', { signal: s }); await _signedRequest('/v', {}); }
+            async function handleWriter(database, id) { await database.runAsync('INSERT OR IGNORE INTO conversations (id) VALUES (?)', [id]); }
+            async function rule1Through() { const r = await signedGet('/r'); await handleWriter(await getDb(), 'c'); }
             async function fine() { const here = await chatCopyForRequest(); const r = await signedGet('/u', { anchorUrl: here.anchorUrl }); const d = await here.handle(); if (d) await d.runAsync('INSERT OR IGNORE INTO conversation_participants (a) VALUES (?)', [1]); }
         `;
         const holes = holesIn(broken);
         expect(holes.filter((x) => x.startsWith('rule1 ')).some((x) => x.includes('rule 1'))).toBe(true);
         expect(holes.filter((x) => x.startsWith('rule2 ')).some((x) => x.includes('rule 2'))).toBe(true);
+        expect(holes.filter((x) => x.startsWith('rule1Through ')).some((x) => x.includes('rule 1'))).toBe(true);
         expect(holes.filter((x) => x.startsWith('rule3 ')).filter((x) => x.includes('rule 3')).length).toBe(2);
         expect(holes.filter((x) => x.startsWith('rule4 ')).filter((x) => x.includes('rule 4')).length).toBe(2);
         expect(holes.filter((x) => x.startsWith('fine '))).toEqual([]);

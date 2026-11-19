@@ -34,7 +34,7 @@ export interface HeldHandle {
 
 export interface HeldCopiesDeps<H extends HeldHandle> {
     /** Resolves once the phone's copies have their own names (cache-file-migration.ts communityCachesRenamed). */
-    renamed(): Promise<void>;
+    renamed(): Promise<unknown>;
     /** Whether `file`'s copy is on the phone. Asked before every open: an open makes a file that isn't there. */
     exists(file: string): Promise<boolean>;
     /** `file` is the community in use, its copy is being opened, or a copy is moving: no held handle for it then. */

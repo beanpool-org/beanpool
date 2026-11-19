@@ -25,7 +25,7 @@ const h = vi.hoisted(() => ({
     store: new Map<string, string>(),
     me: 'a1'.repeat(32),
     /** Every open: its file, and the SQL run on it before its first read. */
-    opens: [] as Array<{ file: string; beforeFirstRead: string[] | null; queryOnly: boolean }>,
+    opens: [] as Array<{ file: string; beforeFirstRead: string[] | null; queryOnly: boolean; handle?: any }>,
     /** A held read the test holds: the file it is for, told when it starts, let go by the test. */
     gate: null as null | { file: string; started: () => void; release: Promise<void> },
     /** Handles closed while a read was in flight on them (on a phone, that read never settles). */
@@ -61,7 +61,7 @@ vi.mock('expo-sqlite', async () => {
                     inFlight--;
                 }
             };
-            return {
+            const handle = {
                 runAsync: async (q: string, p?: unknown) => {
                     const r = sql.prepare(q).run(...params(p));
                     return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
@@ -83,6 +83,8 @@ vi.mock('expo-sqlite', async () => {
                     sql.close();
                 },
             };
+            (open as any).handle = handle;
+            return handle;
         }),
     };
 });
@@ -344,6 +346,9 @@ describe('held chats: the rules on their own', () => {
         const held = h.opens.filter((o) => o.file === B_FILE);
         expect(held.length).toBe(1);
         expect(held[0].queryOnly).toBe(true);
+        // The very handle db.ts opened for B, written to past the module (as a slip in S2 could): SQLite refuses it.
+        await expect(held[0].handle.runAsync("INSERT INTO conversations (id, type) VALUES ('written', 'dm')")).rejects.toThrow(/readonly/i);
+        await expect(held[0].handle.execAsync("DELETE FROM messages")).rejects.toThrow(/readonly/i);
         // The file is untouched: what the held read listed is what was seeded.
         const sql = new DatabaseSync(path.join(h.dir, B_FILE));
         try {

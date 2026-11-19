@@ -52,7 +52,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { spawnNode, post, copyDir, runNodeChild, inspectNode, recoverySealCommands, type NodeProc } from './takeover-test-harness.js';
+import { spawnNode, post, copyDir, runNodeChild, inspectNode, recoverySealCommands, holdDeadAddress, type NodeProc } from './takeover-test-harness.js';
 import { fixtureWords, GOOGLE_SUB } from './recovery-seal-test-http.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
@@ -249,6 +249,9 @@ async function main(): Promise<void> {
         console.log('\n— 2. the main server is killed —');
         await main.kill('SIGKILL');
         assert(main.proc.signalCode === 'SIGKILL', 'the main server is gone');
+        // Its address stays dead to the end: the standby promoted in 5 must not be given its port, or the probes in 9, which
+        // still copy the main server, would find a take-over there and refuse (takeover-test-harness.ts holdDeadAddress).
+        await holdDeadAddress(main);
 
         // ── 3. Codes: typos, the wrong number, the brake ──
         console.log('\n— 3. typing the code —');

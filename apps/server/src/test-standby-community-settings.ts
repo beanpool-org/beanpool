@@ -53,7 +53,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { spawnNode, post, runNodeChild, serveCommands, inspectNode, type NodeProc } from './takeover-test-harness.js';
+import { spawnNode, post, runNodeChild, serveCommands, inspectNode, holdDeadAddress, type NodeProc } from './takeover-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -700,6 +700,9 @@ async function main(): Promise<void> {
         console.log('\n— 6. the main server is killed; the standby takes over with the recovery code —');
         refused.push(...(await main.send('fetches')).blocked);
         await main.kill('SIGKILL');
+        // Its address stays dead to the end: S, promoted here, must not be given its port, or S3, which still copies the main
+        // server, would find a take-over there and refuse in 9 (takeover-test-harness.ts holdDeadAddress).
+        await holdDeadAddress(main);
         const registry = await directoryRegistry();
         closers.push(registry.close);
         // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).

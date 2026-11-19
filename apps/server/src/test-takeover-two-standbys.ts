@@ -34,7 +34,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
-import { spawnNode, post, copyDir, runNodeChild, type NodeProc } from './takeover-test-harness.js';
+import { spawnNode, post, copyDir, runNodeChild, holdDeadAddress, type NodeProc } from './takeover-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -191,6 +191,9 @@ async function main(): Promise<void> {
         assert(migrated('main') === 'not-a-standby' && migrated('a') === 'unpaired' && migrated('b') === 'unpaired',
             `each node's first start ran the pin's migration, as index.ts does (main ${migrated('main')}, A ${migrated('a')}, B ${migrated('b')})`);
         await main.kill('SIGKILL');
+        // Its address stays dead to the end: A' promoted in 2 must not be given its port, or B', which still copies the main
+        // server, would find a take-over there and refuse what 2 has it do (takeover-test-harness.ts holdDeadAddress).
+        await holdDeadAddress(main);
 
         let a = track(await spawnNode(SCRIPT, dir('a'), envA));
         const b = track(await spawnNode(SCRIPT, dir('b'), envB));

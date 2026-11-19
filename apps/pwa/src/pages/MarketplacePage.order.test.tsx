@@ -104,7 +104,9 @@ const eventOldRsvped = {
     authorCallsign: 'Charlie',
     createdAt: '2026-10-02T10:00:00.000Z',
     updatedAt: '2026-10-16T12:00:00.000Z',
-    eventStartAt: '2026-11-20T10:00:00.000Z',
+    // Relative to now, never a fixed day: a fixed 2026-11-20 start came within the page's 24-hour 'starting soon' lift on 19 Nov
+    // 10:00 UTC and turned this test red on every queue run (#3302's). Thirty days out keeps it an ordinary later event.
+    eventStartAt: new Date(Date.now() + 30 * 24 * 3600_000).toISOString(),
     eventEndAt: '2026-11-20T12:00:00.000Z',
     eventState: 'scheduled',
 };
@@ -202,9 +204,11 @@ describe('MarketplacePage order (pinning-s0)', () => {
             expect(cards.length).toBe(2);
         });
 
-        const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
         // Newest created must be first; edited older post stays below it
-        expect(titles).toEqual(['Newer Post', 'Older Post Edited Later']);
+        // The order is waited for too: the cards can be on screen before the sort settles (a CI flake on #3302's queue run).
+        await waitFor(() => {
+            expect(screen.getAllByTestId('market-post-card').map(el => el.textContent)).toEqual(['Newer Post', 'Older Post Edited Later']);
+        });
     });
 
     it('an event RSVPed later than a newer post stays below it', async () => {
@@ -217,9 +221,11 @@ describe('MarketplacePage order (pinning-s0)', () => {
             expect(cards.length).toBe(2);
         });
 
-        const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
         // Newest created must be first; RSVPed older event stays below it
-        expect(titles).toEqual(['Newer Post', 'Older Event RSVPed Later']);
+        // The order is waited for too: the cards can be on screen before the sort settles (a CI flake on #3302's queue run).
+        await waitFor(() => {
+            expect(screen.getAllByTestId('market-post-card').map(el => el.textContent)).toEqual(['Newer Post', 'Older Event RSVPed Later']);
+        });
     });
 
     it('a post by an author named "Daily Pulse" is not put first: it takes its place by date', async () => {
@@ -232,8 +238,10 @@ describe('MarketplacePage order (pinning-s0)', () => {
             expect(cards.length).toBe(2);
         });
 
-        const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
-        expect(titles).toEqual(['Newer Post', 'Daily Pulse Reflection']);
+        // The order is waited for too: the cards can be on screen before the sort settles (a CI flake on #3302's queue run).
+        await waitFor(() => {
+            expect(screen.getAllByTestId('market-post-card').map(el => el.textContent)).toEqual(['Newer Post', 'Daily Pulse Reflection']);
+        });
     });
 
     it('on a node that reads by area the order is newest listed first, not nearest first', async () => {
@@ -252,9 +260,11 @@ describe('MarketplacePage order (pinning-s0)', () => {
             expect(cards.length).toBe(2);
         });
 
-        const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
         // Newest listed first (market order S2): postFar is the newer, so it is first though postNear is nearer.
-        expect(titles).toEqual(['Far Listing', 'Near Listing']);
+        // The order is waited for too: the cards can be on screen before the sort settles (a CI flake on #3302's queue run).
+        await waitFor(() => {
+            expect(screen.getAllByTestId('market-post-card').map(el => el.textContent)).toEqual(['Far Listing', 'Near Listing']);
+        });
         // And the node was asked for the newest in the circle, not the nearest.
         const reads = vi.mocked(api.getMarketplacePosts).mock.calls.map(c => c[0] as any).filter(f => f?.lat != null);
         expect(reads.length).toBeGreaterThan(0);
@@ -392,8 +402,10 @@ describe('MarketplacePage order (pinning-s0)', () => {
             expect(cards.length).toBe(2);
         });
 
-        const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
         // Server search result ranking stands: postSearchOld first, postSearchNew second
-        expect(titles).toEqual(['Honey - Raw Forest', 'Honey - Creamed Clover']);
+        // The order is waited for too: the cards can be on screen before the sort settles (a CI flake on #3302's queue run).
+        await waitFor(() => {
+            expect(screen.getAllByTestId('market-post-card').map(el => el.textContent)).toEqual(['Honey - Raw Forest', 'Honey - Creamed Clover']);
+        });
     });
 });

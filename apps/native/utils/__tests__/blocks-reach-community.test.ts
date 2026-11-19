@@ -1588,3 +1588,68 @@ describe('a block is of a person, from every screen that blocks or unblocks, at 
         expect(checked).toBeGreaterThan(200);
     }, 600_000);
 });
+
+/**
+ * Slice S3 (scratch/fable-design/DESIGN-no-switch-messaging-fable.md §6): Block and Report on another community's request
+ * card, answered there in place. The phone is set to NODE; the request is OTHER's. Whatever happens while the block is on its
+ * way, its report goes to OTHER's moderators only, OTHER's own list takes the block, signed by the account that blocked, and
+ * a third community the phone moved to meanwhile has no report of it. The block itself is the account's on this phone
+ * (every community the phone is set to hears it at its own sync, as before this slice).
+ */
+describe('a block made on another community\'s request card, in place (slice S3)', () => {
+    const THIRD = 'https://third.example';
+    const MEANWHILE: Record<string, (app: Awaited<ReturnType<typeof startApp>>) => Promise<void>> = {
+        'nothing': async () => {},
+        'a switch to a third community': async () => { mem.async.set(ANCHOR, THIRD); },
+        'a switch onto that very community': async () => { mem.async.set(ANCHOR, OTHER); },
+        'the account switching': async (app) => { await app.signOut(ana); await app.identity.importIdentity(ben); },
+    };
+    const reportsAt = () => net.sent.filter((s) => s.url.includes('/api/reports')).map((s) => s.url.slice(0, s.url.indexOf('/api/')));
+
+    it.each(Object.keys(MEANWHILE))('with %s while it is on its way: its report and its change land at that community, never another', async (what) => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        let release!: () => void;
+        net.hold = new Promise<void>((r) => { release = r; });
+        const blocking = app.blockUser(HARASSER, ana.publicKey, 'Spam or scam', undefined, OTHER);
+        await new Promise((r) => setTimeout(r, 0));
+        await MEANWHILE[what](app);
+        release();
+        expect(await blocking).toBe(true);
+        await app.blockSyncsEndedForTests();
+
+        expect(reportsAt()).toEqual([OTHER]);
+        const atOther = blockChanges().filter((c) => c.at.startsWith(OTHER));
+        if (what === 'the account switching') {
+            // Ben is on the phone by the time OTHER's turn comes: nothing of Ana's goes in his name.
+            expect(atOther.every((c) => c.signedBy === ben.publicKey)).toBe(true);
+            expect([...listAt(OTHER, ben.publicKey)]).toEqual([]);
+        } else {
+            expect(atOther).toContainEqual({ at: `${OTHER}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } });
+            expect([...listAt(OTHER, ana.publicKey)]).toEqual([HARASSER]);
+        }
+        // Every block or report request went to one of the three communities; a report to none but OTHER.
+        for (const s of net.sent.filter((x) => x.url.includes('/api/blocks') || x.url.includes('/api/reports'))) {
+            expect([NODE, OTHER, THIRD]).toContain(s.url.slice(0, s.url.indexOf('/api/')));
+        }
+    });
+
+    it('a guest\'s look at that community is sent nothing: no report, no change; the block stands on the phone', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.nodes.markGuestNode(OTHER);
+        expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam', undefined, OTHER)).toBe(true);
+        await app.blockSyncsEndedForTests();
+        expect(net.sent.filter((s) => s.url.startsWith(OTHER))).toEqual([]);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+    });
+
+    it('control: with no community named, the report goes to the community the phone is set to, as before', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam')).toBe(true);
+        await app.blockSyncsEndedForTests();
+        expect(reportsAt()).toEqual([NODE]);
+        expect(blockChanges().filter((c) => c.at.startsWith(OTHER))).toEqual([]);
+    });
+});

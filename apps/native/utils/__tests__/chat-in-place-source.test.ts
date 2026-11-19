@@ -40,6 +40,8 @@ const IN_PLACE = [
     'markConversationReadLocally', 'markDmPeerVerified', 'muteChatApi', 'pinsCopyFor', 'refreshConversationFromNode', 'removeDmPeerVerification',
     'requireDmKeyContext', 'sealOfLine', 'syncSingleConversation', 'syncSingleConversationOnce', 'toggleMessageReactionApi',
     'unplacedKeyChange',
+    // Slice S3: another community's request list read there in place, and a line of it reported to its moderators.
+    'reportDmLine', 'requestsInPlace',
 ].sort();
 /** A function the DM screen may call with no `at`: it reads neither a copy nor a server (this run's memory, by the chat's id). */
 const NO_COPY = new Set(['getKnownChatMute']);

@@ -1399,9 +1399,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         const { item, blocks } = reportingLine;
         try {
             let outcome: RequestReportOutcome = 'reported';
-            const there = at ? [at] as const : [] as const;
-            if (blocks) outcome = await reportRequestAndBlock(String(id), item, blocks, reason, identity?.publicKey ?? '', ...there);
-            else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason, ...there);
+            if (blocks) outcome = await reportRequestAndBlock(String(id), item, blocks, reason, identity?.publicKey ?? '', ...(at ? [at] as const : [] as const));
+            else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason, at);
             hapticSuccess();
             const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);
             // A report that did not go whole still blocked them (each such sentence ends "They are blocked."): that is the title,

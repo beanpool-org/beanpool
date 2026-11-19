@@ -9195,7 +9195,7 @@ export async function decideMessageRequest(conversationId: string, decision: 'ac
  * Null: no copy in place to read (the community in use, one not saved, a guest's look, a copy not on the phone), or no
  * answer; the card then moves the phone there, as in S0.
  */
-export async function requestsInPlace(myPubkey: string, community: string): Promise<{ count: number; conversations: any[] } | null> {
+export async function requestsInPlace(myPubkey: string, community: ChatCommunity): Promise<{ count: number; conversations: any[] } | null> {
     if (!myPubkey || !community) return null;
     let here: ChatRequestCopy;
     try {
@@ -11210,15 +11210,15 @@ export async function removeGroupChatMessage(groupId: string, messageId: string)
 export async function reportDmLine(conversationId: string, messageId: string, words: string, reason: string, community?: ChatCommunity): Promise<any> {
     // `community`: a request or chat of another community this phone holds (slice S3): the line is read from that
     // community's copy, only a line of a direct chat it holds (#3305 review F1), and the report goes to its moderators.
-    const here = community ? await onlyDmLineInPlace(await onlyDmInPlace(await chatCopyForRequest(community), conversationId), messageId) : null;
-    const database = here ? here.database : await getDb();
-    const row = await database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata, conversation_id FROM messages WHERE id = ?', [messageId]);
-    if (!row || (here && row.conversation_id !== conversationId)) throw new Error('Message not found');
+    // Left out: the community in use, its copy and address taken together (chatCopyForRequest).
+    const here = await onlyDmLineInPlace(await onlyDmInPlace(await chatCopyForRequest(community), conversationId), messageId);
+    const row = await here.database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata, conversation_id FROM messages WHERE id = ?', [messageId]);
+    if (!row || (here.inPlace && row.conversation_id !== conversationId)) throw new Error('Message not found');
     try {
         return await _signedRequest('/api/messages/report', {
             messageId, reason,
             disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId }, words),
-        }, here ? here.anchorUrl : undefined);
+        }, here.anchorUrl);
     } catch (e: any) {
         throw reportRefusal(e);
     }

@@ -154,6 +154,8 @@ export async function heldOutsideChatsShown(myPubkey: string, view?: HeldChatsVi
         const out: HeldOutsideChat[] = [];
         for (const { url, file, name } of await heldCommunities()) {
             if (!inView()) break;
+            // Listed only where it opens: never a file a guest mark names under any spelling (outside-chat-live.ts contextFor).
+            if (await isGuestCopy(url).catch(() => true)) continue;
             for (const chat of (await getHeldOutsideChats(myPubkey, url)) ?? []) {
                 if (await isUserBlocked(chat.peerKey)) continue;
                 out.push({ ...chat, key: `held-across:${file}:${chat.id}`, community: url, communityName: name });

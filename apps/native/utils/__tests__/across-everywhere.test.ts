@@ -445,6 +445,21 @@ describe('rounds and `mail`: a held community\'s round is skipped only when its 
     });
 });
 
+describe('listed only where it opens', () => {
+    it('a guest mark naming the carrying community under another spelling: its across chats are not listed, and none opens there', async () => {
+        await phone(B);
+        const view = heldChatsInView();
+        try {
+            expect((await heldOutsideChatsShown(me.publicKey, view)).some((c) => c.id === chatId)).toBe(true);
+            h.store.set('beanpool_guest_nodes', JSON.stringify(['HTTPS://RIVERSIDE.EXAMPLE/']));
+            expect((await heldOutsideChatsShown(me.publicKey, view)).some((c) => c.id === chatId)).toBe(false);
+            expect(await outsideContext(A)).toBeNull();
+        } finally {
+            await view.leave();
+        }
+    });
+});
+
 describe('the across mute: told to the carrying community\'s server, kept in its file, wherever the phone is set', () => {
     it.each([['set to the carrying community', A], ['set elsewhere', B]])('%s', async (_name, setTo) => {
         await phone(setTo);

@@ -2288,8 +2288,10 @@ describe('global\'s lease: a device tells global, once a day, which copies it ho
         const phone = w.device();
         await phone.showOnGlobal(w.home, HOME, identity);
         const second = { ...w.home, id: 'home-2', title: 'Beans' };
+        // Each listing read as itself: read as the first, the second is out of step, sent again, and has said it for the day.
+        w.homeAnswers((path) => (path.includes('id=home-2') ? w.json([second]) : null));
         await phone.showOnGlobal(second, HOME, identity);
-        const now = Date.now() + DAY;
+        const now = Date.now() + DAY + 1000;
         await phone.tendCopies(identity, undefined, now);
         expect(w.confirms).toHaveLength(1);
         expect([...w.confirms[0]].sort()).toEqual(phone.pairs().map((p) => p.copyId).sort());

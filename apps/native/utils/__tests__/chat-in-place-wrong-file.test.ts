@@ -17,6 +17,12 @@
  *   removed copy is never made again;
  * - the app killed: on the next start, the chat's poll in place brings A's server's word into A's file, never B's.
  *
+ * Then leaving the chat (#3305 review): each thing on its way as it is left (a poll, a read mid-flight, a mark read, a
+ * reply) x everything that could still follow (the screen's follow-ups after a poll or a push, and every other in-place
+ * action from anywhere): nothing opens A's copy again and nothing is asked of A until the chat holds it again, when it
+ * opens and its poll brings what came meanwhile. Key code, opened as the chat's close still runs, waits for that close and
+ * reads; a read by nothing holding the chat waits and is refused.
+ *
  * Then the DM key-pin gate (the dm-line-binding rows' rules, utils/__tests__/dm-line-binding.test.ts), for a chat in place:
  * the pins read and written are A's own file's, a verified person's key change pauses its sends, an unverified one's
  * carries on with one notice there, unreadable pins refuse a send with nothing written or sent, and B's pins never decide
@@ -41,6 +47,8 @@ const h = vi.hoisted(() => ({
     me: { publicKey: '', privateKey: '' },
     /** The next native close of this file waits for `release` (a close still running, as a phone's can for a while). */
     closeHold: null as null | { file: string; started: () => void; release: Promise<void> },
+    /** Lets a held close go: called by the test, and by the next phone's set-up so one failed row never hangs the next. */
+    letCloseGo: () => {},
 }));
 
 /** expo-sqlite over node:sqlite, one real file per name in this test's directory, as expo-sqlite opens them in its own. */
@@ -254,11 +262,12 @@ const storedFor = (file: string) => Object.fromEntries([...h.store.entries()].fi
  * set to B, whose file is a copy of A's (the same ids), with the peer's line spoiled there. A is now the away community.
  */
 async function phoneOnBWithAAway(): Promise<void> {
+    h.letCloseGo();
+    h.closeHold = null;
     await db.closeDB();
     db._resetDmPeerPinsForTests();
     // A new phone: no chat held or left in place yet (the marks are this run's memory, by file).
     db._resetChatsInPlaceForTests();
-    h.closeHold = null;
     h.dir = path.join(root, `phone-${++phoneN}`);
     fs.mkdirSync(h.dir);
     h.store.clear();
@@ -566,6 +575,17 @@ const AFTER_LEAVING: Array<[string, () => Promise<unknown>]> = [
     ['markDmPeerVerified (the key code screen)', () => db.markDmPeerVerified(dm.id, peer.publicKey, A)],
 ];
 
+/** Hold the next native close of `file` until `release()`: `started` settles once that close is under way. */
+function holdCloseOf(file: string): { started: Promise<void>; release: () => void } {
+    let begun!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((r) => { begun = r; });
+    const gate = new Promise<void>((r) => { release = r; });
+    h.closeHold = { file, started: () => begun(), release: gate };
+    h.letCloseGo = release;
+    return { started, release };
+}
+
 describe('a chat in place, left: its copy stays closed and its community is asked nothing until the chat is back (#3305 review)', () => {
     it.each(ON_ITS_WAY.map((w) => [w.name, w] as const))('%s as the chat is left: nothing after it opens the copy or asks A anything', async (_name, way) => {
         db.enterChatInPlace(A);
@@ -619,13 +639,10 @@ describe('a chat in place, left: its copy stays closed and its community is aske
     it('Key code opens while the chat\'s close is still running: it waits for that close and reads A\'s pins, no refusal', async () => {
         db.enterChatInPlace(A);
         await db.getMessages(dm.id, { community: A });
-        let started!: () => void;
-        let release!: () => void;
-        const closing = new Promise<void>((r) => { started = r; });
-        h.closeHold = { file: A_FILE, started: () => started(), release: new Promise<void>((r) => { release = r; }) };
+        const { started, release } = holdCloseOf(A_FILE);
         // Chat -> Key code: the chat is covered and lets go first; its close runs (held here at the native close).
         const chatLet = db.leaveChatInPlace(A);
-        await closing;
+        await started;
         // The key code screen shows: it holds the chat, then reads.
         db.enterChatInPlace(A);
         let info: any = 'not yet';
@@ -663,12 +680,9 @@ describe('a chat in place, left: its copy stays closed and its community is aske
     it('a read asked while the close runs, by nothing that holds the chat: it waits, then is refused, and nothing opens', async () => {
         db.enterChatInPlace(A);
         await db.getMessages(dm.id, { community: A });
-        let started!: () => void;
-        let release!: () => void;
-        const closing = new Promise<void>((r) => { started = r; });
-        h.closeHold = { file: A_FILE, started: () => started(), release: new Promise<void>((r) => { release = r; }) };
+        const { started, release } = holdCloseOf(A_FILE);
         const left = db.leaveChatInPlace(A);
-        await closing;
+        await started;
         asked = [];
         const late = db.getMessages(dm.id, { community: A }).then(() => 'read', (e) => (db.isNoCopyInPlace(e) ? 'refused' : e));
         release();

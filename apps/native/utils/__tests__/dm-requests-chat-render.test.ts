@@ -172,6 +172,7 @@ import { setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import ChatRoute from '../../app/chat/[id]';
 import { router } from 'expo-router';
+import { PUSH_RECEIVED_EVENT } from '../app-events';
 
 const NODE = 'https://mullum.example';
 const now = Date.now();
@@ -707,5 +708,84 @@ describe('old chat on the phone\'s chat screen', () => {
         expect(asked).toHaveLength(2);
         // Neither opened here (the stand-in answers null): each keeps the locked bubble.
         expect(host.textContent?.match(/Image unavailable/g)).toHaveLength(2);
+    });
+});
+
+describe('a chat in place, left while its poll, a push or a read is on its way (slice S2, #3305 review)', () => {
+    const RIVER = 'https://riverside.example';
+    const KOFI_THERE = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: null, listed: 1 };
+    /** Calls held until the test answers them, as a node still answering does. */
+    const heldCalls: Array<(v: unknown) => void> = [];
+    const later = () => new Promise((resolve) => { heldCalls.push(resolve); });
+    /** Each hold and let-go of the chat in place, by the community the screen named. */
+    const placeLog: string[] = [];
+    const callsSince = (n: number) => net.calls.slice(n).filter((c) => c !== 'db.getKnownChatMute');
+    const leave = async () => { await act(async () => { root.unmount(); }); };
+
+    async function openInPlace(over: Answers): Promise<void> {
+        heldCalls.length = 0;
+        placeLog.length = 0;
+        params.now = { id: 'dm1', community: RIVER, communityName: 'Riverside' };
+        standIn({
+            getConversation: KOFI_THERE, getMessages: [], markConversationRead: true,
+            enterChatInPlace: (c: unknown) => { placeLog.push(`enter ${String(c)}`); return undefined; },
+            leaveChatInPlace: (c: unknown) => { placeLog.push(`leave ${String(c)}`); return undefined; },
+            ...over,
+        });
+        await open();
+        // Held before the first read, by the chat's own community, and held now (the focus effect runs again once the
+        // peer's key is read, as before: each run lets go in its cleanup and holds again).
+        expect(net.calls.indexOf('db.enterChatInPlace')).toBeLessThan(net.calls.indexOf('db.getConversation'));
+        expect(placeLog.every((x, i) => x === `${i % 2 === 0 ? 'enter' : 'leave'} ${RIVER}`)).toBe(true);
+        expect(placeLog.length % 2).toBe(1);
+    }
+    /** As many let-goes as holds: none left behind once the chat is left. */
+    const balanced = () => placeLog.filter((x) => x.startsWith('enter')).length === placeLog.filter((x) => x.startsWith('leave')).length;
+
+    it('the poll answers once the chat is left: nothing after it is read, marked or asked; the hold is let go once', async () => {
+        await openInPlace({ syncSingleConversation: later });
+        expect(heldCalls.length, 'a poll is on its way').toBeGreaterThan(0);
+        const before = net.calls.length;
+        await leave();
+        for (const answer of heldCalls) answer(true);
+        await settle();
+        expect(callsSince(before)).toEqual(['db.leaveChatInPlace']);
+        expect(placeLog.at(-1)).toBe(`leave ${RIVER}`);
+        expect(balanced()).toBe(true);
+        // Mutation: drop the `active` check in the poll's follow-up -> getConversation, getDmKeyChange, getDmKeyCodeInfo,
+        // getMessages and markConversationRead are called after the leave (the review's late mark read to A).
+    });
+
+    it('a push\'s poll answers once the chat is left: the same, nothing after it', async () => {
+        let holdNext = false;
+        await openInPlace({ syncSingleConversation: () => (holdNext ? later() : Promise.resolve(true)) });
+        await settle();
+        holdNext = true;
+        await act(async () => { for (const fn of events.on[PUSH_RECEIVED_EVENT] ?? []) fn(); });
+        expect(heldCalls.length, 'the push\'s poll is on its way').toBe(1);
+        const before = net.calls.length;
+        await leave();
+        heldCalls[0](true);
+        await settle();
+        expect(callsSince(before)).toEqual(['db.leaveChatInPlace']);
+        expect(balanced()).toBe(true);
+        // A push after the leave starts nothing: its listener went with the chat.
+        expect(events.on[PUSH_RECEIVED_EVENT]?.size ?? 0).toBe(0);
+    });
+
+    it('a read mid-flight as the chat is left (its thread still on its way): not marked read, nothing shown, nothing asked', async () => {
+        let holdReads = false;
+        await openInPlace({ syncSingleConversation: () => Promise.resolve(true), getMessages: () => (holdReads ? later() : Promise.resolve([])) });
+        await settle();
+        holdReads = true;
+        await act(async () => { for (const fn of events.on[PUSH_RECEIVED_EVENT] ?? []) fn(); });
+        await settle();
+        expect(heldCalls.length, 'the thread\'s read is on its way').toBeGreaterThan(0);
+        const before = net.calls.length;
+        await leave();
+        for (const answer of heldCalls) answer([{ id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'late', rawTimestamp: iso(now), timestamp: '' }]);
+        await settle();
+        expect(callsSince(before)).toEqual(['db.leaveChatInPlace']);
+        // Mutation: drop the in-view check after the thread's read -> markConversationRead is called after the leave.
     });
 });

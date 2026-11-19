@@ -21,7 +21,7 @@ type Name = keyof typeof STATEMENTS;
 
 /** A fake handle: each read waits for `release()` when held; a close during a read is recorded (on a phone it hangs it). */
 interface Fake extends HeldHandle { file: string; closed: boolean; queryOnly: boolean; reads: number; withTransactionAsync(task: () => Promise<void>): Promise<void> }
-function world(files: string[], opts: { schema?: number; statements?: Record<string, string> } = {}) {
+function world(files: string[], opts: { schema?: number; statements?: Record<string, string>; placeRefused?: (file: string) => boolean } = {}) {
     const present = new Set(files);
     const opened: string[] = [];
     const cutMidRead: string[] = [];
@@ -91,6 +91,7 @@ function world(files: string[], opts: { schema?: number; statements?: Record<str
         register: (handle, file) => { registered.push([handle, file]); },
         schema: SCHEMA,
         statements: (opts.statements ?? STATEMENTS) as Record<Name, string>,
+        placeRefused: opts.placeRefused,
     });
     const gate = () => {
         let started!: () => void;
@@ -539,6 +540,84 @@ describe('held copies: a copy open in place (slice S2), under every closer', () 
         expect(first.open()).toBe(false);
         await expect((first.handle as Fake).getAllAsync('SELECT 1', [])).rejects.toBeInstanceOf(InPlaceClosedError);
         expect(w.opened).toEqual([B, B]);
+    });
+
+    // #3305 review: asked while a close of it was still running, the open was refused (null) and its caller threw for good
+    // (Chat -> Key code: the chat's leave closes the copy as the key code screen reads it).
+    for (const [name, close] of CLOSERS) {
+        const pause = name.startsWith('pause');
+        it(`asked while ${name}'s close of it is under way: ${pause ? 'refused at once (a pause opens nothing)' : 'waits for that close, then a new connection'}`, async () => {
+            const w = world([B]);
+            const first = (await w.held.inPlace(B))!;
+            const g = w.holdNextClose();
+            // A pause that is still on as the open is asked (pauseUntil's own row in CLOSERS ends its pause at once).
+            let endPause!: () => void;
+            const pauseOn = new Promise<void>((r) => { endPause = r; });
+            const closing = name === 'pauseUntil(done)' ? w.held.pauseUntil(pauseOn) : close(w.held);
+            await g.started;
+            const asked = w.held.inPlace(B);
+            if (pause) {
+                expect(await asked).toBeNull();
+                g.release();
+                await closing;
+                endPause();
+                expect(w.opened).toEqual([B]);
+                return;
+            }
+            endPause();
+            expect(await pending(asked), 'it waits for the close').toBe(true);
+            expect(w.opened).toEqual([B]);
+            g.release();
+            await closing;
+            const second = (await asked)!;
+            expect(second).not.toBeNull();
+            expect(second.handle).not.toBe(first.handle);
+            expect(second.open()).toBe(true);
+            expect(first.open()).toBe(false);
+            expect(w.opened).toEqual([B, B]);
+            expect(w.fakes[0].closed).toBe(true);
+            expect(await (second.handle as Fake).getAllAsync('SELECT 1', [])).toEqual([{ file: B }]);
+        });
+    }
+
+    it('asked while its close is under way and refused by then (`placeRefused`: its chat left): waits, then null, nothing opened', async () => {
+        const left = new Set<string>();
+        const w = world([B], { placeRefused: (f) => left.has(f) });
+        await w.held.inPlace(B);
+        const g = w.holdNextClose();
+        left.add(B);
+        const closing = w.held.close(B);
+        await g.started;
+        const asked = w.held.inPlace(B);
+        expect(await pending(asked)).toBe(true);
+        g.release();
+        await closing;
+        expect(await asked).toBeNull();
+        expect(w.opened).toEqual([B]);
+        expect(w.held.openFiles()).toEqual([]);
+        // Refused from the first check too, with no close under way; held again, it opens.
+        expect(await w.held.inPlace(B)).toBeNull();
+        left.delete(B);
+        expect(await w.held.inPlace(B)).not.toBeNull();
+        expect(w.opened).toEqual([B, B]);
+    });
+
+    it('an open cut by a close that began meanwhile waits for that close, then opens again (never handed a closing connection)', async () => {
+        const w = world([B]);
+        w.holdOpens();
+        const asked = w.held.inPlace(B);
+        await ticks();
+        const closing = w.held.close(B);
+        w.letOpensGo();
+        await closing;
+        const place = (await asked)!;
+        expect(place).not.toBeNull();
+        expect(place.open()).toBe(true);
+        // The first connection was closed by the open it was cut in; the copy handed out is the second.
+        expect(w.opened).toEqual([B, B]);
+        expect(w.fakes[0].closed).toBe(true);
+        expect(w.fakes[1].closed).toBe(false);
+        expect(await (place.handle as Fake).getAllAsync('SELECT 1', [])).toEqual([{ file: B }]);
     });
 });
 

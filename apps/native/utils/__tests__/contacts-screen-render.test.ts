@@ -151,12 +151,16 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 const ME = vi.hoisted(() => ({ publicKey: '', privateKey: '' }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
+/** Each hold of a chat in place Contacts takes and lets go (db.ts enterChatInPlace, leaveChatInPlace; #3305 review), in order. */
+const holds = vi.hoisted(() => ({ log: [] as string[] }));
 vi.mock('../db', () => ({
-    createConversationApi: vi.fn(async () => ({ id: 'conv-1' })),
+    createConversationApi: vi.fn(async (...args: unknown[]) => { holds.log.push(`start ${String(args[5] ?? '')}`); return { id: 'conv-1' }; }),
     getChattedWithMembers: async () => mem.chats,
     getFriendsLocal: async () => mem.friends,
     // db.ts's refusal of a chat in place with no copy of that community to open (slice S2): tagged here as `noCopy`.
     isNoCopyInPlace: (e: unknown) => !!(e as { noCopy?: boolean } | null)?.noCopy,
+    enterChatInPlace: (community: string) => { holds.log.push(`enter ${community}`); },
+    leaveChatInPlace: async (community: string) => { holds.log.push(`leave ${community}`); },
 }));
 /** What db.ts throws when that community's copy can't be opened in place (not on the phone yet, a move or a delete under way). */
 const NO_COPY_IN_PLACE = Object.assign(new Error('This phone has switched community since this chat was opened.'), { noCopy: true });
@@ -314,6 +318,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         vi.mocked(switchCommunity).mockClear();
         const { createConversationApi } = await import('../db');
         vi.mocked(createConversationApi).mockClear();
+        holds.log.length = 0;
         expect(button('Open Riverbend ›')).toBeUndefined();
         await press('Message');
         expect(mem.alerts).toEqual([]);
@@ -321,6 +326,9 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         // Started in Riverbend by the address its saved list gives (this file's nodes stand-in), and opened there in place.
         expect(vi.mocked(createConversationApi).mock.calls).toEqual([['dm', [ME.publicKey, ANA], ME.publicKey, undefined, undefined, RIVERBEND]]);
         expect(mem.pushed).toEqual([{ pathname: '/chat/[id]', params: { id: 'conv-1', community: RIVERBEND, communityName: 'Riverbend' } }]);
+        // Held in place while it starts there, and let go once (#3305 review): a chat of Riverbend left a moment ago doesn't
+        // refuse it, and the chat it opens holds the copy from its own focus.
+        expect(holds.log).toEqual([`enter ${RIVERBEND}`, `start ${RIVERBEND}`, `leave ${RIVERBEND}`]);
         // Mutation: the S0 move kept for held communities -> switchCommunity is called and nothing is pushed.
     });
 
@@ -333,7 +341,10 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         const { createConversationApi } = await import('../db');
         vi.mocked(createConversationApi).mockClear();
         vi.mocked(createConversationApi).mockRejectedValueOnce(NO_COPY_IN_PLACE);
+        holds.log.length = 0;
         await press('Message');
+        // The try in place held Riverbend and let it go before the move (#3305 review): no hold is left behind.
+        expect(holds.log).toEqual([`enter ${RIVERBEND}`, `leave ${RIVERBEND}`]);
         // No question: the one switch, to the address the phone saved, and no chat started anywhere but the one try in place.
         expect(mem.alerts).toEqual([]);
         expect(vi.mocked(switchCommunity).mock.calls.map((c) => c[0])).toEqual([`${RIVERBEND}/`]);

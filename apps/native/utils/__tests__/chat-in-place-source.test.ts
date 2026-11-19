@@ -9,18 +9,19 @@
  *    copyInPlaceFor, on the file it names from its own parameter (`const file = getDatabaseFilenameForNode(community)`).
  * 10. A function of utils/db.ts that takes a chat's community (a parameter `community: ChatCommunity`, or getMessages's
  *     `const community = opts?.community`), the copy's own makers aside (chatCopyForRequest, chatReadFor, copyInPlaceFor,
- *     leaveChatInPlace):
+ *     enterChatInPlace, leaveChatInPlace):
  *     a. takes no copy itself: no getDb(), waitForInit() or 'beanpool_anchor_url' (with no community, chatReadFor stands
  *        in for the copy in use);
  *     b. hands `community` to every chatCopyForRequest / chatDbFor / chatReadFor it calls;
  *     c. hands `community` on to every function of the file it calls that takes one, at that function's own place for it
  *        (getMessages: `{ community }` in its options).
  *     And the functions that take one are the in-place set this slice built, no fewer (so the rules above are not vacuous).
- * 11. app/chat/[id].tsx, the DM screen (ChatScreen): every call of an in-place function (leaveChatInPlace too) hands it
+ * 11. app/chat/[id].tsx, the DM screen (ChatScreen): every call of an in-place function (enterChatInPlace and leaveChatInPlace too) hands it
  *     `at`, the community the chat lives in, at that function's place for it; every other function of utils/db.ts it calls
  *     sits behind `at`: in a function that returns (or throws) first when `at` is set, or under a condition that holds only
  *     with no `at`. The one exception is getKnownChatMute, a read of this run's memory by the chat's id (no copy, no server).
- * 12. app/chat/key-code.tsx hands its `at` to each of the three pin calls.
+ * 12. app/chat/key-code.tsx hands its `at` to each of the three pin calls, and holds the chat in place by that `at` while it
+ *     shows (enterChatInPlace, leaveChatInPlace in its cleanup), before its first read (#3305 review).
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
@@ -43,7 +44,7 @@ const IN_PLACE = [
 /** A function the DM screen may call with no `at`: it reads neither a copy nor a server (this run's memory, by the chat's id). */
 const NO_COPY = new Set(['getKnownChatMute']);
 /** The copy's own makers: they decide what the community names, and are read by rule 9 or by eye. */
-const MAKERS = new Set(['chatCopyForRequest', 'chatReadFor', 'chatDbFor', 'copyInPlaceFor', 'leaveChatInPlace']);
+const MAKERS = new Set(['chatCopyForRequest', 'chatReadFor', 'chatDbFor', 'copyInPlaceFor', 'enterChatInPlace', 'leaveChatInPlace']);
 const RESOLVERS = new Set(['chatCopyForRequest', 'chatDbFor', 'chatReadFor']);
 const TAKES_A_COPY = new Set(['getDb', 'waitForInit']);
 
@@ -217,7 +218,7 @@ export function screenHolesIn(source: string, takesAt: ReadonlyMap<string, numbe
 /** Where each in-place function of db.ts takes its community (leaveChatInPlace, a maker, too: the screen hands it `at`). */
 function takesAtOf(source: string): Map<string, number | 'opts'> {
     const { fns } = dbFunctions(source);
-    return new Map(fns.filter((f) => f.communityAt !== null && (!MAKERS.has(f.name) || f.name === 'leaveChatInPlace')).map((f) => [f.name, f.communityAt as number | 'opts']));
+    return new Map(fns.filter((f) => f.communityAt !== null && (!MAKERS.has(f.name) || f.name === 'enterChatInPlace' || f.name === 'leaveChatInPlace')).map((f) => [f.name, f.communityAt as number | 'opts']));
 }
 
 describe('slice S2: every in-place read and write takes its community by name', () => {
@@ -245,6 +246,26 @@ describe('slice S2: every in-place read and write takes its community by name', 
         for (const call of ['getDmKeyCodeInfo(String(id), at)', 'markDmPeerVerified(String(id), info.peer, at)', 'removeDmPeerVerification(String(id), at)']) {
             expect(source).toContain(call);
         }
+        // It holds the chat in place while it shows (#3305 review): the hold's effect is written before the first read's, so
+        // it runs first, and it lets go in its cleanup.
+        const hold = source.search(/useEffect\(\(\) => \{\s*if \(!at\) return;\s*enterChatInPlace\(at\);\s*return \(\) => \{ void leaveChatInPlace\(at\); \};\s*\}, \[at\]\);/);
+        expect(hold).toBeGreaterThan(0);
+        expect(hold).toBeLessThan(source.indexOf('useEffect(() => { void load(); }, [load]);'));
+    });
+
+    it('the DM screen holds the chat in place from its focus effect\'s start, before any read, and lets go in its cleanup (#3305 review)', () => {
+        const source = fs.readFileSync(CHAT_TSX, 'utf8');
+        const focus = source.slice(source.indexOf('useFocusEffect('));
+        const effect = focus.slice(0, focus.indexOf('}, [id, identity, loadConversationData, loadDeals, at])'));
+        const enter = effect.indexOf('if (at) enterChatInPlace(at);');
+        expect(enter).toBeGreaterThan(0);
+        expect(enter).toBeLessThan(effect.indexOf('loadConversationData();'));
+        expect(enter).toBeLessThan(effect.indexOf('loadMessages()'));
+        const cleanup = effect.slice(effect.lastIndexOf('return () => {'));
+        expect(cleanup).toMatch(/active = false;\s*inViewRef\.current = false;/);
+        expect(cleanup).toContain('if (at) void leaveChatInPlace(at);');
+        expect(effect.match(/enterChatInPlace\(/g)?.length).toBe(1);
+        expect(effect.match(/leaveChatInPlace\(/g)?.length).toBe(1);
     });
 
     it('the guard sees each rule broken (so a clean read above is a real one)', () => {

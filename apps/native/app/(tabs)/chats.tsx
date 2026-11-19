@@ -147,7 +147,9 @@ export default function ChatsScreen() {
     const [requests, setRequests] = useState<{ count: number; conversations: any[] } | null | undefined>(undefined);
     const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
     // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row.
-    const [onGlobal, setOnGlobal] = useState(0);
+    // Null until global has answered (or while an ask with nothing heard before goes unanswered): not known, which the row's red
+    // dot leaves out, where a 0 would read as a fall and bring the dot back on every start (PR #3298 review).
+    const [onGlobal, setOnGlobal] = useState<number | null>(null);
     // Chats with people in other communities, on this phone only; a request among them waits behind the same row.
     const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);
     const outsideRequests = React.useMemo(() => outsideChats.filter((c) => c.state === 'request'), [outsideChats]);
@@ -156,7 +158,7 @@ export default function ChatsScreen() {
     const guestInvites = React.useMemo(() => guestChats.filter((c) => c.state === 'invited'), [guestChats]);
     const { recheck, nodeUrl: communityUrl } = useNodeStatus();
     const otherNotices = useOtherCommunitiesNotices();
-    const requestsHere = requests ?? (onGlobal > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
+    const requestsHere = requests ?? ((onGlobal ?? 0) > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
     // The row's count and red dot (core dm-requests.ts requestsRowCount, utils/requests-seen.ts): every kind behind the row.
     const requestsWaitingNow = React.useMemo(
         () => ({ here: requestsHere, onGlobal, outside: outsideRequests, guestInvites }),
@@ -190,7 +192,7 @@ export default function ChatsScreen() {
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
-        if (requests === null && onGlobal === 0 && outsideRequests.length === 0 && guestInvites.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
+        if (requests === null && !onGlobal && outsideRequests.length === 0 && guestInvites.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
     }, [requests, onGlobal, outsideRequests.length, guestInvites.length, messagesFilter]);
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
     // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
@@ -1099,7 +1101,7 @@ export default function ChatsScreen() {
                 <MessageRequestsPane
                     entries={requestsHere.conversations}
                     count={requestsHere.count}
-                    onGlobal={onGlobal}
+                    onGlobal={onGlobal ?? 0}
                     onOpenGlobal={() => void openGlobalRequests(identity?.publicKey, recheck)}
                     outside={outsideRequests}
                     onOpenOutside={(c) => router.push(`/outside-chat/${c.id}`)}

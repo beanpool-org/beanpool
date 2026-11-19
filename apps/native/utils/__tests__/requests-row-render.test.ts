@@ -74,13 +74,18 @@ const row = () => host.querySelector('[data-testid="message-requests-row"]');
 const dot = () => host.querySelector('[data-testid="message-requests-dot"]');
 const style = (el: Element | null) => JSON.parse(el?.getAttribute('data-style') ?? '{}');
 
-beforeEach(() => {
-    store.clear();
-    theme.dark = false;
-    root?.unmount();
+/** A new screen on the same phone (an app start): the hook reads the kept mark again, as Chat does when it mounts. */
+function restart() {
+    act(() => { root?.unmount(); });
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
+}
+
+beforeEach(() => {
+    store.clear();
+    theme.dark = false;
+    restart();
 });
 
 describe('the Message requests row', () => {
@@ -119,6 +124,37 @@ describe('the Message requests row', () => {
         const newer: RequestsWaiting = { ...one, here: { count: 2, conversations: [req('2026-11-19T11:00:00Z'), ...one.here!.conversations] } };
         await show(createElement(Screen, { waiting: newer, open: false }));
         expect(host.querySelector('[data-testid="message-requests-count"]')?.textContent).toBe('2');
+        expect(dot()).not.toBeNull();
+    });
+
+    it('a cold start before global answers (null) keeps a seen count seen, and a real fall there is still followed (PR #3298 review)', async () => {
+        const onGlobal = (n: number | null): RequestsWaiting => ({ here: { count: 0, conversations: [] }, onGlobal: n, outside: [], guestInvites: [] });
+        await show(createElement(Screen, { waiting: onGlobal(2), open: true }));
+        // Each start: the mark is read first, global not known yet (chats.tsx's useState(null)), then global says the same 2.
+        for (let start = 0; start < 2; start++) {
+            restart();
+            await show(createElement(Screen, { waiting: onGlobal(null), open: false }));
+            await show(createElement(Screen, { waiting: onGlobal(2), open: false }));
+            expect(row()).not.toBeNull();
+            expect(dot()).toBeNull();
+        }
+        // Answered on global itself (2 → 1): followed, so the next one there (→ 2) shows the dot.
+        await show(createElement(Screen, { waiting: onGlobal(1), open: false }));
+        expect(dot()).toBeNull();
+        await show(createElement(Screen, { waiting: onGlobal(2), open: false }));
+        expect(dot()).not.toBeNull();
+    });
+
+    it('a late-delivered outside request lights the dot: this phone\'s time for it, never its sender\'s (PR #3298 review)', async () => {
+        const T = Date.parse('2026-11-19T10:00:00Z');
+        const A = { id: 'a', state: 'request', lastAt: T + 3_600_000, updatedAt: T + 3_900_000 };
+        const B = { id: 'b', state: 'request', lastAt: T, updatedAt: T + 7_200_000 };
+        const outside = (...cs: Array<typeof A>): RequestsWaiting => ({ here: { count: 0, conversations: [] }, onGlobal: 0, outside: cs, guestInvites: [] });
+        await show(createElement(Screen, { waiting: outside(A), open: true }));
+        restart();
+        await show(createElement(Screen, { waiting: outside(A), open: false }));
+        expect(dot()).toBeNull();
+        await show(createElement(Screen, { waiting: outside(A, B), open: false }));
         expect(dot()).not.toBeNull();
     });
 

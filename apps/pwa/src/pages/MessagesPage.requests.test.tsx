@@ -13,6 +13,7 @@ import { lockForDm } from '../lib/dm-lock';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys } from '../lib/group-chat-keys';
+import { requestsSeenStoreKey } from '../lib/requests-seen';
 
 // Message requests in the web app (DESIGN-message-a-friend-fable.md §4, slice S3), against the server's answers as PR #2392
 // gives them at 7d20c62d: every listing, read and refusal below was captured from that server on localhost (an open, a first
@@ -335,6 +336,63 @@ describe('requests waiting on the global community, behind the same row', () => 
         expect(screen.getByTestId('message-requests')).toBeInTheDocument();
     });
 
+    // PR #3298 review: the page passed 0 for global until it answered, so the mark followed a false fall and the same count a
+    // moment later lit the dot on every page load (and after any ask with no answer).
+    describe('the red dot, for what waits there', () => {
+        const markGlobal = () => JSON.parse(localStorage.getItem(requestsSeenStoreKey(ann.publicKey)) ?? 'null')?.global;
+        const dotNow = async () => within(await screen.findByTestId('message-requests-row')).queryByTestId('message-requests-dot');
+        async function seenWithTwo() {
+            localStorage.clear();
+            node.list = annListWith([]);
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            const page = render(<MessagesPage identity={idOf(ann)} />);
+            fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Back to chats' }));
+            expect(await dotNow()).toBeNull();
+            expect(markGlobal()).toBe(2);
+            page.unmount();
+        }
+
+        it('a count already seen keeps no dot on the next visit, read before global answers', async () => {
+            await seenWithTwo();
+            let answer: (found: typeof THERE) => void = () => {};
+            waitingOnGlobal.answer.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+            render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            await act(async () => {});
+            expect(markGlobal()).toBe(2);
+            await act(async () => { answer(THERE); });
+            expect((await screen.findByTestId('message-requests-row')).querySelector('[data-testid="message-requests-count"]')?.textContent).toBe('2');
+            expect(await dotNow()).toBeNull();
+            expect(markGlobal()).toBe(2);
+        });
+
+        it('an ask with no answer and nothing heard (not known) moves nothing, so the next answer of the same count has no dot', async () => {
+            await seenWithTwo();
+            waitingOnGlobal.answer.mockResolvedValue(undefined);
+            const page = render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            await act(async () => {});
+            expect(screen.queryByTestId('message-requests-row')).toBeNull();
+            expect(markGlobal()).toBe(2);
+            page.unmount();
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            render(<MessagesPage identity={idOf(ann)} />);
+            expect(await dotNow()).toBeNull();
+        });
+
+        it('a real fall there (one answered on global) is followed, so the next one there shows the dot', async () => {
+            await seenWithTwo();
+            waitingOnGlobal.answer.mockResolvedValue({ ...THERE, count: 1 });
+            const page = render(<MessagesPage identity={idOf(ann)} />);
+            expect(await dotNow()).toBeNull();
+            await waitFor(() => expect(markGlobal()).toBe(1));
+            page.unmount();
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            render(<MessagesPage identity={idOf(ann)} />);
+            expect(await screen.findByTestId('message-requests-dot')).toBeInTheDocument();
+        });
+    });
+
     it('nothing waiting there: no row and no way to them', async () => {
         node.list = annListWith([]);
         render(<MessagesPage identity={idOf(ann)} />);
@@ -426,7 +484,8 @@ describe('requests waiting on the global community, behind the same row', () => 
             render(<MessagesPage identity={idOf(ann)} />);
             await chips();
             await act(async () => {});
-            expect(waitingOnGlobal.answer.mock.calls[0][1]).toBeNull();
+            // Nothing heard yet: undefined, not known (a null here would be a "none waiting" the row's dot reads as a fall).
+            expect(waitingOnGlobal.answer.mock.calls[0][1]).toBeUndefined();
             clock += 6 * MINUTE;
             await flick();
             expect(waitingOnGlobal.answer.mock.calls[1][1]).toEqual(THERE);

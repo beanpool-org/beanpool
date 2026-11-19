@@ -292,13 +292,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // null where the community has requests off (its list has no `requests`).
     const [requests, setRequests] = useState<{ count: number; conversations: DmRequestEntry[] } | null>(null);
     // Requests waiting on the global community for a member who takes questions there (lib/show-on-global.ts): behind the same row.
-    const [onGlobal, setOnGlobal] = useState<{ count: number; href: string } | null>(null);
+    // Undefined until global has answered (or while an ask with nothing heard before goes unanswered): not known, which the
+    // row's red dot leaves out, where a 0 would read as a fall and bring the dot back on every visit (PR #3298 review).
+    const [onGlobal, setOnGlobal] = useState<{ count: number; href: string } | null | undefined>(undefined);
     // When global was last asked. The card opens global in a new tab and this page stays up, so what the member answers there is
     // heard when the tab comes back. Going to global lets go of this, or a quick answer would wait out the 5 minutes.
     const askedGlobalAt = useRef(0);
     useEffect(() => {
         let gone = false;
-        let shown: { count: number; href: string } | null = null;
+        let shown: { count: number; href: string } | null | undefined;
         let newest = 0;
         const ask = () => {
             const asking = ++newest;
@@ -364,7 +366,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => { if (!requests && !onGlobal && !outsideRequests.length && !guestInvites.length && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, outsideRequests.length, guestInvites.length, activeTab]);
     // The Message requests row's count and red dot (core dm-requests.ts requestsRowCount, lib/requests-seen.ts): every kind
     // waiting behind the row; the dot goes once the list has been open since the newest came.
-    const requestsWaiting = { here: requests, onGlobal: onGlobal?.count ?? 0, outside: outsideRequests, guestInvites };
+    const requestsWaiting = { here: requests, onGlobal: onGlobal === undefined ? null : onGlobal?.count ?? 0, outside: outsideRequests, guestInvites };
     const requestsRowTotal = requestsRowCount(requestsWaiting);
     const requestsUnseenNow = useRequestsUnseen(identity.publicKey, requestsWaiting,
         activeTab === 'requests' && (!!requests || !!onGlobal || outsideRequests.length > 0 || guestInvites.length > 0));

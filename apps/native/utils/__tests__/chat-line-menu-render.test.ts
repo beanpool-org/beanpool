@@ -138,7 +138,11 @@ const STACKS: Stack[] = [
 ];
 
 /** The lines, each with every action it allows (utils/chat-actions decides which a screen offers; here, the most). */
-interface Line { name: string; kind: ChatKind; isMe: boolean; text: string; actions: MessageActions; onReport: boolean; photo?: boolean }
+interface Line {
+    name: string; kind: ChatKind; isMe: boolean; text: string; actions: MessageActions; onReport: boolean; photo?: boolean;
+    /** A group's or an event chat's name over someone else's line (ChatBubble's authorLabel), and a line quoting another. */
+    author?: string; quote?: boolean;
+}
 const TWO = 'Yes, the trays are ready. Come by after four and bring the twine.';
 const FOUR = 'The trays are ready on the back step. Come by after four, bring the twine if you have it, and the pots too; I will leave the gate open for you.';
 const LINES: Line[] = [
@@ -165,7 +169,7 @@ const LABELS: [keyof MessageActions, string][] = [
  * The open line, laid out at the phone's width inside the list's padding: its height, where each action sits in it, and how far
  * its emoji row (when it is up) reaches past the cell, over it or under it, as Yoga places it (it is absolutely positioned).
  */
-function openLine(line: Line, p: Phone, s: Scale, emojiRow: EmojiRow = null) {
+function openLine(line: Line, p: { width: number; window: number }, s: Scale, emojiRow: EmojiRow = null) {
     flat.window = { width: p.width, height: p.window, fontScale: s };
     const styles = makeChatStyles({ theme: theme.name, colors: theme.colors } as any) as any;
     const item = { id: 'line-1', text: line.text, senderId: line.isMe ? 'me' : 'ben', timestamp: Date.now(), type: line.photo ? 'image' : 'text' } as unknown as ChatMessage;
@@ -177,6 +181,8 @@ function openLine(line: Line, p: Phone, s: Scale, emojiRow: EmojiRow = null) {
                 attachment: line.photo ? createElement('div', { 'data-style': JSON.stringify({ width: 220, height: 220 }) }) : undefined,
                 onPressBubble: () => {}, onReply: () => {}, onToggleEmojiPicker: () => {}, onEdit: () => {}, onDelete: () => {}, onRemove: () => {},
                 onReport: line.onReport ? () => {} : undefined, onPickEmoji: () => {},
+                authorLabel: line.author ?? null,
+                quote: line.quote ? { author: 'Bartholomew', text: 'Are the trays still there, and could I bring the twine on Saturday?' } : null,
             }))) as Parameters<Root['render']>[0]));
     const cell = host.querySelector('[data-testid="cell"]')!;
     const layout = layOut(host.querySelector('[data-testid="list"]')!, { width: p.width, height: 4000 }, { fontScale: s });
@@ -195,7 +201,10 @@ function openLine(line: Line, p: Phone, s: Scale, emojiRow: EmojiRow = null) {
     const picker = host.querySelector('[aria-label^="React with"]')?.parentElement;
     if (emojiRow) expect(picker, 'the emoji row drawn').toBeTruthy();
     const reach = picker ? { above: Math.max(0, -topIn(picker)), below: Math.max(0, topIn(picker) + layout.height(picker) - height) } : { above: 0, below: 0 };
-    return { height, actions, reach, bubble, round };
+    // The emoji row across the screen too, and what is drawn under the line's round buttons (Copy, Report, the edit-window note).
+    const emoji = picker ? across(picker) : null;
+    const under = actions.filter((a) => a.el && (a.k === 'copy' || a.k === 'report')).length > 0 || !!line.actions.editClosed;
+    return { height, actions, reach, bubble, round, emoji, under };
 }
 type OpenLine = ReturnType<typeof openLine>;
 
@@ -310,20 +319,44 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('every ch
 /**
  * Across the screen (emulator walk 147, 20 Nov 2026, 320 dp at 1.3× text, Light and Dark, a DM in place and one in the
  * community in use): Reply, React, Edit and Delete beside my two-line line pushed it past the screen's right edge, its words
- * cut, because the line kept its width beside them. Now they go to a line of their own over mine (under someone else's) when
- * the two don't fit, and stay beside a short line as before. Every line of the table, every phone, both text sizes: the
- * bubble and each round button lie inside the list's padding, and never over each other.
+ * cut, because the line kept its width beside them. Now they go to a line of their own under the line when the two don't
+ * fit, mine and someone else's alike (mine at the right), over Copy and Report, and stay beside a short line as before.
+ *
+ * Every chat that draws a line's menu with ChatMessageRow: the DM (in place too: the same screen), a group (the name over
+ * someone else's line, a convenor's Remove), an enterprise thread (its keeper's Remove, nothing else) and an event chat (its
+ * host's Remove); a guest chat draws no menu (below). Every phone and a wide screen, both text sizes, light and dark: the
+ * bubble and each round button lie inside the list's padding and never over each other, and the emoji row, opened over the
+ * line, never lies on buttons that have a line of their own. (#3307's first head put mine over my line: there the emoji row
+ * lay on the top 7 dp of Reply, React, Edit and Delete at 1.3×, and a dragged thread showed them between my line and the
+ * one over it, walk 147 r8fix/02.)
  */
+const MINE: MessageActions = { reply: true, react: true, edit: true, delete: true, remove: false, copy: true };
 const SHORT: Line[] = [
-    { name: 'my short line', kind: 'dm', isMe: true, text: 'Yes.', onReport: false, actions: { reply: true, react: true, edit: true, delete: true, remove: false, copy: true } },
+    { name: 'my short line', kind: 'dm', isMe: true, text: 'Yes.', onReport: false, actions: MINE },
     { name: 'someone else\'s short line', kind: 'dm', isMe: false, text: 'Yes.', onReport: true, actions: OTHERS },
-    { name: 'my one-letter line', kind: 'dm', isMe: true, text: 'k', onReport: false, actions: { reply: true, react: true, edit: true, delete: true, remove: false, copy: true } },
+    { name: 'my one-letter line', kind: 'dm', isMe: true, text: 'k', onReport: false, actions: MINE },
 ];
+/** What each screen hands ChatMessageRow for a line (GroupChatView, EventChatView, app/chat/[id].tsx; utils/chat-actions). */
+const KEEPER: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: true, copy: true };
+const SCREEN_LINES: Line[] = [
+    { name: 'a group: someone else\'s line under their name, a convenor\'s menu', kind: 'group', isMe: false, text: TWO, author: 'Bartholomew Riverside-Hilltop', onReport: true, actions: { reply: true, react: true, edit: false, delete: false, remove: true, report: true, copy: true } },
+    { name: 'a group: my four-line line', kind: 'group', isMe: true, text: FOUR, onReport: false, actions: MINE },
+    { name: 'an enterprise thread: someone else\'s line under their name, its keeper\'s Remove', kind: 'enterprise', isMe: false, text: FOUR, author: 'Bartholomew', onReport: false, actions: KEEPER },
+    { name: 'an enterprise thread: the keeper\'s own line', kind: 'enterprise', isMe: true, text: TWO, onReport: false, actions: KEEPER },
+    { name: 'an event chat: someone else\'s line under their name, its host\'s Remove', kind: 'event', isMe: false, text: FOUR, author: 'Bartholomew', onReport: false, actions: KEEPER },
+    { name: 'an event chat: the host\'s own line', kind: 'event', isMe: true, text: TWO, onReport: false, actions: KEEPER },
+    { name: 'a DM: my line quoting another', kind: 'dm', isMe: true, text: TWO, quote: true, onReport: false, actions: MINE },
+    { name: 'a DM: someone else\'s line quoting mine', kind: 'dm', isMe: false, text: 'Yes.', quote: true, onReport: true, actions: OTHERS },
+    { name: 'a DM: my photo', kind: 'dm', isMe: true, text: '', photo: true, onReport: false, actions: { reply: true, react: true, edit: false, delete: true, remove: false } },
+    { name: 'someone else\'s photo', kind: 'dm', isMe: false, text: '', photo: true, onReport: true, actions: { ...OTHERS, copy: false } },
+];
+/** A wide screen: a tablet or an unfolded phone held upright (Android installs the app there; iOS draws it as a phone). */
+const WIDE = { name: 'a wide screen, 800 × 1280', width: 800, window: 1280 };
 describe.each([['light', lightColors], ['dark', darkColors]] as const)('a line and its round buttons stay inside the screen, %s', (name, colors) => {
     beforeEach(() => { theme.colors = colors; theme.name = name; });
     const overlap = (a: { left: number; right: number; top: number; bottom: number }, b: typeof a) =>
         Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
-    for (const p of PHONES) for (const s of [1, 1.3] as const) for (const line of [...LINES, ...TALL.slice(0, 2), ...SHORT]) {
+    for (const p of [...PHONES, WIDE]) for (const s of [1, 1.3] as const) for (const line of [...LINES, ...TALL.slice(0, 2), ...SHORT, ...SCREEN_LINES]) {
         it(`${p.name} at ${s}×: ${line.name}`, () => {
             const open = openLine(line, p, s);
             const inner = { left: 16, right: p.width - 16 };
@@ -340,19 +373,32 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('a line a
             // Mine stay at the right: my line keeps to the list's right edge.
             if (line.isMe) expect(b.right, 'my line at the right').toBeGreaterThan(inner.right - 1);
             // Beside the line when the two fit in its row (85% of the list, the buttons' 8-dp margin included), as before; else
-            // on a line of their own, over mine or under someone else's, never beside it and cut.
+            // on a line of their own under it, mine and someone else's alike, never beside it and cut.
             const bar = { left: Math.min(...open.round.map((r) => r.left)), right: Math.max(...open.round.map((r) => r.right)), top: Math.min(...open.round.map((r) => r.top)), bottom: Math.max(...open.round.map((r) => r.bottom)) };
             const fits = (b.right - b.left) + (bar.right - bar.left) + 8 <= 0.85 * (p.width - 32) + 0.5;
             if (fits) {
                 expect(bar.top < b.bottom && bar.bottom > b.top, 'beside the line: on its band').toBe(true);
                 if (line.isMe) expect(bar.right, 'left of my line').toBeLessThanOrEqual(b.left + 0.5);
                 else expect(bar.left, 'right of their line').toBeGreaterThanOrEqual(b.right - 0.5);
-            } else if (line.isMe) {
-                expect(bar.bottom, 'over my line').toBeLessThanOrEqual(b.top + 0.5);
-                // At the right, in from its edge by the buttons' own 8-dp margin (styles actionButtonsMe).
-                expect(bar.right, 'at the right, over my line').toBeGreaterThan(inner.right - 8 - 1);
             } else {
-                expect(bar.top, 'under their line').toBeGreaterThanOrEqual(b.bottom - 0.5);
+                expect(bar.top, 'under the line').toBeGreaterThanOrEqual(b.bottom - 0.5);
+                // Mine at the right, in from its edge by the buttons' own 8-dp margin (styles actionButtonsMe); theirs at the left.
+                if (line.isMe) expect(bar.right, 'at the right, under my line').toBeGreaterThan(inner.right - 8 - 1);
+                else expect(bar.left, 'at the left, under their line').toBeLessThan(inner.left + 8 + 1);
+                // Over Copy and Report: the line's menu is one block under it.
+                for (const a of open.actions) if (a.k === 'copy' || a.k === 'report') expect(a.top, `${a.label} under the round buttons`).toBeGreaterThanOrEqual(bar.bottom - 0.5);
+            }
+            // The emoji row (React, where the chat has it). Over the line, where it opens unless the line is held in the screen's top
+            // 230 dp: never on buttons that have their own line. Under it: never on them while Copy, Report or the edit-window note
+            // is under them (it lies on the last of those, as before). With nothing under them (my photo, no words to copy) it lies
+            // on their lowest few dp, as it lay on the line's before; where the emoji row goes is a design of its own (walk 147's
+            // second finding). Beside the line the buttons are where they always were, and so is the emoji row.
+            if (!line.actions.react || fits) return;
+            for (const at of ['top', 'bottom'] as const) {
+                const withRow = openLine(line, p, s, at);
+                const row = withRow.emoji!;
+                if (at === 'bottom' && !withRow.under) continue;
+                for (const r of withRow.round) expect(overlap(r, row), `the emoji row ${at === 'top' ? 'over' : 'under'} the line clear of ${r.label}`).toBe(false);
             }
         });
     }

@@ -67,9 +67,13 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
     systemActionBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: colors.surface.card, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary },
     systemActionText: { color: colors.brand.primary, fontWeight: '700', fontSize: 12 },
 
-    /** A line with its round buttons beside it (ChatMessageRow): they wrap to a line of their own when the two don't fit. */
+    /**
+     * A line with its round buttons beside it (ChatMessageRow): they wrap to a line of their own, under it, when the two don't
+     * fit. Mine come first in the row (left of my line), so my row wraps in reverse to put them under it too: never between my
+     * line and the one over it, and never under the emoji row, which opens over the line.
+     */
     lineRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', rowGap: 6, maxWidth: '85%' },
-    lineRowMe: { justifyContent: 'flex-end' },
+    lineRowMe: { justifyContent: 'flex-end', flexWrap: 'wrap-reverse' },
     actionButtonsContainer: { flexDirection: 'row', gap: 6, alignItems: 'center' },
     actionButtonsMe: { marginRight: 8 },
     actionButtonsOther: { marginLeft: 8 },

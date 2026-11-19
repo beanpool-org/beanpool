@@ -317,6 +317,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         headerTextContainer: { flex: 1, justifyContent: 'center' },
         headerTitle: { fontSize: 16, fontWeight: '800', color: colors.text.body, letterSpacing: 0.5 },
         headerSubtitle: { fontSize: 11, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
+        // A chat in place (slice S2): its community's name in grey under the person's, as Chat's held row says it.
+        headerCommunity: { fontSize: 11, color: colors.text.secondary, fontWeight: '600', marginTop: 2 },
         // The subtitle's row: "🔒 End-to-end encrypted" gives way first at 320 dp and 1.3× text, so "Verified ✓" stays whole.
         headerSubtitleRow: { flexDirection: 'row', alignItems: 'center' },
         headerSubtitleText: { flexShrink: 1 },
@@ -1655,7 +1657,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle} numberOfLines={1}>{peerName}</Text>
                         {/* In place (slice S2): the community this chat lives in, its name as the phone saved it, in grey. */}
-                        {inPlace?.name ? <Text style={styles.headerSubtitle} numberOfLines={1}>{inPlace.name}</Text> : null}
+                        {inPlace?.name ? <Text style={styles.headerCommunity} numberOfLines={1} testID="chat-in-place-community">{inPlace.name}</Text> : null}
                         <View style={styles.headerSubtitleRow}>
                             <Text style={[styles.headerSubtitle, styles.headerSubtitleText]} numberOfLines={1}>
                                 {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via your community')}

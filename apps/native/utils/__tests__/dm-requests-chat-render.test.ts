@@ -818,3 +818,167 @@ describe('a chat in place, left while its poll, a push or a read is on its way (
         // Mutation: drop the in-view check after the thread's read -> markConversationRead is called after the leave.
     });
 });
+
+describe('a chat in place opens nothing of the community in use: no listing, profile or deal of its (slice S2, #3305 review)', () => {
+    const RIVER = 'https://riverside.example';
+    const KOFI_THERE = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: null, listed: 1 };
+    /** A deal's notice, as the node posts it into the pair's own chat: it names the listing (metadata.postId). */
+    const notice = (systemType: string, text: string) => ({
+        id: `n-${systemType}`, type: 'system', senderId: 'SYSTEM', systemType, text, metadata: { postId: 'p-ladder' }, rawTimestamp: iso(now - 60_000), timestamp: '',
+    });
+    const FUNDED = notice('ESCROW_FUNDED', 'The Beans are held in trust.');
+    const RELEASED = notice('ESCROW_RELEASED', 'The Beans were released.');
+    const CANCELLED = notice('ESCROW_CANCELLED', 'The deal was cancelled.');
+    /** A line sent from a listing (Message on a listing): its card names the listing. */
+    const ABOUT_LINE = {
+        id: 'a1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'is it still free?', rawTimestamp: iso(now - 30_000), timestamp: '',
+        about: { postId: 'p-ladder', title: 'Borrow a long ladder', kind: 'offer' },
+    };
+    /** The chat's own listing, with a deal on it whose Beans are mine to release: the sticky header and the release bar. */
+    const ON_A_LISTING = {
+        ...KOFI_THERE, postId: 'p-ladder', postTitle: 'Borrow a long ladder', postStatus: 'pending', price_c: 500, price_type: 'fixed',
+        pendingTxId: 'tx-held', pendingAmount_c: 500, txBuyerPubkey: ME.publicKey,
+    };
+    const HELD_DEAL = { txId: 'tx-held', postId: 'p-ladder', postTitle: 'Borrow a long ladder', status: 'pending', buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key', iAmBuyer: true, amount_c: 500 };
+    /** A deal of theirs on my listing: the strip's card, which opens the listing at that deal. */
+    const STRIP_DEAL = { txId: 'tx-eggs', postId: 'p-eggs', postTitle: 'Duck eggs', status: 'pending', buyerPubkey: 'kofi-key', sellerPubkey: ME.publicKey, iAmBuyer: false, amount_c: 300 };
+
+    let went: Array<[string, unknown]>;
+    beforeEach(() => {
+        went = [];
+        for (const how of ['push', 'replace', 'navigate'] as const) vi.spyOn(router, how).mockImplementation(((to: unknown) => { went.push([how, to]); }) as never);
+    });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    async function openChat(inPlace: boolean, over: Answers): Promise<void> {
+        params.now = inPlace ? { id: 'dm1', community: RIVER, communityName: 'Riverside' } : { id: 'dm1' };
+        standIn({ getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true, ...over });
+        await open();
+        expect(host.textContent).toContain('Kofi');
+    }
+    const buttonReading = (words: string) => (): HTMLElement | null =>
+        Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.trim() === words) ?? null;
+    const buttonHolding = (words: string) => (): HTMLElement | null =>
+        Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.includes(words)) ?? null;
+    const openMenu = async () => { await tap('More options'); };
+
+    /**
+     * Every tap target of the DM screen that opens a listing, a profile, a deal or a route of a community (the class closed
+     * after #3305's deciding review of 465fb8f9). `goes`: where it leads in an ordinary chat, the community in use's (null:
+     * no move; `asks`, what it reads of that community's copy). In place it is not there (`absent`), or there with a tap that
+     * opens nothing (`inert`), or it goes where it does named by the chat's own community (`named`, `inPlaceGoes`).
+     */
+    interface Row {
+        name: string; over: Answers; open?: () => Promise<void>; find: () => HTMLElement | null;
+        goes: [string, unknown] | null; asks?: string; inPlace: 'absent' | 'inert' | 'named'; inPlaceGoes?: [string, unknown];
+    }
+    const ROWS: Row[] = [
+        ...[FUNDED, RELEASED, CANCELLED].map((line): Row => ({
+            name: `View Post on a deal's notice (${line.systemType})`, over: { getMessages: [line] }, find: buttonReading('View Post'),
+            goes: ['push', '/post/p-ladder'], inPlace: 'absent',
+        })),
+        {
+            name: "Rate your partner on a deal's notice (ESCROW_RELEASED)", over: { getMessages: [RELEASED] }, find: buttonReading('Rate your partner'),
+            goes: null, asks: 'db.getDb', inPlace: 'absent',
+        },
+        {
+            name: "a listing's card on a line", over: { getMessages: [ABOUT_LINE] }, find: () => host.querySelector<HTMLElement>('[data-testid="chat-about-card"]'),
+            goes: ['push', '/post/p-ladder'], inPlace: 'inert',
+        },
+        {
+            name: "the person's name at the top (their profile)", over: {}, find: buttonHolding('End-to-end encrypted'),
+            goes: ['push', { pathname: '/public-profile', params: { publicKey: 'kofi-key', callsign: 'Kofi' } }], inPlace: 'inert',
+        },
+        {
+            name: 'View profile in the menu', over: {}, open: openMenu, find: buttonReading('View profile'),
+            goes: ['push', { pathname: '/public-profile', params: { publicKey: 'kofi-key', callsign: 'Kofi' } }], inPlace: 'absent',
+        },
+        {
+            name: "the listing's header over the chat", over: { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL] },
+            find: buttonHolding('Borrow a long ladder'), goes: ['push', '/post/p-ladder'], inPlace: 'absent',
+        },
+        {
+            name: 'Release on the bar under it', over: { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL] },
+            find: () => (host.textContent?.includes('Action needed: release the Beans')
+                ? Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.startsWith('Release')) ?? null
+                : null),
+            goes: null, inPlace: 'absent',
+        },
+        {
+            name: "a deal's card on the strip", over: { getDealsBetween: [STRIP_DEAL] }, find: buttonHolding('Duck eggs'),
+            goes: ['push', { pathname: '/post/[id]', params: { id: 'p-eggs', txId: 'tx-eggs' } }], inPlace: 'absent',
+        },
+        {
+            name: 'Key code in the menu', over: {}, open: openMenu, find: buttonReading('Key code'),
+            goes: ['push', { pathname: '/chat/key-code', params: { id: 'dm1' } }],
+            inPlace: 'named', inPlaceGoes: ['push', { pathname: '/chat/key-code', params: { id: 'dm1', community: RIVER } }],
+        },
+    ];
+
+    for (const row of ROWS) it(`${row.name}: in an ordinary chat it is offered, and leads to the community in use`, async () => {
+        await openChat(false, row.over);
+        await row.open?.();
+        const target = row.find();
+        expect(target, 'offered in an ordinary chat (so its in-place row is not vacuous)').not.toBeNull();
+        const before = net.calls.length;
+        await act(async () => { target!.click(); });
+        await settle();
+        if (row.goes) expect(went).toEqual([row.goes]);
+        if (row.asks) expect(net.calls.slice(before)).toContain(row.asks);
+    });
+
+    for (const row of ROWS) it(`${row.name}: in place it opens nothing of the community in use`, async () => {
+        await openChat(true, row.over);
+        await row.open?.();
+        const target = row.find();
+        if (row.inPlace === 'absent') expect(target, 'not offered in place').toBeNull();
+        else {
+            expect(target, 'shown in place').not.toBeNull();
+            await act(async () => { target!.click(); });
+            await settle();
+        }
+        expect(went).toEqual(row.inPlace === 'named' ? [row.inPlaceGoes] : []);
+        // Nothing of a deal or a listing is read in place, from the copy in use or any other.
+        expect(net.calls.filter((c) => ['db.getDealsBetween', 'db.getDb', 'db.lookupAboutListing'].includes(c))).toEqual([]);
+        // Mutation: drop `!at &&` from the notice's View Post -> its three rows find View Post in place.
+    });
+
+    /** Taps every button the screen shows: the menu's (opened again as each row closes it) and each line's actions included. */
+    async function tapEverything(): Promise<string[]> {
+        const tapped = new Set<string>();
+        const keyOf = (b: HTMLElement) => b.getAttribute('aria-label') ?? b.textContent?.trim() ?? '';
+        const untapped = () => Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => !tapped.has(keyOf(b))) ?? null;
+        for (let i = 0; i < 120; i++) {
+            let next = untapped();
+            if (!next) {
+                // Each menu row closes the menu: open it again, and stop once it holds nothing new.
+                await openMenu();
+                next = untapped();
+                if (!next) break;
+            }
+            tapped.add(keyOf(next));
+            const b = next;
+            await act(async () => { b.click(); });
+            await settle(3);
+        }
+        return [...tapped];
+    }
+    const EVERYTHING: Answers = { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL, STRIP_DEAL], getMessages: [FUNDED, RELEASED, CANCELLED, ABOUT_LINE] };
+
+    it('every button of a chat in place, with all of these there to show: the one move is Key code, named by its community', async () => {
+        await openChat(true, EVERYTHING);
+        const tapped = await tapEverything();
+        expect(tapped).toEqual(expect.arrayContaining(['More options', 'Key code', 'Back']));
+        expect(tapped.length).toBeGreaterThan(8);
+        expect(went).toEqual([['push', { pathname: '/chat/key-code', params: { id: 'dm1', community: RIVER } }]]);
+        expect(net.calls.filter((c) => ['db.getDealsBetween', 'db.getDb', 'db.lookupAboutListing', 'db.completeMarketplaceTransaction', 'db.cancelMarketplaceTransaction', 'db.reportDmLine'].includes(c))).toEqual([]);
+        // Mutation: drop `!at &&` from the notice's View Post -> went holds ['push', '/post/p-ladder'].
+    });
+
+    it('control: the same taps in an ordinary chat open the listing, the person and the deal (so the sweep above would see them)', async () => {
+        await openChat(false, EVERYTHING);
+        await tapEverything();
+        const to = went.map(([, where]) => (typeof where === 'string' ? where : (where as { pathname: string }).pathname));
+        expect(to).toEqual(expect.arrayContaining(['/post/p-ladder', '/public-profile', '/post/[id]', '/chat/key-code']));
+    });
+});

@@ -1363,8 +1363,9 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 </View>
                 <Text style={chat.systemTimestamp}>{messageTime(item)}</Text>
 
-                {/* Inline post link — only when it points somewhere the sticky header doesn't already cover */}
-                {item.metadata?.postId && item.metadata.postId !== postContext?.id && (
+                {/* Inline post link — only when it points somewhere the sticky header doesn't already cover. Not in place
+                    (slice S2): the listing screen reads the community in use, which never has this chat's listing. */}
+                {!at && item.metadata?.postId && item.metadata.postId !== postContext?.id && (
                     <Pressable
                         accessibilityRole="button"
                         style={chat.systemActionBtn}

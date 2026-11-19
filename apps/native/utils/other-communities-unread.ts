@@ -27,7 +27,9 @@
  * (utils/node-version-gate.ts), so its round is refused before it leaves the phone and counts as no answer.
  *
  * **What the phone does with an answer.** Its `unread` is that community's number on the BeanPool sheet (notice-counts.ts).
- * `requests` is not looked at: a message request makes no badge and no alert until it is accepted (Marty, 1 Nov).
+ * `requests` is kept beside it (notice-counts.ts `readNoticeRequests`) for Chat's line "1 message request in {community}"
+ * alone (Marty, 19 Nov 2026): it is in no number, no badge and no notice, as a message request makes no alert until it is
+ * accepted (Marty, 1 Nov).
  *
  * **Its own notice, where no push can have said it** (R5). A rise in `alerts` posts one notice, written down before it is
  * posted so it is never posted twice: "You have new messages in {community}", in the phone's own words, with the name the
@@ -173,7 +175,7 @@ function savedName(saved: ReturnType<typeof savedRows>, community: string): stri
 }
 
 /** A count as a community's answer gave it, or null for anything that isn't a count. */
-function countIn(body: unknown, field: 'unread' | 'alerts'): number | null {
+function countIn(body: unknown, field: 'unread' | 'alerts' | 'requests'): number | null {
     const count = body && typeof body === 'object' ? (body as Partial<UnreadAnswer>)[field] : undefined;
     return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : null;
 }
@@ -187,7 +189,7 @@ function saysNotTheirs(answer: { status: number; body: unknown }): boolean {
  * What `community` says waits, with `alerts` standing at `unread` where a node too old to send it says nothing of them;
  * `'not-theirs'` where it says the account isn't theirs; null for no answer, or anything that isn't a count. Never throws.
  */
-async function countAt(community: string, account: Account, deps: RoundDeps, signal: AbortSignal): Promise<{ unread: number; alerts: number } | 'not-theirs' | null> {
+async function countAt(community: string, account: Account, deps: RoundDeps, signal: AbortSignal): Promise<{ unread: number; alerts: number; requests: number } | 'not-theirs' | null> {
     const answer = await signedAnswer(`${community}${UNREAD_PATH}`, account, deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS, signal);
     if (!answer) return null;
     if (saysNotTheirs(answer)) return 'not-theirs';
@@ -195,7 +197,7 @@ async function countAt(community: string, account: Account, deps: RoundDeps, sig
         try { deps.heard(community, answer.body); } catch (e) { console.warn('[Notices] A round\'s answer was not passed on', e); }
     }
     const unread = answer.ok ? countIn(answer.body, 'unread') : null;
-    return unread === null ? null : { unread, alerts: countIn(answer.body, 'alerts') ?? unread };
+    return unread === null ? null : { unread, alerts: countIn(answer.body, 'alerts') ?? unread, requests: countIn(answer.body, 'requests') ?? 0 };
 }
 
 /** The phone's own notice for a rise, unless it may not notify or that community's own push said so. True if one went out. */
@@ -236,7 +238,7 @@ async function askOne(community: string, account: Account, deps: RoundDeps, sign
         return false;
     }
     if (!count || !await stillForAlerts(deps.storage, community)) return false;
-    if (!await noteServerUnread(deps.storage, community, count.unread, count.alerts)) return false;
+    if (!await noteServerUnread(deps.storage, community, count.unread, count.alerts, count.requests)) return false;
     // Again before the notice: the switch can go off between the number and the telling.
     return await stillForAlerts(deps.storage, community) && tell(community, name, account, deps);
 }

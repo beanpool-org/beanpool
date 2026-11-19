@@ -76,7 +76,7 @@ const STUBS = {
     '@expo/vector-icons': `
         import React from 'react';
         import { Text } from 'react-native-web';
-        const glyph = { 'chevron-right': '›', 'chevron-down': '⌄', close: '✕' };
+        const glyph = { 'chevron-right': '›', 'chevron-down': '⌄', close: '✕', 'message-question-outline': '✉' };
         export const MaterialCommunityIcons = ({ name, style, size, color }) => React.createElement(Text, { style: [{ fontSize: size, color: color || '#000' }, style] }, glyph[name] || '•');
     `,
     'expo-constants': `export default { expoConfig: { version: '1.2.84' } };`,
@@ -121,6 +121,7 @@ import { createRoot } from 'react-dom/client';
 import { View, Text } from 'react-native';
 import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { OtherCommunityNotices } from ${JSON.stringify(path.join(NATIVE, 'components/OtherCommunityNotices'))};
+import { MessageRequestsRow } from ${JSON.stringify(path.join(NATIVE, 'components/MessageRequestsRow'))};
 import BeanPoolSheet from ${JSON.stringify(path.join(NATIVE, 'app/beanpool'))};
 
 const q = new URLSearchParams(location.search);
@@ -144,11 +145,15 @@ const Chat = () => (
             notices={[
                 { url: 'https://castlemaine.example', name: 'Castlemaine and the Goldfields Region Network', count: 3 },
                 { url: 'https://byron.example', name: 'Byron', count: 1 },
+                // A message request waiting in another community: its own line (Marty, 19 Nov 2026).
+                { url: 'https://hillside.example', name: 'Hillside Neighbours Network', count: 0, requests: 2 },
             ]}
             busy={false}
             onOpen={() => {}}
             note={q.get('note') === '1' ? 'Something went wrong. Try again in a moment.' : null}
         />
+        {/* Chat's Message requests row (components/MessageRequestsRow.tsx): the count, and the red dot while unopened. */}
+        <MessageRequestsRow count={12} unseen={q.get('dot') !== '0'} onPress={() => {}} />
         <Text style={{ padding: 16, color: colors.text.secondary, fontSize: 13 }}>(the conversation list, not drawn here)</Text>
     </View>
 );

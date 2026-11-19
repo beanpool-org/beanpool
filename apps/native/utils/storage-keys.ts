@@ -146,6 +146,19 @@ export function messageRequestsStoreKey(publicKey: string, file: string): string
     return `${MESSAGE_REQUESTS_STORE_PREFIX}${publicKey.toLowerCase()}:${file}`;
 }
 
+/** Every {@link messageRequestsSeenStoreKey} key starts with this. */
+export const MESSAGE_REQUESTS_SEEN_STORE_PREFIX = 'beanpool_message_requests_seen:';
+
+/**
+ * How far one account had opened Chat's Message requests list in one community file (core dm-requests.ts RequestsSeen,
+ * JSON): the row's red dot shows while something newer waits (Marty, 19 Nov 2026). Times and a count, nothing of who
+ * wrote. Per (account, file), as the list it marks is; Sign Out and Replace wipe every one by
+ * {@link MESSAGE_REQUESTS_SEEN_STORE_PREFIX} (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export function messageRequestsSeenStoreKey(publicKey: string, file: string): string {
+    return `${MESSAGE_REQUESTS_SEEN_STORE_PREFIX}${publicKey.toLowerCase()}:${file}`;
+}
+
 /**
  * The key each of one account's direct messages in one community file is sealed to, as this phone pinned it
  * (utils/dm-peer-pins.ts): `{ pins }`, conversation id lower-cased → pin. One value per (account, file), so no community's
@@ -205,7 +218,7 @@ export function dmLinesAtUpdateStoreKey(publicKey: string, file: string): string
  */
 export const PER_FILE_STORE_KEYS: readonly ((publicKey: string, file: string) => string)[] = [
     dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey, dmConversationsSeenStoreKey, dmConversationsSeenSetAsideStoreKey, dmLinesAtUpdateStoreKey,
-    messageRequestsStoreKey,
+    messageRequestsStoreKey, messageRequestsSeenStoreKey,
 ];
 
 /**

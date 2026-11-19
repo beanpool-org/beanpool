@@ -93,6 +93,34 @@ describe('what waits on global', () => {
         expect(await requestsWaitingOnGlobal(me, 800_000)).toBe(2);
     });
 
+    it('no answer with nothing heard before is not known (null), never a 0 the row\'s dot would read as a fall (PR #3298 review)', async () => {
+        await noteQuestionsOpened(me.publicKey);
+        net.get.mockImplementation(async () => { throw new TypeError('Network request failed'); });
+        expect(await requestsWaitingOnGlobal(me, 1_000)).toBeNull();
+        net.get.mockImplementation(async () => answer(null, false));
+        expect(await requestsWaitingOnGlobal(me, 2_000)).toBeNull();
+        // Then global answers: its count.
+        net.get.mockImplementation(async () => answer(2));
+        expect(await requestsWaitingOnGlobal(me, 3_000)).toBe(2);
+    });
+
+    it('a storage read that fails is not known either: what it last heard, or null', async () => {
+        await noteQuestionsOpened(me.publicKey);
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const read = AsyncStorage.getItem;
+        try {
+            AsyncStorage.getItem = async () => { throw new Error('storage is busy'); };
+            expect(await requestsWaitingOnGlobal(me, 1_000)).toBeNull();
+            AsyncStorage.getItem = read;
+            expect(await requestsWaitingOnGlobal(me, 2_000)).toBe(2);
+            AsyncStorage.getItem = async () => { throw new Error('storage is busy'); };
+            expect(await requestsWaitingOnGlobal(me, 3_000)).toBe(2);
+        } finally {
+            AsyncStorage.getItem = read;
+        }
+        expect(net.get).toHaveBeenCalledTimes(1);
+    });
+
     it('no key on this phone: nothing', async () => {
         expect(await requestsWaitingOnGlobal(null)).toBe(0);
         expect(await requestsWaitingOnGlobal({ publicKey: me.publicKey } as any)).toBe(0);

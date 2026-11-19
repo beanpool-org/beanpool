@@ -43,8 +43,14 @@ export const hostHere = () => audienceOf(homeAddress());
 
 /** The global community this web app's community names, or null: never a fixed name of ours. */
 export async function globalAddress(): Promise<string | null> {
-    const info = await communityInfoOnce().catch(() => null);
-    return globalCommunityLink(info ?? null, hostHere())?.href.replace(/\/+$/, '') ?? null;
+    return (await globalAddressRead()) ?? null;
+}
+
+/** As {@link globalAddress}, and undefined where this community gave no answer, so which global it names isn't known. */
+async function globalAddressRead(): Promise<string | null | undefined> {
+    const read = await communityInfoOnce().then((info) => ({ info }), () => null);
+    if (!read) return undefined;
+    return globalCommunityLink(read.info ?? null, hostHere())?.href.replace(/\/+$/, '') ?? null;
 }
 
 function dataUrlOf(blob: Blob): Promise<string> {
@@ -151,16 +157,20 @@ function noteQuestionsOpened(publicKey: string): void {
 
 /**
  * How many wait on global for this key, in a count alone, and where they are. Null where nothing does. `kept` is what a page is
- * showing: where global gives no answer it stands, as the phone's count does, so a blip doesn't take the row away.
+ * showing: where global (or this community, which names it) gives no answer it stands, as the phone's count does, so a blip
+ * doesn't take the row away. Undefined while the page has heard nothing yet, so a first ask with no answer says not known,
+ * never a 0 the row's red dot would read as a fall (core dm-requests.ts RequestsWaiting; PR #3298 review).
  */
-export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity, kept: GlobalRequests | null = null): Promise<GlobalRequests | null> {
+export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity, kept?: GlobalRequests | null): Promise<GlobalRequests | null | undefined> {
     try {
         if (localStorage.getItem(QUESTIONS_KEY) !== identity.publicKey) return null;
     } catch {
         return null;
     }
-    const global = await globalAddress();
-    if (!global || !identity.privateKey) return null;
+    if (!identity.privateKey) return null;
+    const global = await globalAddressRead();
+    if (global === undefined) return kept;
+    if (!global) return null;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);
     try {

@@ -13,6 +13,7 @@ import { lockForDm } from '../lib/dm-lock';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys } from '../lib/group-chat-keys';
+import { requestsSeenStoreKey } from '../lib/requests-seen';
 
 // Message requests in the web app (DESIGN-message-a-friend-fable.md §4, slice S3), against the server's answers as PR #2392
 // gives them at 7d20c62d: every listing, read and refusal below was captured from that server on localhost (an open, a first
@@ -186,20 +187,50 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('the Message requests row', () => {
-    it('is one plain row at the top of Chat: no count and no badge, and no filter pill', async () => {
+    // Marty, 19 Nov 2026: the row shows how many wait and a small red dot until the list is opened (it replaced his 1 Nov
+    // "no count and no badge until one is accepted" for this row alone). Still no filter pill, chip count or unread count.
+    it('is one row at the top of Chat with the count in a pill and a red dot while unopened, and no filter pill', async () => {
+        localStorage.clear();
         node.list = annListWith([requestEntry(bo, CONV)]);
         render(<MessagesPage identity={idOf(ann)} />);
         const row = await screen.findByTestId('message-requests-row');
-        expect(row).toHaveAccessibleName('Message requests');
-        expect(row.textContent).not.toMatch(/\d/);
+        expect(row).toHaveAccessibleName('Message requests: 1 waiting');
+        expect(within(row).getByTestId('message-requests-count').textContent).toBe('1');
+        expect(within(row).getByTestId('message-requests-dot')).toBeInTheDocument();
+        expect(row.getAttribute('aria-description')).toBe('New since you last looked');
         expect(screen.queryByTestId('conversation-filter-count-requests')).toBeNull();
         expect(Array.from((await chips()).querySelectorAll('button')).map(b => b.textContent)).toEqual(['All', 'Transactions', 'Direct', 'Groups']);
     });
 
-    it('shows no number however many wait', async () => {
+    it('counts what the node says waits, more than it lists, as 99+ past 99', async () => {
         node.list = annListWith([requestEntry(bo, CONV)], 120);
         render(<MessagesPage identity={idOf(ann)} />);
-        expect((await screen.findByTestId('message-requests-row')).textContent).not.toMatch(/\d/);
+        const row = await screen.findByTestId('message-requests-row');
+        expect(within(row).getByTestId('message-requests-count').textContent).toBe('99+');
+        expect(row).toHaveAccessibleName('Message requests: 120 waiting');
+    });
+
+    it('loses the dot once the list has been opened, and gets it back for a newer request', async () => {
+        localStorage.clear();
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        const { unmount } = render(<MessagesPage identity={idOf(ann)} />);
+        expect(within(await screen.findByTestId('message-requests-row')).queryByTestId('message-requests-dot')).not.toBeNull();
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Back to chats' }));
+        const row = await screen.findByTestId('message-requests-row');
+        expect(within(row).queryByTestId('message-requests-dot')).toBeNull();
+        expect(row.getAttribute('aria-description')).toBeNull();
+        unmount();
+        // Next visit, a newer request has come: the dot is back.
+        const cy = person('Cy');
+        const NEWER = new Date(Date.parse(REQUESTED_AT) + 60_000).toISOString();
+        node.list = annListWith([
+            requestEntry(cy, 'conv-cy', { request: { state: 'pending', from: cy.publicKey, at: NEWER }, participants: [ann.publicKey, cy.publicKey] }),
+            requestEntry(bo, CONV),
+        ]);
+        render(<MessagesPage identity={idOf(ann)} />);
+        const again = await screen.findByTestId('message-requests-row');
+        expect(within(again).getByTestId('message-requests-count').textContent).toBe('2');
+        expect(within(again).queryByTestId('message-requests-dot')).not.toBeNull();
     });
 
     it('opens a view of its own, as a chat does: Back to chats at its top, with no Chats · Forum switch, title or filter chips above it (walk 2)', async () => {
@@ -305,6 +336,79 @@ describe('requests waiting on the global community, behind the same row', () => 
         expect(screen.getByTestId('message-requests')).toBeInTheDocument();
     });
 
+    // PR #3298 review: the page passed 0 for global until it answered, so the mark followed a false fall and the same count a
+    // moment later lit the dot on every page load (and after any ask with no answer).
+    describe('the red dot, for what waits there', () => {
+        const markGlobal = () => JSON.parse(localStorage.getItem(requestsSeenStoreKey(ann.publicKey)) ?? 'null')?.global;
+        const dotNow = async () => within(await screen.findByTestId('message-requests-row')).queryByTestId('message-requests-dot');
+        async function seenWithTwo() {
+            localStorage.clear();
+            node.list = annListWith([]);
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            const page = render(<MessagesPage identity={idOf(ann)} />);
+            fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Back to chats' }));
+            expect(await dotNow()).toBeNull();
+            expect(markGlobal()).toBe(2);
+            page.unmount();
+        }
+
+        it('a count already seen keeps no dot on the next visit, read before global answers', async () => {
+            await seenWithTwo();
+            let answer: (found: typeof THERE) => void = () => {};
+            waitingOnGlobal.answer.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+            render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            await act(async () => {});
+            expect(markGlobal()).toBe(2);
+            await act(async () => { answer(THERE); });
+            expect((await screen.findByTestId('message-requests-row')).querySelector('[data-testid="message-requests-count"]')?.textContent).toBe('2');
+            expect(await dotNow()).toBeNull();
+            expect(markGlobal()).toBe(2);
+        });
+
+        it('an ask with no answer and nothing heard (not known) moves nothing, so the next answer of the same count has no dot', async () => {
+            await seenWithTwo();
+            waitingOnGlobal.answer.mockResolvedValue(undefined);
+            const page = render(<MessagesPage identity={idOf(ann)} />);
+            await chips();
+            await act(async () => {});
+            expect(screen.queryByTestId('message-requests-row')).toBeNull();
+            expect(markGlobal()).toBe(2);
+            page.unmount();
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            render(<MessagesPage identity={idOf(ann)} />);
+            expect(await dotNow()).toBeNull();
+        });
+
+        it('another account on the same page: the count before was the last one\'s, so its own mark moves on nothing until global answers', async () => {
+            localStorage.clear();
+            localStorage.setItem(requestsSeenStoreKey(bo.publicKey), JSON.stringify({ here: 0, outside: 0, guest: 0, global: 3 }));
+            node.list = annListWith([]);
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            const { rerender } = render(<MessagesPage identity={idOf(ann)} />);
+            expect(await screen.findByTestId('message-requests-row')).toBeInTheDocument();
+            let answer: (found: typeof THERE) => void = () => {};
+            waitingOnGlobal.answer.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+            rerender(<MessagesPage identity={idOf(bo)} />);
+            await act(async () => {});
+            expect(JSON.parse(localStorage.getItem(requestsSeenStoreKey(bo.publicKey))!).global).toBe(3);
+            await act(async () => { answer({ ...THERE, count: 3 }); });
+            expect(await dotNow()).toBeNull();
+        });
+
+        it('a real fall there (one answered on global) is followed, so the next one there shows the dot', async () => {
+            await seenWithTwo();
+            waitingOnGlobal.answer.mockResolvedValue({ ...THERE, count: 1 });
+            const page = render(<MessagesPage identity={idOf(ann)} />);
+            expect(await dotNow()).toBeNull();
+            await waitFor(() => expect(markGlobal()).toBe(1));
+            page.unmount();
+            waitingOnGlobal.answer.mockResolvedValue(THERE);
+            render(<MessagesPage identity={idOf(ann)} />);
+            expect(await screen.findByTestId('message-requests-dot')).toBeInTheDocument();
+        });
+    });
+
     it('nothing waiting there: no row and no way to them', async () => {
         node.list = annListWith([]);
         render(<MessagesPage identity={idOf(ann)} />);
@@ -396,7 +500,8 @@ describe('requests waiting on the global community, behind the same row', () => 
             render(<MessagesPage identity={idOf(ann)} />);
             await chips();
             await act(async () => {});
-            expect(waitingOnGlobal.answer.mock.calls[0][1]).toBeNull();
+            // Nothing heard yet: undefined, not known (a null here would be a "none waiting" the row's dot reads as a fall).
+            expect(waitingOnGlobal.answer.mock.calls[0][1]).toBeUndefined();
             clock += 6 * MINUTE;
             await flick();
             expect(waitingOnGlobal.answer.mock.calls[1][1]).toEqual(THERE);
@@ -973,7 +1078,7 @@ describe('the sender\'s side', () => {
         node.list = boList(pending());
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
         render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a message request. Ann will see it under Message requests, without a notification. You can write again once they accept.');
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
         expect(screen.queryByRole('button', { name: 'React to message' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Reply to message' })).toBeNull();
@@ -992,7 +1097,7 @@ describe('the sender\'s side', () => {
         expect(screen.queryByTestId('request-first-line')).toBeNull();
         expect(screen.queryByTitle('Send photo')).toBeNull();
         await act(async () => { open(); });
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a message request. Ann will see it under Message requests, without a notification. You can write again once they accept.');
         expect(screen.queryByTestId('request-first-line')).toBeNull();
     });
 
@@ -1080,7 +1185,7 @@ describe('the sender\'s side', () => {
         node.gates[CONV] = new Promise<void>(() => {});
         fireEvent.change(screen.getByPlaceholderText('Message...'), { target: { value: 'Hello again' } });
         fireEvent.click(screen.getByTitle('Send message'));
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a message request. Ann will see it under Message requests, without a notification. You can write again once they accept.');
         expect(sendMessageApi).toHaveBeenCalledTimes(1);
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
     });
@@ -1134,7 +1239,7 @@ describe('the sender\'s side', () => {
         node.list = { ...boList(hers), conversations: [{ ...boList(hers).conversations[0], peerCallsign: 'Bo' }] };
         node.reads[CONV] = readOf(hers, [herLine]);
         render(<MessagesPage identity={idOf(ann)} openConversationId={CONV} />);
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Bo will see it under Message requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a message request. Bo will see it under Message requests, without a notification. You can write again once they accept.');
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
         expect(screen.queryByText('Are you still there?')).toBeNull();
     });

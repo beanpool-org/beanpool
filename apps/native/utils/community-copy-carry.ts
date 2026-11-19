@@ -47,7 +47,7 @@ import { copyCopyFile, databaseDirectory, deleteCopyFile, exists, fileUri } from
 import { getDatabaseFilenameForNode } from './nodes';
 import {
     PER_FILE_STORE_KEYS, dmConversationsSeenSetAsideStoreKey, dmConversationsSeenStoreKey, dmLinesAtUpdateStoreKey,
-    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey, messageRequestsStoreKey,
+    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey, messageRequestsStoreKey, messageRequestsSeenStoreKey,
 } from './storage-keys';
 import { pinsWithCarried } from './dm-peer-pins';
 import { seenWithCarried } from './dm-guard-list';
@@ -77,6 +77,8 @@ export const MERGES: ReadonlyMap<KeyOf, Merge> = new Map<KeyOf, Merge>([
     [dmLinesAtUpdateStoreKey, (here, carried) => linesHeldWithCarried(here, carried)],
     // The node's last list of the member's requests, which its next sync replaces: the new name's own stays.
     [messageRequestsStoreKey, keepHere],
+    // How far the requests list was opened (the row's red dot): the new name's own stays, the old name's where there is none.
+    [messageRequestsSeenStoreKey, keepHere],
 ]);
 
 /** One per-account key of a file: its key now, how it goes, and the same key under another file's name. */

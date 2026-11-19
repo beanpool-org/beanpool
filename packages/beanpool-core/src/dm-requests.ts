@@ -10,7 +10,9 @@ import { isBusyError, busyWords } from './busy-answer.js';
  * What waits for a member in one community, in counts alone (GET /api/me/unread): both apps read it, and it names nobody
  * and no chat. `unread` is the lines in the chats their list shows, so the number can always be opened and cleared.
  * `requests` is the message requests waiting for them: never in `unread`, and no badge or alert is made of it
- * (Marty, 1 Nov 2026: nothing until accepted). `asOf` is when the node counted (ISO 8601).
+ * (Marty, 1 Nov 2026: nothing until accepted). Since 19 Nov 2026 (Marty) the phone shows it on Chat's line about another
+ * community ("1 message request in {community}") and the row's count ({@link requestsRowCount}), and nowhere else. `asOf`
+ * is when the node counted (ISO 8601).
  *
  * `alerts` is how many lines of `unread` the node would have sent this member a push about: never those of a chat they muted
  * (an @mention of them gets through, as it does a mute), none with their Direct Messages off, none of an event's chat, none
@@ -180,4 +182,104 @@ export function requestReportNotSentWords(outcome: Exclude<RequestReportOutcome,
 export function requestPendingRefusal(e: unknown): string | null {
     const err = e as { code?: unknown; message?: unknown } | null | undefined;
     return err?.code === 'dm_request_pending' && typeof err.message === 'string' && err.message.trim() ? err.message : null;
+}
+
+/**
+ * The one "Message requests" row at the top of Chat (both apps): how many wait behind it, and whether any came since the
+ * member last opened the list (the small red dot). Marty, 19 Nov 2026, after a global test where a first message waited as a
+ * request and the person it was for never saw it: the plain row read as a heading, not a button. It replaced his 1 Nov 2026
+ * rule (no count and no badge until one is accepted) for the row alone: still NO push, and nothing in the app-icon badge,
+ * the tab's badge or the unread count, because a stranger's line must not ring a phone set to another community.
+ *
+ * What it counts, each kind waiting behind the row: the node's own requests for the member here (`here.count`, the node's
+ * total, which may be more than it lists), those waiting on global for a member who ticked a door (`onGlobal`, a count
+ * only), a request from someone in another community kept on this device (`outside`), and an invitation to a group chat
+ * hosted elsewhere (`guestInvites`). Each is someone waiting for an answer, and the row's tap shows every one of them.
+ *
+ * `onGlobal` is null (or undefined) while it isn't known: global not asked yet, or an ask that failed with nothing heard
+ * before. Both apps read the mark before global answers, so a 0 there would read as a fall, the mark would follow it, and
+ * the same count from global a moment later would light the dot on every visit (PR #3298 review). While it isn't known, the
+ * global part is left out of the dot and the mark alike.
+ */
+export interface RequestsWaiting {
+    here: { count: number; conversations: ReadonlyArray<{ request?: { at?: string | null } | null }> } | null | undefined;
+    onGlobal: number | null | undefined;
+    outside: ReadonlyArray<{ updatedAt?: number | null }>;
+    guestInvites: ReadonlyArray<{ updatedAt?: number | null }>;
+}
+
+/**
+ * Where the member had opened the list up to, kept per account and community on the device: for each kind, the newest time
+ * it had then, each from one clock alone so none is compared with another's: the node's for `here` (when it took the
+ * request), and this device's for `outside` and `guest` (when the line or invitation was written here, `updatedAt`). Never
+ * a sender's: an outside line's own time (`lastAt`) is its sender's signed envelope time, and a line held on the way (up to
+ * 7 days) or from a sender whose clock is ahead (up to a day) would come in older than the mark: a new request with no dot
+ * (PR #3298 review). And the count waiting on global then, which has no time.
+ *
+ * Global gives a count alone, no times: one answered there and another come between two reads leave the count the same, and
+ * the new one has no dot until the count moves.
+ */
+export interface RequestsSeen { here: number; outside: number; guest: number; global: number }
+
+const NO_SEEN: RequestsSeen = { here: 0, outside: 0, guest: 0, global: 0 };
+
+const whole = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.floor(x) : 0);
+
+/** How many wait behind the row, all kinds added up (none on global while that count isn't known). */
+export function requestsRowCount(w: RequestsWaiting): number {
+    return whole(w.here?.count) + whole(w.onGlobal) + w.outside.length + w.guestInvites.length;
+}
+
+/** The newest of each kind now, as {@link RequestsSeen} keeps it; the global count null while it isn't known. */
+export function requestsNewest(w: RequestsWaiting): Omit<RequestsSeen, 'global'> & { global: number | null } {
+    const most = (xs: number[]) => xs.reduce((m, x) => (Number.isFinite(x) && x > m ? x : m), 0);
+    return {
+        here: most((w.here?.conversations ?? []).map((c) => at(c.request?.at))),
+        outside: most(w.outside.map((c) => Number(c.updatedAt ?? NaN))),
+        guest: most(w.guestInvites.map((c) => Number(c.updatedAt ?? NaN))),
+        global: typeof w.onGlobal === 'number' && Number.isFinite(w.onGlobal) ? whole(w.onGlobal) : null,
+    };
+}
+
+/**
+ * The red dot: something waits that came after the member last opened the list. With no mark kept (never opened on this
+ * device, or a mark that can't be read), anything waiting is new. A global count not known yet lights nothing.
+ */
+export function requestsUnseen(w: RequestsWaiting, seen: RequestsSeen | null): boolean {
+    if (requestsRowCount(w) === 0) return false;
+    if (!seen) return true;
+    const now = requestsNewest(w);
+    return now.here > seen.here || now.outside > seen.outside || now.guest > seen.guest || (now.global !== null && now.global > seen.global);
+}
+
+/**
+ * The mark to keep, or null when nothing changes (so nothing is written). `opened`: the list shows, so everything in it is
+ * seen (each kind's newest, never moving back). Otherwise only the global count follows a fall (an answer given on global
+ * itself), so the next one there shows the dot. Only a count read from global moves the mark's: one not known yet keeps it.
+ */
+export function requestsSeenNext(w: RequestsWaiting, seen: RequestsSeen | null, opened: boolean): RequestsSeen | null {
+    const now = requestsNewest(w);
+    if (!opened) return seen && now.global !== null && now.global < seen.global ? { ...seen, global: now.global } : null;
+    const s = seen ?? NO_SEEN;
+    const next = { here: Math.max(s.here, now.here), outside: Math.max(s.outside, now.outside), guest: Math.max(s.guest, now.guest), global: now.global ?? s.global };
+    const same = !!seen && next.here === seen.here && next.outside === seen.outside && next.guest === seen.guest && next.global === seen.global;
+    return same ? null : next;
+}
+
+/** A kept mark, as storage gave it; null for none or one that can't be read. */
+export function parseRequestsSeen(raw: string | null | undefined): RequestsSeen | null {
+    try {
+        const v = JSON.parse(raw ?? 'null') as Partial<Record<keyof RequestsSeen, unknown>> | null;
+        if (!v || typeof v !== 'object') return null;
+        const ok = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 0;
+        if (!ok(v.here) || !ok(v.outside) || !ok(v.guest) || !ok(v.global)) return null;
+        return { here: v.here, outside: v.outside, guest: v.guest, global: v.global };
+    } catch {
+        return null;
+    }
+}
+
+/** The row's count as its pill shows it. */
+export function requestsPillText(n: number): string {
+    return n > 99 ? '99+' : String(n);
 }

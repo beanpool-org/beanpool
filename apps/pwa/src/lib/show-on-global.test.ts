@@ -229,10 +229,26 @@ describe('what waits on global, for the one Message requests row (slice GD)', ()
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('a community that names no global, or no answer: nothing, and it throws nothing', async () => {
+    it('no answer with nothing shown is not known (undefined), never a nothing the row\'s dot would read as a fall; it throws nothing', async () => {
+        // PR #3298 review: a failed first ask read as "none waiting", the dot's mark followed that false fall, and the same
+        // count a moment later lit the dot on every visit.
         await takeQuestions('home-1', true, me).catch(() => {});
         fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
-        expect(await requestsWaitingOnGlobal(me)).toBeNull();
+        expect(await requestsWaitingOnGlobal(me)).toBeUndefined();
+        fetchMock.mockResolvedValue(new Response('{}', { status: 503 }));
+        expect(await requestsWaitingOnGlobal(me)).toBeUndefined();
+        // This community's own answer (which names global) not there either: not known, and global isn't asked.
+        vi.mocked(communityInfoOnce).mockRejectedValue(new TypeError('Failed to fetch'));
+        fetchMock.mockClear();
+        expect(await requestsWaitingOnGlobal(me)).toBeUndefined();
+        const shown = { count: 3, href: 'https://global.test/' };
+        expect(await requestsWaitingOnGlobal(me, shown)).toBe(shown);
+        expect(await requestsWaitingOnGlobal(me, null)).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('a community that names no global: nothing, and global isn\'t asked', async () => {
+        await takeQuestions('home-1', true, me).catch(() => {});
         vi.mocked(communityInfoOnce).mockResolvedValue({ profile: 'local', addresses: [] } as never);
         fetchMock.mockClear();
         expect(await requestsWaitingOnGlobal(me)).toBeNull();

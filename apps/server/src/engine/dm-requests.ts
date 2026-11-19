@@ -103,7 +103,11 @@
  *
  * A request alerts nobody and counts in no badge until it is accepted (Marty, 1 Nov 2026, chat design S1.1; it replaced his
  * answer of 23 Oct, one push an hour, once the push token began going to every community a phone keeps, where a stranger's
- * line would have reached phones set elsewhere). It waits behind the one "Message requests" row at the top of Chat. Its line
+ * line would have reached phones set elsewhere). It waits behind the one "Message requests" row at the top of Chat. Marty,
+ * 19 Nov 2026, after a global test where the person it was for never saw one (the plain row read as a heading): that row
+ * shows how many wait and a small red dot until the list is opened, in both apps, from `requests` here and in GET
+ * /api/me/unread (core dm-requests.ts requestsRowCount). That replaced the 1 Nov "no count" for the row alone: still no
+ * push, and nothing in the badge or the unread count, for the reason above. Its line
  * does the push's work all the same and drops it, as a withheld one does, so the work after the answer never tells a sender
  * which happened (#1403 re-review). Once it is accepted, a line pushes as any line.
  *

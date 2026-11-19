@@ -51,26 +51,34 @@ export async function openGlobalRequests(publicKey: string | null | undefined, r
 /**
  * How many wait on global for this key. 0 on a phone that has opened no door, and on global itself, whose own list has them: and
  * whatever the member answers there changes the count, so the one kept here goes, or the row is still there when they get home.
+ * With no answer it says what it last heard, and null where it has heard nothing: not known.
  */
-export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity | null | undefined, now: number = Date.now()): Promise<number> {
+export async function requestsWaitingOnGlobal(identity: BeanPoolIdentity | null | undefined, now: number = Date.now()): Promise<number | null> {
     if (!identity?.privateKey) return 0;
-    const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+    // No answer from global (or from this phone's own storage), with nothing heard before: null, not known. The row's red dot
+    // leaves that out, where a 0 would read as a fall and bring the dot back on every start (core dm-requests.ts
+    // RequestsWaiting; PR #3298 review).
+    const heard = () => (asked?.key === identity.publicKey ? asked.count : null);
+    const anchor = await AsyncStorage.getItem('beanpool_anchor_url').then((v) => v, () => undefined);
+    if (anchor === undefined) return heard();
     if (!anchor || audienceOf(anchor) === audienceOf(GLOBAL_NODE_URL)) {
         asked = null;
         return 0;
     }
-    if ((await AsyncStorage.getItem(QUESTIONS_OPENED_STORE_KEY).catch(() => null)) !== identity.publicKey) return 0;
+    const ticked = await AsyncStorage.getItem(QUESTIONS_OPENED_STORE_KEY).then((v) => v, () => undefined);
+    if (ticked === undefined) return heard();
+    if (ticked !== identity.publicKey) return 0;
     if (asked?.key === identity.publicKey && now - asked.at < ASK_EVERY_MS) return asked.count;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);
     try {
         const res = await signedGet(GLOBAL_NODE_URL, '/api/me/unread', identity, controller.signal);
         const answer: any = res.ok ? await res.json() : null;
-        if (typeof answer?.requests !== 'number') return asked?.key === identity.publicKey ? asked.count : 0;
+        if (typeof answer?.requests !== 'number') return heard();
         asked = { key: identity.publicKey, at: now, count: answer.requests };
         return answer.requests;
     } catch {
-        return asked?.key === identity.publicKey ? asked.count : 0;
+        return heard();
     } finally {
         clearTimeout(timer);
     }

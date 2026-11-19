@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { onNoticeCounts, readNoticeCounts } from './notice-counts';
+import { onNoticeCounts, readNoticeCounts, readNoticeRequests } from './notice-counts';
 import { getSavedNodes } from './nodes';
 import { sameCommunity } from './push-pins';
 import { communityName } from './community-name';
@@ -26,12 +26,15 @@ export function useNoticeCounts(): Record<string, number> {
 export interface OtherCommunityNotice {
     url: string;
     name: string;
+    /** Unread messages there (its number on the sheet and in the badge). */
     count: number;
+    /** Message requests waiting there: Chat's line alone, never a number or a badge (notice-counts.ts readNoticeRequests). */
+    requests: number;
 }
 
 /**
- * Other communities where unread messages wait, with their display name and count (design R6): for Talk's row at the top
- * of ChatsScreen. Empty until read or when none wait.
+ * Other communities where unread messages or message requests wait, with their display name and counts (design R6): for
+ * Talk's rows at the top of ChatsScreen. Empty until read or when none wait.
  */
 export function useOtherCommunitiesNotices(): OtherCommunityNotice[] {
     const [notices, setNotices] = useState<OtherCommunityNotice[]>([]);
@@ -39,23 +42,28 @@ export function useOtherCommunitiesNotices(): OtherCommunityNotice[] {
         let alive = true;
         const read = async () => {
             try {
-                const [counts, saved] = await Promise.all([
+                const [counts, requests, saved] = await Promise.all([
                     readNoticeCounts(AsyncStorage),
+                    readNoticeRequests(AsyncStorage),
                     getSavedNodes().catch(() => []),
                 ]);
                 if (!alive) return;
-                const entries = Object.entries(counts).filter(([, count]) => typeof count === 'number' && count > 0);
+                const urls = [...new Set([...Object.keys(counts), ...Object.keys(requests)])];
+                const entries = urls
+                    .map((url) => [url, counts[url] ?? 0, requests[url] ?? 0] as const)
+                    .filter(([, count, waiting]) => count > 0 || waiting > 0);
                 if (entries.length === 0) {
                     setNotices([]);
                     return;
                 }
-                const result: OtherCommunityNotice[] = entries.map(([url, count]) => {
+                const result: OtherCommunityNotice[] = entries.map(([url, count, waiting]) => {
                     const hit = saved.find((n) => sameCommunity(n.url, url));
                     const hitName = (hit as any)?.name;
                     return {
                         url: hit?.url ?? url,
                         name: (typeof hitName === 'string' && hitName.trim() ? hitName.trim() : communityName(hit ?? { url })),
                         count,
+                        requests: waiting,
                     };
                 });
                 setNotices(result);

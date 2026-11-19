@@ -5962,7 +5962,6 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     return removePostEngine(broadcast, id, authorPublicKey, dispatchPushNotification);
 }
 
-/** A member's copy takes questions, or stops (engine/event-copy.ts). Null for anything but the signer's own copy. */
 /** A device's word that the signer's copies are still in step at home (engine/copy-lease.ts), with this node's broadcast. */
 export function confirmCopies(ids: readonly string[], signer: string): string[] {
     return confirmCopiesEngine(broadcast, ids, signer);
@@ -5973,6 +5972,7 @@ export function sweepCopyLeases(nowMs = Date.now()): number {
     return sweepCopyLeasesEngine(broadcast, nowMs);
 }
 
+/** A member's copy takes questions, or stops (engine/event-copy.ts). Null for anything but the signer's own copy. */
 export function setCopyQuestions(id: string, signer: string, on: boolean): boolean | null {
     return setCopyQuestionsEngine(broadcast, id, signer, on);
 }

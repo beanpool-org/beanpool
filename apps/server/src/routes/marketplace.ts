@@ -1010,7 +1010,6 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
     }
 });
 
-// "Take questions about this on the global community" (engine/event-copy.ts): an Offer's or Need's door, by its own author alone.
 /** A copy's lease from its own author's write (engine/copy-lease.ts). Never in the write's way: it is the write that counts. */
 function leaseFrom(id: string, actor: string | undefined): void {
     if (!actor || standbyWritesNothing()) return;
@@ -1046,6 +1045,7 @@ router.post('/api/marketplace/posts/copies/confirm', async (ctx) => {
     }
 });
 
+// "Take questions about this on the global community" (engine/event-copy.ts): an Offer's or Need's door, by its own author alone.
 // A route of its own, since an edit is refused to a muted member and closing a door never is.
 router.post('/api/marketplace/posts/takes-questions', async (ctx) => {
     const { id, on } = (ctx as any).requestBody || {};

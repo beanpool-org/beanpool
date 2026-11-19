@@ -550,6 +550,7 @@ export const SUITES = [
     'test-listings-from-here',
     'test-copy-door',
     'test-copy-cors',
+    'test-copy-lease',
     'test-offer-copy-credit',
     'test-enterprise-event-http',
     'test-enterprise-post-edit-http',

@@ -113,6 +113,8 @@ vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => {}) }));
+// The route's check (held-chats.ts) imports Chat's blocklist read, which loads react-native: nobody is blocked here.
+vi.mock('../blocklist', () => ({ getBlockedUsers: vi.fn(async () => []) }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
@@ -126,6 +128,7 @@ import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { openDmLine, sealDmLine } from '../e2e-crypto';
 import { dmPeerPinsStoreKey } from '../storage-keys';
+import { chatInPlaceRoute, heldChatsInView } from '../held-chats';
 
 // A finished sync ends with require('react-native') for a DeviceEventEmitter nudge: answered at node's loader for the file.
 const realLoad = (Module as any)._load;
@@ -1084,6 +1087,147 @@ describe('a link naming another community with an id its copy holds as no DM: no
         // Mutations: the poll's gate off -> red only at the line above (B still blanks: the memory is kept by the copy's
         // file); the gate off AND the memory kept by the community in use (currentDbName) -> red at B's line, which keeps its
         // words (the review's second effect).
+    });
+
+    it('a held DM whose page A\'s node types a group\'s, carrying a deleted account\'s tombstone: polled in place, A\'s lines of theirs go, and B still blanks its own (#3305 max review r2 N1)', async () => {
+        // The gate passes this one (A's copy holds it as a DM); the page's own type is what lets a tombstone blank
+        // (chat-sync.ts accountDeletedAuthor), and a node relisting a DM as a group's chat is the DM guard's own threat.
+        const gone = person();
+        const tombstoneIn = (conv: Conv) => readableLine(conv, gone, 'This message was deleted',
+            JSON.stringify({ accountDeleted: true, removedBy: gone.publicKey, removedAt: tick() }), 'removed');
+        const plainOld = (conv: Conv, words: string): Line => ({ id: randomUUID(), conversationId: conv.id, authorPubkey: gone.publicKey, ciphertext: Buffer.from(words, 'utf8').toString('base64'), nonce: 'plaintext-v1', type: 'text', metadata: null, timestamp: tick(), editedAt: null });
+        // A holds an older line of theirs, in a group A keeps (the in-place poll's blanking reaches A's whole copy).
+        const groupA: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, gone.publicKey] };
+        const olderInA = plainOld(groupA, 'my old words in A');
+        keptIn(A_FILE, groupA, olderInA);
+        // B holds an older line of theirs in a group of its own, still holding its words; B's page of it names the tombstone.
+        const groupB: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, gone.publicKey] };
+        node.convs.push(groupB);
+        const olderInB = plainOld(groupB, 'my old words in B');
+        keptIn(B_FILE, groupB, olderInB);
+        tombstoneIn(groupB);
+        // A's node now answers the held DM's page as a group's, with the tombstone on it.
+        dm.type = 'group_thread';
+        tombstoneIn(dm);
+        const typeInA = () => (rowsOf(A_FILE)!.conversations as any[]).find((c) => c.id === dm.id)?.type;
+        expect(typeInA()).toBe('dm');
+        db.enterChatInPlace(A);
+        expect(await db.syncSingleConversation(dm.id, A), 'the held DM is polled in place (the gate passes it)').toBe(true);
+        await db.leaveChatInPlace(A);
+        expect(typeInA(), 'A\'s row stays a DM').toBe('dm');
+        const lineOf = (file: string, id: string) => (rowsOf(file)!.messages as any[]).find((m) => m.id === id);
+        expect({ type: lineOf(A_FILE, olderInA.id)?.type, nonce: lineOf(A_FILE, olderInA.id)?.nonce }, 'the poll in place blanked A\'s line of the account').toEqual({ type: 'removed', nonce: 'plaintext-v1' });
+        expect(lineOf(B_FILE, olderInB.id)?.type, 'nothing of B\'s blanked by A\'s poll').toBe('text');
+        // B's own poll of its group: its older line of that account is blanked, as with no poll in place at all.
+        expect(await db.syncSingleConversation(groupB.id)).toBe(true);
+        expect({ type: lineOf(B_FILE, olderInB.id)?.type, nonce: lineOf(B_FILE, olderInB.id)?.nonce }, 'B blanks its own line of the deleted account').toEqual({ type: 'removed', nonce: 'plaintext-v1' });
+        // Mutation (the xhigh review's, green on every other row): the memory kept by the community in use (`const copy =
+        // currentDbName ?? ''`), the poll's gate kept -> A's poll marks B's file done, and B's line keeps its words.
+    });
+});
+
+/** A's node answering a new DM with `id`, for the very people asked (so the people check holds): as a node that reuses an id. */
+function createAnswersWith(id: string): void {
+    (globalThis as any).fetch = async (url: string, init: any = {}) => {
+        if ((init.method || 'GET') === 'POST' && new URL(url).pathname === '/api/messages/conversation') {
+            asked.push({ method: 'POST', url });
+            return answer(200, { conversation: view({ id, type: 'dm', participants: JSON.parse(init.body).participants }) });
+        }
+        return fetchMock(url, init);
+    };
+}
+
+/** What A's copy can already hold under the id A's node answers a new DM with: never a DM's to start over (newDmFitsIn). */
+const NO_NEW_DM_OVER: Array<{ name: string; make: () => string }> = [
+    {
+        name: 'a group whose keys A\'s copy holds, its row there typed a DM',
+        make: () => {
+            const conv: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, peer.publicKey, third.publicKey] };
+            keptIn(A_FILE, conv, readableLine(conv, peer, 'a held group\'s words'), 'dm');
+            const sql = new DatabaseSync(fileOn(A_FILE));
+            sql.prepare('INSERT INTO group_chat_key_state (group_id, highest) VALUES (?, 1)').run(`${me.publicKey}/${conv.id.toLowerCase()}`);
+            sql.close();
+            return conv.id;
+        },
+    },
+    {
+        name: 'a group whose wrapped key A\'s copy holds (no key state yet), its row there typed a DM',
+        make: () => {
+            const conv: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, peer.publicKey, third.publicKey] };
+            keptIn(A_FILE, conv, readableLine(conv, peer, 'a wrapped group\'s words'), 'dm');
+            const sql = new DatabaseSync(fileOn(A_FILE));
+            sql.prepare('INSERT INTO group_chat_epochs (group_id, epoch, record, wrap) VALUES (?, 1, ?, ?)').run(`${me.publicKey}/${conv.id.toLowerCase()}`, 'record', 'wrap');
+            sql.close();
+            return conv.id;
+        },
+    },
+    {
+        name: 'a group\'s chat A\'s copy keeps as a group',
+        make: () => {
+            const conv: Conv = { id: randomUUID(), type: 'group_thread', participants: [me.publicKey, peer.publicKey, third.publicKey] };
+            keptIn(A_FILE, conv, readableLine(conv, peer, 'words in the group'));
+            return conv.id;
+        },
+    },
+    {
+        name: 'an event\'s chat A\'s copy keeps',
+        make: () => {
+            const conv: Conv = { id: randomUUID(), type: 'event_thread', participants: [me.publicKey, peer.publicKey] };
+            keptIn(A_FILE, conv, readableLine(conv, peer, 'see you at the hall'));
+            return conv.id;
+        },
+    },
+];
+
+describe('a new DM started in place that A\'s copy already holds as no DM: refused, nothing written or remembered (#3305 max review r2 N2)', () => {
+    it.each(NO_NEW_DM_OVER.map((k) => [k.name, k] as const))('A\'s node answers with the id of %s', async (_name, kind) => {
+        const id = kind.make();
+        createAnswersWith(id);
+        const before = { A: rowsOf(A_FILE), B: rowsOf(B_FILE), storedA: storedFor(A_FILE), storedB: storedFor(B_FILE) };
+        asked = [];
+        const thrown: any = await db.createConversationApi('dm', [me.publicKey, third.publicKey], me.publicKey, undefined, undefined, A).then(() => null, (e) => e);
+        await settle();
+        expect(String(thrown?.message ?? thrown)).toBe('This community answered with someone else for this chat, so it wasn\'t started.');
+        // Asked of A only, and nothing of it written: no row, no people, no pin, nothing in A's DM guard list.
+        expect(asked.map((r) => `${r.method} ${r.url}`)).toEqual([`POST ${A}/api/messages/conversation`]);
+        expect({ A: rowsOf(A_FILE), B: rowsOf(B_FILE), storedA: storedFor(A_FILE), storedB: storedFor(B_FILE) }).toEqual(before);
+        await db.leaveChatInPlace(A);
+        // Mutation: newDmFitsIn always true -> A's DM guard list and pins keep the id, and its people are written into A.
+        // (A fresh id A's copy doesn't hold is started and written there: the table's 'a new chat' row, with nothing meanwhile.)
+    });
+});
+
+describe('the route\'s check (chatInPlaceRoute) leaves no read-only handle open, whatever it answers (#3305 max review r2 N2)', () => {
+    const ANSWERS: Array<{ name: string; open: string; ask: () => Promise<{ open: string }> }> = [
+        { name: 'an id A\'s copy doesn\'t hold', open: 'move', ask: () => chatInPlaceRoute(me.publicKey, randomUUID(), A) },
+        { name: 'the DM\'s id in other capitals', open: 'move', ask: () => chatInPlaceRoute(me.publicKey, dm.id.toUpperCase(), A) },
+        { name: 'the DM A\'s copy holds', open: 'in-place', ask: () => chatInPlaceRoute(me.publicKey, dm.id, A) },
+        { name: 'a community the phone doesn\'t keep', open: 'nothing', ask: () => chatInPlaceRoute(me.publicKey, dm.id, C) },
+        {
+            name: 'A kept only as a guest\'s look', open: 'nothing',
+            ask: () => { h.store.set('beanpool_guest_nodes', JSON.stringify([A])); return chatInPlaceRoute(me.publicKey, dm.id, A); },
+        },
+    ];
+
+    it.each(ANSWERS.map((a) => [a.name, a.open, a] as const))('%s: answers \'%s\', and no held handle is open after', async (_name, open, row) => {
+        expect(db.heldCopyFiles()).toEqual([]);
+        expect((await row.ask()).open).toBe(open);
+        await settle();
+        expect(db.heldCopyFiles(), 'the check\'s read-only handle closed').toEqual([]);
+        // Mutation: chatInPlaceRoute without its closeUnlessInView -> A's read-only handle stays open after 'move' and
+        // 'in-place' (a 'nothing' answer opens none at all).
+    });
+
+    it('contrast: asked with Chat in view, Chat\'s read-only handle on A stays open for Chat, and closes as Chat is left', async () => {
+        const view = heldChatsInView();
+        try {
+            expect((await chatInPlaceRoute(me.publicKey, randomUUID(), A)).open).toBe('move');
+            await settle();
+            expect(db.heldCopyFiles(), 'the check did open a read-only handle on A').toContain(A_FILE);
+        } finally {
+            await view.leave();
+        }
+        expect(db.heldCopyFiles()).toEqual([]);
     });
 });
 

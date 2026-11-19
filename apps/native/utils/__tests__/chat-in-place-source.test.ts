@@ -256,7 +256,12 @@ describe('slice S2: every in-place read and write takes its community by name', 
     it('the DM screen holds the chat in place from its focus effect\'s start, before any read, and lets go in its cleanup (#3305 review)', () => {
         const source = fs.readFileSync(CHAT_TSX, 'utf8');
         const focus = source.slice(source.indexOf('useFocusEffect('));
-        const effect = focus.slice(0, focus.indexOf('}, [id, identity, loadConversationData, loadDeals, at])'));
+        const deps = '}, [id, identity, loadConversationData, dealsRerun, at])';
+        expect(focus).toContain(deps);
+        const effect = focus.slice(0, focus.indexOf(deps));
+        // The peer's key re-runs it only for an ordinary chat: in place, a re-run would let go of the copy and hold it again
+        // under the first poll (#3305 review). The rendered rows are dm-requests-chat-render's "held once" ones.
+        expect(source).toContain('const dealsRerun = at ? null : loadDeals;');
         const enter = effect.indexOf('if (at) enterChatInPlace(at);');
         expect(enter).toBeGreaterThan(0);
         expect(enter).toBeLessThan(effect.indexOf('loadConversationData();'));

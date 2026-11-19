@@ -609,6 +609,10 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     }, [identity?.publicKey, peerPubkey, at]);
 
     React.useEffect(() => { loadDeals(); }, [loadDeals]);
+    // The peer's key, once read, changes loadDeals, and the focus effect runs again so an ordinary chat's deals read under
+    // it. In place loadDeals does nothing, and that re-run would let go of the community's copy and hold it again, cutting
+    // the first poll from that community's server on its way (#3305 review): there the key arriving runs nothing again.
+    const dealsRerun = at ? null : loadDeals;
 
     useFocusEffect(
         useCallback(() => {
@@ -717,7 +721,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 // code screen holds it: then it closes as that screen goes).
                 if (at) void leaveChatInPlace(at);
             };
-        }, [id, identity, loadConversationData, loadDeals, at])
+        }, [id, identity, loadConversationData, dealsRerun, at])
     );
 
     // Change signature for the poll-tick compare in loadMessages: every field that

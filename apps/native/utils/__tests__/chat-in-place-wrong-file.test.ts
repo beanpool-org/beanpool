@@ -118,6 +118,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
+import * as SQLite from 'expo-sqlite';
 import * as db from '../db';
 import { switchPhoneTo } from '../reconnect';
 import { removeCommunityCaches } from '../community-cache';
@@ -716,6 +717,71 @@ describe('a chat in place, left: its copy stays closed and its community is aske
         expect(Array.isArray(await db.getMessages(dm.id))).toBe(true);
         expect(Array.isArray(await db.getMessages(dm.id, { community: B }))).toBe(true);
         await db.markConversationRead(dm.id, me.publicKey, B);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+    });
+});
+
+describe('a chat in place, opened: its copy opens once, and the first poll\'s line lands from that poll (#3305 review)', () => {
+    /** Each native open of A's file (the copy open in place; Chat's read-only rows are S1's and not asked here). */
+    const opensOfA = () => vi.mocked(SQLite.openDatabaseAsync).mock.calls.filter(([name]) => name === A_FILE).length;
+    const NEWEST = 'the newest line, waiting at the node';
+
+    /**
+     * The chat's focus effect as it opens in place (app/chat/[id].tsx): held, then in one turn the conversation (the peer's
+     * key), the thread, and the first poll, whose page is held at A's node with a line A's file doesn't have yet. Returns
+     * once the peer's key is read, as the screen has it then.
+     */
+    async function openWithFirstPollAtTheNode() {
+        const opensBefore = opensOfA();
+        const newest = nodeLine(dm, peer, NEWEST).id;
+        db.enterChatInPlace(A);
+        hold = holdFor((m, p) => m === 'GET' && p === `/api/messages/${dm.id}`);
+        const peerRead = db.getConversation(dm.id, me.publicKey, A);
+        const threadRead = db.getMessages(dm.id, { community: A, notices: true });
+        const polled = db.syncSingleConversation(dm.id, A);
+        await hold.seen;
+        expect((await peerRead)?.otherPubkey, 'the peer\'s key is read').toBe(peer.publicKey);
+        expect((await threadRead).some((m: any) => m.text === NEWEST), 'not in A\'s file before the poll').toBe(false);
+        return { polled, newest, opensBefore };
+    }
+    const inA = (id: string) => rowsOf(A_FILE)!.messages.some((m: any) => m.id === id);
+
+    it('held once as the peer\'s key is read: that first poll writes its line into A\'s file, and A\'s copy opens once for the whole open', async () => {
+        const others = { B: rowsOf(B_FILE), storedB: storedFor(B_FILE) };
+        const { polled, newest, opensBefore } = await openWithFirstPollAtTheNode();
+        hold!.release();
+        expect(await polled, 'the first poll answered').toBe(true);
+        expect(inA(newest), 'its line is in A\'s file from that first poll').toBe(true);
+        // The poll's follow-ups, as the screen runs them: the conversation, the thread (the line shows), the read mark.
+        await db.getConversation(dm.id, me.publicKey, A);
+        expect((await db.getMessages(dm.id, { community: A, notices: true })).some((m: any) => m.text === NEWEST)).toBe(true);
+        await db.markConversationRead(dm.id, me.publicKey, A);
+        await settle();
+        expect(opensOfA() - opensBefore, 'A\'s copy opened once, never closed and opened again').toBe(1);
+        expect(db.heldCopyFiles()).toContain(A_FILE);
+        expect(asked.filter((r) => new URL(r.url).pathname.startsWith('/api/messages')).every((r) => new URL(r.url).origin === A)).toBe(true);
+        expect({ B: rowsOf(B_FILE), storedB: storedFor(B_FILE) }).toEqual(others);
+        await db.leaveChatInPlace(A);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+        expect(opensOfA() - opensBefore).toBe(1);
+    });
+
+    it('contrast: let go and held again under that poll (the screen\'s re-run before this fix): its line waits for the next poll, through a second open', async () => {
+        const { polled, newest, opensBefore } = await openWithFirstPollAtTheNode();
+        // The re-run, as React ran it: the cleanup lets go (its close runs while the page is at the node), the next run
+        // holds and asks its own first poll.
+        const left = db.leaveChatInPlace(A);
+        db.enterChatInPlace(A);
+        const second = db.syncSingleConversation(dm.id, A);
+        await left;
+        hold!.release();
+        await Promise.all([polled, second]);
+        await settle();
+        expect(inA(newest), 'that first poll\'s line is not in A\'s file').toBe(false);
+        expect(await db.syncSingleConversation(dm.id, A), 'the next poll').toBe(true);
+        expect(inA(newest)).toBe(true);
+        expect(opensOfA() - opensBefore, 'A\'s copy closed and opened again').toBe(2);
+        await db.leaveChatInPlace(A);
         expect(db.heldCopyFiles()).not.toContain(A_FILE);
     });
 });

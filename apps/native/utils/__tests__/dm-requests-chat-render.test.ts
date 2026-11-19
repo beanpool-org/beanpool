@@ -733,14 +733,43 @@ describe('a chat in place, left while its poll, a push or a read is on its way (
             ...over,
         });
         await open();
-        // Held before the first read, by the chat's own community, and held now (the focus effect runs again once the
-        // peer's key is read, as before: each run lets go in its cleanup and holds again).
+        // Held before the first read, by the chat's own community, once: the peer's key read runs the focus effect again only
+        // for an ordinary chat, so the copy is never let go and held again under its first poll (#3305 review).
         expect(net.calls.indexOf('db.enterChatInPlace')).toBeLessThan(net.calls.indexOf('db.getConversation'));
-        expect(placeLog.every((x, i) => x === `${i % 2 === 0 ? 'enter' : 'leave'} ${RIVER}`)).toBe(true);
-        expect(placeLog.length % 2).toBe(1);
+        expect(placeLog).toEqual([`enter ${RIVER}`]);
     }
     /** As many let-goes as holds: none left behind once the chat is left. */
     const balanced = () => placeLog.filter((x) => x.startsWith('enter')).length === placeLog.filter((x) => x.startsWith('leave')).length;
+
+    it('opening, its first poll on its way as the peer\'s key is read: held once, never let go while it shows, and that poll\'s line shows', async () => {
+        const LINE = { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'the newest line', rawTimestamp: iso(now), timestamp: '' };
+        let polled = false;
+        await openInPlace({ syncSingleConversation: later, getMessages: () => Promise.resolve(polled ? [LINE] : []) });
+        // The peer's key is read (getConversation answered it) and the chat still holds its copy, from one hold.
+        expect(host.textContent).toContain('Kofi');
+        expect(callsOf('syncSingleConversation'), 'one first poll, not a second one deduped onto the first').toBe(1);
+        expect(heldCalls).toHaveLength(1);
+        const before = net.calls.length;
+        polled = true;
+        heldCalls[0](true);
+        await settle();
+        // The first poll's answer is followed up: the thread is read again and the line it brought shows, with no let-go.
+        expect(callsSince(before)).toContain('db.getMessages');
+        expect(host.textContent).toContain('the newest line');
+        expect(placeLog).toEqual([`enter ${RIVER}`]);
+        await leave();
+        expect(placeLog).toEqual([`enter ${RIVER}`, `leave ${RIVER}`]);
+        // Mutation: put loadDeals back in the focus effect's deps in place -> the key read lets go and holds again
+        // (placeLog enter, leave, enter), a second poll is asked, and the first poll's answer runs nothing: no line shown.
+    });
+
+    it('control: an ordinary chat still runs its focus effect again once the peer\'s key is read (its first poll asked twice, as before)', async () => {
+        standIn({ getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true });
+        await open();
+        expect(host.textContent).toContain('Kofi');
+        expect(callsOf('syncSingleConversation')).toBe(2);
+        expect(callsOf('enterChatInPlace') + callsOf('leaveChatInPlace')).toBe(0);
+    });
 
     it('the poll answers once the chat is left: nothing after it is read, marked or asked; the hold is let go once', async () => {
         await openInPlace({ syncSingleConversation: later });

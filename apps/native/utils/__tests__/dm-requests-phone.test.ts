@@ -24,7 +24,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import React, { createElement } from 'react';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 
 const alerts = vi.hoisted(() => ({ said: [] as { title: string; body?: string; buttons?: any[] }[] }));
 
@@ -561,6 +561,66 @@ describe('MessageRequestsPane on phone', () => {
 
         expect(dbMocks.ignoreAllMessageRequests).toHaveBeenCalledTimes(1);
         expect(onChanged).toHaveBeenCalled();
+    });
+
+    // Slice S3: another community's requests, read there in place, answered there by name; the community in use's as before.
+    describe('requests of another community this phone holds, in place (slice S3)', () => {
+        const RIVER = 'https://riverside.example';
+        const place = { address: RIVER, url: RIVER, name: 'Riverside', count: 1 };
+        const away = { ...entry, id: 'conv-away-1', peerCallsign: 'Cleo', name: 'Cleo', participants: ['me-pubkey', 'cleo-pubkey'], request: { state: 'pending', from: 'cleo-pubkey', at: '2026-11-20T00:00:00Z' } };
+        const pane = (extra: Record<string, unknown> = {}) => render(createElement(MessageRequestsPane, {
+            entries: [], count: 0, identity: { publicKey: 'me-pubkey' },
+            onOpen: () => {}, onBack: () => {}, onAccepted: () => {}, onChanged: () => {},
+            inPlace: [{ place, entries: [away] }], ...extra,
+        }));
+        const awayCard = () => within(screen.getByTestId(`message-requests-in-place-${RIVER}`));
+
+        it('drawn under "In {community}", its preview read from that community by name, and Accept sent there', async () => {
+            dbMocks.getMessages.mockResolvedValue([{ id: 'c1', text: 'Hello from Cleo', senderId: 'cleo-pubkey', rawTimestamp: '2026-11-20T00:00:01Z' }]);
+            dbMocks.decideMessageRequest.mockResolvedValueOnce({ success: true });
+            const onAcceptedInPlace = vi.fn();
+            pane({ onAcceptedInPlace });
+            expect(awayCard().getByText('In Riverside')).toBeTruthy();
+            expect(await awayCard().findByText('Hello from Cleo')).toBeTruthy();
+            expect(dbMocks.syncSingleConversation).toHaveBeenCalledWith('conv-away-1', RIVER);
+            expect(dbMocks.getMessages).toHaveBeenCalledWith('conv-away-1', { limit: 20, community: RIVER });
+            fireEvent.click(awayCard().getByTestId('request-accept'));
+            await waitFor(() => expect(dbMocks.decideMessageRequest).toHaveBeenCalledWith('conv-away-1', 'accept', RIVER));
+            expect(onAcceptedInPlace).toHaveBeenCalledWith(away, place);
+            dbMocks.getMessages.mockReset();
+            dbMocks.getMessages.mockResolvedValue([]);
+        });
+
+        it('Decline goes there by name; Report reports the line there and blocks with that community named', async () => {
+            dbMocks.getMessages.mockResolvedValue([{ id: 'c1', text: 'Hello from Cleo', senderId: 'cleo-pubkey', rawTimestamp: '2026-11-20T00:00:01Z' }]);
+            dbMocks.decideMessageRequest.mockResolvedValueOnce({ success: true });
+            const onChanged = vi.fn();
+            pane({ onChanged });
+            await awayCard().findByText('Hello from Cleo');
+            fireEvent.click(awayCard().getByTestId('request-decline'));
+            await waitFor(() => expect(dbMocks.decideMessageRequest).toHaveBeenCalledWith('conv-away-1', 'ignore', RIVER));
+            fireEvent.click(awayCard().getByTestId('request-report'));
+            fireEvent.click(await screen.findByTestId('report-sheet-submit'));
+            await waitFor(() => expect(dbMocks.reportDmLine).toHaveBeenCalledWith('conv-away-1', 'c1', 'Hello from Cleo', 'Harassment', RIVER));
+            await waitFor(() => expect(blockMocks.blockUser).toHaveBeenCalledWith('cleo-pubkey', undefined, undefined, undefined, RIVER));
+            dbMocks.getMessages.mockReset();
+            dbMocks.getMessages.mockResolvedValue([]);
+        });
+
+        it('beside this community\'s own requests: those go on with no community named, as before', async () => {
+            dbMocks.decideMessageRequest.mockResolvedValue({ success: true });
+            pane({ entries: [entry], count: 1 });
+            const here = screen.getAllByTestId('request-accept').find((b) => !screen.getByTestId(`message-requests-in-place-${RIVER}`).contains(b))!;
+            fireEvent.click(here);
+            await waitFor(() => expect(dbMocks.decideMessageRequest).toHaveBeenCalledWith('conv-req-1', 'accept'));
+            expect(dbMocks.syncSingleConversation).toHaveBeenCalledWith('conv-req-1');
+            dbMocks.decideMessageRequest.mockReset();
+        });
+
+        it('a group with no requests left draws nothing', () => {
+            pane({ inPlace: [{ place, entries: [] }] });
+            expect(screen.queryByTestId(`message-requests-in-place-${RIVER}`)).toBeNull();
+        });
     });
 });
 

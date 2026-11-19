@@ -9,6 +9,7 @@ import { dealStateWords, dealStep, formatHundredths, freePriceWords, itemDealTit
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { leaveScreen } from '../../utils/leave-screen';
 import { PUSH_RECEIVED_EVENT } from '../../utils/app-events';
 
@@ -30,6 +31,8 @@ import { keyCodeOf } from '../../utils/key-code';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
+import { chatInPlaceRoute, type ChatInPlaceRoute } from '../../utils/held-chats';
+import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { dmPeerName, isDmBlocked } from '../../utils/dm-blocked';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
@@ -116,30 +119,114 @@ const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getC
  * link or a push.
  */
 export default function ChatRoute() {
-    const { id, event, group, enterprise, created, name, info, community, communityName } = useLocalSearchParams<{
+    // `communityName` (a held row's, a contact's) is never shown: the name is the one the phone saved (#3305 review F2).
+    const { id, event, group, enterprise, created, name, info, community } = useLocalSearchParams<{
         id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string; info?: string;
         community?: string; communityName?: string;
     }>();
+    const { identity } = useIdentity();
+    // A chat named with a community (slice S2): what this phone holds there decides, before anything draws (#3305 review
+    // F1). A link can carry any id and any address, so only a direct chat that community's own copy already holds opens in
+    // place, at its saved address and under its saved name; the community in use takes the ordinary route; anything else
+    // opens nothing there (utils/held-chats.ts chatInPlaceRoute).
+    const placeKey = id && community ? `${String(community)}\n${String(id)}` : null;
+    const [placed, setPlaced] = useState<{ for: string; answer: ChatInPlaceRoute } | null>(null);
+    useEffect(() => {
+        if (!placeKey) return;
+        let alive = true;
+        setPlaced(null);
+        chatInPlaceRoute(identity?.publicKey, String(id), String(community))
+            .catch((): ChatInPlaceRoute => ({ open: 'nothing' }))
+            .then((answer) => { if (alive) setPlaced({ for: placeKey, answer }); });
+        return () => { alive = false; };
+        // The key names the id and the community; the account is read as the answer is asked.
+    }, [placeKey, identity?.publicKey]);
+    const placedNow = placeKey && placed?.for === placeKey ? placed.answer : null;
+    // No community named, or the one in use: the ordinary route.
+    const ordinary = !community || placedNow?.open === 'here';
     // The answer for the id it was asked of: a new id draws nothing until its own answer is in.
     const [route, setRoute] = useState<{ for: string; answer: ChatRouteAnswer } | null>(null);
     useEffect(() => {
-        if (!id || community) return;
+        if (!id || !ordinary) return;
         let alive = true;
         setRoute(null);
         routeChat(ROUTE_ASKS, String(id), { event: event === '1', thread: group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null })
             .then(answer => { if (alive) setRoute({ for: String(id), answer }); });
         return () => { alive = false; };
-    }, [id, event, group, enterprise, community]);
+    }, [id, event, group, enterprise, ordinary]);
 
-    // A direct chat of another community this phone holds, read and written there in place (slice S2): only a DM is ever
-    // linked this way (Chat's held rows, a contact there), and its screen reaches that community by name for everything.
-    if (id && community) return <ChatScreen id={String(id)} inPlace={{ community: String(community), name: communityName ? String(communityName) : '' }} />;
+    // A direct chat of another community this phone holds, read and written there in place (slice S2): its screen reaches
+    // that community by name for everything.
+    if (id && community && !placedNow) return null;
+    if (id && placedNow?.open === 'in-place') return <ChatScreen id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
+    if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;
     if (!id || !route || route.for !== String(id)) return null;
     const { view, screenId } = route.answer;
     if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     if (view === 'event') return <EventChatView eventId={screenId} />;
     if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     return <ChatScreen id={screenId} />;
+}
+
+/**
+ * A chat named with a community that doesn't open in place (#3305 review F1): nothing of that community's copy is opened,
+ * read or written here, and nothing is asked of its server. A community this phone holds as a member: one tap moves the
+ * phone there and opens the chat, as Chat's held row of a group's chat does (S1, utils/push-notice-switch.ts
+ * openNoticeIn). Any other: only that the chat can't be opened.
+ */
+function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) {
+    const { colors } = useTheme();
+    const { identity } = useIdentity();
+    const { recheck } = useNodeStatus();
+    const [moving, setMoving] = useState(false);
+    const move = where.open === 'move' ? where : null;
+    // As Contacts' own move button (app/contacts.tsx `go`): central tokens, readable light and dark, 44 dp and wrapping.
+    const styles = useStyles(({ colors: c }) => StyleSheet.create({
+        page: { flex: 1, backgroundColor: c.surface.card },
+        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+        back: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start' },
+        body: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+        words: { fontSize: 15, color: c.text.body, lineHeight: 21, textAlign: 'center' },
+        go: { minHeight: 44, maxWidth: '100%', paddingHorizontal: 16, borderRadius: 10, backgroundColor: c.brand.fill, alignItems: 'center', justifyContent: 'center' },
+        goText: { fontSize: 15, fontWeight: '800', color: c.text.inverse, textAlign: 'center' },
+    }));
+    const moveThere = async () => {
+        if (!move || !identity?.publicKey || moving) return;
+        setMoving(true);
+        try {
+            // Asked only on the tap: the switch and its guards, as Chat's held rows move (app/(tabs)/chats.tsx openHeldChat).
+            const [{ openNoticeIn }, { switchCommunity, communitySwitchUnderWay }, { getPendingOnboarding }] = await Promise.all([
+                import('../../utils/push-notice-switch'), import('../../utils/use-communities'), import('../../utils/onboarding-state'),
+            ]);
+            await openNoticeIn(move.community, null, async () => `/chat/${id}` as const, {
+                storage: AsyncStorage,
+                publicKey: identity.publicKey,
+                joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
+                switchUnderWay: communitySwitchUnderWay,
+                switchTo: switchCommunity,
+                recheck,
+            });
+        } finally {
+            setMoving(false);
+        }
+    };
+    return (
+        <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
+            <View style={styles.header}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Back')} onPress={() => leaveScreen(router, 'chat/[id]')} style={styles.back}>
+                    <MaterialCommunityIcons name="arrow-left" size={28} color={colors.text.body} />
+                </Pressable>
+            </View>
+            <View style={styles.body} testID="chat-not-in-place">
+                <Text style={styles.words} accessibilityRole="alert">{t('Could not open this chat.')}</Text>
+                {move ? (
+                    <Pressable accessibilityRole="button" style={styles.go} disabled={moving} onPress={() => void moveThere()}>
+                        <Text style={styles.goText}>{t('Open {community} ›', { community: move.name })}</Text>
+                    </Pressable>
+                ) : null}
+            </View>
+        </SafeAreaView>
+    );
 }
 
 /**
@@ -523,7 +610,18 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
 
     const loadConversationData = useCallback(async () => {
         if (id && identity?.publicKey) {
-            const res = await getConversation(id as string, identity.publicKey, at);
+            let res: any;
+            try {
+                res = await getConversation(id as string, identity.publicKey, at);
+            } catch (e: any) {
+                // A read refused (in place: that community's copy can't be opened now, or the chat was left meanwhile): the
+                // chat's not-available state, never "Loading..." for good (#3305 review F4). Nothing more is read or asked.
+                if (!inViewRef.current) return;
+                console.warn('[Chat] Could not read this conversation:', e?.message || e);
+                setPeerName(String(id).slice(0, 8));
+                setLoadError(e?.message || t('Could not open this chat.'));
+                return;
+            }
             if (res) {
                 setConvRow(res);
                 // Talk's list and Needs you name it by the same rule (utils/dm-blocked.ts dmPeerName): never the conversation's id.

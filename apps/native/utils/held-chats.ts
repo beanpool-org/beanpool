@@ -10,8 +10,8 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { closeHeldCopies, getHeldConversations, type HeldConversation } from './db';
-import { getDatabaseFilenameForNode, getSavedNodes, isGuestNode } from './nodes';
+import { closeHeldCopies, getHeldConversations, heldChatIsDm, type HeldConversation } from './db';
+import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { sameCommunity } from './push-pins';
 import { communityName } from './community-name';
@@ -108,4 +108,37 @@ async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promi
         for (const chat of chats) rows.push({ ...chat, key: `held:${file}:${chat.id}`, held: true, community: url, communityName: name });
     }
     return rows;
+}
+
+/**
+ * What a link to a chat of another community opens (slice S2; #3305 review F1 and F2). The chat's route asks this before
+ * it draws anything for a `community` param:
+ * - `here`: the community in use, however spelled: the chat's ordinary route, which asks what kind of chat the id is;
+ * - `in-place`: a direct chat that community's own copy already holds (db.ts heldChatIsDm, read only), at the address and
+ *   under the name the phone saved for it, never a link's own;
+ * - `move`: any other id of a community this phone holds as a member (a group's, an event's or an enterprise's chat, an
+ *   id its copy doesn't hold): nothing of it opens in place, and a tap moves the phone there (S1);
+ * - `nothing`: not a community this phone holds (not saved, a guest's look, not a plain address).
+ */
+export type ChatInPlaceRoute =
+    | { open: 'here' }
+    | { open: 'in-place' | 'move'; community: string; name: string }
+    | { open: 'nothing' };
+
+export async function chatInPlaceRoute(myPubkey: string | null | undefined, id: string, community: string): Promise<ChatInPlaceRoute> {
+    const file = getDatabaseFilenameForNode(community);
+    if (getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) === file) return { open: 'here' };
+    const node = (await getSavedNodes().catch(() => [])).find((n) => getDatabaseFilenameForNode(n.url) === file);
+    if (!node || !isPlainNodeAddress(node.url) || await isGuestCopy(node.url).catch(() => true)) return { open: 'nothing' };
+    // Named as Chat's held rows name it: the name the phone saved, else the community's own.
+    const savedName = (node as { name?: unknown }).name;
+    const where = { community: node.url, name: typeof savedName === 'string' && savedName.trim() ? savedName.trim() : communityName(node) };
+    if (!myPubkey || !id) return { open: 'move', ...where };
+    try {
+        return (await heldChatIsDm(myPubkey, node.url, id)) ? { open: 'in-place', ...where } : { open: 'move', ...where };
+    } finally {
+        // The check read through a held, read-only handle: it closes again unless Chat is in view (#3302 review F3). The
+        // chat doesn't wait for that close: the copy it opens in place is a connection of its own.
+        void closeUnlessInView().catch(() => {});
+    }
 }

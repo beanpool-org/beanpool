@@ -20,9 +20,9 @@ import {
 } from './dm-peer-pins';
 import { dmPeerKeys, dmPeerName, isDmType } from './dm-blocked';
 import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
-import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
+import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError, readDmSeen } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
-import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode, getSavedNodes, isGuestNode } from './nodes';
+import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode, getSavedNodes, isGuestCopy } from './nodes';
 import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -977,13 +977,15 @@ export async function chatCopyForRequest(community?: ChatCommunity): Promise<Cha
 async function copyInPlaceFor(community: string): Promise<ChatRequestCopy> {
     const file = getDatabaseFilenameForNode(community);
     if (chatsInPlaceLeft.has(file)) throw new NoCopyInPlaceError();
-    const saved = (await getSavedNodes().catch(() => [])).some((n) => getDatabaseFilenameForNode(n.url) === file);
-    if (!saved || await isGuestNode(community).catch(() => true)) throw new NoCopyInPlaceError();
+    // The community as this phone saved it and every guest mark, each by its file (#3305 review F2): a link's own spelling
+    // (capitals, a trailing path) is never a way past either, and its requests go to the saved row's own address.
+    const saved = (await getSavedNodes().catch(() => [])).find((n) => getDatabaseFilenameForNode(n.url) === file);
+    if (!saved || await isGuestCopy(saved.url).catch(() => true)) throw new NoCopyInPlaceError();
     const place = await heldCopies.inPlace(file);
     if (!place) throw new NoCopyInPlaceError();
     const database = place.handle;
     return {
-        anchorUrl: community, file, database, inPlace: true,
+        anchorUrl: saved.url, file, database, inPlace: true,
         openNow: () => (place.open() ? database : null),
         handle: async () => (place.open() ? database : await copyStillFor(file)),
     };
@@ -1058,6 +1060,83 @@ export async function leaveChatInPlace(community: ChatCommunity): Promise<void> 
 export function _resetChatsInPlaceForTests(): void {
     chatsInPlaceHeld.clear();
     chatsInPlaceLeft.clear();
+}
+
+/**
+ * What one community's own copy keeps about a conversation id that says whether it is a direct chat there (#3305 review
+ * F1): its row's type (an untyped row reads as a DM, as everywhere here), and whether that copy's group key memory holds
+ * keys of a group under the id (asked lower-cased, as groupKeyring keeps them). One plain SELECT (held-copies.ts
+ * isOneRead), so a held, read-only handle runs it as well as the copy open in place.
+ */
+const DM_FACTS_SQL = `SELECT (SELECT IFNULL(type, 'dm') FROM conversations WHERE id = ?) AS type,
+           (SELECT highest FROM group_chat_key_state WHERE group_id = ?) AS highest,
+           EXISTS(SELECT 1 FROM group_chat_epochs WHERE group_id = ? AND wrap IS NOT NULL) AS wrapped`;
+const dmFactsParams = (me: string, id: string): string[] => [id, `${me}/${id.toLowerCase()}`, `${me}/${id.toLowerCase()}`];
+
+/**
+ * Whether a community's copy holds `conversationId` as a direct chat, from what it keeps (#3305 review F1): never a group
+ * whose keys that copy holds; else its row is a DM's, or that file's DM pins or DM guard list, as stored, keep the id. The
+ * id's own spelling only. Nothing known, or nothing readable: not a DM, so nothing of it is read, written or asked there
+ * in place (a link can name any id: an enterprise's discussion, whose id is its public key, or a group's or an event's).
+ */
+function holdsAsDm(conversationId: string, facts: any, pins: DmPeerPins | null, seen: readonly string[] | null): boolean {
+    if (!facts || Number(facts.highest ?? 0) > 0 || Number(facts.wrapped ?? 0) > 0) return false;
+    if (facts.type === 'dm') return true;
+    if (pins && dmSightFor(pins, conversationId)) return true;
+    return !!seen?.includes(conversationId);
+}
+
+/** That file's DM pins and DM guard list as stored, read only (never seeded, never written): null for one not readable. */
+async function dmMemoryOf(me: string, file: string): Promise<{ pins: DmPeerPins | null; seen: string[] | null }> {
+    const [pins, seen] = await Promise.all([dmPins.peek(me, file), readDmSeen(AsyncStorage, me, file).catch(() => null)]);
+    return { pins, seen };
+}
+
+/**
+ * Whether the copy `database` reads (a copy open in place) holds `conversationId` as a direct chat ({@link holdsAsDm}):
+ * the poll in place asks it before anything is asked of that community's server or written anywhere.
+ */
+async function heldAsDmThrough(database: SQLite.SQLiteDatabase, conversationId: string): Promise<boolean> {
+    const me = (await loadIdentity())?.publicKey;
+    const file = dbFileOf.get(database);
+    if (!me || !file || !conversationId) return false;
+    try {
+        const facts = await database.getFirstAsync<any>(DM_FACTS_SQL, dmFactsParams(me, conversationId));
+        const { pins, seen } = await dmMemoryOf(me, file);
+        return holdsAsDm(conversationId, facts, pins, seen);
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * A new DM that a community's server answered, started there in place: it fits that community's copy only when the copy
+ * holds no group's keys under its id and has no row for it but a DM's (#3305 review F1). Unreadable: it doesn't fit.
+ */
+async function newDmFitsIn(database: SQLite.SQLiteDatabase, conversationId: string): Promise<boolean> {
+    const me = (await loadIdentity())?.publicKey;
+    if (!me || !conversationId) return false;
+    const facts = await database.getFirstAsync<any>(DM_FACTS_SQL, dmFactsParams(me, conversationId)).catch(() => null);
+    return !!facts && !(Number(facts.highest ?? 0) > 0) && !(Number(facts.wrapped ?? 0) > 0) && (facts.type == null || facts.type === 'dm');
+}
+
+/**
+ * Whether `community`'s copy, another community this phone holds, holds `conversationId` as a direct chat ({@link
+ * holdsAsDm}): asked by the chat's route before a chat opens there in place (#3305 review F1), through a held, read-only
+ * handle (slice S1), so nothing is opened writable, seeded, remembered or asked. False for anything not known as one, the
+ * community in use, a copy not on the phone, and anything that can't be read.
+ */
+export async function heldChatIsDm(myPubkey: string, community: string, conversationId: string): Promise<boolean> {
+    if (!myPubkey || !community || !conversationId) return false;
+    const file = getDatabaseFilenameForNode(community);
+    try {
+        const rows = await heldCopies.all<any>(file, 'dmFacts', dmFactsParams(myPubkey, conversationId));
+        if (!rows?.length) return false;
+        const { pins, seen } = await dmMemoryOf(myPubkey, file);
+        return holdsAsDm(conversationId, rows[0], pins, seen);
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -1817,9 +1896,9 @@ const HELD_CONVERSATIONS_SQL = `
 `;
 
 /** The names of the statements a held copy runs (utils/held-copies.ts takes no SQL from a caller, only one of these). */
-type HeldStatement = 'conversations';
+type HeldStatement = 'conversations' | 'dmFacts';
 /** Every statement a held copy runs: one plain SELECT each (held-copies.ts isOneRead), refused at its use otherwise. */
-const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({ conversations: HELD_CONVERSATIONS_SQL });
+const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({ conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL });
 
 /** A photo's address on `community`'s server: a path its node stored ("/uploads/…") is that server's, never the one in use. */
 function onCommunity(community: string, value: unknown): string | null {
@@ -5315,7 +5394,7 @@ async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversatio
     if (merged.contentReplaced && merged.type === 'removed') await forgetCachedChatImage(m.id);
 }
 
-// Deleted accounts already blanked on this phone, per community copy. The conversation list names them on every sync from
+// Deleted accounts already blanked on this phone, per community copy (its file). The conversation list names them on every sync from
 // then on, and an open chat's page can carry their tombstones on every poll: a pass already done is not run again.
 const deletedAccountsBlanked = new Set<string>();
 
@@ -5333,7 +5412,9 @@ const deletedAccountsBlanked = new Set<string>();
  * this one when a later sync carries it. Returns how many lines it blanked.
  */
 async function blankLinesOfDeletedAccounts(database: SQLite.SQLiteDatabase, keys: Iterable<string>, myPubkey: string | null | undefined): Promise<number> {
-    const copy = currentDbName ?? '';
+    // Kept by the file `database` reads, never by the community in use (#3305 review F1): a page polled in place blanks that
+    // community's copy, and the community in use still blanks its own.
+    const copy = dbFileOf.get(database) ?? currentDbName ?? '';
     const pending = [...new Set(keys)].filter(k => typeof k === 'string' && k !== '' && k !== myPubkey && !deletedAccountsBlanked.has(`${copy}\u0001${k}`));
     if (pending.length === 0) return 0;
     const rows = await database.getAllAsync<{ id: string; author_pubkey: string; type: string | null; nonce: string | null; metadata: string | null }>(
@@ -5834,6 +5915,10 @@ async function syncSingleConversationOnce(conversationId: string, community?: Ch
         const here = await chatCopyForRequest(community);
         const anchorUrl = here.anchorUrl;
         if (!anchorUrl) return false;
+        // In place, only a chat that community's own copy already holds as a direct one (#3305 review F1): any other id (a
+        // link can name an enterprise's discussion, a group's or an event's chat) asks that server nothing and writes
+        // nothing, its lines, its pins, its DM guard list, its mute or its deleted accounts' memory, anywhere.
+        if (here.inPlace && !(await heldAsDmThrough(here.database, conversationId))) return false;
         const takenBefore = _ownLinesTaken.get(conversationId) ?? 0;
         const decidedBefore = _requestDecisions;
 
@@ -6031,8 +6116,9 @@ async function syncSingleConversationOnce(conversationId: string, community?: Ch
         } finally {
             releaseSyncLock();
         }
-        // The DM guard: a chat whose lines are encrypted is a DM here, whatever type the node gives it.
-        if (msgData?.conversation?.type === 'dm' || here.inPlace) await rememberDmConversations([conversationId], database);
+        // The DM guard: a chat whose lines are encrypted is a DM here, whatever type the node gives it. In place exactly as
+        // when the phone is set there: only what the node calls a DM is remembered, in the file the page was written to.
+        if (msgData?.conversation?.type === 'dm') await rememberDmConversations([conversationId], database);
         // The DM guard's sweep reads the copy in use's pins and key memory: never over a copy open in place.
         if (!here.inPlace) await holdDmTypes(database);
 
@@ -8369,7 +8455,12 @@ export async function createConversationApi(type: 'dm', participants: string[], 
             // This phone asked for a DM: it is one, whatever type the answer names (the DM guard). In place (slice S2) it is
             // remembered as one in that community's own list, and nothing of the copy in use is asked.
             const convType = here.inPlace ? 'dm' : await heldConversationType(conv.id, type, undefined, false, copy);
-            if (here.inPlace) await rememberDmConversations([conv.id], copy);
+            if (here.inPlace) {
+                // Never over a group that community's copy holds keys of, or a row of another kind there (#3305 review F1):
+                // nothing is written or remembered, as the held guard keeps a group a group when the phone is set there.
+                if (!(await newDmFitsIn(copy, conv.id))) throw new Error(t("This community answered with someone else for this chat, so it wasn't started."));
+                await rememberDmConversations([conv.id], copy);
+            }
             if (conv.type && conv.type !== convType) console.warn(`[DM guard] the node answered a new DM as a ${conv.type}: ignored`);
             const pid = convType === 'dm' ? null : (conv.postId || conv.post_id || postId);
             const lookupPid = conv.postId || conv.post_id || postId;

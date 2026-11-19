@@ -186,6 +186,9 @@ function standIn(over: Answers): void {
         getConversation: null, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null,
         markConversationRead: undefined,
         getDb: { getAllAsync: async () => [], getFirstAsync: async () => null, runAsync: async () => ({}) },
+        // The route's check before a chat opens in place (#3305 review F1): that community's copy holds it as a DM. A row
+        // about another id says otherwise; the check's read-only handle then closes.
+        heldChatIsDm: true, closeHeldCopies: undefined,
         ...over,
     };
     net.answer = (name, args) => {
@@ -219,6 +222,10 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const settle = async (n = 12) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+/** The phone keeps `url` as a community it is a member of, under the name it saved (Chat's held rows, a contact there). */
+function holdsCommunity(url: string, name: string): void {
+    store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url, name }]));
+}
 async function open(): Promise<void> {
     await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(ChatRoute)) as any); });
     await settle();
@@ -726,6 +733,7 @@ describe('a chat in place, left while its poll, a push or a read is on its way (
         heldCalls.length = 0;
         placeLog.length = 0;
         params.now = { id: 'dm1', community: RIVER, communityName: 'Riverside' };
+        holdsCommunity(RIVER, 'Riverside');
         standIn({
             getConversation: KOFI_THERE, getMessages: [], markConversationRead: true,
             enterChatInPlace: (c: unknown) => { placeLog.push(`enter ${String(c)}`); return undefined; },
@@ -852,6 +860,7 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
 
     async function openChat(inPlace: boolean, over: Answers): Promise<void> {
         params.now = inPlace ? { id: 'dm1', community: RIVER, communityName: 'Riverside' } : { id: 'dm1' };
+        if (inPlace) holdsCommunity(RIVER, 'Riverside');
         standIn({ getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true, ...over });
         await open();
         expect(host.textContent).toContain('Kofi');

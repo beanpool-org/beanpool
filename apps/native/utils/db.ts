@@ -64,7 +64,10 @@ import {
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
-import { OUTSIDE_CHAT_DROP_SQL, OUTSIDE_CHAT_TABLES_SQL, outsideChatStore, type OutsideChatStore } from './outside-chat-store';
+import {
+    OUTSIDE_CHAT_DROP_SQL, OUTSIDE_CHAT_TABLES_SQL, OUTSIDE_CHATS_HELD_SQL, OUTSIDE_LAST_CHANGES_HELD_SQL, outsideChatStore, outsideChatsFromHeld,
+    type OutsideChat, type OutsideChatStore,
+} from './outside-chat-store';
 import { FORUM_KEPT_TABLE_SQL, forumKeptStore, type ForumKeptStore } from './forum-kept';
 import {
     sendSealedGroupLine, editSealedGroupLine, reportSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
@@ -1936,9 +1939,34 @@ const HELD_CONVERSATIONS_SQL = `
 `;
 
 /** The names of the statements a held copy runs (utils/held-copies.ts takes no SQL from a caller, only one of these). */
-type HeldStatement = 'conversations' | 'dmFacts';
+type HeldStatement = 'conversations' | 'dmFacts' | 'outsideChats' | 'outsideLastChanges';
 /** Every statement a held copy runs: one plain SELECT each (held-copies.ts isOneRead), refused at its use otherwise. */
-const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({ conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL });
+const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
+    conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL,
+    // Across chats (slice S4): utils/outside-chat-store.ts, read as its chats() reads them.
+    outsideChats: OUTSIDE_CHATS_HELD_SQL, outsideLastChanges: OUTSIDE_LAST_CHANGES_HELD_SQL,
+});
+
+/**
+ * This account's across chats kept in `community`'s file, another community this phone holds (slice S4,
+ * scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Where an across chat lives": same file, same rule, visible
+ * always), read through a held, read-only handle, never through getDb() nor the address in use, each with its newest line
+ * as the chat shows it. No synced cursor is asked: these tables are the phone's own, never cleared by a Force Resync. Null
+ * when there is nothing to read (no such copy, the community in use, another schema number, a move or a delete under way).
+ */
+export async function getHeldOutsideChats(myPubkey: string, community: string): Promise<OutsideChat[] | null> {
+    const file = getDatabaseFilenameForNode(community);
+    try {
+        const rows = await heldCopies.all<any>(file, 'outsideChats', [myPubkey]);
+        if (!rows) return null;
+        if (!rows.length) return [];
+        const changes = (await heldCopies.all<any>(file, 'outsideLastChanges', [myPubkey])) ?? [];
+        return outsideChatsFromHeld(myPubkey, rows, changes);
+    } catch (e) {
+        console.warn(`[Held] Could not list the chats across held for ${file}`, e);
+        return null;
+    }
+}
 
 /** A photo's address on `community`'s server: a path its node stored ("/uploads/…") is that server's, never the one in use. */
 function onCommunity(community: string, value: unknown): string | null {
@@ -10923,6 +10951,24 @@ export function outsideStore(nodeUrl: string): OutsideChatStore {
         const database = await getDb();
         if (dbFileOf.get(database) !== file) throw new Error('This phone has switched community since this chat was opened.');
         return database as any;
+    });
+}
+
+/**
+ * This phone's chats with people in other communities kept in `community`'s file, wherever the phone is set (slice S4,
+ * scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3: "Same file, same rule, visible always"; no data moves). Each
+ * read and write goes through chatCopyForRequest(community), taken afresh for that statement: the copy in use while that
+ * community is the one in use, else its copy open in place (slice S2: a connection on that one file, only while a screen or a
+ * round holds it, enterChatInPlace ... leaveChatInPlace). So a write lands in that file only, a switch mid-way included (onto
+ * that community: the copy in use, the same file; away from it: its copy open in place, the same file), and when neither can
+ * be had (a chat left, a close under way, the copy gone) it throws and nothing is written anywhere.
+ */
+export function outsideStoreOf(community: string): OutsideChatStore {
+    const file = getDatabaseFilenameForNode(community);
+    return outsideChatStore(async () => {
+        const copy = await chatCopyForRequest(community);
+        if (copy.file !== file || dbFileOf.get(copy.database) !== file) throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
+        return copy.database as any;
     });
 }
 

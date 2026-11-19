@@ -96,6 +96,12 @@ export async function askOtherCommunitiesNow(): Promise<void> {
         // Each answer's number of the member's locked contacts copy there (utils/contacts-sync.ts): no request of its own.
         const heard = (community: string, body: unknown) => {
             void import('../utils/contacts-sync').then(({ contactsHeard }) => contactsHeard(me, community, body, true)).catch(() => {});
+            // Across mail waiting there (slice S4, `mail`): that community's mailbox is fetched now, into its own file; none
+            // waiting, its round is skipped until an answer says more (utils/outside-chat-live.ts noteMailHeard).
+            void import('../utils/outside-chat-live').then(({ noteMailHeard, syncOutsideMailNow }) => {
+                if (noteMailHeard(community, body)) return syncOutsideMailNow(undefined, community);
+                return null;
+            }).catch(() => {});
         };
         await roundWhileOpen(AsyncStorage, me, phoneNotices, heard);
     } catch (e) {

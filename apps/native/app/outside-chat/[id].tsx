@@ -8,6 +8,11 @@
  * In an open chat a tap on a line offers the chat's reactions and, on a line of mine, Edit message and Delete message (X6:
  * each a sealed item of its own, utils/outside-mail.ts sendOutsideChange). A tap on a line of theirs offers Report message in
  * every state of the chat, a request's included (design §3.5: Accept, Decline, Report): core outsideLineActions, the web's rule.
+ *
+ * `community` (slice S4, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3): the chat is kept in the file of
+ * another community this phone holds. It opens there with no switch: read, answered and fetched in that community's file
+ * and through its server only (utils/outside-chat-live.ts outsideContext), its copy held open in place while this screen
+ * is up (db.ts enterChatInPlace ... leaveChatInPlace). Without it, the community in use's, as before.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, FlatList, DeviceEventEmitter } from 'react-native';
@@ -21,6 +26,7 @@ import {
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { blockUser } from '../../utils/blocklist';
+import { enterChatInPlace, leaveChatInPlace } from '../../utils/db';
 import { OutsideMailError, reportOutsideLine, sendFromBox, sendOutsideChange } from '../../utils/outside-mail';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
@@ -48,7 +54,9 @@ function outsideLineStateWords(state: OutsideLineState | null): string | null {
 }
 
 export default function OutsideChatScreen() {
-    const { id } = useLocalSearchParams<{ id: string }>();
+    const { id, community } = useLocalSearchParams<{ id: string; community?: string }>();
+    // The community whose file carries this chat, when not the one in use (slice S4): every read, write and round names it.
+    const where = typeof community === 'string' && community ? community : null;
     const { colors } = useTheme();
     // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
     const screenKeyboard = useScreenKeyboardOffset();
@@ -67,15 +75,22 @@ export default function OutsideChatScreen() {
     const [typedAside, setTypedAside] = useState('');
     const listRef = useRef<FlatList<OutsideLine>>(null);
 
+    // Held open in place for as long as this screen is up, before its first read (slice S4); closed as it goes.
+    useEffect(() => {
+        if (!where) return;
+        enterChatInPlace(where);
+        return () => { void leaveChatInPlace(where); };
+    }, [where]);
+
     const load = useCallback(async () => {
-        const ctx = await outsideContext();
+        const ctx = await outsideContext(where);
         if (!ctx || !id) { setChat(null); return; }
         setMe(ctx.identity.publicKey);
         const c = await ctx.store.chat(ctx.identity.publicKey, String(id)).catch(() => null);
         setChat(c);
         setLines(c ? await ctx.store.lines(c.id).catch(() => []) : []);
         setChanges(c ? await ctx.store.changes(c.id).catch(() => []) : []);
-    }, [id]);
+    }, [id, where]);
 
     useEffect(() => {
         void load();
@@ -84,14 +99,14 @@ export default function OutsideChatScreen() {
     }, [load]);
 
     useFocusEffect(useCallback(() => {
-        void syncOutsideMailNow().then(load);
-        const timer = setInterval(() => { void syncOutsideMailNow().then(load); }, POLL_MS);
+        void syncOutsideMailNow(undefined, where).then(load);
+        const timer = setInterval(() => { void syncOutsideMailNow(undefined, where).then(load); }, POLL_MS);
         return () => clearInterval(timer);
-    }, [load]));
+    }, [load, where]));
 
     /** An edit, a reaction or a delete of a line, applied here at once and sent (X6); my server's words if it says no. */
     const change = async (c: { kind: OutsideChangeKind; lineId: string; text?: string; emoji?: string }): Promise<boolean> => {
-        const ctx = await outsideContext();
+        const ctx = await outsideContext(where);
         if (!ctx || !chat) return false;
         try {
             await sendOutsideChange(ctx, chat.id, c);
@@ -129,7 +144,7 @@ export default function OutsideChatScreen() {
                 if (await change({ kind: 'dm-edit', lineId: editing.id, text: words })) stopEditing();
                 return;
             }
-            const ctx = await outsideContext();
+            const ctx = await outsideContext(where);
             if (!ctx) return;
             // The box empties once the line is kept here, and the line shows at once (Sending…), never before: a send that fails
             // before that leaves the words in the box. Its own deadline: a send my server never answers leaves the line
@@ -146,7 +161,7 @@ export default function OutsideChatScreen() {
     };
 
     const decide = async (state: 'open' | 'declined') => {
-        const ctx = await outsideContext();
+        const ctx = await outsideContext(where);
         if (!ctx || !chat) return;
         await ctx.store.decide(ctx.identity.publicKey, chat.id, state);
         if (state === 'declined') { router.back(); return; }
@@ -161,7 +176,7 @@ export default function OutsideChatScreen() {
             {
                 text: t('Block'), style: 'destructive', onPress: async () => {
                     await blockUser(chat.peerKey);
-                    const ctx = await outsideContext();
+                    const ctx = await outsideContext(where);
                     if (ctx) await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined');
                     router.back();
                 },
@@ -172,7 +187,7 @@ export default function OutsideChatScreen() {
     // Report on a line from another community always blocks its sender (the sheet says so). The line goes to my community's
     // moderators with its sender's signatures; their community is told, never who reported. The sheet stays until OK.
     const submitReport = async (reason: string) => {
-        const ctx = await outsideContext();
+        const ctx = await outsideContext(where);
         if (!reporting || !chat || !ctx) return;
         try {
             await reportOutsideLine(ctx, reporting.id, reason);

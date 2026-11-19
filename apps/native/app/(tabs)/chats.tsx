@@ -5,7 +5,7 @@ import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
-import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsInView, heldChatsShown, type HeldChatRow as HeldChat } from '../../utils/held-chats';
+import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsInView, heldChatsShown, heldOutsideChatsShown, outsideChatHref, type HeldChatRow as HeldChat, type HeldOutsideChat } from '../../utils/held-chats';
 import { HeldChatRow } from '../../components/HeldChatRow';
 import { requestsWaitingOnGlobal } from '../../utils/global-requests';
 import { elsewhereCounts, requestsElsewhere, useHeldRequests } from '../../utils/requests-elsewhere';
@@ -44,7 +44,7 @@ import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
 import { chatSides, chatSideShown, formatHundredths, homeTail, requestsRowCount, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
 import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
-import { OUTSIDE_CHATS_UPDATED, outsideContext, syncOutsideMailNow } from '../../utils/outside-chat-live';
+import { OUTSIDE_CHATS_UPDATED, outsideContext, syncHeldMailNow, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import { chatsShown } from '../../utils/outside-mail';
 import type { OutsideChat } from '../../utils/outside-chat-store';
 import { GUEST_CHATS_UPDATED, loadGuestChats, syncGuestMailNow } from '../../utils/guest-chat-live';
@@ -156,7 +156,13 @@ export default function ChatsScreen() {
     const [onGlobal, setOnGlobal] = useState<number | null>(null);
     // Chats with people in other communities, on this phone only; a request among them waits behind the same row.
     const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);
-    const outsideRequests = React.useMemo(() => outsideChats.filter((c) => c.state === 'request'), [outsideChats]);
+    // The same, kept in the file of another community this phone holds (slice S4, utils/held-chats.ts): listed whatever
+    // community the phone is set to, each opened in its own community's file.
+    const [heldOutside, setHeldOutside] = useState<HeldOutsideChat[]>([]);
+    const outsideRequests = React.useMemo(
+        () => [...outsideChats, ...heldOutside].filter((c) => c.state === 'request'),
+        [outsideChats, heldOutside],
+    );
     // Group chats hosted by other communities, as a guest, on this phone only (G2); an invitation waits behind the same row.
     const [guestChats, setGuestChats] = useState<GuestChat[]>([]);
     const guestInvites = React.useMemo(() => guestChats.filter((c) => c.state === 'invited'), [guestChats]);
@@ -235,22 +241,30 @@ export default function ChatsScreen() {
         const view = heldChatsInView();
         const loadHeld = async () => {
             if (!identity?.publicKey) {
-                if (view.inView()) setHeldChats([]);
+                if (view.inView()) { setHeldChats([]); setHeldOutside([]); }
                 return;
             }
             try {
                 // A DM with someone the member blocked, under any key that chat names them by there, is not listed.
                 const shown = await heldChatsShown(identity.publicKey, view);
                 if (view.inView()) setHeldChats((prev) => (JSON.stringify(prev) === JSON.stringify(shown) ? prev : shown));
+                // Across chats and their requests kept in those files (slice S4), none with someone the account blocked.
+                const across = await heldOutsideChatsShown(identity.publicKey, view);
+                if (view.inView()) setHeldOutside((prev) => (JSON.stringify(prev) === JSON.stringify(across) ? prev : across));
             } catch (e) {
                 console.warn('[Held] Could not list the chats of the other communities', e);
-                if (view.inView()) setHeldChats([]);
+                if (view.inView()) { setHeldChats([]); setHeldOutside([]); }
             }
         };
         void loadHeld();
+        // Their across mail fetched into their own files (slice S4): each held community where its server didn't last say
+        // none waits; the list read again after a round that changed anything.
+        if (identity?.publicKey) void syncHeldMailNow().catch(() => 0);
         const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); });
+        const acrossSub = DeviceEventEmitter.addListener(OUTSIDE_CHATS_UPDATED, () => { void loadHeld(); });
         return () => {
             blockSub.remove();
+            acrossSub.remove();
             void view.leave();
         };
     }, [identity, communityUrl]));
@@ -438,8 +452,10 @@ export default function ChatsScreen() {
     // Partition conversations into "Action Required" and regular
     const { actionRequired, regularConversations } = React.useMemo(() => {
         // A chat with someone in another community sits among the others, by its newest line; a request stays behind the row.
-        let list = [...conversations, ...outsideChats.filter((c) => c.state === 'open').map((c) => ({
-            id: c.id, outside: true, peer: c.peerName ?? '', peerPubkey: c.peerKey, outsideHome: c.peerHome,
+        let list = [...conversations, ...[...outsideChats, ...heldOutside].filter((c) => c.state === 'open').map((c) => ({
+            id: 'key' in c ? c.key : c.id, outside: true, peer: c.peerName ?? '', peerPubkey: c.peerKey, outsideHome: c.peerHome,
+            // Kept in another community's file (slice S4): opened there, with no switch.
+            href: outsideChatHref(c),
             lastMessage: c.lastText ?? '', rawTimestamp: new Date(c.lastAt ?? c.updatedAt).toISOString(), unread: 0,
         })), ...guestChats.filter(guestChatListed).map((c) => {
             const last = c.lines[c.lines.length - 1];
@@ -512,7 +528,7 @@ export default function ChatsScreen() {
         regular = orderTalkRows(regular, sortBy);
 
         return { actionRequired, regularConversations: regular };
-    }, [conversations, outsideChats, guestChats, heldChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
+    }, [conversations, outsideChats, heldOutside, guestChats, heldChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
 
     const resetFilters = () => {
         setSearchQuery('');
@@ -678,7 +694,7 @@ export default function ChatsScreen() {
             const outsideName = item.peer || (item.guest ? t('Group chat') : t('Someone in another community'));
             return (
                 <Pressable accessibilityRole="button" style={styles.chatRow} testID={item.guest ? 'guest-chat-row' : 'outside-chat-row'}
-                    onPress={() => router.push(item.guest ? `/guest-chat/${encodeURIComponent(item.id)}` : `/outside-chat/${item.id}`)}>
+                    onPress={() => router.push(item.guest ? `/guest-chat/${encodeURIComponent(item.id)}` : item.href)}>
                     <View style={styles.avatarWrapper}>
                         <MemberAvatar avatarUrl={null} pubkey={item.peerPubkey || ''} callsign={item.peer} size={44} />
                     </View>
@@ -1174,7 +1190,7 @@ export default function ChatsScreen() {
                     elsewhereBusy={switchingCommunity}
                     elsewhereNote={switchNote}
                     outside={outsideRequests}
-                    onOpenOutside={(c) => router.push(`/outside-chat/${c.id}`)}
+                    onOpenOutside={(c) => router.push(outsideChatHref(c))}
                     guestInvites={guestInvites}
                     onOpenGuest={(c) => router.push(`/guest-chat/${encodeURIComponent(c.id)}`)}
                     identity={identity}

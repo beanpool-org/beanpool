@@ -1,0 +1,440 @@
+/**
+ * Slice S4 (scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Where an across chat lives", §6 row S4): a chat
+ * with someone in a community the member doesn't belong to is kept in the file of the community that carries it (its
+ * mailbox is that community's server). It now shows, and is fetched, whatever community the phone is set to, read through a
+ * held, read-only handle (S1) and written through its copy open in place (S2). No data moves between files.
+ *
+ * One table (close the class): each across action (the list, a line arriving in a round, a line sent, a reaction sent,
+ * Accept, Decline) x where the phone is (set to the carrying community; set elsewhere; set elsewhere and switched to a third
+ * community while the action's request is on its way; set elsewhere and the account leaving the phone meanwhile). A carries
+ * the chat; B is where the phone is set; C is the third. B's file starts as a copy of A's (the same chat ids), so a write
+ * by id into the wrong file would show. Each row asserts:
+ * - every mail request went to A's own server;
+ * - B's and C's across tables are exactly as they were;
+ * - the action's effect is in A's file (after a switch, once A's next round has run), and nowhere else;
+ * - the account leaving: nothing is written anywhere and no file is made again.
+ *
+ * Then the rounds and `mail` (the counts answer, server GET /api/me/unread): one table over what A's server last said
+ * (nothing heard, an old node with no `mail`, 0, 2): A's round is skipped only on 0; and the answer that says more starts it.
+ *
+ * Real SQLite files on disk (node:sqlite, in a directory of this test's own), the real database module, real sealing and
+ * signing between real keys; the mailbox is a stand-in that answers as routes/relay.ts does.
+ */
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import Module from 'node:module';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { ed25519Signer, relayConversationId, relayPayloadHash, sealOutsideLine, signRelayEnvelope, type RelayItem } from '@beanpool/core';
+
+const h = vi.hoisted(() => ({
+    dir: '',
+    store: new Map<string, string>(),
+    me: { publicKey: '', privateKey: '' },
+}));
+
+vi.mock('react-native', () => ({
+    Platform: { OS: 'android' },
+    DeviceEventEmitter: { addListener: () => ({ remove: () => {} }), emit: () => {} },
+}));
+/** expo-sqlite over node:sqlite, one real file per name in this test's directory, as expo-sqlite opens them in its own. */
+vi.mock('expo-sqlite', async () => {
+    const { DatabaseSync: Sqlite } = await import('node:sqlite');
+    const { join } = await import('node:path');
+    const params = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as any[];
+    return {
+        get defaultDatabaseDirectory() { return `file://${h.dir}`; },
+        openDatabaseAsync: vi.fn(async (name: string) => {
+            const sql = new Sqlite(join(h.dir, name));
+            return {
+                runAsync: async (q: string, p?: unknown) => {
+                    const r = sql.prepare(q).run(...params(p));
+                    return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
+                },
+                execAsync: async (q: string) => { sql.exec(q); },
+                getAllAsync: async (q: string, p?: unknown) => sql.prepare(q).all(...params(p)),
+                getFirstAsync: async (q: string, p?: unknown) => sql.prepare(q).get(...params(p)) ?? null,
+                withTransactionAsync: async (cb: () => Promise<void>) => { await cb(); },
+                closeAsync: async () => { sql.close(); },
+            };
+        }),
+    };
+});
+vi.mock('expo-file-system/legacy', async () => {
+    const nodeFs = await import('node:fs');
+    const local = (uri: string) => decodeURI(uri).replace(/^file:\/\//, '');
+    return {
+        get cacheDirectory() { return `file://${h.dir}/cache/`; },
+        get documentDirectory() { return `file://${h.dir}/doc/`; },
+        EncodingType: { Base64: 'base64' },
+        getInfoAsync: vi.fn(async (uri: string) => ({ exists: nodeFs.existsSync(local(uri)), size: 0 })),
+        moveAsync: vi.fn(async ({ from, to }: { from: string; to: string }) => { nodeFs.renameSync(local(from), local(to)); }),
+        copyAsync: vi.fn(async ({ from, to }: { from: string; to: string }) => { nodeFs.copyFileSync(local(from), local(to)); }),
+        deleteAsync: vi.fn(async (uri: string) => { nodeFs.rmSync(local(uri), { force: true, recursive: true }); }),
+        makeDirectoryAsync: vi.fn(async (uri: string) => { nodeFs.mkdirSync(local(uri), { recursive: true }); }),
+        writeAsStringAsync: vi.fn(async (uri: string, data: string) => { nodeFs.writeFileSync(local(uri), data); }),
+        readAsStringAsync: vi.fn(async (uri: string) => (nodeFs.existsSync(local(uri)) ? nodeFs.readFileSync(local(uri), 'utf8') : '')),
+        readDirectoryAsync: vi.fn(async (uri: string) => (nodeFs.existsSync(local(uri)) ? nodeFs.readdirSync(local(uri)) : [])),
+    };
+});
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (k: string) => h.store.get(k) ?? null),
+        setItem: vi.fn(async (k: string, v: string) => { h.store.set(k, String(v)); }),
+        removeItem: vi.fn(async (k: string) => { h.store.delete(k); }),
+        getAllKeys: vi.fn(async () => [...h.store.keys()]),
+        multiRemove: vi.fn(async (ks: string[]) => { for (const k of ks) h.store.delete(k); }),
+    },
+}));
+vi.mock('expo-crypto', async () => {
+    const nodeCrypto = await import('node:crypto');
+    return { randomUUID: nodeCrypto.randomUUID, getRandomBytes: (n: number) => new Uint8Array(nodeCrypto.randomBytes(n)) };
+});
+vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
+vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
+vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
+vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => {}) }));
+vi.mock('../blocklist', () => ({ getBlockedUsers: vi.fn(async () => []), isUserBlocked: vi.fn(async () => false) }));
+// Every community here takes messages from other communities.
+vi.mock('../node-profile', async (orig) => ({
+    ...(await orig<any>()),
+    getCachedNodeProfile: vi.fn(async () => ({ features: { outsideMessages: true } })),
+    fetchNodeProfile: vi.fn(async () => ({ features: { outsideMessages: true } })),
+}));
+// The member's statements as core signs them, without the phone's native modules.
+vi.mock('../member-statements', async () => {
+    const core = await import('@beanpool/core');
+    const toKey = (hex: string) => Uint8Array.from(Buffer.from(hex, 'hex'));
+    return {
+        signRelayEnvelopeStatement: (f: any, k: string) => core.signRelayEnvelope(f, core.ed25519Signer(toKey(k))),
+        signAddressCardStatement: (c: any, k: string) => core.signAddressCard(c, core.ed25519Signer(toKey(k))),
+    };
+});
+
+/** The mailboxes, one per community server, as routes/relay.ts answers: what each holds for this phone, and every request. */
+const mail = vi.hoisted(() => ({
+    held: new Map<string, any[]>(),
+    asked: [] as Array<{ origin: string; method: string; path: string }>,
+    /** The next request matching `matches` waits for `release` (an action on its way while something happens). */
+    hold: null as null | { matches: (method: string, p: string) => boolean; seenNow: () => void; released: Promise<void>; taken: boolean },
+}));
+vi.mock('../node-post', async (orig) => {
+    const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+    const waitIfHeld = async (method: string, p: string) => {
+        const hold = mail.hold;
+        if (hold && !hold.taken && hold.matches(method, p)) {
+            hold.taken = true;
+            hold.seenNow();
+            await hold.released;
+        }
+    };
+    return {
+        ...(await orig<any>()),
+        signedGet: vi.fn(async (url: string, p: string) => {
+            const origin = new URL(url).origin;
+            mail.asked.push({ origin, method: 'GET', path: p.split('?')[0] });
+            await waitIfHeld('GET', p.split('?')[0]);
+            if (p.startsWith('/api/mail?')) return answer(200, { items: mail.held.get(origin) ?? [], more: false, outbox: [], outboxMore: false });
+            return answer(404, { error: 'not here' });
+        }),
+        signedPost: vi.fn(async (url: string, p: string, body: any) => {
+            const origin = new URL(url).origin;
+            mail.asked.push({ origin, method: 'POST', path: p });
+            await waitIfHeld('POST', p);
+            if (p === '/api/mail/confirm') {
+                mail.held.set(origin, (mail.held.get(origin) ?? []).filter((i) => !body.ids.includes(i.envelope.itemId)));
+                return answer(200, { confirmed: body.ids.length });
+            }
+            if (p === '/api/mail/send') return answer(200, { items: body.items.map((i: RelayItem) => ({ itemId: i.envelope.itemId, state: 'sent' })) });
+            return answer(404, { error: 'not here' });
+        }),
+    };
+});
+
+import * as db from '../db';
+import { switchPhoneTo } from '../reconnect';
+import { removeCommunityCaches } from '../community-cache';
+import { getDatabaseFilenameForNode } from '../nodes';
+import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
+import { SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { heldChatsInView, heldOutsideChatsShown, outsideChatHref } from '../held-chats';
+import { _forgetMailHeardForTests, noteMailHeard, outsideContext, syncHeldMailNow, syncOutsideMailNow } from '../outside-chat-live';
+import { chatsShown, sendFromBox, sendOutsideChange } from '../outside-mail';
+
+// A finished write may end with require('react-native') for a DeviceEventEmitter nudge: answered at node's loader.
+const realLoad = (Module as any)._load;
+(Module as any)._load = function (request: string, ...rest: any[]) {
+    if (request === 'react-native') return { DeviceEventEmitter: { emit: () => {}, addListener: () => ({ remove: () => {} }) }, Platform: { OS: 'android' } };
+    return realLoad.call(this, request, ...rest);
+};
+const root = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'bp-across-everywhere-'));
+afterAll(() => {
+    (Module as any)._load = realLoad;
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+/** A: carries the across chat (its mailbox). B: where the phone is set. C: a third, the phone switches to. */
+const A = 'https://riverside.example';
+const B = 'https://hilltop.example';
+const C = 'https://brookside.example';
+const A_FILE = getDatabaseFilenameForNode(A);
+const B_FILE = getDatabaseFilenameForNode(B);
+const C_FILE = getDatabaseFilenameForNode(C);
+const ANCHOR = 'beanpool_anchor_url';
+const ACROSS_TABLES = ['outside_chats', 'outside_lines', 'outside_changes', 'outside_receipts'];
+const PEER_HOME = 'faraway.example';
+
+interface Person { publicKey: string; privateKey: string }
+function person(): Person {
+    const seed = ed25519.utils.randomSecretKey();
+    return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed) };
+}
+const uuid = () => { const b = randomBytes(16); b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80; const x = b.toString('hex'); return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`; };
+const settle = async () => { for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0)); };
+
+let me: Person;
+let peer: Person;
+let chatId: string;
+/** A line of theirs already in A's file (and B's copy): what a reaction names. */
+let theirLine: string;
+let phoneN = 0;
+
+const fileOn = (file: string) => path.join(h.dir, file);
+function acrossRowsOf(file: string): Record<string, unknown[]> | null {
+    if (!fs.existsSync(fileOn(file))) return null;
+    const sql = new DatabaseSync(fileOn(file));
+    try {
+        const out: Record<string, unknown[]> = {};
+        for (const t of ACROSS_TABLES) out[t] = sql.prepare(`SELECT * FROM ${t} ORDER BY 1`).all().map((r) => ({ ...(r as object) }));
+        return out;
+    } finally {
+        sql.close();
+    }
+}
+function setChatState(file: string, state: string): void {
+    const sql = new DatabaseSync(fileOn(file));
+    sql.prepare('UPDATE outside_chats SET state = ? WHERE id = ?').run(state, chatId);
+    sql.close();
+}
+
+/** A line `peer` writes me, sealed on their phone, held at A's mailbox for me. */
+async function heldAtA(text: string): Promise<string> {
+    const itemId = uuid();
+    const payload = sealOutsideLine({ text, name: 'Pia', myEdPrivHex: peer.privateKey, myKey: peer.publicKey, peerKey: me.publicKey, messageId: itemId });
+    const envelope = await signRelayEnvelope({
+        kind: 'dm-line', itemId, senderKey: peer.publicKey, senderHome: PEER_HOME, recipient: me.publicKey, recipientHome: new URL(A).host,
+        at: Date.now(), payloadHash: relayPayloadHash(payload),
+    }, ed25519Signer(Buffer.from(peer.privateKey, 'hex')));
+    mail.held.set(A, [...(mail.held.get(A) ?? []), { kind: 'dm-line', envelope, payload, bytes: payload.length, receivedAt: Date.now() }]);
+    return itemId;
+}
+
+/**
+ * A phone that holds an open across chat with `peer` in A's file (one line of theirs in it), then is set to `setTo`. B's
+ * file starts as a copy of A's (the same ids).
+ */
+async function phone(setTo: string): Promise<void> {
+    await db.closeDB();
+    db._resetChatsInPlaceForTests();
+    _forgetMailHeardForTests();
+    h.dir = path.join(root, `phone-${++phoneN}`);
+    fs.mkdirSync(h.dir);
+    h.store.clear();
+    h.store.set(CACHE_NAMES_DONE_KEY, '1');
+    h.store.set(SAVED_NODES_STORE_KEY, JSON.stringify([A, B, C].map((url) => ({ url, lastConnected: '2026-11-20T00:00:00.000Z' }))));
+    h.store.set(ANCHOR, A);
+    me = person();
+    peer = person();
+    h.me = { publicKey: me.publicKey, privateKey: me.privateKey };
+    mail.held = new Map();
+    mail.asked = [];
+    mail.hold = null;
+    chatId = relayConversationId(me.publicKey, peer.publicKey);
+
+    // Made while set to A, as today: the chat lives in A's file, A's mailbox is its home.
+    const here = db.outsideStore(A);
+    await here.setMeta('home', `${new URL(A).host} ${Date.now()}`);
+    await here.openChat(me.publicKey, chatId, { key: peer.publicKey, home: PEER_HOME, name: 'Pia' });
+    theirLine = await heldAtA('first words from Pia');
+    expect(await syncOutsideMailNow(30_000)).not.toBeNull();
+    expect(acrossRowsOf(A_FILE)!.outside_lines.some((l: any) => l.id === theirLine)).toBe(true);
+    await db.closeDB();
+    fs.copyFileSync(fileOn(A_FILE), fileOn(B_FILE));
+    if (setTo !== A) await switchPhoneTo(setTo);
+    else await db.initDB();
+    expect(h.store.get(ANCHOR)).toBe(setTo);
+    mail.asked = [];
+}
+
+interface Act {
+    name: string;
+    /** The mail request held while something happens (null: the action asks no server). */
+    held: ((method: string, p: string) => boolean) | null;
+    before?: () => Promise<void> | void;
+    act: (community: string) => Promise<unknown>;
+    /** The action's effect, as A's across tables and its result show it. */
+    landed: (a: Record<string, any[]>, result: any) => boolean;
+}
+
+let arrived = '';
+const sentWords = 'an answer from wherever I am';
+const ACTS: Act[] = [
+    {
+        name: 'the list', held: null,
+        act: async () => {
+            // As Chat reads it while in view (app/(tabs)/chats.tsx): its held handles close as it is left.
+            const view = heldChatsInView();
+            try {
+                const here = await outsideContext();
+                return { here: here ? await chatsShown(here) : [], held: await heldOutsideChatsShown(me.publicKey, view) };
+            } finally {
+                await view.leave();
+            }
+        },
+        landed: (_a, r) => {
+            const set = h.store.get(ANCHOR);
+            const listed = set === A ? r.here.find((c: any) => c.id === chatId) : r.held.find((c: any) => c.id === chatId && c.community === A);
+            return !!listed && listed.lastText === 'first words from Pia' && (set === A || outsideChatHref(listed) === `/outside-chat/${chatId}?community=${encodeURIComponent(A)}`);
+        },
+    },
+    {
+        name: 'a line arriving (the round)',
+        held: (m, p) => m === 'GET' && p === '/api/mail',
+        before: async () => { arrived = await heldAtA('arrived wherever the phone is set'); },
+        act: (community) => syncOutsideMailNow(30_000, community),
+        landed: (a) => a.outside_lines.some((l: any) => l.id === arrived && l.text === 'arrived wherever the phone is set'),
+    },
+    {
+        name: 'a line sent',
+        held: (m, p) => m === 'POST' && p === '/api/mail/send',
+        act: async (community) => {
+            const ctx = await outsideContext(community);
+            return sendFromBox(ctx!, chatId, sentWords, 20_000, () => {});
+        },
+        landed: (a) => a.outside_lines.some((l: any) => l.text === sentWords && l.author === me.publicKey),
+    },
+    {
+        name: 'a reaction sent',
+        held: (m, p) => m === 'POST' && p === '/api/mail/send',
+        act: async (community) => sendOutsideChange((await outsideContext(community))!, chatId, { kind: 'dm-reaction', lineId: theirLine, emoji: '👍' }),
+        landed: (a) => a.outside_changes.some((c: any) => c.line_id === theirLine && c.emoji === '👍' && c.author === me.publicKey),
+    },
+    {
+        name: 'Accept a request',
+        held: null,
+        before: () => { setChatState(A_FILE, 'request'); setChatState(B_FILE, 'request'); },
+        act: async (community) => (await outsideContext(community))!.store.decide(me.publicKey, chatId, 'open'),
+        landed: (a) => a.outside_chats.some((c: any) => c.id === chatId && c.state === 'open'),
+    },
+    {
+        name: 'Decline a request',
+        held: null,
+        before: () => { setChatState(A_FILE, 'request'); setChatState(B_FILE, 'request'); },
+        act: async (community) => (await outsideContext(community))!.store.decide(me.publicKey, chatId, 'declined'),
+        landed: (a) => a.outside_chats.some((c: any) => c.id === chatId && c.state === 'declined'),
+    },
+];
+
+/** Where the phone is, and what happens while the action is on its way. */
+const WHERE: Record<string, { setTo: string; meanwhile: (() => Promise<void>) | null; leaves: boolean }> = {
+    'set to the carrying community': { setTo: A, meanwhile: null, leaves: false },
+    'set elsewhere': { setTo: B, meanwhile: null, leaves: false },
+    'set elsewhere, switched to a third community mid-way': { setTo: B, meanwhile: async () => { await switchPhoneTo(C); }, leaves: false },
+    'set elsewhere, the account leaving the phone mid-way': {
+        setTo: B,
+        meanwhile: async () => { await db.clearDB({ identityLeaves: true }); await removeCommunityCaches([A, B, C], { everyCopy: true }); },
+        leaves: true,
+    },
+};
+
+describe('an across chat: every action lands in the carrying community\'s file and mailbox, wherever the phone is set', () => {
+    const cases = ACTS.flatMap((a) => Object.keys(WHERE).map((w) => [a.name, w, a] as const));
+    it.each(cases)('%s, %s', async (_name, whereName, row) => {
+        const where = WHERE[whereName];
+        await phone(where.setTo);
+        await row.before?.();
+        const bBefore = acrossRowsOf(B_FILE);
+        const cBefore = acrossRowsOf(C_FILE);
+        mail.asked = [];
+
+        let seen: () => void = () => {};
+        let release: () => void = () => {};
+        const seenP = new Promise<void>((r) => { seen = r; });
+        const released = new Promise<void>((r) => { release = r; });
+        if (row.held && where.meanwhile) mail.hold = { matches: row.held, seenNow: seen, released, taken: false };
+        // A chat screen holds its community in place while it is up (app/outside-chat/[id].tsx); a round holds it itself.
+        const holds = where.setTo !== A;
+        if (holds) db.enterChatInPlace(A);
+        let result: unknown;
+        const running = row.act(A).then((r) => { result = r; }, () => {});
+        if (mail.hold) await seenP;
+        else await running;
+        if (where.meanwhile) await where.meanwhile();
+        await settle();
+        const cAfterMeanwhile = acrossRowsOf(C_FILE);
+        release();
+        await running;
+        if (holds) await db.leaveChatInPlace(A);
+        await settle();
+
+        // Every mail request went to A's own server.
+        for (const r of mail.asked) expect(r.origin, `${r.method} ${r.path}`).toBe(A);
+        if (row.held && !where.leaves) expect(mail.asked.length, 'the action asked A').toBeGreaterThan(0);
+
+        if (where.leaves) {
+            // Nothing written anywhere after the account left, and no copy made again.
+            expect(fs.existsSync(fileOn(A_FILE)), 'A\'s copy is never made again').toBe(false);
+            expect(fs.existsSync(fileOn(B_FILE)), 'B\'s copy is never made again').toBe(false);
+            expect(db.heldCopyFiles()).toEqual([]);
+            return;
+        }
+        // B's and C's across tables exactly as they were (C's as the switch made it).
+        expect(acrossRowsOf(B_FILE), 'B\'s file').toEqual(bBefore);
+        if (cBefore || cAfterMeanwhile) expect(acrossRowsOf(C_FILE), 'C\'s file').toEqual(cAfterMeanwhile ?? cBefore);
+        // A round of A afterwards (a switch can cut the first), from wherever the phone now is: the effect is in A's file.
+        if (where.meanwhile && row.held) await syncOutsideMailNow(30_000, A);
+        expect(row.landed(acrossRowsOf(A_FILE)!, result), 'landed in A').toBe(true);
+        expect(acrossRowsOf(B_FILE), 'B\'s file, after A\'s next round').toEqual(bBefore);
+        // Nothing of A left open beside the copy in use once the screen, the list and the rounds let go.
+        if (h.store.get(ANCHOR) !== A) expect(db.heldCopyFiles(), 'nothing of A left open').not.toContain(A_FILE);
+    });
+});
+
+describe('rounds and `mail`: a held community\'s round is skipped only when its server last said none waits', () => {
+    const HEARD: Array<[string, unknown | undefined, boolean, boolean]> = [
+        // what A's counts answer said, body; does it start a round; is A fetched by the held rounds
+        ['nothing heard yet', undefined, false, true],
+        ['an old node, no `mail`', { unread: 0, requests: 0 }, false, true],
+        ['`mail: 0`', { unread: 0, requests: 0, mail: 0 }, false, false],
+        ['`mail: 2`', { unread: 0, requests: 0, mail: 2 }, true, true],
+        ['a `mail` that is no count', { mail: -1 }, false, true],
+    ];
+    it.each(HEARD)('%s', async (_name, body, starts, fetched) => {
+        await phone(B);
+        if (body !== undefined) expect(noteMailHeard(A, body)).toBe(starts);
+        mail.asked = [];
+        await syncHeldMailNow(30_000);
+        expect(mail.asked.some((r) => r.origin === A && r.path === '/api/mail')).toBe(fetched);
+        // Never B (the community in use is the ordinary round's), never a community the phone doesn't hold.
+        expect(mail.asked.every((r) => r.origin === A || r.origin === C)).toBe(true);
+    });
+
+    it('an answer that says more after a 0 starts the round again', async () => {
+        await phone(B);
+        noteMailHeard(A, { mail: 0 });
+        await heldAtA('after the zero');
+        mail.asked = [];
+        await syncHeldMailNow(30_000);
+        expect(mail.asked.some((r) => r.origin === A)).toBe(false);
+        expect(noteMailHeard(A, { mail: 1 })).toBe(true);
+        await syncHeldMailNow(30_000);
+        expect(acrossRowsOf(A_FILE)!.outside_lines.some((l: any) => l.text === 'after the zero')).toBe(true);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
+    });
+});
+
+beforeEach(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); vi.spyOn(console, 'log').mockImplementation(() => {}); });

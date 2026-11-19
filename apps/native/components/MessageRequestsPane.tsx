@@ -452,7 +452,7 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
             </Pressable>
             <RequestsElsewhereCards places={elsewhere} busy={elsewhereBusy} note={elsewhereNote} onOpen={(place) => onOpenElsewhere?.(place)} />
             {outside.map((c) => (
-                <Pressable key={c.id} accessibilityRole="button" testID="outside-request-card" style={styles.emptyCard} onPress={() => onOpenOutside?.(c)}>
+                <Pressable key={(c as { key?: string }).key ?? c.id} accessibilityRole="button" testID="outside-request-card" style={styles.emptyCard} onPress={() => onOpenOutside?.(c)}>
                     <Text style={styles.title}>{t('{name} · {community}', { name: c.peerName ?? t('Someone in another community'), community: c.peerHome })}</Text>
                     <Text style={styles.emptyText}>{t('{name} wants to message you', { name: c.peerName ?? c.peerHome })}</Text>
                     {!!c.lastText && <Text style={styles.emptyText} numberOfLines={4}>{c.lastText}</Text>}

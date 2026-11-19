@@ -10,13 +10,14 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { closeHeldCopies, getHeldConversations, heldChatIsDm, type HeldConversation } from './db';
+import { closeHeldCopies, getHeldConversations, getHeldOutsideChats, heldChatIsDm, type HeldConversation } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { sameCommunity } from './push-pins';
 import { communityName } from './community-name';
-import { getBlockedUsers } from './blocklist';
+import { getBlockedUsers, isUserBlocked } from './blocklist';
 import { talkShowsChat } from './dm-blocked';
+import type { OutsideChat } from './outside-chat-store';
 
 export interface HeldChatRow extends HeldConversation {
     /** The row's key in Chat's list: never that of a chat in the community in use, nor of the same id in another. */
@@ -88,9 +89,13 @@ export async function heldChatRows(myPubkey: string, view?: HeldChatsView): Prom
     }
 }
 
-async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promise<HeldChatRow[]> {
+/**
+ * The other communities whose copies Chat reads (slice S1; S4's across chats too): the saved list, one per file however its
+ * address is spelled, never the one in use, never a guest's look, never an address that isn't plain; each with its saved name.
+ */
+async function heldCommunities(): Promise<Array<{ url: string; file: string; name: string }>> {
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
-    const rows: HeldChatRow[] = [];
+    const out: Array<{ url: string; file: string; name: string }> = [];
     const files = new Set<string>();
     for (const node of await getSavedNodes()) {
         const url = node.url;
@@ -99,15 +104,65 @@ async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promi
         const file = getDatabaseFilenameForNode(url);
         if (files.has(file)) continue;
         files.add(file);
+        const savedName = (node as { name?: unknown }).name;
+        out.push({ url, file, name: typeof savedName === 'string' && savedName.trim() ? savedName.trim() : communityName(node) });
+    }
+    return out;
+}
+
+async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promise<HeldChatRow[]> {
+    const rows: HeldChatRow[] = [];
+    for (const { url, file, name } of await heldCommunities()) {
         // Chat left: no further community's copy is opened (one opened since the close as it was left closes as this ends).
         if (!inView()) break;
         const chats = await getHeldConversations(myPubkey, url);
         if (!chats) continue;
-        const savedName = (node as { name?: unknown }).name;
-        const name = typeof savedName === 'string' && savedName.trim() ? savedName.trim() : communityName(node);
         for (const chat of chats) rows.push({ ...chat, key: `held:${file}:${chat.id}`, held: true, community: url, communityName: name });
     }
     return rows;
+}
+
+/**
+ * A chat with someone in a community the member doesn't belong to, kept in the file of another community this phone holds
+ * (slice S4, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3: "Same file, same rule, visible always"). It opens
+ * in that file (app/outside-chat/[id].tsx `community`): read, answered and fetched there with no switch.
+ */
+export interface HeldOutsideChat extends OutsideChat {
+    /** The row's key in Chat's list and the requests list: never that of an across chat in use, nor of the same id elsewhere. */
+    key: string;
+    /** The community whose file carries it, as the saved list has its address: where its mail is fetched and its lines go. */
+    community: string;
+    communityName: string;
+}
+
+/**
+ * Where an across chat opens (app/outside-chat/[id].tsx): in the file that carries it, named by its community when that is
+ * another one this phone holds (slice S4), else the community in use's, as before.
+ */
+export function outsideChatHref(chat: { id: string; community?: string }): string {
+    return chat.community ? `/outside-chat/${chat.id}?community=${encodeURIComponent(chat.community)}` : `/outside-chat/${chat.id}`;
+}
+
+/**
+ * The across chats and requests kept in every other community's file this phone holds, read through held, read-only handles
+ * (db.ts getHeldOutsideChats), none with someone the account blocked (as outside-mail.ts chatsShown leaves them out). `view`:
+ * as {@link heldChatRows}, so no handle opened after Chat is left stays open.
+ */
+export async function heldOutsideChatsShown(myPubkey: string, view?: HeldChatsView): Promise<HeldOutsideChat[]> {
+    const inView = view ? view.inView : () => true;
+    try {
+        const out: HeldOutsideChat[] = [];
+        for (const { url, file, name } of await heldCommunities()) {
+            if (!inView()) break;
+            for (const chat of (await getHeldOutsideChats(myPubkey, url)) ?? []) {
+                if (await isUserBlocked(chat.peerKey)) continue;
+                out.push({ ...chat, key: `held-across:${file}:${chat.id}`, community: url, communityName: name });
+            }
+        }
+        return out;
+    } finally {
+        if (view && !view.inView()) await closeUnlessInView();
+    }
 }
 
 /**

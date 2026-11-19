@@ -105,11 +105,14 @@ const keeper = makeCopyKeeper<BeanPoolIdentity>({
         return Number.isFinite(end) && end <= Date.now();
     },
     // A tend runs inside withGlobal, so this community names a global and isn't it.
-    homesOf: async (identity) => (adoptsFor(identity.publicKey) ? [homeAddress()] : []),
+    homesOf: async (identity, now) => (adoptsFor(identity.publicKey, now) ? [homeAddress()] : []),
 });
 
-/** Whether a tend here looks for copies this browser holds no pair for: only for a key it last heard is on global. */
-const adoptsFor = (publicKey: string): boolean => keptStanding(publicKey, Date.now()) === 'member';
+/**
+ * Whether a tend here looks for copies this browser holds no pair for: only for a key it last heard is on global. `now` is the
+ * tend's own clock, the one it judges everything else by.
+ */
+const adoptsFor = (publicKey: string, now: number): boolean => keptStanding(publicKey, now) === 'member';
 
 async function withGlobal<T>(run: (deps: CopyDeps<BeanPoolIdentity>) => Promise<T>, none: T): Promise<T> {
     const global = await globalAddress();
@@ -202,9 +205,9 @@ export async function stopShowing(id: string, identity: BeanPoolIdentity, gone?:
 }
 
 /** Every copy brought into step: a pause, a holiday, a return; and, once a day, copies made elsewhere taken up. */
-export async function tendCopies(identity: BeanPoolIdentity): Promise<void> {
+export async function tendCopies(identity: BeanPoolIdentity, now: number = Date.now()): Promise<void> {
     const mine = (await copyPairs.read()).some((p) => p.publicKey === identity.publicKey);
-    if (mine || adoptsFor(identity.publicKey)) await withGlobal((deps) => keeper.tendCopies(identity, deps), undefined);
+    if (mine || adoptsFor(identity.publicKey, now)) await withGlobal((deps) => keeper.tendCopies(identity, deps, now), undefined);
 }
 
 /**
@@ -219,7 +222,7 @@ export async function tendCopiesSoon(identity: BeanPoolIdentity | null | undefin
         due = now - Number(localStorage.getItem(TENDED_KEY) ?? 0) >= TEND_EVERY_MS;
         if (due) localStorage.setItem(TENDED_KEY, String(now));
     } catch { /* storage off: this load tends */ }
-    if (due) await tendCopies(identity).catch(() => {});
+    if (due) await tendCopies(identity, now).catch(() => {});
     await keepTryingOffs(identity);
 }
 

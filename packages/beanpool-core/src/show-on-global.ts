@@ -210,9 +210,10 @@ export interface CopyKeeperSetup<I extends CopyIdentity> {
     isEventEnded(home: HomeEvent): boolean;
     /**
      * The member's own communities a tend may look for copies from (`adoptCopies`): none where the device has no reason to
-     * think the key is on global. Without it, a device tends only the pairs it holds.
+     * think the key is on global. Without it, a device tends only the pairs it holds. `now` is the tend's clock, so what the
+     * device last heard is judged by the same time as the rest of the tend.
      */
-    homesOf?(identity: I): Promise<string[]>;
+    homesOf?(identity: I, now: number): Promise<string[]>;
 }
 
 export interface CopyKeeper<I extends CopyIdentity> {
@@ -1051,7 +1052,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
         const key = identity.publicKey;
         if (!setup.homesOf || now - (lookedAt.get(key) ?? -Infinity) < COPY_ADOPT_EVERY_MS) return;
         // Nowhere to look yet is no look: the day starts when there is one, so a key heard on global later isn't kept waiting.
-        const homes = await setup.homesOf(identity);
+        const homes = await setup.homesOf(identity, now);
         if (homes.length === 0) return;
         const held = (await readPairs()).filter((p) => p.publicKey === key);
         const unpaired: { home: HomeEvent; url: string }[] = [];

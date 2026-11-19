@@ -1954,7 +1954,7 @@ function ChatScreen({ id }: { id: string }) {
                         style={[styles.waitingContainer, { marginBottom: Math.max(insets.bottom, 12) }]}
                     >
                         <Text style={styles.waitingText}>
-                            {t('Sent as a request. {name} will see it under Message requests. You can write more once they accept.', { name: peerName })}
+                            {t('Sent as a message request. {name} will see it under Message requests, without a notification. You can write again once they accept.', { name: peerName })}
                         </Text>
                         <Pressable
                             accessibilityRole="button"

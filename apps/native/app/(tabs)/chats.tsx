@@ -27,6 +27,8 @@ import { chatPreviewWords } from '../../utils/chat-line-words';
 import { listingStatusWords } from '../../utils/listing-status-words';
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { MessageRequestsPane } from '../../components/MessageRequestsPane';
+import { MessageRequestsRow } from '../../components/MessageRequestsRow';
+import { useRequestsUnseen } from '../../utils/requests-seen';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,7 +38,7 @@ import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-commun
 import { getPendingOnboarding } from '../../utils/onboarding-state';
 import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
 import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
-import { chatSides, chatSideShown, formatHundredths, homeTail, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
+import { chatSides, chatSideShown, formatHundredths, homeTail, requestsRowCount, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
 import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
 import { OUTSIDE_CHATS_UPDATED, outsideContext, syncOutsideMailNow } from '../../utils/outside-chat-live';
@@ -152,9 +154,16 @@ export default function ChatsScreen() {
     // Group chats hosted by other communities, as a guest, on this phone only (G2); an invitation waits behind the same row.
     const [guestChats, setGuestChats] = useState<GuestChat[]>([]);
     const guestInvites = React.useMemo(() => guestChats.filter((c) => c.state === 'invited'), [guestChats]);
-    const { recheck } = useNodeStatus();
+    const { recheck, nodeUrl: communityUrl } = useNodeStatus();
     const otherNotices = useOtherCommunitiesNotices();
     const requestsHere = requests ?? (onGlobal > 0 || outsideRequests.length > 0 || guestInvites.length > 0 ? { count: 0, conversations: [] } : null);
+    // The row's count and red dot (core dm-requests.ts requestsRowCount, utils/requests-seen.ts): every kind behind the row.
+    const requestsWaitingNow = React.useMemo(
+        () => ({ here: requestsHere, onGlobal, outside: outsideRequests, guestInvites }),
+        [requestsHere, onGlobal, outsideRequests, guestInvites],
+    );
+    const requestsCount = requestsRowCount(requestsWaitingNow);
+    const requestsUnseenNow = useRequestsUnseen(identity?.publicKey, communityUrl, requestsWaitingNow, messagesFilter === 'requests' && !!requestsHere);
     const [switchingCommunity, setSwitchingCommunity] = useState(false);
     // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
     const [switchNote, setSwitchNote] = useState<string | null>(null);
@@ -349,21 +358,6 @@ export default function ChatsScreen() {
         resetBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         closeBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.border.default },
         closeBtnText: { color: colors.text.secondary, fontSize: 13, fontWeight: '700' },
-        requestsRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            minHeight: 48,
-            paddingHorizontal: 16,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border.default,
-        },
-        requestsRowText: {
-            flex: 1,
-            fontSize: 15,
-            fontWeight: '600',
-            color: colors.text.body,
-        },
         contactsLine: { marginHorizontal: 16, marginBottom: 10, padding: 12, borderRadius: 12, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         contactsLineText: { fontSize: 14, lineHeight: 20, color: colors.text.body },
         contactsLineBold: { fontWeight: '800' },
@@ -1091,18 +1085,13 @@ export default function ChatsScreen() {
             {messagesFilter !== 'requests' && (
                 <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
             )}
-            {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
-            {requestsHere && requestsHere.count + onGlobal + outsideRequests.length + guestInvites.length > 0 && messagesFilter !== 'requests' && (
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('Message requests')}
-                    testID="message-requests-row"
-                    style={styles.requestsRow}
-                    onPress={() => setMessagesFilter('requests')}
-                >
-                    <Text style={styles.requestsRowText}>{t('Message requests')}</Text>
-                    <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
-                </Pressable>
+            {/* One row for every kind of outside request (Marty, 1 Nov 2026). Marty, 19 Nov 2026, after Damo's global test ("I
+                thought that was a heading for the chat not a menu!!!"): it shows how many wait and a small red dot until the list
+                is opened, which replaced his 1 Nov "no count and no badge until one is accepted" for this row alone. Still no
+                push, and nothing in the app-icon badge, the tab's badge or the unread count: a stranger's line must not ring a
+                phone set to another community (components/MessageRequestsRow.tsx). */}
+            {requestsHere && messagesFilter !== 'requests' && (
+                <MessageRequestsRow count={requestsCount} unseen={requestsUnseenNow} onPress={() => setMessagesFilter('requests')} />
             )}
             </QuickReturnBlock>
             {messagesFilter === 'requests' && requestsHere ? (

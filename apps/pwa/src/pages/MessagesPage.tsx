@@ -21,7 +21,8 @@ import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPrevie
 import { OutsideChatRow, OutsideChatThread, OutsideRequestCard, outsideRoundNow } from '../components/OutsideChats';
 import { GuestChatRow, GuestChatThread, GuestInvitationCard, guestChatAsListed, useGuestChats } from '../components/GuestChats';
 import { guestRowsKnown } from '../lib/guest-chat-live';
-import { guestChatListed } from '@beanpool/core';
+import { guestChatListed, requestsRowCount, requestsPillText } from '@beanpool/core';
+import { useRequestsUnseen } from '../lib/requests-seen';
 import { AddressCardPanel } from '../components/AddressCardPanel';
 import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
 import type { OutsideChat } from '../lib/outside-chat-store';
@@ -361,6 +362,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [activeTab, setActiveTab] = useState<ConversationTab>('all');
     // Requests turned off while the member is on them: the pill goes, so the list goes back to All, never to no chip.
     useEffect(() => { if (!requests && !onGlobal && !outsideRequests.length && !guestInvites.length && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, outsideRequests.length, guestInvites.length, activeTab]);
+    // The Message requests row's count and red dot (core dm-requests.ts requestsRowCount, lib/requests-seen.ts): every kind
+    // waiting behind the row; the dot goes once the list has been open since the newest came.
+    const requestsWaiting = { here: requests, onGlobal: onGlobal?.count ?? 0, outside: outsideRequests, guestInvites };
+    const requestsRowTotal = requestsRowCount(requestsWaiting);
+    const requestsUnseenNow = useRequestsUnseen(identity.publicKey, requestsWaiting,
+        activeTab === 'requests' && (!!requests || !!onGlobal || outsideRequests.length > 0 || guestInvites.length > 0));
     // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to Start something on a community with
@@ -3834,7 +3841,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem',
                     }}>
                         <span style={{ flex: '1 1 14rem' }}>
-                            {t('Sent as a request. {name} will see it under Message requests. You can write more once they accept.', { name: getConversationTitle(activeConv) })}
+                            {t('Sent as a message request. {name} will see it under Message requests, without a notification. You can write again once they accept.', { name: getConversationTitle(activeConv) })}
                         </span>
                         <button
                             type="button"
@@ -4097,8 +4104,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         { id: 'direct', label: t('Direct'), count: 0 },
         { id: 'groups', label: t('Groups'), count: groupsUnread },
     ];
-    // Requests (lib/dm-requests.ts): one plain row at the top of Chat, where the community has them on and one is waiting. No
-    // count and no badge until one is accepted (Marty, 1 Nov 2026): every kind of outside request waits behind it.
+    // Requests (lib/dm-requests.ts): one row at the top of Chat, where the community has them on and one is waiting; every
+    // kind of outside request waits behind it (Marty, 1 Nov 2026). Marty, 19 Nov 2026, after Damo's global test ("I thought
+    // that was a heading for the chat not a menu!!!"): it reads as a button, with how many wait and a small red dot until the
+    // list is opened, which replaced his 1 Nov "no count and no badge until one is accepted" for this row alone. Still no push,
+    // and nothing in the tab's badge, the title's count or the unread count: a stranger's line rings nobody.
     const requestCount = requests?.count ?? 0;
     const showingRequests = activeTab === 'requests' && (!!requests || !!onGlobal || outsideRequests.length > 0 || guestInvites.length > 0);
     // Open chats with people in other communities, in All and Direct, above the community's own (kept in this browser only),
@@ -4198,13 +4208,34 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             </div>
             </>)}
 
-            {(requestCount > 0 || !!onGlobal || outsideRequests.length > 0 || guestInvites.length > 0) && !showingRequests && (
-                <button type="button" data-testid="message-requests-row" onClick={() => setActiveTab('requests')} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: '48px', padding: '0.5rem 1rem',
-                    marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '12px',
-                    color: 'var(--text-primary)', font: 'inherit', fontWeight: 600, cursor: 'pointer', textAlign: 'left',
-                }}>
-                    {t('Message requests')}<span aria-hidden="true">›</span>
+            {requestsRowTotal > 0 && !showingRequests && (
+                <button type="button" data-testid="message-requests-row" onClick={() => setActiveTab('requests')}
+                    aria-label={tn(requestsRowTotal, 'Message requests: {n} waiting', 'Message requests: {n} waiting')}
+                    {...(requestsUnseenNow ? { 'aria-description': t('New since you last looked') } : {})}
+                    className="hover:brightness-95 dark:hover:brightness-110"
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', minHeight: '52px', padding: '0.5rem 0.875rem',
+                        marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '12px',
+                        color: 'var(--text-primary)', font: 'inherit', fontWeight: 700, cursor: 'pointer', textAlign: 'left',
+                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
+                    }}>
+                    <span aria-hidden="true" style={{
+                        position: 'relative', flexShrink: 0, width: '36px', height: '36px', borderRadius: '18px', display: 'inline-flex',
+                        alignItems: 'center', justifyContent: 'center', background: 'var(--bg-hover)', fontSize: '1.1rem',
+                    }}>
+                        ✉️
+                        {requestsUnseenNow && <span data-testid="message-requests-dot" style={{
+                            position: 'absolute', top: 0, right: 0, width: '10px', height: '10px', borderRadius: '5px',
+                            background: 'var(--danger)', border: '1.5px solid var(--bg-card)',
+                        }} />}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{t('Message requests')}</span>
+                    <span aria-hidden="true" data-testid="message-requests-count" style={{
+                        flexShrink: 0, minWidth: '26px', height: '22px', padding: '0 7px', borderRadius: '11px', display: 'inline-flex',
+                        alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 800,
+                        background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
+                    }}>{requestsPillText(requestsRowTotal)}</span>
+                    <span aria-hidden="true" style={{ flexShrink: 0, color: 'var(--text-muted)', fontSize: '1.25rem', lineHeight: 1 }}>›</span>
                 </button>
             )}
 

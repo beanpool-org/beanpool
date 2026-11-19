@@ -44,6 +44,7 @@ const STORES: Record<string, Kind> = {
     blockedKeyChainsStoreKey: PHONE,
     blockChangesStoreKey: PHONE,
     MESSAGE_REQUESTS_STORE_PREFIX: PHONE,
+    MESSAGE_REQUESTS_SEEN_STORE_PREFIX: PHONE,
     PUSH_TOKEN_STORE_KEY: PHONE,
     PUSH_STAMP_STORE_KEY: PHONE,
     IDENTITY_THIS_DEVICE_STORE_KEY: PHONE,
@@ -71,6 +72,7 @@ const STORES: Record<string, Kind> = {
     homeInterestsOwedStoreKey: KEY,
 
     messageRequestsStoreKey: FILE,
+    messageRequestsSeenStoreKey: FILE,
     dmPeerPinsStoreKey: FILE,
     dmPeerPinsSetAsideStoreKey: FILE,
     dmConversationsSeenStoreKey: FILE,

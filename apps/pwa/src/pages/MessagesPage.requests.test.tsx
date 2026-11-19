@@ -973,7 +973,7 @@ describe('the sender\'s side', () => {
         node.list = boList(pending());
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
         render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a message request. Ann will see it under Message requests, without a notification. You can write again once they accept.');
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
         expect(screen.queryByRole('button', { name: 'React to message' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Reply to message' })).toBeNull();
@@ -992,7 +992,7 @@ describe('the sender\'s side', () => {
         expect(screen.queryByTestId('request-first-line')).toBeNull();
         expect(screen.queryByTitle('Send photo')).toBeNull();
         await act(async () => { open(); });
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a message request. Ann will see it under Message requests, without a notification. You can write again once they accept.');
         expect(screen.queryByTestId('request-first-line')).toBeNull();
     });
 
@@ -1080,7 +1080,7 @@ describe('the sender\'s side', () => {
         node.gates[CONV] = new Promise<void>(() => {});
         fireEvent.change(screen.getByPlaceholderText('Message...'), { target: { value: 'Hello again' } });
         fireEvent.click(screen.getByTitle('Send message'));
-        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Message requests. You can write more once they accept.');
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a message request. Ann will see it under Message requests, without a notification. You can write again once they accept.');
         expect(sendMessageApi).toHaveBeenCalledTimes(1);
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
     });

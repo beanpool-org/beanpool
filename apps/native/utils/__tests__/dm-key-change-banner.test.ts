@@ -468,26 +468,28 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
         expect(ben.heading).toBe("Ben's key code");
         expect(ben.howTo).toBe('Ask Ben to open Settings, then Account Protection, and read you My key code. Do it in person or on a call. If every digit matches, this chat is really with Ben.');
         expect(ben.mark).toBe('Mark as verified');
-        expect(ben.markNote).toBe('After that, this phone asks you before it sends to a new key for Ben. Kept on this phone only.');
+        expect(ben.markNote).toBe('After that, this phone asks you before it sends to a new key for Ben, in every community on this phone. Kept on this phone only.');
         expect(ben.verified).toBe('Verified ✓');
-        expect(ben.verifiedNote).toBe('This phone asks you before it sends to a new key for Ben. Kept on this phone only.');
+        expect(ben.verifiedNote).toBe('This phone asks you before it sends to a new key for Ben, in every community on this phone. Kept on this phone only.');
         expect(ben.remove).toBe('Remove verification');
         expect(ben.paused).toBe("Ben's key changed. The new code is at the top of the chat.");
         expect(ben.none).toBe('There is no key code to show for this chat yet.');
         expect(ben.moved).toBe("This chat's key changed while you were checking. Look at the new code and check it again.");
         expect(ben.removeConfirmTitle).toBe('Remove verification?');
-        expect(ben.removeConfirmBody).toBe('This phone will stop asking before it sends to a new key for Ben.');
+        expect(ben.removeConfirmBody).toBe('This phone will stop asking before it sends to a new key for Ben, in every community on this phone.');
         expect(dmKeyCodeCopy('Ben', true).removeConfirmBody).toBe("This chat will carry on with Ben's new key, without the check.");
         const nobody = dmKeyCodeCopy(null);
         expect(nobody.heading).toBe("This chat's key code");
         expect(nobody.howTo).toBe('Ask the other person to open Settings, then Account Protection, and read you My key code. Do it in person or on a call. If every digit matches, this chat is really with them.');
-        expect(nobody.markNote).toBe('After that, this phone asks you before it sends to a new key for this person. Kept on this phone only.');
-        expect(nobody.verifiedNote).toBe('This phone asks you before it sends to a new key for this person. Kept on this phone only.');
+        expect(nobody.markNote).toBe('After that, this phone asks you before it sends to a new key for this person, in every community on this phone. Kept on this phone only.');
+        expect(nobody.verifiedNote).toBe('This phone asks you before it sends to a new key for this person, in every community on this phone. Kept on this phone only.');
         expect(nobody.paused).toBe("This chat's key changed. The new code is at the top of the chat.");
-        expect(nobody.removeConfirmBody).toBe('This phone will stop asking before it sends to a new key for this person.');
+        expect(nobody.removeConfirmBody).toBe('This phone will stop asking before it sends to a new key for this person, in every community on this phone.');
         expect(dmKeyCodeCopy(null, true).removeConfirmBody).toBe("This chat will carry on with the other person's new key, without the check.");
         expect(JSON.stringify(dmKeyCodeCopy('Ben'))).not.toMatch(/safety number/i);
-        expect(CHAT_MEMORY_RESET_WORDS.verifiedGo).toBe('People you marked as verified in this community go back to not verified.');
+        // S7c (DESIGN-s7-blocks-verified-everywhere §3.4): the reset no longer costs marks, so its warning lost that sentence.
+        expect(CHAT_MEMORY_RESET_WORDS).not.toHaveProperty('verifiedGo');
+        expect(JSON.stringify(CHAT_MEMORY_RESET_WORDS)).not.toMatch(/verified/);
         // S2: why sending waits while no single key is listed (the S1 deciding review's note), whole with its twin.
         expect(ben.waiting).toBe("This community doesn't list a single key for Ben in this chat, so sending waits.");
         expect(nobody.waiting).toBe("This community doesn't list a single key for the other person in this chat, so sending waits.");
@@ -546,6 +548,8 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
         expect(screen).toMatch(/markDmPeerVerified\(String\(id\), info\.peer, at\)/);
         expect(screen).toMatch(/getDmKeyCodeInfo\(String\(id\), at\)/);
         const card = readFileSync(join(process.cwd(), 'components', 'ChatMemoryCard.tsx'), 'utf8');
-        expect(card).toMatch(/\{t\(CHAT_MEMORY_COPY\.confirm\)\}<\/Text>\s*<Text style=\{styles\.confirmText\}>\{t\(CHAT_MEMORY_COPY\.verifiedGo\)\}<\/Text>/);
+        // S7c: the confirmation is the reset's own sentence alone; no sentence about verified people follows it.
+        expect(card).toMatch(/\{t\(CHAT_MEMORY_COPY\.confirm\)\}<\/Text>\s*<Pressable style=\{styles\.confirmBtn\}/);
+        expect(card).not.toMatch(/verifiedGo/);
     });
 });

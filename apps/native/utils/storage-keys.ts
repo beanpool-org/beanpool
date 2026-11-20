@@ -172,6 +172,16 @@ export function dmPeerPinsStoreKey(publicKey: string, file: string): string {
 }
 
 /**
+ * The keys one account marked as verified on this phone (utils/dm-verified-keys.ts, DESIGN-s7-blocks-verified-everywhere §3.2):
+ * `{ keys: { <key>: <date> } }`. One per account, outside every community's file: a chat in any community is verified
+ * exactly when the key it is sealed to is here. Written only by the member's own taps; no sync, carry or community reset
+ * touches it. Kept when the account leaves the phone, as its block list is, and never read for another account.
+ */
+export function dmVerifiedKeysStoreKey(publicKey: string): string {
+    return `beanpool_dm_verified_keys:${publicKey.toLowerCase()}`;
+}
+
+/**
  * What the member's reset of one community's chat memory set aside (utils/dm-peer-pins.ts, §3.4 amendment 6 §3): the raw
  * pins value as storage returned it, the newest kept. Never read by the app; kept for the record, as the pins are.
  */

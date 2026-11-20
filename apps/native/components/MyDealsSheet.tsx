@@ -401,7 +401,6 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const sample = sampleDeals();
             setPosts(sample.posts);
             setTransactions(sample.transactions);
-            setReadCursors(NO_CURSORS);
             setHeldSample(true);
             return;
         }
@@ -421,20 +420,28 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const txs = await getMarketplaceTransactions(identity.publicKey);
             if (gen !== loadGen.current) return;
             setTransactions(txs);
-            // For each request of mine still waiting, the other person's read cursor in our one chat (core notSeenOfDeal):
-            // none read, nothing said.
-            const askedOf = txs.filter((tx: any) => dealStep(tx, identity.publicKey).state === 'asked')
-                .map((tx: any) => (tx.buyerPublicKey === identity.publicKey ? tx.sellerPublicKey : tx.buyerPublicKey));
-            let cursors = NO_CURSORS;
-            if (askedOf.length) {
-                try { cursors = await peerReadCursors(identity.publicKey, askedOf); } catch { /* no cursor: no line */ }
-            }
-            if (gen !== loadGen.current) return;
-            setReadCursors(cursors);
         } catch (e) {
             console.error('MyDealsSheet: failed to load data', e);
         }
     };
+
+    // For each request of mine still waiting, the other person's read cursor in our one chat (core notSeenOfDeal, slice N4),
+    // read once the deals are in. Never in preview; none read, nothing said.
+    const myKey = preview ? '' : identity?.publicKey ?? '';
+    const askedPeers = useMemo(() => (!myKey ? '' : transactions
+        .filter((tx: any) => dealStep(tx, myKey).state === 'asked')
+        .map((tx: any) => (tx.buyerPublicKey === myKey ? tx.sellerPublicKey : tx.buyerPublicKey))
+        .sort().join('\n')), [transactions, myKey]);
+    useEffect(() => {
+        setReadCursors(NO_CURSORS);
+        if (!visible || !myKey || !askedPeers) return;
+        let live = true;
+        Promise.resolve()
+            .then(() => peerReadCursors(myKey, askedPeers.split('\n')))
+            .then((cursors) => { if (live) setReadCursors(cursors); })
+            .catch(() => { /* no cursor: no line */ });
+        return () => { live = false; };
+    }, [visible, myKey, askedPeers]);
 
     // ⚡ Bolt: Group active/requested transactions by postId into a 1:N Map for O(1) lookups without array scans
     const activeTxsByPostId = useMemo(() => {
@@ -543,7 +550,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             // never a blank after "From " (DESIGN-global-members-by-area §2.4).
             const partnerCallsign = (isBuyer ? item.sellerCallsign : item.buyerCallsign) || (partnerPubkey || '').slice(0, 8);
             const partnerAvatar = isBuyer ? item.sellerAvatar : item.buyerAvatar;
-            const notSeenText = dealsTab === 'pending' && !standing ? notSeenWords(notSeenOfDeal({
+            const notSeenText = !preview && dealsTab === 'pending' && !standing ? notSeenWords(notSeenOfDeal({
                 asked: step.state === 'asked',
                 chat: !!partnerPubkey && readCursors.has(partnerPubkey),
                 createdAt: item.createdAt,

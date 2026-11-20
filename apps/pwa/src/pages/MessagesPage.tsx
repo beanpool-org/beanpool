@@ -679,9 +679,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // "Not seen yet." under my newest line the other person hasn't seen or answered (core notSeenInThread, slice N4), from
     // the same tick the bubbles draw (the other person's read cursor) and the times only: the same whoever they are. Only
     // this chat's own lines once they are loaded, never the last chat's. A node's notice, a line shown as nobody's and a
-    // deleted line (nothing left to see) are passed over; a line still on its way is in pendingHere, not here.
+    // deleted line (nothing left to see) are passed over; a line still on its way is in pendingHere, not here. Never while
+    // the chat is a message request: the sender is told only what the node said, and it withholds the other's cursor until
+    // they accept (engine/dm-requests.ts).
     const notSeenHere = useMemo(() => {
-        if (!activeConv || activeConv.type !== 'dm' || loadedDmId !== activeConv.id) return null;
+        if (!activeConv || activeConv.type !== 'dm' || loadedDmId !== activeConv.id || requestMode !== 'none') return null;
         const readAt = activeConv.peerLastReadAt ? new Date(activeConv.peerLastReadAt).getTime() : null;
         const found = notSeenInThread(shownMessages.map(m => ({
             mine: m.authorPubkey === identity.publicKey,
@@ -691,7 +693,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             counts: m.type !== 'system' && m.authorPubkey !== 'SYSTEM' && !dmLineIsUnattributed(lineViews?.get(m.id)) && !isDeletedRow(m),
         })), Date.now());
         return found ? { id: shownMessages[found.index].id, notSeen: found.notSeen } : null;
-    }, [shownMessages, activeConv, loadedDmId, identity.publicKey, lineViews]);
+    }, [shownMessages, activeConv, loadedDmId, identity.publicKey, lineViews, requestMode]);
     // The listing each line is about, opened once per load (core chat-about.ts) and not on every redraw, which the member's
     // every keystroke is: a key derivation and a decrypt a card. Only a line whose words opened (checkDmThread gives a
     // deleted line, one that did not open and one not from this pair no format), and never a deleted one, as the phone's

@@ -2401,8 +2401,9 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
 /**
  * Each of `peers`' read cursor in the one DM this phone holds with them, for a deal request that sits unseen (core
  * notSeenOfDeal, slice N4): a peer with a DM here maps to their cursor (null: never read); one with no DM is left out, as
- * there is no tick to go by. The node keeps one DM per pair, so the newest cursor is theirs. Only the cursor, the tick's
- * own source: nothing else of theirs is read.
+ * there is no tick to go by. So is a chat that is still a message request, either way: the node withholds the other's
+ * cursor until it is accepted (engine/dm-requests.ts), so a cursor there says nothing. The node keeps one DM per pair, so
+ * the newest cursor is theirs. Only the cursor, the tick's own source: nothing else of theirs is read.
  */
 export async function peerReadCursors(myPubkey: string, peers: readonly string[]): Promise<Map<string, string | null>> {
     const out = new Map<string, string | null>();
@@ -2414,6 +2415,8 @@ export async function peerReadCursors(myPubkey: string, peers: readonly string[]
         FROM conversation_participants cp
         JOIN conversations c ON c.id = cp.conversation_id
         WHERE (c.type IS NULL OR c.type = 'dm')
+        AND (CASE WHEN json_valid(c.request) THEN (CASE WHEN json_type(c.request, '$.state') = 'text'
+            AND json_extract(c.request, '$.state') != 'accepted' THEN 0 ELSE 1 END) ELSE 1 END) = 1
         AND cp.public_key IN (${wanted.map(() => '?').join(', ')})
         AND EXISTS (SELECT 1 FROM conversation_participants mine WHERE mine.conversation_id = c.id AND mine.public_key = ?)
         GROUP BY cp.public_key

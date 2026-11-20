@@ -89,6 +89,14 @@ describe('peerCursorsFrom', () => {
         const got = peerCursorsFrom([dm(null), { ...dm('2026-11-02T00:00:00Z', [ME, 'bob']), id: 'b' } as Conversation], ME, [ASHA]);
         expect([...got]).toEqual([[ASHA, null]]);
     });
+    it('a chat still a message request, either way, is no tick (the node withholds the cursor); an accepted one is', () => {
+        const pending = { ...dm(null), request: { state: 'pending', from: ME, at: '2026-11-01T00:00:00Z' } } as Conversation;
+        expect([...peerCursorsFrom([pending], ME, [ASHA])]).toEqual([]);
+        const theirs = { ...dm(null), request: { state: 'pending', from: ASHA, at: '2026-11-01T00:00:00Z' } } as Conversation;
+        expect([...peerCursorsFrom([theirs], ME, [ASHA])]).toEqual([]);
+        const accepted = { ...dm('2026-11-03T00:00:00Z'), request: { state: 'accepted', from: ME, at: '2026-11-01T00:00:00Z' } } as Conversation;
+        expect([...peerCursorsFrom([accepted], ME, [ASHA])]).toEqual([[ASHA, '2026-11-03T00:00:00Z']]);
+    });
     it('two DMs with one person (should not happen): the newest cursor', () => {
         const got = peerCursorsFrom([dm('2026-11-01T00:00:00Z'), { ...dm('2026-11-05T00:00:00Z'), id: 'c2' } as Conversation, { ...dm(null), id: 'c3' } as Conversation], ME, [ASHA]);
         expect(got.get(ASHA)).toBe('2026-11-05T00:00:00Z');

@@ -85,12 +85,14 @@ const NO_CURSORS: ReadonlyMap<string, string | null> = new Map();
 /**
  * Each of `peers`' read cursor in the one DM the member has with them (the node keeps one per pair), for a request that sits
  * unseen (core notSeenOfDeal, slice N4): null when they have never read it; a peer with no DM is left out, as there is no
- * tick to go by. Only the cursor, the tick's own source.
+ * tick to go by. So is a chat that is still a message request, either way: the node withholds the other's cursor until it
+ * is accepted (engine/dm-requests.ts), so a null there says nothing. Only the cursor, the tick's own source.
  */
 export function peerCursorsFrom(conversations: readonly Conversation[], me: string, peers: readonly string[]): Map<string, string | null> {
     const out = new Map<string, string | null>();
     for (const c of conversations) {
         if (c.type !== 'dm' || !c.participants?.includes(me)) continue;
+        if (c.request && c.request.state !== 'accepted') continue;
         const peer = c.participants.find((p) => p !== me);
         if (!peer || !peers.includes(peer)) continue;
         const at = c.peerLastReadAt ?? null;

@@ -647,6 +647,16 @@ describe('"Not seen yet" under my newest line the other person has not seen (sli
         }
     });
 
+    it('a chat still a message request (mine, waiting): nothing, as the node withholds the cursor until they accept', async () => {
+        net.answer = node({
+            getConversation: { ...DM_CONVERSATION, request: { state: 'pending', from: ME.publicKey, at: iso(now - 5 * DAY) } },
+            getMessages: [mine('n1', 4 * DAY)],
+        });
+        await renderIn('en');
+        expect(host.textContent).toContain('Yes, come by at five');
+        expect(shown()).toHaveLength(0);
+    });
+
     it('in the pseudo-locale its words came through t()', async () => {
         net.answer = node({ getMessages: [mine('n1', 26 * 3_600_000)] });
         await renderIn('xx');

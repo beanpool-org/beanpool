@@ -377,7 +377,7 @@ describe('text at 1.3×: the invite is above the fold in every language, on the 
     // Apple's button needs iOS 16, whose smallest iPhone is the iPhone 8 / SE (2nd and 3rd), 375 × 667 pt, less its status bar.
     const IOS16 = { width: 375, visible: 667 - 20 };
     const FONT_SCALE = 1.3;
-    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
+    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
     const em = (c: string) => (/\p{M}/u.test(c) ? 0 : /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
     const widthOf = (s: string, size: number) => Array.from(s).reduce((w, c) => w + em(c) * size * FONT_SCALE, 0);
     const linesOf = (text: string, size: number, width: number) => {

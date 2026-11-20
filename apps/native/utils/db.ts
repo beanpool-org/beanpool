@@ -3153,7 +3153,7 @@ export async function createPost(post: any) {
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
     // The one notifications ask, at the first post (DESIGN-home-default-fable.md §2.5: someone may answer it now). Once in
-    // all with the first message and the first ask to join, never after a Not now (utils/notification-permission.ts).
+    // all with the first message and the first ask to join, never after the phone's no (utils/notification-permission.ts).
     // Loaded lazily and not waited on: the post is up, and an ask that fails never touches it.
     void import('./notification-permission')
         .then(({ askNotificationPermissionOnAction }) => askNotificationPermissionOnAction('post', identity.publicKey))
@@ -8818,7 +8818,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
     // Front doors S3 (#2524): every way a DM starts (New message, Message on a listing, a profile, People, a shop, a
     // project's keeper, a deal's approve or decline) comes through here, so the first message's notification ask is made
     // here, not in each screen. It asks only while unanswered, once in all with the first post and the first ask to join,
-    // never after a Not now and never when the phone already allows notifications (utils/notification-permission.ts,
+    // never after the phone's no and never when the phone already allows notifications (utils/notification-permission.ts,
     // DESIGN-home-default-fable.md §2.5). Loaded lazily, and an ask that fails never stops the chat.
     try {
         const { askNotificationPermissionOnAction } = await import('./notification-permission');

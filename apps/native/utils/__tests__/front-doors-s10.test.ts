@@ -120,7 +120,8 @@ describe('Recover with Social asks "Which community?" first', () => {
 });
 
 describe('no permission prompt after a restore', () => {
-    // The restored member lands on Home; the notifications card (S3, utils/notification-permission.ts) says why and asks when tapped.
+    // The restored member lands on Home and the restore asks nothing itself. Its one soft ask is Home's once card (core's
+    // notify-ask.ts `once`, drawn by slice N1h), and the phone's pop-up only follows a tap on it.
     const body = (name: string) => {
         const a = welcome.indexOf(`async function ${name}(`);
         expect(a, name).toBeGreaterThan(-1);

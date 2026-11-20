@@ -7,8 +7,12 @@
  * A phone that can't read its storage draws the tile (never hidden for a missing fact, at most shown once more).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { homeWelcomeCommunity, homeWelcomePartStoreKey } from './storage-keys';
+import { communityKeyOf } from './community-index';
+import { homeWelcomePartStoreKey } from './storage-keys';
 import { stillOnPhone, type HomeAccount } from './home-account';
+
+/** The community a Home is for, as the mark names it: its record's name (community-index.ts), in one spelling. */
+const communityOf = (url: string): string => communityKeyOf(url).trim().replace(/\/+$/, '').toLowerCase();
 
 export interface WelcomePartMark {
     v: 1;
@@ -27,7 +31,7 @@ export function readWelcomePartMark(raw: unknown): WelcomePartMark | null {
 
 /** Whether BeanPool's part was drawn first for another community on this phone, so this one leaves it out. */
 export function welcomePartElsewhere(mark: WelcomePartMark | null, url: string): boolean {
-    return !!mark && mark.where !== homeWelcomeCommunity(url);
+    return !!mark && mark.where !== communityOf(url);
 }
 
 /** The account's mark on this phone; none when there is none or it can't be read. */
@@ -48,7 +52,7 @@ export async function markWelcomePart(whose: HomeAccount, url: string, now: numb
     const had = await loadWelcomePart(whose.publicKey);
     if (had) return had;
     if (!stillOnPhone(whose)) return null;
-    const mark: WelcomePartMark = { v: 1, where: homeWelcomeCommunity(url), at: new Date(now).toISOString() };
+    const mark: WelcomePartMark = { v: 1, where: communityOf(url), at: new Date(now).toISOString() };
     try {
         await AsyncStorage.setItem(homeWelcomePartStoreKey(whose.publicKey), JSON.stringify(mark));
     } catch {

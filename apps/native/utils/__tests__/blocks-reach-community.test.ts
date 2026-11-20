@@ -110,6 +110,14 @@ async function startApp() {
  */
 const net = {
     up: true,
+    /** Communities that can't be reached (slice S7a: one of several held is offline): nothing reaches them, nothing is answered. */
+    down: new Set<string>(),
+    /** Held: every block request waits for it, after the community has it, while it is set. */
+    gate: null as Promise<void> | null,
+    /** Communities whose block requests are taken and never answered: only the phone's abort ends them. */
+    hang: new Set<string>(),
+    /** The signals of the requests left hanging, to see that the phone aborted them. */
+    hung: [] as (AbortSignal | undefined)[],
     /** Communities whose node has no block list: each answers this status, with no JSON. */
     noList: new Map<string, number>(),
     /** Communities that refuse block changes, with the node's own refusal: every change, or only the adds. */
@@ -164,6 +172,10 @@ beforeEach(async () => {
     mem.secure.clear();
     rn.emit.mockClear();
     net.up = true;
+    net.down.clear();
+    net.gate = null;
+    net.hang.clear();
+    net.hung = [];
     net.noList.clear();
     net.refuse.clear();
     net.loseNextAnswer = false;
@@ -182,6 +194,7 @@ beforeEach(async () => {
         const headers = (init?.headers ?? {}) as Record<string, string>;
         const body = JSON.parse((init?.body as string) ?? '{}');
         const signer = headers['X-Public-Key'];
+        if (net.down.has(url.slice(0, url.indexOf('/api/')))) throw new TypeError('Network request failed');
         net.sent.push({ url, signedBy: signer, body, time: Date.now() });
         const reply = (status: number, answer: unknown, raw?: string) => ({
             ok: status >= 200 && status < 300,
@@ -197,6 +210,14 @@ beforeEach(async () => {
             const hold = net.hold;
             net.hold = null;
             await hold;
+        }
+        if (net.gate) await net.gate;
+        if (net.hang.has(url.slice(0, url.indexOf('/api/')))) {
+            const signal = init?.signal ?? undefined;
+            net.hung.push(signal);
+            return new Promise<Response>((_, reject) => {
+                signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+            });
         }
         if (!net.up) throw new TypeError('Network request failed');
         if (net.portal) return reply(200, null, '<!DOCTYPE html><html><title>Sign in to Wi-Fi</title></html>');
@@ -652,7 +673,7 @@ describe('a community the phone visits as a guest ("Guest view first", global-gu
     // 4354899747). Here nothing but the redeem does.
     for (const alreadyMember of [false, true]) {
         for (const [marked, setTo] of [[OTHER, OTHER], [OTHER, `${OTHER}/`], [`${OTHER}/`, OTHER]]) {
-            it(`once she joins there with an invite (${alreadyMember ? 'a member there already' : 'new there'}; marked ${marked}, set to ${setTo}), the next sync sends the list`, async () => {
+            it(`once she joins there with an invite (${alreadyMember ? 'a member there already' : 'new there'}; marked ${marked}, set to ${setTo}), the list goes at the join`, async () => {
                 const app = await startApp();
                 await app.identity.importIdentity(ana);
                 await app.nodes.markGuestNode(marked);
@@ -665,10 +686,13 @@ describe('a community the phone visits as a guest ("Guest view first", global-gu
                 const { redeemInvite } = await import('../db');
                 expect(await redeemInvite('INV-ABCD-1234', 'Ana', ana)).toEqual({ success: true, alreadyMember, nodeHasPhoto: false });
                 for (const url of [OTHER, `${OTHER}/`]) expect(await app.nodes.isGuestNode(url)).toBe(false);
-                net.sent = [];
-                await app.syncBlocks();
+                // At the join, not at the next round (S7a: db.ts redeemInvite → blocklist.ts blocksAtJoin).
+                await app.blockSyncsEndedForTests();
                 expect(blockChanges()).toEqual([{ at: `${OTHER}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
                 expect([...listAt(OTHER, ana.publicKey)]).toEqual([HARASSER]);
+                net.sent = [];
+                await app.syncBlocks();
+                expect(blockChanges()).toEqual([]);
             });
         }
     }
@@ -699,7 +723,9 @@ describe('a community that has the account as no member yet (403 not_a_member, r
         vi.setSystemTime(new Date('2026-10-23T08:00:00Z'));
     });
 
-    it('holds no block back for a day: once the account is a member there, the next sync sends it', async () => {
+    // S7a (design §2.2): asked again in an hour, or at once at a join there (blocksAtJoin), not every 5-minute round: a
+    // saved community is not always one the account belongs to, and the phone now asks every one it holds.
+    it('holds no block back for a day: asked again within the hour, not every round, and then the block goes', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         net.refuse.set(NODE, { status: 403, code: 'not_a_member' });
@@ -708,10 +734,15 @@ describe('a community that has the account as no member yet (403 not_a_member, r
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect(await app.isUserBlocked(HARASSER)).toBe(true);
 
-        // She joins; the 5-minute tick.
+        // She is let in some other way than an invite on this phone; the 5-minute tick asks nothing yet.
         net.refuse.delete(NODE);
         vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
         net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([]);
+
+        // The hour is up: the next round sends it.
+        vi.setSystemTime(new Date(Date.now() + 55 * 60 * 1000));
         await app.syncBlocks();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
@@ -734,6 +765,10 @@ describe('a community that has the account as no member yet (403 not_a_member, r
         net.sent = [];
         await app.blockUser(SPAMMER, ana.publicKey);
         await app.blockSyncsEndedForTests();
+        // Within the hour: nothing, not even at the tap (S7a).
+        expect(blockChanges()).toEqual([]);
+        vi.setSystemTime(new Date(Date.now() + 55 * 60 * 1000));
+        await app.syncBlocks();
         expect(blockChanges()).toEqual([
             { at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } },
             { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } },
@@ -759,8 +794,10 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
     /** A vote brings her back (decisions-engine.ts reinstate_member): the same key and account, with no list. */
     const reinstateAna = () => net.refuse.delete(NODE);
     const fiveMinutesOn = () => vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
+    /** The rest of the hour a "no member" answer is waited for (S7a, design §2.2). */
+    const restOfTheHour = () => vi.setSystemTime(new Date(Date.now() + 55 * 60 * 1000));
 
-    it('removed, then brought back by a vote: once the phone has heard she was removed, the next sync puts her blocks back', async () => {
+    it('removed, then brought back by a vote: once the phone has heard she was removed, the first round after the hour\'s wait puts her blocks back', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
@@ -776,6 +813,10 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
         fiveMinutesOn();
         net.sent = [];
         await app.syncBlocks();
+        // That sync was answered account_closed: asked again within the hour, not every round (S7a).
+        expect(blockChanges()).toEqual([]);
+        restOfTheHour();
+        await app.syncBlocks();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
         expect(await app.isUserBlocked(HARASSER)).toBe(true);
@@ -785,7 +826,7 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
         expect(blockChanges()).toEqual([]);
     });
 
-    it('removed, a block made meanwhile is refused (403 account_closed): nothing waits a day, and once she is back the next sync puts every block back', async () => {
+    it('removed, a block made meanwhile is refused (403 account_closed): nothing waits a day, and once she is back the first round after the hour puts every block back', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
@@ -801,11 +842,15 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
         fiveMinutesOn();
         net.sent = [];
         await app.syncBlocks();
+        // Within the hour of the account_closed answer: nothing (S7a); then every block goes back.
+        expect(blockChanges()).toEqual([]);
+        restOfTheHour();
+        await app.syncBlocks();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkeys: [HARASSER, SPAMMER] } }]);
         expect([...listAt(NODE, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
     });
 
-    it('a community set up again at the same address: she joins there again with an invite, and the next sync puts her blocks back', async () => {
+    it('a community set up again at the same address: she joins there again with an invite, and the join puts her blocks back', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
@@ -814,11 +859,15 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
         // A new node at the address: no account, so no list.
         listAt(NODE, ana.publicKey).clear();
         const { redeemInvite } = await import('../db');
-        expect(await redeemInvite('INV-ABCD-1234', 'Ana', ana)).toEqual({ success: true, alreadyMember: false, nodeHasPhoto: false });
         net.sent = [];
-        await app.syncBlocks();
+        expect(await redeemInvite('INV-ABCD-1234', 'Ana', ana)).toEqual({ success: true, alreadyMember: false, nodeHasPhoto: false });
+        // At the join (S7a, blocksAtJoin), not at the next round.
+        await app.blockSyncsEndedForTests();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([]);
     });
 
     it('heard while a sync is under way: that sync never writes back what it read before', async () => {
@@ -1615,6 +1664,7 @@ describe('a block made on another community\'s request card, in place (slice S3)
         const blocking = app.blockUser(HARASSER, ana.publicKey, 'Spam or scam', undefined, OTHER);
         await new Promise((r) => setTimeout(r, 0));
         await MEANWHILE[what](app);
+        const sentAtSwitch = net.sent.length;
         release();
         expect(await blocking).toBe(true);
         await app.blockSyncsEndedForTests();
@@ -1622,9 +1672,12 @@ describe('a block made on another community\'s request card, in place (slice S3)
         expect(reportsAt()).toEqual([OTHER]);
         const atOther = blockChanges().filter((c) => c.at.startsWith(OTHER));
         if (what === 'the account switching') {
-            // Ben is on the phone by the time OTHER's turn comes: nothing of Ana's goes in his name.
-            expect(atOther.every((c) => c.signedBy === ben.publicKey)).toBe(true);
+            // Every community hears a block at the tap, side by side (S7a), so OTHER's change may go before Ben is on the
+            // phone, in Ana's name while she is. After the switch nothing goes in Ana's name, and nothing of hers in his.
+            expect(net.sent.slice(sentAtSwitch).every((s) => s.signedBy !== ana.publicKey)).toBe(true);
             expect([...listAt(OTHER, ben.publicKey)]).toEqual([]);
+            expect([...listAt(NODE, ben.publicKey)]).toEqual([]);
+            expect(atOther.every((c) => c.signedBy === ana.publicKey || c.signedBy === ben.publicKey)).toBe(true);
         } else {
             expect(atOther).toContainEqual({ at: `${OTHER}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } });
             expect([...listAt(OTHER, ana.publicKey)]).toEqual([HARASSER]);
@@ -1675,7 +1728,10 @@ describe('a block made on another community\'s request card, in place (slice S3)
         expect(await app.isUserBlocked(HARASSER)).toBe(true);
     });
 
-    it('control: blocked on this phone already, with no community named: nothing is sent again, as before', async () => {
+    // S7a (design §2.2, "Already blocked, blocked again from a card"): no early return. Nothing new is recorded and no
+    // community that holds the block is sent it again, but the report goes where the member blocked again: here the
+    // community in use, as no community is named.
+    it('blocked on this phone already, with no community named: no block change goes to a community that holds it, and the report goes to the community in use', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam')).toBe(true);
@@ -1683,7 +1739,9 @@ describe('a block made on another community\'s request card, in place (slice S3)
         net.sent = [];
         expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam')).toBe(false);
         await app.blockSyncsEndedForTests();
-        expect(net.sent).toEqual([]);
+        expect(blockChanges()).toEqual([]);
+        expect(reportsAt()).toEqual([NODE]);
+        expect(net.sent.every((s) => s.signedBy === ana.publicKey)).toBe(true);
     });
 
     it('control: with no community named, the report goes to the community the phone is set to, as before', async () => {
@@ -1693,5 +1751,486 @@ describe('a block made on another community\'s request card, in place (slice S3)
         await app.blockSyncsEndedForTests();
         expect(reportsAt()).toEqual([NODE]);
         expect(blockChanges().filter((c) => c.at.startsWith(OTHER))).toEqual([]);
+    });
+});
+
+/**
+ * Slice S7a (scratch/fable-design/DESIGN-s7-blocks-verified-everywhere-fable.md §2.2, §2.5, §4; Marty, 21 Nov): a block, an
+ * unblock and Unblock All reach every community this phone holds, at the tap, side by side, not only the one in use; and the
+ * open N1 of #3310's review: an Unblock reaches the community carrying an across chat.
+ *
+ * One table closes the class: each row is something the member does, each column one community the phone holds in one
+ * state, and every column is on the phone at once. The oracles per cell: what that community heard at the tap, what it heard
+ * at the next round (5 minutes on, the offline one back), and the list it keeps at rest. Then each column again on a phone
+ * holding only it and the community in use: what it hears must be the same, so a failure in one column changes no other.
+ * The saved list puts the reachable community last, behind every one that fails, so a sync that stops at the first failure
+ * never reaches it.
+ */
+describe('a block reaches every community this phone holds (slice S7a)', () => {
+    const IN_USE = 'https://riverside.example';
+    const HELD = 'https://hilltop.example';
+    const OFFLINE = 'https://creekside.example';
+    const NOT_MEMBER = 'https://lakeside.example';
+    const GUEST = 'https://seaside.example';
+    const REFUSES = 'https://valley.example';
+    const NO_LIST = 'https://meadow.example';
+    const SAVED_NODES = 'beanpool_saved_nodes';
+
+    type Col = 'in use' | 'held and reachable' | 'held, offline, then back' | 'held, not a member' | "a guest's look"
+        | 'refuses blocks (its limit)' | 'no block list';
+    const URL_OF: Record<Col, string> = {
+        'in use': IN_USE,
+        'held, offline, then back': OFFLINE,
+        'held, not a member': NOT_MEMBER,
+        'refuses blocks (its limit)': REFUSES,
+        'no block list': NO_LIST,
+        "a guest's look": GUEST,
+        'held and reachable': HELD,
+    };
+    /** The order the phone saved them in: the community in use first, the reachable one last. */
+    const COLS = Object.keys(URL_OF) as Col[];
+
+    const NAMES = new Map([[HARASSER, 'H'], [SPAMMER, 'S'], [STRANGER, 'X']]);
+    const said = (k: string) => NAMES.get(k) ?? k.slice(0, 4);
+    /** The block and report requests `community` heard from index `from` to `to` of what was sent, in short, sorted. */
+    const heard = (community: string, from: number, to?: number) => net.sent.slice(from, to)
+        .filter((s) => s.url.startsWith(`${community}/api/blocks`) || s.url === `${community}/api/reports`)
+        .map((s) => {
+            const path = s.url.slice(community.length);
+            if (path === '/api/reports') return `report ${said(s.body.targetPubkey)}`;
+            if (path === '/api/blocks/remove') return `unblock ${said(s.body.targetPubkey)}`;
+            if (path === '/api/blocks' && Array.isArray(s.body.targetPubkeys)) return `block ${s.body.targetPubkeys.map(said).join('+')}`;
+            if (path === '/api/blocks' && typeof s.body.targetPubkey === 'string') return `block ${said(s.body.targetPubkey)}`;
+            return path === '/api/blocks' ? 'read' : path;
+        })
+        .sort();
+    const listOf = (community: string, owner: string) => [...listAt(community, owner)].map(said).sort();
+    const blockAndReportRequests = () => net.sent.filter((s) => s.url.includes('/api/blocks') || s.url.includes('/api/reports'));
+
+    /** A phone with Ana on it, set to the community in use, holding `cols`, each answering as its column says from the start. */
+    async function phoneHolding(cols: readonly Col[], saved: readonly string[] = cols.map((c) => URL_OF[c])) {
+        mem.async.clear();
+        mem.secure.clear();
+        net.sent = [];
+        net.lists.clear();
+        net.refuse.clear();
+        net.noList.clear();
+        net.down.clear();
+        net.gate = null;
+        net.hang.clear();
+        net.hung = [];
+        net.formerKeys.clear();
+        net.rekeyedTo.clear();
+        net.knownAt.clear();
+        mem.async.set(ANCHOR, IN_USE);
+        mem.async.set(SAVED_NODES, JSON.stringify(saved.map((url) => ({ url, alias: url.slice(8) }))));
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        // A guest's look, and a node from before block lists: so from the start.
+        await app.nodes.markGuestNode(GUEST);
+        net.noList.set(NO_LIST, 404);
+        return app;
+    }
+    const setSaved = (urls: readonly string[]) => mem.async.set(SAVED_NODES, JSON.stringify(urls.map((url) => ({ url }))));
+    const savedNow = (): string[] => JSON.parse(mem.async.get(SAVED_NODES) ?? '[]').map((n: { url: string }) => n.url);
+
+    /** After what came before, for the member's tap: one is offline, one has the account as no member now, one is at its limit. */
+    function during() {
+        net.down.add(OFFLINE);
+        net.refuse.set(NOT_MEMBER, { status: 403, code: 'not_a_member' });
+        listAt(NOT_MEMBER, ana.publicKey).clear();
+        net.refuse.set(REFUSES, { status: 409, code: 'block_limit', addsOnly: true });
+    }
+
+    type App = Awaited<ReturnType<typeof startApp>>;
+    /** Heard at the tap, heard at the next round, the list at rest (Ana's). */
+    type Cell = [tap: string[], next: string[], list: string[]];
+    interface Row {
+        before: (app: App, cols: readonly Col[]) => Promise<void>;
+        tap: (app: App, cols: readonly Col[]) => Promise<void>;
+        /** Between the tap and the next round, besides the offline community coming back. */
+        between?: (cols: readonly Col[]) => void;
+        cells: Record<Col, Cell>;
+    }
+
+    /** Blocked while the held and the offline communities could not be reached: neither has heard it. */
+    const blockedWhileTwoWereOut = async (app: App) => {
+        net.down.add(HELD);
+        net.down.add(OFFLINE);
+        await app.blockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
+        net.down.delete(HELD);
+        net.down.delete(OFFLINE);
+    };
+
+    const ROWS: Record<string, Row> = {
+        Block: {
+            before: async () => {},
+            tap: async (app) => { expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam')).toBe(true); },
+            cells: {
+                'in use': [['block H', 'report H'], [], ['H']],
+                'held, offline, then back': [[], ['block H'], ['H']],
+                'held, not a member': [['block H'], [], []],
+                'refuses blocks (its limit)': [['block H'], [], []],
+                'no block list': [['block H'], [], []],
+                "a guest's look": [[], [], []],
+                'held and reachable': [['block H'], [], ['H']],
+            },
+        },
+        Unblock: {
+            before: async (app) => { await app.blockUser(HARASSER); },
+            tap: async (app) => { expect(await app.unblockUser(HARASSER)).toBe(true); },
+            cells: {
+                'in use': [['unblock H'], [], []],
+                'held, offline, then back': [[], ['unblock H'], []],
+                'held, not a member': [['unblock H'], [], []],
+                // Unblocks still go to a community that refuses blocks.
+                'refuses blocks (its limit)': [['unblock H'], [], []],
+                // Left alone for a day after its 404.
+                'no block list': [[], [], []],
+                "a guest's look": [[], [], []],
+                'held and reachable': [['unblock H'], [], []],
+            },
+        },
+        'Unblock All': {
+            before: async (app) => { await app.blockUser(HARASSER); await app.blockUser(SPAMMER); },
+            tap: async (app) => { expect(await app.clearBlocklist()).toBe(true); },
+            cells: {
+                'in use': [['unblock H', 'unblock S'], [], []],
+                'held, offline, then back': [[], ['unblock H', 'unblock S'], []],
+                // Its first answer says no member: asked nothing more for the hour.
+                'held, not a member': [['unblock H'], [], []],
+                'refuses blocks (its limit)': [['unblock H', 'unblock S'], [], []],
+                'no block list': [[], [], []],
+                "a guest's look": [[], [], []],
+                'held and reachable': [['unblock H', 'unblock S'], [], []],
+            },
+        },
+        'Block again when already blocked, from a card in place at the held community': {
+            before: blockedWhileTwoWereOut,
+            tap: async (app) => { expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam', undefined, HELD)).toBe(false); },
+            cells: {
+                'in use': [[], [], ['H']],
+                'held, offline, then back': [[], ['block H'], ['H']],
+                // It held the block when it was a member: the phone's record says so, and nothing goes.
+                'held, not a member': [[], [], []],
+                'refuses blocks (its limit)': [[], [], ['H']],
+                'no block list': [[], [], []],
+                "a guest's look": [[], [], []],
+                'held and reachable': [['block H', 'report H'], [], ['H']],
+            },
+        },
+        'Block again when already blocked, from the community in use': {
+            before: blockedWhileTwoWereOut,
+            tap: async (app) => { expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam')).toBe(false); },
+            cells: {
+                'in use': [['report H'], [], ['H']],
+                'held, offline, then back': [[], ['block H'], ['H']],
+                'held, not a member': [[], [], []],
+                'refuses blocks (its limit)': [[], [], ['H']],
+                'no block list': [[], [], []],
+                "a guest's look": [[], [], []],
+                'held and reachable': [['block H'], [], ['H']],
+            },
+        },
+        'The held community taken off the phone, an unblock and a block, then it is back': {
+            before: async (app) => {
+                await app.blockUser(HARASSER);
+                await app.blockSyncsEndedForTests();
+                setSaved(savedNow().filter((u) => u !== HELD));
+            },
+            tap: async (app) => {
+                await app.unblockUser(HARASSER);
+                await app.blockUser(SPAMMER, ana.publicKey, 'Spam or scam');
+            },
+            between: (cols) => { if (cols.includes('held and reachable')) setSaved([...savedNow(), HELD]); },
+            cells: {
+                'in use': [['block S', 'report S', 'unblock H'], [], ['S']],
+                'held, offline, then back': [[], ['block S', 'unblock H'], ['S']],
+                'held, not a member': [['unblock H'], [], []],
+                'refuses blocks (its limit)': [['block S', 'unblock H'], [], []],
+                'no block list': [[], [], []],
+                "a guest's look": [[], [], []],
+                // Told nothing while it was off the phone; everything at the first round it is back.
+                'held and reachable': [[], ['block S', 'unblock H'], ['S']],
+            },
+        },
+        'The account switching while a round is out': {
+            // Ana blocked Sam and someone no community has a row for while every community was out of reach.
+            before: async (app, cols) => {
+                cols.forEach((c) => net.down.add(URL_OF[c]));
+                await app.blockUser(SPAMMER);
+                await app.blockUser(STRANGER);
+                await app.blockSyncsEndedForTests();
+                net.down.clear();
+            },
+            tap: async (app, cols) => {
+                let release!: () => void;
+                net.gate = new Promise<void>((r) => { release = r; });
+                const reach = cols.filter((c) => c !== "a guest's look" && c !== 'held, offline, then back').map((c) => URL_OF[c]);
+                void app.syncBlocks();
+                await vi.waitFor(() => expect(reach.every((u) => net.sent.some((s) => s.url.startsWith(u)))).toBe(true));
+                await app.signOut(ana);
+                await app.identity.importIdentity(ben);
+                const switched = net.sent.length;
+                release();
+                net.gate = null;
+                await app.blockSyncsEndedForTests();
+                // After the switch nothing goes in Ana's name (the stranger's own request waits for her), and nothing of hers
+                // in Ben's.
+                const later = blockAndReportRequests().filter((s) => net.sent.indexOf(s) >= switched);
+                expect(later.filter((s) => s.signedBy === ana.publicKey)).toEqual([]);
+                for (const c of COLS) expect([...listAt(URL_OF[c], ben.publicKey)]).toEqual([]);
+            },
+            cells: {
+                'in use': [['block S+X'], [], ['S']],
+                'held, offline, then back': [[], [], []],
+                'held, not a member': [['block S+X'], [], []],
+                'refuses blocks (its limit)': [['block S+X'], [], []],
+                'no block list': [['block S+X'], [], []],
+                "a guest's look": [[], [], []],
+                'held and reachable': [['block S+X'], [], ['S']],
+            },
+        },
+    };
+
+    async function run(row: Row, cols: readonly Col[]): Promise<Partial<Record<Col, Cell>>> {
+        vi.setSystemTime(new Date('2026-11-21T08:00:00Z'));
+        const app = await phoneHolding(cols);
+        await row.before(app, cols);
+        await app.blockSyncsEndedForTests();
+        during();
+        const from = net.sent.length;
+        await row.tap(app, cols);
+        await app.blockSyncsEndedForTests();
+        const tapped = net.sent.length;
+        net.down.delete(OFFLINE);
+        row.between?.(cols);
+        vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
+        await app.syncBlocks();
+        await app.blockSyncsEndedForTests();
+        const cells: Partial<Record<Col, Cell>> = {};
+        for (const c of cols) cells[c] = [heard(URL_OF[c], from, tapped), heard(URL_OF[c], tapped), listOf(URL_OF[c], ana.publicKey)];
+        return cells;
+    }
+
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+    });
+
+    it.each(Object.keys(ROWS))('%s: every community it holds, each as its state says, and none held up by another', async (name) => {
+        const row = ROWS[name];
+        const together = await run(row, COLS);
+        expect(together).toEqual(row.cells);
+        if (!name.startsWith('The account switching')) {
+            // Every request in Ana's name: no other account is on the phone.
+            expect(blockAndReportRequests().every((s) => s.signedBy === ana.publicKey)).toBe(true);
+        }
+        for (const c of COLS.filter((col) => col !== 'in use')) {
+            const alone = await run(row, ['in use', c]);
+            expect({ [c]: alone[c], 'in use': alone['in use'] }, `${c}, held with only the community in use`).toEqual({ [c]: together[c], 'in use': together['in use'] });
+        }
+    });
+
+    describe('joining a community: its list goes at the join, not at the next round (db.ts redeemInvite → blocksAtJoin)', () => {
+        const BEFORE: Record<string, (app: App) => Promise<void>> = {
+            'it said "no member" within the hour': async (app) => {
+                net.refuse.set(IN_USE, { status: 403, code: 'not_a_member' });
+                await app.blockUser(HARASSER);
+                await app.blockSyncsEndedForTests();
+                net.refuse.delete(IN_USE);
+            },
+            "it was a guest's look": async (app) => {
+                await app.nodes.markGuestNode(IN_USE);
+                await app.blockUser(HARASSER);
+                await app.blockSyncsEndedForTests();
+            },
+            'it held the block, and was set up again at its address': async (app) => {
+                await app.blockUser(HARASSER);
+                await app.blockSyncsEndedForTests();
+                listAt(IN_USE, ana.publicKey).clear();
+            },
+        };
+        const AT_JOIN: Record<string, [newMember: string[], alreadyMember: string[]]> = {
+            'it said "no member" within the hour': [['block H'], ['block H']],
+            "it was a guest's look": [['block H'], ['block H']],
+            // A member there already keeps their list: the phone's record stands.
+            'it held the block, and was set up again at its address': [['block H'], []],
+        };
+        const CASES = Object.keys(BEFORE).flatMap((b) => [[b, false], [b, true]] as const);
+
+        it.each(CASES)('%s; a member there already: %s', async (before, alreadyMember) => {
+            vi.setSystemTime(new Date('2026-11-21T08:00:00Z'));
+            const app = await phoneHolding(['in use', 'held and reachable']);
+            await BEFORE[before](app);
+            vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
+            const from = net.sent.length;
+            net.alreadyMember = alreadyMember;
+            const { redeemInvite } = await import('../db');
+            await redeemInvite('INV-ABCD-1234', 'Ana', ana);
+            await app.blockSyncsEndedForTests();
+            expect(heard(IN_USE, from)).toEqual(AT_JOIN[before][alreadyMember ? 1 : 0]);
+            expect(heard(HELD, from)).toEqual([]);
+            const joined = net.sent.length;
+            await app.syncBlocks();
+            await app.blockSyncsEndedForTests();
+            expect(heard(IN_USE, joined)).toEqual([]);
+        });
+    });
+
+    /** An admin re-keys `from` to `to` at `community`: its list's block moves (moveBlocks), and its read names the old key. */
+    function rekeyAt(community: string, from: string, to: string) {
+        const list = listAt(community, ana.publicKey);
+        if (list.delete(from)) list.add(to);
+        net.formerKeys.set(community, new Map([[to, [from]]]));
+        net.rekeyedTo.set(community, new Map([[from, to]]));
+    }
+    const THIRD = 'https://orchard.example';
+    const NEW_KEY = 'ef'.repeat(32);
+
+    it('a person re-keyed at a held community, not the one in use, is held at all three by the key they hold at each (design §2.5)', async () => {
+        const app = await phoneHolding(['in use', 'held and reachable'], [IN_USE, HELD, THIRD]);
+        await app.blockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
+        for (const c of [IN_USE, HELD, THIRD]) expect(listOf(c, ana.publicKey)).toEqual(['H']);
+
+        // He lost his phone; the held community's admin re-keys him there only: his new key is a stranger at the others.
+        net.knownAt.set(HELD, new Set([...net.known, NEW_KEY]));
+        rekeyAt(HELD, HARASSER, NEW_KEY);
+        const from = net.sent.length;
+        await app.followRekeyedBlocks();
+        await app.syncBlocks();
+        await app.blockSyncsEndedForTests();
+
+        expect(await app.isUserBlocked(NEW_KEY)).toBe(true);
+        expect(heard(HELD, from)).toEqual(['read']);
+        expect(heard(IN_USE, from)).toEqual(['block efef+H', 'read']);
+        expect(heard(THIRD, from)).toEqual(['block efef+H', 'read']);
+        expect(listOf(HELD, ana.publicKey)).toEqual(['efef']);
+        expect(listOf(IN_USE, ana.publicKey)).toEqual(['H']);
+        expect(listOf(THIRD, ana.publicKey)).toEqual(['H']);
+
+        // Nothing more to change anywhere.
+        const settled = net.sent.length;
+        await app.syncBlocks();
+        await app.blockSyncsEndedForTests();
+        expect(blockAndReportRequests().filter((s) => net.sent.indexOf(s) >= settled)).toEqual([]);
+    });
+
+    it.each([
+        ['the newest and 4 before (5 keys): learned, and the others are sent them', 4, true],
+        ['the newest and 5 before (6 keys): not learned, and nothing of them goes anywhere', 5, false],
+    ] as const)('a community that names one person by %s (design §2.5, the 5-key guard)', async (_what, formers, learned) => {
+        const others = Array.from({ length: formers }, (_, i) => `b${i}`.repeat(32));
+        const app = await phoneHolding(['in use', 'held and reachable']);
+        await app.blockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
+        // The held community's read names him as one person with `others`.
+        net.formerKeys.set(HELD, new Map([[HARASSER, others]]));
+        const from = net.sent.length;
+        await app.followRekeyedBlocks();
+        await app.syncBlocks();
+        await app.blockSyncsEndedForTests();
+
+        for (const k of others) expect(await app.isUserBlocked(k)).toBe(learned);
+        expect(await app.getBlockedUsers()).toEqual(learned ? [HARASSER, ...others] : [HARASSER]);
+        const changes = blockAndReportRequests().filter((s) => net.sent.indexOf(s) >= from && Object.keys(s.body).length > 0);
+        expect(changes.map((s) => [s.url, s.body])).toEqual(learned ? [[`${IN_USE}/api/blocks`, { targetPubkeys: [HARASSER, ...others] }]] : []);
+    });
+
+    it('the 30-a-minute limit is each community\'s own: 40 keys reach 30 at each in the first minute, and the rest the next', async () => {
+        vi.useRealTimers();
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        vi.setSystemTime(new Date('2026-11-21T08:00:00Z'));
+        // 40 authors no community has a row for, blocked before this build: the list goes first, then each on its own.
+        const strangers = Array.from({ length: 40 }, (_, i) => (i + 1).toString(16).padStart(64, '0'));
+        mem.async.clear();
+        mem.secure.clear();
+        mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
+        mem.async.set(listKey(ana.publicKey), JSON.stringify(strangers));
+        mem.async.set(ANCHOR, IN_USE);
+        setSaved([IN_USE, HELD]);
+        net.sent = [];
+        const app = await startApp();
+
+        await app.syncBlocks();
+        await app.blockSyncsEndedForTests();
+        expect(heard(IN_USE, 0)).toHaveLength(30);
+        expect(heard(HELD, 0)).toHaveLength(30);
+
+        // The next minute, each by itself: the 11 left as one list, then each on its own.
+        await vi.advanceTimersByTimeAsync(60_000);
+        await app.blockSyncsEndedForTests();
+        for (const c of [IN_USE, HELD]) {
+            expect(heard(c, 0)).toHaveLength(30 + 1 + 11);
+            expect([...listAt(c, ana.publicKey)].sort()).toEqual([...strangers].sort());
+        }
+    });
+
+    describe('the background sync (services/background-task.ts → syncOwedBlocks)', () => {
+        it('nothing owed anywhere: nothing is sent, not even a read', async () => {
+            const app = await phoneHolding(['in use', 'held and reachable']);
+            await app.blockUser(HARASSER);
+            await app.blockSyncsEndedForTests();
+            const from = net.sent.length;
+            expect(await app.syncOwedBlocks(8000)).toBe(0);
+            expect(net.sent.slice(from)).toEqual([]);
+        });
+
+        it('owed at one held community only (offline at the tap): that one alone is sent it', async () => {
+            const app = await phoneHolding(['in use', 'held and reachable']);
+            net.down.add(HELD);
+            await app.blockUser(HARASSER);
+            await app.blockSyncsEndedForTests();
+            net.down.delete(HELD);
+            const from = net.sent.length;
+            expect(await app.syncOwedBlocks(8000)).toBe(1);
+            await app.blockSyncsEndedForTests();
+            expect(heard(HELD, from)).toEqual(['block H']);
+            expect(heard(IN_USE, from)).toEqual([]);
+            expect(listOf(HELD, ana.publicKey)).toEqual(['H']);
+        });
+
+        it('a community that never answers: it settles by the deadline, aborts the request, and the other owed one still gets it', async () => {
+            vi.useRealTimers();
+            const app = await phoneHolding(['in use', 'held and reachable'], [IN_USE, THIRD, HELD]);
+            net.down.add(HELD);
+            net.down.add(THIRD);
+            await app.blockUser(HARASSER);
+            await app.blockSyncsEndedForTests();
+            net.down.clear();
+            net.hang.add(THIRD);
+            const from = net.sent.length;
+            const started = Date.now();
+            expect(await app.syncOwedBlocks(1500)).toBe(2);
+            expect(Date.now() - started).toBeLessThan(2500);
+            expect(heard(HELD, from)).toEqual(['block H']);
+            expect(listOf(HELD, ana.publicKey)).toEqual(['H']);
+            await vi.waitFor(() => expect(net.hung.length > 0 && net.hung.every((s) => s?.aborted)).toBe(true));
+        });
+
+        it('runs after the mail, inside what is left of the wake\'s window', async () => {
+            const { readFileSync } = await import('node:fs');
+            const { join } = await import('node:path');
+            const task = readFileSync(join(__dirname, '..', '..', 'services', 'background-task.ts'), 'utf8');
+            const mail = task.indexOf('await mailAfterBackgroundSync(wokeAt);');
+            const blocks = task.indexOf('if (budget > 0) await syncOwedBlocks(budget);');
+            expect(mail).toBeGreaterThan(0);
+            expect(blocks).toBeGreaterThan(mail);
+            expect(task.slice(mail, blocks)).toContain('const budget = backgroundMailBudget(Date.now() - wokeAt);');
+        });
+    });
+
+    it('nothing in blocklist.ts reads the address in use for blocks: only the report of a block with no community named, and the move of old reports at start', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const lines = readFileSync(join(__dirname, '..', 'blocklist.ts'), 'utf8').split('\n');
+        const readers = new Set<string>();
+        lines.forEach((line, i) => {
+            if (!line.includes('ANCHOR_STORE_KEY') || /^const ANCHOR_STORE_KEY\b/.test(line)) return;
+            const fn = lines.slice(0, i).reverse().map((l) => /^(?:export )?(?:async )?function (\w+)/.exec(l)).find(Boolean);
+            readers.add(fn?.[1] ?? '?');
+        });
+        expect([...readers].sort()).toEqual(['moveAtStart', 'reportBlock']);
     });
 });

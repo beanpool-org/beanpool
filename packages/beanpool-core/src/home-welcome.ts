@@ -15,7 +15,10 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
 import { PROTOCOL_CONSTANTS } from './protocol.js';
-import { t, word } from './words.js';
+import { formatCount, t, tn, word } from './words.js';
+import { WELCOME_BAND_DAYS, defaultHomeLayout, type HomeLayoutV2 } from './home-frame.js';
+import { COMMUNITY_CARD_WORDS } from './community-card.js';
+import { isKeptCommunityWelcome } from './community-welcome.js';
 
 /**
  * The WELCOME TO BEANPOOL! tile's words (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.1 item 1, Marty's
@@ -30,6 +33,12 @@ export const WELCOME_TILE_WORDS = {
     noBeans: word('No Beans here. Trading in Beans happens in local communities.'),
     tour: word('Show me around'),
     gotIt: word('Got it'),
+    /** The tile folded to one band after seven days (§4.2): the band opens it again. */
+    band: word('Welcome to BeanPool ›'),
+    /** The band's ×, as a screen reader names it. */
+    away: word('Put the welcome away'),
+    /** The tile, and the band's open button, as a screen reader names them. */
+    name: word('Welcome to BeanPool'),
 } as const;
 
 /** Which picture a tile line wears (the app maps it to an icon it bundles): give and take, the scales, zero, people. */
@@ -102,4 +111,99 @@ export function readerMayInvite(features: { invites?: unknown; door?: unknown },
     if (features.invites !== true) return false;
     if (features.door !== 'admins') return true;
     return role === 'owner' || role === 'admin';
+}
+
+// ── The community's welcome on Home ─────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The key a member's × on the community's welcome leaves in the Home layout's `dismissed` map (`{ card id: date }`,
+ * home-frame.ts `HomeLayoutV2`), on the account, so the phone and the web agree (DESIGN-onboarding-home-landing-fable.md
+ * §4.3: "one more entry in the Home layout's dismissed map … A new key, no new shape"). Both apps' slices use this one key
+ * (web W2, phone S7). It is no card's id, so no card is hidden by it.
+ */
+export const COMMUNITY_WELCOME_DISMISSED = 'welcome-community';
+
+/** The community's welcome's own words (§4.1 item 2), shown through t(); the owners' words themselves never are. */
+export const COMMUNITY_WELCOME_HOME_WORDS = {
+    /** Its caption: "FROM RIVERSIDE", capitals by style. */
+    from: word('From {community}'),
+    /** Its caption where the answer carries no name for the community. */
+    fromYours: word('From your community'),
+    /** Its ×, as a screen reader names it. */
+    away: word("Put {community}'s welcome away"),
+    awayYours: word("Put your community's welcome away"),
+    /** To an owner, where none is written yet: opens the community's Settings, where it is written (slice S6). */
+    write: word("Write your community's welcome ›"),
+} as const;
+
+/** The parts of a Home answer the community's welcome reads (both apps' answers have this shape). */
+export interface CommunityWelcomeAnswer {
+    /** A visitor's answer (the web's lobby): no welcome. */
+    welcome?: unknown;
+    me?: { joinedAt?: string | null; standing?: string } | null;
+    cards?: { community?: { name?: string | null; members?: number | null; welcome?: string | null } | null } | null;
+}
+
+/** What the community's welcome on Home says (§4.1 item 2), in the member's language where the words are ours. */
+export interface CommunityWelcomeView {
+    /** "From Riverside" / "From your community". */
+    caption: string;
+    /** The ×'s name. */
+    away: string;
+    /** The owners' words, exactly as written (never translated, §4.5); null where none are written or the server is older. */
+    text: string | null;
+    /**
+     * The server said none is written (`welcome: null`), as opposed to a server from before the setting, which sends no field:
+     * only then is an owner asked to write one ({@link COMMUNITY_WELCOME_HOME_WORDS} `write`), since only then can they.
+     */
+    unwritten: boolean;
+    /** "84 members"; null where the answer carries no count. */
+    members: string | null;
+}
+
+/**
+ * The community's welcome on Home, or null where it is not drawn (DESIGN-onboarding-home-landing-fable.md §4.1 item 2,
+ * §4.2; Marty's picks of 21 Nov 2026). A newcomer's, like the tile: a member (never a visitor or a suspended member) in
+ * their first {@link WELCOME_BAND_DAYS} days, until their own × (the {@link COMMUNITY_WELCOME_DISMISSED} entry in the
+ * layout's `dismissed`), whatever became of BeanPool's tile, since it is the community's and not ours ("The community's
+ * welcome stays until its own ×"). A join date the node didn't send or can't be read keeps it, never hides it, as
+ * home-frame.ts `welcomeShape` does. With no owners' words it still says who brought them and the count (§4.1: "No
+ * owner's words yet: the inviter line and the count alone"); the inviter's line is the app's, from {@link welcomeFacts}.
+ *
+ * Only a welcome as one is kept is shown ({@link isKeptCommunityWelcome}): anything else is no words, never a stand-in.
+ */
+export function communityWelcomeView(
+    answer: CommunityWelcomeAnswer,
+    layout: Pick<HomeLayoutV2, 'dismissed'> | null | undefined,
+    now: number = Date.now(),
+): CommunityWelcomeView | null {
+    const me = answer.me;
+    if (answer.welcome || !me || (me.standing !== undefined && me.standing !== 'member')) return null;
+    if (layout?.dismissed && Object.prototype.hasOwnProperty.call(layout.dismissed, COMMUNITY_WELCOME_DISMISSED)) return null;
+    const joined = typeof me.joinedAt === 'string' ? Date.parse(me.joinedAt) : NaN;
+    if (Number.isFinite(joined) && now - joined >= WELCOME_BAND_DAYS * 86_400_000) return null;
+    const card = answer.cards?.community;
+    const name = typeof card?.name === 'string' ? card.name.trim() : '';
+    const said = card?.welcome;
+    const count = card?.members;
+    return {
+        caption: name ? t(COMMUNITY_WELCOME_HOME_WORDS.from, { community: name }) : t(COMMUNITY_WELCOME_HOME_WORDS.fromYours),
+        away: name ? t(COMMUNITY_WELCOME_HOME_WORDS.away, { community: name }) : t(COMMUNITY_WELCOME_HOME_WORDS.awayYours),
+        text: isKeptCommunityWelcome(said) ? said : null,
+        unwritten: said === null,
+        members: typeof count === 'number' && Number.isFinite(count) && count > 0
+            ? tn(count, COMMUNITY_CARD_WORDS.members.one, COMMUNITY_CARD_WORDS.members.other, { n: formatCount(count) })
+            : null,
+    };
+}
+
+/**
+ * The member's × on the community's welcome: the layout with its {@link COMMUNITY_WELCOME_DISMISSED} entry, dated `now`,
+ * the cards untouched. A Home never saved is the default list with it (as each app's `dismissSafety` does for "Your way
+ * back in"), so the newcomer's Home is not changed by it.
+ */
+export function dismissCommunityWelcome(layout: HomeLayoutV2 | null | undefined, now: number): HomeLayoutV2 {
+    const base = layout ?? defaultHomeLayout();
+    const at = new Date(now).toISOString();
+    return { ...base, dismissed: { ...base.dismissed, [COMMUNITY_WELCOME_DISMISSED]: at }, updatedAt: at };
 }

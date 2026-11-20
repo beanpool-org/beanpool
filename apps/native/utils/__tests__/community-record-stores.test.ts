@@ -43,6 +43,7 @@ const STORES: Record<string, Kind> = {
     blockedUsersStoreKey: PHONE,
     blockedKeyChainsStoreKey: PHONE,
     blockChangesStoreKey: PHONE,
+    dmVerifiedKeysStoreKey: PHONE,
     MESSAGE_REQUESTS_STORE_PREFIX: PHONE,
     MESSAGE_REQUESTS_SEEN_STORE_PREFIX: PHONE,
     PUSH_TOKEN_STORE_KEY: PHONE,

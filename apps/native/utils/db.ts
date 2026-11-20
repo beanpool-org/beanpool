@@ -15,9 +15,10 @@ import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType, isKeyStore
 import {
     createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, applyResetVerdict, judgeFirstSight,
     settleFirstSight, isUnplacedSight, isHeldLostSight, markHeldLost, isDmPinStoreError, isDmPinsFullError, DmPinsFullError, isPinnableId,
-    noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, restDmEntry, dmEntryRestless, dmEntryWaitsForMember, isVerifiedPin,
-    markVerified, removeVerified, type DmPeerPins, type DmPeerPin, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset, type DmPeerOffer,
+    noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, restDmEntry, dmEntryRestless, dmEntryWaitsForMember, markableKey,
+    type DmPeerPins, type DmPeerPin, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
+import { createDmVerifiedBook, isVerifiedPin, showsVerifiedMark, DmVerifiedStoreError, type DmVerifiedKeys } from './dm-verified-keys';
 import { dmPeerKeys, dmPeerName, isDmType } from './dm-blocked';
 import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError, readDmSeen } from './dm-guard-list';
@@ -1122,8 +1123,8 @@ async function onlyDmInPlace(here: ChatRequestCopy, conversationId: string): Pro
 }
 
 /**
- * The copy a key-code mark of `community`'s chat writes its pins through (the member's Mark as verified, Remove
- * verification, Continue with the new key): in place, only for the id of a direct chat that copy holds as it holds it
+ * The copy whose pins a key-code tap in `community`'s chat reads or writes (the member's Mark as verified and Remove
+ * verification read the pin there, Continue with the new key moves it): in place, only for the id of a direct chat that copy holds as it holds it
  * (#3305 review F1: the pins fold an id's case, and a link can carry any spelling), else null and nothing is written.
  */
 async function pinsCopyFor(community: ChatCommunity, conversationId: string): Promise<SQLite.SQLiteDatabase | null> {
@@ -1763,6 +1764,8 @@ export async function getConversations(myPubkey: string) {
     // The keys each DM's other person is known by (peerKeys, below) come from this member's pins, read once.
     let keyPins: DmPeerPins | null = previewPins;
     if (!keyPins) { try { keyPins = await dmPins.read(myPubkey, database); } catch { keyPins = null; } }
+    // The member's verified keys, for the "key changed" tag (a verified person's change waits for them).
+    const verified = await dmVerified.read(previewIdentity?.publicKey ?? myPubkey);
 
     // A request for this member they haven't accepted is no chat of theirs: the node lists it under Requests, or nowhere
     // once ignored or lapsed (sortRequestsOut). Its row is here for its card's preview and its own screen only.
@@ -1868,7 +1871,7 @@ export async function getConversations(myPubkey: string) {
             // The "key changed" tag: only while the chat waits for the member (DESIGN-dm-key-signal-model §4): a verified
             // person's change, or no single key listed. An ordinary change shows none: the chat carries on with a notice in
             // the thread (from the same one read as the preview; unreadable pins, no tag: the chat itself says why).
-            keyChanged: (row.convType || 'dm') === 'dm' && !!previewPins && dmEntryWaitsForMember(dmSightFor(previewPins, row.id)),
+            keyChanged: (row.convType || 'dm') === 'dm' && !!previewPins && dmEntryWaitsForMember(dmSightFor(previewPins, row.id), verified),
             lastMessage: displayMsg,
             lastMessageFromApp: fromApp,
             lastMsgType: row.lastMsgType,
@@ -1908,6 +1911,12 @@ export interface HeldConversation {
     peerPubkey: string | null;
     /** Every other key in the chat (dm-blocked.ts talkShowsChat hides it when any is blocked). */
     peerKeys: string[];
+    /**
+     * The "key changed" tag, as Chat's own rows have it (DESIGN-s7-blocks-verified-everywhere §3.3): the chat waits for the
+     * member there (a verified person's change, or no single key listed), read from that community's pins as stored and
+     * the member's one list of verified keys. False when its pins can't be read: the chat itself says why.
+     */
+    keyChanged: boolean;
     rawTimestamp: string | null;
     createdAt: string | null;
 }
@@ -1971,6 +1980,7 @@ export async function getHeldConversations(myPubkey: string, community: string):
     // The pins as stored for that file, never seeded from here (no held handle reaches the pin book); none stored, or
     // unreadable: the rows' keys, as getConversations has them when its pins can't be read.
     const pins = await dmPins.peek(myPubkey, file);
+    const verified = await dmVerified.read(myPubkey);
     return rows.map((row) => {
         let postPhoto: string | null = null;
         if (row.postPhotos) {
@@ -1990,6 +2000,7 @@ export async function getHeldConversations(myPubkey: string, community: string):
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
             peerKeys: dmPeerKeys(typeof row.otherKeys === 'string' ? row.otherKeys : null, isDmType(row.convType) && pins ? dmPinFor(pins, String(row.id)) : null),
+            keyChanged: (row.convType || 'dm') === 'dm' && !!pins && dmEntryWaitsForMember(dmSightFor(pins, String(row.id)), verified),
             rawTimestamp: row.timestamp || null,
             createdAt: row.createdAt || null,
         };
@@ -5656,12 +5667,13 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                 const before = await dmPins.read(me, database);
                 const sights = myIdentity.privateKey ? await judgeHeldAtUpdate(me, database, myIdentity.privateKey, before, convData.conversations) : [];
                 const held = await dmPeersHeld(database);
+                const verified = await dmVerified.read(me);
                 await dmPins.update(me, database, (pins) => {
                     // The book seeded this file's rows, checked, before this run's first write here; any held beyond
                     // those were written since, from the node, and pin unchecked: the lines judge them first.
                     const seeded = seedPinsFromRows(pins, me, held, false);
-                    const judged = applyHeldSights(pins, sights);
-                    const listed = applyListingsToPins(pins, me, convData.conversations);
+                    const judged = applyHeldSights(pins, sights, verified);
+                    const listed = applyListingsToPins(pins, me, convData.conversations, verified);
                     return seeded || judged || listed;
                 });
             } catch (e) {
@@ -6043,7 +6055,8 @@ async function syncSingleConversationOnce(conversationId: string, community?: Ch
         // resting rule there (DESIGN-dm-key-signal-model: a notice and carry on, a verified person's change pauses).
         if (here.inPlace && myIdentity?.publicKey && msgData.conversation && Array.isArray(msgData.conversation.participants)) {
             const me = myIdentity.publicKey;
-            await dmPins.update(me, database, (pins) => applyListingsToPins(pins, me, [{ ...msgData.conversation, id: conversationId }])).catch(() => {});
+            const verified = await dmVerified.read(me);
+            await dmPins.update(me, database, (pins) => applyListingsToPins(pins, me, [{ ...msgData.conversation, id: conversationId }], verified)).catch(() => {});
         }
         // The node's word on the chat's request, after the gate and never while the pins are unread: it decides whether the
         // chat is in the list (isRequestFor) and whether it has a composer (requestModeOf), so a node answering a request on a
@@ -6478,12 +6491,21 @@ const dmPins = createDmPinBook<SQLite.SQLiteDatabase>(AsyncStorage, (database) =
     }
     const kept = await keepLinesHeldAtUpdate(me, file, lines);
     const sights = reset ? await judgeRowsAfterReset(me, file, database, held) : null;
+    // The reset no longer costs marks (DESIGN-s7-blocks-verified-everywhere §3.3): the re-seed judges with the member's list.
+    const verified = sights ? await dmVerified.read(me) : null;
     return (pins) => {
         const now = new Date().toISOString();
-        const seeded = sights ? applyResetSights(pins, sights, now) : seedPinsFromRows(pins, me, held, true);
+        const seeded = sights && verified ? applyResetSights(pins, sights, now, verified) : seedPinsFromRows(pins, me, held, true);
         return (!kept && markHeldLost(pins, lines.keys(), now)) || seeded;
     };
 }, dropHeldLinesOfPinned);
+
+/**
+ * The member's verified keys (utils/dm-verified-keys.ts, DESIGN-s7-blocks-verified-everywhere §3.2): one list per account
+ * for every community on the phone, read once per run. Written only by the member's Mark as verified, Continue on the
+ * verified card and Remove verification (below); every other path here only reads it, to hand it to the pins' rules.
+ */
+const dmVerified = createDmVerifiedBook(AsyncStorage);
 
 interface ResetSight { id: string; rowsKey: string; verdict: SightVerdict }
 
@@ -6519,9 +6541,9 @@ async function judgeRowsAfterReset(me: string, file: string, database: SQLite.SQ
 }
 
 /** {@link judgeRowsAfterReset}'s verdicts, each kept for a DM still keeping nothing. True when the pins changed. */
-function applyResetSights(pins: DmPeerPins, sights: ReadonlyArray<ResetSight>, now: string): boolean {
+function applyResetSights(pins: DmPeerPins, sights: ReadonlyArray<ResetSight>, now: string, verified: DmVerifiedKeys): boolean {
     let changed = false;
-    for (const s of sights) if (applyResetVerdict(pins, s.id, s.verdict, s.rowsKey, now)) changed = true;
+    for (const s of sights) if (applyResetVerdict(pins, s.id, s.verdict, s.rowsKey, now, verified)) changed = true;
     return changed;
 }
 
@@ -6641,6 +6663,7 @@ export async function seedDmPinsBeforeCarry(files: readonly string[]): Promise<v
 /** For tests: a fresh app session (an update, a restore): the DM pins are read from storage again. */
 export function _resetDmPeerPinsForTests(): void {
     dmPins.forget();
+    dmVerified.forget();
     dmLinesHeldAtUpdate.clear();
 }
 
@@ -6656,7 +6679,10 @@ interface PinnedDmKeyContext extends DMKeyContext {
     keyChanged: boolean;
     /** The key offered in the pinned one's place (null: none, or the node lists several): its lines are marked, never read. */
     offeredPeer: string | null;
-    /** The member marked the pinned key verified (DESIGN-dm-key-signal-model §2.2): only then does a changed listing pause. */
+    /**
+     * The pinned key is on the member's list of verified keys, as read (dm-verified-keys.ts showsVerifiedMark): the card's
+     * "You marked … as verified" only. Never what decides a pause: the pins' rules do, with the list itself.
+     */
     verified?: boolean;
     /** When this phone saw the key change, newest first: one notice each in the thread (getMessages). */
     changedAt?: string[];
@@ -6778,6 +6804,9 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
     if (!conv || conv.type !== 'dm') return null;
     const me = identity.publicKey;
     let entry = dmSightFor(await dmPins.read(me, database), conversationId);
+    // The member's one list (DESIGN-s7-blocks-verified-everywhere §3.2): the same in every community, the one in use or one
+    // open in place. Unreadable: every pin holds (no move by itself), and no ✓.
+    const verified = await dmVerified.read(me);
     if (use !== 'open' && !isPinnableId(conversationId)) return null;
     const parts = await database.getAllAsync<any>('SELECT public_key FROM conversation_participants WHERE conversation_id = ?', [conversationId]);
     let peers = parts.map(p => p.public_key).filter((pk: string) => pk && pk !== identity.publicKey);
@@ -6816,16 +6845,16 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
         const onHeld = judging.held.has(dmPinId(conversationId));
         await dmPins.update(me, database, (pins) => {
             const kept = dmSightFor(pins, conversationId);
-            return (kept === judged || (onHeld && isHeldLostSight(kept))) && applySightVerdict(pins, conversationId, verdict, listed, heard, now);
+            return (kept === judged || (onHeld && isHeldLostSight(kept))) && applySightVerdict(pins, conversationId, verdict, listed, heard, now, verified);
         });
         entry = dmSightFor(await dmPins.read(me, database), conversationId);
     }
     // The resting rule before a send or the check answers (DESIGN-dm-key-signal-model §2.5): a person not marked verified
     // never rests on an offer naming one key, and a rule-5 record never on a listing naming one key, so a send never
     // depends on which path ran last. Never on 'open', which writes nothing.
-    if (use !== 'open' && dmEntryRestless(entry)) {
+    if (use !== 'open' && dmEntryRestless(entry, verified)) {
         const now = new Date().toISOString();
-        await dmPins.update(me, database, (pins) => restDmEntry(pins, conversationId, now));
+        await dmPins.update(me, database, (pins) => restDmEntry(pins, conversationId, now, verified));
         entry = dmSightFor(await dmPins.read(me, database), conversationId);
     }
     if (!entry || isUnplacedSight(entry)) {
@@ -6849,7 +6878,7 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
     }
     return {
         myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered, offered: pin.offered,
-        offeredPeer: pin.offered?.peer ?? null, myPubHex: me, verified: isVerifiedPin(pin), changedAt: pin.changedAt ?? [],
+        offeredPeer: pin.offered?.peer ?? null, myPubHex: me, verified: showsVerifiedMark(pin, verified), changedAt: pin.changedAt ?? [],
     };
 }
 
@@ -6975,12 +7004,12 @@ async function judgeHeldAtUpdate(me: string, database: SQLite.SQLiteDatabase, my
 interface HeldSight { id: string; listed: string; heard: DmHeard | undefined; verdict: SightVerdict }
 
 /** {@link judgeHeldAtUpdate}'s verdicts, each kept for a DM that still keeps nothing. True when the pins changed. */
-function applyHeldSights(pins: DmPeerPins, sights: ReadonlyArray<HeldSight>): boolean {
+function applyHeldSights(pins: DmPeerPins, sights: ReadonlyArray<HeldSight>, verified: DmVerifiedKeys): boolean {
     const now = new Date().toISOString();
     let changed = false;
     for (const s of sights) {
         const entry = dmSightFor(pins, s.id);
-        if ((!entry || isHeldLostSight(entry)) && applySightVerdict(pins, s.id, s.verdict, s.listed, s.heard, now)) changed = true;
+        if ((!entry || isHeldLostSight(entry)) && applySightVerdict(pins, s.id, s.verdict, s.listed, s.heard, now, verified)) changed = true;
     }
     return changed;
 }
@@ -7004,7 +7033,7 @@ async function dmPeersHeld(database: SQLite.SQLiteDatabase): Promise<any[]> {
  * moves here (utils/dm-peer-pins.ts applyDmListings). A listing of any type counts against a pin (a DM the node retypes
  * is still the DM this phone pinned); only a DM's listing pins at first sight.
  */
-function applyListingsToPins(pins: DmPeerPins, myPubkey: string, conversations: ReadonlyArray<any>): boolean {
+function applyListingsToPins(pins: DmPeerPins, myPubkey: string, conversations: ReadonlyArray<any>, verified: DmVerifiedKeys): boolean {
     const me = myPubkey.toLowerCase();
     const byId = new Map<string, { others: string[]; dm: boolean; heard?: DmHeard }[]>();
     for (const c of conversations) {
@@ -7018,7 +7047,7 @@ function applyListingsToPins(pins: DmPeerPins, myPubkey: string, conversations: 
     let changed = false;
     for (const [id, listings] of byId) {
         if (!dmSightFor(pins, id) && listings.some(l => !l.dm)) continue;
-        if (applyDmListings(pins, id, listings.map(l => l.others), now, listings.length === 1 ? listings[0].heard : undefined)) changed = true;
+        if (applyDmListings(pins, id, listings.map(l => l.others), now, verified, listings.length === 1 ? listings[0].heard : undefined)) changed = true;
     }
     return changed;
 }
@@ -7110,7 +7139,10 @@ async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: 
         }
     }
     // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
-    if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, heardWith)].some(Boolean)).catch(() => {});
+    if (me && before) {
+        const verified = await dmVerified.read(me);
+        await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights, verified), applyListingsToPins(pins, me, heardWith, verified)].some(Boolean)).catch(() => {});
+    }
 }
 
 /**
@@ -7164,7 +7196,7 @@ export async function isDmUnplaced(conversationId: string): Promise<boolean> {
         const me = (await loadIdentity())?.publicKey;
         if (!me) return false;
         const entry = dmSightFor(await dmPins.read(me, await getDb()), conversationId);
-        return isUnplacedSight(entry) && dmEntryWaitsForMember(entry);
+        return isUnplacedSight(entry) && dmEntryWaitsForMember(entry, await dmVerified.read(me));
     } catch {
         return false;
     }
@@ -7231,17 +7263,20 @@ export interface DmKeyCodeInfo {
     peer: string | null;
     /** The person's name as this phone holds the directory, or null (the screen's unknown-name sentences). */
     name: string | null;
-    /** The member marked that key verified. */
+    /** The key it is sealed to is on the member's list of verified keys, as read: never true while the list can't be read. */
     verified: boolean;
     /** Sends wait for the member: a verified person's key changed, or no single key is listed. */
     paused: boolean;
     /** While paused, one new key is on offer (a verified person's change): removing the mark carries on with it. */
     offersKey: boolean;
+    /** The member's list of verified keys can't be read: the screen says so in place of Mark, Remove and ✓. */
+    listUnread?: true;
 }
 
 /**
  * The key code screen's read (§3): the pinned key's code, whether it is marked verified, and whether the chat waits.
- * Reads only, through the pins' book. Null for anything that isn't a DM; throws DmPinStoreError when the pins can't be read.
+ * Reads only, through the pins' book and the member's list. Null for anything that isn't a DM; throws DmPinStoreError
+ * when the pins can't be read.
  */
 export async function getDmKeyCodeInfo(conversationId: string, community?: ChatCommunity): Promise<DmKeyCodeInfo | null> {
     const me = (await loadIdentity())?.publicKey;
@@ -7250,40 +7285,55 @@ export async function getDmKeyCodeInfo(conversationId: string, community?: ChatC
     const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
     if (!conv || conv.type !== 'dm') return null;
     const entry = dmSightFor(await dmPins.read(me, database), conversationId);
+    const verified = await dmVerified.read(me);
     const pin = entry && !isUnplacedSight(entry) ? entry : null;
-    const paused = dmEntryWaitsForMember(entry);
-    return { peer: pin?.peer ?? null, name: await callsignOfKey(pin?.peer, community), verified: isVerifiedPin(pin), paused, offersKey: paused && !!pin?.offered?.peer };
+    const paused = dmEntryWaitsForMember(entry, verified);
+    const info: DmKeyCodeInfo = { peer: pin?.peer ?? null, name: await callsignOfKey(pin?.peer, community), verified: showsVerifiedMark(pin, verified), paused, offersKey: paused && !!pin?.offered?.peer };
+    if (!verified.readable) info.listUnread = true;
+    return info;
 }
 
 /**
- * The member's "Mark as verified" (§2.5): marks `expectedPeer`, the key whose code the screen showed, through the pins' one
- * queue and this call's own handle. False, nothing written, when the pin holds an offer or has moved since the screen read
- * it (the screen then shows the new code). Throws DmPinStoreError when the pins can't be read or written.
+ * The member's "Mark as verified" (DESIGN-s7-blocks-verified-everywhere §3.2): puts `expectedPeer`, the key whose code the
+ * screen showed, on the member's one list, so every chat sealed to it, in any community on the phone, is verified. Only
+ * while this chat's pin still holds that key with no other offered, read in the pins' turn through this call's own
+ * handle; false, nothing written, when it moved since the screen read it (the screen then shows the new code). The pins
+ * are only read: nothing goes into any community's file. Throws DmPinStoreError when the pins can't be read,
+ * DmVerifiedStoreError when the list can't be read or written, DmVerifiedFullError at its cap.
  */
 export async function markDmPeerVerified(conversationId: string, expectedPeer: string, community?: ChatCommunity): Promise<boolean> {
     const me = (await loadIdentity())?.publicKey;
     if (!me) return false;
     const database = await pinsCopyFor(community, conversationId);
     if (!database) return false;
-    const now = new Date().toISOString();
-    let marked = false;
-    await dmPins.update(me, database, (pins) => (marked = markVerified(pins, conversationId, expectedPeer, now)));
-    return marked;
+    if (!(await dmVerified.read(me)).readable) throw new DmVerifiedStoreError();
+    let key = null as string | null;
+    await dmPins.update(me, database, (pins) => { key = markableKey(pins, conversationId, expectedPeer); return false; });
+    if (!key) return false;
+    await dmVerified.add(me, key);
+    return true;
 }
 
 /**
- * The member's "Remove verification" (§2.5): the mark goes, and in the same write a pause for one offered key ends with
- * the pin moved to it (the resting rule). Throws DmPinStoreError when the pins can't be read or written.
+ * The member's "Remove verification" (§3.3 Unverify): the key this chat is sealed to comes off the member's list, so no
+ * chat sealed to it, in any community, is verified from now. In this chat a pause for one offered key then ends with the
+ * pin moved to it (the resting rule, with its notice); every other chat rests at its own next check. Throws
+ * DmPinStoreError when the pins can't be read or written, DmVerifiedStoreError when the list can't be read or written.
  */
 export async function removeDmPeerVerification(conversationId: string, community?: ChatCommunity): Promise<boolean> {
     const me = (await loadIdentity())?.publicKey;
     if (!me) return false;
     const database = await pinsCopyFor(community, conversationId);
     if (!database) return false;
+    const before = await dmVerified.read(me);
+    if (!before.readable) throw new DmVerifiedStoreError();
+    const pin = dmPinFor(await dmPins.read(me, database), conversationId);
+    if (!pin || !isVerifiedPin(pin, before)) return false;
+    if ((await dmVerified.remove(me, pin.peer)) !== 'removed') return false;
+    const after = await dmVerified.read(me);
     const now = new Date().toISOString();
-    let removed = false;
-    await dmPins.update(me, database, (pins) => (removed = removeVerified(pins, conversationId, now)));
-    return removed;
+    await dmPins.update(me, database, (pins) => restDmEntry(pins, conversationId, now, after));
+    return true;
 }
 
 /**
@@ -7300,7 +7350,7 @@ async function unplacedKeyChange(conversationId: string, community?: ChatCommuni
     const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
     if (!conv || conv.type !== 'dm') return null;
     const entry = dmSightFor(await dmPins.read(me, database), conversationId);
-    if (!isUnplacedSight(entry) || !dmEntryWaitsForMember(entry)) return null;
+    if (!isUnplacedSight(entry) || !dmEntryWaitsForMember(entry, await dmVerified.read(me))) return null;
     const parts = await database.getAllAsync<any>('SELECT public_key FROM conversation_participants WHERE conversation_id = ?', [conversationId]).catch(() => []);
     const others = parts.map((p: any) => p.public_key).filter((pk: string) => pk && pk !== me);
     const name = others.length === 1 ? await callsignOfKey(others[0], community) : null;
@@ -7319,6 +7369,11 @@ async function unplacedKeyChange(conversationId: string, community?: ChatCommuni
  * record offers no key, so nothing continues from one. What the node says about a re-key never moves a pin here (pick 4);
  * only this call does. Throws DmPinStoreError when the pins can't be read or written.
  *
+ * The card's tick says the new key's code matches, as Mark as verified does, so a verified person stays verified: the new
+ * key goes on the member's list beside the old one (other communities may still list that), before the pin moves
+ * (DESIGN-s7-blocks-verified-everywhere §3.2). While the list can't be read nothing moves (DmVerifiedStoreError); at its
+ * cap neither (DmVerifiedFullError).
+ *
  * Through the pins' one queue (#1873 review, finding 4): the sync, first sight and the refresh write there too, so no
  * writer's older copy can be written over the member's choice, and the in-memory copy every send reads is the one changed.
  */
@@ -7330,8 +7385,11 @@ export async function acceptOfferedPeer(conversationId: string, expectedPeer: st
     // One handle for the pin and the rows (§3.4 amendment 5): the community this tap is in, never the one open afterwards.
     const database = await pinsCopyFor(community, conversationId);
     if (!database) return false;
+    const verified = await dmVerified.read(me);
+    if (!verified.readable) throw new DmVerifiedStoreError();
     const change = await getDmKeyChange(conversationId, community);
     if (!change || change.offeredPeer !== expected) return false;
+    if (isVerifiedPin(dmPinFor(await dmPins.read(me, database), conversationId), verified)) await dmVerified.add(me, expected);
     const now = new Date().toISOString();
     let moved = false;
     await dmPins.update(me, database, (pins) => (moved = acceptOffer(pins, conversationId, expected, now)));

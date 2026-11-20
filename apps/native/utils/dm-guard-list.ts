@@ -55,8 +55,8 @@ export const CHAT_MEMORY_RESET_WORDS = {
     rowSub: word('Who your chats are with, and which are private.'),
     body: word("This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start."),
     confirm: word("A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send."),
-    /** The marks go with the pins (DESIGN-dm-key-signal-model §2.2, §4): one more sentence after the confirmation. */
-    verifiedGo: word('People you marked as verified in this community go back to not verified.'),
+    // No sentence about verified people: the marks are on the member's one list, which no reset touches
+    // (DESIGN-s7-blocks-verified-everywhere §3.3).
 } as const;
 
 export class DmGuardUnreadError extends Error {

@@ -133,7 +133,7 @@ import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { MERGES } from '../community-copy-carry';
 import {
     PER_FILE_STORE_KEYS, dmConversationsSeenSetAsideStoreKey, dmConversationsSeenStoreKey, dmLinesAtUpdateStoreKey,
-    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey,
+    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey, dmVerifiedKeysStoreKey,
 } from '../storage-keys';
 import type { StoredGroupEpoch } from '../group-chat-keys';
 
@@ -266,7 +266,7 @@ async function phoneAtTheNumber(app: App = firstApp): Promise<{ before: Record<s
     await app.db.syncMessages(me.publicKey);
     expect(pinOf(FROM_FILE)?.peer, 'precondition: the real sync pinned the DM').toBe(peer.publicKey);
     // Signal's model (DESIGN-dm-key-signal-model §6 port rule): only a person the member marked verified holds a changed
-    // listing back as an offer, so the member marks them here; the mark travels with the pin (pinsWithCarried keeps it).
+    // listing back as an offer, so the member marks them here. The mark is the member's one list (S7c), which no carry moves.
     expect(await app.db.markDmPeerVerified(dm.id, peer.publicKey), 'precondition: the member marked the person verified').toBe(true);
     expect(stored(dmConversationsSeenStoreKey(me.publicKey, FROM_FILE)), 'precondition: the DM guard list holds it').toContain(dm.id);
     await app.db.groupKeyStore(FROM).raiseHighest('g-beans', 7);
@@ -425,9 +425,12 @@ describe('a copy already at the new address takes what guards the chats, add-onl
         await phoneWasAtTheName();
         await phoneAtTheNumber();
         const theirs = person();
-        // Marked verified at the name (Signal's model: only a verified person's changed listing waits for the member).
-        const pinnedAtTheName = { peer: theirs.publicKey, since: '2026-09-01T00:00:00.000Z', by: 'first-seen', checked: true, verified: { peer: theirs.publicKey, at: '2026-09-02T00:00:00.000Z' } };
+        // Marked verified (Signal's model: only a verified person's changed listing waits for the member): the key the name
+        // pins goes on the member's one list beside the number's (S7c), read again at the next fresh start below.
+        const pinnedAtTheName = { peer: theirs.publicKey, since: '2026-09-01T00:00:00.000Z', by: 'first-seen', checked: true };
         h.store.set(dmPeerPinsStoreKey(me.publicKey, TO_FILE), JSON.stringify({ pins: { [dm.id.toLowerCase()]: pinnedAtTheName } }));
+        const list = JSON.parse(stored(dmVerifiedKeysStoreKey(me.publicKey)) ?? '{"keys":{}}');
+        h.store.set(dmVerifiedKeysStoreKey(me.publicKey), JSON.stringify({ keys: { ...list.keys, [theirs.publicKey]: '2026-09-02T00:00:00.000Z' } }));
         const atTheNumber = stored(dmPeerPinsStoreKey(me.publicKey, FROM_FILE));
         const warn = quiet();
         expect(await follow()).toBe('moved-kept-both');
@@ -518,10 +521,10 @@ describe('a chat-memory reset still waiting at either address never makes the ca
         expect(pinOf(FROM_FILE)?.peer, 'the number\'s re-seed ran over its own rows').toBe(peer.publicKey);
         expect(pinOf(TO_FILE)?.peer, 'and its pin is in the name\'s pin book').toBe(peer.publicKey);
         expect(JSON.parse(stored(dmConversationsSeenStoreKey(me.publicKey, TO_FILE))!), 'and the DM in the name\'s guard list').toContain(dm.id);
-        // The reset took the mark with the pins (its warning says so: DESIGN-dm-key-signal-model §4); the member marks again.
-        expect(pinOf(TO_FILE)?.verified, 'the reset took the verified mark').toBeUndefined();
+        // S7c (DESIGN-s7-blocks-verified-everywhere §3.3): the reset no longer costs marks. The member's list still holds
+        // the key, so after a fresh start the person is still held back at the name with no new tap.
+        expect(Object.keys(JSON.parse(stored(dmVerifiedKeysStoreKey(me.publicKey))!).keys), 'the reset left the member\'s list alone').toEqual([peer.publicKey]);
         const app = await afterAFreshStart();
-        expect(await app.db.markDmPeerVerified(dm.id, peer.publicKey), 'the member marks the person verified again at the name').toBe(true);
         await heldBackAtTheName(app, peer.publicKey);
         await app.db.closeDB();
     });

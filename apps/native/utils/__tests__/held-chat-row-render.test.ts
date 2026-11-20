@@ -49,7 +49,7 @@ import { lightColors, darkColors } from '../../constants/colors';
 
 const ROW: HeldChat = {
     id: 'b-dm', key: 'held:community_hilltop.example_x.db:b-dm', held: true, type: 'dm', postId: null, postTitle: null, postPhoto: null,
-    peer: 'Kai', peerAvatar: 'https://hilltop.example/uploads/kai.jpg', peerUpdatedAt: null, peerPubkey: 'b2'.repeat(32), peerKeys: ['b2'.repeat(32)],
+    peer: 'Kai', peerAvatar: 'https://hilltop.example/uploads/kai.jpg', peerUpdatedAt: null, peerPubkey: 'b2'.repeat(32), peerKeys: ['b2'.repeat(32)], keyChanged: false,
     rawTimestamp: '2026-11-18T10:00:00.000Z', createdAt: null, community: 'https://hilltop.example', communityName: 'Hilltop',
 };
 
@@ -100,6 +100,23 @@ describe('a chat held in another community, in Chat\'s list', () => {
             expect(row.getAttribute('aria-description')).toBe('Chat with Kai in Hilltop. Opens that community.');
             // The row's own photo, an address on that community's server, as getHeldConversations made it.
             expect(seen.avatars).toEqual(['https://hilltop.example/uploads/kai.jpg']);
+        });
+    }
+
+    for (const dark of [false, true]) {
+        const colors = dark ? darkColors : lightColors;
+        it(`${dark ? 'dark' : 'light'}: S7c, a held direct chat waiting for the member there shows Chat's "key changed" tag in the warning colours; none otherwise`, async () => {
+            theme.dark = dark;
+            await render(createElement(HeldChatRow, { item: ROW, busy: false, onOpen: () => {} }));
+            expect(host.querySelector('[data-testid="held-chat-key-changed"]')).toBeNull();
+            await render(createElement(HeldChatRow, { item: { ...ROW, keyChanged: true }, busy: false, onOpen: () => {} }));
+            const tag = host.querySelector('[data-testid="held-chat-key-changed"]')!;
+            expect(tag.textContent).toBe('key changed');
+            expect(styleOf(tag).backgroundColor).toBe(colors.feedback.warning.bg);
+            expect(styleOf(tag.firstElementChild).color).toBe(colors.feedback.warning.fg);
+            // Its words are part of the row's spoken name (no label of its own), so the row stays one button.
+            expect(host.querySelector('[data-testid="held-chat-row"]')!.textContent).toContain('key changed');
+            expect(tag.getAttribute('aria-label')).toBeNull();
         });
     }
 

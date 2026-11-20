@@ -67,6 +67,8 @@ import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-grou
 import { chatLineWords } from '../../utils/chat-line-words';
 import { listingHeaderStatusWords } from '../../utils/listing-status-words';
 import { NotDeliveredMark } from '../../components/chat/NotDeliveredMark';
+import { NotSeenLine } from '../../components/chat/NotSeenLine';
+import { notSeenInThread, notSeenWords } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
@@ -1377,6 +1379,21 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     // Day pills interleaved, then reversed for the inverted list. Shared with every chat so a group's
     // Today / Yesterday / "Mon, 12 May" reads exactly like a DM's (utils/chat-actions).
     const listItems = React.useMemo(() => buildChatListItems(messages), [messages]);
+    // "Not seen yet." under my newest line the other person hasn't seen or answered (core notSeenInThread, slice N4): from
+    // the tick and the times only, the same whoever they are. A notice, a node's line or one shown as nobody's is passed
+    // over; a line still sending or failed has its own mark. Worked out when the thread changes.
+    const notSeen = React.useMemo(() => {
+        const myKey = identity?.publicKey;
+        if (!myKey) return null;
+        const found = notSeenInThread(messages.map((m: any) => ({
+            mine: m.senderId === myKey && !!m.outgoing,
+            at: m.rawTimestamp,
+            seen: !!m.readByPeer,
+            delivered: !m.sendState,
+            counts: !m.keyChangedNotice && m.type !== 'system' && m.senderId !== 'SYSTEM' && !m.unattributed && !m.fromOfferedKey,
+        })), Date.now());
+        return found ? { id: messages[found.index]?.id as string, notSeen: found.notSeen } : null;
+    }, [messages, identity?.publicKey]);
     // The listings the messages name (Message on a listing; core chat-about.ts), as this member can read them.
     const aboutListings = useAboutListings(React.useMemo(() => (at ? [] : messages.filter((m) => m.about).map((m) => m.about.postId as string)), [messages, at]));
 
@@ -1658,7 +1675,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
             )
         ) : null;
 
-        return (
+        const row = (
             <ChatMessageRow
                 item={item}
                 kind="dm"
@@ -1730,6 +1747,14 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 ) : null}
             />
         );
+        // The other person's name only once the chat has said it (never "Loading..."); before, "them".
+        const notSeenText = notSeen && notSeen.id === item.id ? notSeenWords(notSeen.notSeen, convRow ? peerName : null) : null;
+        return notSeenText ? (
+            <View>
+                {row}
+                <NotSeenLine text={notSeenText} />
+            </View>
+        ) : row;
     };
 
     const menuItems: ChatMenuItem[] = [

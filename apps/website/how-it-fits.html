@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How BeanPool Fits Together — BeanPool</title>
+    <meta name="description" content="Clickable architectural mockup of how BeanPool fits together: three spaces crossed by four threads, built upon community servers.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* ======================== PAGE SPECIFIC STYLES ======================== */
+        :root {
+            --color-trust: #38bdf8;       /* Vibrant Sky Blue */
+            --color-trust-glow: rgba(56, 189, 248, 0.4);
+            --color-trust-bg: rgba(56, 189, 248, 0.12);
+            --color-trust-border: rgba(56, 189, 248, 0.45);
+
+            --color-talk: #c084fc;        /* Purple / Violet */
+            --color-talk-glow: rgba(192, 132, 252, 0.4);
+            --color-talk-bg: rgba(192, 132, 252, 0.12);
+            --color-talk-border: rgba(192, 132, 252, 0.45);
+
+            --color-trade: #f59e0b;       /* Ambient Amber */
+            --color-trade-glow: rgba(245, 158, 11, 0.4);
+            --color-trade-bg: rgba(245, 158, 11, 0.12);
+            --color-trade-border: rgba(245, 158, 11, 0.45);
+
+            --color-decide: #10b981;      /* Emerald */
+            --color-decide-glow: rgba(16, 185, 129, 0.4);
+            --color-decide-bg: rgba(16, 185, 129, 0.12);
+            --color-decide-border: rgba(16, 185, 129, 0.45);
+        }
+
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
+            background-color: var(--pattern-bg);
+            color: var(--text-primary);
+        }
+
+        /* Nav responsive refinements for tight 320px screens at 130% root font */
+        @media (max-width: 360px) {
+            .nav-inner.has-menu {
+                padding: 0.5rem 0.5rem !important;
+                gap: 0.25rem !important;
+            }
+            .nav-inner.has-menu .logo {
+                font-size: 1.05rem !important;
+                gap: 0.2rem !important;
+            }
+            .nav-inner.has-menu .logo img {
+                width: 34px !important;
+                height: 34px !important;
+            }
+            .nav-menu summary {
+                padding: 0 0.5rem !important;
+                font-size: 0.85rem !important;
+            }
+        }
+
+        .page-container {
+            width: 100%;
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 5.5rem 1.25rem 3rem 1.25rem;
+            box-sizing: border-box;
+        }
+
+        @media (max-width: 640px) {
+            .page-container {
+                padding: 4.75rem 0.75rem 2rem 0.75rem;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .page-container {
+                padding: 4.5rem 0.5rem 1.5rem 0.5rem;
+            }
+        }
+
+        /* Header */
+        .page-header {
+            margin-bottom: 1.75rem;
+            text-align: left;
+        }
+
+        .page-header h1 {
+            font-family: var(--font-header);
+            font-size: clamp(1.65rem, 4vw, 2.75rem);
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .page-intro {
+            font-size: clamp(0.95rem, 2vw, 1.15rem);
+            color: var(--text-secondary);
+            max-width: 760px;
+            line-height: 1.45;
+            margin: 0;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        /* 2-Column Responsive Layout */
+        .diagram-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            width: 100%;
+        }
+
+        @media (min-width: 960px) {
+            .diagram-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+                gap: 2rem;
+                align-items: start;
+            }
+        }
+
+        /* Left Column: Visual Diagram Area */
+        .diagram-card {
+            background: rgba(11, 15, 25, 0.7);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            box-sizing: border-box;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            width: 100%;
+            max-width: 100%;
+        }
+
+        @media (max-width: 480px) {
+            .diagram-card {
+                padding: 0.75rem 0.5rem;
+                border-radius: var(--radius-md);
+            }
+        }
+
+        /* Toolbar / Fast Selector Chips */
+        .selector-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            justify-content: flex-start;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .toolbar-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            align-items: center;
+        }
+
+        .toolbar-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-right: 0.15rem;
+        }
+
+        .chip-btn {
+            appearance: none;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            font-family: var(--font-body);
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 0 0.75rem;
+            min-height: 44px;
+            min-width: 44px;
+            border-radius: 9999px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .chip-btn:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: var(--text-primary);
+        }
+
+        .chip-btn:focus-visible {
+            outline: 3px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        .chip-btn[aria-pressed="true"] {
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .chip-btn[data-ring="trust"][aria-pressed="true"] {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: var(--color-trust);
+            color: var(--color-trust);
+        }
+        .chip-btn[data-ring="talk"][aria-pressed="true"] {
+            background: rgba(192, 132, 252, 0.2);
+            border-color: var(--color-talk);
+            color: var(--color-talk);
+        }
+        .chip-btn[data-ring="trade"][aria-pressed="true"] {
+            background: rgba(245, 158, 11, 0.2);
+            border-color: var(--color-trade);
+            color: var(--color-trade);
+        }
+        .chip-btn[data-ring="decide"][aria-pressed="true"] {
+            background: rgba(16, 185, 129, 0.2);
+            border-color: var(--color-decide);
+            color: var(--color-decide);
+        }
+
+        .chip-btn[data-space][aria-pressed="true"] {
+            background: rgba(245, 158, 11, 0.15);
+            border-color: var(--accent);
+            color: #ffffff;
+        }
+
+        .chip-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .chip-clear {
+            margin-left: auto;
+            color: var(--text-muted);
+            border-style: dashed;
+        }
+        .chip-clear:hover {
+            color: var(--text-primary);
+            border-color: var(--text-muted);
+        }
+
+        /* SVG Diagram Wrapper */
+        .svg-canvas-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+            touch-action: manipulation;
+        }
+
+        .diagram-svg {
+            display: block;
+            width: 100%;
+            height: auto;
+            overflow: visible;
+        }
+
+        /* SVG Interactive Elements */
+        .interactive-el {
+            cursor: pointer;
+            transition: opacity 0.25s ease, filter 0.25s ease, stroke-width 0.2s ease;
+            outline: none;
+        }
+
+        .interactive-el:focus-visible {
+            outline: 3px solid var(--accent);
+            outline-offset: 4px;
+        }
+
+        /* Rings styling */
+        .ring-band-bg {
+            transition: fill 0.25s ease, opacity 0.25s ease;
+        }
+        .ring-thread {
+            transition: stroke-width 0.25s ease, filter 0.25s ease;
+        }
+        .ring-pill {
+            transition: fill 0.25s ease, stroke 0.25s ease, filter 0.25s ease;
+        }
+
+        /* Active Ring Glow */
+        .ring-group.is-active .ring-band-bg {
+            fill-opacity: 0.42 !important;
+        }
+        .ring-group.is-active .ring-thread {
+            stroke-width: 3.5px !important;
+        }
+        .ring-group[data-ring="trust"].is-active {
+            filter: drop-shadow(0 0 10px var(--color-trust-glow));
+        }
+        .ring-group[data-ring="talk"].is-active {
+            filter: drop-shadow(0 0 10px var(--color-talk-glow));
+        }
+        .ring-group[data-ring="trade"].is-active {
+            filter: drop-shadow(0 0 10px var(--color-trade-glow));
+        }
+        .ring-group[data-ring="decide"].is-active {
+            filter: drop-shadow(0 0 10px var(--color-decide-glow));
+        }
+
+        /* Dimmed State when something else is active */
+        .ring-group.is-dimmed {
+            opacity: 0.22;
+        }
+        .space-group.is-dimmed {
+            opacity: 0.3;
+        }
+        .ground-group.is-dimmed {
+            opacity: 0.25;
+        }
+
+        /* Active Space Highlight */
+        .space-group.is-active .space-shape {
+            stroke: var(--accent) !important;
+            stroke-width: 2.5px !important;
+            fill-opacity: 0.9 !important;
+        }
+        .space-group.is-active {
+            filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.45));
+        }
+
+        /* Active Ground Highlight */
+        .ground-group.is-active .ground-rect {
+            stroke: var(--accent) !important;
+            stroke-width: 2.5px !important;
+            fill: rgba(30, 41, 59, 0.95) !important;
+        }
+        .ground-group.is-active {
+            filter: drop-shadow(0 0 14px rgba(245, 158, 11, 0.5));
+        }
+
+        /* Right Column: Explanation Box */
+        .explanation-box {
+            background: rgba(17, 24, 39, 0.75);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            box-sizing: border-box;
+            width: 100%;
+        }
+
+        @media (min-width: 960px) {
+            .explanation-box {
+                position: sticky;
+                top: 80px;
+                min-height: 480px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .explanation-box {
+                padding: 1.15rem 0.9rem;
+                border-radius: var(--radius-md);
+            }
+        }
+
+        /* Explanation Content Inner */
+        .exp-header {
+            margin-bottom: 1.25rem;
+            padding-bottom: 0.85rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .exp-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 0.25rem 0.65rem;
+            border-radius: 9999px;
+            margin-bottom: 0.6rem;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-secondary);
+        }
+
+        .exp-title {
+            font-family: var(--font-header);
+            font-size: clamp(1.35rem, 2.5vw, 1.85rem);
+            font-weight: 800;
+            line-height: 1.2;
+            color: var(--text-primary);
+            margin: 0 0 0.35rem 0;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .exp-subtitle {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            margin: 0;
+            line-height: 1.4;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        /* Cards list for ring breakdown */
+        .space-cards-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+        }
+
+        .space-row-card {
+            background: rgba(11, 15, 25, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-left: 3px solid var(--card-border-color, rgba(255, 255, 255, 0.2));
+            border-radius: var(--radius-sm);
+            padding: 0.85rem 1rem;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+        .space-row-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--card-accent-color, var(--accent));
+            margin-bottom: 0.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .space-row-body {
+            font-size: 0.93rem;
+            line-height: 1.5;
+            color: var(--text-primary);
+            margin: 0;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        /* Standalone space/ground text block */
+        .standalone-card {
+            background: rgba(11, 15, 25, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-md);
+            padding: 1.25rem 1.15rem;
+            font-size: 1.02rem;
+            line-height: 1.6;
+            color: var(--text-primary);
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .standalone-card p {
+            margin: 0 0 0.75rem 0;
+        }
+        .standalone-card p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Overview / Default State */
+        .overview-items {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .overview-item {
+            background: rgba(11, 15, 25, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius-sm);
+            padding: 0.9rem 1rem;
+        }
+
+        .overview-item h3 {
+            font-family: var(--font-header);
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin: 0 0 0.35rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .overview-item p {
+            font-size: 0.88rem;
+            line-height: 1.45;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        .reset-hint {
+            margin-top: 1.25rem;
+            padding-top: 0.85rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        kbd {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+            padding: 0.1rem 0.35rem;
+            font-size: 0.75rem;
+            font-family: inherit;
+            color: var(--text-secondary);
+        }
+
+        /* Reduced Motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+            .ring-group.is-active,
+            .space-group.is-active,
+            .ground-group.is-active {
+                filter: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar (copied from index.html) -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">How It Works</a>
+                <a href="index.html#features">What You Can Do</a>
+                <a href="rules.html">The Rules</a>
+                <a href="index.html#run-a-node">Run a Community</a>
+                <a href="help.html" title="Every rule, guide and manual in one place">Help</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Watch Video Tutorials on YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Join Reddit Community (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="View on GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Get Started</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. -->
+            <details class="nav-menu">
+                <summary aria-label="Open menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Get Started</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="index.html#features">What You Can Do</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="index.html#run-a-node">Run a Community</a>
+                    <a href="help.html">Help</a>
+                    <a href="guide/index.html">Members' guide</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Videos on YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool on Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Source on GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="page-container">
+        <!-- Title and short intro line -->
+        <header class="page-header">
+            <h1>How BeanPool fits together</h1>
+            <p class="page-intro">Three spaces where life happens, crossed by four threads that hold community together.</p>
+        </header>
+
+        <div class="diagram-grid">
+            <!-- Diagram Column -->
+            <section class="diagram-card" aria-label="Interactive architecture diagram">
+                <!-- Selector Toolbar (real buttons for touch targets >= 44px) -->
+                <div class="selector-toolbar" role="toolbar" aria-label="Quick selector controls">
+                    <div class="toolbar-group">
+                        <span class="toolbar-label">Rings:</span>
+                        <button type="button" class="chip-btn" data-ring="trust" aria-pressed="false" aria-label="Trust ring">
+                            <span class="chip-dot" style="background: var(--color-trust);"></span>Trust
+                        </button>
+                        <button type="button" class="chip-btn" data-ring="talk" aria-pressed="false" aria-label="Talk ring">
+                            <span class="chip-dot" style="background: var(--color-talk);"></span>Talk
+                        </button>
+                        <button type="button" class="chip-btn" data-ring="trade" aria-pressed="false" aria-label="Trade ring">
+                            <span class="chip-dot" style="background: var(--color-trade);"></span>Trade
+                        </button>
+                        <button type="button" class="chip-btn" data-ring="decide" aria-pressed="false" aria-label="Decide ring">
+                            <span class="chip-dot" style="background: var(--color-decide);"></span>Decide
+                        </button>
+                    </div>
+
+                    <div class="toolbar-group">
+                        <span class="toolbar-label">Spaces:</span>
+                        <button type="button" class="chip-btn" data-space="you" aria-pressed="false" aria-label="You space">
+                            You
+                        </button>
+                        <button type="button" class="chip-btn" data-space="community" aria-pressed="false" aria-label="Your community space">
+                            Community
+                        </button>
+                        <button type="button" class="chip-btn" data-space="beyond" aria-pressed="false" aria-label="Beyond space">
+                            Beyond
+                        </button>
+                        <button type="button" class="chip-btn" data-space="ground" aria-pressed="false" aria-label="The ground base">
+                            The ground
+                        </button>
+                        <button type="button" class="chip-btn chip-clear" id="reset-btn" aria-label="Reset selection">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SVG Diagram Canvas -->
+                <div class="svg-canvas-wrapper" id="diagram-container">
+                    <svg class="diagram-svg" viewBox="0 0 540 640" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Diagram showing three nested concentric spaces (You, Your community split into Town square and Groups, and Beyond), crossed by four rings (Trust, Talk, Trade, Decide), resting on The ground">
+                        <defs>
+                            <!-- Space Fills -->
+                            <radialGradient id="grad-beyond" cx="50%" cy="40%" r="55%">
+                                <stop offset="0%" stop-color="#0b1120" stop-opacity="0.8" />
+                                <stop offset="100%" stop-color="#030712" stop-opacity="0.95" />
+                            </radialGradient>
+                            <radialGradient id="grad-community" cx="50%" cy="40%" r="55%">
+                                <stop offset="0%" stop-color="#0f172a" stop-opacity="0.85" />
+                                <stop offset="100%" stop-color="#070c18" stop-opacity="0.95" />
+                            </radialGradient>
+                            <radialGradient id="grad-you" cx="50%" cy="40%" r="55%">
+                                <stop offset="0%" stop-color="#1e293b" stop-opacity="0.95" />
+                                <stop offset="100%" stop-color="#0f172a" stop-opacity="0.98" />
+                            </radialGradient>
+                        </defs>
+
+                        <!-- Backdrop Click Catcher (clears selection when empty diagram space is clicked) -->
+                        <rect x="0" y="0" width="540" height="640" fill="transparent" id="svg-backdrop" style="cursor: default;" />
+
+                        <!-- ================= SPACES (Nested Concentric Circles) ================= -->
+                        <!-- 3. BEYOND: Outermost circle annulus (Radius 220, inner 150) -->
+                        <g class="interactive-el space-group" data-space="beyond" role="button" tabindex="0" aria-label="Beyond: Other communities, and the global node where people find BeanPool from anywhere in the world." aria-pressed="false">
+                            <!-- Outer Annulus Path -->
+                            <path class="space-shape" d="M 270 30 A 220 220 0 1 0 270 470 A 220 220 0 1 0 270 30 M 270 100 A 150 150 0 1 1 270 400 A 150 150 0 1 1 270 100 Z" fill="url(#grad-beyond)" fill-rule="evenodd" stroke="rgba(255, 255, 255, 0.12)" stroke-width="1.5" />
+                            <!-- Beyond Labels (Upper Arc) -->
+                            <text x="270" y="62" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="16" font-weight="800" fill="#f8fafc" letter-spacing="0.08em">BEYOND</text>
+                            <text x="270" y="80" text-anchor="middle" font-family="'Inter', sans-serif" font-size="11.5" font-weight="500" fill="#94a3b8">Other communities &amp; the global node</text>
+                            <!-- Beyond Subtle Perimeter Indicator (Bottom Arc) -->
+                            <text x="270" y="445" text-anchor="middle" font-family="'Inter', sans-serif" font-size="11" font-weight="500" fill="#64748b">Worldwide federation</text>
+                        </g>
+
+                        <!-- 2. YOUR COMMUNITY: Middle circle, visibly split into two halves (Radius 150, inner 85) -->
+                        <g class="interactive-el space-group community-split-container" data-space="community" role="button" tabindex="0" aria-label="Your community: Town square (the map, Market, Pulse) and Groups (social groups, guilds, projects, enterprises)." aria-pressed="false">
+                            <!-- Left Half: Town Square -->
+                            <path class="space-shape community-half community-townsquare" d="M 267 100 A 150 150 0 0 0 267 400 L 267 335 A 85 85 0 0 1 267 165 Z" fill="url(#grad-community)" stroke="rgba(255, 255, 255, 0.16)" stroke-width="1.5" />
+                            <!-- Right Half: Groups -->
+                            <path class="space-shape community-half community-groups" d="M 273 100 A 150 150 0 0 1 273 400 L 273 335 A 85 85 0 0 0 273 165 Z" fill="url(#grad-community)" stroke="rgba(255, 255, 255, 0.16)" stroke-width="1.5" />
+
+                            <!-- Header label for Community across top of middle ring -->
+                            <rect x="200" y="106" width="140" height="20" rx="10" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255, 255, 255, 0.15)" stroke-width="1" />
+                            <text x="270" y="120" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11" font-weight="700" fill="#cbd5e1" letter-spacing="0.05em">YOUR COMMUNITY</text>
+
+                            <!-- Left Half Label: Town square -->
+                            <g transform="translate(178, 142)">
+                                <rect x="-56" y="-12" width="112" height="24" rx="12" fill="rgba(11, 15, 25, 0.85)" stroke="rgba(255, 255, 255, 0.15)" stroke-width="1" />
+                                <text x="0" y="4" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="12" font-weight="700" fill="#f8fafc">Town square</text>
+                            </g>
+                            <text x="178" y="166" text-anchor="middle" font-family="'Inter', sans-serif" font-size="10" fill="#94a3b8">Map • Market • Pulse</text>
+
+                            <!-- Right Half Label: Groups -->
+                            <g transform="translate(362, 142)">
+                                <rect x="-44" y="-12" width="88" height="24" rx="12" fill="rgba(11, 15, 25, 0.85)" stroke="rgba(255, 255, 255, 0.15)" stroke-width="1" />
+                                <text x="0" y="4" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="12" font-weight="700" fill="#f8fafc">Groups</text>
+                            </g>
+                            <text x="362" y="166" text-anchor="middle" font-family="'Inter', sans-serif" font-size="10" fill="#94a3b8">Guilds • Enterprises</text>
+                        </g>
+
+                        <!-- 1. YOU: Innermost circle in the middle (Radius 85, Center 270, 250) -->
+                        <g class="interactive-el space-group" data-space="you" role="button" tabindex="0" aria-label="You: Your Home, the cards you choose, your Beans, your messages and your votes." aria-pressed="false">
+                            <circle class="space-shape" cx="270" cy="250" r="85" fill="url(#grad-you)" stroke="rgba(255, 255, 255, 0.22)" stroke-width="1.8" />
+                            <!-- "You" Header in upper portion of inner circle -->
+                            <g transform="translate(270, 185)">
+                                <rect x="-38" y="-13" width="76" height="26" rx="13" fill="rgba(30, 41, 59, 0.95)" stroke="rgba(245, 158, 11, 0.4)" stroke-width="1.2" />
+                                <text x="0" y="4" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="13" font-weight="800" fill="#f8fafc" letter-spacing="0.05em">YOU</text>
+                            </g>
+                            <text x="270" y="210" text-anchor="middle" font-family="'Inter', sans-serif" font-size="10.5" font-weight="600" fill="#f59e0b">(Home)</text>
+                        </g>
+
+                        <!-- ================= FOUR RINGS (Threads / Bands) ================= -->
+                        <!-- Each band passes horizontally through Beyond (left) -> Town square -> You -> Groups -> Beyond (right) -->
+
+                        <!-- RING 1: TRUST (Sky Blue: #38bdf8) -->
+                        <!-- y: 218 to 244 (height 26) -->
+                        <g class="interactive-el ring-group" data-ring="trust" role="button" tabindex="0" aria-label="Trust ring: 12 words account & badges in You; invite & trust in Community; global node in Beyond" aria-pressed="false">
+                            <!-- Generous hit target area (height 48) -->
+                            <rect x="15" y="206" width="510" height="48" fill="transparent" />
+                            <!-- Translucent horizontal band ribbon -->
+                            <rect class="ring-band-bg" x="20" y="218" width="500" height="26" rx="13" fill="var(--color-trust-bg)" stroke="var(--color-trust-border)" stroke-width="1.2" />
+                            <!-- Bright center thread line passing through all spaces -->
+                            <line class="ring-thread" x1="25" y1="231" x2="515" y2="231" stroke="var(--color-trust)" stroke-width="2.2" stroke-linecap="round" />
+                            <!-- Left pill label -->
+                            <g transform="translate(30, 219)">
+                                <rect class="ring-pill" x="0" y="0" width="68" height="24" rx="12" fill="#0b1120" stroke="var(--color-trust)" stroke-width="1.5" />
+                                <text x="34" y="16" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11.5" font-weight="700" fill="var(--color-trust)">Trust</text>
+                            </g>
+                            <!-- Right pill label -->
+                            <g transform="translate(442, 219)">
+                                <rect class="ring-pill" x="0" y="0" width="68" height="24" rx="12" fill="#0b1120" stroke="var(--color-trust)" stroke-width="1.5" />
+                                <text x="34" y="16" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11.5" font-weight="700" fill="var(--color-trust)">Trust</text>
+                            </g>
+                        </g>
+
+                        <!-- RING 2: TALK (Purple / Violet: #c084fc) -->
+                        <!-- y: 248 to 274 (height 26) -->
+                        <g class="interactive-el ring-group" data-ring="talk" role="button" tabindex="0" aria-label="Talk ring: E2E encrypted messages in You; group chats in Community; global messaging in Beyond" aria-pressed="false">
+                            <!-- Generous hit target area (height 48) -->
+                            <rect x="15" y="238" width="510" height="48" fill="transparent" />
+                            <!-- Translucent horizontal band ribbon -->
+                            <rect class="ring-band-bg" x="20" y="248" width="500" height="26" rx="13" fill="var(--color-talk-bg)" stroke="var(--color-talk-border)" stroke-width="1.2" />
+                            <!-- Bright center thread line passing through all spaces -->
+                            <line class="ring-thread" x1="25" y1="261" x2="515" y2="261" stroke="var(--color-talk)" stroke-width="2.2" stroke-linecap="round" />
+                            <!-- Left pill label -->
+                            <g transform="translate(30, 249)">
+                                <rect class="ring-pill" x="0" y="0" width="68" height="24" rx="12" fill="#0b1120" stroke="var(--color-talk)" stroke-width="1.5" />
+                                <text x="34" y="16" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11.5" font-weight="700" fill="var(--color-talk)">Talk</text>
+                            </g>
+                            <!-- Right pill label -->
+                            <g transform="translate(442, 249)">
+                                <rect class="ring-pill" x="0" y="0" width="68" height="24" rx="12" fill="#0b1120" stroke="var(--color-talk)" stroke-width="1.5" />
+                                <text x="34" y="16" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11.5" font-weight="700" fill="var(--color-talk)">Talk</text>
+                            </g>
+                        </g>
+
+                        <!-- RING 3: TRADE (Ambient Amber: #f59e0b) -->
+                        <!-- y: 278 to 304 (height 26) -->
+                        <g class="interactive-el ring-group" data-ring="trade" role="button" tabindex="0" aria-label="Trade ring: Your Beans in You; Market & Commons in Community; linking communities in Beyond" aria-pressed="false">
+                            <!-- Generous hit target area (height 48) -->
+                            <rect x="15" y="268" width="510" height="48" fill="transparent" />
+                            <!-- Translucent horizontal band ribbon -->
+                            <rect class="ring-band-bg" x="20" y="278" width="500" height="26" rx="13" fill="var(--color-trade-bg)" stroke="var(--color-trade-border)" stroke-width="1.2" />
+                            <!-- Bright center thread line passing through all spaces -->
+                            <line class="ring-thread" x1="25" y1="291" x2="515" y2="291" stroke="var(--color-trade)" stroke-width="2.2" stroke-linecap="round" />
+                            <!-- Left pill label -->
+                            <g transform="translate(30, 279)">
+                                <rect class="ring-pill" x="0" y="0" width="68" height="24" rx="12" fill="#0b1120" stroke="var(--color-trade)" stroke-width="1.5" />
+                                <text x="34" y="16" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11.5" font-weight="700" fill="var(--color-trade)">Trade</text>
+                            </g>
+                            <!-- Right pill label -->
+                            <g transform="translate(442, 279)">
+                                <rect class="ring-pill" x="0" y="0" width="68" height="24" rx="12" fill="#0b1120" stroke="var(--color-trade)" stroke-width="1.5" />
+                                <text x="34" y="16" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11.5" font-weight="700" fill="var(--color-trade)">Trade</text>
+                            </g>
+                        </g>
+
+                        <!-- RING 4: DECIDE (Emerald: #10b981) -->
+                        <!-- y: 308 to 334 (height 26) -->
+                        <g class="interactive-el ring-group" data-ring="decide" role="button" tabindex="0" aria-label="Decide ring: open votes card in You; town-hall decisions in Community; no votes on global node in Beyond" aria-pressed="false">
+                            <!-- Generous hit target area (height 48) -->
+                            <rect x="15" y="298" width="510" height="48" fill="transparent" />
+                            <!-- Translucent horizontal band ribbon -->
+                            <rect class="ring-band-bg" x="20" y="308" width="500" height="26" rx="13" fill="var(--color-decide-bg)" stroke="var(--color-decide-border)" stroke-width="1.2" />
+                            <!-- Bright center thread line passing through all spaces -->
+                            <line class="ring-thread" x1="25" y1="321" x2="515" y2="321" stroke="var(--color-decide)" stroke-width="2.2" stroke-linecap="round" />
+                            <!-- Left pill label -->
+                            <g transform="translate(30, 309)">
+                                <rect class="ring-pill" x="0" y="0" width="68" height="24" rx="12" fill="#0b1120" stroke="var(--color-decide)" stroke-width="1.5" />
+                                <text x="34" y="16" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11.5" font-weight="700" fill="var(--color-decide)">Decide</text>
+                            </g>
+                            <!-- Right pill label -->
+                            <g transform="translate(442, 309)">
+                                <rect class="ring-pill" x="0" y="0" width="68" height="24" rx="12" fill="#0b1120" stroke="var(--color-decide)" stroke-width="1.5" />
+                                <text x="34" y="16" text-anchor="middle" font-family="'Outfit', sans-serif" font-size="11.5" font-weight="700" fill="var(--color-decide)">Decide</text>
+                            </g>
+                        </g>
+
+                        <!-- ================= THE GROUND ================= -->
+                        <!-- A base band under the whole diagram: "The ground: each community runs its own server" -->
+                        <g class="interactive-el ground-group" data-space="ground" role="button" tabindex="0" aria-label="The ground: each community runs its own server. Each community runs its own server, with its own address. No company sits in the middle." aria-pressed="false">
+                            <rect class="ground-rect" x="20" y="495" width="500" height="74" rx="14" fill="#0b0f19" stroke="rgba(255, 255, 255, 0.16)" stroke-width="1.5" />
+                            <!-- Pedestal accent top stripe -->
+                            <line x1="34" y1="495" x2="506" y2="495" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" />
+                            <!-- Ground Server / Node Icon -->
+                            <g transform="translate(45, 520)">
+                                <rect x="0" y="0" width="24" height="24" rx="4" fill="rgba(245, 158, 11, 0.15)" stroke="var(--accent)" stroke-width="1.2" />
+                                <circle cx="6" cy="6" r="1.8" fill="var(--accent)" />
+                                <line x1="12" y1="6" x2="19" y2="6" stroke="#94a3b8" stroke-width="1.5" />
+                                <circle cx="6" cy="12" r="1.8" fill="var(--accent-success)" />
+                                <line x1="12" y1="12" x2="19" y2="12" stroke="#94a3b8" stroke-width="1.5" />
+                                <circle cx="6" cy="18" r="1.8" fill="var(--accent)" />
+                                <line x1="12" y1="18" x2="19" y2="18" stroke="#94a3b8" stroke-width="1.5" />
+                            </g>
+                            <!-- Ground Text -->
+                            <text x="82" y="530" font-family="'Outfit', sans-serif" font-size="14.5" font-weight="700" fill="#f8fafc">The ground: each community runs its own server</text>
+                            <text x="82" y="550" font-family="'Inter', sans-serif" font-size="11.5" fill="#94a3b8">Each community runs its own server, with its own address. No company sits in the middle.</text>
+                        </g>
+                    </svg>
+                </div>
+            </section>
+
+            <!-- Explanation Column -->
+            <aside class="explanation-box" id="explanation-box" aria-live="polite" aria-atomic="true">
+                <!-- Content injected dynamically by JS -->
+            </aside>
+        </div>
+    </main>
+
+    <!-- Data & Interaction Script -->
+    <script>
+        (function() {
+            // EXACT WORDS (Verbatim per specifications)
+            const CONTENT = {
+                spaces: {
+                    you: {
+                        name: "You",
+                        badge: "Center Space",
+                        text: "Your Home: the cards you choose, your Beans, your messages and your votes."
+                    },
+                    community: {
+                        name: "Your community",
+                        badge: "Middle Space (Split)",
+                        sub: "Town square &amp; Groups",
+                        text: "Town square: the map, the Market (offers, needs and events) and Pulse. Groups: social groups, guilds, projects and enterprises."
+                    },
+                    beyond: {
+                        name: "Beyond",
+                        badge: "Outermost Space",
+                        text: "Other communities, and the global node where people find BeanPool from anywhere in the world."
+                    },
+                    ground: {
+                        name: "The ground",
+                        badge: "Base Foundation",
+                        text: "Each community runs its own server, with its own address. No company sits in the middle."
+                    }
+                },
+                rings: {
+                    trust: {
+                        name: "Trust",
+                        badge: "Ring 1 of 4",
+                        color: "var(--color-trust)",
+                        colorRaw: "#38bdf8",
+                        border: "var(--color-trust-border)",
+                        you: "Your 12 words are your account; your level badges show what you've done (they lock nothing).",
+                        community: "You join by invite; members see each other's trust; moderators handle reports.",
+                        beyond: "The global node: a community anyone can join, worldwide."
+                    },
+                    talk: {
+                        name: "Talk",
+                        badge: "Ring 2 of 4",
+                        color: "var(--color-talk)",
+                        colorRaw: "#c084fc",
+                        border: "var(--color-talk-border)",
+                        you: "Private one-to-one messages, end-to-end encrypted: the server can't read them.",
+                        community: "Chats for groups, guilds, events and enterprises.",
+                        beyond: "Message members of the global community."
+                    },
+                    trade: {
+                        name: "Trade",
+                        badge: "Ring 3 of 4",
+                        color: "var(--color-trade)",
+                        colorRaw: "#f59e0b",
+                        border: "var(--color-trade-border)",
+                        you: "Your Beans: help someone and Beans come to you; get help and they go the other way.",
+                        community: "The Market, on the map and by distance; enterprises and the Commons hold Beans too.",
+                        beyond: "Planned: linking communities so trade can cross between them."
+                    },
+                    decide: {
+                        name: "Decide",
+                        badge: "Ring 4 of 4",
+                        color: "var(--color-decide)",
+                        colorRaw: "#10b981",
+                        border: "var(--color-decide-border)",
+                        you: "A Home card shows the votes open to you.",
+                        community: "Town-hall decisions by secret ballot; polls for the community or one group; enterprises choose keepers by vote.",
+                        beyond: "No votes on the global node yet."
+                    }
+                }
+            };
+
+            const explanationBox = document.getElementById('explanation-box');
+            const chipButtons = document.querySelectorAll('.chip-btn[data-ring], .chip-btn[data-space]');
+            const resetBtn = document.getElementById('reset-btn');
+            const svgBackdrop = document.getElementById('svg-backdrop');
+            const ringElements = document.querySelectorAll('.ring-group');
+            const spaceElements = document.querySelectorAll('.space-group');
+            const groundElements = document.querySelectorAll('.ground-group');
+            const allDiagramInteractives = document.querySelectorAll('.diagram-svg .interactive-el');
+
+            // State: current selection
+            let currentSelection = null; // { type: 'ring' | 'space', id: string, pinned: boolean }
+
+            function renderDefault() {
+                explanationBox.innerHTML = `
+                    <div class="exp-header">
+                        <span class="exp-tag">Interactive Architecture</span>
+                        <h2 class="exp-title">How BeanPool fits together</h2>
+                        <p class="exp-subtitle">Hover or tap any ring, space or the ground to explore.</p>
+                    </div>
+                    <div class="overview-items">
+                        <div class="overview-item">
+                            <h3>4 Rings: Trust • Talk • Trade • Decide</h3>
+                            <p>Four colored threads that cross all three spaces &mdash; personal home, community, and the wider world.</p>
+                        </div>
+                        <div class="overview-item">
+                            <h3>3 Nested Spaces</h3>
+                            <p><strong>You</strong> (Home in the center), <strong>Your community</strong> (split into Town square and Groups), and <strong>Beyond</strong>.</p>
+                        </div>
+                        <div class="overview-item">
+                            <h3>The Ground</h3>
+                            <p>Each community runs its own server, with its own address. No company sits in the middle.</p>
+                        </div>
+                    </div>
+                    <div class="reset-hint">
+                        <span>Tip: Press <kbd>Esc</kbd> or tap empty space to reset view.</span>
+                    </div>
+                `;
+            }
+
+            function renderRing(ringKey) {
+                const ring = CONTENT.rings[ringKey];
+                if (!ring) return;
+
+                explanationBox.innerHTML = `
+                    <div class="exp-header">
+                        <span class="exp-tag" style="border-color: ${ring.border}; color: ${ring.color}; background: rgba(255,255,255,0.05);">
+                            <span class="chip-dot" style="background: ${ring.color};"></span> ${ring.badge}
+                        </span>
+                        <h2 class="exp-title" style="color: ${ring.color};">${ring.name}</h2>
+                        <p class="exp-subtitle">How ${ring.name} threads through all three spaces:</p>
+                    </div>
+                    <div class="space-cards-list">
+                        <div class="space-row-card" style="--card-border-color: ${ring.color}; --card-accent-color: ${ring.color};">
+                            <div class="space-row-title">You</div>
+                            <p class="space-row-body">${ring.you}</p>
+                        </div>
+                        <div class="space-row-card" style="--card-border-color: ${ring.color}; --card-accent-color: ${ring.color};">
+                            <div class="space-row-title">Community</div>
+                            <p class="space-row-body">${ring.community}</p>
+                        </div>
+                        <div class="space-row-card" style="--card-border-color: ${ring.color}; --card-accent-color: ${ring.color};">
+                            <div class="space-row-title">Beyond</div>
+                            <p class="space-row-body">${ring.beyond}</p>
+                        </div>
+                    </div>
+                    <div class="reset-hint">
+                        <span>Select another ring, space, or press <kbd>Esc</kbd> to clear.</span>
+                    </div>
+                `;
+            }
+
+            function renderSpace(spaceKey) {
+                const space = CONTENT.spaces[spaceKey];
+                if (!space) return;
+
+                explanationBox.innerHTML = `
+                    <div class="exp-header">
+                        <span class="exp-tag" style="border-color: var(--border-hover); color: var(--accent);">
+                            ${space.badge}
+                        </span>
+                        <h2 class="exp-title">${space.name}</h2>
+                        ${space.sub ? `<p class="exp-subtitle">${space.sub}</p>` : ''}
+                    </div>
+                    <div class="standalone-card">
+                        <p>${space.text}</p>
+                    </div>
+                    <div class="reset-hint">
+                        <span>Select another space, ring, or press <kbd>Esc</kbd> to clear.</span>
+                    </div>
+                `;
+            }
+
+            function updateUI() {
+                if (!currentSelection) {
+                    // Reset all dim / active states
+                    allDiagramInteractives.forEach(el => {
+                        el.classList.remove('is-active', 'is-dimmed');
+                        el.setAttribute('aria-pressed', 'false');
+                    });
+                    chipButtons.forEach(btn => btn.setAttribute('aria-pressed', 'false'));
+                    renderDefault();
+                    return;
+                }
+
+                const { type, id } = currentSelection;
+
+                // Sync Toolbar Chips
+                chipButtons.forEach(btn => {
+                    const matchesRing = type === 'ring' && btn.getAttribute('data-ring') === id;
+                    const matchesSpace = type === 'space' && btn.getAttribute('data-space') === id;
+                    btn.setAttribute('aria-pressed', matchesRing || matchesSpace ? 'true' : 'false');
+                });
+
+                if (type === 'ring') {
+                    // Active ring glows; other rings dim
+                    ringElements.forEach(r => {
+                        const isTarget = r.getAttribute('data-ring') === id;
+                        r.classList.toggle('is-active', isTarget);
+                        r.classList.toggle('is-dimmed', !isTarget);
+                        r.setAttribute('aria-pressed', isTarget ? 'true' : 'false');
+                    });
+                    // Spaces remain visible in normal state
+                    spaceElements.forEach(s => {
+                        s.classList.remove('is-active', 'is-dimmed');
+                        s.setAttribute('aria-pressed', 'false');
+                    });
+                    groundElements.forEach(g => {
+                        g.classList.remove('is-active', 'is-dimmed');
+                        g.setAttribute('aria-pressed', 'false');
+                    });
+                    renderRing(id);
+                } else if (type === 'space') {
+                    // Dim rings
+                    ringElements.forEach(r => {
+                        r.classList.remove('is-active');
+                        r.classList.add('is-dimmed');
+                        r.setAttribute('aria-pressed', 'false');
+                    });
+                    // Highlight selected space, dim others
+                    spaceElements.forEach(s => {
+                        const isTarget = s.getAttribute('data-space') === id;
+                        s.classList.toggle('is-active', isTarget);
+                        s.classList.toggle('is-dimmed', !isTarget);
+                        s.setAttribute('aria-pressed', isTarget ? 'true' : 'false');
+                    });
+                    groundElements.forEach(g => {
+                        const isTarget = id === 'ground';
+                        g.classList.toggle('is-active', isTarget);
+                        g.classList.toggle('is-dimmed', !isTarget);
+                        g.setAttribute('aria-pressed', isTarget ? 'true' : 'false');
+                    });
+                    renderSpace(id);
+                }
+            }
+
+            function select(type, id, pinned = true) {
+                // If clicking the same item that's already pinned, keep it or toggle
+                currentSelection = { type, id, pinned };
+                updateUI();
+            }
+
+            function clearSelection() {
+                currentSelection = null;
+                updateUI();
+            }
+
+            // Ring Elements Event Listeners (SVG)
+            ringElements.forEach(el => {
+                const ringId = el.getAttribute('data-ring');
+                
+                // Desktop Hover
+                el.addEventListener('mouseenter', () => {
+                    if (!currentSelection || !currentSelection.pinned) {
+                        select('ring', ringId, false);
+                    }
+                });
+
+                el.addEventListener('mouseleave', () => {
+                    if (currentSelection && !currentSelection.pinned) {
+                        clearSelection();
+                    }
+                });
+
+                // Tap / Click (pins)
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    select('ring', ringId, true);
+                });
+
+                // Keyboard (Enter / Space)
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        select('ring', ringId, true);
+                    }
+                });
+            });
+
+            // Space Elements Event Listeners (SVG)
+            spaceElements.forEach(el => {
+                const spaceId = el.getAttribute('data-space');
+
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    select('space', spaceId, true);
+                });
+
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        select('space', spaceId, true);
+                    }
+                });
+            });
+
+            // Ground Group (SVG)
+            groundElements.forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    select('space', 'ground', true);
+                });
+
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        select('space', 'ground', true);
+                    }
+                });
+            });
+
+            // Toolbar Chip Buttons Event Listeners
+            chipButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const ringId = btn.getAttribute('data-ring');
+                    const spaceId = btn.getAttribute('data-space');
+                    if (ringId) {
+                        select('ring', ringId, true);
+                    } else if (spaceId) {
+                        select('space', spaceId, true);
+                    }
+                });
+            });
+
+            // Reset Button
+            resetBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                clearSelection();
+            });
+
+            // SVG Backdrop Click
+            svgBackdrop.addEventListener('click', () => {
+                clearSelection();
+            });
+
+            // Global Escape key & clicking outside diagram container
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    clearSelection();
+                }
+            });
+
+            document.getElementById('diagram-container').addEventListener('click', (e) => {
+                if (e.target === svgBackdrop || e.target.tagName.toLowerCase() === 'svg') {
+                    clearSelection();
+                }
+            });
+
+            // Initial render
+            renderDefault();
+        })();
+    </script>
+</body>
+</html>

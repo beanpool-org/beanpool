@@ -134,6 +134,21 @@ describe('RestoreLockedBackup', () => {
         expect(await screen.findByText("This community's backup, locked by another machine.")).toBeInTheDocument();
     });
 
+    // #3313 review: single-node Settings makes a new activeNode on every App render (the 5-second diagnostics poll). An equal
+    // new object is the same server: its IDs are asked for once, not on every tick through the restore.
+    it('a re-render with an equal new activeNode asks for this server\'s IDs once', async () => {
+        const calls = stubFetch((path) => path === '/api/local/admin/backup-enroll' ? { status: 200, body: HERE } : { status: 404, body: {} });
+        const singleNode = (): NodeProfile => ({ id: 'local-node', name: 'Local Sovereign Node', url: 'https://fresh.example.org', isPrimary: true });
+        const mine = { ...BACKUP, communityId: HERE.communityId, sealedBy: HERE.primaryPeerId };
+        const view = render(<RestoreLockedBackup activeNode={singleNode()} file={file} backup={mine} canUseCode canUsePhone onDone={vi.fn()} onCancel={vi.fn()} />);
+        await screen.findByText("This community's backup, locked by this server.");
+        for (let tick = 0; tick < 3; tick++) {
+            view.rerender(<RestoreLockedBackup activeNode={singleNode()} file={file} backup={mine} canUseCode canUsePhone onDone={vi.fn()} onCancel={vi.fn()} />);
+        }
+        await new Promise((r) => setTimeout(r, 0));
+        expect(calls.filter((c) => c.path === '/api/local/admin/backup-enroll')).toHaveLength(1);
+    });
+
     it('when this server\'s own IDs cannot be read, it says so and claims no match', async () => {
         stubFetch((path) => path === '/api/local/admin/backup-enroll' ? { status: 503, body: { error: 'Genesis not initialized yet' } } : { status: 404, body: {} });
         render(<RestoreLockedBackup activeNode={node} file={file} backup={{ ...BACKUP, communityId: HERE.communityId, sealedBy: HERE.primaryPeerId }} canUseCode canUsePhone onDone={vi.fn()} onCancel={vi.fn()} />);

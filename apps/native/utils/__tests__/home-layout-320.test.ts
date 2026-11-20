@@ -34,6 +34,7 @@ import { WELCOME_TILE_WORDS, welcomeTileLines, ARRANGE_WORDS, HOME_CARD_GROUPS, 
 import { starter } from '../../components/home/StarterOffersSheet';
 import { FAB_BAND_DP } from '../fab-band';
 import { chatCardStyles } from '../../components/home/chat-parts';
+import { marketTileStyles } from '../../components/home/market-tile-styles';
 import { CHAT_CARD_WORDS } from '../home-chat';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
@@ -190,6 +191,32 @@ describe('a card at 320dp × 1.3', () => {
         const home = read('app/(tabs)/index.tsx');
         const pad = Number(/content: \{ paddingBottom: (\d+) \}/.exec(home)?.[1]);
         expect(pad).toBeGreaterThanOrEqual(FAB_BAND_DP);
+    });
+
+    it("the Market card's picture tiles (slice S8): two a row, OFFER/NEED in every language fits its photo, a price fits a line, nothing runs off sideways", () => {
+        const m = marketTileStyles as unknown as Record<string, Record<string, unknown>>;
+        // Two equal cells a row, each free to shrink: a long title can never push the row past the card.
+        expect(m.cell).toMatchObject({ flex: 1, minWidth: 0 });
+        const tile = (CARD_INNER - num(m.row.gap)) / 2;
+        expect(tile).toBeGreaterThan(120);
+        // The photo is the Market grid's 4:3, so a tile at the floor is about 93dp of picture.
+        expect(num(m.photo.aspectRatio)).toBeCloseTo(4 / 3);
+        expect(m.photo.overflow).toBe('hidden');
+        // OFFER and NEED on the photo's corner, at the badge's own cap (1.2x), in each of the 25 languages.
+        const words = [['OFFER', 'NEED']].concat(fs.readdirSync(path.resolve(__dirname, '../../words')).filter(f => f.endsWith('.json'))
+            .map(f => JSON.parse(read(`words/${f}`)) as Record<string, string>).map(cat => [cat.OFFER, cat.NEED].filter(Boolean))).flat();
+        expect(words.length).toBeGreaterThanOrEqual(2 * 25);
+        const chipRoom = tile - 2 * num(m.chip.left);
+        for (const w of words) {
+            const chip = textWidth(w, num(s.badgeText.fontSize), { scale: 1.2, caps: true, letterSpacing: num(s.badgeText.letterSpacing) }) + 2 * num(s.badge.paddingHorizontal);
+            expect(chip, w).toBeLessThan(chipRoom);
+        }
+        // A title word of ten letters fits a line whole; a longer one wraps inside itself at the edge (the title is cut to two lines).
+        expect(longestWord('Wheelbarow', num(m.title.fontSize))).toBeLessThan(tile);
+        expect(longestWord('Neighbourhood', num(m.title.fontSize))).toBeGreaterThan(tile);
+        expect(m.title.flexShrink).toBeUndefined();
+        // A price up to four figures fits a line whole; its distance ("· 2.5 km") may take the second.
+        expect(textWidth('1,250 Beans', num(m.facts.fontSize))).toBeLessThan(tile);
     });
 });
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, type TextStyle } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import type { AppColors } from '../../constants/colors';
 import { categoryLabel } from '../../constants/categories';
@@ -8,8 +8,9 @@ import { ListPhoto } from '../ListPhoto';
 import { MARKET_GRID_CROP } from '../MarketCardPicture';
 import { formatDistance } from '../../utils/events';
 import { beansAmount, sentence, withPin, type HomeMarketItem } from '../../utils/home-cards';
-import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, copyPriceLine, eventCopyOf, freePriceWords, isHundredths, perItemLine, perItemOf, t } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, freePriceWords, isHundredths, perItemLine, perItemOf, t } from '@beanpool/core';
 import { homeStyles, onNode } from './HomeParts';
+import { marketTileStyles as tiles } from './market-tile-styles';
 
 /**
  * "New in the Market" as picture tiles (DESIGN-onboarding-home-landing-fable.md §4.1 item 5, §4.4, slice S8): two tiles a
@@ -100,21 +101,3 @@ function MarketTile({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketI
         </Pressable>
     );
 }
-
-const GRID_TYPE = MARKET_CARD_TYPE.grid;
-const GRID_PHOTO = MARKET_CARD_SHELL.photo.grid;
-
-/** The tiles' styles, exported for the layout check at 320dp and 1.3x (utils/__tests__/home-layout-320.test.ts). */
-export const marketTileStyles = StyleSheet.create({
-    grid: { gap: 12, paddingTop: 4, paddingBottom: 2 },
-    row: { flexDirection: 'row', gap: 10 },
-    // flex 1 each, so two share the row equally at any width; the row stretches both to the taller one.
-    cell: { flex: 1, minWidth: 0 },
-    tile: { borderRadius: 12, paddingBottom: 4 },
-    photo: { width: '100%', aspectRatio: GRID_PHOTO.aspectWidth / GRID_PHOTO.aspectHeight, borderRadius: 12, overflow: 'hidden' },
-    fill: { width: '100%', height: '100%' },
-    chip: { position: 'absolute', top: 6, left: 6 },
-    title: { marginTop: 6, fontSize: GRID_TYPE.loud.size, lineHeight: GRID_TYPE.loud.line, fontWeight: String(GRID_TYPE.loud.weight) as TextStyle['fontWeight'] },
-    facts: { marginTop: 2, fontSize: GRID_TYPE.price.size, lineHeight: 18, fontWeight: String(GRID_TYPE.price.weight) as TextStyle['fontWeight'] },
-});
-const tiles = marketTileStyles;

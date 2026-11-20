@@ -245,6 +245,8 @@ vi.mock('../outside-chat-live', () => ({
     syncOutsideMailNow: async () => null,
     // The other communities' across mail (slice S4): nothing held here.
     syncHeldMailNow: async () => 0,
+    // Block from an across chat (#3310 r3 F1): where it goes is outside-chat-in-place-render.test.ts's.
+    blockFromAcross: async (_where: unknown, key: string) => { outside.blocked.push(key); },
     outsideContext: async () => ({
         identity: { publicKey: 'me-key' },
         store: {

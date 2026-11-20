@@ -257,8 +257,8 @@ export default function ChatsScreen() {
             }
         };
         void loadHeld();
-        // Their across mail fetched into their own files (slice S4): each held community where its server didn't last say
-        // none waits; the list read again after a round that changed anything.
+        // Their across mail fetched into their own files (slice S4): every held community, whatever its server last said, side
+        // by side; the list read again after a round that changed anything.
         if (identity?.publicKey) void syncHeldMailNow().catch(() => 0);
         const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); });
         const acrossSub = DeviceEventEmitter.addListener(OUTSIDE_CHATS_UPDATED, () => { void loadHeld(); });

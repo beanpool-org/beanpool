@@ -459,7 +459,15 @@ export async function blockUser(
     targetPubkey: string,
     reporterPubkey?: string,
     reason: string = 'User Blocked by Member',
-    postId?: string
+    postId?: string,
+    /**
+     * Another community this phone holds, where the member blocked from (slice S3: a request card "In {community}", its
+     * saved address): its report goes there and nowhere else, and that community hears the block now as well
+     * ({@link syncBlocksAt}), even when the person was blocked on this phone already (then false comes back, as for any
+     * block that is not new). Left out: the community the phone is set to, as before. The block itself is the account's,
+     * on every community on this phone either way.
+     */
+    community?: string,
 ): Promise<boolean> {
     if (!targetPubkey) return false;
 
@@ -476,10 +484,19 @@ export async function blockUser(
         });
         if (made) {
             // Blocked on the phone already: the block goes to the community without waiting for its answer, nor for a
-            // sync already under way. The report goes side by side, and is sent or queued before this returns.
+            // sync already under way. The report goes side by side, and is sent or queued before this returns. Blocked from
+            // another community in place: that community hears it too, and has the report.
             void syncBlocks();
-            await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId);
+            if (community) void syncBlocksAt(community);
+            await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId, community);
             return true;
+        }
+        if (community) {
+            // Blocked on this phone already (from another community: until S7 a block reaches only the community the phone
+            // is set to), yet blocked again from this community's card in place: this community may never have heard it,
+            // and goes on listing their request until it does (#3309 review F1). It hears it now, and has the report.
+            void syncBlocksAt(community);
+            await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId, community);
         }
     } catch (e) {
         console.error('[blocklist] Failed to block user', e);
@@ -491,12 +508,13 @@ export async function blockUser(
  * Apple Guideline 1.2: Blocking must notify developer of inappropriate content. The report a block of `targetPubkey` by
  * `owner` sends, when it names a reporter: queued when the node didn't take it.
  */
-async function reportBlock(owner: string, targetPubkey: string, reporterPubkey: string | undefined, reason: string, postId?: string): Promise<void> {
+async function reportBlock(owner: string, targetPubkey: string, reporterPubkey: string | undefined, reason: string, postId?: string, at?: string): Promise<void> {
     if (reporterPubkey && reporterPubkey !== owner) {
         console.warn('[blocklist] Not reporting the block: the reporter is not the account on this phone');
     } else if (reporterPubkey) {
-        // Made at the community the phone is set to now, where the member blocked, and sent only there.
-        const community = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
+        // Made where the member blocked, and sent only there: the community in place they blocked from (slice S3), else
+        // the community the phone is set to now.
+        const community = at ? await communityToSyncAt(at) : await AsyncStorage.getItem(ANCHOR_STORE_KEY);
         if (!community) {
             console.warn('[blocklist] Not reporting the block: the phone is set to no community');
         } else {
@@ -671,7 +689,18 @@ let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
  */
 export function syncBlocks(): Promise<void> {
     // After the one before it, however that ended: a sync that failed never stops the next.
-    const run = syncing.then(syncBlocksOnce, syncBlocksOnce);
+    const run = syncing.then(() => syncBlocksOnce(), () => syncBlocksOnce());
+    syncing = run;
+    return run;
+}
+
+/**
+ * {@link syncBlocks}, for `community`, another community this phone holds, by its saved address (slice S3: a block made on
+ * its request card in place): the same plan, the same one-at-a-time queue and the same limits, sent to that community and
+ * signed for its name, never to the community in use. A guest's look is sent nothing, as there.
+ */
+export function syncBlocksAt(community: string): Promise<void> {
+    const run = syncing.then(() => syncBlocksOnce(community), () => syncBlocksOnce(community));
     syncing = run;
     return run;
 }
@@ -681,11 +710,11 @@ export function blockSyncsEndedForTests(): Promise<void> {
     return syncing;
 }
 
-async function syncBlocksOnce(): Promise<void> {
+async function syncBlocksOnce(at?: string): Promise<void> {
     try {
         const owner = await accountOnPhone();
         if (!owner) return;
-        const community = await communityToSync();
+        const community = at ? await communityToSyncAt(at) : await communityToSync();
         if (!community) return;
         // Each change at most once a sync: one the community's answer leaves undone waits for the next.
         const tried = new Set<string>();
@@ -707,6 +736,16 @@ async function communityToSync(): Promise<string | null> {
     if (!anchor || !community) return null;
     // Marked as the visit wrote the address, with or without its trailing slash.
     for (const url of new Set([anchor, community, `${community}/`])) {
+        if (await isGuestNode(url)) return null;
+    }
+    return community;
+}
+
+/** `at`, a saved address, as the records name it: null for none, or a guest's look there (as {@link communityToSync}). */
+async function communityToSyncAt(at: string): Promise<string | null> {
+    const community = at.replace(/\/+$/, '');
+    if (!community) return null;
+    for (const url of new Set([at, community, `${community}/`])) {
         if (await isGuestNode(url)) return null;
     }
     return community;
@@ -1077,6 +1116,23 @@ export function communityKeepsNoBlocks(publicKey: string, community: string): Pr
     const run = syncing.then(forget, forget);
     syncing = run;
     return run;
+}
+
+/**
+ * Whether a block went to `community` (a saved address: another community this phone holds, blocked at in place) and its answer
+ * never came (no connection, a timeout, the minute's limit): the account's record there still has it as sent. The round of that
+ * community's across mail sends it again ({@link syncBlocksAt}; utils/outside-chat-live.ts, #3310 r3 review F1), since the
+ * syncs that run by themselves reach only the community in use. False on a guest's look, with no account, or on any failure.
+ */
+export async function blocksOwedAt(community: string): Promise<boolean> {
+    try {
+        const owner = await accountOnPhone();
+        const at = owner ? await communityToSyncAt(community) : null;
+        if (!owner || !at) return false;
+        return (await serially(() => recordOf(owner, at))).at.sent.length > 0;
+    } catch {
+        return false;
+    }
 }
 
 /** Whether a record's address is `community`'s: the same, whatever its case and trailing slash. */

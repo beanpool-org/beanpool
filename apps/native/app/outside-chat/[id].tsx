@@ -25,12 +25,11 @@ import {
 } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
-import { blockUser } from '../../utils/blocklist';
 import { enterChatInPlace, leaveChatInPlace } from '../../utils/db';
 import { OutsideMailError, outsideQuiet, reportOutsideLine, sendFromBox, sendOutsideChange, setOutsideQuiet } from '../../utils/outside-mail';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
-import { OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
+import { blockFromAcross, OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../../utils/outside-chat-store';
 import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 import { twoParagraphs } from '../../utils/alert-words';
@@ -190,7 +189,9 @@ export default function OutsideChatScreen() {
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t('Block'), style: 'destructive', onPress: async () => {
-                    await blockUser(chat.peerKey);
+                    // Blocked for the account, and told to the community that carries this chat, in place or not: its mailbox is
+                    // the one that holds and rings their lines (#3310 r3 review F1).
+                    await blockFromAcross(where, chat.peerKey);
                     const ctx = await outsideContext(where);
                     if (ctx) await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined');
                     router.back();
@@ -206,7 +207,7 @@ export default function OutsideChatScreen() {
         if (!reporting || !chat || !ctx) return;
         try {
             await reportOutsideLine(ctx, reporting.id, reason);
-            await blockUser(chat.peerKey).catch(() => false);
+            await blockFromAcross(where, chat.peerKey);
             await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined');
             Alert.alert(t('Reported'), reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => { setReporting(null); router.back(); } }]);
         } catch (e) {

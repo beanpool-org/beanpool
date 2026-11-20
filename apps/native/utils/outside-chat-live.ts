@@ -15,9 +15,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
 import { t } from '@beanpool/core';
 import { loadIdentity } from './identity';
-import { isUserBlocked } from './blocklist';
+import { blocksOwedAt, blockUser, isUserBlocked, syncBlocksAt } from './blocklist';
 import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn } from './node-profile';
-import { failUnsent, syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
+import { failUnsent, setOutsideQuiet, syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 
@@ -51,6 +51,20 @@ async function contextFor(community?: string | null): Promise<{ ctx: OutsideMail
     const saved = (await getSavedNodes().catch(() => [])).find((n) => getDatabaseFilenameForNode(n.url) === file);
     if (!saved || !isPlainNodeAddress(saved.url) || await isGuestCopy(saved.url).catch(() => true)) return null;
     return { ctx: { nodeUrl: saved.url.replace(/\/+$/, ''), identity, store: db.outsideStoreOf(saved.url), isBlocked: isUserBlocked }, inPlace: saved.url };
+}
+
+/**
+ * Block, from an across chat (#3310 review F1): `key` blocked for the account on this phone, and the community in use hears it,
+ * as it hears every block (blocklist.ts blockUser). When another community this phone holds carries the chat (`community`, the
+ * screen's in place), that community hears it too, at the address the phone saved for it and signed for its name (blockUser's
+ * `community`, syncBlocksAt): its mailbox holds that key's lines and rings for them (server engine/relay-mail.ts). And the key
+ * is made quiet there at once (setOutsideQuiet), so it rings nothing even before that community holds the block. A quiet that
+ * doesn't go (offline, an old server, the 500 limit) leaves the block as it is. Never throws.
+ */
+export async function blockFromAcross(community: string | null | undefined, key: string): Promise<void> {
+    const found = await contextFor(community).catch(() => null);
+    await blockUser(key, undefined, undefined, undefined, found?.inPlace ?? undefined);
+    if (found) await setOutsideQuiet(found.ctx, key, true).catch(() => {});
 }
 
 /**
@@ -106,19 +120,18 @@ export async function roundOnRing(notice: { community: string; kind: string | nu
 
 /**
  * A round for each held community (slice S4): Chat as it opens, and the background task after the community in use's ({@link
- * mailAfterBackgroundSync}). One after another under one budget, each community fetched whatever its last counts answer said
- * (#3310 review F1: a `mail: 0` heard earlier never hides a line that came, and rang, since). Returns how many rounds ran.
+ * mailAfterBackgroundSync}). Side by side, each with its own deadline at the end of the one budget (#3310 r3 review F2: one
+ * after another, a community that never answers used the whole budget, and no other was fetched), each community fetched
+ * whatever its last counts answer said (#3310 review F1: a `mail: 0` heard earlier never hides a line that came, and rang,
+ * since). Returns how many rounds ran.
  */
 export async function syncHeldMailNow(budgetMs: number = OUTSIDE_ROUND_MS): Promise<number> {
     const end = Date.now() + budgetMs;
-    let ran = 0;
-    for (const community of await heldMailCommunities().catch(() => [])) {
-        const left = end - Date.now();
-        if (left < BACKGROUND_MIN_MS) break;
-        await syncOutsideMailNow(left, community);
-        ran++;
-    }
-    return ran;
+    const held = await heldMailCommunities().catch(() => []);
+    const left = end - Date.now();
+    if (held.length === 0 || left < BACKGROUND_MIN_MS) return 0;
+    await Promise.all(held.map((community) => syncOutsideMailNow(left, community).catch(() => null)));
+    return held.length;
 }
 
 /**
@@ -212,6 +225,10 @@ function roundWithDeadline(deadlineMs: number, community?: string | null): Promi
             if (found.inPlace) {
                 held = found.inPlace;
                 (await import('./db')).enterChatInPlace(held);
+                // A block from one of its chats whose answer never came (offline, the minute's limit: #3310 r3 review F1): sent
+                // there again, outside this round's deadline. Until S7 nothing else sends a block to a community not in use.
+                const owedAt = held;
+                void (async () => { if (await blocksOwedAt(owedAt)) await syncBlocksAt(owedAt); })().catch(() => {});
             }
             const profile = await profileHere(ctx.nodeUrl);
             if (!outsideMessagesOn(profile?.features)) {

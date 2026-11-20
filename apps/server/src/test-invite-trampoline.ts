@@ -161,8 +161,8 @@ function runTrampoline(search: string, ua: string, origin = 'https://mullum.bean
     const docHandlers: Record<string, Array<(e: any) => void>> = {};
     const winHandlers: Record<string, Array<(e: any) => void>> = {};
     const storage = opts.storage ?? new Map<string, string>();
-    const exec = opts.exec ?? 'missing';
-    const clip = opts.clipboard ?? 'text';
+    let exec = opts.exec ?? 'missing';
+    let clip = opts.clipboard ?? 'text';
     const url = new URL(origin);
     const loc = { search, origin, href: '', protocol: url.protocol, host: url.host };
     const document: any = {
@@ -240,7 +240,9 @@ function runTrampoline(search: string, ua: string, origin = 'https://mullum.bean
     const pageshow = () => { for (const fn of winHandlers.pageshow ?? []) fn({ persisted: true }); };
     /** The ids of the install area's elements that show, in page order. */
     const installOrder = () => el('installArea').children.filter((c): c is FakeEl => c instanceof FakeEl && shows(c)).map((c) => c.id);
-    return { el, click, copied, writes, loc, storage, leaveAndComeBack, pageshow, installOrder, text: () => visibleText(body), html };
+    /** The browser's copy starts working (or stops) mid-page: a later tap meets the new behaviour. */
+    const setCopy = (e: NonNullable<TrampolineOpts['exec']>, c: NonNullable<TrampolineOpts['clipboard']>) => { exec = e; clip = c; };
+    return { el, click, copied, writes, loc, storage, leaveAndComeBack, pageshow, installOrder, setCopy, text: () => visibleText(body), html };
 }
 /** Lets the page's promises (an async copy's answer) settle. */
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -553,6 +555,26 @@ async function main() {
         cardOk.click('copyBtn');
         await settle();
         assert(cardOk.el('copyBtn').textContent === 'Copied ✓' && cardOk.writes[0].types['text/uri-list'] === LINK, 'iPhone: Copy that worked says "Copied ✓", both forms written');
+
+        // #3314 review: a copy that works after a failed one puts the line back, from the code card's Copy or the badge again.
+        for (const [why, again] of [['the code card\'s Copy', 'copyBtn'], ['the badge again', 'iosStore']] as const) {
+            const tab2 = new Map<string, string>();
+            const after = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', storage: tab2 });
+            after.click('iosStore');
+            await settle();
+            assert(after.el('copyNote').textContent === NOT_COPIED, `iPhone (${why}): the first tap failed and says so`);
+            after.setCopy('yes', 'rejects');
+            after.click(again);
+            await settle();
+            assert(after.el('copyNote').textContent === COPIES && after.el('copyNote').className === 'copynote' && !after.text().includes(NOT_COPIED),
+                `iPhone (${why}): a copy that worked after a failed one puts the line back to "${COPIES}"`);
+            assert(JSON.parse(tab2.get('beanpool-invite-store-tap') ?? 'null')?.copy === 'copied', `iPhone (${why}): the tab's record says copied too, so a reload agrees with the page`);
+        }
+        // The code card's Copy alone (no store tap) records nothing: a reload must not act as if the store was visited.
+        const cardOnly = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes', storage: new Map() });
+        cardOnly.click('copyBtn');
+        await settle();
+        assert(!cardOnly.storage.has('beanpool-invite-store-tap') && cardOnly.installOrder()[0] === 'iosLead', 'iPhone: Copy with no store tap keeps no record and moves nothing');
 
         // In the visitor's language: the catalog's words, marked with the language; right to left where it reads so.
         const fr = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', lang: 'fr' });

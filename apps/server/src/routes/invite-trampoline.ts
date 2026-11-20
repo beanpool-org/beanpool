@@ -367,8 +367,11 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
   var copyBtn = document.getElementById('copyBtn');
   // The button's words: English here, the iPhone's own below.
   var copyWord = { t: 'Copy code' }, copiedWord = { t: 'Copied ✓' };
+  // Set by the iPhone part below: the line under the badge follows every copy's answer, not only the badge's (#3314 review).
+  var afterCopy = null;
   copyBtn.addEventListener('click', function(){
     copyInvite().then(function(ok){
+      if (afterCopy) afterCopy(ok);
       if (ok) {
         put(copyBtn, copiedWord);
         setTimeout(function(){ put(copyBtn, copyWord); }, 2000);
@@ -447,6 +450,9 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
     var tapped = false, back = false;
     function keep(copy){ try { window.sessionStorage.setItem(KEPT, JSON.stringify({ code: code, copy: copy })); } catch (_) {} }
     function failed(){ note.className = 'copynote warn'; put(note, W.notCopied); }
+    // A copy that worked after one that failed puts the line back: the page says only what happened (#3314 review).
+    function copiedNow(){ note.className = 'copynote'; put(note, W.copies); }
+    afterCopy = function(ok){ if (ok) { copiedNow(); if (tapped) keep('copied'); } };
     // Back from the store: the button that carries the invite itself goes on top, solid. It works with or without the copy.
     function cameBack(){
       if (!tapped || back) return;
@@ -461,7 +467,7 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
       keep('pending');
       copyInvite().then(function(ok){
         keep(ok ? 'copied' : 'failed');
-        if (!ok) failed();
+        if (ok) copiedNow(); else failed();
       });
     });
     document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') cameBack(); });

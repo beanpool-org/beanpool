@@ -322,7 +322,7 @@ async function phoneOnBWithAHeld(): Promise<void> {
 function heldRowOf(conv: Conv, timestamp: string | null): HeldChatRow {
     return {
         id: conv.id, type: 'dm', postId: null, postTitle: null, postPhoto: null, peer: 'Kai', peerAvatar: null, peerUpdatedAt: null,
-        peerPubkey: peer.publicKey, peerKeys: [peer.publicKey], rawTimestamp: timestamp, createdAt: null,
+        peerPubkey: peer.publicKey, peerKeys: [peer.publicKey], keyChanged: false, rawTimestamp: timestamp, createdAt: null,
         key: `held:${A_FILE}:${conv.id}`, held: true, community: A, communityName: 'Riverside',
     };
 }

@@ -473,20 +473,8 @@ async function mount(): Promise<void> {
         root!.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(WelcomeScreen, { key: 'welcome' })) as any);
     });
     await settle();
-    await answerNewHere();
 }
 
-/**
- * A phone with no account is asked "Used BeanPool before?" first (components/welcome/UsedBefore.tsx, utils/first-question.ts).
- * These are a new person's screens: when the question is up, they answer I'm New Here, as a new person does, and the doors
- * are drawn. A screen that opens elsewhere (an invite, a waiting account) never shows the question, and nothing is pressed.
- */
-async function answerNewHere(): Promise<void> {
-    const isNew = host!.querySelector('[data-testid="used-before-new"]') as HTMLElement | null;
-    if (!isNew) return;
-    await act(async () => { isNew.click(); });
-    await settle();
-}
 const all = (sel: string) => Array.from(host!.querySelectorAll(sel)) as HTMLElement[];
 const byId = (id: string) => host!.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 function button(name: string): HTMLElement {

@@ -5,8 +5,8 @@
  * 320dp wide, the phone's text at 1.3×), in the light and the dark scheme: the app's own components through
  * react-native-web in headless Chromium, as e2e/locked-history-320.mjs draws its screens.
  *
- * What is drawn: the first screen's two doors while Explore BeanPool worldwide asks whether the phone may look around
- * (components/WelcomeDoors.tsx with `exploring`, in the welcome screen's own style numbers for the doors); the visitor's
+ * What is drawn: the front door while No invite? Look around asks whether the phone may look around
+ * (components/welcome/FrontDoor.tsx with `exploring`, in the welcome screen's own colours and column); the visitor's
  * card at the top of Home and the Market (components/LookAroundCard.tsx); the + chooser for a visitor, Join to post
  * (components/NewPostTypeSheet.tsx with no account), and for a member, as before.
  *
@@ -55,9 +55,16 @@ const STUBS = {
         export default { ...RNW, Text, TextInput };
     `,
     'ThemeContext': `export const useTheme = () => globalThis.__theme; export const useStyles = (make) => make(globalThis.__theme);`,
-    'expo-router': `export const router = { back() {}, push() {}, replace() {}, canDismiss: () => false, dismissAll() {} };`,
+    // A screen's focus reads (the + chooser's Learn row, utils/use-reader-features.ts) never run here: drawn at rest, nothing read.
+    'expo-router': `export const router = { back() {}, push() {}, replace() {}, canDismiss: () => false, dismissAll() {} };
+        export const useFocusEffect = () => {};`,
     'IdentityContext': `export const useIdentity = () => ({ identity: globalThis.__identity, isLoading: false });`,
     'LanguageProvider': `import { t, tn } from '@beanpool/core'; export const useWords = () => ({ t, tn });`,
+    // Apple's own paste button (iOS 16+) is native: drawn as the box it takes, in the colours it is given, with no words (icon only).
+    'expo-clipboard': `import React from 'react'; import { View } from 'react-native-web';
+        export const ClipboardPasteButton = ({ style, backgroundColor }) => React.createElement(View, { role: 'button', 'aria-label': 'Paste', style: [{ borderRadius: 12 }, style, { backgroundColor }] });
+        export const isPasteButtonAvailable = false;
+        export const getStringAsync = async () => ''; export const hasStringAsync = async () => false;`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {
@@ -72,9 +79,10 @@ const entry = path.join(work, 'entry.tsx');
 fs.writeFileSync(entry, `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { View, ScrollView, Text, StyleSheet } from 'react-native';
-import { lightColors, darkColors, palette } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
-import { WelcomeDoors } from ${JSON.stringify(path.join(NATIVE, 'components/WelcomeDoors'))};
+import { View, ScrollView, Text } from 'react-native';
+import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
+import { onboardingColors } from ${JSON.stringify(path.join(NATIVE, 'utils/onboarding-colors'))};
+import { FrontDoor } from ${JSON.stringify(path.join(NATIVE, 'components/welcome/FrontDoor'))};
 import { LookAroundCard } from ${JSON.stringify(path.join(NATIVE, 'components/LookAroundCard'))};
 import { NewPostTypeSheet } from ${JSON.stringify(path.join(NATIVE, 'components/NewPostTypeSheet'))};
 
@@ -83,23 +91,18 @@ const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
 const colors = scheme === 'dark' ? darkColors : lightColors;
 globalThis.__theme = { theme: scheme, colors };
 globalThis.__identity = q.get('account') === '1' ? { publicKey: 'a'.repeat(64), callsign: 'Kim' } : null;
-// The doors in the welcome screen's own numbers (app/welcome.tsx makeStyles: homeDoors, memberBtn, memberBtnText,
-// doorLine, inviteOnlyHint), on its page colour.
-const doorStyles = StyleSheet.create({
-    homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
-    doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
-    inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
-    memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12 },
-    memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700', textAlign: 'center' },
-    // Already a member? Restore, the third button (front doors S10; e2e/front-doors-s10-320.mjs checks it at the fold).
-    restoreBtn: { width: '100%', minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-    restoreBtnText: { color: scheme === 'dark' ? palette.blue400 : palette.blue600, fontSize: 15, fontWeight: '700', textAlign: 'center' },
-});
+// The front door draws in the welcome screen's own colours (app/welcome.tsx: useOnboardingColors), in its column
+// (makeStyles homeContent and homeMain), on its page colour.
+const welcome = onboardingColors(scheme).colors;
 const c = q.get('case');
 const Page = () => {
     if (c === 'doors') return (
-        <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={{ padding: 16 }}>
-            <WelcomeDoors door="open" joinWithInvite={() => {}} openGlobalDoor={() => {}} restore={() => {}} exploring={q.get('exploring') === '1'} styles={doorStyles} />
+        <ScrollView style={{ flex: 1, backgroundColor: welcome.surface.page }} contentContainerStyle={{ flexGrow: 1, padding: 24, alignItems: 'center' }}>
+            <View style={{ width: '100%', alignItems: 'center' }}>
+                <FrontDoor colors={welcome} door="open" exploring={q.get('exploring') === '1'} appleTile={false}
+                    onInvite={() => {}} onApplePaste={() => {}} onScanOrType={() => {}} onLookAround={() => {}}
+                    onUsedBefore={() => {}} onAskToJoin={() => {}} onClaim={() => {}} />
+            </View>
         </ScrollView>
     );
     if (c === 'card') return (
@@ -128,7 +131,8 @@ const result = await build({
     resolveExtensions: ['.web.tsx', '.web.ts', '.web.js', '.tsx', '.ts', '.js', '.mjs', '.json'],
     nodePaths: [path.join(ROOT, 'node_modules'), path.join(NATIVE, 'node_modules')],
     define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false', 'process.env.EXPO_OS': '"web"' },
-    banner: { js: 'globalThis.process = globalThis.process || { env: {} };' },
+    // The expo modules the + chooser reaches (its Learn row) read `global`, as React Native defines it; a browser has globalThis.
+    banner: { js: 'globalThis.process = globalThis.process || { env: {} }; globalThis.global = globalThis;' },
     logLevel: 'error',
     plugins: [{
         name: 'stubs',

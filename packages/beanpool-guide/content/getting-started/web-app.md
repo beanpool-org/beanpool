@@ -124,7 +124,7 @@ If you joined in a browser, bring the same account to the phone app. Don't join 
 Or, with no typing, scan a code from the browser:
 
 - In the web app, open **Settings**, tap **Use the phone app**, then **Put your account on your phone**. It shows a QR code for two minutes.
-- In the phone app, tap **I'm Already a Member →** on the first screen, then **Scan from a browser**, and point the phone's camera at the code.
+- In the phone app, tap **I've used BeanPool before** on the first screen, then **Scan from a browser**, and point the phone's camera at the code.
 - The phone then shows **four digits**. Type them in the browser and press **Confirm**. Your account goes to the phone only after that. Three wrong tries and nothing is sent: make a new code. Never read the digits out or send them to anyone.
 - The phone shows whose account it is and which community it is from. Tap **Bring it to this phone**.
 - Once the phone has saved it, the browser says so: the account is then on both, and you can keep both or tap **Remove from this browser**. If the phone doesn't save it, or you leave before it does, the browser says so and keeps the account.

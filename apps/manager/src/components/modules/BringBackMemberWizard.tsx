@@ -313,7 +313,7 @@ export function BringBackMemberWizard({ member, nodeUrl, credential, onRekeyInst
                             </div>
                         )}
                         <p className="m-0 leading-relaxed break-words">
-                            Have them open BeanPool on the new phone → <strong>Already a Member? Restore Account</strong> → <strong>An admin gave me a re-key code</strong>, and scan this or type the code and your community's name. Their phone shows two digits.
+                            Have them open BeanPool on the new phone → <strong>I&apos;ve used BeanPool before</strong> → <strong>An admin gave me a re-key code</strong>, and scan this or type the code and your community's name. Their phone shows two digits.
                         </p>
                         {waiting && (
                             <label className="block space-y-1.5">

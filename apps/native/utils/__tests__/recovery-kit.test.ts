@@ -55,7 +55,9 @@ describe('recoveryKitHtml', () => {
     it('carries the warning and the steps back in', () => {
         const html = recoveryKitHtml(KIT);
         expect(html).toContain('Anyone who has these 12 words can sign in as you. Keep this page somewhere safe. Never photograph it or send it in a chat.');
-        expect(html).toContain('Already a Member? Restore Account');
+        expect(html).toContain('I&#39;ve used BeanPool before');
+        // The front door has no "Already a member" button: the kit names the one it has (onboarding S1, review of #3317).
+        expect(html).not.toContain('Already a Member');
         expect(html).toContain('Recover with 12 Words');
         expect(html).toContain('Recover Identity');
     });

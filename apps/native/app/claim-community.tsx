@@ -3,7 +3,7 @@
  * boot wrote on the server. Opened only for a node that answered GET /api/local/claim `unclaimed: true`: from the
  * `beanpool://claim?node=…[&id=…][&code=…]` link (the terminal QR `beanpool claim` prints, the manager's unclaimed card),
  * from Find a community's address check, or with no server yet from "Set up a new community server" (Find a community,
- * Start a community: components/SetUpServerRow.tsx) and the first screen's "Installed BeanPool on a server? Claim it",
+ * Start a community: components/SetUpServerRow.tsx) and the front door's "More ways in ›" → "Claim a server you installed",
  * where Scan the code reads the server's QR before its address is known. utils/node-claim.ts has the steps and the
  * reasons; the code never leaves the phone.
  *

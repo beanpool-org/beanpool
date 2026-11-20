@@ -31,11 +31,12 @@ import {
 } from '../components/welcome/welcome-lines';
 import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
 import type { GlobalDoorState } from '../utils/global-entry';
-import { WelcomeDoors } from '../components/WelcomeDoors';
+import { FrontDoor } from '../components/welcome/FrontDoor';
 import { coreSettingsNextWords } from '../components/settings/settings-lines';
 import { RestoreMenu } from '../components/welcome/RestoreMenu';
-import { UsedBefore, StartNewInstead } from '../components/welcome/UsedBefore';
-import { homeView, offersStartNew, type FirstAnswer } from '../utils/first-question';
+import { StartNewInstead } from '../components/welcome/StartNewInstead';
+import { homeView, offersStartNew } from '../utils/first-question';
+import { inviteDoor, inviteOnly, ourButtonReadsClipboard } from '../utils/invite-arrival';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
     keepJoinedIdentity, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
@@ -97,7 +98,7 @@ import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { returnToApp } from '../utils/sso-signin';
 
 
-import { extractNodeOrigin, holdsInvite, normaliseInviteCode, readInviteText } from '../utils/invite-parser';
+import { extractNodeOrigin, normaliseInviteCode, readInviteText } from '../utils/invite-parser';
 import { fetchKnownRule } from '../utils/known-rule';
 import { holdPostAfterJoin } from '../utils/post-after-join';
 import { joinedForListing } from '../utils/listing-after-join';
@@ -197,9 +198,6 @@ export default function WelcomeScreen() {
         ? (params.mode as any)
         : 'home';
     const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'ownerCard' | 'confirmReplace'>(initialMode);
-    // The first question's answer on a phone with no account (utils/first-question.ts): null asks "Used BeanPool before?",
-    // 'new' shows the doors. In memory only: a new start of the app asks again.
-    const [firstAnswer, setFirstAnswer] = useState<FirstAnswer>(null);
     useEffect(() => {
         if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'confirmReplace'].includes(params.mode as string)) {
             setMode(params.mode as any);
@@ -387,10 +385,19 @@ export default function WelcomeScreen() {
     /** Read the rule again: the sheet found it moved on since the step read it, and linked nothing. */
     const [backupCopiesRead, setBackupCopiesRead] = useState(0);
     const [inviterName, setInviterName] = useState<string | null>(null);
-    const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
-    /** The community address `inviteCommunityName` was read at (join names N1): the step's heading names it only while the fields still point there. */
-    const [inviteNamedAt, setInviteNamedAt] = useState<string | null>(null);
+    /**
+     * The name screen's greeting (onboarding §3.1 C): who invited and to which community, from the node's invite check (a
+     * read: nothing is made by it), with the address it was read at and the code it was read for. The band names them only
+     * while the fields still hold that code for that address: an inviter belongs to one code, so a new code for the same
+     * community reads "You're invited" until its own check answers (review of #3317). Not heard yet, or offline: the same.
+     */
+    const [greeting, setGreeting] = useState<{ at: string; code: string; community: string | null; inviter: string | null } | null>(null);
+    /** iOS 16+ only: the phone holds copied text (`hasStringAsync`, which reads nothing): Apple's button is drawn. */
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
+    /** Your invite's box (onboarding §3.1 B): what is typed there, read only at its Next. */
+    const [inviteDraft, setInviteDraft] = useState('');
+    /** Your invite's one line, after a tap or a Next that brought something that isn't an invite. */
+    const [inviteNote, setInviteNote] = useState<string | null>(null);
     const [seedCopied, setSeedCopied] = useState(false);
 
     // --- The global community's open door (utils/global-join.ts; design §2.3). Sign in once, choose a
@@ -477,8 +484,8 @@ export default function WelcomeScreen() {
     /** From Next's tap on "Your Name" until it ends: that step is not left mid-join (utils/invite-next.ts `runNext`). */
     const nextOutRef = useRef(false);
 
-    // What the global community's door said this app start (utils/global-door-offer.ts): only the line under home's
-    // "Explore BeanPool worldwide", which is always drawn (components/WelcomeDoors.tsx). Drawn from what is already known
+    // What the global community's door said this app start (utils/global-door-offer.ts): only the line under the front door's
+    // "No invite? Look around", which is always drawn (components/welcome/FrontDoor.tsx). Drawn from what is already known
     // and asked after drawing, never before. Asked again when home comes back into view or the app to the front: free
     // once there is an answer (it is kept for the session), a new ask after none. The door itself asks again anyway.
     const [globalDoor, setGlobalDoor] = useState<GlobalDoorState>(() => globalDoorOffer().state);
@@ -813,15 +820,13 @@ export default function WelcomeScreen() {
         recordOnboardingEvent('protection_shown');
     }, [mode]);
 
-    // The web trampoline copies the invite link to the clipboard before sending
-    // people to the app store, but nothing can read it for them automatically —
-    // so offer a one-tap paste on the home and join screens. hasStringAsync only
-    // reports presence; the clipboard is READ solely on the user's tap, and on
-    // iOS 16+ that tap lands on the system paste button (UIPasteControl), which
-    // never shows the "Allow Paste" popup. Re-check on foreground so copying an
-    // invite in another app and switching back makes the offer appear.
+    // The invite page copies the invite link before sending people to the store (utils/invite-arrival.ts). On iOS 16 and
+    // later only Apple's own paste button reads it with no pop-up, so the front door and Your invite draw that button when
+    // the phone holds copied text. hasStringAsync only reports presence (no notice, no pop-up); nothing is READ but at a
+    // tap. Asked again on foreground, so a link copied in another app makes the button appear. Android and iOS 15 never
+    // ask: their "I have an invite" reads at its tap.
     React.useEffect(() => {
-        if (mode !== 'home' && mode !== 'create') return;
+        if (!Clipboard.isPasteButtonAvailable || (mode !== 'home' && mode !== 'create')) return;
         const check = () => {
             Clipboard.hasStringAsync()
                 .then(has => setClipboardMayHaveInvite(!!has))
@@ -834,44 +839,69 @@ export default function WelcomeScreen() {
         return () => sub.remove();
     }, [mode]);
 
-    // Shared sink for pasted invite content however it arrives: the iOS system
-    // paste button hands us the text directly, the fallback buttons read the
-    // clipboard programmatically.
-    async function applyInviteContent(raw: string, source: 'home' | 'join') {
-        const content = raw?.trim() || '';
-        if (holdsInvite(content)) {
-            await processFullUrl(content);
-            return;
+    /**
+     * Your invite, asked for ("Scan or type it instead ›", or a tap that brought no invite). An invite found earlier (a
+     * link, then ← Back to Home) would draw the name screen in its place: it is set aside in Your invite's box, as the pencil
+     * does, never dropped. Next uses it again, and the copy held on the phone (utils/held-invite.ts) stays until it is
+     * redeemed, so "I have an invite" still finds it (review of #3317).
+     */
+    function openYourInvite() {
+        const found = inviteCodeRef.current;
+        if (found.trim()) {
+            setInviteDraft(found);
+            setInviteCode('');
         }
-        if (source === 'home') {
-            Alert.alert(
-                t('No invite found'),
-                t("Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen."),
-                [{ text: t('OK'), onPress: () => setMode('create') }]
-            );
-            return;
-        }
-        // Join screen: a short single-line paste may be a plain code in a format
-        // we don't recognise (e.g. legacy 6-char codes) — drop it in the field
-        // and let handleCreate normalise it. Anything bigger clearly isn't an
-        // invite, so say so instead of dumping it into the field.
-        if (content && content.length <= 100 && !content.includes('\n')) {
-            setInviteCode(content);
-        } else {
-            Alert.alert(
-                t('No invite found'),
-                t('Your clipboard has something else on it. You can type or paste your invite code below instead.')
-            );
-        }
+        setMode('create');
     }
 
-    async function handleCheckClipboardInvite() {
-        try {
-            const content = (await Clipboard.getStringAsync())?.trim() || '';
-            await applyInviteContent(content, 'home');
-        } catch {
-            setMode('create');
+    /**
+     * What a tap brought back (Apple's button, a scan): kept only if it is an invite, which opens the name screen. Anything
+     * else is dropped here, never shown in a box and never sent: Your invite opens with its one line.
+     */
+    async function takeInvite(raw: string) {
+        const invite = inviteOnly(raw);
+        if (invite) {
+            setInviteNote(null);
+            await processFullUrl(invite);
+            return;
         }
+        setInviteNote(t("That isn't an invite. Type or scan it."));
+        openYourInvite();
+    }
+
+    /**
+     * Our own "I have an invite" (utils/invite-arrival.ts): an invite held on the phone first, never asking for one it has;
+     * then on Android and iOS 15 the clipboard, read at this tap and kept only if it is an invite. On iOS 16 and later
+     * nothing is read (only Apple's button may). No invite found: Your invite.
+     */
+    async function handleInviteTap() {
+        setError(null);
+        setInviteNote(null);
+        const held = await readHeldInvite(AsyncStorage).catch(() => null);
+        if (held && !inviteCodeRef.current) {
+            setInviteCode(held.invite);
+            noteLandingPost(held.invite, held.post);
+            if (held.server) setCreateAnchorUrl(held.server);
+        } else if (!inviteCodeRef.current && ourButtonReadsClipboard({ os: Platform.OS, pasteButton: Clipboard.isPasteButtonAvailable })) {
+            const invite = inviteOnly(await Clipboard.getStringAsync().catch(() => ''));
+            if (invite) {
+                await processFullUrl(invite);
+                return;
+            }
+        }
+        setMode('create');
+    }
+
+    /** Your invite's Next: the box holds an invite (a link, a code, a code typed in small letters), or the one line says not. */
+    function handleInviteNext() {
+        const typed = inviteDraft.trim();
+        const invite = inviteOnly(typed) ?? (typed && !/\s/.test(typed) ? inviteOnly(normaliseInviteCode(typed)) : null);
+        if (!invite) {
+            setInviteNote(t("That isn't an invite. Type or scan it."));
+            return;
+        }
+        setInviteNote(null);
+        void processFullUrl(invite);
     }
 
     const processFullUrl = useCallback(async (fullUrl: string) => {
@@ -911,21 +941,8 @@ export default function WelcomeScreen() {
         const raw = inviteFromScan(data);
         if (!raw) return false;
         setScanner(null);
-        void applyInviteContent(raw, 'join');
+        void takeInvite(raw);
         return true;
-    };
-
-    const handlePasteInvite = async () => {
-        try {
-            const content = (await Clipboard.getStringAsync())?.trim() || '';
-            if (!content) {
-                Alert.alert(t('Nothing to paste'), t('Your clipboard is empty.'));
-                return;
-            }
-            await applyInviteContent(content, 'join');
-        } catch (e) {
-            Alert.alert(t('Failed to read clipboard'), t('Please try pasting the link manually.'));
-        }
     };
 
     React.useEffect(() => {
@@ -1036,10 +1053,10 @@ export default function WelcomeScreen() {
     inviteCodeRef.current = inviteCode;
     const accountRef = useRef(accountOnPhone);
     accountRef.current = accountOnPhone;
-    // The doors are what the home draws (utils/first-question.ts). Back on them asks "Used BeanPool before?" again with the
-    // mode still 'home', so an Explore still asking reads this, not the mode alone (PR #3209 review).
+    // The front door is what the home draws (utils/first-question.ts), so an Explore still asking reads this, not the mode
+    // alone (PR #3209 review).
     const onDoorsRef = useRef(false);
-    onDoorsRef.current = mode === 'home' && homeView({ hasAccount: !!accountOnPhone, waiting: waitingToJoin, answer: firstAnswer }) === 'doors';
+    onDoorsRef.current = mode === 'home' && homeView({ hasAccount: !!accountOnPhone, waiting: waitingToJoin }) === 'door';
     const applyHeldInvite = useCallback((held: HeldInvite) => {
         const key = heldInviteKey(held);
         if (appliedInvites.current.has(key)) return;
@@ -1061,17 +1078,6 @@ export default function WelcomeScreen() {
         });
         return () => { live = false; off(); };
     }, [applyHeldInvite]);
-    /** "Join with an invite": the step opens filled from a held invite, never asking to scan a code the phone has. */
-    const openInviteStep = useCallback(() => {
-        void readHeldInvite(AsyncStorage).then((held) => {
-            if (held && !inviteCodeRef.current) {
-                setInviteCode(held.invite);
-                noteLandingPost(held.invite, held.post);
-                if (held.server) setCreateAnchorUrl(held.server);
-            }
-        }).catch(() => {});
-        setMode('create');
-    }, []);
 
     useEffect(() => {
         if (mode !== 'create' || !error) return;
@@ -1273,17 +1279,37 @@ export default function WelcomeScreen() {
         return () => { cancelled = true; clearTimeout(timer); };
     }, [mode, inviteCode, createAnchorUrl]);
 
+    // The greeting (onboarding §3.1 C): the invite check the join makes, asked as soon as the invite is found, from the node
+    // it names. A read, unsigned: no account is made by it and nothing is redeemed. No answer: the band says "You're invited".
+    useEffect(() => {
+        const code = inviteCode.trim();
+        if (mode !== 'create' || !code) return;
+        let origin: string | null;
+        try { origin = extractNodeOrigin(code); } catch { origin = null; }
+        const nodeUrl = normalizeNodeUrl(origin || createAnchorUrl.trim());
+        if (!nodeUrl || !looksLikeNodeAddress(nodeUrl) || shouldBlockCleartextNodeUrl(nodeUrl)) return;
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            void import('../utils/db').then(({ checkInvite }) => checkInvite(normaliseInviteCode(code), nodeUrl)).then((check) => {
+                if (!cancelled && check) setGreeting({ at: nodeUrl, code: normaliseInviteCode(code), community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
+            }).catch(() => {});
+        }, 600);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [mode, inviteCode, createAnchorUrl]);
+
     /**
      * The name box given an invite (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted there became
-     * her name): the invite goes to the invite box as a paste there goes (its code, and the community its link names), the
-     * name box is left empty, and the one line says why. False when `text` holds no invite.
+     * her name): the invite is used as a found invite is (its code, and the community its link names; the greeting band
+     * changes to it), the name box is left empty, and the one line says why. The name screen has no invite box (onboarding
+     * §3.1 B), so the line is the phone's own, not core's "it goes in the invite box", which is the web's (review of #3317).
+     * False when `text` holds no invite.
      */
     function inviteFromNameBox(text: string): boolean {
         const moved = inviteForInviteBox(text);
         if (!moved) return false;
         setCallsign('');
         if (callsignSuggestions.length) setCallsignSuggestions([]);
-        void processFullUrl(moved).then(() => setError(t(NAME_BOX_WORDS[notANameIn(moved) ?? 'inviteCode'])));
+        void processFullUrl(moved).then(() => setError(t("That's an invite, not a name: it's your invite now.")));
         return true;
     }
 
@@ -1356,10 +1382,9 @@ export default function WelcomeScreen() {
                 undoCommunity = !!storedIdentity && !(await AsyncStorage.getItem('beanpool_anchor_url'));
 
                 const check = await checkInvite(parsedCode, nodeUrl);
-                // Which community this code is for, said in the step's heading from here on (join names N1), whatever the node
-                // thinks of the code: a refused one is still a code for that community. Kept with the address it was read at.
-                setInviteCommunityName(check?.communityName || null);
-                setInviteNamedAt(nodeUrl);
+                // Which community this code is for, said in the greeting from here on (join names N1), whatever the node thinks
+                // of the code: a refused one is still a code for that community. Kept with the address it was read at.
+                if (check) setGreeting({ at: nodeUrl, code: parsedCode, community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
                 // The node has this phone's key already: nothing is redeemed again (below).
                 let inAlready = false;
                 if (check && !check.valid) {
@@ -2346,6 +2371,7 @@ export default function WelcomeScreen() {
     function goBack() {
         setMode('home');
         setError(null);
+        setInviteNote(null);
     }
 
     // --- Onboarding Progress Stepper ---
@@ -2512,12 +2538,12 @@ export default function WelcomeScreen() {
                             <View style={styles.inviteVerifiedBox}>
                                 <Text style={styles.inviteVerifiedText}>
                                     <Sentence
-                                        text={inviteCommunityName
+                                        text={greeting?.community
                                             ? t('🎟️ Your invite from {inviter} checks out — welcome to {community}!')
                                             : t('🎟️ Your invite from {inviter} checks out!')}
                                         parts={{
                                             inviter: <Text style={{ fontWeight: 'bold' }}>{inviterName}</Text>,
-                                            community: <Text style={{ fontWeight: 'bold' }}>{inviteCommunityName}</Text>,
+                                            community: <Text style={{ fontWeight: 'bold' }}>{greeting?.community}</Text>,
                                         }}
                                     />
                                 </Text>
@@ -2994,61 +3020,107 @@ export default function WelcomeScreen() {
     }
 
     // --- CREATE NEW IDENTITY ---
-    if (mode === 'create') {
-        // "Join with an invite", then "Join {name}" once the node has checked the code and said whose community it is (join
-        // names N1): only while the code and address fields still name the community it was checked at, as Next reads them.
-        let createStepName: string | null = null;
-        if (inviteCommunityName && inviteNamedAt) {
-            try {
-                const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
-                if (at && at === inviteNamedAt) createStepName = inviteCommunityName;
-            } catch { /* an address that is not plain host[:port]: Next says so; no name is claimed for it */ }
-        }
+    // --- YOUR INVITE (onboarding §3.1 B, iPhone design §4.1): only when no invite was found on the phone ---
+    if (mode === 'create' && !inviteCode.trim()) {
+        const scanner = Scanner && (
+            <Scanner
+                hint={t('Point the camera at the QR code on your invite.')}
+                deniedText={t('Allow the camera for BeanPool in your phone settings, or paste your invite below.')}
+                onRead={onInviteScanned}
+                onClose={() => setScanner(null)}
+            />
+        );
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} bottomOffset={24 + stepFooterHeight}>
-                    <OnboardingStepper step={1} />
-                    <View style={styles.card}>
-                        <Text style={styles.title} accessibilityRole="header">{createStepName ? t('Join {name}', { name: createStepName }) : t('🎟️ Join with an invite')}</Text>
-
-                        {clipboardMayHaveInvite && !inviteCode && (
-                            <View style={styles.pasteCard}>
-                                <Text style={styles.pasteCardText}>{t('Tap Paste to insert the code from your invite.')}</Text>
-                                {Clipboard.isPasteButtonAvailable ? (
-                                    <Clipboard.ClipboardPasteButton
-                                        onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'join'); }}
-                                        acceptedContentTypes={['plain-text', 'url']}
-                                        displayMode="iconAndLabel"
-                                        backgroundColor={palette.blue600}
-                                        foregroundColor={colors.text.inverse}
-                                        cornerStyle="capsule"
-                                        style={styles.pasteCardSystemBtn}
-                                    />
-                                ) : (
-                                    <Pressable style={styles.pasteCardBtn} onPress={handlePasteInvite} accessibilityRole="button">
-                                        <Text style={styles.pasteCardBtnText}>{t('📋 Paste')}</Text>
-                                    </Pressable>
-                                )}
-                            </View>
-                        )}
-
-                        {/* Scan a QR code, beside Paste (front doors S10): many old Androids have no shortcut to the phone's own camera app. */}
+                <KeyboardAwareScrollView key="invite" contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
+                    <View style={styles.card} testID="your-invite">
+                        <Text style={styles.title} accessibilityRole="header">{t('Your invite')}</Text>
+                        {/* The camera is asked for at this tap, never before (components/ScanCodeModal.tsx). */}
                         <Pressable style={styles.scanInviteBtn} onPress={() => { void openInviteScanner(); }} accessibilityRole="button" testID="join-scan-invite">
                             <MaterialCommunityIcons name="qrcode-scan" size={20} color={dark ? palette.blue400 : palette.blue600} />
                             <Text style={styles.scanInviteBtnText}>{t('Scan a QR code')}</Text>
                         </Pressable>
+                        <View style={styles.inviteBoxRow}>
+                            <TextInput
+                                style={[styles.input, styles.inviteBoxInput]}
+                                placeholder={t('Invite link or code')}
+                                placeholderTextColor={colors.text.muted}
+                                value={inviteDraft}
+                                onChangeText={(text) => { setInviteDraft(text); if (inviteNote) setInviteNote(null); }}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                accessibilityLabel={t('Invite link or code')}
+                                testID="your-invite-box"
+                            />
+                            {/* iOS 16+: Apple's small icon button at the box's end, whenever text is copied; what it hands over is kept only if it is an invite. */}
+                            {Clipboard.isPasteButtonAvailable && clipboardMayHaveInvite && (
+                                <Clipboard.ClipboardPasteButton
+                                    onPress={(data) => { if (data.type === 'text') void takeInvite(data.text); }}
+                                    acceptedContentTypes={['plain-text', 'url']}
+                                    displayMode="iconOnly"
+                                    backgroundColor={colors.action.cta}
+                                    foregroundColor={colors.text.onBrand}
+                                    cornerStyle="large"
+                                    style={styles.inviteBoxPaste}
+                                />
+                            )}
+                        </View>
+                        {inviteNote && <Text style={styles.error} accessibilityLiveRegion="polite" testID="your-invite-note">{inviteNote}</Text>}
+                        <Text style={styles.fieldHint}>{t('Have the link? Tap it again.')}</Text>
+                        <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
+                        </Pressable>
+                    </View>
+                </KeyboardAwareScrollView>
+                <StepFooter testID="step-footer-your-invite" onHeight={setStepFooterHeight}>
+                    <Pressable style={[styles.primaryBtn, styles.footerBtn]} onPress={handleInviteNext} accessibilityRole="button" accessibilityLabel={t('Next')} testID="your-invite-next">
+                        <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
+                    </Pressable>
+                </StepFooter>
+                {scanner}
+            </SafeAreaView>
+        );
+    }
 
-                        <TextInput
-                            style={styles.input}
-                            placeholder={t('Paste your invite link or code')}
-                            placeholderTextColor={colors.text.muted}
-                            value={inviteCode}
-                            onChangeText={setInviteCode}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            accessibilityLabel={t('Invite link or code')}
-                        />
+    if (mode === 'create') {
+        // The greeting band (onboarding §3.1 C), from the invite check: who invited and to which community, while the code is the
+        // one it was checked for and the address the one it was checked at, as Join reads them (join names N1). Else "You're
+        // invited": a new code for the same community never shows the previous code's inviter.
+        let greet: { community: string; inviter: string | null } | null = null;
+        if (greeting?.community) {
+            try {
+                const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
+                if (at && at === greeting.at && greeting.code === normaliseInviteCode(inviteCode.trim())) greet = { community: greeting.community, inviter: greeting.inviter };
+            } catch { /* an address that is not plain host[:port]: Join says so; no name is claimed for it */ }
+        }
+        const bold = (text: string) => <Text style={styles.greetingName}>{text}</Text>;
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style={dark ? 'light' : 'dark'} />
+                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
+                    <OnboardingStepper step={1} />
+                    <View style={styles.card}>
+                        <View style={styles.greetingBand} testID="invite-greeting">
+                            <Text style={styles.greetingText} accessibilityRole="header">
+                                {greet?.inviter
+                                    ? <Sentence text={t('{inviter} invited you to {community}')} parts={{ inviter: <Text>{greet.inviter}</Text>, community: bold(greet.community) }} />
+                                    : greet
+                                        ? <Sentence text={t("You're invited to {community}")} parts={{ community: bold(greet.community) }} />
+                                        : t("You're invited")}
+                            </Text>
+                            {/* The pencil: Your invite, to change it. Never while Join is out. */}
+                            <Pressable
+                                style={[styles.greetingEdit, loading && styles.closedWhileNextIsOut]}
+                                onPress={() => leaveUnlessNextIsOut(nextOutRef, () => { setInviteDraft(inviteCode); setInviteCode(''); setInviteNote(null); setError(null); })}
+                                disabled={loading}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Change the invite')}
+                                testID="invite-greeting-change"
+                            >
+                                <MaterialCommunityIcons name="pencil" size={20} color={colors.text.onBrand} />
+                            </Pressable>
+                        </View>
 
                         {inviteCode && !inviteCode.startsWith('http') && (
                             <>
@@ -3467,7 +3539,7 @@ export default function WelcomeScreen() {
                         {/* Never a dead end (utils/first-question.ts): a person with no account here who can't get back in may
                             start new, told plainly that it makes a new account. The tap only opens the doors; a join there makes it. */}
                         {offersStartNew(!!accountOnPhone) && (
-                            <StartNewInstead colors={colors} dark={dark} onStartNew={() => { setError(null); setFirstAnswer('new'); setMode('home'); }} />
+                            <StartNewInstead colors={colors} dark={dark} onStartNew={() => { setError(null); setMode('home'); }} />
                         )}
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
@@ -4030,7 +4102,7 @@ export default function WelcomeScreen() {
                             onJoin={(line) => startKnockJoin({ url: line.url, invite: line.invite, name: line.name })}
                             onGotIt={(line) => { void forgetWaitLine(line); }}
                             onAskAnother={() => router.push('/find-community')}
-                            onJoinWithInvite={() => { setError(null); setCallsign(c => c || accountOnPhone.callsign || ''); setMode('create'); }}
+                            onJoinWithInvite={() => { setError(null); setInviteNote(null); setCallsign(c => c || accountOnPhone.callsign || ''); setMode('create'); }}
                             onRestore={() => setMode('member')}
                             styles={styles}
                             accent={colors.text.inverse}
@@ -4041,104 +4113,30 @@ export default function WelcomeScreen() {
         );
     }
 
-    // --- THE FIRST QUESTION (Marty, 12 Nov idea 2) ---
-    // A phone with no account asks "Used BeanPool before?" before the doors (components/welcome/UsedBefore.tsx), so someone
-    // who lost a phone brings their account back instead of making a second one. New here: the doors below. Already a
-    // member: the ways back, with "Start a new account instead" under them. The language switch stays first, as on the doors.
-    if (mode === 'home' && homeView({ hasAccount: !!accountOnPhone, waiting: waitingToJoin, answer: firstAnswer }) === 'question') {
-        return (
-            <SafeAreaView style={styles.container}>
-                <StatusBar style={dark ? 'light' : 'dark'} />
-                <ScrollView contentContainerStyle={styles.homeContent}>
-                    <View style={styles.homeMain}>
-                        <LanguageSwitch />
-                        <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
-                        <UsedBefore
-                            colors={colors}
-                            dark={dark}
-                            onNew={() => { setError(null); setFirstAnswer('new'); }}
-                            onReturning={() => { setError(null); setMode('member'); }}
-                        />
-                    </View>
-                </ScrollView>
-            </SafeAreaView>
-        );
-    }
-
-    // --- MAIN WELCOME SCREEN ---
-    // Drawn from the top, not centred: the line under Explore arrives after drawing (and comes and goes as the app returns
-    // to the front), and in a centred column it moved the doors up by half its height; from the top it moves only what is
-    // under it (utils/__tests__/welcome-doors-render.test.ts). Nearly every first launch is a new user, so
-    // the two doors come right under the title (components/WelcomeDoors.tsx, DESIGN-global-entry §B.3): Join with an
-    // invite first and primary, Explore BeanPool worldwide under it, always drawn, so at 320 dp with text at 1.3× both
-    // are above the fold (the long sentence about BeanPool comes after them: above them it pushed Explore under the fold).
-    // Restoring an account on a new phone is a full-width quiet third button under the two doors, above the hint (front doors S10).
+    // --- THE FRONT DOOR (onboarding §3.1 A, slice S1; Marty, 21 Nov 2026) ---
+    // One screen in place of "Used BeanPool before?" and the doors: I have an invite, No invite? Look around, and I've used
+    // BeanPool before (the 12 Nov question's job, on the very first screen), with "More ways in ›" under them. Drawn from the
+    // top: the line under Look around arrives after drawing and moves only what is under it. The language switch stays first.
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style={dark ? 'light' : 'dark'} />
-            {/* Scrolls: at 320dp and 1.3x text, the sentence about BeanPool and the paste offer are taller than a small phone. */}
             <ScrollView contentContainerStyle={styles.homeContent}>
                 <View style={styles.homeMain}>
                     {/* The language, before anything else: a small switch, never a step (director amendment 2). */}
                     <LanguageSwitch />
-                    <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
-
-                    <WelcomeDoors door={globalDoor} joinWithInvite={openInviteStep} openGlobalDoor={() => { void exploreWorldwide(); }} restore={() => setMode('member')} exploring={exploring} styles={styles} />
-
-                    <Text style={styles.homeAbout}>
-                        {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}
-                    </Text>
-
-                    {clipboardMayHaveInvite && (Clipboard.isPasteButtonAvailable ? (
-                        <View style={styles.clipboardHintBox}>
-                            <Text style={styles.clipboardHintText}>{t('📋 Been sent an invite? Tap Paste to open it')}</Text>
-                            <Clipboard.ClipboardPasteButton
-                                onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'home'); }}
-                                acceptedContentTypes={['plain-text', 'url']}
-                                displayMode="iconAndLabel"
-                                backgroundColor={palette.blue600}
-                                foregroundColor={colors.text.inverse}
-                                cornerStyle="capsule"
-                                style={styles.homePasteSystemBtn}
-                            />
-                        </View>
-                    ) : (
-                        <Pressable style={styles.clipboardHintBtn} onPress={handleCheckClipboardInvite} accessibilityRole="button">
-                            <Text style={styles.clipboardHintText}>{t('📋 Been sent an invite? Tap to check your clipboard')}</Text>
-                        </Pressable>
-                    ))}
-
-                    {/* Whoever installed a community server claims it here, and the claim makes their account: no invite,
-                        and nothing of ours (app/claim-community.tsx). Quiet, under the fold: the doors and their hint stay
-                        where they are (utils/__tests__/welcome-doors-render.test.ts). */}
-                    {/* A stranger who knows a community (its sign, its website, a friend) asks it by its address or its code, and
-                        the knock makes their account: no invite, and nothing of ours (app/find-community.tsx, slice S3). Quiet,
-                        under the fold, as the claim's link below. */}
-                    <Pressable
-                        style={styles.claimServerLink}
-                        onPress={() => router.push('/find-community')}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('Know a community near you? Ask to join it')}
-                        testID="welcome-ask-to-join"
-                    >
-                        <Text style={styles.claimServerLinkText}>{t('Know a community near you? Ask to join it →')}</Text>
-                    </Pressable>
-
-                    <Pressable
-                        style={styles.claimServerLink}
-                        onPress={() => router.push(CLAIM_NEW_SERVER_ROUTE)}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('Installed BeanPool on a server? Claim it')}
-                        testID="welcome-claim-server"
-                    >
-                        <Text style={styles.claimServerLinkText}>{t('Installed BeanPool on a server? Claim it →')}</Text>
-                    </Pressable>
-                    {/* Back to "Used BeanPool before?" on a phone with no account (utils/first-question.ts). */}
-                    {!accountOnPhone && (
-                        <Pressable style={styles.backBtn} onPress={() => { setError(null); setFirstAnswer(null); }} accessibilityRole="button" accessibilityLabel={t('Back')} testID="welcome-doors-back">
-                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
-                        </Pressable>
-                    )}
+                    <FrontDoor
+                        colors={colors}
+                        door={globalDoor}
+                        exploring={exploring}
+                        appleTile={inviteDoor({ os: Platform.OS, pasteButton: Clipboard.isPasteButtonAvailable, copiedText: clipboardMayHaveInvite }) === 'apple-tile'}
+                        onInvite={() => { void handleInviteTap(); }}
+                        onApplePaste={(text) => { setError(null); void takeInvite(text); }}
+                        onScanOrType={() => { setError(null); setInviteNote(null); openYourInvite(); }}
+                        onLookAround={() => { void exploreWorldwide(); }}
+                        onUsedBefore={() => { setError(null); setMode('member'); }}
+                        onAskToJoin={() => router.push('/find-community')}
+                        onClaim={() => router.push(CLAIM_NEW_SERVER_ROUTE)}
+                    />
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -4150,28 +4148,16 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
     homeContent: { flexGrow: 1, padding: 24, alignItems: 'center' },
     homeMain: { width: '100%', alignItems: 'center' },
-    // The two doors (components/WelcomeDoors.tsx), right under the title; the line under Explore when its door can't be used.
+    // The waiting mode's buttons (components/welcome/WaitingToJoin.tsx); the line under a door when it can't be used.
     homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
     doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
-    // The sentence about BeanPool, under the doors (it was the subtitle above them).
-    homeAbout: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginTop: 20 },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
     card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
     inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
     inviteVerifiedText: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 14, lineHeight: 20 },
-    clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
-    // blue-700 in light: blue-600 was 4.48:1 on the pale blue pill over the page.
-    clipboardHintText: { color: dark ? palette.blue400 : palette.blue700, fontSize: 14, fontWeight: '600', textAlign: 'center' },
-    clipboardHintBox: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', alignItems: 'center', width: '100%' },
-    homePasteSystemBtn: { width: 170, height: 44, marginTop: 12 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
     tosLink: { color: dark ? palette.blue400 : palette.blue600, textDecorationLine: 'underline' },
-    inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
-    // Already a member? Restore, the third button under the two doors (front doors S10): full width, quiet (an outline, no fill),
-    // a 48dp target; its label shrinks to two lines like the doors', so it stays above the fold at 320dp and 1.3x text.
-    restoreBtn: { width: '100%', minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-    restoreBtnText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 15, fontWeight: '700', textAlign: 'center' },
     restoreSecondaryBtn: {
         marginTop: 20,
         paddingVertical: 14,
@@ -4195,9 +4181,6 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
     },
-    // "Installed BeanPool on a server? Claim it →": a quiet link under Restore, a 48dp target, the words wrapping.
-    claimServerLink: { marginTop: 8, minHeight: 48, width: '100%', paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
-    claimServerLinkText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 15, fontWeight: '600', textAlign: 'center', lineHeight: 21 },
     // The owner's card: the claimed community's full address, wrapped, never cut (the one thing a phishing server can't fake).
     ownerAddress: { fontSize: 15, color: colors.text.secondary, marginTop: 4, marginBottom: 8, lineHeight: 21, fontFamily: 'monospace' },
     restorePromptBox: {
@@ -4238,13 +4221,17 @@ const styles = StyleSheet.create({
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
     fieldHint: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 16, lineHeight: 18 },
-    pasteCard: { backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', borderRadius: 12, padding: 14, marginBottom: 16, alignItems: 'center' },
-    pasteCardText: { color: colors.text.body, fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 12 },
-    pasteCardSystemBtn: { width: 170, height: 44 },
     scanInviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent' },
     scanInviteBtnText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
-    pasteCardBtn: { backgroundColor: palette.blue600, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999, alignItems: 'center' },
-    pasteCardBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '700' },
+    // Your invite's box, and Apple's small icon button at its end on iOS 16+ (nothing drawn over it).
+    inviteBoxRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    inviteBoxInput: { flex: 1 },
+    inviteBoxPaste: { width: 52, height: 52 },
+    // The name screen's greeting: white words on the brand green (5.48:1), the community's name larger; the pencil beside it.
+    greetingBand: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.brand.fill, borderRadius: 14, paddingVertical: 14, paddingLeft: 16, paddingRight: 4, marginBottom: 16 },
+    greetingText: { flex: 1, color: colors.text.onBrand, fontSize: 17, lineHeight: 24, fontWeight: '600' },
+    greetingName: { fontSize: 22, fontWeight: '800' },
+    greetingEdit: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
 
     // Callsign (Step 1) — larger, labeled input
     callsignLabel: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8, marginTop: 8 },

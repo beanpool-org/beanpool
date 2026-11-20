@@ -28,13 +28,13 @@ export const KIT_TITLE = 'Your BeanPool recovery kit';
 export const KIT_WARNING = 'Anyone who has these 12 words can sign in as you. Keep this page somewhere safe. Never photograph it or send it in a chat.';
 
 /**
- * On a phone, worded as the app's restore screens are (apps/native/app/welcome.tsx): the welcome screen's "Already a
- * Member? Restore Account", then "Recover with 12 Words" on "Restore your account", then the words, the community, and
- * "Recover Identity".
+ * On a phone, worded as the app's restore screens are (apps/native/app/welcome.tsx): the front door's "I've used
+ * BeanPool before" (onboarding S1, 21 Nov 2026), then "Recover with 12 Words" on "Restore your account", then the words,
+ * the community, and "Recover Identity".
  */
 export const KIT_RESTORE_STEPS = [
     'Install BeanPool on your phone and open it.',
-    'Tap “🔑 Already a Member? Restore Account →”.',
+    "Tap “I've used BeanPool before”.",
     'Tap “🔑 Recover with 12 Words”.',
     'Type your 12 words in order, one in each box.',
     'Type your community’s name or address (written above).',

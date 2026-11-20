@@ -21,14 +21,17 @@ const theme = fs.readFileSync(path.join(root, 'utils/drawn-colours.ts'), 'utf8')
 /** The source of one step: from its `if (mode === '<mode>'` to the next step's. */
 function step(mode: string): string {
     // The screen's own branch, at the render's indent (an effect's `if (mode === 'create' && …)` is deeper).
-    const start = welcome.indexOf(`\n    if (mode === '${mode}'`);
+    // A mode written with its own quote and what follows it (the invite step's two branches) is matched as written.
+    const start = welcome.indexOf(`\n    if (mode === '${mode.includes("'") ? mode : `${mode}'`}`);
     expect(start, mode).toBeGreaterThan(-1);
     const next = welcome.indexOf('\n    if (mode === ', start + 10);
     return welcome.slice(start, next === -1 ? undefined : next);
 }
 
 const STEPS: Array<{ mode: string; scroll: string; button: RegExp; testID: string }> = [
-    { mode: 'create', scroll: '</KeyboardAwareScrollView>', button: /onPress=\{handleCreate\}/, testID: 'step-footer-invite' },
+    // Your invite (onboarding §3.1 B): its own branch of 'create', drawn only when no invite was found.
+    { mode: "create' && !inviteCode.trim()", scroll: '</KeyboardAwareScrollView>', button: /onPress=\{handleInviteNext\}/, testID: 'step-footer-your-invite' },
+    { mode: "create') {", scroll: '</KeyboardAwareScrollView>', button: /onPress=\{handleCreate\}/, testID: 'step-footer-invite' },
     { mode: 'profileSetup', scroll: '</ScrollView>', button: /onPress=\{handleCompleteProfile\}/, testID: 'step-footer-profile' },
     { mode: 'seedBackup', scroll: '</ScrollView>', button: /recordOnboardingEvent\('protection_choice'/, testID: 'step-footer-words' },
     { mode: 'ownerCard', scroll: '</ScrollView>', button: /t\("Let's Begin! 🚀"\)/, testID: 'step-footer-owner' },
@@ -51,9 +54,12 @@ describe('the join steps\' main button is in a footer that stays on screen', () 
     }
 
     it('the invite step keeps its fields clear of the footer while typing', () => {
-        const src = step('create');
+        const src = step("create') {");
         expect(src).toMatch(/bottomOffset=\{24 \+ stepFooterHeight\}/);
         expect(src).toMatch(/<StepFooter testID="step-footer-invite" onHeight=\{setStepFooterHeight\}>/);
+        const invite = step("create' && !inviteCode.trim()");
+        expect(invite).toMatch(/bottomOffset=\{24 \+ stepFooterHeight\}/);
+        expect(invite).toMatch(/<StepFooter testID="step-footer-your-invite" onHeight=\{setStepFooterHeight\}>/);
     });
 
     it('the footer rides above the keyboard and the system bar, from the central colour tokens', () => {

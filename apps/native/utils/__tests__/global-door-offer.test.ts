@@ -284,37 +284,36 @@ describe('the welcome screen', () => {
     const code = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     const home = () => {
         const s = src();
-        const start = s.indexOf('// --- MAIN WELCOME SCREEN');
+        const start = s.indexOf('// --- THE FRONT DOOR');
         const end = s.indexOf('const styles = StyleSheet.create(');
         expect(start).toBeGreaterThan(-1);
         expect(end).toBeGreaterThan(start);
         return code(s.slice(start, end));
     };
 
-    it('draws the two doors on every home, whatever the door said: nothing wraps them in a condition', () => {
+    it('draws the front door on every home, whatever the door said: nothing wraps it in a condition', () => {
         const h = home();
-        // Explore looks first on a phone with no account (slice S12, welcome's exploreWorldwide), which opens the door itself
-        // wherever looking can't happen; `exploring` is the line under it while it asks.
-        const doors = h.match(/^( *)(.*)<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{openInviteStep\} openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\} restore=\{\(\) => setMode\('member'\)\} exploring=\{exploring\} styles=\{styles\} \/>$/m);
-        expect(doors).not.toBeNull();
+        // Look around looks first on a phone with no account (slice S12, welcome's exploreWorldwide), which opens the door
+        // itself wherever looking can't happen; `exploring` is the line under it while it asks.
+        const door = h.match(/^( *)(.*)<FrontDoor$/m);
+        expect(door).not.toBeNull();
         // On a line of its own: no `{x && (`, no ternary, in front of it.
-        expect(doors![2]).toBe('');
-        expect(h.match(/<WelcomeDoors /g)).toHaveLength(1);
-        // Right under the title, before the sentence about BeanPool and the rest.
-        const title = h.indexOf("{t('Welcome to BeanPool')}");
-        const at = h.indexOf('<WelcomeDoors ');
-        expect(title).toBeGreaterThan(-1);
-        expect(at).toBeGreaterThan(title);
-        expect(h.slice(title, at)).not.toMatch(/<Text|<Pressable|<View/);
-        for (const after of ["{t('Trade skills, goods and favours", "Clipboard.isPasteButtonAvailable", "styles.claimServerLink"]) {
-            expect(h.indexOf(after), after).toBeGreaterThan(at);
-        }
-        // Already a member? Restore is the doors' third button now (front doors S10): the component's, handed the tap (the regex
-        // above), not a link drawn under the fold.
-        expect(h).not.toContain('styles.restoreSecondaryBtn');
+        expect(door![2]).toBe('');
+        expect(h.match(/<FrontDoor\b/g)).toHaveLength(1);
+        // Right under the language switch, nothing between them.
+        const lang = h.indexOf('<LanguageSwitch />');
+        const at = h.indexOf('<FrontDoor');
+        expect(lang).toBeGreaterThan(-1);
+        expect(at).toBeGreaterThan(lang);
+        expect(h.slice(lang + '<LanguageSwitch />'.length, at)).not.toMatch(/<Text|<Pressable|<View/);
+        const tag = h.slice(at, h.indexOf('/>', at));
+        expect(tag).toContain('door={globalDoor}');
+        expect(tag).toContain('exploring={exploring}');
+        expect(tag).toContain('onLookAround={() => { void exploreWorldwide(); }}');
+        expect(tag).toContain("onUsedBefore={() => { setError(null); setMode('member'); }}");
         // The buttons themselves are the component's alone.
-        expect(h).not.toMatch(/Explore BeanPool worldwide|Join with an invite/);
-        expect(src().match(/openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\}/g)).toHaveLength(1);
+        expect(h).not.toMatch(/Look around'|I have an invite'|Explore BeanPool worldwide|Join with an invite/);
+        expect(src().match(/void exploreWorldwide\(\); \}\}/g)).toHaveLength(1);
     });
 
     it('nothing waits for the door: no fade, no pinning, no layout read for it', () => {

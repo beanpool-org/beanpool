@@ -8,6 +8,8 @@
  * - **Held while shown.** Each such community's copy is held in place (db.ts enterChatInPlace) from the read until the
  *   requests are left, then let go (leaveChatInPlace): the last to let go closes it, and nothing of it opens again
  *   until a screen holds it. A chat opened from a card holds it too, so it stays open under the chat.
+ * - **Side by side, each with a deadline.** The places are read at once, each answer within 12 s (db.ts requestsInPlace):
+ *   a community that never answers keeps its own S0 card and holds back no other's (#3309 review N2, P4).
  * - **Only places with requests.** A community whose count is 0, or one that can't be read in place (not saved, a
  *   guest's look, no copy on the phone, global's door count where the member is no member), is not held or read; a place
  *   with a count that can't be read in place keeps its S0 card, which moves the phone there.
@@ -45,8 +47,11 @@ export function placesThatMoveElsewhere<P extends { address: string }>(waiting: 
 }
 
 /**
- * Reads `places` in place, one after another, each held while it is read and after: the groups read (a place that can't be
- * read in place is left out). `stillWanted` false stops before the next place.
+ * Reads `places` in place, side by side, each held while it is read and after: the groups read, in the places' order (a
+ * place that can't be read in place, or doesn't answer within its read's deadline, is left out and keeps its S0 card).
+ * Side by side, so a community that is slow to answer holds back no other's cards past that one deadline (db.ts
+ * requestsInPlace, #3309 review N2, P4). `stillWanted` false before the reads: none is asked; false once they are back
+ * (the list left meanwhile): none is handed back.
  */
 export async function readRequestsInPlace(
     myPubkey: string,
@@ -54,12 +59,14 @@ export async function readRequestsInPlace(
     stillWanted: () => boolean,
     read: typeof requestsInPlace = requestsInPlace,
 ): Promise<RequestsInPlaceGroup[]> {
+    if (!stillWanted()) return [];
+    const answers = await Promise.all(places.map((place) => read(myPubkey, place.url).catch(() => null)));
+    if (!stillWanted()) return [];
     const groups: RequestsInPlaceGroup[] = [];
-    for (const place of places) {
-        if (!stillWanted()) break;
-        const requests = await read(myPubkey, place.url).catch(() => null);
+    places.forEach((place, i) => {
+        const requests = answers[i];
         if (requests) groups.push({ place, entries: requests.conversations, count: requests.count });
-    }
+    });
     return groups;
 }
 

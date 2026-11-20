@@ -1585,6 +1585,14 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
         });
     }
 
+    // The welcome for new members (onboarding S6, Node Identity): an owner's few lines; a POST answers what was sent, trimmed,
+    // or null for none, as the node keeps it.
+    if (pathname === '/api/local/admin/community-welcome') {
+        const body = m === 'POST' && bodyText ? JSON.parse(bodyText) : {};
+        if (m !== 'POST') return ok({ welcome: "Welcome! Market day is Saturday at the hall.\nPost what you grow, make or can lend." });
+        return ok({ welcome: typeof body.welcome === 'string' && body.welcome.trim() ? body.welcome.trim() : null });
+    }
+
     // ---- registrar ----
     if (pathname === '/api/local/admin/registrar/pending') return ok({ allocations: REGISTRAR_ALLOCATIONS });
     if (/^\/api\/local\/admin\/registrar\/[^/]+\/approve$/.test(pathname)) return ok({ status: 'ok', name: 'harcourt-orchard-exchange' });

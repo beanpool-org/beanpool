@@ -123,6 +123,16 @@ describe('Not seen yet, on the web', () => {
         expect(lineAbove(shown)?.id).toBe('msg-m2');
     });
 
+    it('my newest line deleted: the words go under the one before it, which still waits', async () => {
+        await open(dm(null), [
+            line('m1', 'my-pubkey', 'Yes! Want some?', 4 * D),
+            line('m2', 'my-pubkey', '', H, { type: 'removed' }),
+        ], 'Yes! Want some?');
+        const shown = screen.getByTestId('not-seen-line');
+        expect(shown.textContent).toBe('Not seen in 4 days. You could try Bob another way.');
+        expect(lineAbove(shown)?.id).toBe('msg-m1');
+    });
+
     it('seen (✓✓): nothing', async () => {
         await open(dm(ago(D)), [line('m1', 'my-pubkey', 'Yes! Want some?', 4 * D)], 'Yes! Want some?');
         expect(screen.queryByTestId('not-seen-line')).toBeNull();

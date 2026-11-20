@@ -625,6 +625,14 @@ describe('"Not seen yet" under my newest line the other person has not seen (sli
         expect(shown()[0].previousElementSibling?.textContent).toContain('Yes, come by at five');
     });
 
+    it('my newest line deleted: the words go under the one before it, which still waits', async () => {
+        net.answer = node({ getMessages: [mine('n1', 4 * DAY), { ...mine('n2', 3_600_000), text: 'This message was deleted', type: 'removed', metadata: { removed: true } }] });
+        await renderIn('en');
+        expect(shown()).toHaveLength(1);
+        expect(shown()[0].textContent).toBe('Not seen in 4 days. You could try Kofi another way.');
+        expect(shown()[0].previousElementSibling?.textContent).toContain('Yes, come by at five');
+    });
+
     it('seen (✓✓), or answered since, or sent an hour ago: nothing', async () => {
         for (const lines of [
             [mine('n1', 4 * DAY, { readByPeer: true })],

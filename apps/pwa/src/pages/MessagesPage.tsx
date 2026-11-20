@@ -678,8 +678,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }, [shownMessages, activeConv, identity, isDmThread]);
     // "Not seen yet." under my newest line the other person hasn't seen or answered (core notSeenInThread, slice N4), from
     // the same tick the bubbles draw (the other person's read cursor) and the times only: the same whoever they are. Only
-    // this chat's own lines once they are loaded, never the last chat's. A node's notice or a line shown as nobody's is
-    // passed over; a line still on its way is in pendingHere, not here.
+    // this chat's own lines once they are loaded, never the last chat's. A node's notice, a line shown as nobody's and a
+    // deleted line (nothing left to see) are passed over; a line still on its way is in pendingHere, not here.
     const notSeenHere = useMemo(() => {
         if (!activeConv || activeConv.type !== 'dm' || loadedDmId !== activeConv.id) return null;
         const readAt = activeConv.peerLastReadAt ? new Date(activeConv.peerLastReadAt).getTime() : null;
@@ -688,7 +688,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             at: m.timestamp,
             seen: readAt != null && new Date(m.timestamp).getTime() <= readAt,
             delivered: true,
-            counts: m.type !== 'system' && m.authorPubkey !== 'SYSTEM' && !dmLineIsUnattributed(lineViews?.get(m.id)),
+            counts: m.type !== 'system' && m.authorPubkey !== 'SYSTEM' && !dmLineIsUnattributed(lineViews?.get(m.id)) && !isDeletedRow(m),
         })), Date.now());
         return found ? { id: shownMessages[found.index].id, notSeen: found.notSeen } : null;
     }, [shownMessages, activeConv, loadedDmId, identity.publicKey, lineViews]);

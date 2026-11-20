@@ -1381,7 +1381,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     const listItems = React.useMemo(() => buildChatListItems(messages), [messages]);
     // "Not seen yet." under my newest line the other person hasn't seen or answered (core notSeenInThread, slice N4): from
     // the tick and the times only, the same whoever they are. A notice, a node's line or one shown as nobody's is passed
-    // over; a line still sending or failed has its own mark. Worked out when the thread changes.
+    // over, and so is a deleted line (nothing left to see); a line still sending or failed has its own mark. Worked out
+    // when the thread changes.
     const notSeen = React.useMemo(() => {
         const myKey = identity?.publicKey;
         if (!myKey) return null;
@@ -1390,7 +1391,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
             at: m.rawTimestamp,
             seen: !!m.readByPeer,
             delivered: !m.sendState,
-            counts: !m.keyChangedNotice && m.type !== 'system' && m.senderId !== 'SYSTEM' && !m.unattributed && !m.fromOfferedKey,
+            counts: !m.keyChangedNotice && m.type !== 'system' && m.senderId !== 'SYSTEM' && !m.unattributed && !m.fromOfferedKey && !isTombstone(m),
         })), Date.now());
         return found ? { id: messages[found.index]?.id as string, notSeen: found.notSeen } : null;
     }, [messages, identity?.publicKey]);

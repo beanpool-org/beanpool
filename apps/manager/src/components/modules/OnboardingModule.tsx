@@ -45,7 +45,9 @@ const COHORT: { event: string; label: string; hint: string }[] = [
 const IN_APP: { event: string; label: string; hint: string }[] = [
     { event: 'protection_shown', label: 'Saw the protection screen', hint: 'Step 3 drawn on their device' },
     { event: 'protection_choice', label: 'Chose how to be protected', hint: 'Step 3 answered — their words, or skip' },
-    { event: 'guide_complete', label: 'Finished the guide', hint: 'Step 4 done' },
+    // From 1.4.8 the phone's join ends at the way-back step, Safety Backup (How it Works left the phone's join, slice S5 of
+    // DESIGN-onboarding-home-landing-fable.md); the web app's join still ends at How it Works until its own slice.
+    { event: 'guide_complete', label: 'Way back step done', hint: 'Phone: Safety Backup finished. Web: How it Works finished' },
 ];
 
 const FAILURE_LABELS: Record<string, string> = {

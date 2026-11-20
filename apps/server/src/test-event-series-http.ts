@@ -59,6 +59,8 @@ import { addConnector } from './connector-manager.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+// The dates are in Y27 and Y28, years laid out as 2027 and 2028 are, always ahead (future-year-test-helper.ts): comments name them 2027 and 2028.
+import { Y27, Y28 } from './future-year-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -143,31 +145,31 @@ async function main(): Promise<void> {
     // ── 1. Create ───────────────────────────────────────────────────────────────────────────────
     console.log('── 1. A weekly series from the host\'s clock ──');
     // Sydney's DST starts Sun 3 Oct 2027: Fri 1 Oct is AEST (+10), Fri 8 Oct AEDT (+11).
-    const series = await create(host, { eventStartLocal: '2027-10-01T20:50', eventEndLocal: '2027-10-01T22:50', eventTz: SYD, eventRepeat: weeklyFri });
+    const series = await create(host, { eventStartLocal: `${Y27}-10-01T20:50`, eventEndLocal: `${Y27}-10-01T22:50`, eventTz: SYD, eventRepeat: weeklyFri });
     const sid = series.body?.post?.id as string;
     assert(series.status === 200 && !!sid, `a weekly series is accepted (got ${series.status} ${series.error ?? ''})`);
     const s0 = row(sid);
     assert(s0.event_repeat === '{"freq":"weekly","interval":1,"byDay":"FR","time":"20:50","minutes":120}' && s0.event_repeat_until === null && s0.event_repeat_skips === null,
         `the rule is stored in its closed shape with the typed time and length (got ${s0.event_repeat})`);
-    assert(s0.event_start_at === '2027-10-01T10:50:00.000Z', `its first date is the row's own: 20:50 AEST is 10:50Z (got ${s0.event_start_at})`);
+    assert(s0.event_start_at === `${Y27}-10-01T10:50:00.000Z`, `its first date is the row's own: 20:50 AEST is 10:50Z (got ${s0.event_start_at})`);
     assert(series.body?.post?.eventRepeat?.byDay === 'FR' && series.body?.post?.eventRepeat?.time === '20:50', 'the post carries its rule');
 
     const refusals: Array<[string, Record<string, unknown>, string]> = [
         ['a first date not on the rule (a Friday, every Saturday)', { eventRepeat: { freq: 'weekly', interval: 1, byDay: 'SA' } }, REPEAT_ERRORS.firstDate],
-        ['an until before the first date', { eventRepeat: weeklyFri, eventRepeatUntil: '2027-09-30' }, REPEAT_ERRORS.until],
-        ['an until past five years', { eventRepeat: weeklyFri, eventRepeatUntil: '2032-10-02' }, REPEAT_ERRORS.untilTooFar],
+        ['an until before the first date', { eventRepeat: weeklyFri, eventRepeatUntil: `${Y27}-09-30` }, REPEAT_ERRORS.until],
+        ['an until past five years', { eventRepeat: weeklyFri, eventRepeatUntil: `${Y27 + 5}-10-02` }, REPEAT_ERRORS.untilTooFar],
         ['a rule the form never sends (daily)', { eventRepeat: { freq: 'daily' } }, REPEAT_ERRORS.shape],
         ['RRULE text', { eventRepeat: 'FREQ=WEEKLY;BYDAY=FR' }, REPEAT_ERRORS.shape],
-        ['a date longer than a week, every week', { eventRepeat: weeklyFri, eventEndLocal: '2027-10-08T20:50' }, REPEAT_ERRORS.tooLong],
+        ['a date longer than a week, every week', { eventRepeat: weeklyFri, eventEndLocal: `${Y27}-10-08T20:50` }, REPEAT_ERRORS.tooLong],
     ];
     for (const [what, extra, words] of refusals) {
-        const r = await create(stranger, { eventStartLocal: '2027-10-01T20:50', eventTz: SYD, ...extra });
+        const r = await create(stranger, { eventStartLocal: `${Y27}-10-01T20:50`, eventTz: SYD, ...extra });
         assert(r.status === 400 && r.error === words, `refused: ${what}, "${words}" (got ${r.status} ${r.error})`);
     }
-    const onlineNoZone = await create(stranger, { lat: undefined, lng: undefined, eventOnline: true, eventStartAt: '2027-10-01T10:50:00.000Z', eventRepeat: weeklyFri });
+    const onlineNoZone = await create(stranger, { lat: undefined, lng: undefined, eventOnline: true, eventStartAt: `${Y27}-10-01T10:50:00.000Z`, eventRepeat: weeklyFri });
     assert(onlineNoZone.status === 400 && onlineNoZone.error === 'Pick a time zone from the list',
         `a repeating online event with no zone is refused (got ${onlineNoZone.status} ${onlineNoZone.error})`);
-    const onlineWithZone = await create(onlineHost, { lat: undefined, lng: undefined, eventOnline: true, eventStartLocal: '2028-04-07T19:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const onlineWithZone = await create(onlineHost, { lat: undefined, lng: undefined, eventOnline: true, eventStartLocal: `${Y28}-04-07T19:00`, eventTz: SYD, eventRepeat: weeklyFri });
     assert(onlineWithZone.status === 200 && !!onlineWithZone.body?.post?.id,
         `a weekly online event with a zone is accepted (got ${onlineWithZone.status} ${onlineWithZone.error ?? ''})`);
 
@@ -175,18 +177,18 @@ async function main(): Promise<void> {
     console.log('\n── 2. The roll across the Sydney DST start ──');
     rsvpEvent(() => {}, sid, regular.pubKeyHex, 'going');
     const rsvp0 = db.prepare('SELECT occurrence_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(sid, regular.pubKeyHex) as any;
-    assert(rsvp0?.occurrence_at === '2027-10-01T10:50:00.000Z', `an RSVP is stamped with the date the card showed (got ${rsvp0?.occurrence_at})`);
+    assert(rsvp0?.occurrence_at === `${Y27}-10-01T10:50:00.000Z`, `an RSVP is stamped with the date the card showed (got ${rsvp0?.occurrence_at})`);
     assert((await readEvent(sid, host))?.goingCount === 1, 'one going for the first date');
     db.prepare(`UPDATE posts SET event_state = 'updated' WHERE id = ?`).run(sid);
-    const afterFirst = Date.parse('2027-10-01T12:50:00.000Z') + 1000;
+    const afterFirst = Date.parse(`${Y27}-10-01T12:50:00.000Z`) + 1000;
     assert(eventThreadReadOnlyReason(loadEventForThread(sid), afterFirst) === null,
         'between a date\'s end and the roll the chat stays open (a regular can type in that minute)');
     const events: any[] = [];
     const rolled = rollDueSeries((e) => events.push(e), afterFirst);
     const s1 = row(sid);
-    assert(rolled >= 1 && s1.event_start_at === '2027-10-08T09:50:00.000Z' && s1.event_end_at === '2027-10-08T11:50:00.000Z',
+    assert(rolled >= 1 && s1.event_start_at === `${Y27}-10-08T09:50:00.000Z` && s1.event_end_at === `${Y27}-10-08T11:50:00.000Z`,
         `the roll moves it to Fri 8 Oct, 20:50 AEDT = 09:50Z (got ${s1.event_start_at} ${s1.event_end_at})`);
-    assert(s1.event_start_local === '2027-10-08T20:50' && s0.event_start_local?.slice(11) === s1.event_start_local.slice(11),
+    assert(s1.event_start_local === `${Y27}-10-08T20:50` && s0.event_start_local?.slice(11) === s1.event_start_local.slice(11),
         `the local clocks are equal across DST (${s0.event_start_local} → ${s1.event_start_local})`);
     assert(Date.parse(s1.event_start_at) - Date.parse(s0.event_start_at) === 7 * DAY - HOUR, 'and the instants are an hour short of a week apart');
     assert(s1.event_state === 'scheduled', `the state goes back to scheduled (got ${s1.event_state})`);
@@ -194,9 +196,9 @@ async function main(): Promise<void> {
     const hostView = await readEvent(sid, host);
     const regView = await readEvent(sid, regular);
     assert(hostView?.goingCount === 0 && hostView?.eventStartAt === s1.event_start_at, `the next date starts at nobody going (got ${hostView?.goingCount})`);
-    assert(regView?.myRsvp === null && regView?.myLastRsvp?.status === 'going' && regView?.myLastRsvp?.occurrenceAt === '2027-10-01T10:50:00.000Z',
+    assert(regView?.myRsvp === null && regView?.myLastRsvp?.status === 'going' && regView?.myLastRsvp?.occurrenceAt === `${Y27}-10-01T10:50:00.000Z`,
         `the regular's RSVP reads as last week's (got ${JSON.stringify({ my: regView?.myRsvp, last: regView?.myLastRsvp })})`);
-    assert(Array.isArray(regView?.eventNextDates) && regView.eventNextDates[0]?.date === '2027-10-08' && regView.eventNextDates.length === 6,
+    assert(Array.isArray(regView?.eventNextDates) && regView.eventNextDates[0]?.date === `${Y27}-10-08` && regView.eventNextDates.length === 6,
         `a by-id read lists the next six dates (got ${JSON.stringify(regView?.eventNextDates?.map((d: any) => d.date))})`);
     const seat = db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(sid, regular.pubKeyHex);
     assert(!!seat, 'the roll removes nobody from the chat');
@@ -204,26 +206,26 @@ async function main(): Promise<void> {
 
     // ── 3. Monthly ──────────────────────────────────────────────────────────────────────────────
     console.log('\n── 3. Monthly on the 31st and on the last Friday ──');
-    const m31 = await create(monthly, { eventStartLocal: '2027-01-31T18:00', eventEndLocal: '2027-01-31T19:00', eventTz: SYD, eventRepeat: { freq: 'monthly', interval: 1, byMonthDay: 31 } });
+    const m31 = await create(monthly, { eventStartLocal: `${Y27}-01-31T18:00`, eventEndLocal: `${Y27}-01-31T19:00`, eventTz: SYD, eventRepeat: { freq: 'monthly', interval: 1, byMonthDay: 31 } });
     const m31Id = m31.body?.post?.id as string;
     rollDueSeries(undefined, Date.parse(row(m31Id).event_end_at) + 1000);
-    assert(row(m31Id).event_start_local === '2027-03-31T18:00', `monthly on the 31st skips February (got ${row(m31Id).event_start_local})`);
-    const lastFri = await create(monthly, { eventStartLocal: '2027-01-29T19:00', eventEndLocal: '2027-01-29T20:30', eventTz: SYD, eventRepeat: { freq: 'monthly', interval: 1, byDay: 'FR', pos: -1 } });
+    assert(row(m31Id).event_start_local === `${Y27}-03-31T18:00`, `monthly on the 31st skips February (got ${row(m31Id).event_start_local})`);
+    const lastFri = await create(monthly, { eventStartLocal: `${Y27}-01-29T19:00`, eventEndLocal: `${Y27}-01-29T20:30`, eventTz: SYD, eventRepeat: { freq: 'monthly', interval: 1, byDay: 'FR', pos: -1 } });
     const lfId = lastFri.body?.post?.id as string;
-    assert(lastFri.status === 200, `the last Friday of January 2027 (the 29th) takes "last Friday" (got ${lastFri.status} ${lastFri.error ?? ''})`);
+    assert(lastFri.status === 200, `the last Friday of January ${Y27} (the 29th) takes "last Friday" (got ${lastFri.status} ${lastFri.error ?? ''})`);
     rollDueSeries(undefined, Date.parse(row(lfId).event_end_at) + 1000);
-    assert(row(lfId).event_start_local === '2027-02-26T19:00', `monthly on the last Friday: 26 Feb (got ${row(lfId).event_start_local})`);
+    assert(row(lfId).event_start_local === `${Y27}-02-26T19:00`, `monthly on the last Friday: 26 Feb (got ${row(lfId).event_start_local})`);
 
     // ── 4. Until ────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. Until ──');
-    const until = await create(monthly, { eventStartLocal: '2027-11-05T20:50', eventTz: SYD, eventRepeat: weeklyFri, eventRepeatUntil: '2027-11-12' });
+    const until = await create(monthly, { eventStartLocal: `${Y27}-11-05T20:50`, eventTz: SYD, eventRepeat: weeklyFri, eventRepeatUntil: `${Y27}-11-12` });
     const uId = until.body?.post?.id as string;
     rollDueSeries(undefined, Date.parse(row(uId).event_end_at) + 1000);
-    assert(row(uId).event_start_local === '2027-11-12T20:50', `until: the last date comes (got ${row(uId).event_start_local})`);
+    assert(row(uId).event_start_local === `${Y27}-11-12T20:50`, `until: the last date comes (got ${row(uId).event_start_local})`);
     const lastEnd = Date.parse(row(uId).event_end_at) + 1000;
     rollDueSeries(undefined, lastEnd);
     const u2 = row(uId);
-    assert(u2.event_start_local === '2027-11-12T20:50' && u2.status === 'active' && u2.event_repeat_until === '2027-11-12',
+    assert(u2.event_start_local === `${Y27}-11-12T20:50` && u2.status === 'active' && u2.event_repeat_until === `${Y27}-11-12`,
         `after it, the series ends as a one-off does: it stays on its last date, active for the scrub (got ${JSON.stringify(u2)})`);
     assert(eventThreadReadOnlyReason(loadEventForThread(uId), lastEnd) === 'This event has ended. The chat is read-only.',
         'and its chat is read-only, as an ended event\'s');
@@ -233,68 +235,68 @@ async function main(): Promise<void> {
 
     // ── 5. Cancel a date ────────────────────────────────────────────────────────────────────────
     console.log('\n── 5. Cancel a date ──');
-    const sk = await create(skipper, { eventStartLocal: '2027-12-03T19:00', eventTz: SYD, eventRepeat: weeklyFri, eventRepeatUntil: '2027-12-24' });
+    const sk = await create(skipper, { eventStartLocal: `${Y27}-12-03T19:00`, eventTz: SYD, eventRepeat: weeklyFri, eventRepeatUntil: `${Y27}-12-24` });
     const skId = sk.body?.post?.id as string;
-    const notHost = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-10' }, stranger);
+    const notHost = await signed('POST', `/api/events/${skId}/skip`, { date: `${Y27}-12-10` }, stranger);
     assert(notHost.status === 403 && notHost.error === SKIP_HOST_ONLY, `only the host cancels a date (got ${notHost.status} ${notHost.error})`);
-    const offRule = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-11' }, skipper);
+    const offRule = await signed('POST', `/api/events/${skId}/skip`, { date: `${Y27}-12-11` }, skipper);
     assert(offRule.status === 400 && offRule.error === REPEAT_ERRORS.skipDate, `a date that is not the series' is refused (got ${offRule.status} ${offRule.error})`);
-    const pastUntil = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-31' }, skipper);
+    const pastUntil = await signed('POST', `/api/events/${skId}/skip`, { date: `${Y27}-12-31` }, skipper);
     assert(pastUntil.status === 400, `a date past its last one is refused (got ${pastUntil.status})`);
-    const unsigned = await fetch(`${BASE}/api/events/${skId}/skip`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"date":"2027-12-10"}' });
+    const unsigned = await fetch(`${BASE}/api/events/${skId}/skip`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: `{"date":"${Y27}-12-10"}` });
     assert(unsigned.status === 401, `unsigned is 401 (got ${unsigned.status})`);
-    const later = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-17' }, skipper);
-    assert(later.status === 200 && JSON.stringify(later.body?.skips) === '["2027-12-17"]' && row(skId).event_start_local === '2027-12-03T19:00',
+    const later = await signed('POST', `/api/events/${skId}/skip`, { date: `${Y27}-12-17` }, skipper);
+    assert(later.status === 200 && JSON.stringify(later.body?.skips) === `["${Y27}-12-17"]` && row(skId).event_start_local === `${Y27}-12-03T19:00`,
         `a later date is cancelled; the current one stays (got ${later.status} ${JSON.stringify(later.body?.skips)})`);
     // The final date (the 24th, its until) can't be cancelled while earlier dates are left either: a series ends on it, so
     // the host's until is kept and a date cancelled before it can be restored (the deciding review of #1945, finding 7).
-    const finalEarly = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-24' }, skipper);
-    assert(finalEarly.status === 400 && finalEarly.error === SKIP_LAST_DATE && row(skId).event_repeat_skips === '["2027-12-17"]',
+    const finalEarly = await signed('POST', `/api/events/${skId}/skip`, { date: `${Y27}-12-24` }, skipper);
+    assert(finalEarly.status === 400 && finalEarly.error === SKIP_LAST_DATE && row(skId).event_repeat_skips === `["${Y27}-12-17"]`,
         `the final date can't be cancelled while earlier ones are left (got ${finalEarly.status} ${finalEarly.error})`);
     rsvpEvent(() => {}, skId, regular.pubKeyHex, 'going');
     const pushes: Array<{ to: string[]; title: string; body: string }> = [];
     const push = ((to: string[], _from: string, title: string, body: string) => { pushes.push({ to, title, body }); }) as any;
-    const cur = setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, '2027-12-03', true);
+    const cur = setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, `${Y27}-12-03`, true);
     // The cancelled 3rd is behind the series' date now, but it stays on the list until it has ended (it can be brought
     // back till then; the confirmation of #1993, B1); the 17th stays.
-    assert(row(skId).event_start_local === '2027-12-10T19:00' && JSON.stringify(cur.skips) === '["2027-12-03","2027-12-17"]'
-        && cur.post.eventNextDates?.[0]?.date === '2027-12-03' && cur.post.eventNextDates?.[0]?.cancelled === true
-        && cur.post.eventNextDates?.[1]?.date === '2027-12-10' && cur.post.eventNextDates?.[1]?.cancelled === false,
+    assert(row(skId).event_start_local === `${Y27}-12-10T19:00` && JSON.stringify(cur.skips) === `["${Y27}-12-03","${Y27}-12-17"]`
+        && cur.post.eventNextDates?.[0]?.date === `${Y27}-12-03` && cur.post.eventNextDates?.[0]?.cancelled === true
+        && cur.post.eventNextDates?.[1]?.date === `${Y27}-12-10` && cur.post.eventNextDates?.[1]?.cancelled === false,
         `cancelling the current date rolls it at once to Fri 10 Dec, the cancelled 3 Dec listed before it (got ${row(skId).event_start_local} ${JSON.stringify(cur.skips)} ${JSON.stringify(cur.post.eventNextDates?.slice(0, 2))})`);
     assert(pushes.length === 1 && pushes[0].to.includes(regular.pubKeyHex) && pushes[0].title === DATE_CANCELLED_PUSH_TITLE
         && pushes[0].body === 'Friday dinner: Fri 3 Dec is cancelled. Next: Fri 10 Dec.',
         `Going for it are told (got ${JSON.stringify(pushes)})`);
     // Brought back while it hasn't ended (the deciding review of #1993, N2): the series moves back to it, and Going for it
     // are told it is on again, as they were told it was off.
-    setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, '2027-12-03', false);
-    assert(row(skId).event_start_local === '2027-12-03T19:00' && pushes.length === 2 && pushes[1].to.includes(regular.pubKeyHex)
+    setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, `${Y27}-12-03`, false);
+    assert(row(skId).event_start_local === `${Y27}-12-03T19:00` && pushes.length === 2 && pushes[1].to.includes(regular.pubKeyHex)
         && pushes[1].title === DATE_BACK_ON_PUSH_TITLE && pushes[1].body === 'Friday dinner: Fri 3 Dec is back on.',
         `bringing the current date back tells Going "… is back on" (got ${row(skId).event_start_local} ${JSON.stringify(pushes.slice(1))})`);
     // After the date's end it can't come back: the node refuses it, and nobody is told anything.
-    setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, '2027-12-03', true);
+    setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, `${Y27}-12-03`, true);
     const thirdEnd = Date.parse(row(skId).event_end_at) - 7 * DAY;
     let lateError = '';
-    try { setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, '2027-12-03', false, thirdEnd + 1000); } catch (e: any) { lateError = e?.message ?? ''; }
-    assert(lateError === REPEAT_ERRORS.skipDate && row(skId).event_start_local === '2027-12-10T19:00' && pushes.length === 3,
+    try { setSeriesDateSkipped(undefined, push, skId, skipper.pubKeyHex, `${Y27}-12-03`, false, thirdEnd + 1000); } catch (e: any) { lateError = e?.message ?? ''; }
+    assert(lateError === REPEAT_ERRORS.skipDate && row(skId).event_start_local === `${Y27}-12-10T19:00` && pushes.length === 3,
         `once the cancelled date has ended it can't be brought back (got ${JSON.stringify(lateError)} ${row(skId).event_start_local} ${pushes.length})`);
     // Restoring a later date (not the current one) tells nobody: nobody can be Going for a date that isn't the event's yet.
-    await signed('DELETE', `/api/events/${skId}/skip`, { date: '2027-12-17' }, skipper);
+    await signed('DELETE', `/api/events/${skId}/skip`, { date: `${Y27}-12-17` }, skipper);
     assert(pushes.length === 3, `restoring a later date tells nobody (got ${pushes.length})`);
-    await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-17' }, skipper);
-    const restore = await signed('DELETE', `/api/events/${skId}/skip`, { date: '2027-12-03' }, skipper);
-    assert(restore.status === 200 && row(skId).event_start_local === '2027-12-03T19:00' && !(restore.body?.skips ?? []).includes('2027-12-03'),
+    await signed('POST', `/api/events/${skId}/skip`, { date: `${Y27}-12-17` }, skipper);
+    const restore = await signed('DELETE', `/api/events/${skId}/skip`, { date: `${Y27}-12-03` }, skipper);
+    assert(restore.status === 200 && row(skId).event_start_local === `${Y27}-12-03T19:00` && !(restore.body?.skips ?? []).includes(`${Y27}-12-03`),
         `restoring it moves the series back to Fri 3 Dec (got ${restore.status} ${row(skId).event_start_local} ${JSON.stringify(restore.body?.skips)})`);
     // "Your events" (the deciding review of #1993, N5): the row says how it repeats and its last date, for the ↻ caption,
     // as Home's line does: the pattern only, never the host's clock or each date's length.
     const mine = await signed('GET', '/api/events/mine', null, regular);
     const mineRow = (mine.body?.events ?? []).find((e: any) => e.postId === skId);
-    assert(mine.status === 200 && JSON.stringify(mineRow?.repeat) === '{"freq":"weekly","interval":1,"byDay":"FR"}' && mineRow?.repeatUntil === '2027-12-24',
+    assert(mine.status === 200 && JSON.stringify(mineRow?.repeat) === '{"freq":"weekly","interval":1,"byDay":"FR"}' && mineRow?.repeatUntil === `${Y27}-12-24`,
         `Your events carries the pattern and the last date (got ${mine.status} ${JSON.stringify(mineRow)})`);
     // The 24th is the last date: cancel the 10th and the 24th, then roll to the 24th and try to cancel it.
-    await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-10' }, skipper);
+    await signed('POST', `/api/events/${skId}/skip`, { date: `${Y27}-12-10` }, skipper);
     rollDueSeries(undefined, Date.parse(row(skId).event_end_at) + 1000);
-    assert(row(skId).event_start_local === '2027-12-24T19:00', `the roll passes the cancelled 10th and 17th (got ${row(skId).event_start_local})`);
-    const lastOne = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-24' }, skipper);
+    assert(row(skId).event_start_local === `${Y27}-12-24T19:00`, `the roll passes the cancelled 10th and 17th (got ${row(skId).event_start_local})`);
+    const lastOne = await signed('POST', `/api/events/${skId}/skip`, { date: `${Y27}-12-24` }, skipper);
     assert(lastOne.status === 400 && lastOne.error === SKIP_LAST_DATE, `the only date left can't be cancelled (got ${lastOne.status} ${lastOne.error})`);
 
     // A later cancelled date the roll jumps stays cancelled until it has ended, so Bring it back on the current date finds it
@@ -302,68 +304,68 @@ async function main(): Promise<void> {
     // current one on, and the row had dropped those it passed). (a) Monthly, the third Friday: 19 Nov cancelled, then the
     // current 15 Oct, which rolls past 19 Nov to 17 Dec.
     const nextOf = (dates: any[] | undefined) => (dates ?? []).slice(0, 4).map((d: any) => `${d.date}${d.cancelled ? ' cancelled' : ''}`).join(', ');
-    const ja = await create(jumper, { eventStartLocal: '2027-10-15T18:50', eventEndLocal: '2027-10-15T20:50', eventTz: SYD,
-        eventRepeat: { freq: 'monthly', interval: 1, byDay: 'FR', pos: 3 }, eventRepeatUntil: '2028-12-15' });
+    const ja = await create(jumper, { eventStartLocal: `${Y27}-10-15T18:50`, eventEndLocal: `${Y27}-10-15T20:50`, eventTz: SYD,
+        eventRepeat: { freq: 'monthly', interval: 1, byDay: 'FR', pos: 3 }, eventRepeatUntil: `${Y28}-12-15` });
     const jaId = ja.body?.post?.id as string;
-    await signed('POST', `/api/events/${jaId}/skip`, { date: '2027-11-19' }, jumper);
+    await signed('POST', `/api/events/${jaId}/skip`, { date: `${Y27}-11-19` }, jumper);
     rsvpEvent(() => {}, jaId, regular.pubKeyHex, 'going');
-    const jaCancel = await signed('POST', `/api/events/${jaId}/skip`, { date: '2027-10-15' }, jumper);
-    assert(jaCancel.status === 200 && row(jaId).event_start_local === '2027-12-17T18:50' && JSON.stringify(jaCancel.body?.skips) === '["2027-10-15","2027-11-19"]',
+    const jaCancel = await signed('POST', `/api/events/${jaId}/skip`, { date: `${Y27}-10-15` }, jumper);
+    assert(jaCancel.status === 200 && row(jaId).event_start_local === `${Y27}-12-17T18:50` && JSON.stringify(jaCancel.body?.skips) === `["${Y27}-10-15","${Y27}-11-19"]`,
         `(a) cancelling the current 15 Oct rolls past the cancelled 19 Nov to 17 Dec, and both stay cancelled (got ${jaCancel.status} ${row(jaId).event_start_local} ${JSON.stringify(jaCancel.body?.skips)})`);
     pushes.length = 0;
-    const jaBack = setSeriesDateSkipped(undefined, push, jaId, jumper.pubKeyHex, '2027-10-15', false);
+    const jaBack = setSeriesDateSkipped(undefined, push, jaId, jumper.pubKeyHex, `${Y27}-10-15`, false);
     const jaRead = await readEvent(jaId, regular);
-    assert(row(jaId).event_start_local === '2027-10-15T18:50' && JSON.stringify(jaBack.skips) === '["2027-11-19"]'
-        && nextOf(jaRead?.eventNextDates) === '2027-10-15, 2027-11-19 cancelled, 2027-12-17, 2028-01-21',
+    assert(row(jaId).event_start_local === `${Y27}-10-15T18:50` && JSON.stringify(jaBack.skips) === `["${Y27}-11-19"]`
+        && nextOf(jaRead?.eventNextDates) === `${Y27}-10-15, ${Y27}-11-19 cancelled, ${Y27}-12-17, ${Y28}-01-21`,
         `(a) Bring it back on 15 Oct: 19 Nov is still cancelled, and the next dates say so (got ${row(jaId).event_start_local} ${JSON.stringify(jaBack.skips)}; ${nextOf(jaRead?.eventNextDates)})`);
     assert(pushes.length === 1 && pushes[0].body === 'Friday dinner: Fri 15 Oct is back on.' && !pushes.some(p => p.body.includes('19 Nov')),
         `(a) the one notice is "Fri 15 Oct is back on"; none says 19 Nov is on (got ${JSON.stringify(pushes.map(p => p.body))})`);
 
     // (b) Another later date cancelled between the cancel and the undo (its write kept only the dates from the current one
     // on): weekly, 22 Oct cancelled, then the current 15 Oct (→ 29 Oct), then 5 Nov; Bring it back over HTTP.
-    const jb = await create(jumper, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jb = await create(jumper, { eventStartLocal: `${Y27}-10-15T19:00`, eventEndLocal: `${Y27}-10-15T21:00`, eventTz: SYD, eventRepeat: weeklyFri });
     const jbId = jb.body?.post?.id as string;
-    await signed('POST', `/api/events/${jbId}/skip`, { date: '2027-10-22' }, jumper);
-    await signed('POST', `/api/events/${jbId}/skip`, { date: '2027-10-15' }, jumper);
-    const jbBetween = await signed('POST', `/api/events/${jbId}/skip`, { date: '2027-11-05' }, jumper);
-    assert(row(jbId).event_start_local === '2027-10-29T19:00' && JSON.stringify(jbBetween.body?.skips) === '["2027-10-15","2027-10-22","2027-11-05"]',
+    await signed('POST', `/api/events/${jbId}/skip`, { date: `${Y27}-10-22` }, jumper);
+    await signed('POST', `/api/events/${jbId}/skip`, { date: `${Y27}-10-15` }, jumper);
+    const jbBetween = await signed('POST', `/api/events/${jbId}/skip`, { date: `${Y27}-11-05` }, jumper);
+    assert(row(jbId).event_start_local === `${Y27}-10-29T19:00` && JSON.stringify(jbBetween.body?.skips) === `["${Y27}-10-15","${Y27}-10-22","${Y27}-11-05"]`,
         `(b) a later date cancelled after the current one keeps the dates the roll passed (got ${row(jbId).event_start_local} ${JSON.stringify(jbBetween.body?.skips)})`);
-    const jbBack = await signed('DELETE', `/api/events/${jbId}/skip`, { date: '2027-10-15' }, jumper);
-    assert(jbBack.status === 200 && row(jbId).event_start_local === '2027-10-15T19:00' && JSON.stringify(jbBack.body?.skips) === '["2027-10-22","2027-11-05"]'
-        && nextOf(jbBack.body?.post?.eventNextDates) === '2027-10-15, 2027-10-22 cancelled, 2027-10-29, 2027-11-05 cancelled',
+    const jbBack = await signed('DELETE', `/api/events/${jbId}/skip`, { date: `${Y27}-10-15` }, jumper);
+    assert(jbBack.status === 200 && row(jbId).event_start_local === `${Y27}-10-15T19:00` && JSON.stringify(jbBack.body?.skips) === `["${Y27}-10-22","${Y27}-11-05"]`
+        && nextOf(jbBack.body?.post?.eventNextDates) === `${Y27}-10-15, ${Y27}-10-22 cancelled, ${Y27}-10-29, ${Y27}-11-05 cancelled`,
         `(b) Bring it back on 15 Oct: 22 Oct and 5 Nov are still cancelled (got ${jbBack.status} ${JSON.stringify(jbBack.body?.skips)}; ${nextOf(jbBack.body?.post?.eventNextDates)})`);
 
     // (c) The weekly case from the review: 22 Oct cancelled, Going told the current 15 Oct is off; Bring it back tells them it
     // is on, and 22 Oct stays cancelled through the minute roll, which lets it go only once it has ended.
-    const jc = await create(jumper, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jc = await create(jumper, { eventStartLocal: `${Y27}-10-15T19:00`, eventEndLocal: `${Y27}-10-15T21:00`, eventTz: SYD, eventRepeat: weeklyFri });
     const jcId = jc.body?.post?.id as string;
-    await signed('POST', `/api/events/${jcId}/skip`, { date: '2027-10-22' }, jumper);
+    await signed('POST', `/api/events/${jcId}/skip`, { date: `${Y27}-10-22` }, jumper);
     rsvpEvent(() => {}, jcId, regular.pubKeyHex, 'going');
     pushes.length = 0;
-    setSeriesDateSkipped(undefined, push, jcId, jumper.pubKeyHex, '2027-10-15', true);
-    const jcBack = setSeriesDateSkipped(undefined, push, jcId, jumper.pubKeyHex, '2027-10-15', false);
-    assert(row(jcId).event_start_local === '2027-10-15T19:00' && JSON.stringify(jcBack.skips) === '["2027-10-22"]'
-        && jcBack.post.eventNextDates?.[1]?.date === '2027-10-22' && jcBack.post.eventNextDates?.[1]?.cancelled === true,
+    setSeriesDateSkipped(undefined, push, jcId, jumper.pubKeyHex, `${Y27}-10-15`, true);
+    const jcBack = setSeriesDateSkipped(undefined, push, jcId, jumper.pubKeyHex, `${Y27}-10-15`, false);
+    assert(row(jcId).event_start_local === `${Y27}-10-15T19:00` && JSON.stringify(jcBack.skips) === `["${Y27}-10-22"]`
+        && jcBack.post.eventNextDates?.[1]?.date === `${Y27}-10-22` && jcBack.post.eventNextDates?.[1]?.cancelled === true,
         `(c) weekly: Bring it back on 15 Oct leaves 22 Oct cancelled (got ${JSON.stringify(jcBack.skips)}; ${nextOf(jcBack.post.eventNextDates)})`);
     assert(JSON.stringify(pushes.map(p => p.body)) === JSON.stringify(['Friday dinner: Fri 15 Oct is cancelled. Next: Fri 29 Oct.', 'Friday dinner: Fri 15 Oct is back on.']),
         `(c) Going hear 15 Oct is off, then back on, and nothing of 22 Oct (got ${JSON.stringify(pushes.map(p => p.body))})`);
     rollDueSeries(undefined, Date.parse(row(jcId).event_end_at) + 1000);
-    assert(row(jcId).event_start_local === '2027-10-29T19:00' && row(jcId).event_repeat_skips === '["2027-10-22"]',
+    assert(row(jcId).event_start_local === `${Y27}-10-29T19:00` && row(jcId).event_repeat_skips === `["${Y27}-10-22"]`,
         `(c) the roll passes the cancelled 22 Oct to 29 Oct and keeps it cancelled until it ends (got ${row(jcId).event_start_local} ${row(jcId).event_repeat_skips})`);
     rollDueSeries(undefined, Date.parse(row(jcId).event_end_at) + 1000);
-    assert(row(jcId).event_start_local === '2027-11-05T19:00' && row(jcId).event_repeat_skips === null,
+    assert(row(jcId).event_start_local === `${Y27}-11-05T19:00` && row(jcId).event_repeat_skips === null,
         `(c) once 22 Oct has ended the roll lets it go (got ${row(jcId).event_start_local} ${row(jcId).event_repeat_skips})`);
 
     // (d) An edit between the cancel and the undo (here the last date) keeps the dates the roll passed as well.
-    const jd = await create(jumper, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri, eventRepeatUntil: '2028-03-31' });
+    const jd = await create(jumper, { eventStartLocal: `${Y27}-10-15T19:00`, eventEndLocal: `${Y27}-10-15T21:00`, eventTz: SYD, eventRepeat: weeklyFri, eventRepeatUntil: `${Y28}-03-31` });
     const jdId = jd.body?.post?.id as string;
-    await signed('POST', `/api/events/${jdId}/skip`, { date: '2027-10-22' }, jumper);
-    await signed('POST', `/api/events/${jdId}/skip`, { date: '2027-10-15' }, jumper);
-    const jdEdit = await signed('POST', '/api/marketplace/posts/update', { id: jdId, authorPublicKey: jumper.pubKeyHex, eventRepeatUntil: '2028-06-30' }, jumper);
-    assert(jdEdit.status === 200 && row(jdId).event_repeat_until === '2028-06-30' && row(jdId).event_repeat_skips === '["2027-10-15","2027-10-22"]',
+    await signed('POST', `/api/events/${jdId}/skip`, { date: `${Y27}-10-22` }, jumper);
+    await signed('POST', `/api/events/${jdId}/skip`, { date: `${Y27}-10-15` }, jumper);
+    const jdEdit = await signed('POST', '/api/marketplace/posts/update', { id: jdId, authorPublicKey: jumper.pubKeyHex, eventRepeatUntil: `${Y28}-06-30` }, jumper);
+    assert(jdEdit.status === 200 && row(jdId).event_repeat_until === `${Y28}-06-30` && row(jdId).event_repeat_skips === `["${Y27}-10-15","${Y27}-10-22"]`,
         `(d) an edit of the last date keeps the cancelled dates the roll passed (got ${jdEdit.status} ${jdEdit.error ?? ''} ${row(jdId).event_repeat_skips})`);
-    const jdBack = await signed('DELETE', `/api/events/${jdId}/skip`, { date: '2027-10-15' }, jumper);
-    assert(jdBack.status === 200 && row(jdId).event_start_local === '2027-10-15T19:00' && JSON.stringify(jdBack.body?.skips) === '["2027-10-22"]',
+    const jdBack = await signed('DELETE', `/api/events/${jdId}/skip`, { date: `${Y27}-10-15` }, jumper);
+    assert(jdBack.status === 200 && row(jdId).event_start_local === `${Y27}-10-15T19:00` && JSON.stringify(jdBack.body?.skips) === `["${Y27}-10-22"]`,
         `(d) after the edit, Bring it back on 15 Oct leaves 22 Oct cancelled (got ${jdBack.status} ${JSON.stringify(jdBack.body?.skips)})`);
 
     // (e) An edit that moves Starts onto a cancelled date takes it back: the row's own date is never also a cancelled one,
@@ -372,77 +374,77 @@ async function main(): Promise<void> {
     // and the rule), and as the phone or an older app does (the clocks only); and forward onto a later cancelled date.
     const editBack = async (withRule: boolean) => {
         const mover = makeIdentity(withRule ? 'MoverMei' : 'MoverMo');
-        const e = await create(mover, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+        const e = await create(mover, { eventStartLocal: `${Y27}-10-15T19:00`, eventEndLocal: `${Y27}-10-15T21:00`, eventTz: SYD, eventRepeat: weeklyFri });
         const id = e.body?.post?.id as string;
         rsvpEvent(() => {}, id, regular.pubKeyHex, 'going');
-        await signed('POST', `/api/events/${id}/skip`, { date: '2027-10-15' }, mover);
+        await signed('POST', `/api/events/${id}/skip`, { date: `${Y27}-10-15` }, mover);
         const moved = await signed('POST', '/api/marketplace/posts/update', {
-            id, authorPublicKey: mover.pubKeyHex, eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', ...(withRule ? { eventRepeat: weeklyFri } : {}),
+            id, authorPublicKey: mover.pubKeyHex, eventStartLocal: `${Y27}-10-15T19:00`, eventEndLocal: `${Y27}-10-15T21:00`, ...(withRule ? { eventRepeat: weeklyFri } : {}),
         }, mover);
         return { id, moved, read: await readEvent(id, regular) };
     };
     for (const withRule of [true, false]) {
         const { id, moved, read } = await editBack(withRule);
-        assert(moved.status === 200 && row(id).event_start_local === '2027-10-15T19:00' && row(id).event_repeat_skips === null
-            && nextOf(read?.eventNextDates) === '2027-10-15, 2027-10-22, 2027-10-29, 2027-11-05',
+        assert(moved.status === 200 && row(id).event_start_local === `${Y27}-10-15T19:00` && row(id).event_repeat_skips === null
+            && nextOf(read?.eventNextDates) === `${Y27}-10-15, ${Y27}-10-22, ${Y27}-10-29, ${Y27}-11-05`,
             `(e) cancel the current 15 Oct, then edit Starts back to it${withRule ? '' : ' (no rule in the edit)'}: it is on, and Next dates don't mark it (got ${moved.status} ${moved.error ?? ''} ${row(id).event_start_local} ${row(id).event_repeat_skips}; ${nextOf(read?.eventNextDates)})`);
     }
     const forward = makeIdentity('MoverMax');
-    const jf = await create(forward, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jf = await create(forward, { eventStartLocal: `${Y27}-10-15T19:00`, eventEndLocal: `${Y27}-10-15T21:00`, eventTz: SYD, eventRepeat: weeklyFri });
     const jfId = jf.body?.post?.id as string;
-    await signed('POST', `/api/events/${jfId}/skip`, { date: '2027-10-29' }, forward);
+    await signed('POST', `/api/events/${jfId}/skip`, { date: `${Y27}-10-29` }, forward);
     const jfMoved = await signed('POST', '/api/marketplace/posts/update', {
-        id: jfId, authorPublicKey: forward.pubKeyHex, eventStartLocal: '2027-10-29T19:00', eventEndLocal: '2027-10-29T21:00', eventRepeat: weeklyFri,
+        id: jfId, authorPublicKey: forward.pubKeyHex, eventStartLocal: `${Y27}-10-29T19:00`, eventEndLocal: `${Y27}-10-29T21:00`, eventRepeat: weeklyFri,
     }, forward);
     const jfRead = await readEvent(jfId, regular);
-    assert(jfMoved.status === 200 && row(jfId).event_start_local === '2027-10-29T19:00' && row(jfId).event_repeat_skips === null
-        && nextOf(jfRead?.eventNextDates) === '2027-10-29, 2027-11-05, 2027-11-12, 2027-11-19',
+    assert(jfMoved.status === 200 && row(jfId).event_start_local === `${Y27}-10-29T19:00` && row(jfId).event_repeat_skips === null
+        && nextOf(jfRead?.eventNextDates) === `${Y27}-10-29, ${Y27}-11-05, ${Y27}-11-12, ${Y27}-11-19`,
         `(e) edit Starts forward onto the cancelled 29 Oct: it is on, and Next dates don't mark it (got ${jfMoved.status} ${jfMoved.error ?? ''} ${row(jfId).event_start_local} ${row(jfId).event_repeat_skips}; ${nextOf(jfRead?.eventNextDates)})`);
 
     // (f) Bring it back survives a reload and reaches every device (the confirmation 2 of #1993, NB2): a fresh read lists a
     // cancelled date the series has passed, first and marked, with its end, while it hasn't ended; the host brings it back
     // from that list. 15 Oct 19:00–21:00 Sydney (AEDT) ends at 10:00Z.
     const reloader = makeIdentity('ReloadRia');
-    const jg = await create(reloader, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jg = await create(reloader, { eventStartLocal: `${Y27}-10-15T19:00`, eventEndLocal: `${Y27}-10-15T21:00`, eventTz: SYD, eventRepeat: weeklyFri });
     const jgId = jg.body?.post?.id as string;
-    await signed('POST', `/api/events/${jgId}/skip`, { date: '2027-10-15' }, reloader);
+    await signed('POST', `/api/events/${jgId}/skip`, { date: `${Y27}-10-15` }, reloader);
     const jgHost = await readEvent(jgId, reloader);
     const jgMember = await readEvent(jgId, regular);
-    assert(row(jgId).event_start_local === '2027-10-22T19:00' && nextOf(jgHost?.eventNextDates) === '2027-10-15 cancelled, 2027-10-22, 2027-10-29, 2027-11-05'
-        && jgHost?.eventNextDates?.[0]?.endAt === '2027-10-15T10:00:00.000Z' && nextOf(jgMember?.eventNextDates) === nextOf(jgHost?.eventNextDates),
+    assert(row(jgId).event_start_local === `${Y27}-10-22T19:00` && nextOf(jgHost?.eventNextDates) === `${Y27}-10-15 cancelled, ${Y27}-10-22, ${Y27}-10-29, ${Y27}-11-05`
+        && jgHost?.eventNextDates?.[0]?.endAt === `${Y27}-10-15T10:00:00.000Z` && nextOf(jgMember?.eventNextDates) === nextOf(jgHost?.eventNextDates),
         `(f) after the cancel, a fresh read lists the cancelled 15 Oct first, marked, with its end, for the host and a member (got ${row(jgId).event_start_local}; ${JSON.stringify(jgHost?.eventNextDates?.[0])}; member ${nextOf(jgMember?.eventNextDates)})`);
-    const jgBack = await signed('DELETE', `/api/events/${jgId}/skip`, { date: '2027-10-15' }, reloader);
+    const jgBack = await signed('DELETE', `/api/events/${jgId}/skip`, { date: `${Y27}-10-15` }, reloader);
     const jgAfter = await readEvent(jgId, regular);
-    assert(jgBack.status === 200 && row(jgId).event_start_local === '2027-10-15T19:00' && nextOf(jgAfter?.eventNextDates) === '2027-10-15, 2027-10-22, 2027-10-29, 2027-11-05',
+    assert(jgBack.status === 200 && row(jgId).event_start_local === `${Y27}-10-15T19:00` && nextOf(jgAfter?.eventNextDates) === `${Y27}-10-15, ${Y27}-10-22, ${Y27}-10-29, ${Y27}-11-05`,
         `(f) Bring it back from the listed date: the series is on 15 Oct again, listed once and not marked (got ${jgBack.status} ${jgBack.error ?? ''} ${row(jgId).event_start_local}; ${nextOf(jgAfter?.eventNextDates)})`);
     // Once a cancelled date has ended it is neither listed nor brought back: Fri 9 Oct 2026 has, Fri 8 Oct 2027 hasn't, both
     // in the cell as it keeps them until the roll.
-    db.prepare('UPDATE posts SET event_repeat_skips = ? WHERE id = ?').run('["2026-10-09","2027-10-08"]', jgId);
+    db.prepare('UPDATE posts SET event_repeat_skips = ? WHERE id = ?').run(`["2026-10-09","${Y27}-10-08"]`, jgId);
     const jgEnded = await readEvent(jgId, reloader);
     const jgLate = await signed('DELETE', `/api/events/${jgId}/skip`, { date: '2026-10-09' }, reloader);
-    assert(nextOf(jgEnded?.eventNextDates) === '2027-10-08 cancelled, 2027-10-15, 2027-10-22, 2027-10-29'
-        && jgLate.status === 400 && jgLate.error === REPEAT_ERRORS.skipDate && row(jgId).event_start_local === '2027-10-15T19:00',
+    assert(nextOf(jgEnded?.eventNextDates) === `${Y27}-10-08 cancelled, ${Y27}-10-15, ${Y27}-10-22, ${Y27}-10-29`
+        && jgLate.status === 400 && jgLate.error === REPEAT_ERRORS.skipDate && row(jgId).event_start_local === `${Y27}-10-15T19:00`,
         `(f) an ended cancelled date is not listed and can't be brought back; one not ended is (got ${nextOf(jgEnded?.eventNextDates)}; ${jgLate.status} ${jgLate.error})`);
 
     // (g) A date an edit moved the series past was never cancelled: it can't be "brought back", which moved the series back
     // to it with no notice and left Going on the later date, nor cancelled (the confirmation 2 of #1993, NB1).
     const passer = makeIdentity('PasserPia');
-    const jh = await create(passer, { eventStartLocal: '2027-10-15T19:00', eventEndLocal: '2027-10-15T21:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const jh = await create(passer, { eventStartLocal: `${Y27}-10-15T19:00`, eventEndLocal: `${Y27}-10-15T21:00`, eventTz: SYD, eventRepeat: weeklyFri });
     const jhId = jh.body?.post?.id as string;
     rsvpEvent(() => {}, jhId, regular.pubKeyHex, 'going');
     const jhMoved = await signed('POST', '/api/marketplace/posts/update', {
-        id: jhId, authorPublicKey: passer.pubKeyHex, eventStartLocal: '2027-10-29T19:00', eventEndLocal: '2027-10-29T21:00', eventRepeat: weeklyFri,
+        id: jhId, authorPublicKey: passer.pubKeyHex, eventStartLocal: `${Y27}-10-29T19:00`, eventEndLocal: `${Y27}-10-29T21:00`, eventRepeat: weeklyFri,
     }, passer);
-    const jhBack = await signed('DELETE', `/api/events/${jhId}/skip`, { date: '2027-10-22' }, passer);
-    const jhCancel = await signed('POST', `/api/events/${jhId}/skip`, { date: '2027-10-22' }, passer);
+    const jhBack = await signed('DELETE', `/api/events/${jhId}/skip`, { date: `${Y27}-10-22` }, passer);
+    const jhCancel = await signed('POST', `/api/events/${jhId}/skip`, { date: `${Y27}-10-22` }, passer);
     const jhRead = await readEvent(jhId, regular);
     assert(jhMoved.status === 200 && jhBack.status === 400 && jhBack.error === REPEAT_ERRORS.skipDate && jhCancel.status === 400 && jhCancel.error === REPEAT_ERRORS.skipDate
-        && row(jhId).event_start_local === '2027-10-29T19:00' && row(jhId).event_repeat_skips === null && jhRead?.myRsvp === 'going',
+        && row(jhId).event_start_local === `${Y27}-10-29T19:00` && row(jhId).event_repeat_skips === null && jhRead?.myRsvp === 'going',
         `(g) after an edit to 29 Oct, the passed 22 Oct is refused both ways; the series stays on 29 Oct with Going on it (got ${jhMoved.status} ${jhBack.status} ${jhBack.error} / ${jhCancel.status} ${jhCancel.error}; ${row(jhId).event_start_local} ${row(jhId).event_repeat_skips} ${jhRead?.myRsvp})`);
 
     // ── 6. Reminders ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. Reminders once per date ──');
-    const rs = await create(remind, { eventStartLocal: '2028-01-07T20:50', eventTz: SYD, eventRepeat: weeklyFri });
+    const rs = await create(remind, { eventStartLocal: `${Y28}-01-07T20:50`, eventTz: SYD, eventRepeat: weeklyFri });
     const rsId = rs.body?.post?.id as string;
     rsvpEvent(() => {}, rsId, regular.pubKeyHex, 'going');
     db.prepare(`UPDATE event_rsvps SET reminder_offsets = '[1440]' WHERE post_id = ? AND member_pubkey = ?`).run(rsId, regular.pubKeyHex);
@@ -465,15 +467,15 @@ async function main(): Promise<void> {
     assert(marks.length === 2 && marks[0].occurrence_at !== marks[1].occurrence_at, `one mark per date (got ${JSON.stringify(marks)})`);
 
     // A one-off whose time an edit moves: the reminder already sent is not sent again, and Going still counts.
-    const one = await create(remind, { eventStartLocal: '2028-02-04T20:50', eventTz: SYD });
+    const one = await create(remind, { eventStartLocal: `${Y28}-02-04T20:50`, eventTz: SYD });
     const oneId = one.body?.post?.id as string;
     rsvpEvent(() => {}, oneId, regular.pubKeyHex, 'going');
     db.prepare(`UPDATE event_rsvps SET reminder_offsets = '[1440]' WHERE post_id = ? AND member_pubkey = ?`).run(oneId, regular.pubKeyHex);
     const oneSent: string[] = [];
     const onePush = ((_t: string[], _f: string, _title: string, _body: string, data: any) => { if (data?.postId === oneId) oneSent.push(data.postId); }) as any;
     runEventReminderSweep(onePush, Date.parse(row(oneId).event_start_at) - DAY + 1000);
-    const moved = await signed('POST', '/api/marketplace/posts/update', { id: oneId, authorPublicKey: remind.pubKeyHex, eventStartLocal: '2028-02-04T21:30', eventTz: SYD }, remind);
-    assert(moved.status === 200 && row(oneId).event_start_local === '2028-02-04T21:30', `the one-off moves 40 minutes (got ${moved.status} ${moved.error ?? ''})`);
+    const moved = await signed('POST', '/api/marketplace/posts/update', { id: oneId, authorPublicKey: remind.pubKeyHex, eventStartLocal: `${Y28}-02-04T21:30`, eventTz: SYD }, remind);
+    assert(moved.status === 200 && row(oneId).event_start_local === `${Y28}-02-04T21:30`, `the one-off moves 40 minutes (got ${moved.status} ${moved.error ?? ''})`);
     runEventReminderSweep(onePush, Date.parse(row(oneId).event_start_at) - DAY + 1000);
     assert(oneSent.length === 1, `its reminder is not sent a second time (got ${oneSent.length})`);
     assert((await readEvent(oneId, remind))?.goingCount === 1, 'and the people going are still going for the moved date');
@@ -494,20 +496,20 @@ async function main(): Promise<void> {
 
     // ── 8. The cap ──────────────────────────────────────────────────────────────────────────────
     console.log('\n── 8. The cap counts a series once ──');
-    const capSeries = await create(capper, { eventStartLocal: '2028-03-03T20:50', eventTz: SYD, eventRepeat: weeklyFri });
+    const capSeries = await create(capper, { eventStartLocal: `${Y28}-03-03T20:50`, eventTz: SYD, eventRepeat: weeklyFri });
     const capId = capSeries.body?.post?.id as string;
-    for (let i = 0; i < 4; i++) await create(capper, { eventStartLocal: `2028-03-1${i}T10:00`, eventTz: SYD });
-    const sixth = await create(capper, { eventStartLocal: '2028-03-20T10:00', eventTz: SYD });
+    for (let i = 0; i < 4; i++) await create(capper, { eventStartLocal: `${Y28}-03-1${i}T10:00`, eventTz: SYD });
+    const sixth = await create(capper, { eventStartLocal: `${Y28}-03-20T10:00`, eventTz: SYD });
     assert(!!capId && sixth.status === 400 && /Limit reached: 5 upcoming events/.test(sixth.error ?? ''),
         `a forever series and four one-offs are five: the sixth is refused (got ${sixth.status} ${sixth.error})`);
     rollDueSeries(undefined, Date.parse(row(capId).event_end_at) + 1000);
-    const seventh = await create(capper, { eventStartLocal: '2028-03-21T10:00', eventTz: SYD });
+    const seventh = await create(capper, { eventStartLocal: `${Y28}-03-21T10:00`, eventTz: SYD });
     assert(seventh.status === 400, `after it rolls it still counts once (got ${seventh.status})`);
 
     // ── 9. The 30-day prune ─────────────────────────────────────────────────────────────────────
     console.log('\n── 9. The 30-day prune ──');
     // The regular's RSVP on the first series is for 1 Oct; the series is on 8 Oct now.
-    const pruneAt = Date.parse('2027-10-01T10:50:00.000Z') + 31 * DAY;
+    const pruneAt = Date.parse(`${Y27}-10-01T10:50:00.000Z`) + 31 * DAY;
     const pruned = pruneStaleRsvps(pruneAt, true);
     const gone = db.prepare('SELECT 1 FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(sid, regular.pubKeyHex);
     const tomb = db.prepare(`SELECT 1 FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?`).get(`${sid}|${regular.pubKeyHex}`);
@@ -545,7 +547,7 @@ async function main(): Promise<void> {
 
     // ── 11. An RSVP from before this build ──────────────────────────────────────────────────────
     console.log('\n── 11. An RSVP from before this build, on an event an edit makes repeating ──');
-    const und = await create(undatedHost, { eventStartLocal: '2028-05-05T20:50', eventEndLocal: '2028-05-05T22:50', eventTz: SYD });
+    const und = await create(undatedHost, { eventStartLocal: `${Y28}-05-05T20:50`, eventEndLocal: `${Y28}-05-05T22:50`, eventTz: SYD });
     const undId = und.body?.post?.id as string;
     rsvpEvent(() => {}, undId, regular.pubKeyHex, 'going');
     // What the ALTER leaves on every RSVP written before this build: no date.
@@ -557,7 +559,7 @@ async function main(): Promise<void> {
     rollDueSeries(undefined, Date.parse(row(undId).event_end_at) + 1000);
     const undHostView = await readEvent(undId, undatedHost);
     const undRegView = await readEvent(undId, regular);
-    assert(row(undId).event_start_local === '2028-05-12T20:50' && undHostView?.goingCount === 0,
+    assert(row(undId).event_start_local === `${Y28}-05-12T20:50` && undHostView?.goingCount === 0,
         `so its next date starts at nobody going (got ${row(undId).event_start_local}, ${undHostView?.goingCount} going)`);
     assert(undRegView?.myRsvp === null && undRegView?.myLastRsvp?.status === 'going',
         `and the member's RSVP reads as last week's (got ${JSON.stringify({ my: undRegView?.myRsvp, last: undRegView?.myLastRsvp ?? null })})`);
@@ -573,11 +575,11 @@ async function main(): Promise<void> {
     console.log('\n── 12. A DST gap day: its end clock, and a re-save keeps the rule\'s own clock ──');
     // Sydney's clocks jump 02:00 → 03:00 on Sun 3 Oct 2027.
     const sundays = { freq: 'weekly', interval: 1, byDay: 'SU' };
-    const gap = await create(gapHost, { eventStartLocal: '2027-09-26T02:30', eventEndLocal: '2027-09-26T03:30', eventTz: SYD, eventRepeat: sundays });
+    const gap = await create(gapHost, { eventStartLocal: `${Y27}-09-26T02:30`, eventEndLocal: `${Y27}-09-26T03:30`, eventTz: SYD, eventRepeat: sundays });
     const gapId = gap.body?.post?.id as string;
     rollDueSeries(undefined, Date.parse(row(gapId).event_end_at) + 1000);
     const g1 = row(gapId);
-    assert(g1.event_start_local === '2027-10-03T03:30' && g1.event_end_local === '2027-10-03T04:30' && Date.parse(g1.event_end_at) - Date.parse(g1.event_start_at) === HOUR,
+    assert(g1.event_start_local === `${Y27}-10-03T03:30` && g1.event_end_local === `${Y27}-10-03T04:30` && Date.parse(g1.event_end_at) - Date.parse(g1.event_start_at) === HOUR,
         `on the gap Sunday 02:30-03:30 reads 03:30-04:30, an hour, its end clock the end it stores (got ${g1.event_start_local}-${g1.event_end_local})`);
     const resave = await signed('POST', '/api/marketplace/posts/update', {
         id: gapId, authorPublicKey: gapHost.pubKeyHex, title: 'Early swim', eventStartLocal: g1.event_start_local, eventEndLocal: g1.event_end_local,
@@ -586,7 +588,7 @@ async function main(): Promise<void> {
     assert(resave.status === 200 && JSON.parse(row(gapId).event_repeat ?? '{}').time === '02:30' && JSON.parse(row(gapId).event_repeat ?? '{}').minutes === 60,
         `a form re-saving the gap day's clocks with the rule keeps the rule's 02:30 and its hour (got ${resave.status} ${resave.error ?? ''} ${row(gapId).event_repeat})`);
     rollDueSeries(undefined, Date.parse(row(gapId).event_end_at) + 1000);
-    assert(row(gapId).event_start_local === '2027-10-10T02:30', `so the next Sunday is 02:30 again (got ${row(gapId).event_start_local})`);
+    assert(row(gapId).event_start_local === `${Y27}-10-10T02:30`, `so the next Sunday is 02:30 again (got ${row(gapId).event_start_local})`);
 
     // ── 13. The host lets people in, on a repeating event ───────────────────────────────────────
     console.log('\n── 13. "Only people I let in" on a repeating event: the note, the link and the chat wait, across dates ──');
@@ -598,7 +600,7 @@ async function main(): Promise<void> {
     const LINK = 'https://meet.example.org/door';
     const door = await create(doorHost, {
         lat: undefined, lng: undefined, eventOnline: true, eventLink: LINK, eventPrivateNote: NOTE, eventHostLetsIn: true,
-        eventStartLocal: '2028-06-02T19:00', eventEndLocal: '2028-06-02T21:00', eventTz: SYD, eventRepeat: weeklyFri,
+        eventStartLocal: `${Y28}-06-02T19:00`, eventEndLocal: `${Y28}-06-02T21:00`, eventTz: SYD, eventRepeat: weeklyFri,
     });
     const doorId = door.body?.post?.id as string;
     assert(door.status === 200 && door.body?.post?.eventHostLetsIn === true && door.body?.post?.eventRepeat?.byDay === 'FR',
@@ -616,7 +618,7 @@ async function main(): Promise<void> {
     assert(wes0?.eventPrivateNote === undefined && wes0?.eventLink === undefined && wes0?.myLetIn === false && await chatStatus(waitWes) === 403,
         `Going and not let in: no note, no link, the chat refused, as on a one-off (got ${JSON.stringify({ note: wes0?.eventPrivateNote ?? null, link: wes0?.eventLink ?? null, letIn: wes0?.myLetIn })})`);
     rollDueSeries(undefined, Date.parse(row(doorId).event_end_at) + 1000);
-    assert(row(doorId).event_start_local === '2028-06-09T19:00', `it rolls to the next Friday (got ${row(doorId).event_start_local})`);
+    assert(row(doorId).event_start_local === `${Y28}-06-09T19:00`, `it rolls to the next Friday (got ${row(doorId).event_start_local})`);
     const ann1 = await readEvent(doorId, inAnn);
     const wes1 = await readEvent(doorId, waitWes);
     assert(ann1?.myRsvp === null && ann1?.myLastRsvp?.status === 'going' && ann1?.eventPrivateNote === NOTE && ann1?.eventLink === LINK
@@ -652,7 +654,7 @@ async function main(): Promise<void> {
     const heldBefore = (db.prepare('SELECT COUNT(*) AS n FROM event_rsvps WHERE post_id = ? AND let_in_at IS NOT NULL').get(doorId) as { n: number }).n;
     const lu3 = await readEvent(doorId, lateLu);
     const ann3 = await readEvent(doorId, inAnn);
-    assert(row(doorId).event_start_local === '2028-06-16T19:00' && heldBefore === 2 && lu3?.myRsvp === null && lu3?.myLastRsvp?.status === 'going'
+    assert(row(doorId).event_start_local === `${Y28}-06-16T19:00` && heldBefore === 2 && lu3?.myRsvp === null && lu3?.myLastRsvp?.status === 'going'
         && lu3?.eventPrivateNote === NOTE && lu3?.eventLink === LINK && await chatStatus(lateLu) === 200 && ann3?.myRsvp === 'going' && ann3?.myLetIn === true,
         `rolled to 16 June: two let in, Lu (last week's, not Going this date) still reads the note, link and chat, Ann is Going and in (got ${row(doorId).event_start_local}, ${heldBefore} let in, Lu ${JSON.stringify({ my: lu3?.myRsvp, note: lu3?.eventPrivateNote ?? null })})`);
     const takeBack = await letIn({ everyone: true, letIn: false });
@@ -674,25 +676,25 @@ async function main(): Promise<void> {
     const goerGus = makeIdentity('GoerGus');
     const edit = (id: string, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts/update', { id, authorPublicKey: moverMeg.pubKeyHex, ...body }, moverMeg);
     const ruleTime = (id: string) => JSON.parse(row(id).event_repeat ?? '{}') as { time?: string; minutes?: number };
-    const moving = await create(moverMeg, { ...BRISBANE, eventPlaceName: 'The hall', eventStartLocal: '2027-11-05T09:28', eventEndLocal: '2027-11-05T11:28', eventTz: 'Australia/Brisbane', eventRepeat: weeklyFri });
+    const moving = await create(moverMeg, { ...BRISBANE, eventPlaceName: 'The hall', eventStartLocal: `${Y27}-11-05T09:28`, eventEndLocal: `${Y27}-11-05T11:28`, eventTz: 'Australia/Brisbane', eventRepeat: weeklyFri });
     const movingId = moving.body?.post?.id as string;
     rsvpEvent(() => {}, movingId, goerGus.pubKeyHex, 'going');
     // What an old client sends, and a form whose lookup of the pin's zone failed: the pin alone.
     const west = await edit(movingId, PERTH);
     const w = row(movingId);
-    assert(west.status === 200 && w.event_tz === 'Australia/Perth' && w.event_start_local === '2027-11-05T09:28' && w.event_end_local === '2027-11-05T11:28',
+    assert(west.status === 200 && w.event_tz === 'Australia/Perth' && w.event_start_local === `${Y27}-11-05T09:28` && w.event_end_local === `${Y27}-11-05T11:28`,
         `moved west with no zone or time sent, it takes the pin's zone and keeps 09:28-11:28 (got ${west.status} ${west.error ?? ''} ${w.event_tz} ${w.event_start_local}-${w.event_end_local})`);
-    assert(ruleTime(movingId).time === '09:28' && ruleTime(movingId).minutes === 120 && w.event_start_at === '2027-11-05T01:28:00.000Z',
+    assert(ruleTime(movingId).time === '09:28' && ruleTime(movingId).minutes === 120 && w.event_start_at === `${Y27}-11-05T01:28:00.000Z`,
         `so the rule and the start say the same clock, and the moment is that clock in Perth (got rule ${ruleTime(movingId).time}, ${w.event_start_at})`);
     const gusDate = () => (db.prepare('SELECT occurrence_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(movingId, goerGus.pubKeyHex) as any)?.occurrence_at;
     assert(gusDate() === w.event_start_at && w.event_state === 'updated', `the RSVP goes with the date, and the event reads UPDATED (got ${gusDate()} ${w.event_state})`);
     rollDueSeries(undefined, Date.parse(w.event_end_at) + 1000);
     const afterWest = row(movingId);
-    assert(afterWest.event_start_local === '2027-11-12T09:28' && afterWest.event_tz === 'Australia/Perth',
+    assert(afterWest.event_start_local === `${Y27}-11-12T09:28` && afterWest.event_tz === 'Australia/Perth',
         `the roll takes the next Friday, never the same date again (got ${afterWest.event_start_local})`);
     const east = await edit(movingId, BRISBANE);
     const e = row(movingId);
-    assert(east.status === 200 && e.event_tz === 'Australia/Brisbane' && e.event_start_local === '2027-11-12T09:28' && ruleTime(movingId).time === '09:28' && e.event_start_at === '2027-11-11T23:28:00.000Z',
+    assert(east.status === 200 && e.event_tz === 'Australia/Brisbane' && e.event_start_local === `${Y27}-11-12T09:28` && ruleTime(movingId).time === '09:28' && e.event_start_at === `${Y27}-11-11T23:28:00.000Z`,
         `moved back east it keeps the clock too (got ${east.status} ${east.error ?? ''} ${e.event_start_local}, rule ${ruleTime(movingId).time}, ${e.event_start_at})`);
     const nudge = await edit(movingId, { lat: BRISBANE.lat + 0.001, lng: BRISBANE.lng });
     assert(nudge.status === 200 && row(movingId).event_start_at === e.event_start_at && row(movingId).event_start_local === e.event_start_local && row(movingId).event_repeat === e.event_repeat,
@@ -700,29 +702,29 @@ async function main(): Promise<void> {
     // The moment kept on purpose, by the instant sent with the new zone or the new pin: the rule goes to the new clock.
     const zoneKept = await edit(movingId, { eventTz: 'Australia/Perth', eventStartAt: e.event_start_at });
     const z = row(movingId);
-    assert(zoneKept.status === 200 && z.event_start_at === e.event_start_at && z.event_start_local === '2027-11-12T07:28' && ruleTime(movingId).time === '07:28' && ruleTime(movingId).minutes === 120,
+    assert(zoneKept.status === 200 && z.event_start_at === e.event_start_at && z.event_start_local === `${Y27}-11-12T07:28` && ruleTime(movingId).time === '07:28' && ruleTime(movingId).minutes === 120,
         `a new zone with the instant kept: 07:28 there, and the rule says 07:28 too (got ${zoneKept.status} ${zoneKept.error ?? ''} ${z.event_start_local}, rule ${ruleTime(movingId).time})`);
     // Darwin is +9:30, with no daylight saving: a third zone, so this is a real move and not a nudge that keeps the zone picked above.
     const pinKept = await edit(movingId, { lat: -12.46, lng: 130.84, eventStartAt: e.event_start_at });
     const k = row(movingId);
-    assert(pinKept.status === 200 && k.event_tz === 'Australia/Darwin' && k.event_start_at === e.event_start_at && k.event_start_local === '2027-11-12T08:58' && ruleTime(movingId).time === '08:58',
+    assert(pinKept.status === 200 && k.event_tz === 'Australia/Darwin' && k.event_start_at === e.event_start_at && k.event_start_local === `${Y27}-11-12T08:58` && ruleTime(movingId).time === '08:58',
         `a new pin's zone with the instant kept, the same (got ${pinKept.status} ${pinKept.error ?? ''} ${k.event_tz} ${k.event_start_local}, rule ${ruleTime(movingId).time})`);
-    const onlineFirst = await create(moverMeg, { lat: undefined, lng: undefined, eventOnline: true, eventStartLocal: '2027-11-19T19:00', eventEndLocal: '2027-11-19T20:00', eventTz: SYD, eventRepeat: weeklyFri });
+    const onlineFirst = await create(moverMeg, { lat: undefined, lng: undefined, eventOnline: true, eventStartLocal: `${Y27}-11-19T19:00`, eventEndLocal: `${Y27}-11-19T20:00`, eventTz: SYD, eventRepeat: weeklyFri });
     const onlineFirstId = onlineFirst.body?.post?.id as string;
     const atPlace = await edit(onlineFirstId, { eventOnline: false, ...PERTH, eventPlaceName: 'The hall' });
     const p = row(onlineFirstId);
-    assert(atPlace.status === 200 && p.event_tz === 'Australia/Perth' && p.event_start_local === '2027-11-19T19:00' && ruleTime(onlineFirstId).time === '19:00',
+    assert(atPlace.status === 200 && p.event_tz === 'Australia/Perth' && p.event_start_local === `${Y27}-11-19T19:00` && ruleTime(onlineFirstId).time === '19:00',
         `an online series coming to a pin in another zone keeps its clock and its rule (got ${atPlace.status} ${atPlace.error ?? ''} ${p.event_tz} ${p.event_start_local}, rule ${ruleTime(onlineFirstId).time})`);
     // A one-off keeps the moment when its pin moves (test-event-times-http), so a rule sent with the pin is read off the clock it lands on.
-    const oneOff = await create(moverMeg, { ...BRISBANE, eventPlaceName: 'The hall', eventStartLocal: '2027-12-03T09:28', eventEndLocal: '2027-12-03T11:28', eventTz: 'Australia/Brisbane' });
+    const oneOff = await create(moverMeg, { ...BRISBANE, eventPlaceName: 'The hall', eventStartLocal: `${Y27}-12-03T09:28`, eventEndLocal: `${Y27}-12-03T11:28`, eventTz: 'Australia/Brisbane' });
     const oneOffId = oneOff.body?.post?.id as string;
     const nowWeekly = await edit(oneOffId, { ...PERTH, eventRepeat: weeklyFri });
     const o = row(oneOffId);
-    assert(nowWeekly.status === 200 && o.event_start_local === '2027-12-03T07:28' && ruleTime(oneOffId).time === '07:28',
+    assert(nowWeekly.status === 200 && o.event_start_local === `${Y27}-12-03T07:28` && ruleTime(oneOffId).time === '07:28',
         `a one-off made repeating as its pin moves: the rule takes the clock it now has (got ${nowWeekly.status} ${nowWeekly.error ?? ''} ${o.event_start_local}, rule ${ruleTime(oneOffId).time})`);
     const nowOnce = await edit(oneOffId, { ...BRISBANE, eventRepeat: null });
     const once = row(oneOffId);
-    assert(nowOnce.status === 200 && once.event_repeat === null && once.event_tz === 'Australia/Brisbane' && once.event_start_local === '2027-12-03T07:28',
+    assert(nowOnce.status === 200 && once.event_repeat === null && once.event_tz === 'Australia/Brisbane' && once.event_start_local === `${Y27}-12-03T07:28`,
         `a series made a one-off as its pin moves keeps the clock it had, with no rule left (got ${nowOnce.status} ${nowOnce.error ?? ''} ${once.event_tz} ${once.event_start_local} ${once.event_repeat})`);
 
     console.log(`\n${passed}/${run} checks passed.`);

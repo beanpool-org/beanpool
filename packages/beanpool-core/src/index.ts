@@ -157,6 +157,7 @@ export * from './chat-links.js';
 export * from './tour.js';
 export * from './first-steps.js';
 export * from './home-welcome.js';
+export * from './community-welcome.js';
 export * from './help-map.js';
 export * from './brand-colours.js';
 export * from './look.js';

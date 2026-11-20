@@ -915,6 +915,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     recovery_copies: { kind: 'community-settings', reason: "where members' copies go: BeanPool's key vault, this server, or nowhere (config/recovery-copies.ts)" },
     removal_decider: { kind: 'community-settings', reason: 'who decides a removal: a jury from 100 members, everyone, or a jury (config/removal-decider.ts)' },
     contact_copies: { kind: 'community-settings', reason: "whether members' locked contact lists are kept here: the owners' switch, off stored as `off` (config/contact-copies.ts)" },
+    community_welcome: { kind: 'community-settings', reason: "the owners' welcome for new members: plain text members read on Home, never public (config/community-welcome.ts)" },
     core_settings_lock: { kind: 'community-settings', reason: "the core settings confirmed and locked by an owner, when and by whom (config/core-settings.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',

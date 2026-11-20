@@ -788,6 +788,24 @@ describe("Chat's own held wiring (slices S1 and S2, #3302 review F6): the rows, 
         expect(heldRows().length).toBe(2);
     });
 
+    it("S2b: once the rows show, each takes its own count and its newest line's preview from its own community's copy", async () => {
+        net.answer = community({
+            getHeldConversations: HELD, closeHeldCopies: undefined,
+            getHeldLatest: [{ id: 'h-kai', type: 'dm', newest: HELD[0].rawTimestamp, unread: 2 }, { id: 'h-rowan', type: 'dm', newest: HELD[1].rawTimestamp, unread: 0 }],
+            getHeldPreviews: { 'h-kai': { lastMessage: 'the second of them', lastMessageFromApp: false }, 'h-rowan': null },
+        });
+        await renderIn('en');
+        expect(net.calls).toContain('db.getHeldLatest');
+        expect(net.calls).toContain('db.getHeldPreviews');
+        const kai = heldRows().find((r) => r.textContent?.includes('Kai'))!;
+        expect(kai.querySelector('[data-testid="held-chat-preview"]')?.textContent).toBe('the second of them');
+        expect(kai.querySelector('[data-testid="held-chat-unread"]')?.textContent).toBe('2');
+        // The pins couldn't place Rowan's line: no preview, and nothing unread.
+        const rowan = heldRows().find((r) => r.textContent?.includes('Rowan'))!;
+        expect(rowan.querySelector('[data-testid="held-chat-preview"]')).toBeNull();
+        expect(rowan.querySelector('[data-testid="held-chat-unread"]')).toBeNull();
+    });
+
     it("a tap on a direct chat opens it in place (S2): that chat by its own id, in that community by its address, and no switch", async () => {
         await renderIn('en');
         pushes.calls.length = 0;

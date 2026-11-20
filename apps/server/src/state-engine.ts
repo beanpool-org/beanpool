@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView, ItemTakeUpIn, AddressListFields } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, FORUM_PUSH_PREF, isLang, standingLines, type Lang } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, FORUM_PUSH_PREF, NEW_EVENT_PUSH_PREF, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -528,6 +528,7 @@ export {
 import { rollDueSeries, pruneStaleRsvps, setSeriesDateSkipped } from './engine/event-series-roll.js';
 import { HOME_PREFERENCE_KEYS, HOME_MEMBERS_ONLY_MESSAGE, homePreferenceWrites, ownHomePreferences, type HomeLayout } from './engine/home-preferences.js';
 import { ASKED_PUSH_PREF, noticeNeedAsked } from './engine/asked-push.js';
+import { noticeNewEvent } from './engine/event-new-push.js';
 export {
     HOME_PREFERENCE_KEYS, HOME_CARD_IDS, INTEREST_IDS, getHomeLayout, getInterests, ownHomePreferences, homePreferencesNamed,
     type HomeLayout, type HomeCardId,
@@ -5922,6 +5923,12 @@ export function createPost(
             audienceScope: options?.audienceScope ?? 'public', copied: !!options?.shownCopy || !!post.originNode, createdVia: options?.createdVia ?? null,
         }, dispatchPushNotification);
     }
+    // An event for the whole community tells its members, at most once a day each, under their own switch, on a local
+    // community (engine/event-new-push.ts; notifications amend2 slice NEa). Read back as stored: never a group's own or one
+    // person's, a copy, an owner's assistant's, a hidden one or one already over.
+    if (post && type === 'event') {
+        noticeNewEvent({ id: post.id, author: authorPublicKey, actor: options?.createdBy ?? null, copied: !!options?.shownCopy }, dispatchPushNotification);
+    }
     // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The
     // acting member is named — the keeper or convenor, not an enterprise's own key.
     if (post && options?.audienceScope === 'group' && options.targetGroupId && (type === 'event' || type === 'poll')) {
@@ -10978,7 +10985,7 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
  * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
  * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
-export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', ASKED_PUSH_PREF, FORUM_PUSH_PREF, 'eventReminderOffsets'];
+export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', ASKED_PUSH_PREF, FORUM_PUSH_PREF, NEW_EVENT_PUSH_PREF, 'eventReminderOffsets'];
 
 /**
  * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
@@ -11028,6 +11035,8 @@ export function getMemberPreferences(publicKey: string, reader?: string): Record
         [ASKED_PUSH_PREF]: 'true',
         // The Forum switch (engine/forum-notices.ts, slice F5): its four kinds, on until the member turns it off.
         [FORUM_PUSH_PREF]: 'true',
+        // "When someone posts a new event" (engine/event-new-push.ts, slice NEa): on until the member turns it off.
+        [NEW_EVENT_PUSH_PREF]: 'true',
     };
     for (const r of rows) {
         // The stored reminders key (EVENT_REMINDER_PREF_KEY) isn't one of these either: it is served as eventReminderOffsets below.

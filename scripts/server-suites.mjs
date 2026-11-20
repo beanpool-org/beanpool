@@ -136,6 +136,7 @@ export const SUITES = [
     'test-home-asked-card',
     'test-home-asked-card-global',
     'test-asked-push',
+    'test-event-new-push',
     'test-knock',
     'test-web-push',
     'test-web-push-members',

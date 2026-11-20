@@ -52,7 +52,7 @@
  */
 import { db } from '../db/db.js';
 import { prepared, readWhileUnchanged, MAX_POST_PHOTOS } from '@beanpool/engine';
-import { askedPushSent } from '@beanpool/core';
+import { askedPushSent, newEventPushSent } from '@beanpool/core';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { isPrivatePreview, privatePreviewAtBoot } from './private-preview.js';
 
@@ -451,6 +451,11 @@ export interface NodeFeatures {
      *  so on the What are you into? card and show its switch (`notify_asked`) in Settings → Notifications only here: a
      *  server from before it sends no such push and refuses the key. */
     askedPush?: true;
+    /** Present, and true, only where this community tells its members when someone posts an event for all of them
+     *  (`event.new`, engine/event-new-push.ts; core newEventPushSent: a local community). The apps show its switch
+     *  (`notify_new_events`) in Settings → Notifications only here (slice NEb): a server from before it sends no such push and
+     *  refuses the key. */
+    newEventPush?: true;
     /** Present, and true, only where `knowledge` is on: the apps show Learn, and its routes answer (/api/knowledge/*). Absent
      *  (the global community, or a server from before it): no Learn, which @beanpool/core knowledgeFeatureMode reads as off. */
     knowledge?: true;
@@ -750,6 +755,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.groupGuests && s.outsideMessages ? { groupGuests: true as const } : {}),
         ...(s.shareOutside ? { shareOutside: true as const } : {}),
         ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
+        ...(newEventPushSent(getNodeProfile()) ? { newEventPush: true as const } : {}),
         ...(s.knowledge ? { knowledge: true as const } : {}),
         ...(s.bills ? { bills: true as const } : {}),
         // A capability of the build, as pins are: on every node from 1.4.1.

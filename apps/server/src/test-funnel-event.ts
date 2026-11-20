@@ -6,6 +6,7 @@
  * - Unsigned request guard (returns 401 when missing required signature headers)
  * - Validation of event name against CLIENT_FUNNEL_EVENTS allowlist (returns 400 for unknown event)
  * - Recording valid onboarding events (returns 200 { success: true } and updates DB count)
+ * - The join's notifications screen (N1c): notify_shown and notify_choice (on, later, no), per person only
  *
  * BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-funnel-event.ts
  */
@@ -120,6 +121,47 @@ async function main(): Promise<void> {
     const dbRow2 = db.prepare(`SELECT count FROM onboarding_funnel WHERE day = ? AND event = ? AND variant = ?`)
                      .get(today, 'guide_complete', 'B') as { count: number } | undefined;
     assert(dbRow2?.count === 1, 'Database table onboarding_funnel recorded guide_complete event count = 1');
+
+    // ── 4. The join's notifications screen (slice N1c, amend2 §4.4) ─────────────
+    // Drawn, and answered on|later|no, each in its per-person form only: every row these steps make is one of the
+    // owner's four numbers. Through the real middleware, so the allowlist and the signature are both the server's own.
+    // Nine requests: with the three above, twelve of the bucket's fifteen a minute.
+    const NOTIFY_TABLE: { event: string; variant: string; counted: boolean }[] = [
+        { event: 'notify_shown', variant: 'once', counted: true },
+        { event: 'notify_choice', variant: 'once:on', counted: true },
+        { event: 'notify_choice', variant: 'once:later', counted: true },
+        { event: 'notify_choice', variant: 'once:no', counted: true },
+        { event: 'notify_shown', variant: '', counted: false },          // not per person
+        { event: 'notify_shown', variant: 'once:on', counted: false },   // an answer on the drawn step
+        { event: 'notify_choice', variant: 'once', counted: false },     // an answer with no answer
+        { event: 'notify_choice', variant: 'once:yes', counted: false }, // not one of the three
+        { event: 'notify_choice', variant: 'on', counted: false },       // not per person
+    ];
+    const notifyRow = (event: string, variant: string) => db.prepare(
+        `SELECT count FROM onboarding_funnel WHERE day = ? AND event = ? AND variant = ?`,
+    ).get(today, event, variant) as { count: number } | undefined;
+    for (const row of NOTIFY_TABLE) {
+        const res = await signedFetch('POST', '/api/funnel-event', { event: row.event, variant: row.variant });
+        if (row.counted) {
+            assert(res.status === 200 && res.body?.success === true && notifyRow(row.event, row.variant)?.count === 1,
+                `${row.event} "${row.variant}" is taken and counted once`);
+        } else {
+            assert(res.status === 400 && res.body?.error === 'Unknown onboarding event' && !notifyRow(row.event, row.variant),
+                `${row.event} "${row.variant}" is refused with 400 and leaves no row`);
+        }
+    }
+    const notifyRows = db.prepare(
+        `SELECT event, variant, count FROM onboarding_funnel WHERE event IN ('notify_shown', 'notify_choice') ORDER BY event, variant`,
+    ).all() as { event: string; variant: string; count: number }[];
+    assert(JSON.stringify(notifyRows) === JSON.stringify([
+        { event: 'notify_choice', variant: 'once:later', count: 1 },
+        { event: 'notify_choice', variant: 'once:no', count: 1 },
+        { event: 'notify_choice', variant: 'once:on', count: 1 },
+        { event: 'notify_shown', variant: 'once', count: 1 },
+    ]), `the notification steps made exactly the four rows the owner reads, and no other (got ${JSON.stringify(notifyRows)})`);
+    const keyColumns = (db.prepare(`PRAGMA table_info(onboarding_funnel)`).all() as { name: string }[]).map(c => c.name).sort();
+    assert(JSON.stringify(keyColumns) === JSON.stringify(['count', 'day', 'event', 'variant']),
+        'the counter keeps no key: day, event, variant and count are its only columns (M2)');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

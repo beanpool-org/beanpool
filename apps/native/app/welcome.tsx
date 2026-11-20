@@ -410,10 +410,11 @@ export default function WelcomeScreen() {
     const [inviterName, setInviterName] = useState<string | null>(null);
     /**
      * The name screen's greeting (onboarding §3.1 C): who invited and to which community, from the node's invite check (a
-     * read: nothing is made by it), with the address it was read at. The band names them only while the fields still point
-     * there; not heard yet, or offline: "You're invited".
+     * read: nothing is made by it), with the address it was read at and the code it was read for. The band names them only
+     * while the fields still hold that code for that address: an inviter belongs to one code, so a new code for the same
+     * community reads "You're invited" until its own check answers (review of #3317). Not heard yet, or offline: the same.
      */
-    const [greeting, setGreeting] = useState<{ at: string; community: string | null; inviter: string | null } | null>(null);
+    const [greeting, setGreeting] = useState<{ at: string; code: string; community: string | null; inviter: string | null } | null>(null);
     /** iOS 16+ only: the phone holds copied text (`hasStringAsync`, which reads nothing): Apple's button is drawn. */
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
     /** Your invite's box (onboarding §3.1 B): what is typed there, read only at its Next. */
@@ -1299,7 +1300,7 @@ export default function WelcomeScreen() {
         let cancelled = false;
         const timer = setTimeout(() => {
             void import('../utils/db').then(({ checkInvite }) => checkInvite(normaliseInviteCode(code), nodeUrl)).then((check) => {
-                if (!cancelled && check) setGreeting({ at: nodeUrl, community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
+                if (!cancelled && check) setGreeting({ at: nodeUrl, code: normaliseInviteCode(code), community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
             }).catch(() => {});
         }, 600);
         return () => { cancelled = true; clearTimeout(timer); };
@@ -1390,7 +1391,7 @@ export default function WelcomeScreen() {
                 const check = await checkInvite(parsedCode, nodeUrl);
                 // Which community this code is for, said in the greeting from here on (join names N1), whatever the node thinks
                 // of the code: a refused one is still a code for that community. Kept with the address it was read at.
-                if (check) setGreeting({ at: nodeUrl, community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
+                if (check) setGreeting({ at: nodeUrl, code: parsedCode, community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
                 // The node has this phone's key already: nothing is redeemed again (below).
                 let inAlready = false;
                 if (check && !check.valid) {
@@ -3326,13 +3327,14 @@ export default function WelcomeScreen() {
     }
 
     if (mode === 'create') {
-        // The greeting band (onboarding §3.1 C), from the invite check: who invited and to which community, while the code and
-        // address fields still name the community it was checked at, as Join reads them (join names N1). Else "You're invited".
+        // The greeting band (onboarding §3.1 C), from the invite check: who invited and to which community, while the code is the
+        // one it was checked for and the address the one it was checked at, as Join reads them (join names N1). Else "You're
+        // invited": a new code for the same community never shows the previous code's inviter.
         let greet: { community: string; inviter: string | null } | null = null;
         if (greeting?.community) {
             try {
                 const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
-                if (at && at === greeting.at) greet = { community: greeting.community, inviter: greeting.inviter };
+                if (at && at === greeting.at && greeting.code === normaliseInviteCode(inviteCode.trim())) greet = { community: greeting.community, inviter: greeting.inviter };
             } catch { /* an address that is not plain host[:port]: Join says so; no name is claimed for it */ }
         }
         const bold = (text: string) => <Text style={styles.greetingName}>{text}</Text>;

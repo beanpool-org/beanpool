@@ -185,6 +185,8 @@ const phone = vi.hoisted(() => ({
     pending: null as any,
     enrolment: null as any,
     invite: { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' } as Record<string, unknown>,
+    /** The node's invite check by code, where a test needs one (else every code gets `invite`). */
+    checkFor: null as null | ((code: string) => Promise<unknown>),
     outgoing: null as any,
     redeemFails: null as string | null,
     /** Every redeem the screen sent: the code and the name. */
@@ -235,7 +237,7 @@ vi.mock('../onboarding-state', async (importOriginal) => {
     };
 });
 vi.mock('../db', () => ({
-    checkInvite: async () => phone.invite,
+    checkInvite: async (code: string) => (phone.checkFor ? phone.checkFor(code) : phone.invite),
     redeemInvite: async (code: string, callsign: string) => { phone.redeems.push({ code, callsign }); if (phone.redeemFails) throw new Error(phone.redeemFails); return {}; },
     updateMemberProfile: async () => {},
     fetchNodeCallsign: async () => 'Sally',
@@ -408,6 +410,7 @@ beforeEach(() => {
     plat.OS = 'android'; plat.paste = false;
     phone.stored = { ...KNOCKER }; phone.pending = null; phone.records = []; phone.redeemFails = null; phone.outgoing = null; phone.redeems = [];
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' };
+    phone.checkFor = null;
     keyItem.value = null; keyItem.throws = false;
     knocking.asked = [knockAt(RIVERSIDE, 'Riverside')];
     knocking.statuses = {};
@@ -520,6 +523,33 @@ describe('1. the app opened by the link: the root layout hands welcome the listi
         await press('Next');
         expect(host!.textContent).toContain('Your Photo');
         expect(store.map.has(HELD_KEY)).toBe(false);
+    });
+
+    // Review of #3317: the greeting was matched to the invite by address only, but an inviter belongs to one code.
+    it('the greeting belongs to its code: Bob\'s code for the same community never shows Asha\'s name while its own check is unanswered', async () => {
+        const band = () => byId('invite-greeting')?.textContent ?? '';
+        const checkAnswers = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 700)); }); await settle(); };
+        // Asha's code is checked; Bob's check never answers (offline, or the node too slow).
+        phone.checkFor = (code) => (code === 'INV-ASHA-AAAA'
+            ? Promise.resolve({ valid: true, inviterCallsign: 'Asha', communityName: 'Riverside' })
+            : new Promise(() => {}));
+        params.now = { invite: 'INV-ASHA-AAAA', server: RIVERSIDE, t: '1' };
+        await mount();
+        await checkAnswers();
+        expect(band()).toContain('Asha invited you to Riverside');
+        await press('Change the invite');
+        await type('Invite link or code', 'INV-BOBB-BBBB');
+        await press('Next');
+        expect(onNameScreen()).toBe(true);
+        expect(band()).toContain("You're invited");
+        expect(band()).not.toContain('Asha');
+        await checkAnswers();
+        expect(band()).not.toContain('Asha');
+        // Asha's code back: her check still stands for it.
+        await press('Change the invite');
+        await type('Invite link or code', 'INV-ASHA-AAAA');
+        await press('Next');
+        expect(band()).toContain('Asha invited you to Riverside');
     });
 });
 

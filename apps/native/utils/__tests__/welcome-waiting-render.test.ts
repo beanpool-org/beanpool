@@ -546,12 +546,14 @@ describe('1. the waiting mode', () => {
         expect(byId('welcome-waiting')).toBeNull();
     });
 
-    it('with no account at all, the first screen as before, with the quiet row to ask a community', async () => {
+    it('with no account at all, the front door, with "Ask a community to join" in its More ways in sheet', async () => {
         phone.stored = null;
         await mount();
         expect(byId('welcome-waiting')).toBeNull();
-        button('Explore BeanPool worldwide');
-        await press('Know a community near you? Ask to join it');
+        expect(byId('front-door')).toBeTruthy();
+        button('No invite? Look around');
+        await press('More ways in ›');
+        await press('Ask a community to join');
         expect(nav.pushed).toEqual(['/find-community']);
     });
 });
@@ -626,7 +628,9 @@ describe('6. an invite link on a waiting phone, handed here by the root layout',
         params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
         await mount();
         expect(byId('welcome-waiting')).toBeNull();
-        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        // A found invite skips the box (onboarding §3.1 B): the name screen, greeted, with no invite box on it.
+        expect(byId('invite-greeting')).toBeTruthy();
+        expect(field('Invite link or code')).toBeUndefined();
         expect(field('Community name or node address')?.value).toBe(RIVERSIDE);
         // The account's name, as Join with an invite fills it.
         expect(field('Your name or nickname')?.value).toBe('River Kid');

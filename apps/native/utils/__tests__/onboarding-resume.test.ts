@@ -239,13 +239,16 @@ describe('the welcome screen', () => {
 
     // One line in English at the floor's width, shrinking first; a second line for a longer language, which one line
     // can't hold even at 0.6 (21 of the 24 other languages: utils/__tests__/language-switch-render.test.ts).
-    it('offers the two doors as two full-width buttons of at most two lines, and no longer says BeanPool is invite-only', () => {
-        // The doors are drawn by components/WelcomeDoors.tsx (DESIGN-global-entry §B.3).
-        const s = src() + fs.readFileSync(path.resolve(__dirname, '../../components/WelcomeDoors.tsx'), 'utf-8');
-        expect(s).toMatch(/numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>\{t\('🎟️ Join with an invite'\)\}</);
-        expect(s).toMatch(/onPress=\{openGlobalDoor\}[^>]*>\s*<Text style=\{styles\.memberBtnText\} numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>\{t\('🌍 Explore BeanPool worldwide'\)\}</);
+    it('offers the front door\'s three buttons, whose words wrap, and no longer says BeanPool is invite-only', () => {
+        // The front door is drawn by components/welcome/FrontDoor.tsx (DESIGN-onboarding-home-landing-fable.md §3.1 A).
+        const door = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/FrontDoor.tsx'), 'utf-8');
+        const s = src() + door;
+        expect(s).toMatch(/onPress=\{onInvite\}[^>]*>\s*<Text style=\{styles\.mainBtnText\}>\{t\('I have an invite'\)\}</);
+        expect(s).toMatch(/onPress=\{onLookAround\}[^>]*>\s*<Text style=\{styles\.quietBtnText\}>\{t\('No invite\? Look around'\)\}</);
+        expect(s).toMatch(/onPress=\{onUsedBefore\}[^>]*>\s*<Text style=\{styles\.quietBtnText\}>\{t\("I've used BeanPool before"\)\}</);
+        // Wrapped, never cut off or shrunk: no line limit on the front door's words.
+        expect(door).not.toMatch(/numberOfLines/);
         expect(s).not.toMatch(/BeanPool is invite-only/);
-        expect(s).toMatch(/No invite\? Explore BeanPool worldwide and find a community near you\./);
     });
 
     it('signs in at the door and joins through utils/global-join.ts, and never opens the enrolment sheet for it', () => {

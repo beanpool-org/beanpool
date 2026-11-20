@@ -80,6 +80,8 @@ const server = vi.hoisted(() => ({
     /** X5: each report my server took (`POST /api/mail/report`), and how it answers one when set (a refusal). */
     reports: [] as any[],
     reportAnswer: null as null | { status: number; body: unknown },
+    /** Section 9 (#3310 review F2): the keys my server says I made quiet, in its mailbox answer (`quiet`), when set. */
+    quiet: null as null | string[],
 }));
 const MAIL_DEVICE = /^[0-9a-f]{32}$/;
 const badDevice = () => new Response(JSON.stringify({ error: "device is this device's mail id: 32 lowercase hex characters, made by the app.", code: 'bad_device' }), { status: 400 });
@@ -132,7 +134,7 @@ vi.mock('./api', async (importOriginal) => {
                 if (server.stallGet) await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
                 const page = server.outboxPages ? (server.outboxPages.shift() ?? { ticks: [], more: false }) : { ticks: server.outbox, more: false };
                 const items = server.held.filter((h) => !server.got.get(h.envelope.itemId)?.has(device)).slice(0, 50);
-                return new Response(JSON.stringify({ items, more: false, outbox: page.ticks, outboxMore: page.more }), { status: 200 });
+                return new Response(JSON.stringify({ items, more: false, outbox: page.ticks, outboxMore: page.more, ...(server.quiet ? { quiet: server.quiet } : {}) }), { status: 200 });
             }
             if (path === '/api/mail/device/forget') {
                 server.named.push({ call: 'forget', device: body?.device });
@@ -207,7 +209,7 @@ vi.mock('./outside-chat-store', async (importOriginal) => {
 
 import { clearOutsideChats, outsideChatStore } from './outside-chat-store';
 import {
-    FORGET_DEVICE_MS, chatsShown, doorOpen, failUnsent, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, openChatFromCard, reportOutsideLine,
+    FORGET_DEVICE_MS, chatsShown, doorOpen, failUnsent, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, openChatFromCard, outsideQuiet, reportOutsideLine,
     sendFromBox, sendOutsideChange, sendOutsideLine, setDoor, syncOutsideMail, OutsideMailError, type OutsideMailContext,
 } from './outside-mail';
 import { setNodeApiUrl } from './api';
@@ -1520,5 +1522,27 @@ describe('X6 round 2  what each side shows is one rule of the line, its newest d
             await syncOutsideMail(ctx);
             expect(server.sent.filter((i) => i.envelope.itemId === lineId)).toEqual([]);
         });
+    });
+});
+
+describe('9  the across mute as my server holds it (#3310 review F2)', () => {
+    it('a browser that kept no mark for a key my server lists as quiet shows it muted after a round; its own mark stands; another account is not muted', async () => {
+        try {
+            const CY = { key: 'c'.repeat(64) };
+            server.quiet = [ANA.key, CY.key, BEN.key, 'not a key'];
+            // My own Unmute here, kept before this page was asked: it stands.
+            await ctx.store.setMeta(BEN.key, `quiet:${CY.key}`, '0');
+            expect(await outsideQuiet(ctx, ANA.key)).toBe(false);
+            await syncOutsideMail(ctx);
+            expect(await outsideQuiet(ctx, ANA.key)).toBe(true);
+            expect(await outsideQuiet(ctx, CY.key)).toBe(false);
+            // Never my own key, never a word that is no key.
+            expect(await ctx.store.getMeta(BEN.key, `quiet:${BEN.key}`)).toBeNull();
+            expect(await ctx.store.getMeta(BEN.key, 'quiet:not a key')).toBeNull();
+            // Another account in this browser: not muted by mine.
+            expect(await outsideQuiet({ ...ctx, identity: { ...ctx.identity, publicKey: 'd'.repeat(64) } }, ANA.key)).toBe(false);
+        } finally {
+            server.quiet = null;
+        }
     });
 });

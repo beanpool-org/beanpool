@@ -193,6 +193,8 @@ vi.mock('../node-post', () => ({
 const blocks = vi.hoisted(() => ({ talk: [] as string[] }));
 vi.mock('../blocklist', () => ({
     getBlockedUsers: async () => blocks.talk, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated',
+    // The held across list's block filter (held-chats.ts heldOutsideChatsShown, slice S4).
+    isUserBlocked: async (key: string) => blocks.talk.includes(key),
     blockUser: async (key: string) => { outside.blocked.push(key); return true; },
 }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
@@ -842,6 +844,30 @@ describe("Chat's own held wiring (slices S1 and S2, #3302 review F6): the rows, 
         const rowan = heldRows().find((r) => r.textContent?.includes('Rowan'))!;
         expect(rowan.querySelector('[data-testid="held-chat-preview"]')).toBeNull();
         expect(rowan.querySelector('[data-testid="held-chat-unread"]')).toBeNull();
+    });
+
+    // Merge of S2b (#3312) into S4 (#3310): the held rows with their counts and previews, and the across chats kept in the
+    // same files, are two reads side by side. Each S2b test above leaves the across read unanswered (the stand-in never
+    // settles it) and still sees its counts, previews and refresh; this leaves S2b's count read unanswered and still sees
+    // the across row. Mutation: chain the across read after the fill (or the fill after it) in one loader -> red here or there.
+    it('S4 beside S2b: an across chat kept in that file is listed while its count read is still out, and none blocked', async () => {
+        const across = (id: string, peerKey: string, peerName: string) => ({
+            id, me: 'me-key', peerKey, peerHome: 'faraway.example', peerName, state: 'open', restored: false,
+            createdAt: now - 60_000, updatedAt: now - 60_000, lastText: 'Is the ladder free on Saturday?', lastAt: now - 60_000,
+        });
+        blocks.talk = ['pia-blocked'];
+        net.answer = community({
+            getHeldConversations: HELD, closeHeldCopies: undefined,
+            getHeldOutsideChats: [across('oc-ines', 'ines-key', 'Ines'), across('oc-pia', 'pia-blocked', 'Pia')],
+        });
+        await renderIn('en');
+        expect(net.calls).toContain('db.getHeldLatest');
+        const rows = Array.from(host.querySelectorAll('[data-testid="outside-chat-row"]'));
+        expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining('Ines')]);
+        expect(host.textContent).not.toContain('Pia');
+        // S2b's count read never answered: the held rows show, with no count.
+        expect(heldRows().length).toBe(2);
+        expect(host.querySelector('[data-testid="held-chat-unread"]')).toBeNull();
     });
 
     it('S2b (#3312 review F1): a community with its alerts off refreshes as Chat opens and on the beat while it stays in view, and not once Chat is left', async () => {

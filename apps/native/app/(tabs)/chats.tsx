@@ -255,7 +255,7 @@ export default function ChatsScreen() {
         let rows: HeldChat[] = [];
         const loadHeld = async () => {
             if (!identity?.publicKey) {
-                if (view.inView()) { setHeldChats([]); setHeldOutside([]); }
+                if (view.inView()) setHeldChats([]);
                 return;
             }
             try {
@@ -263,17 +263,28 @@ export default function ChatsScreen() {
                 const shown = await heldChatsShown(identity.publicKey, view);
                 rows = shown;
                 if (view.inView()) setHeldChats((prev) => (JSON.stringify(prev) === JSON.stringify(shown) ? prev : shown));
-                // Across chats and their requests kept in those files (slice S4), none with someone the account blocked; listed
-                // before the previews are read, so they wait for none of them either.
-                const across = await heldOutsideChatsShown(identity.publicKey, view);
-                if (view.inView()) setHeldOutside((prev) => (JSON.stringify(prev) === JSON.stringify(across) ? prev : across));
                 // Slice S2b: each row's own count and the newest ones' previews, read once the rows are set, so Chat's
                 // first paint waits for none of it.
                 const filled = await heldChatsFilledIn(identity.publicKey, shown, view);
                 if (view.inView()) setHeldFilled((prev) => (JSON.stringify([...prev]) === JSON.stringify([...filled]) ? prev : filled));
             } catch (e) {
                 console.warn('[Held] Could not list the chats of the other communities', e);
-                if (view.inView()) { setHeldChats([]); setHeldOutside([]); }
+                if (view.inView()) setHeldChats([]);
+            }
+        };
+        // Across chats and their requests kept in those files (slice S4), none with someone the account blocked: read side by
+        // side with the held rows above, so neither list, nor S2b's counts, previews and refresh, waits for the other.
+        const loadAcross = async () => {
+            if (!identity?.publicKey) {
+                if (view.inView()) setHeldOutside([]);
+                return;
+            }
+            try {
+                const across = await heldOutsideChatsShown(identity.publicKey, view);
+                if (view.inView()) setHeldOutside((prev) => (JSON.stringify(prev) === JSON.stringify(across) ? prev : across));
+            } catch (e) {
+                console.warn('[Held] Could not list the chats across of the other communities', e);
+                if (view.inView()) setHeldOutside([]);
             }
         };
         // Slice S2b: a held community where something may wait (its number above 0 as Chat opens, then each rise: a round's
@@ -283,11 +294,12 @@ export default function ChatsScreen() {
             if ((await refreshHeldWhereRose(identity.publicKey, rows, view)).length > 0 && view.inView()) await loadHeld();
         };
         void loadHeld().then(freshen);
+        void loadAcross();
         // Their across mail fetched into their own files (slice S4): every held community, whatever its server last said, side
         // by side; the list read again after a round that changed anything.
         if (identity?.publicKey) void syncHeldMailNow().catch(() => 0);
-        const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); });
-        const acrossSub = DeviceEventEmitter.addListener(OUTSIDE_CHATS_UPDATED, () => { void loadHeld(); });
+        const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); void loadAcross(); });
+        const acrossSub = DeviceEventEmitter.addListener(OUTSIDE_CHATS_UPDATED, () => { void loadAcross(); });
         const countsSub = onNoticeCounts(() => { void freshen(); });
         // The beat while Chat stays in view and the app is in front (#3312 review F1): a held community with its alerts off
         // (no number to rise) refreshes on it, and a list read that failed is asked again. One pass at a time, no loop.

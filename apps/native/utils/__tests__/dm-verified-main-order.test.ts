@@ -263,6 +263,10 @@ describe('#3316 max review: where main was stricter, main\'s behaviour (real db.
         expect(await card()).toEqual({ offered: 'PUPPET', verified: true });
         // Main showed PLANTED here as words; PUPPET is on offer, so its line reads as the new key's (amendment 2 §3).
         expect(await thread()).toEqual([{ notice: true }, { text: NOT_VERIFIED, fromOfferedKey: true }]);
+        // The Chats list's preview obeys the same rule (max re-check R2-1: getConversations' dmShownFormer filter, db.ts ~1789).
+        const previewRow: any = (await db.getConversations(me.publicKey)).find((c: any) => c.id === conv.id);
+        expect(previewRow?.lastMessage).toBe('🔒 Encrypted message');
+        expect(String(previewRow?.lastMessage)).not.toContain(PLANTED);
         expect(await send('is that you?')).toEqual(REFUSED);
         expect(await db.acceptOfferedPeer(conv.id, puppet.publicKey)).toBe(true);
         expect((await thread()).filter((m: any) => !m.notice)).toEqual([{ text: PLANTED, fromOfferedKey: false }]);

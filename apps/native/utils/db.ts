@@ -2399,6 +2399,30 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
 }
 
 /**
+ * Each of `peers`' read cursor in the one DM this phone holds with them, for a deal request that sits unseen (core
+ * notSeenOfDeal, slice N4): a peer with a DM here maps to their cursor (null: never read); one with no DM is left out, as
+ * there is no tick to go by. The node keeps one DM per pair, so the newest cursor is theirs. Only the cursor, the tick's
+ * own source: nothing else of theirs is read.
+ */
+export async function peerReadCursors(myPubkey: string, peers: readonly string[]): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    const wanted = [...new Set(peers.filter((p) => !!p && p !== myPubkey))];
+    if (!myPubkey || wanted.length === 0) return out;
+    const database = await getDb();
+    const rows = await database.getAllAsync<{ public_key: string; read_at: string | null }>(`
+        SELECT cp.public_key AS public_key, MAX(cp.last_read_at) AS read_at
+        FROM conversation_participants cp
+        JOIN conversations c ON c.id = cp.conversation_id
+        WHERE (c.type IS NULL OR c.type = 'dm')
+        AND cp.public_key IN (${wanted.map(() => '?').join(', ')})
+        AND EXISTS (SELECT 1 FROM conversation_participants mine WHERE mine.conversation_id = c.id AND mine.public_key = ?)
+        GROUP BY cp.public_key
+    `, [...wanted, myPubkey]);
+    for (const r of rows) out.set(r.public_key, r.read_at ?? null);
+    return out;
+}
+
+/**
  * Unread lines per conversation, for the header's "needs you" icons: only conversations with something
  * unread, counted the way getGlobalUnreadCount counts them. Nothing is decrypted and no preview is built;
  * `peer` is the stored conversation name or the other participant's callsign, as the inbox shows it.

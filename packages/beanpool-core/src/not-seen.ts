@@ -112,13 +112,18 @@ export interface NotSeenDeal {
     asked: boolean;
     /** When the request was made (the node's time). */
     createdAt: string | number | null | undefined;
-    /** The other person's read cursor in the one chat the two share; null when they have none, or there is no chat. */
+    /**
+     * The two share a chat (the node keeps one DM per pair). Without one there is no tick to go by and the request is shown
+     * on no chat of theirs: nothing is said.
+     */
+    chat: boolean;
+    /** The other person's read cursor in that chat; null when they have never read it. */
     peerReadAt: string | number | null | undefined;
 }
 
 /** A deal request that sits unseen: still asked, and the other person hasn't been in the chat since it was made. */
 export function notSeenOfDeal(deal: NotSeenDeal, now: number): NotSeen {
-    if (!deal.asked) return NONE;
+    if (!deal.asked || !deal.chat) return NONE;
     const made = msOf(deal.createdAt);
     const read = msOf(deal.peerReadAt);
     return notSeenOf(made, made != null && read != null && read >= made, now);

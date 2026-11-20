@@ -12,6 +12,7 @@ import {
     notSeenOfDeal,
     notSeenWords,
     type NotSeen,
+    type NotSeenDeal,
     type NotSeenLine,
 } from '../not-seen.js';
 import { LANGS, PLURAL_FORMS, pluralKey, setLanguage, type Catalog } from '../words.js';
@@ -103,17 +104,20 @@ describe('notSeenInThread: which line carries the words, and which words', () =>
 });
 
 describe('notSeenOfDeal: a deal request that sits unseen', () => {
-    const rows: Array<[string, { asked: boolean; createdAt: string | number | null | undefined; peerReadAt: string | number | null | undefined }, NotSeen]> = [
-        ['asked 25 hours ago, no cursor', { asked: true, createdAt: ago(25 * H), peerReadAt: null }, NOT_SEEN],
-        ['asked 4 days ago, cursor from before it', { asked: true, createdAt: ago(4 * D), peerReadAt: ago(6 * D) }, days(4)],
-        ['asked 4 days ago, cursor exactly at it (read >= made)', { asked: true, createdAt: ago(4 * D), peerReadAt: ago(4 * D) }, NONE],
-        ['asked 4 days ago, cursor after it', { asked: true, createdAt: ago(4 * D), peerReadAt: ago(2 * D) }, NONE],
-        ['asked an hour ago: too soon', { asked: true, createdAt: ago(H), peerReadAt: null }, NONE],
-        ['not asked by me, or answered (if (!deal.asked) return NONE)', { asked: false, createdAt: ago(5 * D), peerReadAt: null }, NONE],
-        ['no request time', { asked: true, createdAt: null, peerReadAt: null }, NONE],
-        ['a request time that does not read', { asked: true, createdAt: 'soon', peerReadAt: null }, NONE],
-        ['a cursor that does not read counts as none', { asked: true, createdAt: ago(2 * D), peerReadAt: 'garbled' }, NOT_SEEN],
-        ['as milliseconds', { asked: true, createdAt: NOW - 3 * D, peerReadAt: NOW - 4 * D }, days(3)],
+    const rows: Array<[string, NotSeenDeal, NotSeen]> = [
+        ['asked 25 hours ago, chat never read', { asked: true, chat: true, createdAt: ago(25 * H), peerReadAt: null }, NOT_SEEN],
+        ['asked 4 days ago, cursor from before it', { asked: true, chat: true, createdAt: ago(4 * D), peerReadAt: ago(6 * D) }, days(4)],
+        ['asked 4 days ago, cursor exactly at it (read >= made)', { asked: true, chat: true, createdAt: ago(4 * D), peerReadAt: ago(4 * D) }, NONE],
+        ['asked 4 days ago, cursor after it', { asked: true, chat: true, createdAt: ago(4 * D), peerReadAt: ago(2 * D) }, NONE],
+        ['asked an hour ago: too soon', { asked: true, chat: true, createdAt: ago(H), peerReadAt: null }, NONE],
+        ['not asked by me, or answered (if (!deal.asked) return NONE)', { asked: false, chat: true, createdAt: ago(5 * D), peerReadAt: null }, NONE],
+        // !deal.chat: no chat between the two, so no tick to go by, and the request is on no chat of theirs.
+        ['no chat between the two, 5 days (!deal.chat)', { asked: true, chat: false, createdAt: ago(5 * D), peerReadAt: null }, NONE],
+        ['no chat, a cursor anyway: still nothing', { asked: true, chat: false, createdAt: ago(5 * D), peerReadAt: ago(9 * D) }, NONE],
+        ['no request time', { asked: true, chat: true, createdAt: null, peerReadAt: null }, NONE],
+        ['a request time that does not read', { asked: true, chat: true, createdAt: 'soon', peerReadAt: null }, NONE],
+        ['a cursor that does not read counts as none', { asked: true, chat: true, createdAt: ago(2 * D), peerReadAt: 'garbled' }, NOT_SEEN],
+        ['as milliseconds', { asked: true, chat: true, createdAt: NOW - 3 * D, peerReadAt: NOW - 4 * D }, days(3)],
     ];
     it.each(rows)('%s', (_name, deal, want) => {
         expect(notSeenOfDeal(deal, NOW)).toEqual(want);

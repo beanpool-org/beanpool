@@ -2,18 +2,19 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions, ScrollView } from 'react-native';
 import { ListPhoto } from './ListPhoto';
 import { router } from 'expo-router';
-import { getMarketplaceTransactions, getPosts, getMyPosts } from '../utils/db';
+import { getMarketplaceTransactions, getPosts, getMyPosts, peerReadCursors } from '../utils/db';
 import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, notSeenOfDeal, notSeenWords, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const NONE: any[] = [];
+const NO_CURSORS: ReadonlyMap<string, string | null> = new Map();
 
 /** A deal's status on its badge: word() keys, shown through t(); a status this build doesn't know, as the node wrote it. */
 const DEAL_STATUS_WORDS: Readonly<Record<string, WordKey>> = {
@@ -372,6 +373,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
     const [heldPosts, setPosts] = useState<any[]>(NONE);
     const [heldTransactions, setTransactions] = useState<any[]>(NONE);
+    const [readCursors, setReadCursors] = useState<ReadonlyMap<string, string | null>>(NO_CURSORS);
     // Whether what is held is Example Valley's. It is drawn only in preview: a preview that turns live while the sheet is
     // open never shows the sample's deals as the member's own, nor lets a live press (a card, Review) reach a sample id
     // (review of #1852, finding 2). Nor, the other way, are the member's own drawn in preview.
@@ -399,6 +401,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const sample = sampleDeals();
             setPosts(sample.posts);
             setTransactions(sample.transactions);
+            setReadCursors(NO_CURSORS);
             setHeldSample(true);
             return;
         }
@@ -418,6 +421,16 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const txs = await getMarketplaceTransactions(identity.publicKey);
             if (gen !== loadGen.current) return;
             setTransactions(txs);
+            // For each request of mine still waiting, the other person's read cursor in our one chat (core notSeenOfDeal):
+            // none read, nothing said.
+            const askedOf = txs.filter((tx: any) => dealStep(tx, identity.publicKey).state === 'asked')
+                .map((tx: any) => (tx.buyerPublicKey === identity.publicKey ? tx.sellerPublicKey : tx.buyerPublicKey));
+            let cursors = NO_CURSORS;
+            if (askedOf.length) {
+                try { cursors = await peerReadCursors(identity.publicKey, askedOf); } catch { /* no cursor: no line */ }
+            }
+            if (gen !== loadGen.current) return;
+            setReadCursors(cursors);
         } catch (e) {
             console.error('MyDealsSheet: failed to load data', e);
         }
@@ -530,6 +543,12 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             // never a blank after "From " (DESIGN-global-members-by-area §2.4).
             const partnerCallsign = (isBuyer ? item.sellerCallsign : item.buyerCallsign) || (partnerPubkey || '').slice(0, 8);
             const partnerAvatar = isBuyer ? item.sellerAvatar : item.buyerAvatar;
+            const notSeenText = dealsTab === 'pending' && !standing ? notSeenWords(notSeenOfDeal({
+                asked: step.state === 'asked',
+                chat: !!partnerPubkey && readCursors.has(partnerPubkey),
+                createdAt: item.createdAt,
+                peerReadAt: partnerPubkey ? readCursors.get(partnerPubkey) : null,
+            }, Date.now()), (isBuyer ? item.sellerCallsign : item.buyerCallsign) || null) : null;
 
             const card = (
                 <View testID={`deal-card-${item.id}`} style={[
@@ -588,6 +607,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                 numberOfLines={standing ? 3 : 1}>
                                 {standing ? standing.status : dealStateWords(step, partnerCallsign)}
                             </Text>
+                        )}
+                        {/* My request still waiting, and the other person not in our chat since I made it (core notSeenOfDeal,
+                            slice N4): "Not seen yet." after a day, the other way after 3. The same for everyone: only the tick's cursor. */}
+                        {notSeenText && (
+                            <Text testID={`deal-not-seen-${item.id}`} style={[styles.dealStateText, { color: colors.text.secondary }]}>{notSeenText}</Text>
                         )}
                         {/* The payer's open ask to pay less, for either side (DESIGN-getting-paid-fable §3.2): its line only; the card
                             opens the listing, where Answer and Take it back are (small cards open the item), as on the web. */}

@@ -13,8 +13,8 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
-import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey, formatHundredths } from '@beanpool/core';
+import { getConversations, type Conversation, type MarketplacePost, type MarketplaceTransaction } from '../lib/api';
+import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, itemDealTitle, notSeenOfDeal, notSeenWords, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey, formatHundredths } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
@@ -80,6 +80,26 @@ interface Props extends LocalCommunityWays {
 
 export type DealsTab = 'active' | 'pending' | 'history' | 'bills';
 
+const NO_CURSORS: ReadonlyMap<string, string | null> = new Map();
+
+/**
+ * Each of `peers`' read cursor in the one DM the member has with them (the node keeps one per pair), for a request that sits
+ * unseen (core notSeenOfDeal, slice N4): null when they have never read it; a peer with no DM is left out, as there is no
+ * tick to go by. Only the cursor, the tick's own source.
+ */
+export function peerCursorsFrom(conversations: readonly Conversation[], me: string, peers: readonly string[]): Map<string, string | null> {
+    const out = new Map<string, string | null>();
+    for (const c of conversations) {
+        if (c.type !== 'dm' || !c.participants?.includes(me)) continue;
+        const peer = c.participants.find((p) => p !== me);
+        if (!peer || !peers.includes(peer)) continue;
+        const at = c.peerLastReadAt ?? null;
+        const had = out.get(peer) ?? null;
+        out.set(peer, had && (!at || had > at) ? had : at);
+    }
+    return out;
+}
+
 export function MyDealsModal({
     visible,
     identity,
@@ -116,6 +136,25 @@ export function MyDealsModal({
     const effectiveIdentity = preview ? sample?.identity ?? null : identity;
     const effectivePosts = preview ? sample?.posts ?? [] : posts;
     const effectiveTransactions = preview ? sample?.transactions ?? [] : transactions;
+
+    // For each request of mine still waiting, the other person's read cursor in our one chat (core notSeenOfDeal, slice N4),
+    // read once each time the list opens with one in it. Never in preview; none read, nothing said.
+    const myKey = preview ? '' : identity?.publicKey ?? '';
+    const askedPeers = useMemo(() => (!myKey ? '' : transactions
+        .filter((tx) => dealStep(tx, myKey).state === 'asked')
+        .map((tx) => (tx.buyerPublicKey === myKey ? tx.sellerPublicKey : tx.buyerPublicKey))
+        .sort().join('\n')), [transactions, myKey]);
+    const [readCursors, setReadCursors] = useState<ReadonlyMap<string, string | null>>(NO_CURSORS);
+    useEffect(() => {
+        setReadCursors(NO_CURSORS);
+        if (!visible || !myKey || !askedPeers) return;
+        let live = true;
+        Promise.resolve()
+            .then(() => getConversations(myKey))
+            .then((answer) => { if (live) setReadCursors(peerCursorsFrom(answer?.conversations ?? [], myKey, askedPeers.split('\n'))); })
+            .catch(() => { /* no cursor: no line */ });
+        return () => { live = false; };
+    }, [visible, myKey, askedPeers]);
 
     const modalRef = useRef<HTMLDivElement>(null);
     const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -415,6 +454,13 @@ export function MyDealsModal({
                                             ?? standingLoweredHistoryLine(item, effectiveTransactions, currentPubkey))
                                         : null;
                                     const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
+                                    const partnerKey = isBuyer ? item.sellerPublicKey : item.buyerPublicKey;
+                                    const notSeenText = !preview && dealsTab === 'pending' && !standing ? notSeenWords(notSeenOfDeal({
+                                        asked: dealStep(item, currentPubkey).state === 'asked',
+                                        chat: readCursors.has(partnerKey),
+                                        createdAt: item.createdAt,
+                                        peerReadAt: readCursors.get(partnerKey) ?? null,
+                                    }, Date.now()), partnerCallsign || null) : null;
 
                                     if (!preview) {
                                         return (
@@ -494,6 +540,11 @@ export function MyDealsModal({
                                                                 className={`text-xs mt-1 break-words ${standing?.warning ? 'font-bold text-amber-800 dark:text-amber-300' : 'text-nature-600 dark:text-nature-400'}`}>
                                                                 {standing ? standing.status : dealStateWords(dealStep(item, currentPubkey), partnerCallsign)}
                                                             </p>
+                                                        )}
+                                                        {/* My request still waiting, and the other person not in our chat since I made it
+                                                            (core notSeenOfDeal): the same for everyone, from the tick's cursor alone. */}
+                                                        {notSeenText && (
+                                                            <p data-testid={`deal-not-seen-${item.id}`} dir="auto" className="text-xs mt-1 break-words text-nature-600 dark:text-nature-400">{notSeenText}</p>
                                                         )}
                                                         {/* The payer's open ask to pay less, for either side (DESIGN-getting-paid-fable §3.2): its line only;
                                                             the card opens the listing, where Answer and Take it back are (small cards open the item). */}

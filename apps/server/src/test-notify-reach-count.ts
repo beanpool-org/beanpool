@@ -76,6 +76,10 @@ async function main() {
     const before = await read();
     assert(Number.isInteger(before?.notify?.phones) && Number.isInteger(before?.notify?.members),
         `the summary's counts carry the owner's count (${JSON.stringify(before?.notify)})`);
+    // The absolute start, not only the change from it (#3321 review at f67a18bc): the node's own SYSTEM row is no member,
+    // so a node whose only person is its owner (no phone) reads 0 of 1, never 0 of 2.
+    assert(before.notify.phones === 0 && before.notify.members === 1,
+        `a node with only its owner counts that one person, not its SYSTEM row (${JSON.stringify(before.notify)})`);
 
     seed('Ios', { tokens: ['ios'] });
     seed('Android', { tokens: ['android'] });

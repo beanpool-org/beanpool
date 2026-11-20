@@ -9,10 +9,13 @@
  * phone that later switched notifications off in its own settings keeps its token. So: a count, the honest second line,
  * and never a name. The phone chip on each member's row is a separate thing and stays as it is.
  */
+import { isSyntheticAccount } from './protocol.js';
 import { word, wordn, type TFunction, type TnFunction } from './words.js';
 
 /** One row of the members table, as the count needs it, with the platforms of that member's push tokens. */
 export interface NotifyReachRow {
+    /** members.public_key: a synthetic account (protocol.ts isSyntheticAccount: SYSTEM, the commons pool) is the node's own, not a person. */
+    accountId?: string | null;
     /** members.status: 'pruned' is gone (removed, or deleted by its owner); every other status is still a member. */
     status: string | null | undefined;
     /** members.is_treasury: the community's own account, not a person. */
@@ -38,7 +41,7 @@ export function isNotifyPhonePlatform(platform: string | null | undefined): bool
 
 /** Where one row goes in the count. */
 export function notifyReachOf(row: NotifyReachRow): NotifyReachKind {
-    if (row.status === 'pruned' || row.isTreasury || row.isVisitor || row.retired) return 'not-counted';
+    if (row.status === 'pruned' || row.isTreasury || row.isVisitor || row.retired || isSyntheticAccount(row.accountId)) return 'not-counted';
     return row.tokenPlatforms.some(isNotifyPhonePlatform) ? 'phone' : 'no-phone';
 }
 

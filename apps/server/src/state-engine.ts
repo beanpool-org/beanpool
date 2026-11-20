@@ -2462,6 +2462,7 @@ export function getAdminMemberCounts(): { members: number; treasuries: number; d
         FROM members m LEFT JOIN retired_accounts r ON r.member_pubkey = m.public_key WHERE m.status != 'pruned'`).all() as
         Array<{ public_key: string; status: string | null; is_treasury: number | null; is_visitor: number | null; retired: number }>;
     const notify = notifyReachCount(reachRows.map((row): NotifyReachRow => ({
+        accountId: row.public_key,
         status: row.status,
         isTreasury: row.is_treasury === 1,
         isVisitor: row.is_visitor === 1,

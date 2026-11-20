@@ -65,6 +65,20 @@ describe('which rows count, and as what', () => {
         expect(notifyReachOf(row)).toBe(want);
     });
 
+    it("the node's own synthetic accounts (SYSTEM, the commons pool) are never members, with or without a phone", () => {
+        const member: NotifyReachRow = { accountId: 'a1b2c3', status: 'active', isTreasury: false, isVisitor: false, retired: false, tokenPlatforms: [] };
+        expect(notifyReachOf(member)).toBe('no-phone');
+        for (const id of ['SYSTEM', 'system', 'COMMONS_POOL', 'genesis']) {
+            expect(notifyReachOf({ ...member, accountId: id })).toBe('not-counted');
+            expect(notifyReachOf({ ...member, accountId: id, tokenPlatforms: ['ios'] })).toBe('not-counted');
+        }
+        // A fresh node: BeanPool (a treasury) and SYSTEM only -> nobody to count (#3321 review at f67a18bc).
+        expect(notifyReachCount([
+            { accountId: 'SYSTEM', status: 'active', isTreasury: false, isVisitor: false, retired: false, tokenPlatforms: [] },
+            { accountId: 'beanpool-treasury', status: 'active', isTreasury: true, isVisitor: false, retired: false, tokenPlatforms: [] },
+        ])).toEqual({ phones: 0, members: 0 });
+    });
+
     it('each reason a row is left out leaves out a member who has a phone, alone', () => {
         const member: NotifyReachRow = { status: 'active', isTreasury: false, isVisitor: false, retired: false, tokenPlatforms: ['ios'] };
         expect(notifyReachOf(member)).toBe('phone');

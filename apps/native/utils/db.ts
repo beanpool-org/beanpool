@@ -2054,33 +2054,72 @@ function letInOfRows(rows: readonly any[], pins: DmPeerPins | null, me: string):
 }
 
 /**
- * Whom `community`'s copy lets in (slice S3b), another community this phone holds: read through a held, read-only handle
- * (never getDb() nor the address in use), its DM pins as stored for that file, never seeded. Null when nothing could be read.
+ * The keys one copy's DM pins say are not a person's key now (#3319 review F1): each pin's former keys and the keys its
+ * listing names as the pinned key's former ones (a re-keyed person's old key may be a lost phone's), and, while a chat's
+ * community lists another key in place of its pinned one (an offer naming a key, which waits for the member), both that
+ * pinned key and the key on offer. Let in once lets none of these in, from any copy or source: a friend, deal, payment or
+ * contact row keeps whatever key it was made with.
  */
-export async function getHeldLetIn(myPubkey: string, community: string): Promise<string[] | null> {
-    try {
-        const rows = await heldListRead<any>(community, 'letIn', letInParams(myPubkey));
-        if (!rows) return null;
-        return letInOfRows(rows, await dmPins.peek(myPubkey, getDatabaseFilenameForNode(community)), myPubkey);
-    } catch (e) {
-        console.warn('[LetIn] A held copy could not be read', e);
-        return null;
+function notCurrentOfPins(pins: DmPeerPins | null): string[] {
+    const out = new Set<string>();
+    for (const entry of Object.values(pins ?? {})) {
+        for (const k of entry?.heard?.tryKeys ?? []) out.add(k);
+        if (!entry || isUnplacedSight(entry)) continue;
+        for (const k of entry.former ?? []) out.add(k);
+        const offered = entry.offered?.peer;
+        if (offered && offered !== entry.peer) out.add(entry.peer).add(offered);
     }
+    return [...out];
 }
 
 /**
- * Whom the copy in use lets in (slice S3b), with its DM pins as stored, never seeded. None for a guest's look (its copy holds
- * no chat, friend or deal of the member's) or a copy that can't be read.
+ * What one copy says for let in once (slice S3b): whom its rows let in (`letIn`), and the keys its DM pins say are not a
+ * person's key now (`notCurrent`, {@link notCurrentOfPins}), which no copy's row lets in.
  */
-export async function getLetInHere(myPubkey: string): Promise<string[]> {
+export interface LetInRead {
+    letIn: string[];
+    notCurrent: string[];
+}
+
+/**
+ * What `community`'s copy says for let in once (slice S3b), another community this phone holds: its rows read through a
+ * held, read-only handle (never getDb() nor the address in use), its DM pins as stored for that file, never seeded. A copy
+ * whose rows can't be read lets nobody in, and its pins still count. Null when its pins can't be read: what they know was
+ * replaced is then unknown, so nobody is let in quietly (#3319 review F1).
+ */
+export async function getHeldLetIn(myPubkey: string, community: string): Promise<LetInRead | null> {
+    let pins: DmPeerPins | null;
+    try {
+        pins = await dmPins.peekReadable(myPubkey, getDatabaseFilenameForNode(community));
+    } catch (e) {
+        console.warn('[LetIn] A held copy\'s DM pins could not be read', e);
+        return null;
+    }
+    let rows: any[] | null = null;
+    try {
+        rows = await heldListRead<any>(community, 'letIn', letInParams(myPubkey));
+    } catch (e) {
+        console.warn('[LetIn] A held copy could not be read', e);
+    }
+    return { letIn: rows ? letInOfRows(rows, pins, myPubkey) : [], notCurrent: notCurrentOfPins(pins) };
+}
+
+/**
+ * What the copy in use says for let in once (slice S3b), with its DM pins as stored, never seeded. Its rows let nobody in for
+ * a guest's look (its copy holds no chat, friend or deal of the member's). Null when the copy or its pins can't be read:
+ * nobody is let in quietly then (#3319 review F1).
+ */
+export async function getLetInHere(myPubkey: string): Promise<LetInRead | null> {
     try {
         const here = await chatCopyForRequest();
-        if (!here.anchorUrl || await isGuestCopy(here.anchorUrl)) return [];
+        const pins = await dmPins.peekReadable(myPubkey, here.file);
+        const notCurrent = notCurrentOfPins(pins);
+        if (!here.anchorUrl || await isGuestCopy(here.anchorUrl)) return { letIn: [], notCurrent };
         const rows = await here.database.getAllAsync<any>(LET_IN_SQL, letInParams(myPubkey));
-        return letInOfRows(rows, await dmPins.peek(myPubkey, here.file), myPubkey);
+        return { letIn: letInOfRows(rows, pins, myPubkey), notCurrent };
     } catch (e) {
         console.warn('[LetIn] The copy in use could not be read', e);
-        return [];
+        return null;
     }
 }
 
@@ -6274,7 +6313,9 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         const direct = listedRequests.filter((c) => isDirectRequestFor(c, publicKey));
         if (direct.length > 0 && pinsNow && !(await isGuestCopy(anchorUrl))) {
             const people = await requestPeople(database, direct, publicKey, pinsNow);
-            const quiet = people ? await quietlyLetIn(publicKey, direct, people, undefined, asked) : new Set<string>();
+            // To this community only, the one the list was read from (#3319 review F3), and never over an answer of the
+            // member's since that read (F2).
+            const quiet = people ? await quietlyLetIn(publicKey, direct, people, anchorUrl, asked, decidedBefore) : new Set<string>();
             if (quiet.size > 0 && await onThisCopy(database) && await asked.still()) {
                 const left = listedRequests.filter((c) => !quiet.has(String(c.id)));
                 const count = Number.isSafeInteger(convData.requests.count) ? convData.requests.count : listedRequests.length;
@@ -6312,6 +6353,45 @@ function ownLineTaken(conversationId: string): void {
 // review 4395706539). Each read notes the count as it is asked.
 let _requestDecisions = 0;
 const _requestDecided = new Map<string, { n: number; request: string }>();
+
+/**
+ * The member's own answers to message requests on this phone that let in once's quiet accept never goes over (#3319 review
+ * F2): Accept, Ignore or Decline on one request on its way to the node (by conversation id; counted from the tap, before any
+ * await), Decline all on its way (any community), and Decline all as a community's node took it (by its file: the decision
+ * count then, as {@link _requestDecided} numbers each one).
+ */
+const _requestsAnswering = new Map<string, number>();
+let _allRequestsDeclining = 0;
+const _allRequestsDeclined = new Map<string, number>();
+
+/** One more (`by` 1) or one fewer (-1) of the member's answers on its way for this request. */
+function answeringRequest(conversationId: string, by: 1 | -1): void {
+    const left = (_requestsAnswering.get(conversationId) ?? 0) + by;
+    if (left > 0) _requestsAnswering.set(conversationId, left);
+    else _requestsAnswering.delete(conversationId);
+}
+
+/**
+ * Whether the member answered this request in `file`'s community on this phone since a list read when `asOf` decisions had
+ * been taken (its own answer, or Decline all there), or an answer of theirs is on its way now: let in once then leaves it.
+ */
+function memberAnsweredSince(conversationId: string, file: string, asOf: number): boolean {
+    return (_requestDecided.get(conversationId)?.n ?? 0) > asOf || (_allRequestsDeclined.get(file) ?? 0) > asOf
+        || _requestsAnswering.has(conversationId) || _allRequestsDeclining > 0;
+}
+
+/** Let in once's quiet accept was not sent: the member answered that request themselves (memberAnsweredSince). */
+class AnsweredByMemberError extends Error {
+    constructor() {
+        super('The member answered this message request themselves.');
+        this.name = 'AnsweredByMemberError';
+    }
+}
+
+/** True for a quiet accept left because the member answered the request themselves: never pressed again this run. */
+export function isAnsweredByMember(e: unknown): boolean {
+    return e instanceof AnsweredByMemberError;
+}
 
 /**
  * The request a read of the node's leaves on one conversation, the read asked for when `asOf` decisions had been taken
@@ -9619,12 +9699,22 @@ export async function saveMessageRequests(myPubkey: string, file: string, reques
  * into this phone's row before this returns (requestDecided): the chat opened next, as after Accept on a Requests card,
  * reads the decided request, and so does every reread of the row after it (PR #2540 review 4395706539).
  */
-export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel', community?: ChatCommunity): Promise<{ success: boolean; request?: any }> {
-    // In place, only a direct chat that community's copy holds (#3305 review F1).
-    const here = await onlyDmInPlace(await chatCopyForRequest(community), conversationId);
-    const answer = await _signedRequest('/api/messages/request', { conversationId, decision }, here.anchorUrl);
-    await requestDecided(here, conversationId, answer?.request);
-    return answer;
+export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel', community?: ChatCommunity, quietSince?: number): Promise<{ success: boolean; request?: any }> {
+    // The member's own answer is on its way from now (memberAnsweredSince); let in once's quiet accept (`quietSince`) is not.
+    const members = quietSince === undefined;
+    if (members) answeringRequest(conversationId, 1);
+    try {
+        // In place, only a direct chat that community's copy holds (#3305 review F1).
+        const here = await onlyDmInPlace(await chatCopyForRequest(community), conversationId);
+        // Let in once (slice S3b): never over an answer of the member's taken since its list was read (`quietSince`
+        // decisions then), or on its way (#3319 review F2). Asked here, with no await before the POST.
+        if (!members && memberAnsweredSince(conversationId, here.file, quietSince)) throw new AnsweredByMemberError();
+        const answer = await _signedRequest('/api/messages/request', { conversationId, decision }, here.anchorUrl);
+        await requestDecided(here, conversationId, answer?.request);
+        return answer;
+    } finally {
+        if (members) answeringRequest(conversationId, -1);
+    }
 }
 
 /**
@@ -9675,6 +9765,8 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
     }
     if (!here.inPlace || !here.anchorUrl) return null;
     const asked = ownListRead(myPubkey);
+    // The member's answers taken here as the list is asked: let in once never goes over one taken since (#3319 review F2).
+    const decidedBefore = _requestDecisions;
     let data: any;
     const deadline = new AbortController();
     const timer = setTimeout(() => deadline.abort(), requestsInPlaceDeadlineMs);
@@ -9719,7 +9811,7 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
         }
     }
     // Let in once (slice S3b): one from someone the member let in is accepted there now, as a tap would, and shows no card.
-    const quiet = await quietlyLetIn(myPubkey, admitted, people, community, asked);
+    const quiet = await quietlyLetIn(myPubkey, admitted, people, community, asked, decidedBefore);
     const waiting = admitted.filter((c) => !quiet.has(c.id));
     const requests = direct
         ? {
@@ -9753,15 +9845,17 @@ async function requestPeople(database: SQLite.SQLiteDatabase, requests: readonly
 /**
  * Let in once (slice S3b, utils/let-in.ts): each of `requests` (direct requests for `me`, listed by `community`'s own server)
  * whose opener the member let in, and whom no key they are known by (`people`) was ever blocked on this phone, is accepted by
- * exactly the signed POST /api/messages/request {accept} a tap on its card sends (decideMessageRequest), while `asked` is
- * still the account on the phone. The ids accepted; none when anything on the way fails (each is then an ordinary card).
+ * exactly the signed POST /api/messages/request {accept} a tap on its card sends (decideMessageRequest), to `community` (the
+ * one the list was read from: #3319 review F3), while `asked` is still the account on the phone, and never over an answer the
+ * member gave it on this phone since the list was read, when `decidedBefore` decisions had been taken, or one on its way
+ * (F2). The ids accepted; none when anything on the way fails (each is then an ordinary card).
  */
-async function quietlyLetIn(me: string, requests: readonly any[], people: ReadonlyMap<string, string[]>, community: ChatCommunity, asked: OwnListRead): Promise<Set<string>> {
+async function quietlyLetIn(me: string, requests: readonly any[], people: ReadonlyMap<string, string[]>, community: ChatCommunity, asked: OwnListRead, decidedBefore: number): Promise<Set<string>> {
     if (requests.length === 0) return new Set();
     try {
         const { acceptLetIn } = await import('./let-in');
         return await acceptLetIn(me, requests.map((c) => ({ id: String(c.id), from: String(c.request?.from ?? ''), keys: people.get(c.id) ?? [] })),
-            (id) => decideMessageRequest(id, 'accept', community), asked.still);
+            (id) => decideMessageRequest(id, 'accept', community, decidedBefore), asked.still);
     } catch (e) {
         console.warn('[LetIn] No request was accepted quietly', e);
         return new Set();
@@ -9829,7 +9923,17 @@ async function admitRequestInto(database: SQLite.SQLiteDatabase, conv: any, me: 
 }
 
 export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ignored: number }> {
-    return _signedRequest('/api/messages/request/ignore-all', {});
+    // On its way from the tap, and once the node took it, for the community it went to: let in once never accepts one of
+    // those requests over it (memberAnsweredSince, #3319 review F2).
+    _allRequestsDeclining++;
+    try {
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        const answer = await _signedRequest('/api/messages/request/ignore-all', {}, anchorUrl);
+        _allRequestsDeclined.set(getDatabaseFilenameForNode(anchorUrl), ++_requestDecisions);
+        return answer;
+    } finally {
+        _allRequestsDeclining--;
+    }
 }
 
 /**

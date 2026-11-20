@@ -8,15 +8,20 @@
  * - **Who is let in** (derived at each read, never stored or sent): the other person of a direct chat the member wrote a line
  *   in or accepted, a friend they added, the other side of a deal both took up, someone they paid (db.ts LET_IN_SQL, one
  *   plain SELECT through each copy: the one in use and every held one, held-chats.ts heldLetIn), and each private contact
- *   linked to a member (contacts-store.ts; opened only when a copy doesn't already let the person in).
+ *   linked to a member (contacts-store.ts; opened only when a copy doesn't already let the person in). Only under a key that
+ *   is the person's now, from every source alike (#3319 review F1): never one any copy's DM pins say a re-key replaced (a
+ *   lost phone's, perhaps), nor one in question while a chat waits for the member over another key on offer.
  * - **The block first** (DESIGN-s7-blocks-verified-everywhere-fable.md §2.4; Marty 21 Nov: someone unblocked is not let in
  *   quietly): never anyone known by a key on the phone's block list (getBlockedUsers), nor by one the member blocked and
  *   unblocked since, while the phone remembers that (blocklist.ts getKeysOnceBlocked). An unreadable block list lets nobody
  *   in quietly. Their request is then an ordinary card the member answers.
  * - **Once per request**: an id this run accepted quietly is never pressed again, whatever a later list says.
+ * - **The member's own answer stands** (#3319 review F2): a request they Accepted, Ignored, Declined (or Declined all) on this
+ *   phone since its list was read, or with that answer still on its way, is never accepted quietly, nor one whose opener they
+ *   blocked since; each is checked at the accept itself.
  */
 import { getBlockedUsers, getKeysOnceBlocked } from './blocklist';
-import { getLetInHere } from './db';
+import { getLetInHere, isAnsweredByMember } from './db';
 import { heldLetIn } from './held-chats';
 import { loadIdentity } from './identity';
 import { loadContacts, onContactsChanged } from './contacts-store';
@@ -62,16 +67,24 @@ async function contactsLetIn(me: string): Promise<Set<string>> {
     return linked.keys.catch(() => new Set<string>());
 }
 
-/** Which of some keys the member let in: the copies read once at the first ask, the contacts only for a key they don't let in. */
+/**
+ * Which of some keys the member let in: the copies read once at the first ask, the contacts only for a key they don't let in.
+ * Only a person's key now (#3319 review F1): never a key any copy's pins say was replaced or is in question (db.ts
+ * notCurrentOfPins), whichever source names it. None when a copy or its pins can't be read.
+ */
 function letInReader(me: string): (keys: readonly string[]) => Promise<Set<string>> {
-    let copies: Promise<Set<string>> | null = null;
+    let copies: Promise<{ letIn: Set<string>; notCurrent: Set<string> } | null> | null = null;
     return async (keys) => {
-        copies ??= Promise.all([getLetInHere(me), heldLetIn(me)]).then(([here, held]) => new Set([...here, ...held]));
-        const inCopies = await copies;
-        const found = new Set(keys.filter((k) => inCopies.has(k)));
-        if (keys.some((k) => !found.has(k))) {
+        copies ??= Promise.all([getLetInHere(me), heldLetIn(me)]).then(([here, held]) => (here && held
+            ? { letIn: new Set([...here.letIn, ...held.letIn]), notCurrent: new Set([...here.notCurrent, ...held.notCurrent]) }
+            : null));
+        const read = await copies;
+        if (!read) return new Set();
+        const current = keys.filter((k) => !read.notCurrent.has(k));
+        const found = new Set(current.filter((k) => read.letIn.has(k)));
+        if (current.some((k) => !found.has(k))) {
             const contacts = await contactsLetIn(me);
-            for (const k of keys) if (contacts.has(k)) found.add(k);
+            for (const k of current) if (contacts.has(k)) found.add(k);
         }
         return found;
     };
@@ -82,8 +95,10 @@ const pressed = new Set<string>();
 
 /**
  * The quiet accept: each candidate whose opener the member let in, and none of whose keys is never let in quietly, goes to
- * `accept` (db.ts: the same decideMessageRequest a tap on Accept calls), one after another, each only while `still()` says
- * the account that asked is the phone's. The ids accepted. Nothing is read when there is no candidate.
+ * `accept` (db.ts: the same decideMessageRequest a tap on Accept calls), one after another. At each accept, the block list is
+ * read again (a Block tapped since the list was read holds: #3319 review F2) and `still()` says the account that asked is the
+ * phone's; `accept` itself leaves a request the member answered since (db.ts memberAnsweredSince), which is then never pressed
+ * this run. The ids accepted. Nothing is read when there is no candidate.
  */
 export async function acceptLetIn(me: string, candidates: readonly LetInCandidate[], accept: (id: string) => Promise<unknown>, still: () => Promise<unknown>): Promise<Set<string>> {
     const accepted = new Set<string>();
@@ -96,12 +111,16 @@ export async function acceptLetIn(me: string, candidates: readonly LetInCandidat
     const letIn = await letInReader(me)(open.map((c) => c.from));
     for (const c of open) {
         if (!letIn.has(c.from)) continue;
+        const now = await keysNeverLetInQuietly();
+        if (!now || now.has(c.from) || c.keys.some((k) => now.has(k))) continue;
         if (!(await still())) break;
         try {
             await accept(c.id);
             pressed.add(`${me}\u0001${c.id}`);
             accepted.add(c.id);
         } catch (e: any) {
+            // The member's own answer stands, now and for the rest of this run.
+            if (isAnsweredByMember(e)) pressed.add(`${me}\u0001${c.id}`);
             console.warn(`[LetIn] A request was not accepted: ${e?.message || e}`);
         }
     }

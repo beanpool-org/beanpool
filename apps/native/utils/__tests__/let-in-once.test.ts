@@ -498,8 +498,8 @@ describe('let in once: the rest of the rule', () => {
         const t3 = performance.now();
         console.log(`[let-in timing] one held copy of 500 chats: ${(t1 - t0).toFixed(1)} ms; the copy in use: ${(t2 - t1).toFixed(1)} ms; a whole check over three copies: ${(t3 - t2).toFixed(1)} ms`);
         // 250 chats with a line of mine, 100 friends (all among them), 167 paid.
-        expect(held?.length).toBeGreaterThanOrEqual(250);
-        expect(here.length).toBeGreaterThanOrEqual(250);
+        expect(held?.letIn.length).toBeGreaterThanOrEqual(250);
+        expect(here?.letIn.length).toBeGreaterThanOrEqual(250);
         // Measured and logged for the PR, never held to a fixed bound here (a shared Mac's load would make it flaky).
     });
 });

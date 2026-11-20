@@ -1,9 +1,11 @@
 /**
  * Slice S5 of scratch/fable-design/DESIGN-onboarding-home-landing-fable.md on the phone's Home rules: the WELCOME TO
  * BEANPOOL! tile stands at the top and is not arrangeable (§4.1), is full for seven days and a band after until Got it or
- * the tour's end (§4.2, §4.3), shares the tour record with 1.4.7 ("Not now" there is "Got it" here), and BeanPool's part
+ * the tour's end (§4.2, §4.3), a newcomer's only (nothing from day 30, §3.3, §4.2), shares the tour record with 1.4.7 ("Not now" there is "Got it" here), and BeanPool's part
  * is drawn for one community per phone (the local mark, utils/welcome-part.ts).
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 const mem = vi.hoisted(() => ({ async: new Map<string, string>(), fail: false }));
@@ -67,12 +69,31 @@ describe('S5: the tile stands at the top of Home and is not arrangeable', () => 
     });
 });
 
-describe('S5: full for seven days, then a band, until Got it or the tour ends', () => {
-    it('day 1 full, day 8 a band, day 40 still a band (never gone without a tap)', () => {
+describe('S5: full for seven days, then a band to day 30, until Got it or the tour ends', () => {
+    it('day 1 full, day 8 and day 29 a band (never gone without a tap inside the newcomer\'s 30 days), day 31 nothing', () => {
         expect(welcomeShapeFor(answer({ joinedDaysAgo: 0 }), { now: NOW })).toBe('full');
         expect(welcomeShapeFor(answer({ joinedDaysAgo: 8 }), { now: NOW })).toBe('band');
-        expect(welcomeShapeFor(answer({ joinedDaysAgo: 40 }), { now: NOW })).toBe('band');
+        expect(welcomeShapeFor(answer({ joinedDaysAgo: 29 }), { now: NOW })).toBe('band');
+        expect(welcomeShapeFor(answer({ joinedDaysAgo: 31 }), { now: NOW })).toBeNull();
         expect(ids(cardsToDraw(answer({ joinedDaysAgo: 8 }), { v: 2, cards: [{ id: 'start', type: 'start' }, ...starterCards()], dismissed: {}, updatedAt: null }, ctx()))).toContain('start');
+    });
+
+    it("a member of months who never ended the tour: no welcome on a new app's first Home, and no once-per-phone mark (design §3.3)", () => {
+        // Joined in March 2026, never tapped Take the tour or Not now (1.4.7's card left by itself at day 7), no saved Home:
+        // the default list holds Welcome, but it is not drawn, so Home's mark (index.tsx, `welcomeDrawnHere`) is never written.
+        const veteran = { ...answer(), me: { ...answer().me!, joinedAt: '2026-03-12T09:00:00.000Z' } } as HomeAnswer;
+        expect(welcomeShapeFor(veteran, { now: NOW })).toBeNull();
+        expect(welcomeUp(veteran, { now: NOW })).toBe(false);
+        expect(ids(cardsToDraw(veteran, null, ctx()))).not.toContain('start');
+        expect(ids(cardsToDraw(veteran, { v: 2, cards: [{ id: 'start', type: 'start' }, ...starterCards()], dismissed: {}, updatedAt: iso(NOW - 200 * DAY) }, ctx()))).not.toContain('start');
+        // Even with Take the tour again open on this phone: the tile is a newcomer's.
+        expect(welcomeShapeFor(veteran, { now: NOW, tourOpen: true })).toBeNull();
+    });
+
+    it("Home writes the once-per-phone mark only when the tile is drawn here (the drawn list holds Welcome)", () => {
+        const src = readFileSync(join(__dirname, '..', '..', 'app', '(tabs)', 'index.tsx'), 'utf8');
+        expect(src).toMatch(/const welcomeDrawnHere = drawn\.some\(c => c\.type === 'start'\);/);
+        expect(src).toMatch(/if \(!welcomeDrawnHere \|\| [^\n]*\) return;\s*\n\s*void markWelcomePart\(/);
     });
 
     it("Got it here or 1.4.7's Not now (the same 'skipped' record on the account), and the tour's end: gone on every device", () => {

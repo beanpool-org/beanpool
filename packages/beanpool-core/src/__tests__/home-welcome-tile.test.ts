@@ -6,8 +6,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_DEFAULT_LIST, WELCOME_DAYS, defaultCards, welcomeDrawn, welcomeShape,
+    HOME_DEFAULT_LIST, WELCOME_BAND_DAYS, WELCOME_DAYS, defaultCards, welcomeDrawn, welcomeShape,
 } from '../home-frame.js';
+import { FIRST_STEPS_DAYS } from '../first-steps.js';
 import { WELCOME_TILE_WORDS, welcomeTileLines } from '../home-welcome.js';
 import { PROTOCOL_CONSTANTS } from '../protocol.js';
 import { readTourRecord, tourEnded, tourRecord } from '../tour.js';
@@ -22,13 +23,34 @@ describe('S5: the tile is full for seven days, then a band, until Got it or the 
         expect(WELCOME_DAYS).toBe(7);
         expect(welcomeShape(false, daysAgo(0), NOW)).toBe('full');
         expect(welcomeShape(false, new Date(NOW - 7 * DAY + 1).toISOString(), NOW)).toBe('full');
-        // Day 8: folded to one band, never gone without the member's tap.
+        // Day 8: folded to one band, never gone without the member's tap inside the newcomer's 30 days.
         expect(welcomeShape(false, daysAgo(7), NOW)).toBe('band');
-        expect(welcomeShape(false, daysAgo(30), NOW)).toBe('band');
-        expect(welcomeShape(false, daysAgo(400), NOW)).toBe('band');
+        expect(welcomeShape(false, daysAgo(29), NOW)).toBe('band');
         // Got it (skipped) or the tour's end (done): gone, full or band.
         expect(welcomeShape(true, daysAgo(0), NOW)).toBeNull();
-        expect(welcomeShape(true, daysAgo(30), NOW)).toBeNull();
+        expect(welcomeShape(true, daysAgo(9), NOW)).toBeNull();
+    });
+
+    it("a newcomer's only: nothing from day 30, the First steps window (design §3.3 a returning member unchanged, §4.2 day 30)", () => {
+        expect(WELCOME_BAND_DAYS).toBe(FIRST_STEPS_DAYS);
+        expect(WELCOME_BAND_DAYS).toBe(30);
+        // The table: joined today -> tile; day 8 -> band; day 29 -> band; day 31 -> nothing; March 2026 with no tour record
+        // (a member of months who never ended the tour, opening a new app) -> nothing; the tour ended -> nothing.
+        const rows: [string, boolean, string, ReturnType<typeof welcomeShape>][] = [
+            ['joined today', false, daysAgo(0), 'full'],
+            ['day 8', false, daysAgo(8), 'band'],
+            ['day 29', false, daysAgo(29), 'band'],
+            ['day 30, to the millisecond', false, new Date(NOW - 30 * DAY).toISOString(), null],
+            ['a millisecond before day 30', false, new Date(NOW - 30 * DAY + 1).toISOString(), 'band'],
+            ['day 31', false, daysAgo(31), null],
+            ['March 2026, no tour record', false, '2026-03-12T09:00:00.000Z', null],
+            ['a year on, no tour record', false, daysAgo(400), null],
+            ['tour ended, joined today', true, daysAgo(0), null],
+            ['tour ended, March 2026', true, '2026-03-12T09:00:00.000Z', null],
+        ];
+        for (const [name, tourOver, joinedAt, want] of rows) expect(welcomeShape(tourOver, joinedAt, NOW), name).toBe(want);
+        // Take the tour again after day 30 draws nothing either: the full tile is a newcomer's too.
+        expect(welcomeDrawn(false, daysAgo(31), NOW)).toBe(false);
         // A join date not heard keeps it full: never hidden, never folded, for a missing fact.
         expect(welcomeShape(false, null, NOW)).toBe('full');
         expect(welcomeShape(false, 'not a date', NOW)).toBe('full');

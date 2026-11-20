@@ -27,6 +27,7 @@ import { toolHomeCardTypes } from './tools/index.js';
 import { KNOWLEDGE_PLACE_LINE, LEARN_HOME_WORDS, knowledgeFeatureMode } from './knowledge.js';
 import { FORUM_HOME_WORDS, forumOn } from './forum.js';
 import { t, word, type WordKey } from './words.js';
+import { FIRST_STEPS_DAYS } from './first-steps.js';
 import type { CardHue } from './brand-colours.js';
 
 // ── The shape ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -501,7 +502,7 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
  *
  * | Card | Drawn when |
  * |---|---|
- * | `start` (Welcome) | Until the tour is taken or Got it (1.4.7's Not now): full for seven days, then one band ({@link welcomeShape}) |
+ * | `start` (Welcome) | A newcomer's, until the tour is taken or Got it (1.4.7's Not now): full for seven days, one band to day 30, then never ({@link welcomeShape}) |
  * | `safety` (Your way back in) | On its schedule only, for an account with no second way back (the node's `me.wayBack`), on any node, its 12-words door shut or not (the web since D3, the phone since D2 and D2b, both reading core's gate with `me`) |
  * | `steps` (First steps) | A line is left, in the first 30 days (first-steps.ts `FIRST_STEPS_DAYS`) |
  * | `market` (New in the Market) | A listing exists, or the community's examples |
@@ -554,16 +555,27 @@ export const WELCOME_DAYS = 7;
 export type WelcomeShape = 'full' | 'band' | null;
 
 /**
- * How Welcome is drawn (DESIGN-onboarding-home-landing-fable.md §4.2-§4.3, slice S5): `full` for seven days after joining,
- * then `band`, one line with its ×, until the tour is done or Got it (a skip, the record 1.4.7's Not now writes too);
- * `null` once it has. It never leaves without the member's tap, and never stays a screen tall for a month. `tourOver` is
- * the account's record saying done or skipped (tour.ts `tourEnded`); a join date the node didn't send or can't be read
- * keeps it full, never hides it.
+ * How long Welcome is drawn at all, in days after joining: the newcomer's window, the same 30 days First steps keeps
+ * (first-steps.ts `FIRST_STEPS_DAYS`). After it the member is no newcomer, and their Home is unchanged by the welcome
+ * (DESIGN-onboarding-home-landing-fable.md §3.3 "A returning member", §4.2 "Day 30": no band).
+ */
+export const WELCOME_BAND_DAYS = FIRST_STEPS_DAYS;
+
+/**
+ * How Welcome is drawn (DESIGN-onboarding-home-landing-fable.md §3.3, §4.2-§4.3, slice S5): `full` for seven days after
+ * joining, then `band`, one line with its ×, up to day 30 ({@link WELCOME_BAND_DAYS}), then `null`: a newcomer's only, so a
+ * member who joined months ago and never ended the tour meets no welcome on a new app. Inside those days, `null` once the
+ * tour is done or Got it (a skip, the record 1.4.7's Not now writes too); it never leaves without the member's tap, and
+ * never stays a screen tall for a month. `tourOver` is the account's record saying done or skipped (tour.ts `tourEnded`);
+ * a join date the node didn't send or can't be read keeps it full, never hides it.
  */
 export function welcomeShape(tourOver: boolean, joinedAt: string | null | undefined, now: number = Date.now()): WelcomeShape {
     if (tourOver) return null;
     const joined = typeof joinedAt === 'string' ? Date.parse(joinedAt) : NaN;
-    return !Number.isFinite(joined) || now - joined < WELCOME_DAYS * 86_400_000 ? 'full' : 'band';
+    if (!Number.isFinite(joined)) return 'full';
+    const age = now - joined;
+    if (age < WELCOME_DAYS * 86_400_000) return 'full';
+    return age < WELCOME_BAND_DAYS * 86_400_000 ? 'band' : null;
 }
 
 /**

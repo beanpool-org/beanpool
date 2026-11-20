@@ -33,6 +33,8 @@ import WebSocket from 'ws';
 import { localFetch } from './keepalive-test-fetch.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+// Event dates are in Y27, a year laid out as 2027 is, always ahead (future-year-test-helper.ts).
+import { Y27 } from './future-year-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -426,7 +428,7 @@ async function main() {
     const listener = await socketOf(watcher);
     const retitle = (who: Id, id: string, title: string) => call('POST', '/api/marketplace/posts/update', who, { id, authorPublicKey: who.pubKeyHex, title });
     const WEEKLY = {
-        eventStartAt: undefined, eventEndAt: undefined, eventStartLocal: '2027-10-01T20:50', eventEndLocal: '2027-10-01T22:50',
+        eventStartAt: undefined, eventEndAt: undefined, eventStartLocal: `${Y27}-10-01T20:50`, eventEndLocal: `${Y27}-10-01T22:50`,
         eventTz: 'Australia/Sydney', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' },
     };
     let round = 0;

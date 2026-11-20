@@ -354,11 +354,11 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     // The home screen's column (homeContent padding 24 a side): the title's line, wider than the join card's.
     const HOME_LINE = FLOOR - 2 * 24;
     const LINE_OF: Record<string, number> = { 'Welcome to BeanPool': HOME_LINE };
-    // The onboarding stepper (welcome.tsx stepperStyles): four equal quarters of the row inside the scroll's 24dp and the
-    // row's 8dp padding, less three 12dp connectors with 2dp margins; labels at 11, up to three lines, shrinking to 0.7.
+    // The onboarding stepper (welcome.tsx stepperStyles): three equal thirds (How it Works left the path, S5) of the row inside the scroll's 24dp and the
+    // row's 8dp padding, less two 12dp connectors with 2dp margins; labels at 11, up to three lines, shrinking to 0.7.
     // Every real language holds in two; the third line is for the pseudo-locale's +35%.
-    const STEPS = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
-    const STEP_WIDTH = (FLOOR - 2 * 24 - 2 * 8 - 3 * (12 + 2 * 2)) / 4;
+    const STEPS = ['Your Name', 'Your Photo', 'Safety Backup'];
+    const STEP_WIDTH = (FLOOR - 2 * 24 - 2 * 8 - 2 * (12 + 2 * 2)) / 3;
     const ALL_LANGS: UiLang[] = ['xx', ...fs.readdirSync(NATIVE_WORDS).filter((f) => /^[A-Za-z-]+\.json$/.test(f)).map((f) => f.slice(0, -5) as UiLang)];
     /**
      * The source with what is not on a phone's card taken out: every call that hands its words to one of the phone's own
@@ -402,16 +402,15 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
         expect(source).toMatch(/memberBtnText: \{[^}]*textAlign: 'center'/);
     });
 
-    it('the stepper\'s four labels are through t(), in four equal quarters, up to three centred lines at 0.7', () => {
-        expect(source).toContain("const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup'), t('How it Works')];");
+    it('the stepper\'s three labels are through t(), in three equal thirds, up to three centred lines at 0.7', () => {
+        // How it Works left the path (slice S5, DESIGN-onboarding-home-landing-fable.md §3.1): three steps, not four.
+        expect(source).toContain("const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup')];");
+        expect(source).not.toContain("t('How it Works')");
         expect(source).toMatch(/stepperStyles\.labelActive\]\} numberOfLines=\{3\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>\{label\}/);
         expect(source).toMatch(/stepItem: \{\s*alignItems: 'center',\s*flex: 1,/);
         expect(source).toMatch(/ {4}label: \{[^}]*textAlign: 'center'/);
         expect(source).toMatch(/ {4}line: \{\s*width: 12,/);
-        expect(STEP_WIDTH).toBe(52);
-        // English needs it too: on one line the four labels are 273dp at 0.7 by this model (237dp with real shaping) in
-        // a 184dp row, so one line cut them off before any translation.
-        expect(STEPS.reduce((w, k) => w + widthOf(k, 11) * 0.7, 0)).toBeGreaterThan(4 * STEP_WIDTH);
+        expect(STEP_WIDTH).toBeCloseTo(224 / 3, 5);
     });
 
     for (const lang of ALL_LANGS) {

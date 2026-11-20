@@ -39,6 +39,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+// Event dates are in Y27, a year laid out as 2027 is, always ahead (future-year-test-helper.ts).
+import { Y27 } from './future-year-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -213,10 +215,10 @@ async function main(): Promise<void> {
 
     // ── 9. A DST gap is said, from this route too ─────────────────────────────────────────────
     console.log('\n── 9. A clock the zone skips ──');
-    const gap = await signedFetch('POST', eventPath, event({ eventStartAt: undefined, eventStartLocal: '2027-10-03T02:30', eventTz: 'Australia/Sydney' }), keeper);
-    assert(gap.status === 200 && JSON.stringify(gap.body?.eventTimeAdjusted) === JSON.stringify({ start: { kind: 'gap', asked: '2027-10-03T02:30', saved: '2027-10-03T03:30' }, end: null })
+    const gap = await signedFetch('POST', eventPath, event({ eventStartAt: undefined, eventStartLocal: `${Y27}-10-03T02:30`, eventTz: 'Australia/Sydney' }), keeper);
+    assert(gap.status === 200 && JSON.stringify(gap.body?.eventTimeAdjusted) === JSON.stringify({ start: { kind: 'gap', asked: `${Y27}-10-03T02:30`, saved: `${Y27}-10-03T03:30` }, end: null })
         && !('eventTimeAdjusted' in (gap.body?.post ?? {})),
-        `Sydney 3 Oct 2027 02:30 does not exist: the enterprise route answers eventTimeAdjusted next to the post (got ${gap.status} ${JSON.stringify(gap.body?.eventTimeAdjusted)} ${gap.error ?? ''})`);
+        `Sydney 3 Oct ${Y27} 02:30 does not exist: the enterprise route answers eventTimeAdjusted next to the post (got ${gap.status} ${JSON.stringify(gap.body?.eventTimeAdjusted)} ${gap.error ?? ''})`);
     assert(!('eventTimeAdjusted' in (created.body ?? {})), "an old client's instant-only event answered none");
 
     console.log(`\n${passed}/${run} checks passed.`);

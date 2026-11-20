@@ -3,6 +3,9 @@ import { GossipManager } from '../gossip.js';
 import { PassportManager } from '../passport.js';
 import { RouterManager, ResourcePin } from '../router.js';
 
+/** A year from now (#3303 date bombs): a fixed expiry date, once passed, drops the pins the test is about. */
+const IN_A_YEAR = new Date(Date.now() + 365 * 86_400_000).toISOString();
+
 describe('GossipManager', () => {
     it('should process incoming gossip correctly with LWW logic', () => {
         const passportManager = new PassportManager('node-1');
@@ -16,7 +19,7 @@ describe('GossipManager', () => {
             location: { lat: 0, lng: 0 },
             description: 'desc1',
             updatedAt: new Date('2026-01-01').toISOString(),
-            expiresAt: new Date('2026-12-31').toISOString(),
+            expiresAt: IN_A_YEAR,
         };
 
         routerManager.addPin(pin1);
@@ -28,7 +31,7 @@ describe('GossipManager', () => {
             location: { lat: 0, lng: 0 },
             description: 'desc1-updated',
             updatedAt: new Date('2026-01-02').toISOString(),
-            expiresAt: new Date('2026-12-31').toISOString(),
+            expiresAt: IN_A_YEAR,
         };
 
         const incomingPin2New: ResourcePin = {
@@ -38,7 +41,7 @@ describe('GossipManager', () => {
             location: { lat: 0, lng: 0 },
             description: 'desc2',
             updatedAt: new Date('2026-01-01').toISOString(),
-            expiresAt: new Date('2026-12-31').toISOString(),
+            expiresAt: IN_A_YEAR,
         };
 
         const payload = JSON.stringify({

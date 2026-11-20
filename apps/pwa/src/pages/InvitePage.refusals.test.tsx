@@ -183,7 +183,8 @@ describe('C: every refusal of Make invite shows its own words, and the page stay
 // ── D: an invite in Pending once, by its code ───────────────────────────────────────────────────────────────────────────
 
 const row = (code: string, createdAt: string, extra: Partial<Row> = {}): Row => ({ code, createdBy: IDENTITY.publicKey, createdAt, usedBy: null, usedAt: null, ...extra });
-const OLD = row('INV-OLD1', '2026-11-01T00:00:00.000Z');
+// Two days old, from now (#3303 date bombs): a fixed date ran out at the invite's 30 days (INVITE_LIFE_DAYS) and left Pending.
+const OLD = row('INV-OLD1', new Date(Date.now() - 2 * 86_400_000).toISOString());
 const X = row('INV-XXXX', new Date(Date.now() - 60_000).toISOString(), { bill: { id: 'b-1', whatFor: 'Bread', amount_c: 1200 } });
 const NEW = row('INV-NEW2', new Date().toISOString(), { bill: { id: 'b-2', whatFor: 'Bread', amount_c: 1200 } });
 const pendingCodes = () => {

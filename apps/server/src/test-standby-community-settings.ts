@@ -407,7 +407,7 @@ type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kep
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
 // The community's node_config rows, as config/community-settings.ts COMMUNITY_NODE_CONFIG_KEYS lists them: voucher_budget and
 // member_gift are the vouchers' two (engine/vouchers.ts; amend2 §3: "both in COMMUNITY_NODE_CONFIG_KEYS so every copy carries them").
-const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl', 'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock', 'contact_copies'] as const;
+const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl', 'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock', 'contact_copies', 'community_welcome'] as const;
 const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'publishListingsFromHere', 'directoryPushIntervalHours', 'areaName'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);
@@ -487,6 +487,8 @@ async function main(): Promise<void> {
         // The listing promise's two ticks and a closing day (mothership A2, engine/directory-promise.ts): the community's word.
         built('its owners make the listing promise and say when it closes', await A('/api/local/admin/directory/promise', {
             reports: true, notice: true, closingOn: new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10) }));
+        // The welcome for new members (config/community-welcome.ts, onboarding S6): the owners' words, members only.
+        built('its owner writes a welcome for new members', await A('/api/local/admin/community-welcome', { welcome: 'Welcome to Riverbend.\nMarket day is Saturday.' }));
         await main.send('set-local', { patch: { currencyType: 'text', currencyValue: 'Seeds' } });
         // 0.1 Beans is 10 hundredths: the ledger and its baseline are whole hundredths now.
         built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 10 })) ? 200 : 500, body: {} });
@@ -530,6 +532,8 @@ async function main(): Promise<void> {
             && kept1.record?.directory?.publishContactEmail === true && kept1.record?.directory?.publishContactPhone === false
             && kept1.record?.nodeConfig?.ledger_audit_baseline === mSettings.rows.ledger_audit_baseline,
             `S keeps M's record, not installed: its name, its choice to publish its email and not its phone, its baseline (${j(kept1 && { installedAt: kept1.installedAt, name: kept1.record?.localConfig?.communityName, email: kept1.record?.directory?.publishContactEmail, phone: kept1.record?.directory?.publishContactPhone, baseline: kept1.record?.nodeConfig?.ledger_audit_baseline })})`);
+        assert(kept1?.record?.nodeConfig?.community_welcome === 'Welcome to Riverbend.\nMarket day is Saturday.' && sNow.rows.community_welcome === undefined,
+            `the record S keeps has M's welcome for new members, and S has none of its own until it is promoted (${j({ kept: kept1?.record?.nodeConfig?.community_welcome ?? null, own: sNow.rows.community_welcome ?? null })})`);
         assert(kept1?.record?.nodeConfig?.door === 'admins' && sNow.rows.door === undefined,
             `the record S keeps says only admins invite, and S's own door is its own until it is promoted (${j({ kept: kept1?.record?.nodeConfig?.door, own: sNow.rows.door ?? null })})`);
         assert(kept1?.record?.nodeConfig?.confirmation === 'off' && sNow.rows.confirmation === undefined,

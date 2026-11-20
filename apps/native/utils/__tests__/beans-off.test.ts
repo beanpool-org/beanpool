@@ -20,6 +20,7 @@ import {
     decisionTouchesFor, decisionEffectsFor, proposeTitlePlaceholder,
 } from '../beans-off';
 import { beansOn, readNodeProfile, type NodeFeatures } from '../node-profile';
+import { welcomeTileLines } from '@beanpool/core';
 
 const GLOBAL = readNodeProfile({ profile: 'global', features: { beans: false, escrow: false } })!.features;
 const LOCAL = readNodeProfile({ profile: 'local', features: { beans: true, escrow: true } })!.features;
@@ -223,10 +224,14 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         // Drawn in the member's language (words S3e): the card's words are word() keys, t()'d where shown.
         expect(at('{t(NO_BEANS_GUIDE_CARD.text)}')).toBeGreaterThan(other);
         expect(block(guide, '{beansOn && (')).toContain('tab to send credits');
-        // The join wizard says the same thing on the same kind of community.
+        // The join wizard has no How it Works since slice S5 (DESIGN-onboarding-home-landing-fable.md §3.1): on a community
+        // with no Beans, Home's WELCOME TO BEANPOOL! tile says where Beans live instead (core welcomeTileLines), and says
+        // nothing of Beans' figures.
         const welcome = read('app/welcome.tsx');
-        expect(welcome).toContain(NO_BEANS_GUIDE_CARD.title);
-        expect(welcome).toContain(NO_BEANS_GUIDE_CARD.text);
+        expect(welcome).not.toContain(NO_BEANS_GUIDE_CARD.title);
+        const global = welcomeTileLines({ profile: 'global', beans: false }).map((l) => l.text).join(' ');
+        expect(global).toContain('No Beans here. Trading in Beans happens in local communities.');
+        expect(global).not.toMatch(/\d/);
     });
 
     it('a group’s post form: no price field, and the price never holds the post back', () => {

@@ -87,13 +87,17 @@ export function ListingPromisePanel({ activeNode, viewer = { kind: 'token' } }: 
         if (p) { setReports(p.reports); setNotice(p.notice); setClosingOn(p.closingOn ?? ''); }
     }, []);
 
+    // The node as values, not the object: single-node Settings makes a new activeNode on every App render (the 5-second
+    // diagnostics poll among them), and keyed on the object this would read again each time and put the saved ticks and day
+    // back over the owner's unsaved ones (#3313 review).
+    const credential = nodeCredential(activeNode);
     useEffect(() => {
         let mounted = true;
         setLoad('loading');
         (async () => {
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/directory/promise'), {
-                    headers: buildAdminHeaders(nodeCredential(activeNode)),
+                    headers: buildAdminHeaders(credential),
                     cache: 'no-store',
                 });
                 const read = res.ok ? readPromise(await res.json().catch(() => null)) : ({ ok: false } as const);
@@ -104,7 +108,7 @@ export function ListingPromisePanel({ activeNode, viewer = { kind: 'token' } }: 
             }
         })();
         return () => { mounted = false; };
-    }, [activeNode, take]);
+    }, [activeNode.id, activeNode.url, credential, take]);
 
     const changed = !!promise && (reports !== promise.reports || notice !== promise.notice || closingOn !== (promise.closingOn ?? ''));
 

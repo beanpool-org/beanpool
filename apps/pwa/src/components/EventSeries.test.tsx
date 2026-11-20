@@ -263,6 +263,10 @@ describe('the ↻ caption: card, map popup (the same card) and Home', () => {
 
 describe('the detail: Next dates', () => {
     beforeEach(() => { vi.mocked(api.setEventDateCancelled).mockReset(); });
+    // Now is a month before the series' first date (#3303 date bombs): the series is in 2027, and on the wall's clock its
+    // dates pass and Next dates goes stale. Only Date is held; the timers stay real.
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'], now: new Date('2027-09-15T00:00:00.000Z'), shouldAdvanceTime: true }); });
+    afterEach(() => { vi.useRealTimers(); });
 
     it('a member sees the dates, the cancelled one marked, and no host controls', () => {
         detailAt320(<EventDetail post={series} identity={{ ...identity, publicKey: 'me-pk' }} />);

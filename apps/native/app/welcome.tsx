@@ -73,7 +73,6 @@ import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
-import { NO_WORDS_WAY_BACK } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { explicitEditAvatar } from '../utils/avatar-value';
 import { clearPendingProfileChange, keepPendingProfileChange } from '../utils/pending-profile-sync';
@@ -92,10 +91,6 @@ import { loadPendingCommunityRestore } from '../utils/community-recovery';
 import { landNextOn } from '../utils/member-landing';
 import { visitGlobalAsGuest } from '../utils/global-guest-visit';
 import { LOOK_JOIN, LOOK_LANDING, lookingAroundHere } from '../utils/look-around';
-import {
-    declineNotifications, readNotificationPermissionRecord, readOsNotificationPermission,
-    shouldShowNotificationCard, turnOnNotifications,
-} from '../utils/notification-permission';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
@@ -183,7 +178,7 @@ export default function WelcomeScreen() {
         }
     }
 
-    const { styles, profileStyles, stepperStyles, guideStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+    const { styles, profileStyles, stepperStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
     const accentInk = dark ? palette.blue400 : palette.blue600;
     const params = useGlobalSearchParams();
@@ -198,15 +193,15 @@ export default function WelcomeScreen() {
     const appliedInvites = useRef(new Set<string>());
     const { identity: accountOnPhone, setIdentity } = useIdentity();
     const { recheck: recheckNodeStatus } = useNodeStatus();
-    const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string))
+    const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'confirmReplace'].includes(params.mode as string))
         ? (params.mode as any)
         : 'home';
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'ownerCard' | 'confirmReplace'>(initialMode);
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'ownerCard' | 'confirmReplace'>(initialMode);
     // The first question's answer on a phone with no account (utils/first-question.ts): null asks "Used BeanPool before?",
     // 'new' shows the doors. In memory only: a new start of the app asks again.
     const [firstAnswer, setFirstAnswer] = useState<FirstAnswer>(null);
     useEffect(() => {
-        if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string)) {
+        if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'confirmReplace'].includes(params.mode as string)) {
             setMode(params.mode as any);
             // Consume the param. Leaving it set meant any later re-render re-applied it,
             // so "← Back to Restore Options" out of SSO recovery snapped straight back
@@ -221,24 +216,6 @@ export default function WelcomeScreen() {
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
-    const [notifVisible, setNotifVisible] = useState(false);
-    const [notifBusy, setNotifBusy] = useState(false);
-    useEffect(() => {
-        if (mode !== 'onboardingGuide') return;
-        let live = true;
-        const check = async () => {
-            const [record, os] = await Promise.all([
-                readNotificationPermissionRecord(),
-                readOsNotificationPermission(),
-            ]);
-            // Where expo-notifications can't load there is nothing to turn on, so no card (as at a first message).
-            if (live) setNotifVisible(os.available && shouldShowNotificationCard(record, os.granted));
-        };
-        void check();
-        // Back from the phone's settings (Turn on when the phone won't ask again): the card goes once they allow it.
-        const sub = AppState?.addEventListener?.('change', (next) => { if (next === 'active') void check(); });
-        return () => { live = false; sub?.remove(); };
-    }, [mode]);
     // Communities this device has joined before. They survive an identity wipe on purpose, so
     // a member recovering on the same phone can tap theirs rather than retype its address.
     const [savedNodes, setSavedNodes] = useState<SavedNode[]>([]);
@@ -419,10 +396,9 @@ export default function WelcomeScreen() {
     // --- The global community's open door (utils/global-join.ts; design §2.3). Sign in once, choose a
     // name, join; then the same steps as an invite. `joinFlow` says which door this wizard came in by. ---
     const [joinFlow, setJoinFlow] = useState<OnboardingFlow>('invite');
-    // Safety Backup's copies: where the community just joined keeps them (the sign-in row's words and what it offers), and
-    // the guide's: whether its Getting Back In card offers a sign-in.
+    // Safety Backup's copies: where the community just joined keeps them (the sign-in row's words and what it offers).
     useEffect(() => {
-        if (mode !== 'seedBackup' && mode !== 'onboardingGuide') return;
+        if (mode !== 'seedBackup') return;
         let live = true;
         void (async () => {
             const url = await currentAnchorUrl().catch(() => null);
@@ -440,7 +416,7 @@ export default function WelcomeScreen() {
     const [doorSignIn, setDoorSignIn] = useState<DoorSignIn | null>(null);
     /** Under the joining spinner while the door's sign-in is asked for once more (utils/global-join.ts `submitJoin`). */
     const [doorNotice, setDoorNotice] = useState<string | null>(null);
-    /** Whether the community being joined trades in Beans: the How it Works step leaves them out if not. */
+    /** Whether the community being joined trades in Beans: the photo step's note says so. */
     const [joinBeansOn, setJoinBeansOn] = useState(true);
     /**
      * The 12-words door (two-doors design §2): whether this door has it (`features.wordsDoor`), the way the member chose
@@ -2251,7 +2227,7 @@ export default function WelcomeScreen() {
         setGlobalPhase(next === 'restore' ? 'restore' : answer.kind === 'door_closed' ? 'unavailable' : 'closed');
     }
 
-    /** In. From here it is an invite join's steps: photo, Safety Backup, How it Works, then the Market. */
+    /** In. From here it is an invite join's steps: photo, Safety Backup, then Home. */
     async function finishGlobalJoin(joined: BeanPoolIdentity, joinEnrolment: KeeperEnrolmentResult | null, key: JoinKey, way: DoorWay = 'sign-in') {
         // Whose words Safety Backup shows: a key the door made is the member's own new one; the phone's own account's wait
         // for its lock. Read before the record below replaces the door's.
@@ -2373,12 +2349,12 @@ export default function WelcomeScreen() {
     }
 
     // --- Onboarding Progress Stepper ---
-    // Four equal quarters of the row, each label up to three centred lines, shrinking to 0.7 at most: at 320dp and 1.3x
-    // text the four English labels need 237dp on one line even at 0.7 against the row's 184dp (measured with real
-    // shaping), so one line cut them off. Two lines hold every language; the third is for the pseudo-locale's +35%
-    // (utils/__tests__/language-switch-render.test.ts).
-    function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
-        const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup'), t('How it Works')];
+    // Three equal thirds of the row (How it Works left the path, slice S5), each label up to three centred lines, shrinking
+    // to 0.7 at most: at 320dp and 1.3x text the four English labels of old needed 237dp on one line even at 0.7 against
+    // the row's 184dp (measured with real shaping), so one line cut them off. Two lines hold every language; the third is
+    // for the pseudo-locale's +35% (utils/__tests__/language-switch-render.test.ts).
+    function OnboardingStepper({ step }: { step: 1 | 2 | 3 }) {
+        const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup')];
         return (
             <View style={stepperStyles.container}>
                 {steps.map((label, i) => {
@@ -2756,9 +2732,17 @@ export default function WelcomeScreen() {
                             </Pressable>
                         ) : (
                         <>
+                        {/* One recovery truth (rehearsal 14 Oct S5, recoveryTruth.test.ts): How it Works' Getting Back In card
+                            said it until slice S5 took that screen off the join; a 12-words member already reads it in the note
+                            above (WordsBackupNote), so it is said here for everyone else whose words are shown. */}
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
                             {t('💡 Write them down on paper and keep it somewhere safe.')}
                         </Text>
+                        {!wordsMember && (
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }} testID="words-no-reset">
+                                {t('Nobody can reset them: not us, not this community.')}
+                            </Text>
+                        )}
                         {/*
                           Says out loud that this screen is not the only chance. Without it,
                           removing the gate just leaves people guessing whether skipping
@@ -2915,261 +2899,17 @@ export default function WelcomeScreen() {
                                 const who = pendingIdentity;
                                 void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
                             }
-                            updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
-                            setMode('onboardingGuide');
-                        }}
-                        accessibilityRole="button"
-                    >
-                        <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
-                    </Pressable>
-                </StepFooter>
-            </SafeAreaView>
-        );
-    }
-
-    // --- STEP 4: ONBOARDING GUIDE (What is BeanPool & ledger rules) ---
-    if (mode === 'onboardingGuide' && pendingIdentity) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <StatusBar style={dark ? 'light' : 'dark'} />
-                <ScrollView key={mode} contentContainerStyle={styles.scroll}>
-                    <OnboardingStepper step={4} />
-                    <View style={styles.card}>
-                        <Text style={styles.title}>{t('🫘 Welcome to BeanPool')}</Text>
-                        <Text style={styles.subtitle}>
-                            {joinBeansOn ? t("Let's look at how this community economy works.") : t("Here's how BeanPool works.")}
-                        </Text>
-
-                        {/* Cards 1-3 are Beans. A community with Beans off (the global one) gets one card that says so. */}
-                        {joinBeansOn ? (
-                        <>
-                        {/* Card 1: Energy Exchange */}
-                        <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>{t('⚡ Energy Exchange Marketplace')}</Text>
-                            <Text style={guideStyles.cardText}>
-                                {t('BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.')}
-                            </Text>
-                            <View style={guideStyles.highlightBox}>
-                                <Text style={guideStyles.highlightText}>
-                                    <Sentence
-                                        text={t('🟢 {zero} This means you have given as much value to your community as you have received from it.')}
-                                        parts={{ zero: <Text style={{ fontWeight: 'bold' }}>{t('The best place to be is zero (0 Beans).')}</Text> }}
-                                    />
-                                </Text>
-                            </View>
-                            <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
-                                <Text style={[guideStyles.highlightText, { color: dark ? palette.amber400 : (palette.amber700 || '#b45309') }]}>
-                                    <Sentence
-                                        text={t('🫘 {first} In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.')}
-                                        parts={{ first: <Text style={{ fontWeight: 'bold' }}>{t('Contributions First.')}</Text> }}
-                                    />
-                                </Text>
-                            </View>
-                        </View>
-
-                        {/* Card 2: The Ledger Rules */}
-                        <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>{t('🪙 The Mutual Credit Ledger')}</Text>
-                            
-                            <View style={guideStyles.bulletRow}>
-                                <Text style={guideStyles.bulletEmoji}>🤝</Text>
-                                <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>{t('Trust-Backed Credit')}</Text>
-                                    <Text style={guideStyles.bulletText}>
-                                        {t('Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.')}
-                                    </Text>
-                                </View>
-                            </View>
-
-                            <View style={guideStyles.bulletRow}>
-                                <Text style={guideStyles.bulletEmoji}>🌾</Text>
-                                <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>{t('Community Commons Pool')}</Text>
-                                    <Text style={guideStyles.bulletText}>
-                                        {t('Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.')}
-                                    </Text>
-                                </View>
-                            </View>
-
-                            <View style={guideStyles.bulletRow}>
-                                <Text style={guideStyles.bulletEmoji}>⏱️</Text>
-                                <View style={guideStyles.bulletContent}>
-                                    <Text style={guideStyles.bulletTitle}>{t('Reference Rate')}</Text>
-                                    <Text style={guideStyles.bulletText}>
-                                        {t('40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.')}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Card 3: Safe Handshake Held in Trust */}
-                        <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>{t('🔒 Held in Trust')}</Text>
-                            <Text style={guideStyles.cardText}>
-                                {t('To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.')}
-                            </Text>
-                        </View>
-                        </>
-                        ) : (
-                        <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>{t('🌍 A place to meet')}</Text>
-                            <Text style={guideStyles.cardText}>
-                                {joinFlow === 'global' && createAnchorUrl && createAnchorUrl !== GLOBAL_NODE_URL
-                                    // Another community's open door (slice S2): its own name, never the global community's.
-                                    ? t('{name} has no Beans: credit, the Commons and trading in Beans live in communities that use them, which you join with an invite from a member.', { name: communityName({ url: createAnchorUrl, alias: claimedName }) })
-                                    : t('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.')}
-                            </Text>
-                        </View>
-                        )}
-
-                        {/*
-                          Card 4: how you get back in.
-                          
-                          The design doc's wording for this card describes Phase B — an
-                          account split into pieces held by your phone, your hub and the
-                          person who invited you, any three of which bring you back. None of
-                          that machinery exists yet, so printing it here would tell a brand
-                          new member they are protected by keepers they do not have. That is
-                          precisely the false all-clear this redesign is meant to remove, so
-                          the card says what is true today and gets the keeper wording in
-                          Phase B, when the keepers are real.
-                        */}
-                        <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>{t('🔑 Getting Back In')}</Text>
-                            {/* Spaced locally rather than by changing guideStyles.cardText,
-                                which has no marginBottom because the other three cards end on
-                                it. This is the only card where it is followed by bullets. */}
-                            {hasMnemonic(pendingIdentity) ? (
-                                <>
-                                    <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
-                                        {t('Your 12 words are your primary key to your account across devices. Nobody can reset them: not us, not this community.')}
-                                    </Text>
-                                    <Text style={guideStyles.bulletItem}>
-                                        <Sentence
-                                            text={t('📝 Find them any time under {where}.')}
-                                            parts={{ where: <Text style={{ fontWeight: 'bold' }}>{t('Settings → Recovery Phrase')}</Text> }}
-                                        />
-                                    </Text>
-                                </>
-                            ) : (
-                                <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{welcomeLineWords(NO_WORDS_WAY_BACK)}</Text>
-                            )}
-                            {/* Not where the community keeps no copies (its rule `none`, VR2): a sign-in linked there brings
-                                nothing back. Left out, not swapped for the no-copies row's sentence, which says none can be
-                                linked: a 12-words member at the global community can still add one, for the limits. */}
-                            {backupCopiesAt !== 'none' && (
-                                <Text style={guideStyles.bulletItem}>
-                                    {t('🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.')}
-                                </Text>
-                            )}
-                        </View>
-
-                        {/* Card 5: Where to Start */}
-                        <View style={guideStyles.card}>
-                            <Text style={guideStyles.cardTitle}>{t('🚀 Where to Start?')}</Text>
-                            <Text style={guideStyles.bulletItem}>
-                                <Sentence
-                                    text={t('📍 Explore the {map} to find offers (green) and needs (orange) near you.')}
-                                    parts={{ map: <Text style={{ fontWeight: 'bold' }}>{t('Map', undefined, 'tab')}</Text> }}
-                                />
-                            </Text>
-                            <Text style={guideStyles.bulletItem}>
-                                <Sentence
-                                    text={t('💬 Tap {message} on any post to chat securely (E2E encrypted) with neighbors.')}
-                                    parts={{ message: <Text style={{ fontWeight: 'bold' }}>{t('Message', undefined, 'button: write to')}</Text> }}
-                                />
-                            </Text>
-                            <Text style={guideStyles.bulletItem}>
-                                <Sentence
-                                    text={t('➕ Click {post} to list what you need or what you can offer to the community.')}
-                                    parts={{ post: <Text style={{ fontWeight: 'bold' }}>{t('Post', undefined, 'button: publish')}</Text> }}
-                                />
-                            </Text>
-                            {joinBeansOn && (
-                                <Text style={guideStyles.bulletItem}>
-                                    <Sentence
-                                        text={t('💳 Use the {ledger} tab to send credits to neighbors instantly.')}
-                                        parts={{ ledger: <Text style={{ fontWeight: 'bold' }}>{t('Ledger', undefined, 'tab')}</Text> }}
-                                    />
-                                </Text>
-                            )}
-                        </View>
-
-                        {notifVisible && (
-                            <View style={guideStyles.card} testID="guide-notification-card">
-                                <Text style={guideStyles.cardTitle} accessibilityRole="header">{t('Turn on notifications?')}</Text>
-                                <Text style={guideStyles.cardText}>
-                                    {t('So you hear when someone answers you, messages you, or asks to join. Nothing else.')}
-                                </Text>
-                                <Pressable
-                                    style={[styles.primaryBtn, { minHeight: 48, marginTop: 12, marginBottom: 8 }, notifBusy && { opacity: 0.6 }]}
-                                    disabled={notifBusy}
-                                    onPress={async () => {
-                                        if (notifBusy) return;
-                                        setNotifBusy(true);
-                                        try {
-                                            const result = await turnOnNotifications(pendingIdentity?.publicKey);
-                                            // 'settings': the phone's settings opened; nothing is answered yet, so the card stays.
-                                            if (result !== 'settings') setNotifVisible(false);
-                                        } finally {
-                                            setNotifBusy(false);
-                                        }
-                                    }}
-                                    accessibilityRole="button"
-                                    accessibilityState={{ busy: notifBusy, disabled: notifBusy }}
-                                    testID="guide-notification-turn-on"
-                                >
-                                    <Text style={styles.primaryBtnText}>{t('Turn on')}</Text>
-                                </Pressable>
-                                <Pressable
-                                    style={[styles.secondaryBtn, { minHeight: 48 }, notifBusy && { opacity: 0.6 }]}
-                                    disabled={notifBusy}
-                                    onPress={async () => {
-                                        if (notifBusy) return;
-                                        setNotifBusy(true);
-                                        try {
-                                            await declineNotifications();
-                                            setNotifVisible(false);
-                                        } finally {
-                                            setNotifBusy(false);
-                                        }
-                                    }}
-                                    accessibilityRole="button"
-                                    accessibilityState={{ busy: notifBusy, disabled: notifBusy }}
-                                    testID="guide-notification-not-now"
-                                >
-                                    <Text style={[styles.secondaryBtnText, { color: colors.text.secondary }]}>{t('Not now')}</Text>
-                                </Pressable>
-                            </View>
-                        )}
-
-                        {error && <Text style={styles.error}>{error}</Text>}
-
-                        {/* A claim's last step is the owner's card, after these: its own Let's Begin. */}
-                        <Pressable
-                            style={styles.backBtn}
-                            onPress={() => {
-                                updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});
-                                setMode('seedBackup');
+                            // How it Works has left the path (DESIGN-onboarding-home-landing-fable.md §3.1, slice S5): its words
+                            // are Home's WELCOME TO BEANPOOL! tile. A claim's last step is still the owner's card; every other
+                            // join goes Home from here.
+                            if (joinFlow === 'claim') {
+                                updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
+                                setMode('ownerCard');
                                 setError(null);
-                            }}
-                            disabled={loading}
-                            accessibilityRole="button"
-                        >
-                            <Text style={styles.backBtnText}>{t('← Back to Backup')}</Text>
-                        </Pressable>
-                    </View>
-                </ScrollView>
-                {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
-                <StepFooter testID="step-footer-guide">
-                    <Pressable
-                        style={[styles.primaryBtn, styles.footerBtn, loading && styles.disabledBtn]}
-                        disabled={loading}
-                        onPress={joinFlow === 'claim' ? () => {
-                            updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
-                            setMode('ownerCard');
-                            setError(null);
-                        } : handleConfirmSeed}
+                            } else {
+                                void handleConfirmSeed();
+                            }
+                        }}
                         accessibilityRole="button"
                     >
                         {loading ? (
@@ -3222,8 +2962,8 @@ export default function WelcomeScreen() {
                         <Pressable
                             style={styles.backBtn}
                             onPress={() => {
-                                updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
-                                setMode('onboardingGuide');
+                                updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});
+                                setMode('seedBackup');
                                 setError(null);
                             }}
                             disabled={loading}
@@ -4717,70 +4457,5 @@ const stepperStyles = StyleSheet.create({
     },
 });
 
-const guideStyles = StyleSheet.create({
-    card: {
-        backgroundColor: colors.surface.app,
-        borderWidth: 1,
-        borderColor: colors.border.default,
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-    },
-    cardTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: colors.text.body,
-        marginBottom: 8,
-    },
-    cardText: {
-        fontSize: 14,
-        color: dark ? colors.text.secondary : palette.gray600,
-        lineHeight: 20,
-    },
-    highlightBox: {
-        backgroundColor: colors.onboarding.highlightBg,
-        borderWidth: 1,
-        borderColor: colors.onboarding.highlightBorder,
-        borderRadius: 8,
-        padding: 12,
-        marginTop: 10,
-    },
-    highlightText: {
-        fontSize: 13,
-        color: dark ? palette.emerald400 : palette.green800,
-        lineHeight: 18,
-    },
-    bulletRow: {
-        flexDirection: 'row',
-        marginTop: 12,
-        alignItems: 'flex-start',
-    },
-    bulletEmoji: {
-        fontSize: 18,
-        marginRight: 10,
-        marginTop: 2,
-    },
-    bulletContent: {
-        flex: 1,
-    },
-    bulletTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: dark ? colors.text.body : palette.gray700,
-        marginBottom: 2,
-    },
-    bulletText: {
-        fontSize: 13,
-        color: colors.text.secondary,
-        lineHeight: 18,
-    },
-    bulletItem: {
-        fontSize: 13,
-        color: dark ? colors.text.secondary : palette.gray600,
-        lineHeight: 18,
-        marginBottom: 8,
-    }
-});
-
-return { styles, profileStyles, stepperStyles, guideStyles };
+return { styles, profileStyles, stepperStyles };
 }

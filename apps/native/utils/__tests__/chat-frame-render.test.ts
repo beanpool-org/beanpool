@@ -177,6 +177,12 @@ const ME = { publicKey: 'me-key', privateKey: 'me-priv', callsign: 'Ana' };
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
 // A member's picture: drawn from what they chose, never words.
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
+// Message requests' pane, drawn as it is, with what Chat hands it kept for a row to read (#3309 review N4 C3).
+const pane = vi.hoisted(() => ({ last: null as null | Record<string, any> }));
+vi.mock('../../components/MessageRequestsPane', async (orig) => {
+    const real = await orig<typeof import('../../components/MessageRequestsPane')>();
+    return { ...real, MessageRequestsPane: (props: Record<string, any>) => { pane.last = props; return createElement(real.MessageRequestsPane as any, props); } };
+});
 /** What a community this phone asked to join answers its signed status read with (utils/knock.ts); by its origin. */
 const knockReads = vi.hoisted(() => ({ answers: new Map<string, () => Promise<Response>>() }));
 vi.mock('../node-post', () => ({
@@ -260,6 +266,7 @@ vi.mock('../outside-mail', async (importOriginal) => ({
     reportOutsideLine: async (_ctx: unknown, lineId: string, reason: string) => { outside.reported.push({ lineId, reason }); },
 }));
 import ChatsScreen from '../../app/(tabs)/chats';
+import { HELD_QUIET_REFRESH_MS } from '../held-chats';
 import OutsideChatScreen from '../../app/outside-chat/[id]';
 
 const NODE = 'https://riverside.example';
@@ -786,6 +793,89 @@ describe("Chat's own held wiring (slices S1 and S2, #3302 review F6): the rows, 
     it('with no block, both are listed', async () => {
         await renderIn('en');
         expect(heldRows().length).toBe(2);
+    });
+
+    // #3309 review N4 C3: Chat hands Message requests the places whose S0 card still shows (placesThatMoveElsewhere), never
+    // every place waiting: a place whose requests are read in place has its group and no card beside it that moves the phone.
+    it('Message requests: a place read in place has its group there and no card that moves the phone there; one not read keeps it', async () => {
+        const BROOK = 'https://brookside.example';
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: HILL, alias: 'Hilltop' }, { url: BROOK, alias: 'Brookside' }]));
+        store.map.set('beanpool_notice_counts', JSON.stringify({ [HILL]: { n: 0, seen: {}, requests: 1 }, [BROOK]: { n: 0, seen: {}, requests: 2 } }));
+        const asked: string[] = [];
+        const answers = community({ getHeldConversations: HELD, closeHeldCopies: undefined });
+        net.answer = (name, args) => {
+            if (name !== 'requestsInPlace') return answers(name, args);
+            asked.push(String(args[1]));
+            // Hilltop is read in place; Brookside can't be (no copy on the phone): null, its S0 card stays.
+            return Promise.resolve(args[1] === HILL
+                ? { count: 1, conversations: [{ id: 'r-hill', type: 'dm', participants: ['kofi-key', ME.publicKey], peer: 'Kofi', peerPubkey: 'kofi-key', request: { from: 'kofi-key', state: 'pending', at: iso(now) } }] }
+                : null);
+        };
+        pane.last = null;
+        await renderIn('en');
+        await click(host.querySelector('[data-testid="message-requests-row"]'), 'Message requests');
+        await settle(24);
+        expect(asked.sort()).toEqual([HILL, BROOK].sort());
+        // What Chat handed the pane last (set by the pane's stand-in as it drew).
+        const handed = pane.last as Record<string, any> | null;
+        expect(handed?.inPlace?.map((g: any) => g.place.address)).toEqual([HILL]);
+        expect(handed?.elsewhere?.map((p: any) => p.address)).toEqual([BROOK]);
+    });
+
+    it("S2b: once the rows show, each takes its own count and its newest line's preview from its own community's copy", async () => {
+        net.answer = community({
+            getHeldConversations: HELD, closeHeldCopies: undefined,
+            getHeldLatest: [{ id: 'h-kai', type: 'dm', newest: HELD[0].rawTimestamp, unread: 2 }, { id: 'h-rowan', type: 'dm', newest: HELD[1].rawTimestamp, unread: 0 }],
+            getHeldPreviews: { 'h-kai': { lastMessage: 'the second of them', lastMessageFromApp: false }, 'h-rowan': null },
+        });
+        await renderIn('en');
+        expect(net.calls).toContain('db.getHeldLatest');
+        expect(net.calls).toContain('db.getHeldPreviews');
+        const kai = heldRows().find((r) => r.textContent?.includes('Kai'))!;
+        expect(kai.querySelector('[data-testid="held-chat-preview"]')?.textContent).toBe('the second of them');
+        expect(kai.querySelector('[data-testid="held-chat-unread"]')?.textContent).toBe('2');
+        // The pins couldn't place Rowan's line: no preview, and nothing unread.
+        const rowan = heldRows().find((r) => r.textContent?.includes('Rowan'))!;
+        expect(rowan.querySelector('[data-testid="held-chat-preview"]')).toBeNull();
+        expect(rowan.querySelector('[data-testid="held-chat-unread"]')).toBeNull();
+    });
+
+    it('S2b (#3312 review F1): a community with its alerts off refreshes as Chat opens and on the beat while it stays in view, and not once Chat is left', async () => {
+        store.map.set('beanpool_push_alerts_off', JSON.stringify([HILL]));
+        net.answer = community({ getHeldConversations: HELD, closeHeldCopies: undefined, getHeldLatest: [], getHeldPreviews: {}, refreshHeldDms: { brought: 0, answered: true } });
+        const every = vi.spyOn(globalThis, 'setInterval');
+        const stop = vi.spyOn(globalThis, 'clearInterval');
+        const clock = vi.spyOn(Date, 'now');
+        try {
+            const refreshes = () => net.calls.filter((c) => c === 'db.refreshHeldDms').length;
+            await renderIn('en');
+            // As Chat opens: one refresh of that community (it has no number to rise).
+            expect(refreshes()).toBe(1);
+            const at = every.mock.calls.findIndex((c) => c[1] === HELD_QUIET_REFRESH_MS);
+            expect(at).toBeGreaterThanOrEqual(0);
+            const beat = every.mock.calls[at][0] as () => void;
+            // A beat before its time asks nothing; once it is due, one more refresh.
+            await act(async () => { beat(); });
+            await settle();
+            expect(refreshes()).toBe(1);
+            const later = Date.now() + HELD_QUIET_REFRESH_MS;
+            clock.mockImplementation(() => later);
+            await act(async () => { beat(); });
+            await settle();
+            expect(refreshes()).toBe(2);
+            // Chat left: the beat stops, and one that still fires asks nothing.
+            act(() => root.unmount());
+            expect(stop.mock.calls.map((c) => c[0])).toContain(every.mock.results[at].value);
+            clock.mockImplementation(() => later + 2 * HELD_QUIET_REFRESH_MS);
+            beat();
+            await new Promise((r) => setTimeout(r, 0));
+            expect(refreshes()).toBe(2);
+            root = createRoot(host);
+        } finally {
+            every.mockRestore();
+            stop.mockRestore();
+            clock.mockRestore();
+        }
     });
 
     it("a tap on a direct chat opens it in place (S2): that chat by its own id, in that community by its address, and no switch", async () => {

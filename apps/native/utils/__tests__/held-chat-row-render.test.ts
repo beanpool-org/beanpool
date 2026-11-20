@@ -118,6 +118,31 @@ describe('a chat held in another community, in Chat\'s list', () => {
             expect(host.querySelector('[data-testid="held-chat-row"]')!.textContent).toContain('key changed');
             expect(tag.getAttribute('aria-label')).toBeNull();
         });
+
+        it(`${dark ? 'dark' : 'light'}: S2b, its own count and its newest line, bold while unread, as Talk's own rows; none until read`, async () => {
+            theme.dark = dark;
+            await render(createElement(HeldChatRow, { item: { ...ROW, unread: 2, lastMessage: 'the second of them', lastMessageFromApp: false }, busy: false, onOpen: () => {} }));
+            const preview = host.querySelector('[data-testid="held-chat-preview"]')!;
+            expect(preview.textContent).toBe('the second of them');
+            expect(styleOf(preview).color).toBe(colors.text.heading);
+            const badge = host.querySelector('[data-testid="held-chat-unread"]')!;
+            expect(badge.textContent).toBe('2');
+            expect(styleOf(badge).backgroundColor).toBe(colors.accent.fill);
+            expect(styleOf(badge.firstElementChild).color).toBe(colors.text.onAccent);
+            // Read: the preview in grey, no badge. BeanPool's own sentence goes through the words layer (chatPreviewWords).
+            await render(createElement(HeldChatRow, { item: { ...ROW, unread: 0, lastMessage: 'This message was deleted', lastMessageFromApp: true }, busy: false, onOpen: () => {} }));
+            expect(host.querySelector('[data-testid="held-chat-preview"]')!.textContent).toBe('This message was deleted');
+            expect(styleOf(host.querySelector('[data-testid="held-chat-preview"]')).color).toBe(colors.text.secondary);
+            expect(host.querySelector('[data-testid="held-chat-unread"]')).toBeNull();
+            // Not read yet, or no preview the pins can place: no line at all (never an empty one, never a wrong one).
+            await render(createElement(HeldChatRow, { item: { ...ROW, unread: 0, lastMessage: null }, busy: false, onOpen: () => {} }));
+            expect(host.querySelector('[data-testid="held-chat-preview"]')).toBeNull();
+            expect(host.querySelector('[data-testid="held-chat-unread"]')).toBeNull();
+            // A count with no preview: the badge alone.
+            await render(createElement(HeldChatRow, { item: { ...ROW, unread: 3, lastMessage: null }, busy: false, onOpen: () => {} }));
+            expect(host.querySelector('[data-testid="held-chat-preview"]')).toBeNull();
+            expect(host.querySelector('[data-testid="held-chat-unread"]')!.textContent).toBe('3');
+        });
     }
 
     it('a tap hands back the row itself (its community and its chat), and none while a switch is under way', async () => {

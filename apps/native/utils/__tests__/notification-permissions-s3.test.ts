@@ -398,13 +398,13 @@ describe('S3: notification permission at the tap, never at account creation', ()
         const home = fs.readFileSync(path.join(root, 'app/(tabs)/index.tsx'), 'utf8');
         const bellLine = fs.readFileSync(path.join(root, 'components/NotificationsOffLine.tsx'), 'utf8');
 
-        it("How it Works' card: the title is a header; both buttons are 48 dp, busy-guarded and say so", () => {
-            expect(card).toMatch(/accessibilityRole="header">\{t\('Turn on notifications\?'\)\}/);
-            expect(card).not.toMatch(/minHeight: 4[0-4]\b/);
-            expect(card.match(/minHeight: 48/g)).toHaveLength(2);
-            expect(card.match(/disabled=\{notifBusy\}/g)).toHaveLength(2);
-            expect(card.match(/if \(notifBusy\) return;/g)).toHaveLength(2);
-            expect(card.match(/accessibilityState=\{\{ busy: notifBusy, disabled: notifBusy \}\}/g)).toHaveLength(2);
+        // How it Works left the join in slice S5 (DESIGN-onboarding-home-landing-fable.md §2: "Turn on notifications?" became
+        // First steps' "Hear when someone answers you", asked at that tap), and its card went with it: the join asks nothing.
+        it("How it Works' card left the join with How it Works: no notification card in the join, and nothing asked there", () => {
+            expect(welcome).not.toContain('testID="guide-notification-card"');
+            expect(welcome).not.toContain('setNotifVisible');
+            expect(welcome).not.toMatch(/turnOnNotifications\(|declineNotifications\(|requestPermissionsAsync/);
+            expect(card).toBe('');
         });
 
         // DESIGN-home-default-fable.md §2.5 (Marty's pick 3): no card at the top of Home; the card component is gone.
@@ -424,9 +424,6 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(notificationsOffHere({ available: false, granted: false, canAskAgain: false })).toBe(false);
         });
 
-        it("How it Works' card doesn't show where expo-notifications cannot load: there is nothing to turn on", () => {
-            expect(welcome).toContain('setNotifVisible(os.available && shouldShowNotificationCard(record, os.granted))');
-        });
 
         // §2.4: First steps' line "Hear when someone answers you", from this phone alone.
         it("First steps' notifications line: only on a phone that has to ask, ticked when allowed through it, gone after Not now", () => {

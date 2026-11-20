@@ -614,7 +614,12 @@ describe('4. the name box takes a name, never an invite or a link', () => {
         await press('Next');
         await type('Your name or nickname', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`);
         expect(field('Your name or nickname')?.value).toBe('');
-        expect(host!.textContent).toContain(NAME_BOX_WORDS.inviteLink);
+        // The name screen has no invite box, so its line is its own: core's "it goes in the invite box" is the web's (review
+        // of #3317). The invite is used: no box asks for it again.
+        expect(host!.textContent).toContain("That's an invite, not a name: it's your invite now.");
+        expect(host!.textContent).not.toContain(NAME_BOX_WORDS.inviteLink);
+        expect(host!.textContent).not.toContain(NAME_BOX_WORDS.inviteCode);
+        expect(field('Invite link or code')).toBeUndefined();
         expect(phone.redeems).toEqual([]);
         // A name, and Next joins with the invite under it.
         await type('Your name or nickname', 'Rowan');

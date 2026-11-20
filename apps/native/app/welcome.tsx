@@ -1308,15 +1308,17 @@ export default function WelcomeScreen() {
 
     /**
      * The name box given an invite (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted there became
-     * her name): the invite goes to the invite box as a paste there goes (its code, and the community its link names), the
-     * name box is left empty, and the one line says why. False when `text` holds no invite.
+     * her name): the invite is used as a found invite is (its code, and the community its link names; the greeting band
+     * changes to it), the name box is left empty, and the one line says why. The name screen has no invite box (onboarding
+     * §3.1 B), so the line is the phone's own, not core's "it goes in the invite box", which is the web's (review of #3317).
+     * False when `text` holds no invite.
      */
     function inviteFromNameBox(text: string): boolean {
         const moved = inviteForInviteBox(text);
         if (!moved) return false;
         setCallsign('');
         if (callsignSuggestions.length) setCallsignSuggestions([]);
-        void processFullUrl(moved).then(() => setError(t(NAME_BOX_WORDS[notANameIn(moved) ?? 'inviteCode'])));
+        void processFullUrl(moved).then(() => setError(t("That's an invite, not a name: it's your invite now.")));
         return true;
     }
 

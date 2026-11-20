@@ -713,7 +713,7 @@ describe('the welcome tile at 320dp × 1.3 (S5)', () => {
         expect(num(w.bandOpen.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
         expect(num(w.bandX.minWidth)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
         const room = SCREEN - 2 * HOME_GUTTER_DP - num(w.bandX.minWidth) - num(w.bandOpen.paddingLeft) - num(w.bandOpen.paddingRight);
-        expect(longestWord(`${t('Welcome to BeanPool')} ›`, num(w.bandText.fontSize))).toBeLessThanOrEqual(room);
+        expect(longestWord(t('Welcome to BeanPool ›'), num(w.bandText.fontSize))).toBeLessThanOrEqual(room);
     });
 
     it('words sit on the emerald ground and the gold button only, each at 4.5:1 or more, the same in light and dark', () => {

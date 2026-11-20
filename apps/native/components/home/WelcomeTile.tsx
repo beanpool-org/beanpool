@@ -64,7 +64,7 @@ export function WelcomeTile(props: WelcomeTileProps) {
                     accessibilityLabel={t('Welcome to BeanPool')}
                     testID="home-welcome-band-open"
                 >
-                    <Text style={[welcomeTileStyles.bandText, { color: on }]} numberOfLines={2}>{t('Welcome to BeanPool')} ›</Text>
+                    <Text style={[welcomeTileStyles.bandText, { color: on }]} numberOfLines={2}>{t('Welcome to BeanPool ›')}</Text>
                 </Pressable>
                 <Pressable
                     onPress={props.onGotIt}

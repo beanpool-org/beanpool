@@ -112,6 +112,7 @@ import { sealDmLine } from '../e2e-crypto';
 import { messageRequestsStoreKey } from '../storage-keys';
 import { reportRequestAndBlock } from '../request-report';
 import { getBlockedUsers } from '../blocklist';
+import { LISTED_ADDRESS_FIELDS } from '../listed-address-fields';
 
 const realLoad = (Module as any)._load;
 (Module as any)._load = function (request: string, ...rest: any[]) {
@@ -600,7 +601,7 @@ describe('the list read in place: blocked people, addresses, the count and the p
     });
 
     // F2: one row per address field: what comes back is whole on A, never a path B would be asked for.
-    it.each(db.LISTED_ADDRESS_FIELDS.map((f) => [f] as const))('%s, a path on A\'s server, comes back whole on A, never on the community in use', async (field) => {
+    it.each(LISTED_ADDRESS_FIELDS.map((f) => [f] as const))('%s, a path on A\'s server, comes back whole on A, never on the community in use', async (field) => {
         const where = `/api/avatar/${asker.publicKey}?size=thumb&v=r1&k=facekey`;
         const read = await withListing((r) => { for (const c of r.conversations) c[field] = where; }, () => db.requestsInPlace(me.publicKey, A));
         const got = read!.conversations[0][field];
@@ -620,7 +621,7 @@ describe('the list read in place: blocked people, addresses, the count and the p
 
     it('swept: with every address field a path, no value anywhere in what comes back is a path the community in use could be asked for', async () => {
         const read = await withListing((r) => {
-            for (const c of r.conversations) for (const f of db.LISTED_ADDRESS_FIELDS) c[f] = `/uploads/${f}.jpg?k=secret`;
+            for (const c of r.conversations) for (const f of LISTED_ADDRESS_FIELDS) c[f] = `/uploads/${f}.jpg?k=secret`;
         }, () => db.requestsInPlace(me.publicKey, A));
         const paths: string[] = [];
         const walk = (v: unknown, at: string) => {
@@ -639,6 +640,6 @@ describe('the list read in place: blocked people, addresses, the count and the p
         expect(fields.length, 'the interface was read').toBeGreaterThan(10);
         const addressLike = fields.filter((f) => /(avatar|photo|photos|url|picture|image|thumb|link)$/i.test(f));
         expect(addressLike.length).toBeGreaterThanOrEqual(3);
-        for (const f of addressLike) expect(db.LISTED_ADDRESS_FIELDS, f).toContain(f);
+        for (const f of addressLike) expect(LISTED_ADDRESS_FIELDS, f).toContain(f);
     });
 });

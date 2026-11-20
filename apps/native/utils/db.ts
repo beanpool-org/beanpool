@@ -20,6 +20,7 @@ import {
 } from './dm-peer-pins';
 import { dmPeerKeys, dmPeerName, isDmBlocked, isDmType } from './dm-blocked';
 import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
+import { LISTED_ADDRESS_FIELDS } from './listed-address-fields';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError, readDmSeen } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode, getSavedNodes, isGuestCopy } from './nodes';
@@ -9198,7 +9199,7 @@ export async function decideMessageRequest(conversationId: string, decision: 'ac
  * - The list is kept for that community's file alone (saveMessageRequests), where the phone set there reads it, as its
  *   server listed it (its addresses are that server's own paths).
  * - What comes back is for a card drawn while the phone is set elsewhere: each address a listing carries
- *   ({@link LISTED_ADDRESS_FIELDS}) is made whole on `community`, never left as a path the community in use would be
+ *   (listed-address-fields.ts) is made whole on `community`, never left as a path the community in use would be
  *   asked for (a member's photo carries their key and that community's face key: #3309 review F2).
  * - Written after the answer only through `here.handle()`: a switch, a removal, the account leaving or a close while the
  *   list was on its way writes nothing anywhere (that copy's next read brings it).
@@ -9257,16 +9258,7 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
     return requests && { count: requests.count, conversations: kept.map((c) => listedOnCommunity(here.anchorUrl!, c)) };
 }
 
-/**
- * Every field of a conversation's listing (engine messaging.ts `Conversation`, as routes/messaging.ts lists it) that holds an
- * address: a path on the server that listed it, some carrying a key (a member's photo: their key and the community's face
- * key, `k=`). A card of another community drawn while the phone is set elsewhere gets each made whole on that community
- * ({@link listedOnCommunity}). utils/__tests__/requests-in-place-wrong-file.test.ts reads the engine's listing for every
- * field named like an address, so one added there and not here goes red.
- */
-export const LISTED_ADDRESS_FIELDS = Object.freeze(['peerAvatar', 'postPhoto', 'avatarUrl'] as const);
-
-/** `conv` as `community`'s server listed it, each of its addresses on that server ({@link onCommunity}). */
+/** `conv` as `community`'s server listed it, each of its addresses (listed-address-fields.ts) on that server ({@link onCommunity}). */
 function listedOnCommunity(community: string, conv: any): any {
     const out = { ...conv };
     for (const field of LISTED_ADDRESS_FIELDS) if (field in out) out[field] = onCommunity(community, out[field]);

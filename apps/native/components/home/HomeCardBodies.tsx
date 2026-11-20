@@ -18,10 +18,11 @@ import {
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeNeedItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
 import { LEARN_HOME_WORDS, learnFigureCount } from '@beanpool/core';
-import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, freePriceWords, inviteAskNoticeHere, isHundredths, perItemLine, perItemOf, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, eventCopyOf, formatCount, inviteAskNoticeHere, isHundredths, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
-import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
+import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles, onNode } from './HomeParts';
+import { MarketTiles, marketItemWords } from './MarketTiles';
 import { ProgressRing } from './WelcomeTile';
 
 /**
@@ -31,14 +32,6 @@ import { ProgressRing } from './WelcomeTile';
 
 /** Lines kept as word() in utils/home-cards.ts and core, shown here in the member's language. */
 const LINES = { searchOffline: SEARCH_OFFLINE_LINE, tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL };
-
-/** A path from the node ("/api/…") made an address on it; a full address as it is. */
-export function onNode(nodeUrl: string | null, path: string | null | undefined): string | null {
-    if (!path) return null;
-    if (/^https?:\/\//i.test(path)) return path;
-    if (!nodeUrl || !path.startsWith('/')) return null;
-    return `${nodeUrl.replace(/\/+$/, '')}${path}`;
-}
 
 export function NeedsBody({ entries, colors, onOpen }: { entries: NeedsYouEntry[]; colors: AppColors; onOpen: (e: NeedsYouEntry) => void }) {
     const s = homeStyles(colors);
@@ -412,7 +405,8 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
 }) {
     return (
         <>
-            {items.map(p => <MarketRow key={p.id} p={p} nodeUrl={nodeUrl} showsBeans={showsBeans} colors={colors} testID={`home-market-${p.id}`} />)}
+            {/* Picture tiles, two a row (slice S8, MarketTiles.tsx); a saved search's card keeps the rows (MarketRow). */}
+            <MarketTiles items={items} nodeUrl={nodeUrl} showsBeans={showsBeans} colors={colors} />
             {items.length === 0 && (
                 <View testID="home-market-empty-tiles" style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingVertical: 12 }}>
                     {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
@@ -429,24 +423,13 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
     );
 }
 
-/** One listing as the Market card draws it: photo, title, price or distance, Offer or Need; opens the listing. */
+/** One listing as a saved search's card draws it: photo, title, price or distance, Offer or Need; opens the listing. */
 function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketItem; nodeUrl: string | null; showsBeans: boolean; colors: AppColors; testID: string }) {
     const s = homeStyles(colors);
     const type = p.type === 'need' ? colors.market.need : colors.market.offer;
     const word = p.type === 'need' ? t('NEED') : t('OFFER');
-    // A listing priced at 0 reads Free, as on the Market's card (core listing-price.ts); a price never sent draws nothing.
-    // An Offer priced for each one says so in words, with how many are left and the price for all of them while it is on offer (core
-    // per-item.ts perItemLine, DESIGN-per-item-price-fable.md §2.1): "300 Beans each · 20 left · or all for 5,500", "Free · 20 left".
-    const each = showsBeans && !eventCopyOf(p) ? perItemOf(p) : null;
-    const price = each ? perItemLine(each) : showsBeans && isHundredths(p.price_c) ? (freePriceWords(p.price_c, p.type) ?? beansAmount(p.price_c)) : null;
-    const far = formatDistance(p.distanceKm);
-    const copy = eventCopyOf(p);
-    const facts = [copy ? copyPriceLine(copy) : price, far].filter(Boolean).join(' · ');
-    const category = categoryLabel(p.category);
-    const values = { title: sentence(p.title), facts, category };
-    const a11y = p.type === 'need'
-        ? (facts ? t('Need: {title} {facts}. {category}. Opens the listing.', values) : t('Need: {title} {category}. Opens the listing.', values))
-        : (facts ? t('Offer: {title} {facts}. {category}. Opens the listing.', values) : t('Offer: {title} {category}. Opens the listing.', values));
+    // The facts line and the screen reader's sentence are the Market card's tile's own (MarketTiles.tsx marketItemWords).
+    const { facts, a11y, category } = marketItemWords(p, showsBeans);
     return (
         <HomeRow
             colors={colors}

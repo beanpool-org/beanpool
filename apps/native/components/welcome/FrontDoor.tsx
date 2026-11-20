@@ -27,6 +27,8 @@ import { useAfterDismiss } from '../../utils/screen-presented';
 
 /** The block's shapes: one value in every colour set (§4.4), so the light set's are the block's in dark too. */
 const SHAPES = brandColours('light');
+/** The mark, never translated in any language (scripts/words/GLOSSARY.csv: BeanPool, untranslatable). */
+const MARK = 'BeanPool';
 
 export function FrontDoor({ colors, door, exploring = false, appleTile, onInvite, onApplePaste, onScanOrType, onLookAround, onUsedBefore, onAskToJoin, onClaim }: {
     /** The screen's colours (utils/onboarding-colors.ts). */
@@ -72,7 +74,7 @@ export function FrontDoor({ colors, door, exploring = false, appleTile, onInvite
                     <View style={styles.sun} />
                     <View style={styles.bean} />
                 </View>
-                <Text style={styles.name} accessibilityRole="header">BeanPool</Text>
+                <Text style={styles.name} accessibilityRole="header">{MARK}</Text>
                 <Text style={styles.line}>{t('Trade skills, goods and favours with your neighbours.')}</Text>
             </View>
 

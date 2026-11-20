@@ -12,11 +12,13 @@
  *      the community's addresses, else to its main one; the path and query kept, `//elsewhere` kept on the host;
  *   3. from loopback (cloudflared in this container, the registrar's watch) all of that is served as before, IPv4-mapped
  *      loopback too;
- *   4. a host-level tunnel (Docker's bridge gateway naming a beanpool.org host) is served as before; the same source
- *      naming any other host is redirected, and a public source naming a beanpool.org host is redirected; a proxy of the
- *      operator's own (a private source saying X-Forwarded-Proto: https or Forwarded: proto=https) is served, a public
- *      source sending the same headers is redirected;
- *   5. IPv6: a public source is redirected, a unique-local one naming a beanpool.org host is served;
+ *   4. Docker's bridge gateway naming a beanpool.org host is redirected (an IPv6 visitor arrives from there too: security
+ *      inventory 17 Nov 2026, risk 5), and served as a host-level tunnel only with TRUSTED_PROXIES=docker-host; a
+ *      neighbouring container is redirected either way; the gateway naming any other host is redirected, and a public
+ *      source naming a beanpool.org host is redirected; a proxy of the operator's own (saying X-Forwarded-Proto: https or
+ *      Forwarded: proto=https) is served only when TRUSTED_PROXIES names it (or docker-host, for the gateway), and a
+ *      public source sending the same headers is redirected;
+ *   5. IPv6: a public source is redirected, a unique-local one naming a beanpool.org host only when it is listed;
  *   6. the ACME challenge route answers from the Internet on a node with a certificate, unknown tokens 404, never a
  *      redirect;
  *   7. a certificate that expires before it is renewed keeps the redirect: a lapse never reopens port 80 in cleartext;
@@ -37,7 +39,7 @@ import selfsigned from 'selfsigned';
 
 const dataDir = fs.mkdtempSync(path.join(process.env.BEANPOOL_DATA_DIR || process.env.TMPDIR || os.tmpdir(), 'plain-http-gate-'));
 process.env.BEANPOOL_DATA_DIR = dataDir;
-for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'NODE_ROLE', 'PUBLIC_IP']) delete process.env[k];
+for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'NODE_ROLE', 'PUBLIC_IP', 'TRUSTED_PROXIES']) delete process.env[k];
 // localhost too, as an operator lists it for an SSH tunnel: accepted, never an address to send anyone to.
 process.env.BEANPOOL_ADDRESSES = 'beans.example.org,localhost';
 
@@ -54,6 +56,8 @@ const { primaryAddress } = await import('./engine/own-addresses.js');
 const challenge = await import('./services/acme/challenge.js');
 const store = await import('./services/acme/store.js');
 const gate = await import('./plain-http-gate.js');
+const { setTrustConfigForTests } = await import('./client-ip.js');
+const { _setDefaultGatewaysForTests } = await import('./default-gateways.js');
 const { LOOPBACK_ORIGIN } = await import('./services/tunnel-connector.js');
 const { acmeTargets } = await import('./services/acme/schedule.js');
 /** The addresses this server certifies now, as the gate reads them. */
@@ -175,14 +179,37 @@ console.log('\n3. From loopback (the tunnel in this container) as before');
     check('a live-updates socket from loopback is upgraded', ws.status === 101, String(ws.status));
 }
 
-console.log('\n4. A host-level tunnel (Docker\'s bridge gateway) naming a beanpool.org host, as before');
+// Docker's bridge gateway: where a host-level cloudflared arrives from, and where Docker's port proxy hands on an IPv6
+// visitor from the internet (security inventory 17 Nov 2026, risk 5). Until then a private source naming a beanpool.org
+// host, or saying X-Forwarded-Proto: https, was let through whoever it was; now only a proxy the server trusts is.
+const GATEWAY = '172.18.0.1';
+const TUNNEL_NAME = 'riverside.beanpool.org';
+_setDefaultGatewaysForTests([GATEWAY]);
+/** TRUSTED_PROXIES as the operator sets it (undefined: empty, as every node starts). */
+const trusting = (entries?: string) => {
+    if (entries === undefined) delete process.env.TRUSTED_PROXIES; else process.env.TRUSTED_PROXIES = entries;
+    setTrustConfigForTests(undefined);
+};
+
+console.log('\n4. Docker\'s bridge gateway naming a beanpool.org host: redirected, unless TRUSTED_PROXIES=docker-host');
 {
-    const tunnel = await get('172.18.0.1', '/api/version', 'mullum.beanpool.org');
-    check('/api from 172.18.0.1 naming mullum.beanpool.org is served', tunnel.status === 200, `${tunnel.status}`);
-    const mapped = await get('::ffff:172.18.0.1', '/api/version', 'byron.beanpool.org');
-    check('the same from ::ffff:172.18.0.1 is served', mapped.status === 200, `${mapped.status}`);
-    const lan = await get('172.18.0.1', '/api/version', OWN);
-    check('the same source naming the own domain is redirected', redirected(lan, `https://${OWN}/api/version`), `${lan.status}`);
+    trusting();
+    const tunnel = await get(GATEWAY, '/api/version', TUNNEL_NAME);
+    check(`/api from ${GATEWAY} naming ${TUNNEL_NAME} is redirected (an IPv6 visitor arrives from there too)`, tunnel.status === 301, `${tunnel.status}`);
+    const mapped = await get(`::ffff:${GATEWAY}`, '/api/version', TUNNEL_NAME);
+    check(`the same from ::ffff:${GATEWAY} is redirected`, mapped.status === 301, `${mapped.status}`);
+    const neighbour = await get('172.18.0.5', '/api/version', TUNNEL_NAME);
+    check('a neighbouring container naming a beanpool.org host is redirected', neighbour.status === 301, `${neighbour.status}`);
+    trusting('docker-host');
+    const hostTunnel = await get(GATEWAY, '/api/version', TUNNEL_NAME);
+    check(`with docker-host (ports on 127.0.0.1): ${GATEWAY} naming ${TUNNEL_NAME} is served, the host's tunnel`, hostTunnel.status === 200, `${hostTunnel.status}`);
+    const hostMapped = await get(`::ffff:${GATEWAY}`, '/api/version', TUNNEL_NAME);
+    check(`… from ::ffff:${GATEWAY} too`, hostMapped.status === 200, `${hostMapped.status}`);
+    const stillNeighbour = await get('172.18.0.5', '/api/version', TUNNEL_NAME);
+    check('… and a neighbouring container on the same network is still redirected', stillNeighbour.status === 301, `${stillNeighbour.status}`);
+    const lan = await get(GATEWAY, '/api/version', OWN);
+    check('… the gateway naming the own domain is redirected', redirected(lan, `https://${OWN}/api/version`), `${lan.status}`);
+    trusting();
     const lanIp = await get('192.168.1.20', '/api/version', '192.168.1.10');
     check('a LAN member at a LAN address is sent to the main address', redirected(lanIp, `https://${OWN}/api/version`), `${lanIp.status} ${lanIp.headers.location}`);
     // Lights-out (design scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §4.1, test-lights-out.ts): with the switch
@@ -192,7 +219,7 @@ console.log('\n4. A host-level tunnel (Docker\'s bridge gateway) naming a beanpo
     check('… but Settings itself is reached from the LAN (lights-out §4.1)', lanSettings.status !== 301, `${lanSettings.status}`);
     const spoof = await get(PUBLIC, '/api/version', 'mullum.beanpool.org');
     check('a public source naming a beanpool.org host is redirected', spoof.status === 301, `${spoof.status}`);
-    const wsSpoof = await upgrade('172.18.0.1', OWN);
+    const wsSpoof = await upgrade(GATEWAY, OWN);
     check('a live-updates socket from the gateway naming the own domain is refused', wsSpoof.status === 301, `${wsSpoof.status}`);
 }
 
@@ -200,34 +227,51 @@ console.log('\n4b. A web server or proxy of the operator\'s own in front, saying
 {
     const via = (from: string, header: string, host = OWN) =>
         raw(from, `GET /api/version HTTP/1.1\r\nHost: ${host}\r\n${header}\r\nConnection: close\r\n\r\n`);
-    const xfp = await via('172.18.0.1', 'X-Forwarded-Proto: https');
-    check('the gateway with X-Forwarded-Proto: https is served (no loop)', xfp.status === 200, `${xfp.status}`);
-    const fwd = await via('172.18.0.1', 'Forwarded: for=198.51.100.2;proto=https;host=beans.example.org');
-    check('the gateway with Forwarded: proto=https is served', fwd.status === 200, `${fwd.status}`);
+    trusting();
+    const untrusted = await via(GATEWAY, 'X-Forwarded-Proto: https');
+    check('the gateway with X-Forwarded-Proto: https, not trusted, is redirected', untrusted.status === 301, `${untrusted.status}`);
+    const untrustedV6 = await via('fd12::3', 'X-Forwarded-Proto: HTTPS', '127.0.0.1:8080');
+    check('a unique-local source with X-Forwarded-Proto: HTTPS, not listed, is redirected', untrustedV6.status === 301, `${untrustedV6.status}`);
+    trusting('docker-host');
+    const xfp = await via(GATEWAY, 'X-Forwarded-Proto: https');
+    check('with docker-host: the gateway with X-Forwarded-Proto: https is served (no loop)', xfp.status === 200, `${xfp.status}`);
+    const fwd = await via(GATEWAY, 'Forwarded: for=198.51.100.2;proto=https;host=beans.example.org');
+    check('with docker-host: the gateway with Forwarded: proto=https is served', fwd.status === 200, `${fwd.status}`);
+    trusting('fd12::3');
     const v6 = await via('fd12::3', 'X-Forwarded-Proto: HTTPS', '127.0.0.1:8080');
-    check('a unique-local proxy with X-Forwarded-Proto: HTTPS (nginx\'s Host) is served', v6.status === 200, `${v6.status}`);
-    const http = await via('172.18.0.1', 'X-Forwarded-Proto: http');
+    check('a unique-local proxy listed in TRUSTED_PROXIES with X-Forwarded-Proto: HTTPS (nginx\'s Host) is served', v6.status === 200, `${v6.status}`);
+    trusting('docker-host');
+    const http = await via(GATEWAY, 'X-Forwarded-Proto: http');
     check('the gateway with X-Forwarded-Proto: http is redirected', http.status === 301, `${http.status}`);
-    const chain = await via('172.18.0.1', 'X-Forwarded-Proto: http, https');
+    const chain = await via(GATEWAY, 'X-Forwarded-Proto: http, https');
     check('only the first hop\'s X-Forwarded-Proto counts', chain.status === 301, `${chain.status}`);
     const pub = await via(PUBLIC, 'X-Forwarded-Proto: https');
     check('a public source with X-Forwarded-Proto: https is redirected', redirected(pub, `https://${OWN}/api/version`), `${pub.status}`);
     const pubFwd = await via('2001:db8::7', 'Forwarded: proto=https');
     check('a public IPv6 source with Forwarded: proto=https is redirected', pubFwd.status === 301, `${pubFwd.status}`);
-    const wsProxy = await raw('172.18.0.1', `GET /ws HTTP/1.1\r\nHost: ${OWN}\r\nX-Forwarded-Proto: https\r\nConnection: Upgrade\r\n`
+    const wsUpgrade = (from: string) => raw(from, `GET /ws HTTP/1.1\r\nHost: ${OWN}\r\nX-Forwarded-Proto: https\r\nConnection: Upgrade\r\n`
         + `Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${Buffer.from('0123456789abcdef').toString('base64')}\r\n\r\n`,
         '127.0.0.1', true);
-    check('a live-updates socket through the proxy saying https is upgraded', wsProxy.status === 101, `${wsProxy.status}`);
+    const wsProxy = await wsUpgrade(GATEWAY);
+    check('a live-updates socket through the trusted proxy saying https is upgraded', wsProxy.status === 101, `${wsProxy.status}`);
+    trusting();
+    const wsUntrusted = await wsUpgrade(GATEWAY);
+    check('the same socket from the gateway, not trusted, is refused with a 301', wsUntrusted.status === 301, `${wsUntrusted.status}`);
 }
 
 console.log('\n5. IPv6');
 {
+    trusting();
     const pub = await get('2001:db8::5', '/api/version', OWN);
     check('a public IPv6 source is redirected', redirected(pub, `https://${OWN}/api/version`), `${pub.status}`);
-    const ula = await get('fd00::1', '/api/version', 'mullum.beanpool.org');
-    check('a unique-local IPv6 source naming a beanpool.org host is served', ula.status === 200, `${ula.status}`);
+    const ula = await get('fd00::1', '/api/version', TUNNEL_NAME);
+    check('a unique-local IPv6 source naming a beanpool.org host, not listed, is redirected', ula.status === 301, `${ula.status}`);
+    trusting('fd00::1');
+    const listed = await get('fd00::1', '/api/version', TUNNEL_NAME);
+    check('the same source listed in TRUSTED_PROXIES naming a beanpool.org host is served', listed.status === 200, `${listed.status}`);
     const ulaOwn = await get('fd00::1', '/api/version', OWN);
     check('the same naming the own domain is redirected', ulaOwn.status === 301, `${ulaOwn.status}`);
+    trusting();
 }
 
 console.log('\n6. The ACME challenge route from the Internet');

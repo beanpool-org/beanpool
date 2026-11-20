@@ -252,7 +252,7 @@ function part2SharedSource() {
     console.log('\n— one source for everyone (a proxy the node does not trust) waits at most ten minutes —');
     resetPasswordBrake();
     resetUntrustedForwardersForTests();
-    setTrustConfigForTests({ loopback: true, localSubnets: false, cloudflare: true, extra: [] });
+    setTrustConfigForTests({ loopback: true, cloudflare: true, dockerHost: false, extra: [] });
     const warnings: string[] = [];
     const warn = console.warn;
     console.warn = (...a: unknown[]) => { warnings.push(a.join(' ')); };

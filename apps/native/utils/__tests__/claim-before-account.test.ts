@@ -149,21 +149,18 @@ describe('the model is the app', () => {
         expect(state).not.toMatch(/interface PendingClaim|setPendingClaim|getPendingClaim|handOverPendingClaim|PENDING_CLAIM_TTL_MS/);
     });
 
-    it('app/welcome.tsx offers the claim as one quiet link below the fold, after the doors (which now hold Restore), never between the title and the doors', () => {
+    it('the front door offers the claim in its "More ways in" sheet, after its three buttons, never between them', () => {
         const welcome = read('../../app/welcome.tsx');
-        const doors = welcome.indexOf('<WelcomeDoors door={globalDoor}');
-        const about = welcome.indexOf('<Text style={styles.homeAbout}>');
-        const claim = welcome.indexOf("{t('Installed BeanPool on a server? Claim it →')}");
-        expect(doors).toBeGreaterThan(0);
-        expect(about).toBeGreaterThan(doors);
-        expect(claim).toBeGreaterThan(about);
-        // Front doors S10: Restore is the doors' third button (the old "Already a Member?" link under the doors is gone),
-        // so the claim comes after the doors, which carry Restore.
-        const doorsTag = welcome.slice(doors, welcome.indexOf('/>', doors));
-        expect(doorsTag).toContain("restore={() => setMode('member')}");
-        expect(welcome).not.toContain("{t('🔑 Already a Member? Restore Account →')}");
-        expect(read('../../components/WelcomeDoors.tsx')).toContain("{t('🔑 Already a Member? Restore Account →')}");
+        const door = read('../../components/welcome/FrontDoor.tsx');
+        const used = door.indexOf('{t("I\'ve used BeanPool before")}');
+        const more = door.indexOf("{t('More ways in ›')}");
+        const claim = door.indexOf("{t('Claim a server you installed')}");
+        expect(used).toBeGreaterThan(0);
+        expect(more).toBeGreaterThan(used);
+        expect(claim).toBeGreaterThan(more);
+        expect(door.slice(more, claim)).toMatch(/<Modal visible=\{sheet\}/);
         // It opens the claim screen with no server, which scans the server's QR or takes its address.
-        expect(welcome.slice(about, claim)).toMatch(/onPress=\{\(\) => router\.push\(CLAIM_NEW_SERVER_ROUTE\)\}/);
+        const at = welcome.indexOf('<FrontDoor');
+        expect(welcome.slice(at, welcome.indexOf('/>', at))).toContain('onClaim={() => router.push(CLAIM_NEW_SERVER_ROUTE)}');
     });
 });

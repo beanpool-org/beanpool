@@ -17,7 +17,7 @@ No community near you yet? You can start one: see "Nothing near you", below.
 
 On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved. After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again. In the web app, each community on the card is a link to its own page, with **Ask to join** under it. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
-Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, on the app's first screen tap **I'm New Here**, then **Explore BeanPool worldwide**: see "Joining BeanPool". Or, if you know a community's address, ask it directly: see "Asking with no account yet", below.
+Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, on the app's first screen tap **No invite? Look around**: see "Joining BeanPool". Or, if you know a community's address, ask it directly: see "Asking with no account yet", below.
 
 - Tap **Communities near you** to see the whole list.
 - Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name. Rather not share your location? Tap **or type your town**, start typing, and pick your town from the list: only a rough point is kept, and **change** picks another.
@@ -54,7 +54,7 @@ If a community can't take your request, the card shows its own words, for exampl
 
 You don't need an account, or the global community, to ask a community you know. On the phone app:
 
-- On the first screen, tap **I'm New Here**, then **Know a community near you? Ask to join it**.
+- On the first screen, tap **More ways in ›**, then **Ask a community to join**.
 - Type the community's address, such as riverside.example.org, or tap **Scan a code** and point the camera at its code. The camera is asked for only then. The list of communities near you shows once you have an account.
 - Tap **Ask to join**, check your name, write a few words about yourself, and tap **Send**.
 

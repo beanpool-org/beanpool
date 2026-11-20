@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 /* global process, console, document, getComputedStyle */
 /**
- * Front doors S10 at the floor (memory product-audience-small-screens: 320dp wide, the phone's text at 1.3×), in the light and
- * the dark scheme: the app's own components through react-native-web in headless Chromium, as e2e/look-first-320.mjs draws
- * the first screen's doors.
+ * The first screen and the ways in at the floor (memory product-audience-small-screens: 320dp wide, the phone's text at 1.3×),
+ * in the light and the dark scheme: the app's own components through react-native-web in headless Chromium, as
+ * e2e/look-first-320.mjs draws them.
  *
- * What is drawn: the first screen's two doors with Already a member? Restore as the third button under them
- * (components/WelcomeDoors.tsx, in the welcome screen's own style numbers), cut at the fold (320 x 497 dp: a 480x854 phone at
- * 240 dpi less its status and navigation bars) and checked to end above it; Join with an invite with Scan a QR code beside the
- * paste offer; Recover with Social's "Which community?" chips (components/RestoreCommunityChips.tsx), with no name to type
- * (recovery S2: the sign-in finds the account).
+ * What is drawn: the front door (components/welcome/FrontDoor.tsx, onboarding S1) under the language switch, in the welcome
+ * screen's own numbers, cut at the fold (320 x 497 dp: a 480x854 phone at 240 dpi less its status and navigation bars):
+ * I have an invite is checked to end above it, and where I've used BeanPool before ends is reported; the iPhone's invite
+ * tile (Apple's icon-only button, drawn as the box it takes); Your invite with Scan a QR code over the box; Recover with
+ * Social's "Which community?" chips (components/RestoreCommunityChips.tsx), with no name to type (recovery S2: the sign-in
+ * finds the account).
  *
  * Text at 1.3x is Android's font scale: every Text and TextInput's fontSize and lineHeight times 1.3, layout in dp as
  * is. Each state fails on: the page scrolling sideways (the fold case scrolls down, by design); any text past the 320 edge
  * or clipped in its box; a button under 48dp tall; text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px
- * bold or 24px); the fold case's third button ending under the fold.
+ * bold or 24px); the fold case's I have an invite ending under the fold.
  *
  * A stand-in for the phone, not an emulator: Android's fonts and line breaking differ. Nothing leaves the machine: the
  * page aborts every request but its own. The browser: run `pnpm --filter @beanpool/pwa exec playwright install
@@ -62,6 +63,11 @@ const STUBS = {
     'expo-router': `export const router = { back() {}, push() {}, replace() {}, canDismiss: () => false, dismissAll() {} };`,
     'IdentityContext': `export const useIdentity = () => ({ identity: globalThis.__identity, isLoading: false });`,
     'LanguageProvider': `import { t, tn } from '@beanpool/core'; export const useWords = () => ({ t, tn });`,
+    // Apple's own paste button (iOS 16+) is native: drawn as the box it takes, in the colours it is given, with no words (icon only).
+    'expo-clipboard': `import React from 'react'; import { View } from 'react-native-web';
+        export const ClipboardPasteButton = ({ style, backgroundColor }) => React.createElement(View, { role: 'button', 'aria-label': 'Paste', style: [{ borderRadius: 12 }, style, { backgroundColor }] });
+        export const isPasteButtonAvailable = false;
+        export const getStringAsync = async () => ''; export const hasStringAsync = async () => false;`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {
@@ -79,7 +85,8 @@ import { createRoot } from 'react-dom/client';
 import { View, ScrollView, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { palette } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { onboardingColors } from ${JSON.stringify(path.join(NATIVE, 'utils/onboarding-colors'))};
-import { WelcomeDoors } from ${JSON.stringify(path.join(NATIVE, 'components/WelcomeDoors'))};
+import { FrontDoor } from ${JSON.stringify(path.join(NATIVE, 'components/welcome/FrontDoor'))};
+import { ClipboardPasteButton } from 'expo-clipboard';
 import { RestoreCommunityChips } from ${JSON.stringify(path.join(NATIVE, 'components/RestoreCommunityChips'))};
 
 const q = new URLSearchParams(location.search);
@@ -87,59 +94,57 @@ const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
 const { colors, dark } = onboardingColors(scheme);
 globalThis.__theme = { theme: scheme, colors };
 globalThis.__identity = null;
-// These are the welcome screen's own numbers (app/welcome.tsx makeStyles), on its page colour: the doors, the third button, the
-// hint, the join card with its scan button, and the fields.
+// These are the welcome screen's own numbers (app/welcome.tsx makeStyles; the switch's from components/LanguagePicker.tsx), on its
+// page colour: the front door's column, Your invite's card with its scan button, box and hint, and the fields.
 const S = StyleSheet.create({
-    homeContent: { padding: 24, alignItems: 'center' },
-    switchRow: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 14, marginBottom: 8 },
-    headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
-    homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
-    doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
-    inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
-    memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12 },
-    memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700', textAlign: 'center' },
-    restoreBtn: { width: '100%', minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-    restoreBtnText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 15, fontWeight: '700', textAlign: 'center' },
-    homeAbout: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginTop: 20 },
+    homeContent: { flexGrow: 1, padding: 24, alignItems: 'center' },
+    homeMain: { width: '100%', alignItems: 'center' },
+    switchRow: { alignSelf: 'center', minHeight: 48, justifyContent: 'center', paddingHorizontal: 14, marginBottom: 8 },
+    switchText: { fontSize: 15, fontWeight: '600', color: colors.text.secondary },
     scroll: { padding: 24 },
     card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
-    pasteCard: { backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', borderRadius: 12, padding: 14, marginBottom: 16, alignItems: 'center' },
-    pasteCardText: { color: colors.text.body, fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 12 },
-    pasteCardBtn: { backgroundColor: palette.blue600, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999, alignItems: 'center' },
-    pasteCardBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '700' },
+    fieldHint: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 16, lineHeight: 18 },
+    inviteBoxRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    inviteBoxInput: { flex: 1 },
+    inviteBoxPaste: { width: 52, height: 52 },
+    backBtn: { marginTop: 16, alignItems: 'center', justifyContent: 'center', padding: 10, minHeight: 48 },
+    backBtnText: { color: colors.text.secondary, fontSize: 14 },
     scanInviteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent' },
     scanInviteBtnText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
 });
 const c = q.get('case');
 const Page = () => {
-    // The first screen, as the phone draws it: the language switch, the title, the three buttons, the hint, the sentence.
+    // The first screen, as the phone draws it (app/welcome.tsx, THE FRONT DOOR): the language switch (a stand-in in its own
+    // numbers), then the front door itself, with the line under Look around when the door says one.
     if (c === 'home') return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={S.homeContent}>
-            <View style={{ width: '100%', alignItems: 'center' }}>
-                <View style={S.switchRow}><Text style={{ color: colors.text.secondary, fontSize: 14 }}>English</Text></View>
-                <Text style={S.headerTitle}>Welcome to BeanPool</Text>
-                <WelcomeDoors door={q.get('door') || 'open'} joinWithInvite={() => {}} openGlobalDoor={() => {}} restore={() => {}} styles={S} />
-                <Text style={S.homeAbout}>Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.</Text>
+            <View style={S.homeMain}>
+                <View style={S.switchRow}><Text style={S.switchText}>🌐 English ▾</Text></View>
+                <FrontDoor colors={colors} door={q.get('door') || 'open'} appleTile={q.get('tile') === '1'}
+                    onInvite={() => {}} onApplePaste={() => {}} onScanOrType={() => {}} onLookAround={() => {}}
+                    onUsedBefore={() => {}} onAskToJoin={() => {}} onClaim={() => {}} />
             </View>
         </ScrollView>
     );
-    // Join with an invite, with the paste offer a copied invite brings and Scan a QR code under it (the icon is a stand-in glyph).
-    if (c === 'join') return (
+    // Your invite: Scan a QR code over the box, Apple's small icon button at the box's end when text is copied on iOS 16+ (the
+    // scan icon is a stand-in glyph), the hint, and Back.
+    if (c === 'invite') return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={S.scroll}>
             <View style={S.card}>
-                <Text style={S.title}>🎟️ Join with an invite</Text>
-                <View style={S.pasteCard}>
-                    <Text style={S.pasteCardText}>Tap Paste to insert the code from your invite.</Text>
-                    <Pressable style={S.pasteCardBtn} accessibilityRole="button"><Text style={S.pasteCardBtnText}>📋 Paste</Text></Pressable>
-                </View>
+                <Text style={S.title}>Your invite</Text>
                 <Pressable style={S.scanInviteBtn} accessibilityRole="button">
                     <Text style={{ color: dark ? palette.blue400 : palette.blue600, fontSize: 20 }}>▦</Text>
                     <Text style={S.scanInviteBtnText}>Scan a QR code</Text>
                 </Pressable>
-                <TextInput style={S.input} placeholder="Paste your invite link or code" placeholderTextColor={colors.text.muted} accessibilityLabel="Invite link or code" />
+                <View style={S.inviteBoxRow}>
+                    <TextInput style={[S.input, S.inviteBoxInput]} placeholder="Invite link or code" placeholderTextColor={colors.text.muted} accessibilityLabel="Invite link or code" />
+                    {q.get('tile') === '1' && <ClipboardPasteButton backgroundColor={colors.action.cta} style={S.inviteBoxPaste} />}
+                </View>
+                <Text style={S.fieldHint}>Have the link? Tap it again.</Text>
+                <Pressable style={S.backBtn} accessibilityRole="button"><Text style={S.backBtnText}>← Back</Text></Pressable>
             </View>
         </ScrollView>
     );
@@ -273,17 +278,25 @@ try {
         await page.setViewportSize({ width: WIDTH, height: FOLD });
         for (const door of ['open', 'unreachable']) {
             await open(`case=home&scheme=${scheme}&door=${door}`);
-            await page.getByText('Welcome to BeanPool').waitFor();
-            const restoreBottom = await page.evaluate(() => Math.round(document.querySelector('[aria-label="Already a Member? Restore Account"]').getBoundingClientRect().bottom));
-            // With the door's own line under Explore (offline, shut, in preview: two or three lines at 1.3x) Restore is pushed down by
-            // it: reported, not failed (the line is worth more than the button's place there).
-            if (restoreBottom > FOLD && door === 'open') problems.push(`${scheme} · first screen (${door}): Restore ends at ${restoreBottom}dp, under the fold at ${FOLD}dp`);
-            await measure(`${scheme} · first screen at the fold (${door}), Restore ends at ${restoreBottom}dp of ${FOLD}`, { fold: true });
+            await page.getByText('I have an invite').waitFor();
+            const bottom = (id) => page.evaluate((id) => Math.round(document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect().bottom), id);
+            const invite = await bottom('front-door-invite');
+            const usedBefore = await bottom('front-door-used-before');
+            // The design's promise (FrontDoor.tsx, the block's style): the block and I have an invite end above the fold, whatever
+            // the door says. The buttons under it are one scroll away by design, so where I've used BeanPool before ends is
+            // reported, not failed.
+            if (invite > FOLD) problems.push(`${scheme} · first screen (${door}): I have an invite ends at ${invite}dp, under the fold at ${FOLD}dp`);
+            await measure(`${scheme} · first screen at the fold (${door}), I have an invite ends at ${invite}dp, I've used BeanPool before at ${usedBefore}dp of ${FOLD}`, { fold: true });
         }
         await page.setViewportSize({ width: WIDTH, height: 640 });
-        await open(`case=join&scheme=${scheme}`);
-        await page.getByText('Scan a QR code').waitFor();
-        await measure(`${scheme} · Join with an invite, Scan a QR code under the paste offer`);
+        await open(`case=home&scheme=${scheme}&tile=1`);
+        await page.getByText('Scan or type it instead ›').waitFor();
+        await measure(`${scheme} · first screen, the iPhone's invite tile`);
+        for (const tile of ['0', '1']) {
+            await open(`case=invite&scheme=${scheme}&tile=${tile}`);
+            await page.getByText('Scan a QR code').waitFor();
+            await measure(`${scheme} · Your invite, Scan a QR code over the box${tile === '1' ? ", Apple's button at its end" : ''}`);
+        }
         await open(`case=social&scheme=${scheme}`);
         await page.getByText('Which community?').waitFor();
         await measure(`${scheme} · Recover with Social, Which community? first`);

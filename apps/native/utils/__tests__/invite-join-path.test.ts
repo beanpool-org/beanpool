@@ -85,7 +85,9 @@ describe('the welcome screen reads pastes and checks with these', () => {
     it('the paste and the link go through readInviteText and holdsInvite, never a regex that runs to the next &', () => {
         expect(welcome).not.toMatch(/\[\?&\]invite=\(\[\^&\]\+\)/);
         expect(welcome).toMatch(/read = readInviteText\(fullUrl\);/);
-        expect(welcome).toMatch(/if \(holdsInvite\(content\)\) \{\s*await processFullUrl\(content\);/);
+        // What a tap or a scan brings is kept only if it is an invite (utils/invite-arrival.ts inviteOnly, which is holdsInvite).
+        expect(welcome).toMatch(/const invite = inviteOnly\(raw\);\s*if \(invite\) \{\s*setInviteNote\(null\);\s*await processFullUrl\(invite\);/);
+        expect(fs.readFileSync(path.resolve(__dirname, '../invite-arrival.ts'), 'utf8')).toMatch(/return text && holdsInvite\(text\) \? text : null;/);
         // A code pasted alone never clears the listing an earlier invite-and-share link noted.
         expect(welcome).toMatch(/if \(\/\[\?&\]invite=\/\.test\(fullUrl\)\) noteLandingPost\(code, postIdFromInviteLink\(fullUrl\)\);/);
     });

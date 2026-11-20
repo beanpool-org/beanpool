@@ -53,7 +53,7 @@ Nothing changes in your other communities, and your 12 words stay the same. A si
 
 If the app says **This sign-in already joined the global community with a different BeanPool account**, that sign-in has its own account there. Use a different sign-in: one sign-in account makes one account in the global community.
 
-On a new phone with no account yet, tap **I'm New Here** on the first screen, then **Explore BeanPool worldwide**, instead. See "Joining BeanPool".
+On a new phone with no account yet, tap **No invite? Look around** on the first screen instead. See "Joining BeanPool".
 
 ## What the global community shows you
 
@@ -107,4 +107,4 @@ To delete your account in one community, open it and use **Permanently Delete Ac
 
 If you add a community without an invite, you are a guest there. A **Join** button shows at the top, beside the **?**. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with their 12 words or a sign-in instead: see "Joining the global community from your account" above.
 
-On a new phone with no account yet, **I'm New Here** on the first screen, then **Explore BeanPool worldwide**, opens the global community as a guest too, before there is any account: you see its listings and its map, and nothing about you is made or sent until you tap **Join**. See "Joining BeanPool".
+On a new phone with no account yet, **No invite? Look around** on the first screen opens the global community as a guest too, before there is any account: you see its listings and its map, and nothing about you is made or sent until you tap **Join**. See "Joining BeanPool".

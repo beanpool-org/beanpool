@@ -108,13 +108,14 @@ test('each translation of /start says what the English says: the same links and 
         enBlocks.forEach((b, i) => assert.equal(trBlocks[i], b, `${lang}: block ${i} has the English block's links and bold words, in order`));
         const steps = between(src, '<ol class="run-node-steps">', '</ol>');
         const words = JSON.parse(fs.readFileSync(path.join(ROOT, 'apps/native/words', `${lang}.json`), 'utf8'));
-        for (const label of ['Installed BeanPool on a server? Claim it', 'Set up a new community server', 'Claim and become owner']) {
+        for (const label of ['Claim a server you installed', 'Set up a new community server', 'Claim and become owner']) {
             assert.ok(steps.includes(`<strong>${words[label]}</strong>`), `${lang}: the claim step names "${words[label]}", the phone's "${label}"`);
         }
-        // A phone with no account opens on "Used BeanPool before?" and draws the claim link only after I'm New Here (#3209).
-        const newHere = steps.indexOf(`<strong>${words["I'm New Here"]}</strong>`);
-        assert.ok(newHere >= 0 && newHere < steps.indexOf(`<strong>${words['Installed BeanPool on a server? Claim it']}</strong>`),
-            `${lang}: the claim step names "${words["I'm New Here"]}" (the phone's "I'm New Here") before the claim link`);
+        // A phone with no account opens on the front door, whose "More ways in ›" sheet holds the claim (onboarding S1, 21 Nov
+        // 2026; before it, "I'm New Here" then the claim link, #3209).
+        const moreWays = steps.indexOf(`<strong>${words['More ways in ›']}</strong>`);
+        assert.ok(moreWays >= 0 && moreWays < steps.indexOf(`<strong>${words['Claim a server you installed']}</strong>`),
+            `${lang}: the claim step names "${words['More ways in ›']}" (the phone's "More ways in ›") before the claim row`);
         assert.ok(steps.includes('<strong>Action Required</strong>'), `${lang}: Settings Home's list, as the Settings app names it`);
         // In a right-to-left paragraph the slash takes the paragraph's direction and shows as "settings/" (measured in Chromium
         // on ar, fa and ur, 15 Nov 2026). dir="ltr" on the bold word keeps it "/settings"; a left-to-right MARK would too, but it is
@@ -191,10 +192,12 @@ test('/start and the README: both phone routes to the claim, then the one "what 
     const steps = start.slice(start.indexOf('<h3 class="run-node-sub">'), start.indexOf('<p class="run-node-note">'));
     const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
     for (const [where, text, b] of [['/start', steps, (s) => `<strong>${s}</strong>`], ['README.md', readme, (s) => `**${s}**`]]) {
-        assert.ok(text.includes(b('Installed BeanPool on a server? Claim it')), `${where}: the route with no account`);
-        // Since #3209 a phone with no account opens on "Used BeanPool before?" and draws the link only after I'm New Here.
-        assert.ok(text.includes(`open BeanPool, tap ${b("I'm New Here")} on its first screen, then ${b('Installed BeanPool on a server? Claim it')}`),
-            `${where}: the route with no account answers I'm New Here first, in the operator manual's words`);
+        assert.ok(text.includes(b('Claim a server you installed')), `${where}: the route with no account`);
+        // Since onboarding S1 (21 Nov 2026) a phone with no account opens on the front door, whose "More ways in ›" sheet holds the
+        // claim (before it, "I'm New Here" then the claim link, #3209); `beanpool claim` (claim-command.ts) says the same.
+        assert.ok(text.includes(`open BeanPool, tap ${b('More ways in ›')} on its first screen, then ${b('Claim a server you installed')}`),
+            `${where}: the route with no account opens More ways in › first, in the operator manual's words`);
+        assert.ok(!text.includes("I'm New Here") && !text.includes('Installed BeanPool on a server? Claim it'), `${where}: no button the phone no longer has`);
         assert.ok(text.includes('the bean at the top') && text.includes(b('Set up a new community server')), `${where}: the route with an account`);
         assert.ok(text.includes('Claiming is done from the phone app only'), `${where}: the claim is the phone's`);
         assert.ok(text.includes('confirm your Core settings, make a recovery code, add a second owner and invite your first members'), `${where}: the one what next`);

@@ -4443,7 +4443,7 @@
                     let unclaimed = false;
                     try { unclaimed = (await (await fetch(`${API}/claim`)).json()).unclaimed === true; } catch { /* asked again on reload */ }
                     showStatus('login-status', unclaimed
-                        ? 'This community has no owner yet, and this server has no admin password. Claim it with its one-time claim code: run "beanpool claim" on the server, then scan its QR code with your phone, or open BeanPool on your phone, tap "I\'m New Here" on its first screen, then "Installed BeanPool on a server? Claim it" (with an account already on the phone: the bean at the top, then "Set up a new community server").'
+                        ? 'This community has no owner yet, and this server has no admin password. Claim it with its one-time claim code: run "beanpool claim" on the server, then scan its QR code with your phone, or open BeanPool on your phone, tap "More ways in ›" on its first screen, then "Claim a server you installed" (with an account already on the phone: the bean at the top, then "Set up a new community server").'
                         : 'This server has no admin password. Owners and admins sign in with the BeanPool app.', 'warning');
                 }
             } catch (err) {

@@ -2116,7 +2116,8 @@ export interface HeldPreview {
  * community this phone holds (slice S2b): read through a held, read-only handle, and opened under that file's own pins
  * as stored, read only (dmPins.peek: never seeded, never written, as getHeldConversations reads them). A line the pins
  * can't place shows no preview (null): no pins stored or readable for that file, none for that chat, a line that doesn't
- * open under its pinned key or a former one, one that isn't encrypted, the admins' or the node's own. Never a wrong one.
+ * open under its pinned key or a former one (never the key on offer: dmShownFormer, S7c's R10 rule), one that isn't
+ * encrypted, the admins' or the node's own. Never a wrong one.
  * Null when nothing could be read.
  */
 export async function getHeldPreviews(myPubkey: string, community: string, ids: readonly string[]): Promise<Record<string, HeldPreview | null> | null> {
@@ -2148,7 +2149,9 @@ function heldPreviewOf(row: any, myPriv: string | null | undefined, pins: DmPeer
     const line = { id: String(row.lastId), authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata, timestamp: row.timestamp };
     // A deleted line's fixed text: BeanPool's own words.
     if (dmLineKind(line) === 'tombstone') return { lastMessage: dmLineShownText(checkDmThread([line], null, id).get(line.id)), lastMessageFromApp: true };
-    const view = checkDmThread([line], { myEdPrivHex: myPriv, peerEdPubHex: pin.peer }, id, pin.former ?? []).get(line.id);
+    // The former keys a line may open under as words: never the key on offer (dmShownFormer, the R10 rule, as Chat's own
+    // list for the community in use: getConversations). A line under it shows no preview until the member continues there.
+    const view = checkDmThread([line], { myEdPrivHex: myPriv, peerEdPubHex: pin.peer }, id, dmShownFormer(pin)).get(line.id);
     // Only a line that opened under the pinned key (or a former one) and was signed by its sender: format 4.
     if (!view || view.format !== 4 || view.mark === 'not-verified') return null;
     if (row.lastMsgType === 'voice') return { lastMessage: '🎤 Voice message', lastMessageFromApp: true };

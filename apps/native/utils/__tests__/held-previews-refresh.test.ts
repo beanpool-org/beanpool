@@ -502,6 +502,23 @@ describe('S2b: a held row\'s preview and count come from its own copy, and a ref
         expect(messagesIn(A_FILE).length).toBe(2);
     });
 
+    it('S7c, the R10 rule: a line under the key on offer (a verified person\'s change waiting there) shows no preview, even when an earlier judgement put that key into `former`', async () => {
+        const key = dmPeerPinsStoreKey(me.publicKey, A_FILE);
+        const stored = JSON.parse(h.store.get(key)!);
+        const pinned = person().publicKey;
+        // Control: the line's key is a former one, no offer: its words, as before.
+        stored.pins[dm.id] = { ...stored.pins[dm.id], peer: pinned, former: [peer.publicKey] };
+        h.store.set(key, JSON.stringify(stored));
+        db._resetDmPeerPinsForTests();
+        expect((await db.getHeldPreviews(me.publicKey, A, [dm.id]))?.[dm.id]).toEqual({ lastMessage: PEER_WORDS, lastMessageFromApp: false });
+        // That same key on offer, waiting for the member there: no words until they continue with it (dmShownFormer, as
+        // Chat's own list for the community in use: db.ts getConversations).
+        stored.pins[dm.id] = { ...stored.pins[dm.id], offered: { peer: peer.publicKey, at: '2026-11-20T00:00:00.000Z' } };
+        h.store.set(key, JSON.stringify(stored));
+        db._resetDmPeerPinsForTests();
+        expect((await db.getHeldPreviews(me.publicKey, A, [dm.id]))?.[dm.id]).toBeNull();
+    });
+
     it('another account on the phone: a preview asked with the old key opens nothing, and a refresh asks nothing more', async () => {
         const old = me.publicKey;
         const other = person();

@@ -134,8 +134,8 @@ describe('Restore your account: five rows, best first (vault rethink VR4; front 
     const BUTTON = 16;
     const LINE_WIDTH = 320 - 2 * (SCROLL + CARD + BUTTON);
     const FONT = 16 * 1.3;
-    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
-    const em = (c: string) => (/\p{M}/u.test(c) ? 0 : /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
+    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
+    const em = (c: string) => (/\p{M}/u.test(c) ? 0 : /[\ufe0f\u200c\u200d]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
     const widest = (s: string) => Math.max(...s.split(/\s+/).flatMap((w) => (CJK.test(w) ? Array.from(w) : [w])).map((w) => Array.from(w).reduce((n, c) => n + em(c) * FONT, 0)));
 
     it('the styles the measure rests on are the screen\'s and the rows\'', () => {

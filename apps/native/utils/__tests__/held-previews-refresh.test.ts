@@ -712,6 +712,18 @@ describe('S2b: a line that waits in a held community is fetched exactly once, ho
             await chat.refresh();
             return chat;
         },
+        // #3312 review F3: Chat's 15 s beat starts at focus, but the focus refresh notes its time only after the rows are read;
+        // the first beat must still count as due, or the line waits a second beat.
+        'alerts off, the focus refresh noted late (rows read first): the first beat still brings the line': async () => {
+            h.store.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([A]));
+            const chat = openChat();
+            skew = 300; // the interval started at 0; the focus refresh runs once the rows are read
+            expect(await chat.refresh()).toEqual([]);
+            nodeLine(dm, peer, 'a new line');
+            skew = HELD_QUIET_REFRESH_MS; // the beat: 15 s after the interval started, 14.7 s after the focus refresh
+            await chat.refresh();
+            return chat;
+        },
     };
 
     it.each(Object.keys(ROWS))('%s', async (name) => {

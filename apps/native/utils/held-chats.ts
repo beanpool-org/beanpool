@@ -260,7 +260,9 @@ async function refreshOnce(myPubkey: string, rows: readonly HeldChatRow[], view:
             const quiet = alertsOff.includes(communityAddress(row.community) ?? '');
             const number = quiet ? 0 : noticeCountFor(counts, row.community);
             if (quiet) {
-                if (was && at - was.at < HELD_QUIET_REFRESH_MS) continue;
+                // Half a beat of slack (#3312 review F3): Chat's beat starts at focus, but the focus refresh notes its time only
+                // after the rows are read, so the first beat comes a little under 15 s after it and must still count as due.
+                if (was && at - was.at < HELD_QUIET_REFRESH_MS / 2) continue;
             } else {
                 if (was && number < was.number) noted.set(key, { ...was, number });
                 if (number <= (was?.number ?? 0)) continue;

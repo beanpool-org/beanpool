@@ -13,6 +13,7 @@ describe('the community welcome (onboarding design §4.5, slice S6)', () => {
     const a = (n: number) => 'a'.repeat(n);
     const cases: Array<[string, unknown, { text: string } | { problem: string }]> = [
         ['nothing sent clears it', null, { text: '' }],
+        ['a missing value is not text: it never erases one', undefined, { problem: 'not_text' }],
         ['spaces only clear it', '   \n  ', { text: '' }],
         ['plain text is kept as written', "G'day and welcome. Market day is Saturday.", { text: "G'day and welcome. Market day is Saturday." }],
         ['the ends are trimmed', '  Hello  \n', { text: 'Hello' }],

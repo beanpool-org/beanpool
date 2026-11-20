@@ -44,10 +44,12 @@ export function welcomeLineBreaks(text: string): number {
 
 /**
  * The welcome as it is kept, or why it can't be. `null` or a text that is only spaces is the empty welcome (`''`), which
- * clears it. The text kept is what the owner wrote, cleaned as the header says; nothing else is changed.
+ * clears it; anything else that isn't text, a missing value included, is refused. The text kept is what the owner wrote,
+ * cleaned as the header says; nothing else is changed.
  */
 export function cleanCommunityWelcome(raw: unknown): CommunityWelcomeCheck {
-    if (raw === null || raw === undefined) return { ok: true, text: '' };
+    // Only null is "none": a request that leaves the welcome out (undefined) is not one asking to erase it.
+    if (raw === null) return { ok: true, text: '' };
     if (typeof raw !== 'string') return { ok: false, problem: 'not_text' };
     const text = raw.replace(LINE_ENDS, '\n').replace(/\t/g, ' ').replace(BIDI_MARKS, '').trim();
     if (CONTROL.test(text)) return { ok: false, problem: 'control_character' };

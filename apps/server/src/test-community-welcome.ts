@@ -27,9 +27,9 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, exportSyncState, getDirectoryInfo } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders, ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
-import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
+import { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests } from './admin-key-auth.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
@@ -181,6 +181,15 @@ async function main(): Promise<void> {
             `${r.who} × read via the public card: absent (${card.status})`);
     }
     assert(storedRow() === WELCOME, `after the table, the owner's welcome is the one kept (${j(storedRow())})`);
+    // An owner's phone hand-off past its 5-minute unlock (admin-auth.ts requirePhoneStepUp): it still reads, and a change
+    // waits for Manage to be pressed again.
+    const stalePhone = ownerPhoneSessionHeaders(founder.pk);
+    backdateAdminSessionForTests(stalePhone['X-Admin-Session'], 6 * 60_000);
+    const staleSet = await call('POST', null, ROUTE, { welcome: 'From a stale phone' }, stalePhone);
+    assert(staleSet.status === 403 && staleSet.body?.code === 'step_up_required' && storedRow() === WELCOME,
+        `a stale phone hand-off: the change waits for the step-up, nothing changed (${show(staleSet)})`);
+    const staleRead = await call('GET', null, ROUTE, undefined, stalePhone);
+    assert(staleRead.status === 200 && staleRead.body?.welcome === WELCOME, `a stale phone hand-off still reads it (${show(staleRead)})`);
 
     // ── 2. The visitors' view ──
     console.log("\n— 2. a node that shows visitors the listings —");
@@ -211,6 +220,8 @@ async function main(): Promise<void> {
         ['an escape sequence', 'Welcome \u001b[31mred', 'control_character'],
         ['a DEL', 'Wel\u007fcome', 'control_character'],
         ['a number', 42, 'not_text'],
+        // JSON leaves an undefined out: a body with no welcome at all, which must never erase the one kept.
+        ['no welcome in the body', undefined, 'not_text'],
     ];
     for (const [what, welcome, code] of refusals) {
         const r = await call('POST', null, ROUTE, { welcome }, ownerAdmin);

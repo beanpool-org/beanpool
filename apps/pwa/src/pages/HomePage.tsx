@@ -3447,8 +3447,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         load: () => loadChatRows(publicKey),
     } : undefined;
     const offered = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
-    // Welcome is offered only while it can be drawn (DESIGN-home-default-fable.md §2.3: until the tour is taken or Not now,
-    // seven days at most): a card added that never shows is a promise the picker doesn't keep (review B2).
+    // Welcome is offered only while it can be drawn (core welcomeShape, slice W2: until the tour is taken or Got it, full for
+    // seven days, a band to day 30): a card added that never shows is a promise the picker doesn't keep (review B2).
     const welcomeCan = !!a.me && welcomeShape(tourOverFor(a, { tourOver }), a.me.joinedAt, now) !== null;
     const picker = offered && !welcomeCan
         ? { ...offered, groups: offered.groups.map(g => ({ ...g, rows: g.rows.filter(r => r.type !== 'start') })).filter(g => g.rows.length > 0) }

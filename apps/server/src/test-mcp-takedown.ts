@@ -725,6 +725,15 @@ async function main(): Promise<void> {
                 { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventPlaceName: 'The hall' })!.id;
             const stillAhead = meetUp('Still ahead'), overDuringHold = meetUp('Over during the hold');
             for (const id of [stillAhead, overDuringHold]) rsvpEvent(() => {}, id, goer.pub, 'going');
+            // Both are posted for the whole community of a local node: the goer, a member with a phone and not their host, is
+            // told of the first as a new event and not of the second, told that day already (`event.new`,
+            // engine/event-new-push.ts, notifications NEa). Pushes for the posting, held here, so what follows counts the
+            // cancellation's alone.
+            for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));
+            const toldOfPosting = toPhones.map(p => [p.kind, p.data?.postId]);
+            toPhones.length = 0;
+            assert(JSON.stringify(toldOfPosting) === JSON.stringify([['event.new', stillAhead]]),
+                `posting the two, the goer is told of a new event once, for the first (${JSON.stringify(toldOfPosting)})`);
             const twoEvents = structured(await a.callTool({ name: 'take_down_many', arguments: { post_ids: [stillAhead, overDuringHold], reason: 'rules', why: WHY } }));
             assert(twoEvents?.removed?.length === 2, `two events, one person going to each (${JSON.stringify(twoEvents?.kept)})`);
             // Its date is past now: the RSVP moves with it, or nobody is going and the push below could never be sent.

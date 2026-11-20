@@ -177,6 +177,12 @@ const ME = { publicKey: 'me-key', privateKey: 'me-priv', callsign: 'Ana' };
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
 // A member's picture: drawn from what they chose, never words.
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
+// Message requests' pane, drawn as it is, with what Chat hands it kept for a row to read (#3309 review N4 C3).
+const pane = vi.hoisted(() => ({ last: null as null | Record<string, any> }));
+vi.mock('../../components/MessageRequestsPane', async (orig) => {
+    const real = await orig<typeof import('../../components/MessageRequestsPane')>();
+    return { ...real, MessageRequestsPane: (props: Record<string, any>) => { pane.last = props; return createElement(real.MessageRequestsPane as any, props); } };
+});
 /** What a community this phone asked to join answers its signed status read with (utils/knock.ts); by its origin. */
 const knockReads = vi.hoisted(() => ({ answers: new Map<string, () => Promise<Response>>() }));
 vi.mock('../node-post', () => ({
@@ -786,6 +792,31 @@ describe("Chat's own held wiring (slices S1 and S2, #3302 review F6): the rows, 
     it('with no block, both are listed', async () => {
         await renderIn('en');
         expect(heldRows().length).toBe(2);
+    });
+
+    // #3309 review N4 C3: Chat hands Message requests the places whose S0 card still shows (placesThatMoveElsewhere), never
+    // every place waiting: a place whose requests are read in place has its group and no card beside it that moves the phone.
+    it('Message requests: a place read in place has its group there and no card that moves the phone there; one not read keeps it', async () => {
+        const BROOK = 'https://brookside.example';
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: HILL, alias: 'Hilltop' }, { url: BROOK, alias: 'Brookside' }]));
+        store.map.set('beanpool_notice_counts', JSON.stringify({ [HILL]: { n: 0, seen: {}, requests: 1 }, [BROOK]: { n: 0, seen: {}, requests: 2 } }));
+        const asked: string[] = [];
+        const answers = community({ getHeldConversations: HELD, closeHeldCopies: undefined });
+        net.answer = (name, args) => {
+            if (name !== 'requestsInPlace') return answers(name, args);
+            asked.push(String(args[1]));
+            // Hilltop is read in place; Brookside can't be (no copy on the phone): null, its S0 card stays.
+            return Promise.resolve(args[1] === HILL
+                ? { count: 1, conversations: [{ id: 'r-hill', type: 'dm', participants: ['kofi-key', ME.publicKey], peer: 'Kofi', peerPubkey: 'kofi-key', request: { from: 'kofi-key', state: 'pending', at: iso(now) } }] }
+                : null);
+        };
+        pane.last = null;
+        await renderIn('en');
+        await click(host.querySelector('[data-testid="message-requests-row"]'), 'Message requests');
+        await settle(24);
+        expect(asked.sort()).toEqual([HILL, BROOK].sort());
+        expect(pane.last?.inPlace?.map((g: any) => g.place.address)).toEqual([HILL]);
+        expect(pane.last?.elsewhere?.map((p: any) => p.address)).toEqual([BROOK]);
     });
 
     it("a tap on a direct chat opens it in place (S2): that chat by its own id, in that community by its address, and no switch", async () => {

@@ -57,13 +57,36 @@ describe('which places are read in place', () => {
         expect(placesToReadInPlace(null)).toEqual([]);
     });
 
-    it('a place that can\'t be read in place is left out (its S0 card stays); a stop ends the reads', async () => {
+    it('a place that can\'t be read in place is left out (its S0 card stays); the groups keep the places\' order', async () => {
         const read = await readRequestsInPlace('me', [place(RIVER, 1), place(OPEN, 3), place(HILL, 2)], () => true);
         expect(read.map((g) => [g.place.url, g.entries.map((e) => e.id)])).toEqual([[RIVER, ['r1']], [HILL, ['h1', 'h2']]]);
-        let left = 1;
+    });
+
+    // #3309 review N2 (probe P4): read one after another, a community that never answered held back every other group. Now
+    // each read has its deadline (db.ts requestsInPlace) and the places are asked side by side: a slow one holds back the
+    // others for that one deadline at most, never one deadline per place.
+    it('the places are asked side by side: the second is asked while the first is still out', async () => {
+        let answerRiver!: (v: unknown) => void;
+        const read = vi.fn((_me: string, url: string) => (url === RIVER
+            ? new Promise<any>((r) => { answerRiver = r; })
+            : Promise.resolve({ count: 2, conversations: [{ id: 'h1' }, { id: 'h2' }] })));
+        const reading = readRequestsInPlace('me', [place(RIVER, 1), place(HILL, 2)], () => true, read as any);
+        await Promise.resolve();
+        expect(read.mock.calls.map((c) => c[1])).toEqual([RIVER, HILL]);
+        // The first ends at its deadline with no answer (null): its S0 card stays, the second's group comes back.
+        answerRiver(null);
+        expect((await reading).map((g) => g.place.url)).toEqual([HILL]);
+    });
+
+    it('a stop: before the reads, none is asked; once they are back (the list left meanwhile), none is handed back', async () => {
         calls.log = [];
-        await readRequestsInPlace('me', [place(RIVER, 1), place(HILL, 2)], () => left-- > 0);
-        expect(calls.log).toEqual([`read ${RIVER}`]);
+        expect(await readRequestsInPlace('me', [place(RIVER, 1), place(HILL, 2)], () => false)).toEqual([]);
+        expect(calls.log).toEqual([]);
+        let wanted = true;
+        const reading = readRequestsInPlace('me', [place(RIVER, 1), place(HILL, 2)], () => wanted);
+        wanted = false;
+        expect(await reading).toEqual([]);
+        expect(calls.log).toEqual([`read ${RIVER}`, `read ${HILL}`]);
     });
 
     it('each group keeps its read\'s count, which may be more than it lists (#3309 review F3)', async () => {

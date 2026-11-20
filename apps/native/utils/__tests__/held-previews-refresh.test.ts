@@ -471,6 +471,11 @@ describe('S2b: a held row\'s preview and count come from its own copy, and a ref
         h.store.set(key, JSON.stringify(stored));
         db._resetDmPeerPinsForTests();
         expect((await db.getHeldPreviews(me.publicKey, A, [dm.id]))?.[dm.id]).toBeNull();
+        // Pins readable, but none for this chat (never pinned there): none, never the line's own author taken as its key.
+        delete stored.pins[dm.id];
+        h.store.set(key, JSON.stringify(stored));
+        db._resetDmPeerPinsForTests();
+        expect((await db.getHeldPreviews(me.publicKey, A, [dm.id]))?.[dm.id]).toBeNull();
         // Pins that can't be read: none either.
         h.store.set(key, '{not json');
         db._resetDmPeerPinsForTests();
@@ -522,6 +527,19 @@ describe('S2b: bounded', () => {
         // The newest first: the last lines the node took.
         const newest = [...node.convs].sort((a, b) => (lastAt(a)! < lastAt(b)! ? 1 : -1)).slice(0, db.HELD_REFRESH_MAX).map((c) => c.id);
         expect(pages.map((r) => decodeURIComponent(new URL(r.url).pathname.split('/').pop()!)).sort()).toEqual(newest.sort());
+
+        // Chat left while the first page is on its way: no next chat is asked.
+        for (const conv of more) nodeLine(conv, person(), 'and again');
+        let inView = true;
+        hold = holdFor((m, p) => m === 'GET' && /^\/api\/messages\/[^/]+$/.test(p) && !p.includes('conversations'));
+        asked = [];
+        const cut = db.refreshHeldDms(me.publicKey, A, () => inView);
+        await hold.seen;
+        inView = false;
+        hold.release();
+        expect(await cut).toBe(1);
+        expect(asked.filter((r) => /\/api\/messages\/[^/]+$/.test(new URL(r.url).pathname) && !/conversations/.test(r.url)).length).toBe(1);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
     });
 
     it('a refresh runs once per rise of the community\'s number, and again only when it rises further', async () => {
@@ -609,6 +627,28 @@ describe('S2b: the cost at 500 chats', () => {
         const previews = [...filled.values()].filter((f) => f.lastMessage);
         expect(previews.length).toBe(db.HELD_PREVIEWS_MAX);
         expect(h.heldReads.filter((r) => r.sql.includes('json_each')).map((r) => r.rows)).toEqual([db.HELD_PREVIEWS_MAX]);
+        // Handed more ids than that, the read itself opens no more.
+        h.heldReads = [];
+        expect(Object.keys((await db.getHeldPreviews(me.publicKey, A, rows!.slice(0, 30).map((r) => r.id)))!).length).toBe(db.HELD_PREVIEWS_MAX);
+        expect(h.heldReads.filter((r) => r.sql.includes('json_each')).map((r) => r.rows)).toEqual([db.HELD_PREVIEWS_MAX]);
+        // A second held community just as big: still 20 previews in all, the newest across both.
+        const D = 'https://lakeside.example';
+        const D_FILE = getDatabaseFilenameForNode(D);
+        await db.closeDB();
+        // The copy is in WAL mode: its lines into the file itself first, so the copy carries them.
+        const checkpoint = new DatabaseSync(fileOn(A_FILE));
+        checkpoint.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        checkpoint.close();
+        fs.copyFileSync(fileOn(A_FILE), fileOn(D_FILE));
+        h.store.set(dmPeerPinsStoreKey(me.publicKey, D_FILE), h.store.get(pinsKey)!);
+        const dRows: HeldChatRow[] = heldRows.map((r) => ({ ...r, key: `held:${D_FILE}:${r.id}`, community: D, rawTimestamp: r.rawTimestamp ? r.rawTimestamp.replace(/^2026/, '2027') : null }));
+        h.heldReads = [];
+        const both = await heldChatsFilledIn(me.publicKey, [...heldRows, ...dRows]);
+        const shown = [...both.entries()].filter(([, f]) => f.lastMessage);
+        expect(shown.length).toBe(db.HELD_PREVIEWS_MAX);
+        // D's rows say they are a year newer: all 20 are D's.
+        expect(shown.every(([k]) => k.startsWith(`held:${D_FILE}:`))).toBe(true);
+        expect(h.heldReads.filter((r) => r.sql.includes('json_each')).reduce((n, r) => n + r.rows, 0)).toBe(db.HELD_PREVIEWS_MAX);
         console.log(`[cost at 500 chats, 10,000 lines] rows ${rowsMs.toFixed(1)} ms (Chat's first paint, unchanged); after they show: counts ${latestMs.toFixed(1)} ms, counts + ${db.HELD_PREVIEWS_MAX} previews ${fillMs.toFixed(1)} ms`);
     });
 });

@@ -142,6 +142,8 @@ interface TrampolineOpts {
     clipboard?: 'none' | 'text' | 'rejects' | 'item' | 'item-rejects' | 'item-no-uri-list';
     /** The tab's sessionStorage, shared between runs to stand for a reload in the same tab. */
     storage?: Map<string, string>;
+    /** What GET /api/invite/check answers (the preflight); absent = not ok, so the preflight does nothing. */
+    check?: Record<string, unknown>;
 }
 
 /**
@@ -233,7 +235,7 @@ function runTrampoline(search: string, ua: string, origin = 'https://mullum.bean
             addEventListener(ev: string, fn: (e: any) => void) { (winHandlers[ev] ||= []).push(fn); },
             ...(clip.startsWith('item') ? { ClipboardItem: FakeClipboardItem } : {}),
         },
-        fetch: () => Promise.resolve({ ok: false }),
+        fetch: () => Promise.resolve(opts.check ? { ok: true, json: () => Promise.resolve(opts.check) } : { ok: false }),
     };
     vm.runInNewContext(script, sandbox);
     const click = (id: string) => { for (const fn of el(id).handlers.click ?? []) fn({ preventDefault() {} }); };
@@ -724,6 +726,18 @@ async function main() {
         assert(desk.el('iosLead').hidden && desk.el('copyNote').hidden && desk.text().includes('Open this invite link on your phone'), 'desktop: none of the iPhone\'s lines, the nudge to a phone as before');
         assert(!desk.el('codecard').hidden && desk.el('codeFold').hidden && desk.text().includes('INV-AB12-CD34') && !desk.el('copyBtn').hidden && desk.el('copyBtn').textContent === 'Copy code',
             'desktop: the code card stays open, with its "Copy code"');
+
+        // A dead invite (used, expired, not recognised): the banner says to ask for a fresh link, and nothing offers to type the
+        // dead code (#3314 review at ea87aca0): no "Type the code instead ›", no card, on any phone or desktop.
+        for (const [who, ua] of [['iPhone', IPHONE], ['Android', ANDROID], ['desktop', DESKTOP]] as const) {
+            for (const reason of ['used', 'expired', 'unknown']) {
+                const dead = runTrampoline(Q, ua, RIVER, { exec: 'yes', check: { valid: false, reason } });
+                await settle(); await settle();
+                const shown = dead.text();
+                assert(shown.includes('Ask whoever invited you for a fresh link.') && !shown.includes(TYPE_CODE) && !shown.includes('INV-AB12-CD34')
+                    && dead.el('codeArea').style.display === 'none', `${who}, a ${reason} invite: the banner, and no way offered to type the dead code`);
+            }
+        }
     }
 
     // 2. Integration HTTP tests with running HTTPS server

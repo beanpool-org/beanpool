@@ -529,6 +529,8 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
               ? 'This invite has expired — invites last 30 days. Ask whoever invited you for a fresh link.'
               : "This invite code wasn't recognised. Ask whoever invited you for a fresh link.";
           document.getElementById('installArea').style.display = 'none';
+          // Nothing to type either: the code is the dead one (a used, expired or unknown invite).
+          document.getElementById('codeArea').style.display = 'none';
         }
       })
       .catch(function(){});

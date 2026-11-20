@@ -30,7 +30,7 @@
 
 import { t, word } from '@beanpool/core';
 import { dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey } from './storage-keys';
-import { isVerifiedPin, type DmVerifiedKeys } from './dm-verified-keys';
+import { isVerifiedPin, showsVerifiedMark, type DmVerifiedKeys } from './dm-verified-keys';
 
 export interface PinStorage {
     getItem(key: string): Promise<string | null>;
@@ -857,7 +857,10 @@ function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: str
     // A heldLost mark is judged only on the update's held lines (db.ts), and that judgement replaces it as if none were kept.
     const lost = isHeldLostSight(ownPin(pins, id));
     const held = lost ? undefined : ownPin(pins, id);
-    if (held && !isUnplacedSight(held) && (held.checked || held.by !== 'first-seen' || isVerifiedPin(held, verified))) return false;
+    // A pin on a key the list holds is never judged again (a prune and relist can't move it), nor a pause one holds while
+    // the list can't be read. An unchecked pin with no pause IS judged then, fail closed: lines under an older key make
+    // that key the pin and the listed one only offered (below), never a send to the listed key on the node's word.
+    if (held && !isUnplacedSight(held) && (held.checked || held.by !== 'first-seen' || showsVerifiedMark(held, verified) || (isVerifiedPin(held, verified) && !!held.offered))) return false;
     const key = pinKeyOf(listed);
     if (verdict.rule === 1) {
         if (held || lost || !key) return false;

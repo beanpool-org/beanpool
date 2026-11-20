@@ -4559,7 +4559,7 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         expect(await sendTo(dmNew.id, 'Hello Eve', [eve, puppet])).toEqual({ err: null, posts: 1, readBy: ['Puppet'] });
     }, 120_000);
 
-    it('Z6 the member\'s reset: B\'s value corrupt refuses B\'s sends with the true sentence, every time, and the phone never resets it on its own; A sends; the reset sets the raw value aside and puts its marker in the value\'s place (§3.4 amendment 7 §2), keeps the held lines, and the next read seeds B from its own rows, judging each DM on its lines; a value storage can\'t return is removed and logged with nothing set aside, and the marker written; a transient throw needs no reset — Signal\'s model (16 Nov): the relisted DM carries on with the listed key', async () => {
+    it('Z6 the member\'s reset: B\'s value corrupt refuses B\'s sends with the true sentence, every time, and the phone never resets it on its own; A sends; the reset sets the raw value aside and puts its marker in the value\'s place (§3.4 amendment 7 §2), keeps the held lines, and the next read seeds B from its own rows, judging each DM on its lines; a value storage can\'t return is removed and logged with nothing set aside, and the marker written; a transient throw needs no reset — S7c: the reset keeps the member\'s marks, so the relisted DM of a person marked verified waits for the member', async () => {
         sealed(ben, ana, dm, 'Ben in A');
         await phoneOf(ana);
         await switchTo('B');
@@ -4617,15 +4617,16 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         expect(pinOf(dmB.id)).toMatchObject({ peer: ben.publicKey, checked: true });
         expect(await sendTo(dmB.id, 'Back again')).toEqual({ err: null, posts: 1, readBy: ['Ben'] });
         // The relisted DM's rows were written per its pin ([Ana, Ben]) and its only line is PUPPET's (the prune took Ben's).
-        // Signal's model (16 Nov): the reset took the mark with the pins, so this is first sight. Judged with the rows' key
-        // listed, rule 3 pins Ben with PUPPET kept as former (a notice date); this pass's listing of [Ana, PUPPET] then moves
-        // it, Ben not verified, to PUPPET with Ben as former. It carries on with the key the node lists. Two moves in one pass
-        // are one notice (dm-peer-pins changedWith merges changes within a minute), whatever the clock did between them.
+        // S7c (DESIGN-s7-blocks-verified-everywhere §3.3): the reset no longer costs marks, so Ben is still on the member's
+        // list (before S7c the reset took the mark and this pass carried on to PUPPET). Judged with the rows' key listed,
+        // rule 3 pins Ben with PUPPET kept as former (a notice date); this pass's listing of [Ana, PUPPET] is then only
+        // offered, Ben being verified: nothing goes to PUPPET until the member checks the code and continues.
         const rel = pinOf(relisted.id);
-        expect(rel).toEqual({ peer: puppet.publicKey, since: expect.any(String), by: 'listing', checked: true, former: [ben.publicKey], changedAt: [expect.any(String)] });
+        expect(rel).toEqual({ peer: ben.publicKey, since: expect.any(String), by: 'listing', checked: true, former: [puppet.publicKey], changedAt: [expect.any(String)], offered: { peer: puppet.publicKey, at: expect.any(String) } });
+        expect(verifiedKeysOf(ana)).toEqual([ben.publicKey]);
         expect(await keyNotices(relisted)).toHaveLength(1);
         expect(await textsOf(relisted.id)).toEqual(['PUPPET after the relist']);
-        expect(await sendTo(relisted.id, 'The code is 4821')).toEqual({ err: null, posts: 1, readBy: ['Puppet'] });
+        expect(await sendTo(relisted.id, 'The code is 4821')).toEqual({ err: 'DmKeyChangedError', posts: 0, readBy: [] });
         // The stated residual: a DM first met on the node's word, unchecked before the fault, whose only line is PUPPET's:
         // judged on it, rule 2 pins PUPPET (the confirmation says so: "may open with the new key").
         expect(pinOf(firstMet.id)).toMatchObject({ peer: puppet.publicKey, checked: true });

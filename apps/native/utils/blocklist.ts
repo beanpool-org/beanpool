@@ -1118,6 +1118,23 @@ export function communityKeepsNoBlocks(publicKey: string, community: string): Pr
     return run;
 }
 
+/**
+ * Whether a block went to `community` (a saved address: another community this phone holds, blocked at in place) and its answer
+ * never came (no connection, a timeout, the minute's limit): the account's record there still has it as sent. The round of that
+ * community's across mail sends it again ({@link syncBlocksAt}; utils/outside-chat-live.ts, #3310 r3 review F1), since the
+ * syncs that run by themselves reach only the community in use. False on a guest's look, with no account, or on any failure.
+ */
+export async function blocksOwedAt(community: string): Promise<boolean> {
+    try {
+        const owner = await accountOnPhone();
+        const at = owner ? await communityToSyncAt(community) : null;
+        if (!owner || !at) return false;
+        return (await serially(() => recordOf(owner, at))).at.sent.length > 0;
+    } catch {
+        return false;
+    }
+}
+
 /** Whether a record's address is `community`'s: the same, whatever its case and trailing slash. */
 function sameCommunity(community: string): (url: string) => boolean {
     const plain = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();

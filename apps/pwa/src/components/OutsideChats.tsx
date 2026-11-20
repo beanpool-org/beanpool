@@ -18,7 +18,7 @@ import { ChatConfirmDialog } from './ChatConfirmDialog';
 import { ReportModal } from './ReportModal';
 import { draftKey, draftSent, keepEdit, keptDraft, takeEdit, useKeptDraft } from '../lib/chat-drafts';
 import {
-    OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, OutsideMailError, outsideContext, outsideErrorWords, reportOutsideLine, ring, sendFromBox, sendOutsideChange,
+    OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, OutsideMailError, outsideContext, outsideErrorWords, outsideQuiet, reportOutsideLine, ring, sendFromBox, sendOutsideChange, setOutsideQuiet,
     syncOutsideMailNow,
 } from '../lib/outside-mail';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../lib/outside-chat-store';
@@ -148,6 +148,8 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     }, [boxKey]);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
+    // The across mute (slice S4): their lines ring nothing, as this browser keeps it and my server was told.
+    const [quiet, setQuiet] = useState(false);
     const alive = useRef(true);
     const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -159,10 +161,12 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
         const c = await ctx.store.chat(ctx.identity.publicKey, chatId).catch(() => null);
         const l = c ? await ctx.store.lines(ctx.identity.publicKey, c.id).catch(() => []) : [];
         const x = c ? await ctx.store.changes(ctx.identity.publicKey, c.id).catch(() => []) : [];
+        const q = c ? await outsideQuiet(ctx, c.peerKey).catch(() => false) : false;
         if (!alive.current) return;
         setChat(c);
         setLines(l);
         setChanges(x);
+        setQuiet(q);
     }, [chatId]);
 
     useEffect(() => {
@@ -243,6 +247,19 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
         await load();
     };
 
+    /** Their lines ring nothing, or ring again: my server told first, then kept here (lib/outside-mail.ts setOutsideQuiet). */
+    const toggleQuiet = async () => {
+        const ctx = await outsideContext().catch(() => null);
+        if (!ctx || !chat) return;
+        try {
+            await setOutsideQuiet(ctx, chat.peerKey, !quiet);
+            setQuiet(!quiet);
+            setNote(null);
+        } catch (e) {
+            setNote(e instanceof OutsideMailError && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('That did not go through. Please try again.'));
+        }
+    };
+
     const block = async () => {
         if (!chat) return;
         const name = outsideName(chat);
@@ -282,8 +299,13 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                 <button type="button" onClick={onBack} style={{ ...button, flex: '0 0 auto', background: 'none', border: 'none', paddingLeft: 0 }}>
                     <span aria-hidden="true">‹ </span>{t('Back to chats')}
                 </button>
+                {chat && chat.state === 'open' && (
+                    <button type="button" data-testid="outside-chat-quiet" aria-pressed={quiet} onClick={() => void toggleQuiet()} style={{ ...button, flex: '0 0 auto', marginLeft: 'auto' }}>
+                        {quiet ? t('Unmute') : t('Mute notifications')}
+                    </button>
+                )}
                 {chat && chat.state !== 'request' && (
-                    <button type="button" data-testid="outside-chat-block" onClick={() => void block()} style={{ ...danger, flex: '0 0 auto', marginLeft: 'auto' }}>
+                    <button type="button" data-testid="outside-chat-block" onClick={() => void block()} style={{ ...danger, flex: '0 0 auto', marginLeft: chat.state === 'open' ? undefined : 'auto' }}>
                         {t('Block')}
                     </button>
                 )}

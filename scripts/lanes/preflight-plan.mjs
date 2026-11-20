@@ -133,9 +133,6 @@ export const VITEST_PACKAGES = [
  * touched source file, ahead of everything else and whatever the budget: a handful of files, and the reds lanes most often
  * missed. The other classes in that count are steps of their own (tables, routes), checks in the "checks" shard
  * (native_dark_contrast, no_node_names, typecheck, no_google_fonts...) or source pins (rule 3 in the header).
- * One more, with no red record: the phone's static-colours ceiling, the scanner a phone style change must run
- * (preflight.test.mjs pins it). As an ordinary scanner it ran only while it sorted inside MAX_EXTRA: on 21 Nov it was the
- * 60th of 75, so one new phone scanner before it in the alphabet (#3316 merged with #3317 added two) left it to CI. About 1 s.
  */
 export const GUARD_TESTS = [
   'apps/pwa/src/pages/EnterpriseNotAProfile.test.tsx', //    a new profile door: #3029 #3074
@@ -143,7 +140,10 @@ export const GUARD_TESTS = [
   'apps/pwa/src/lib/signing-source-rule.test.ts', //         #2770 #3090
   'apps/pwa/src/darkModeHover.test.ts', //                   #2484 #3148
   'apps/native/utils/__tests__/dark-mode-sources.test.ts', // #1844 #2536 #2994 #3035
-  'apps/native/utils/__tests__/static-colours-ceiling.test.ts', // a style change's own scanner (above)
+  // The phone's colour ceiling, the other tree scanner preflight.test.mjs holds a phone style change to. As a plain scanner
+  // it ran only while it sorted inside MAX_EXTRA by name: main had it 60th of 60 (21 Nov 2026) and #3310's sync, one more
+  // scanner test ahead of it, put it 61st (CI red on the merge ref).
+  'apps/native/utils/__tests__/static-colours-ceiling.test.ts',
 ];
 /** The plan's estimate stays under this many seconds (guards aside): vitest files past it are left to CI. */
 export const PLAN_SECS = Number(process.env.PREFLIGHT_PLAN_SECS || 330);

@@ -18,6 +18,7 @@ import { GROUP_THREAD_TYPE, groupChatRefusal, groupLineForReader, syncGroupThrea
 import { fromEpochOf } from '../engine/group-keys.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone, enterpriseThreadReadRefusal } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
+import { mailWaitingFor } from '../engine/relay-mail.js';
 import { accountsDeletedAmong } from '../engine/message-tombstone.js';
 import { withDmFormerKeys } from '../engine/key-succession.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
@@ -395,8 +396,9 @@ router.get('/api/me/unread', async (ctx) => {
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
-    // Counts alone: nothing here says which chats are muted, so `alerts` beside `unread` tells only the signer.
-    ctx.body = getUnreadAnswer(actor);
+    // Counts alone: nothing here says which chats are muted, so `alerts` beside `unread` tells only the signer. `mail`
+    // (slice S4): the items held for the signer from other communities, so a phone's round fetches only where some wait.
+    ctx.body = { ...getUnreadAnswer(actor), mail: mailWaitingFor(actor) };
 });
 
 router.get('/api/messages/conversations/:publicKey', async (ctx) => {

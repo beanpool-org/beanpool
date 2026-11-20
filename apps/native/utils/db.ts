@@ -66,7 +66,10 @@ import {
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
-import { OUTSIDE_CHAT_DROP_SQL, OUTSIDE_CHAT_TABLES_SQL, outsideChatStore, type OutsideChatStore } from './outside-chat-store';
+import {
+    OUTSIDE_CHAT_DROP_SQL, OUTSIDE_CHAT_TABLES_SQL, OUTSIDE_CHATS_HELD_SQL, OUTSIDE_LAST_CHANGES_HELD_SQL, outsideChatStore, outsideChatsFromHeld,
+    type OutsideChat, type OutsideChatStore,
+} from './outside-chat-store';
 import { FORUM_KEPT_TABLE_SQL, forumKeptStore, type ForumKeptStore } from './forum-kept';
 import {
     sendSealedGroupLine, editSealedGroupLine, reportSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
@@ -2011,11 +2014,50 @@ const HELD_PREVIEWS_SQL = `
 `;
 
 /** The names of the statements a held copy runs (utils/held-copies.ts takes no SQL from a caller, only one of these). */
-type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews';
+type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews' | 'outsideChats' | 'outsideLastChanges';
 /** Every statement a held copy runs: one plain SELECT each (held-copies.ts isOneRead), refused at its use otherwise. */
 const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
     conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL, latest: HELD_LATEST_SQL, previews: HELD_PREVIEWS_SQL,
+    // Across chats (slice S4): utils/outside-chat-store.ts, read as its chats() reads them.
+    outsideChats: OUTSIDE_CHATS_HELD_SQL, outsideLastChanges: OUTSIDE_LAST_CHANGES_HELD_SQL,
 });
+
+/**
+ * One of Chat's held list reads of `community`'s copy (slices S1 and S4): a read answered null by a close of its read-only
+ * handle under way (a round of that community, or a chat open there in place, letting go of the copy as Chat lists it:
+ * outside-chat-live.ts, leaveChatInPlace) waits for that close, then asks once more on a handle of its own, as heldChatIsDm
+ * does; so the list never drops that community's chats for the moment a close runs (#3310 review, measured:
+ * held-chats-close-paths.test.ts). A pause, a move, the copy in use: null still, as the second ask finds them. S2b's
+ * getHeldLatest and getHeldPreviews ask the same way, written out where they read.
+ */
+async function heldListRead<T>(community: string, statement: HeldStatement, params: readonly unknown[]): Promise<T[] | null> {
+    const file = getDatabaseFilenameForNode(community);
+    const rows = await heldCopies.all<T>(file, statement, params);
+    if (rows) return rows;
+    await heldCopies.readsSettled(file);
+    return heldCopies.all<T>(file, statement, params);
+}
+
+/**
+ * This account's across chats kept in `community`'s file, another community this phone holds (slice S4,
+ * scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Where an across chat lives": same file, same rule, visible
+ * always), read through a held, read-only handle, never through getDb() nor the address in use, each with its newest line
+ * as the chat shows it. No synced cursor is asked: these tables are the phone's own, never cleared by a Force Resync. Null
+ * when there is nothing to read (no such copy, the community in use, another schema number, a move or a delete under way).
+ */
+export async function getHeldOutsideChats(myPubkey: string, community: string): Promise<OutsideChat[] | null> {
+    const file = getDatabaseFilenameForNode(community);
+    try {
+        const rows = await heldListRead<any>(community, 'outsideChats', [myPubkey]);
+        if (!rows) return null;
+        if (!rows.length) return [];
+        const changes = (await heldListRead<any>(community, 'outsideLastChanges', [myPubkey])) ?? [];
+        return outsideChatsFromHeld(myPubkey, rows, changes);
+    } catch (e) {
+        console.warn(`[Held] Could not list the chats across held for ${file}`, e);
+        return null;
+    }
+}
 
 /** A photo's address on `community`'s server: a path its node stored ("/uploads/…") is that server's, never the one in use. */
 function onCommunity(community: string, value: unknown): string | null {
@@ -2037,7 +2079,7 @@ export async function getHeldConversations(myPubkey: string, community: string):
     if (!(await AsyncStorage.getItem(syncedCursorKeyOf(file)))) return null;
     let rows: any[] | null;
     try {
-        rows = await heldCopies.all<any>(file, 'conversations', [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+        rows = await heldListRead<any>(community, 'conversations', [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
     } catch (e) {
         console.warn(`[Held] Could not list the chats held for ${file}`, e);
         return null;
@@ -2093,7 +2135,10 @@ export async function getHeldLatest(myPubkey: string, community: string): Promis
     const file = getDatabaseFilenameForNode(community);
     let rows: any[] | null;
     try {
-        rows = await heldCopies.all<any>(file, 'latest', [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+        const params = [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey];
+        rows = await heldCopies.all<any>(file, 'latest', params);
+        // A close of this copy under way (a round, a chat in place letting go) waits, then asks once more, as heldListRead.
+        if (!rows) { await heldCopies.readsSettled(file); rows = await heldCopies.all<any>(file, 'latest', params); }
     } catch (e) {
         console.warn(`[Held] Could not count the chats held for ${file}`, e);
         return null;
@@ -2127,6 +2172,8 @@ export async function getHeldPreviews(myPubkey: string, community: string, ids: 
     let rows: any[] | null;
     try {
         rows = await heldCopies.all<any>(file, 'previews', [JSON.stringify(asked)]);
+        // As getHeldLatest: a close under way waits, then one more ask.
+        if (!rows) { await heldCopies.readsSettled(file); rows = await heldCopies.all<any>(file, 'previews', [JSON.stringify(asked)]); }
     } catch (e) {
         console.warn(`[Held] Could not read the newest lines held for ${file}`, e);
         return null;
@@ -11411,6 +11458,24 @@ export function outsideStore(nodeUrl: string): OutsideChatStore {
         const database = await getDb();
         if (dbFileOf.get(database) !== file) throw new Error('This phone has switched community since this chat was opened.');
         return database as any;
+    });
+}
+
+/**
+ * This phone's chats with people in other communities kept in `community`'s file, wherever the phone is set (slice S4,
+ * scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3: "Same file, same rule, visible always"; no data moves). Each
+ * read and write goes through chatCopyForRequest(community), taken afresh for that statement: the copy in use while that
+ * community is the one in use, else its copy open in place (slice S2: a connection on that one file, only while a screen or a
+ * round holds it, enterChatInPlace ... leaveChatInPlace). So a write lands in that file only, a switch mid-way included (onto
+ * that community: the copy in use, the same file; away from it: its copy open in place, the same file), and when neither can
+ * be had (a chat left, a close under way, the copy gone) it throws and nothing is written anywhere.
+ */
+export function outsideStoreOf(community: string): OutsideChatStore {
+    const file = getDatabaseFilenameForNode(community);
+    return outsideChatStore(async () => {
+        const copy = await chatCopyForRequest(community);
+        if (copy.file !== file || dbFileOf.get(copy.database) !== file) throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
+        return copy.database as any;
     });
 }
 

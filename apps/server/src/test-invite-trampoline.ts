@@ -83,8 +83,8 @@ class FakeEl {
         if (n instanceof FakeEl) n.parentNode = null;
         return n;
     }
-    get firstChild() { return this.children[0] ?? null; }
-    get nextSibling() { const p = this.parentNode; return p ? p.children[p.children.indexOf(this) + 1] ?? null : null; }
+    get firstChild(): FakeNode | null { return this.children[0] ?? null; }
+    get nextSibling(): FakeNode | null { const p = this.parentNode; return p ? p.children[p.children.indexOf(this) + 1] ?? null : null; }
     addEventListener(ev: string, fn: (e: any) => void) { (this.handlers[ev] ||= []).push(fn); }
     select() { this.onSelect(this); }
     setSelectionRange() {}

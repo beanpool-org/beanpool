@@ -13,7 +13,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
-import { sameCommunity } from './push-pins';
+import { communityAddress, sameCommunity } from './push-pins';
+import { communitiesWithAlertsOff } from './push-alerts-off';
 import { communityName } from './community-name';
 import { getBlockedUsers } from './blocklist';
 import { talkShowsChat } from './dm-blocked';
@@ -195,18 +196,41 @@ export async function heldChatsFilledIn(myPubkey: string, rows: readonly HeldCha
     return out;
 }
 
-/** Each held community's number as Chat last refreshed it, or saw it fall, by account and file: a rise from there refreshes it once. */
-const refreshedAt = new Map<string, number>();
+/** How often, while Chat stays in view, a held community with its alerts off (it has no number to rise) is refreshed. */
+export const HELD_QUIET_REFRESH_MS = 15_000;
+
+/** A held community's number as a refresh had its list answer for it (`number`), and when that refresh began (`at`). */
+interface Noted {
+    number: number;
+    at: number;
+}
+
+/**
+ * What one stretch of Chat in view noted of each held community, by account and file (#3312 review F1). Kept with that
+ * view, so it goes as Chat is left: the next focus asks again of every held community with a number above 0, and of every
+ * one with its alerts off, whatever happened while Chat was away (a number that fell and rose again unseen, a list read
+ * Chat left on its way). Never module-wide: a refresh that ends after its view was left notes nothing a later view reads.
+ *
+ * Forgetting, not the copy's own count (getHeldLatest): that count can't tell a stale copy from a fresh one (a line read on
+ * another device stays unread in the copy while a newer one waits there: 1 against 3, nothing asked), and the number
+ * counts lines this refresh never brings (a group's chat), so a comparison would miss lines or ask on every round.
+ */
+const notedByView = new WeakMap<HeldChatsView, Map<string, Noted>>();
 /** One refresh pass at a time: a rise while one runs is looked at once it is done. */
 let refreshing: Promise<unknown> = Promise.resolve();
 
 /**
- * Freshness (slice S2b; DESIGN §3 "Live typing and instant arrival": away chats refresh on a push, no second socket). For
- * each community among Chat's held rows whose own number (notice-counts.ts, the one the BeanPool sheet and the badge read:
- * a round's count or a push's) rose since Chat last refreshed it, bring its newest lines into its own copy (db.ts
- * refreshHeldDms: one list read, at most HELD_REFRESH_MAX chats, through S2's write path), once per rise. A number that
- * falls is noted, so the next rise from there refreshes. Resolves to the communities whose copy took something, for Chat
- * to read their rows again. Never throws.
+ * Freshness (slice S2b; DESIGN §3 "Live typing and instant arrival": away chats refresh on a push and every few seconds
+ * while open, no second socket). For each community among Chat's held rows, bring its newest lines into its own copy (db.ts
+ * refreshHeldDms: one list read, at most HELD_REFRESH_MAX chats, through S2's write path) when something may wait there:
+ * - its own number (notice-counts.ts, the one the BeanPool sheet and the badge read: a round's count or a push's) is above
+ *   what this stretch of Chat in view last had an answer for: on Chat's focus any number above 0, then each rise;
+ * - its alerts are off (notice-counts.ts leaves it out: no number): on Chat's focus, then every
+ *   {@link HELD_QUIET_REFRESH_MS} while Chat stays in view (app/(tabs)/chats.tsx calls this on that beat).
+ * A number is noted only once the refresh had its list answer, so a list read that failed, ran out or was cut by Chat's
+ * leaving is asked again at the next call. A number that falls is noted at once, so the next rise from there refreshes.
+ * Each call is bounded (one list read and at most HELD_REFRESH_MAX pages a community) and starts nothing itself: no loop.
+ * Resolves to the communities whose copy took something, for Chat to read their rows again. Never throws.
  */
 export function refreshHeldWhereRose(myPubkey: string, rows: readonly HeldChatRow[], view: HeldChatsView): Promise<string[]> {
     const run = refreshing.then(() => refreshOnce(myPubkey, rows, view)).catch((e) => {
@@ -218,27 +242,42 @@ export function refreshHeldWhereRose(myPubkey: string, rows: readonly HeldChatRo
 }
 
 async function refreshOnce(myPubkey: string, rows: readonly HeldChatRow[], view: HeldChatsView): Promise<string[]> {
-    const counts = await readNoticeCounts(AsyncStorage);
     const brought: string[] = [];
-    const files = new Set<string>();
-    for (const row of rows) {
-        const file = getDatabaseFilenameForNode(row.community);
-        if (files.has(file)) continue;
-        files.add(file);
-        if (!view.inView()) break;
-        const key = `${myPubkey}\n${file}`;
-        const number = noticeCountFor(counts, row.community);
-        const was = refreshedAt.get(key) ?? 0;
-        // Noted before the refresh: one refresh per rise, whatever it brings.
-        refreshedAt.set(key, number);
-        if (number <= was) continue;
-        if ((await refreshHeldDms(myPubkey, row.community, view.inView)) > 0) brought.push(row.community);
+    try {
+        if (!view.inView()) return brought;
+        const [counts, alertsOff] = await Promise.all([readNoticeCounts(AsyncStorage), communitiesWithAlertsOff(AsyncStorage)]);
+        let noted = notedByView.get(view);
+        if (!noted) notedByView.set(view, (noted = new Map()));
+        const files = new Set<string>();
+        for (const row of rows) {
+            const file = getDatabaseFilenameForNode(row.community);
+            if (files.has(file)) continue;
+            files.add(file);
+            if (!view.inView()) break;
+            const key = `${myPubkey}\n${file}`;
+            const was = noted.get(key);
+            const at = Date.now();
+            const quiet = alertsOff.includes(communityAddress(row.community) ?? '');
+            const number = quiet ? 0 : noticeCountFor(counts, row.community);
+            if (quiet) {
+                if (was && at - was.at < HELD_QUIET_REFRESH_MS) continue;
+            } else {
+                if (was && number < was.number) noted.set(key, { ...was, number });
+                if (number <= (was?.number ?? 0)) continue;
+            }
+            const done = await refreshHeldDms(myPubkey, row.community, view.inView);
+            if (done.answered) noted.set(key, { number, at });
+            if (done.brought > 0) brought.push(row.community);
+        }
+    } finally {
+        // The refresh reads the copy's newest lines through a held handle: one opened after Chat was left closes as this
+        // ends, on every path out of it (#3312 review F2, as heldChatRows and heldChatsFilledIn).
+        if (!view.inView()) await closeUnlessInView();
     }
     return brought;
 }
 
-/** For tests: a new app run (no number noted as refreshed). */
+/** For tests: a new app run (no refresh pass under way). */
 export function _resetHeldRefreshForTests(): void {
-    refreshedAt.clear();
     refreshing = Promise.resolve();
 }

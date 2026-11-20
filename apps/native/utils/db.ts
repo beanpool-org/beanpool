@@ -2113,39 +2113,53 @@ function heldPreviewOf(row: any, myPriv: string | null | undefined, pins: DmPeer
 
 /** The most held direct chats one refresh brings from their community (slice S2b): one list read, then a page each. */
 export const HELD_REFRESH_MAX = 5;
-/** How long a refresh waits for that community's list. */
-const HELD_REFRESH_LIST_MS = 10_000;
+/** How long a refresh waits for that community's list (exported for the test that lets it run out). */
+export const HELD_REFRESH_LIST_MS = 10_000;
 
 /**
- * Bring `community`'s newest lines into its own copy (slice S2b): the phone is set to another community, and that one's
- * number rose (Chat: utils/held-chats.ts refreshHeldWhereRose). One signed read of the member's chat list there, at the
+ * What one {@link refreshHeldDms} did: how many chats it brought, and whether it had its answer (`answered`): the
+ * community's list answered, or there was nothing there to ask about (not saved, a guest's look, the community in use, no
+ * direct chat held). False when Chat was left before the list read, or the list read failed, timed out or was refused:
+ * whatever the refresh was for is still to be asked (utils/held-chats.ts notes a number only once answered).
+ */
+export interface HeldRefresh {
+    brought: number;
+    answered: boolean;
+}
+
+/**
+ * Bring `community`'s newest lines into its own copy (slice S2b): the phone is set to another community, and something
+ * may wait in that one (Chat: utils/held-chats.ts refreshHeldWhereRose). One signed read of the member's chat list there, at the
  * address the phone saved for it, then, for at most {@link HELD_REFRESH_MAX} direct chats its copy already holds whose
  * newest line there is newer than the copy's, newest first, that chat's poll in place (syncSingleConversation, slice S2's
  * one write path into another community's file, through its copy open in place, closed again here). One at a time, once:
  * no loop, no socket. It stops before the next chat once `still()` is false (Chat left) or another account is on the
  * phone. A switch, a removal or the account leaving mid-way: S2's path writes into that community's file or nowhere
  * (#3300's rule). Nothing for the community in use, one not saved, a guest's look, or an address that isn't plain.
- * Returns how many chats it brought.
+ * The held, read-only handle it reads the copy's newest lines through is Chat's: Chat closes it as it is left, and the
+ * refresh's caller closes it again as it ends once Chat was left (held-chats.ts refreshOnce, #3312 review F2).
  */
-export async function refreshHeldDms(myPubkey: string, community: string, still: () => boolean = () => true): Promise<number> {
+export async function refreshHeldDms(myPubkey: string, community: string, still: () => boolean = () => true): Promise<HeldRefresh> {
+    const nothing = (answered: boolean): HeldRefresh => ({ brought: 0, answered });
     const file = getDatabaseFilenameForNode(community);
     const saved = (await getSavedNodes().catch(() => [])).find((n) => getDatabaseFilenameForNode(n.url) === file);
-    if (!saved || !isPlainNodeAddress(saved.url) || await isGuestCopy(saved.url).catch(() => true)) return 0;
-    if (getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) === file) return 0;
+    if (!saved || !isPlainNodeAddress(saved.url) || await isGuestCopy(saved.url).catch(() => true)) return nothing(true);
+    if (getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) === file) return nothing(true);
     const held = await getHeldLatest(myPubkey, saved.url);
     const newestHeld = new Map((held ?? []).filter((c) => c.type === 'dm').map((c) => [c.id, c.newest ?? ''] as const));
-    if (newestHeld.size === 0 || !still()) return 0;
+    if (!still()) return nothing(false);
+    if (newestHeld.size === 0) return nothing(true);
     let listed: unknown[] = [];
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HELD_REFRESH_LIST_MS);
     try {
         const res = await signedGet(`/api/messages/conversations/${myPubkey}`, { signal: controller.signal, anchorUrl: saved.url });
-        if (!res.ok) return 0;
+        if (!res.ok) return nothing(false);
         const body = await res.json();
         listed = Array.isArray(body?.conversations) ? body.conversations : [];
     } catch (e: any) {
         console.warn(`[Held] Could not read the chat list of ${file}: ${e?.message || e}`);
-        return 0;
+        return nothing(false);
     } finally {
         clearTimeout(timer);
     }
@@ -2155,7 +2169,7 @@ export async function refreshHeldDms(myPubkey: string, community: string, still:
         .sort((a, b) => (a.lastMessageAt < b.lastMessageAt ? 1 : a.lastMessageAt > b.lastMessageAt ? -1 : 0))
         .slice(0, HELD_REFRESH_MAX)
         .map((c) => c.id);
-    if (due.length === 0) return 0;
+    if (due.length === 0) return nothing(true);
     let brought = 0;
     // Held in place while it runs, as a chat on screen holds it: the copy open in place closes as the last holder lets go.
     enterChatInPlace(saved.url);
@@ -2167,7 +2181,7 @@ export async function refreshHeldDms(myPubkey: string, community: string, still:
     } finally {
         await leaveChatInPlace(saved.url);
     }
-    return brought;
+    return { brought, answered: true };
 }
 
 /**

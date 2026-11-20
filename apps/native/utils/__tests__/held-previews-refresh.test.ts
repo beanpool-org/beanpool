@@ -16,7 +16,7 @@
  * Real SQLite files on disk (node:sqlite), the real db.ts, the real DM pins, real DM sealing between real keys; the node is
  * a stand-in that answers as routes/messaging.ts does.
  */
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import Module from 'node:module';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -134,9 +134,9 @@ import { removeCommunityCaches } from '../community-cache';
 import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { sealDmLine } from '../e2e-crypto';
-import { dmPeerPinsStoreKey, NOTICE_COUNTS_STORE_KEY } from '../storage-keys';
+import { dmPeerPinsStoreKey, NOTICE_COUNTS_STORE_KEY, PUSH_ALERTS_OFF_STORE_KEY } from '../storage-keys';
 import { communityAddress } from '../push-pins';
-import { heldChatsFilledIn, heldChatsInView, refreshHeldWhereRose, _resetHeldRefreshForTests, type HeldChatRow } from '../held-chats';
+import { heldChatsFilledIn, heldChatsInView, refreshHeldWhereRose, _resetHeldRefreshForTests, HELD_QUIET_REFRESH_MS, type HeldChatRow, type HeldChatsView } from '../held-chats';
 
 // A finished sync ends with require('react-native') for a DeviceEventEmitter nudge: answered at node's loader for the file.
 const realLoad = (Module as any)._load;
@@ -178,6 +178,8 @@ let asked: Array<{ method: string; url: string }> = [];
 
 interface Hold { matches: (method: string, pathname: string) => boolean; hit: boolean; seen: Promise<void>; seenNow: () => void; release: () => void; released: Promise<void> }
 let hold: Hold | null = null;
+/** What goes wrong with the next list read, once (the F1 table). */
+let listFault: null | 'refused' | 'fails' | 'times out' = null;
 function holdFor(matches: Hold['matches']): Hold {
     let seenNow!: () => void;
     let release!: () => void;
@@ -208,6 +210,19 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
         return answer(200, { success: true, message: line });
     }
     const list = u.pathname.match(/^\/api\/messages\/conversations\/([^/]+)$/);
+    if (list && listFault) {
+        // The next list read goes wrong once: refused, cut by the network, or never answered (until the refresh gives up).
+        const fault = listFault;
+        listFault = null;
+        if (fault === 'refused') return answer(503, { error: 'busy' });
+        if (fault === 'fails') throw new TypeError('Network request failed');
+        await new Promise<void>((_, reject) => {
+            const signal: AbortSignal | undefined = init.signal;
+            const give = () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' }));
+            if (signal?.aborted) give();
+            else signal?.addEventListener('abort', give);
+        });
+    }
     if (list) {
         return answer(200, { conversations: node.convs.filter((c) => c.participants.includes(list[1])).map(view), totalUnread: 0, deletedAccounts: [] });
     }
@@ -279,6 +294,7 @@ async function phoneOnBWithAHeld(): Promise<void> {
     node.convs = [dm];
     node.lines = [];
     hold = null;
+    listFault = null;
     h.cutMidRead = [];
     (globalThis as any).fetch = fetchMock;
 
@@ -433,13 +449,13 @@ describe('S2b: a held row\'s preview and count come from its own copy, and a ref
             expect(newIn(B_FILE), 'nothing of the refresh in B').toBe(0);
             if (whatName === 'nothing' || whatName === 'a switch onto that very community mid-read') {
                 // Landed in A's file: through the copy open in place, or through the copy in use once the phone is on A.
-                expect(result).toBe(1);
+                expect(result).toEqual({ brought: 1, answered: true });
                 expect(newIn(A_FILE)).toBe(2);
             } else if (what.removesA) {
                 expect(rowsOf(A_FILE)).toBeNull();
             } else {
                 // Cut by a closer (switched away, killed) or refused by the pins: nothing written anywhere.
-                expect(result).toBe(0);
+                expect(result).toEqual({ brought: 0, answered: true });
                 expect(messagesIn(A_FILE)).toEqual(aBefore);
             }
             // The copy open in place is closed again once the refresh is done.
@@ -454,9 +470,9 @@ describe('S2b: a held row\'s preview and count come from its own copy, and a ref
         await db.closeDB();
         db._resetDmPeerPinsForTests();
         hold.release();
-        expect(await first).toBe(0);
+        expect(await first).toEqual({ brought: 0, answered: true });
         hold = null;
-        expect(await db.refreshHeldDms(me.publicKey, A)).toBe(1);
+        expect(await db.refreshHeldDms(me.publicKey, A)).toEqual({ brought: 1, answered: true });
         const latest = await db.getHeldLatest(me.publicKey, A);
         expect(latest?.find((r) => r.id === dm.id)?.unread).toBe(3);
         const filled = await heldChatsFilledIn(me.publicKey, [heldRowOf(dm, latest![0].newest)]);
@@ -481,7 +497,7 @@ describe('S2b: a held row\'s preview and count come from its own copy, and a ref
         db._resetDmPeerPinsForTests();
         expect((await db.getHeldPreviews(me.publicKey, A, [dm.id]))?.[dm.id]).toBeNull();
         // And the refresh writes nothing into A while its pins can't be read (S2's gate).
-        expect(await db.refreshHeldDms(me.publicKey, A)).toBe(0);
+        expect(await db.refreshHeldDms(me.publicKey, A)).toEqual({ brought: 0, answered: true });
         expect(messagesIn(A_FILE).length).toBe(2);
     });
 
@@ -491,7 +507,7 @@ describe('S2b: a held row\'s preview and count come from its own copy, and a ref
         h.me = { publicKey: other.publicKey, privateKey: other.privateKey };
         expect((await db.getHeldPreviews(old, A, [dm.id]))?.[dm.id]).toBeNull();
         asked = [];
-        expect(await db.refreshHeldDms(old, A)).toBe(0);
+        expect(await db.refreshHeldDms(old, A)).toEqual({ brought: 0, answered: true });
         expect(asked.filter((r) => r.url.includes(`/api/messages/${dm.id}`))).toEqual([]);
         expect(messagesIn(A_FILE).length).toBe(2);
     });
@@ -513,12 +529,12 @@ describe('S2b: bounded', () => {
         for (const conv of more) expect(await db.syncSingleConversation(conv.id)).toBe(true);
         // Nothing for the community in use: its own sync brings it.
         asked = [];
-        expect(await db.refreshHeldDms(me.publicKey, A)).toBe(0);
+        expect(await db.refreshHeldDms(me.publicKey, A)).toEqual({ brought: 0, answered: true });
         expect(asked).toEqual([]);
         await switchPhoneTo(B);
         for (const conv of more) nodeLine(conv, person(), 'not theirs either');
         asked = [];
-        const brought = await db.refreshHeldDms(me.publicKey, A);
+        const { brought } = await db.refreshHeldDms(me.publicKey, A);
         const lists = asked.filter((r) => /\/api\/messages\/conversations\//.test(r.url));
         const pages = asked.filter((r) => /\/api\/messages\/[^/]+$/.test(new URL(r.url).pathname) && !/conversations/.test(r.url));
         expect(lists.length).toBe(1);
@@ -537,7 +553,7 @@ describe('S2b: bounded', () => {
         await hold.seen;
         inView = false;
         hold.release();
-        expect(await cut).toBe(1);
+        expect(await cut).toEqual({ brought: 1, answered: true });
         expect(asked.filter((r) => /\/api\/messages\/[^/]+$/.test(new URL(r.url).pathname) && !/conversations/.test(r.url)).length).toBe(1);
         expect(db.heldCopyFiles()).not.toContain(A_FILE);
     });
@@ -582,6 +598,135 @@ describe('S2b: bounded', () => {
         // The real DM is the oldest of the 31 rows, past the 20 newest: no preview read for it.
         const filled = await heldChatsFilledIn(me.publicKey, rows);
         expect(filled.get(`held:${A_FILE}:${dm.id}`)).toEqual({ unread: 1, lastMessage: null, lastMessageFromApp: true });
+    });
+});
+
+describe('S2b: a line that waits in a held community is fetched exactly once, however Chat saw it (#3312 review F1)', () => {
+    /** The community's number (notice-counts.ts), as a round's answer leaves it. */
+    const setNumber = (n: number) => h.store.set(NOTICE_COUNTS_STORE_KEY, JSON.stringify({ [communityAddress(A)!]: { n: 0, seen: {}, server: n, alerts: n } }));
+    const isPage = (r: { url: string }) => new URL(r.url).pathname === `/api/messages/${dm.id}`;
+    const isList = (r: { url: string }) => /^\/api\/messages\/conversations\//.test(new URL(r.url).pathname);
+    /** Chat in view: its refresh, called as Chat calls it (its focus, a count's change, the beat). */
+    interface Chat { view: HeldChatsView; refresh: () => Promise<string[]> }
+    const openChat = (): Chat => {
+        const view = heldChatsInView();
+        return { view, refresh: () => refreshHeldWhereRose(me.publicKey, [heldRowOf(dm, null)], view) };
+    };
+    /** The clock the beat reads, moved on by the test. */
+    let skew = 0;
+    const realNow = Date.now;
+    const realSetTimeout = globalThis.setTimeout;
+
+    beforeEach(async () => {
+        // A's copy holds every line there first (the walk's two new lines brought), then the row's own line arrives.
+        expect((await db.refreshHeldDms(me.publicKey, A)).brought).toBe(1);
+        expect(messagesIn(A_FILE).length).toBe(node.lines.length);
+        asked = [];
+        skew = 0;
+        vi.spyOn(Date, 'now').mockImplementation(() => realNow() + skew);
+        // The refresh's own wait for the list runs out at once (its 10 s), so "times out" is the real timer and abort.
+        vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: (...a: any[]) => void, ms?: number, ...rest: any[]) =>
+            realSetTimeout(fn, ms === db.HELD_REFRESH_LIST_MS ? 0 : ms, ...rest)) as typeof setTimeout);
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    /** Each row ends in the stretch of Chat that should have brought the line, and hands it back. */
+    const ROWS: Record<string, () => Promise<Chat>> = {
+        'a rise seen while Chat is in view': async () => {
+            const chat = openChat();
+            expect(await chat.refresh()).toEqual([]);
+            expect(asked).toEqual([]);
+            nodeLine(dm, peer, 'a new line');
+            setNumber(1);
+            await chat.refresh();
+            return chat;
+        },
+        'a fall and a rise while Chat is away': async () => {
+            // Chat opens on one unread line A's copy already holds: one list read, nothing to bring.
+            setNumber(1);
+            const first = openChat();
+            expect(await first.refresh()).toEqual([]);
+            await first.view.leave();
+            // Away: that chat read in place (1 -> 0), and a new line there (0 -> 1). Chat saw neither.
+            setNumber(0);
+            nodeLine(dm, peer, 'a new line');
+            setNumber(1);
+            const back = openChat();
+            await back.refresh();
+            return back;
+        },
+        'Chat left while the list read is on its way': async () => {
+            nodeLine(dm, peer, 'a new line');
+            setNumber(1);
+            const first = openChat();
+            hold = holdFor((m, p) => m === 'GET' && p.startsWith('/api/messages/conversations/'));
+            const cut = first.refresh();
+            await hold.seen;
+            await first.view.leave();
+            hold.release();
+            expect(await cut).toEqual([]);
+            hold = null;
+            const back = openChat();
+            await back.refresh();
+            return back;
+        },
+        ...Object.fromEntries(([['is refused', 'refused'], ['fails', 'fails'], ['times out', 'times out']] as const).map(([said, fault]) => [`the list read ${said}`, async () => {
+            nodeLine(dm, peer, 'a new line');
+            setNumber(1);
+            const chat = openChat();
+            listFault = fault;
+            expect(await chat.refresh()).toEqual([]);
+            expect(asked.filter(isList).length).toBe(1);
+            expect(asked.filter(isPage).length).toBe(0);
+            // The next call at the same number (the beat, or another community's count changing) asks again.
+            await chat.refresh();
+            return chat;
+        }])),
+        "alerts off for that community (no number): on Chat's focus": async () => {
+            h.store.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([A]));
+            nodeLine(dm, peer, 'a new line');
+            // A tally kept from before its alerts went off counts for nothing (notice-counts.ts leaves it out).
+            setNumber(4);
+            const chat = openChat();
+            await chat.refresh();
+            return chat;
+        },
+        'alerts off, a line that comes while Chat stays in view: on the next beat': async () => {
+            h.store.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([A]));
+            const chat = openChat();
+            // On focus: one list read, nothing new yet.
+            expect(await chat.refresh()).toEqual([]);
+            expect(asked.filter(isList).length).toBe(1);
+            nodeLine(dm, peer, 'a new line');
+            // Before the beat: nothing asked.
+            asked = [];
+            expect(await chat.refresh()).toEqual([]);
+            expect(asked).toEqual([]);
+            skew += HELD_QUIET_REFRESH_MS;
+            await chat.refresh();
+            return chat;
+        },
+    };
+
+    it.each(Object.keys(ROWS))('%s', async (name) => {
+        const lineCount = node.lines.length;
+        const chat = await ROWS[name]();
+        await settle();
+        const added = node.lines.slice(lineCount);
+        expect(added.length).toBe(1);
+        // The new line is in A's own copy, brought by exactly one read of its page.
+        expect(messagesIn(A_FILE).map((m) => m.id)).toContain(added[0].id);
+        expect(asked.filter(isPage).length).toBe(1);
+        // Nothing in B's.
+        expect(messagesIn(B_FILE).map((m) => m.id)).not.toContain(added[0].id);
+        // Once brought, the same Chat asks nothing more at the same number, before the next beat.
+        asked = [];
+        expect(await chat.refresh()).toEqual([]);
+        expect(asked).toEqual([]);
+        await chat.view.leave();
+        expect(db.heldCopyFiles()).toEqual([]);
     });
 });
 

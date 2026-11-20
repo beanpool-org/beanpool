@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl, AppState } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
-import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsFilledIn, heldChatsInView, heldChatsShown, refreshHeldWhereRose, type HeldChatRow as HeldChat, type HeldRowFill } from '../../utils/held-chats';
+import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsFilledIn, heldChatsInView, heldChatsShown, refreshHeldWhereRose, HELD_QUIET_REFRESH_MS, type HeldChatRow as HeldChat, type HeldRowFill } from '../../utils/held-chats';
 import { onNoticeCounts } from '../../utils/notice-counts';
 import { HeldChatRow } from '../../components/HeldChatRow';
 import { requestsWaitingOnGlobal } from '../../utils/global-requests';
@@ -256,8 +256,8 @@ export default function ChatsScreen() {
                 if (view.inView()) setHeldChats([]);
             }
         };
-        // Slice S2b: a held community whose number rose (a round's count, or its push) brings its newest lines into its own
-        // copy once, and its rows are read again: no loop (only a rise starts one), no second socket.
+        // Slice S2b: a held community where something may wait (its number above 0 as Chat opens, then each rise: a round's
+        // count, or its push) brings its newest lines into its own copy, and its rows are read again; no second socket.
         const freshen = async () => {
             if (!identity?.publicKey || !view.inView()) return;
             if ((await refreshHeldWhereRose(identity.publicKey, rows, view)).length > 0 && view.inView()) await loadHeld();
@@ -265,9 +265,18 @@ export default function ChatsScreen() {
         void loadHeld().then(freshen);
         const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); });
         const countsSub = onNoticeCounts(() => { void freshen(); });
+        // The beat while Chat stays in view and the app is in front (#3312 review F1): a held community with its alerts off
+        // (no number to rise) refreshes on it, and a list read that failed is asked again. One pass at a time, no loop.
+        let beating = false;
+        const beat = setInterval(() => {
+            if (beating || AppState.currentState !== 'active') return;
+            beating = true;
+            void freshen().finally(() => { beating = false; });
+        }, HELD_QUIET_REFRESH_MS);
         return () => {
             blockSub.remove();
             countsSub();
+            clearInterval(beat);
             void view.leave();
         };
     }, [identity, communityUrl]));

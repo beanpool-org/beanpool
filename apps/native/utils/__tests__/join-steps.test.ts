@@ -6,11 +6,16 @@
  * path draws are read from welcome.tsx, so a step bar added to a screen that is no join step (or taken off one that is) is
  * caught here.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },
+}));
+
 import { joinSteps, stepDot, type JoinStep } from '../join-steps';
-import type { OnboardingFlow } from '../onboarding-state';
+import { resumePlan, type OnboardingFlow, type PendingOnboarding } from '../onboarding-state';
 
 const welcome = fs.readFileSync(path.join(__dirname, '..', '..', 'app/welcome.tsx'), 'utf8');
 
@@ -102,6 +107,41 @@ describe('the step bar: one dot per screen the join shows', () => {
     it('the bar has no step on a screen that is no join step', () => {
         for (const mode of ["home'", "member'", "recover'", "ssoRecover'", "confirmReplace'", "ownerCard'", "create' && !inviteCode.trim()"]) {
             expect(screen(mode), mode).not.toContain('<StepBar');
+        }
+    });
+
+    // §4.3: a join a 1.4.7 phone left part-way resumes on a screen of the new path, with its own dot; nothing stored is
+    // rewritten (no conversion code). How it Works (`onboardingGuide`) resumes on the way back, the step before it (S5).
+    it('a 1.4.7 join left at any step resumes on a screen with its dot, on every door', () => {
+        const KEY = 'ab'.repeat(32);
+        const STORED = { publicKey: KEY, privateKey: '07'.repeat(32), callsign: 'Sam', createdAt: '2026-09-26T00:00:00Z' } as never;
+        const MODE_STEP: Record<string, JoinStep> = { create: 'name', globalJoin: 'name', profileSetup: 'photo', seedBackup: 'wayBack' };
+        const rows: Array<{ flow: OnboardingFlow; step: PendingOnboarding['step']; dot: string }> = [
+            { flow: 'invite', step: 'create', dot: '1/3' },
+            { flow: 'invite', step: 'profileSetup', dot: '2/3' },
+            { flow: 'invite', step: 'seedBackup', dot: '3/3' },
+            { flow: 'invite', step: 'onboardingGuide', dot: '3/3' },
+            { flow: 'global', step: 'profileSetup', dot: '2/3' },
+            { flow: 'global', step: 'seedBackup', dot: '3/3' },
+            { flow: 'global', step: 'onboardingGuide', dot: '3/3' },
+            { flow: 'claim', step: 'profileSetup', dot: '1/2' },
+            { flow: 'claim', step: 'seedBackup', dot: '2/2' },
+            { flow: 'claim', step: 'onboardingGuide', dot: '2/2' },
+        ];
+        for (const r of rows) {
+            const record = {
+                step: r.step, flow: r.flow, callsign: 'Sam', redeemed: true, newKey: KEY,
+                inviteCode: r.flow === 'invite' ? 'BP-ABCD-1234' : '',
+                anchorUrl: r.flow === 'invite' ? 'https://riverside.example' : r.flow === 'claim' ? 'https://beans.example.org' : 'https://global.beanpool.org',
+            } as PendingOnboarding;
+            const plan = resumePlan(record, STORED);
+            expect(plan.action, `${r.flow} at ${r.step}`).toBe('resume');
+            if (plan.action !== 'resume') continue;
+            const step = MODE_STEP[plan.mode];
+            const src = screen(plan.mode === 'create' ? "create') {" : `${plan.mode}'`);
+            expect(src.match(/<StepBar\s+step="(\w+)"/)?.[1], `${r.flow} at ${r.step}: the screen it resumes on`).toBe(step);
+            const dot = stepDot(joinSteps(plan.flow), step);
+            expect(dot ? `${dot.at}/${dot.of}` : null, `${r.flow} at ${r.step}`).toBe(r.dot);
         }
     });
 });

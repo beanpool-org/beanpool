@@ -215,7 +215,9 @@ test('the real tree: a phone PR the size of #3113 (20 sources) plans under the b
     'components/NotificationsOffLine.tsx', 'components/RecoveryKitButtons.tsx', 'utils/words-kept.ts'];
   const steps = plan(Object.fromEntries(sources.map(f => [`apps/native/${f}`, 'x'])));
   const s = step(steps, 'vitest:beanpool-pillar');
-  assert.ok(filesOf(s).length <= 1 + MAX_EXTRA, `${filesOf(s).length} phone files`);
+  // The phone's guards (GUARD_TESTS) plus at most MAX_EXTRA.
+  const phoneGuards = GUARD_TESTS.filter(t => t.startsWith('apps/native/')).length;
+  assert.ok(filesOf(s).length <= phoneGuards + MAX_EXTRA, `${filesOf(s).length} phone files`);
   assert.ok(total(steps) <= PLAN_SECS, `${total(steps)} s`);
 });
 

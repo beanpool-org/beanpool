@@ -3,14 +3,14 @@
  * fable.md made of the phone's join and Home: the join's three steps with Safety Backup last (How it Works stays in a web
  * browser until the web's own slice), the WELCOME TO BEANPOOL! tile with Show me around and Got it, its band after 7 days
  * and its end at 30, First steps above the Market, and no notifications card in the join (review of #3315, inline comment
- * on welcome.tsx). The English pages; their 24 language versions follow by their source-hash (packages/beanpool-guide/README.md §6).
+ * on welcome.tsx), and since slice W2 the web app's tile and community welcome. The English pages; their 24 language versions follow by their source-hash (packages/beanpool-guide/README.md §6).
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HOME_DEFAULT_LIST } from '../home-frame.js';
-import { WELCOME_TILE_WORDS } from '../home-welcome.js';
+import { COMMUNITY_WELCOME_HOME_WORDS, WELCOME_TILE_WORDS } from '../home-welcome.js';
 
 const GUIDE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'beanpool-guide', 'content');
 const page = (rel: string) => readFileSync(join(GUIDE, rel), 'utf8');
@@ -35,14 +35,24 @@ describe("the guide's joining page: the phone's three steps", () => {
 describe("the guide's Home page: the tile, its band, its end, the order", () => {
     const home = flat('getting-started/home.md');
 
-    it("the phone's tile: Show me around and Got it, folded after 7 days, gone at 30; the web keeps Take the tour and Not now", () => {
+    it("the tile on both apps (the web since W2): Show me around and Got it, folded after 7 days, gone at 30; no Take the tour or Not now", () => {
         expect(home).toContain(`**${WELCOME_TILE_WORDS.tour}** starts the tour (below). **${WELCOME_TILE_WORDS.gotIt}** puts the tile away.`);
-        expect(home).toContain('After 7 days, if you haven\'t tapped either, the tile folds to one line, "Welcome to BeanPool ›"');
+        expect(home).toContain(`After 7 days, if you haven't tapped either, the tile folds to one line, "${WELCOME_TILE_WORDS.band}"`);
         expect(home).toContain('30 days after you joined it is gone, whether or not you tapped anything.');
-        expect(home).toContain('In the web app, **Welcome** is a card with those first lines, **Take the tour ›** and **Not now**.');
+        // The web app's old card and its words are gone from the page (DESIGN-onboarding-home-landing-fable.md §5, slice W2).
+        expect(home).not.toContain('In the web app, **Welcome** is a card with those first lines, **Take the tour ›** and **Not now**.');
+        expect(home).not.toContain('**Take the tour ›**');
+        expect(home).not.toMatch(/\*\*Not now\*\*/);
         // The phone's Welcome no longer goes at seven days or by Not now: said for the web app only.
         expect(home).not.toContain('It says which community you are in, such as "You\'re in Riverside.", and who invited you, with **Say hello ›** to open a chat with them. An owner alone on a new community, whom nobody invited, sees "You\'re the first one here." instead, with **Invite someone ›** where they can invite. **Welcome** goes when');
         expect(home).not.toContain('**Welcome** has **Not now** instead.');
+    });
+
+    it("the web app's community welcome: its caption, the owners' words as written, Write your community's welcome for an owner, until its ✕ (W2)", () => {
+        expect(home).toContain('In the web app, your community\'s own welcome stands beside the tile, headed with its name, such as "From Riverside", with **✕**.');
+        expect(home).toContain("It shows what your community's owners wrote for new members, exactly as they wrote it, if they wrote anything;");
+        expect(home).toContain(`An owner of a community with no welcome yet sees **${COMMUNITY_WELCOME_HOME_WORDS.write}**, which opens the community's settings, where it is written.`);
+        expect(home).toContain('It stays for your first 30 days, after **Got it** too, until you tap **✕**, and **✕** is kept on your account.');
     });
 
     it("the newcomer's order is core's default list: First steps above New in the Market", () => {

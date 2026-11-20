@@ -7,6 +7,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import vm from 'node:vm';
+import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +42,8 @@ class FakeEl {
     handlers: Record<string, Array<(e: any) => void>> = {};
     href: string;
     value = '';
+    /** Whether the page moved the reader's place (focus) here. */
+    focused = false;
     constructor(public tag: string, attrs: Record<string, string>, private onSelect: (el: FakeEl) => void = () => {}) {
         this.attrs = attrs;
         this.href = attrs.href ?? '';
@@ -87,6 +90,7 @@ class FakeEl {
     get nextSibling(): FakeNode | null { const p = this.parentNode; return p ? p.children[p.children.indexOf(this) + 1] ?? null : null; }
     addEventListener(ev: string, fn: (e: any) => void) { (this.handlers[ev] ||= []).push(fn); }
     select() { this.onSelect(this); }
+    focus() { this.focused = true; }
     setSelectionRange() {}
 }
 
@@ -238,8 +242,9 @@ function runTrampoline(search: string, ua: string, origin = 'https://mullum.bean
         for (const state of ['hidden', 'visible']) { document.visibilityState = state; for (const fn of docHandlers.visibilitychange ?? []) fn({}); }
     };
     const pageshow = () => { for (const fn of winHandlers.pageshow ?? []) fn({ persisted: true }); };
-    /** The ids of the install area's elements that show, in page order. */
-    const installOrder = () => el('installArea').children.filter((c): c is FakeEl => c instanceof FakeEl && shows(c)).map((c) => c.id);
+    /** The ids of the install area's elements that show something (an empty line shows nothing), in page order. */
+    const empty = (e: FakeEl) => e.children.every((n) => 'text' in n && !n.text.trim());
+    const installOrder = () => el('installArea').children.filter((c): c is FakeEl => c instanceof FakeEl && shows(c) && !empty(c)).map((c) => c.id);
     /** The browser's copy starts working (or stops) mid-page: a later tap meets the new behaviour. */
     const setCopy = (e: NonNullable<TrampolineOpts['exec']>, c: NonNullable<TrampolineOpts['clipboard']>) => { exec = e; clip = c; };
     return { el, click, copied, writes, loc, storage, leaveAndComeBack, pageshow, installOrder, setCopy, text: () => visibleText(body), html };
@@ -419,23 +424,42 @@ async function main() {
     }
 
     // 1e. The iPhone's page says only what happened (DESIGN-ios-invite-paste-fable.md §2, §4.2, §4.3; Marty 21 Nov: all of
-    // Fable's picks). It printed "We've copied your code to the clipboard" when it loaded, before any tap, and dropped every
-    // failure. Now the App Store badge copies inside its tap in a way the page can check (the copy event and
-    // execCommand first, navigator.clipboard second, the same tap), writes the link as text and as a link, claims nothing
-    // before the tap, says so when the copy failed, and puts "Open your invite in BeanPool" on top when the person comes back.
+    // Fable's picks, then "fewer words": words only where the member must act differently). It printed "We've copied your
+    // code to the clipboard" when it loaded, before any tap, and dropped every failure. Now the App Store badge copies inside
+    // its tap in a way the page can check (the copy event and execCommand first, navigator.clipboard second, the same tap)
+    // and writes the link as text and as a link. Before the tap and after a copy that worked the page says nothing about a
+    // copy; only a copy that failed says so, and then "Open your invite in BeanPool" goes on top when the person comes back.
+    // On a phone the code card folds behind "Type the code instead ›", and an iPhone's card has no Copy button.
     {
         const RIVER = 'https://riverside.example';
         const LINK = `${RIVER}/?invite=INV-AB12-CD34`;
+        const Q = '?invite=INV-AB12-CD34';
+        const DESKTOP = 'Mozilla/5.0 (X11; Linux x86_64)';
         const W = INVITE_PAGE_WORDS;
         const english = wordsIn(null);
-        const LEAD = english.t(W.lead), COPIES = english.t(W.copies), NOT_COPIED = english.t(W.notCopied);
-        const OPEN_FIRST = english.t(W.openFirst), OPEN_BACK = english.t(W.openBack);
+        const LEAD = english.t(W.lead), NOT_COPIED = english.t(W.notCopied);
+        const OPEN_FIRST = english.t(W.openFirst), OPEN_BACK = english.t(W.openBack), TYPE_CODE = english.t(W.typeCode);
         const claims = /copied|clipboard|paste/i;
-        assert(LEAD === 'New here? Get BeanPool, then tap “I have an invite”.' && COPIES === 'Tapping the badge copies your invite.'
+        assert(LEAD === 'New here? Get BeanPool, then tap “I have an invite”.'
             && NOT_COPIED === 'Your invite wasn’t copied. After installing, come back here and tap Open your invite in BeanPool.'
-            && OPEN_FIRST === 'Have BeanPool already? Open your invite in it' && OPEN_BACK === 'Open your invite in BeanPool',
-            'iPhone: the page\'s words are the design\'s (§4.2)');
+            && OPEN_FIRST === 'Have BeanPool already? Open your invite in it' && OPEN_BACK === 'Open your invite in BeanPool'
+            && TYPE_CODE === 'Type the code instead ›',
+            'iPhone: the page\'s words are the design\'s (§4.2), with Marty\'s fold line (21 Nov)');
         assert(NOT_COPIED.includes(OPEN_BACK), 'iPhone: the failed copy\'s line names the button by the words it shows');
+
+        // Marty 21 Nov, fewer words: "Tapping the badge copies your invite." is gone, from the page's words and from every
+        // catalog, and so are the iPhone Copy button's own words (its card has no Copy button now).
+        const GONE = 'Tapping the badge copies your invite.';
+        const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+        const wordsDir = path.join(root, 'apps/server/words');
+        const catalogFiles = fs.readdirSync(wordsDir).filter((f) => f.endsWith('.json'));
+        const stillIn = catalogFiles.filter((f) => {
+            const catalog = JSON.parse(fs.readFileSync(path.join(wordsDir, f), 'utf8'));
+            return GONE in catalog || 'Copy' in catalog || 'Copied' in catalog;
+        });
+        assert(catalogFiles.length === LANGS.length - 1 && stillIn.length === 0 && !Object.values(W).some((key) => english.t(key) === GONE || english.t(key) === 'Copy' || english.t(key) === 'Copied'),
+            `fewer words: "${GONE}", "Copy" and "Copied" are in none of the ${catalogFiles.length} catalogs and not in the page's words (${stillIn.join(', ')})`);
+        assert([null, ...LANGS].every((lang) => !renderInviteTrampoline({ webJoin: true, lang }).includes('Tapping the badge')), 'fewer words: the page as served in every language has no "Tapping the badge…"');
 
         // The page as served: no claim, no banner, nothing of ours.
         const html = renderInviteTrampoline({ webJoin: true });
@@ -444,153 +468,212 @@ async function main() {
         assert(!html.includes('We\\u2019ve copied') && !/we.ve copied/i.test(html) && !/paste your code/i.test(html), 'iPhone: the old early claim and its "paste your code" step are gone');
         assert(!/apple-itunes-app/i.test(html), 'iPhone: no Safari smart banner (with no app it goes to the store past the copy)');
         assert(!/beanpool\.(?:org|app|com|net)\b/i.test(html), 'the page names no domain of ours (it is each community\'s own page)');
-        const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
         const guard: any = await import(path.join(root, 'scripts/check-no-node-names.mjs'));
         const pageSites = (lang: Lang | null) => guard.sitesIn('apps/server/src/routes/invite-trampoline.ts', renderInviteTrampoline({ webJoin: true, lang }));
         assert(pageSites(null).length === 0 && pageSites('fr').length === 0, 'the page names none of our communities or servers (the node-names guard\'s own list)');
         assert(/var W = \{[^\n]*\};/.test(html) && !/var W = [^\n]*<\//.test(html), 'iPhone: the words reach the script as JSON with no way out of the script block');
         // Even a catalog sentence written to break out stays a string inside the script (words are files anyone can edit).
-        useCatalogsForTests('tr', { server: { Copy: '</script><img src=x onerror=alert(1)>\u2028&' } });
+        useCatalogsForTests('tr', { server: { 'Your invite code': '</script><img src=x onerror=alert(1)>\u2028&' } });
         const hostile = renderInviteTrampoline({ webJoin: true, lang: 'tr' });
         useCatalogsForTests('tr', null);
         assert(hostile.split('</script>').length === 2 && !hostile.includes('<img src=x') && hostile.includes('\\u003c/script\\u003e\\u003cimg src=x onerror=alert(1)\\u003e\\u2028\\u0026'),
             'iPhone: a catalog sentence holding </script>, a tag, U+2028 or & is escaped inside the script block');
+        // With no script (and so on a desktop as served) the code card is open and its fold line hidden.
+        assert(/<button class="codefold" id="codeFold" type="button" hidden><\/button>\s*<div class="codecard" id="codecard">/.test(noScript), 'the page as served: the fold line is hidden and the code card open (a browser with no script, a desktop)');
+        assert(/#code \{[^}]*-webkit-user-select:text; user-select:text; \}/.test(html) && !/user-select:\s*none/.test(html), 'the code is selectable text (with no Copy button on an iPhone, a long press selects it for the phone\'s own Copy)');
 
-        // Before any tap: the two lines and the button, the code card under them with its address, and nothing written.
-        const before = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes' });
+        // Before any tap: the one line, the badge, the second button; the code card folded under them; nothing written.
+        const before = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes' });
         const shown0 = before.text();
-        assert(shown0.includes(LEAD) && shown0.includes(COPIES) && shown0.includes(OPEN_FIRST), 'iPhone, before a tap: the line over the badge, the line under it and "Have BeanPool already? Open your invite in it"');
+        assert(shown0.includes(LEAD) && shown0.includes(OPEN_FIRST) && !shown0.includes(GONE), 'iPhone, before a tap: only the line over the badge, and "Have BeanPool already? Open your invite in it" (no line under the badge)');
         assert(!claims.test(shown0), `iPhone, before a tap: no word on the page says copied, clipboard or paste (${shown0.match(claims)?.[0] ?? ''})`);
         assert(before.writes.length === 0, 'iPhone, before a tap: nothing is written');
-        assert(before.el('steps').style.display === 'none' && !shown0.includes('Install BeanPool from the App Store'), 'iPhone: the three steps are gone (two lines instead)');
-        assert(JSON.stringify(before.installOrder()) === JSON.stringify(['iosLead', 'badges', 'copyNote', 'openAppBtn']), `iPhone: the line, the badge, the line under it, then the second button (${before.installOrder().join(', ')})`);
-        assert(before.el('installArea').nextSibling === before.el('codecard'), 'iPhone: the code card comes after the buttons');
-        assert(before.el('codeAt').textContent === 'at riverside.example' && !before.el('codeAt').hidden, 'iPhone: the code card names the address the code belongs to');
-        assert(before.el('copyBtn').textContent === 'Copy' && before.el('codeLabel').textContent === 'Your invite code', 'iPhone: the code card says "Your invite code" and "Copy"');
+        assert(before.el('steps').style.display === 'none' && !shown0.includes('Install BeanPool from the App Store'), 'iPhone: the three steps are gone (one line instead)');
+        assert(JSON.stringify(before.installOrder()) === JSON.stringify(['iosLead', 'badges', 'openAppBtn']), `iPhone: the line, the badge, then the second button, nothing between (${before.installOrder().join(', ')})`);
+        assert(before.el('copyNote').textContent === '' && before.el('copyNote').getAttribute('role') === 'status' && !before.el('copyNote').hidden, 'iPhone: the line under the badge is there, empty, to be announced if it fills (role="status")');
+        assert(before.el('installArea').nextSibling === before.el('codeArea'), 'iPhone: the code card comes after the buttons');
         assert(before.el('openAppBtn').href === `beanpool://welcome?invite=INV-AB12-CD34&server=${encodeURIComponent(RIVER)}` && before.el('openAppBtn').className === 'cta secondary', 'iPhone: the second button is the app\'s own domain-free link with the invite, a real button');
         before.leaveAndComeBack();
         assert(before.installOrder()[0] === 'iosLead', 'iPhone: leaving and coming back with no store tap moves nothing');
 
-        // The tap, when the copy event works: both forms, inside the tap, before anything else; the words don't change.
-        const ok = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes', clipboard: 'text' });
+        // The code card folds away on a phone behind one line, which opens it in place; an iPhone's has no Copy button.
+        assert(before.el('codecard').hidden && shows(before.el('codeFold')) && before.el('codeFold').textContent === TYPE_CODE
+            && !shown0.includes('INV-AB12-CD34') && !shown0.includes('Your invite code'), 'iPhone: the code card is folded behind "Type the code instead ›"');
+        before.click('codeFold');
+        const opened = before.text();
+        assert(!before.el('codecard').hidden && before.el('codeFold').hidden && opened.includes('Your invite code') && opened.includes('INV-AB12-CD34') && opened.includes('at riverside.example') && !opened.includes(TYPE_CODE),
+            'iPhone: "Type the code instead ›" opens the card in place: the code and the address it belongs to');
+        assert(before.el('codecard').focused && before.el('codecard').getAttribute('tabindex') === '-1', 'iPhone: the reader\'s place moves to the card it opened');
+        assert(before.el('copyBtn').hidden && !/\bCopy\b/.test(opened), 'iPhone: the opened card has no Copy button');
+        assert(before.el('codeAt').textContent === 'at riverside.example' && before.el('codeLabel').textContent === 'Your invite code', 'iPhone: the card says "Your invite code" and names the address the code belongs to');
+
+        // In every state an iPhone's page has, in every language: no line under the badge but the failed one, no Copy button.
+        const everyIphoneState = async (lang: Lang | null, check: (r: ReturnType<typeof runTrampoline>) => boolean): Promise<string[]> => {
+            const bad: string[] = [];
+            const at = (step: string, r: ReturnType<typeof runTrampoline>) => { if (!check(r)) bad.push(step); };
+            const okRun = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes', lang });
+            at('before a tap', okRun);
+            okRun.click('iosStore'); await settle(); at('after a copy that worked', okRun);
+            okRun.leaveAndComeBack(); at('back after a copy that worked', okRun);
+            okRun.click('codeFold'); at('the card opened', okRun);
+            const tab = new Map<string, string>();
+            const failRun = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', lang, storage: tab });
+            failRun.click('iosStore'); at('while the answer is coming', failRun);
+            await settle(); at('after a copy that failed', failRun);
+            failRun.leaveAndComeBack(); at('back after a copy that failed', failRun);
+            failRun.click('codeFold'); at('the card opened after a failed copy', failRun);
+            at('reloaded after a failed copy', runTrampoline(Q, IPHONE, RIVER, { exec: 'no', lang, storage: tab }));
+            failRun.setCopy('yes', 'rejects'); failRun.click('iosStore'); await settle(); at('a later copy that worked', failRun);
+            const hall = runTrampoline(Q, IPHONE, 'http://10.1.2.3:8080', { exec: 'no', clipboard: 'none', lang });
+            hall.click('iosStore'); await settle(); hall.leaveAndComeBack(); hall.click('codeFold'); at('plain http:// with no way to copy', hall);
+            return bad;
+        };
+        const goneSomewhere: string[] = [], copyBtnSomewhere: string[] = [];
+        for (const lang of [null, ...LANGS.filter((l) => l !== 'en')]) {
+            for (const step of await everyIphoneState(lang, (r) => !r.text().includes(GONE))) goneSomewhere.push(`${lang ?? 'en'}: ${step}`);
+            for (const step of await everyIphoneState(lang, (r) => r.el('copyBtn').hidden)) copyBtnSomewhere.push(`${lang ?? 'en'}: ${step}`);
+        }
+        assert(goneSomewhere.length === 0, `iPhone: "${GONE}" shows in no state, in any of the ${LANGS.length} languages (${goneSomewhere.slice(0, 3).join('; ')})`);
+        assert(copyBtnSomewhere.length === 0, `iPhone: the code card has no Copy button in any state, in any of the ${LANGS.length} languages (${copyBtnSomewhere.slice(0, 3).join('; ')})`);
+
+        // The tap, when the copy event works: both forms, inside the tap, before anything else; and nothing more is said.
+        const ok = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes', clipboard: 'text' });
+        const okBefore = ok.text();
         ok.click('iosStore');
         assert(ok.writes.length === 1 && ok.writes[0].via === 'event', 'iPhone tap: the copy event wrote it, inside the tap (before the click handler returned)');
         assert(ok.writes[0].types['text/plain'] === LINK && ok.writes[0].types['text/uri-list'] === LINK, 'iPhone tap: the link is written as text and as a link (text/uri-list)');
         await settle();
         assert(ok.writes.length === 1, 'iPhone tap: a copy that worked is not written twice (navigator.clipboard untouched)');
-        assert(ok.el('copyNote').textContent === COPIES && ok.el('copyNote').className === 'copynote' && !ok.text().includes(NOT_COPIED), 'iPhone tap that copied: the line under the badge stays as it was, no failure shown');
-        // Coming back from the store: the button that carries the invite itself goes on top, solid.
+        assert(ok.text() === okBefore && ok.el('copyNote').textContent === '', 'iPhone tap that copied: nothing more is said (the page reads as it did before the tap)');
+        // Coming back from the store after a copy that worked: still nothing more, and nothing moves.
         ok.leaveAndComeBack();
-        assert(ok.installOrder()[0] === 'openAppBtn' && ok.el('openAppBtn').className === 'cta' && ok.el('openAppBtn').textContent === OPEN_BACK, 'iPhone, back from the store: "Open your invite in BeanPool" is on top, solid');
-        assert(ok.el('openAppBtn').href.startsWith('beanpool://welcome?invite=INV-AB12-CD34&server='), 'iPhone, back from the store: the top button still carries the invite');
+        assert(ok.text() === okBefore && JSON.stringify(ok.installOrder()) === JSON.stringify(['iosLead', 'badges', 'openAppBtn'])
+            && ok.el('openAppBtn').className === 'cta secondary' && ok.el('openAppBtn').textContent === OPEN_FIRST,
+            'iPhone, back from the store after a copy that worked: nothing is said and nothing moves (the solid button is only for a failed copy)');
         assert(JSON.parse(ok.storage.get('beanpool-invite-store-tap') ?? 'null')?.copy === 'copied', 'iPhone tap: the tab remembers the store tap and that the copy worked');
+        const okReload = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes', storage: ok.storage });
+        assert(okReload.text() === okBefore && okReload.installOrder()[0] === 'iosLead', 'iPhone: a page iOS reloads after a copy that worked says nothing more and moves nothing');
 
         // A browser that fires the event with nothing to fill copies what is selected: the link, as text.
-        const sel = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes-no-data' });
+        const sel = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes-no-data' });
+        const selBefore = sel.text();
         sel.click('iosStore');
         await settle();
-        assert(sel.writes.length === 1 && sel.writes[0].via === 'selection' && sel.writes[0].types['text/plain'] === LINK && !sel.text().includes(NOT_COPIED), 'iPhone tap: with no data to fill, the selected link is what is copied, and that counts');
+        assert(sel.writes.length === 1 && sel.writes[0].via === 'selection' && sel.writes[0].types['text/plain'] === LINK && sel.text() === selBefore, 'iPhone tap: with no data to fill, the selected link is what is copied, and that counts (nothing is said)');
 
         // The copy event says no: navigator.clipboard, in the same tap, with both forms where it takes them.
-        const item = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'item' });
+        const item = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', clipboard: 'item' });
+        const itemBefore = item.text();
         item.click('iosStore');
         assert(item.writes.length === 1 && item.writes[0].via === 'write' && item.writes[0].types['text/plain'] === LINK && item.writes[0].types['text/uri-list'] === LINK, 'iPhone tap: when the copy event says no, navigator.clipboard writes both forms, in the same tap');
         await settle();
-        assert(!item.text().includes(NOT_COPIED), 'iPhone tap: a navigator.clipboard copy that worked shows no failure');
-        const noUri = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'throws', clipboard: 'item-no-uri-list' });
+        item.leaveAndComeBack();
+        assert(item.text() === itemBefore && item.installOrder()[0] === 'iosLead', 'iPhone tap: a navigator.clipboard copy that worked says nothing and moves nothing, back from the store too');
+        const noUri = runTrampoline(Q, IPHONE, RIVER, { exec: 'throws', clipboard: 'item-no-uri-list' });
         noUri.click('iosStore');
         assert(noUri.writes.length === 1 && noUri.writes[0].via === 'writeText' && noUri.writes[0].types['text/plain'] === LINK, 'iPhone tap: a browser that takes no text/uri-list gets the link as text, in the tap');
-        const itemNo = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'item-rejects' });
+        const itemNo = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', clipboard: 'item-rejects' });
         itemNo.click('iosStore');
         await settle();
         assert(itemNo.writes.map((w) => w.via).join(',') === 'write,writeText' && !itemNo.text().includes(NOT_COPIED), 'iPhone tap: when write() refuses both forms, the link as text is tried, and its yes counts');
 
         // Every way failed: say so, with the way that needs no clipboard; back from the store, that button is on top.
-        const fail = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'rejects' });
+        const fail = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', clipboard: 'rejects' });
         fail.click('iosStore');
         assert(!fail.text().includes(NOT_COPIED), 'iPhone tap: nothing is claimed while the answer is still coming');
         await settle();
-        assert(fail.el('copyNote').textContent === NOT_COPIED && fail.el('copyNote').className === 'copynote warn' && !fail.text().includes(COPIES), 'iPhone tap that failed: "Your invite wasn\'t copied…" in place of the line under the badge');
-        assert(fail.el('copyNote').getAttribute('role') === 'status', 'iPhone: the line under the badge is announced when it changes (role="status")');
+        assert(fail.el('copyNote').textContent === NOT_COPIED && fail.el('copyNote').getAttribute('role') === 'status' && fail.installOrder()[0] === 'iosLead',
+            'iPhone tap that failed: "Your invite wasn\'t copied…" under the badge, announced (role="status")');
         fail.leaveAndComeBack();
-        assert(fail.installOrder()[0] === 'openAppBtn' && fail.el('openAppBtn').textContent === OPEN_BACK && fail.text().includes(NOT_COPIED), 'iPhone, back after a failed copy: the failed line stays and the button it names is on top');
+        assert(JSON.stringify(fail.installOrder()) === JSON.stringify(['openAppBtn', 'iosLead', 'badges', 'copyNote']) && fail.el('openAppBtn').className === 'cta'
+            && fail.el('openAppBtn').textContent === OPEN_BACK && fail.text().includes(NOT_COPIED),
+            'iPhone, back after a failed copy: the failed line stays and the button it names is on top, solid');
+        assert(fail.el('openAppBtn').href.startsWith('beanpool://welcome?invite=INV-AB12-CD34&server='), 'iPhone, back from the store: the top button still carries the invite');
 
         // Plain http:// (a hall laptop, a bare address): no navigator.clipboard at all. The copy event still works there.
         const HALL = 'http://10.1.2.3:8080';
-        const http = runTrampoline('?invite=INV-AB12-CD34', IPHONE, HALL, { exec: 'yes', clipboard: 'none' });
+        const http = runTrampoline(Q, IPHONE, HALL, { exec: 'yes', clipboard: 'none' });
         http.click('iosStore');
         await settle();
         assert(http.writes.length === 1 && http.writes[0].types['text/plain'] === `${HALL}/?invite=INV-AB12-CD34` && !http.text().includes(NOT_COPIED), 'iPhone on http://: the copy event copies the link with no navigator.clipboard');
         assert(http.el('codeAt').textContent === `at ${HALL}`, 'iPhone on http://: the code card gives the whole address, http:// and all, as the app needs it typed');
-        const httpNo = runTrampoline('?invite=INV-AB12-CD34', IPHONE, HALL, { exec: 'no', clipboard: 'none' });
+        const httpNo = runTrampoline(Q, IPHONE, HALL, { exec: 'no', clipboard: 'none' });
         httpNo.click('iosStore');
         await settle();
         assert(httpNo.writes.length === 0 && httpNo.el('copyNote').textContent === NOT_COPIED, 'iPhone on http:// where the copy event says no: nothing to fall back on, and the page says it wasn\'t copied');
-        const missing = runTrampoline('?invite=INV-AB12-CD34', IPHONE, HALL, { exec: 'missing', clipboard: 'none' });
+        const missing = runTrampoline(Q, IPHONE, HALL, { exec: 'missing', clipboard: 'none' });
         missing.click('iosStore');
         await settle();
         assert(missing.el('copyNote').textContent === NOT_COPIED, 'iPhone with no way to copy at all: the page says it wasn\'t copied');
 
         // Back by Safari's back button (the page restored from its cache) and back after iOS reloaded the page.
-        const cached = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes' });
+        const cached = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', clipboard: 'rejects' });
         cached.click('iosStore');
+        await settle();
         cached.pageshow();
-        assert(cached.installOrder()[0] === 'openAppBtn', 'iPhone: the page restored from Safari\'s cache comes back with the invite\'s button on top');
+        assert(cached.installOrder()[0] === 'openAppBtn', 'iPhone: after a failed copy, the page restored from Safari\'s cache comes back with the invite\'s button on top');
+        const cachedOk = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes' });
+        cachedOk.click('iosStore');
+        await settle();
+        cachedOk.pageshow();
+        assert(cachedOk.installOrder()[0] === 'iosLead', 'iPhone: after a copy that worked, the page restored from Safari\'s cache moves nothing');
         const tab = new Map<string, string>();
-        const first = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', storage: tab });
+        const first = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', storage: tab });
         first.click('iosStore');
         await settle();
-        const reloaded = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', storage: tab });
-        assert(reloaded.installOrder()[0] === 'openAppBtn' && reloaded.el('openAppBtn').textContent === OPEN_BACK && reloaded.el('copyNote').textContent === NOT_COPIED, 'iPhone: a page iOS reloads after the store tap still shows the way back on top, and the failed copy');
+        const reloaded = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', storage: tab });
+        assert(reloaded.installOrder()[0] === 'openAppBtn' && reloaded.el('openAppBtn').textContent === OPEN_BACK && reloaded.el('copyNote').textContent === NOT_COPIED, 'iPhone: a page iOS reloads after a failed copy still shows the failed line and the way back on top');
         assert(reloaded.writes.length === 0, 'iPhone: a reload writes nothing (no copy without a tap)');
         const other = runTrampoline('?invite=INV-ZZ99-YY88', IPHONE, RIVER, { exec: 'no', storage: tab });
-        assert(other.installOrder()[0] === 'iosLead' && other.el('copyNote').textContent === COPIES, 'iPhone: another invite opened in the same tab starts fresh');
+        assert(other.installOrder()[0] === 'iosLead' && other.el('copyNote').textContent === '', 'iPhone: another invite opened in the same tab starts fresh');
+        // The page was gone before the browser answered (the tab kept "pending"): nothing is claimed either way, and the
+        // button that needs no copy goes on top.
+        const unanswered = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', storage: new Map([['beanpool-invite-store-tap', JSON.stringify({ code: 'INV-AB12-CD34', copy: 'pending' })]]) });
+        assert(unanswered.installOrder()[0] === 'openAppBtn' && unanswered.el('copyNote').textContent === '' && !claims.test(unanswered.text()), 'iPhone: reloaded before the copy answered: no line either way, the button that needs no copy on top');
 
-        // The code card's Copy: "Copied" only when it was.
-        const card = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'rejects' });
-        card.click('copyBtn');
-        await settle();
-        assert(card.el('copyBtn').textContent === 'Copy', 'iPhone: Copy that failed never says "Copied"');
-        const cardOk = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes' });
-        cardOk.click('copyBtn');
-        await settle();
-        assert(cardOk.el('copyBtn').textContent === 'Copied ✓' && cardOk.writes[0].types['text/uri-list'] === LINK, 'iPhone: Copy that worked says "Copied ✓", both forms written');
-
-        // #3314 review: a copy that works after a failed one puts the line back, from the code card's Copy or the badge again.
-        for (const [why, again] of [['the code card\'s Copy', 'copyBtn'], ['the badge again', 'iosStore']] as const) {
+        // #3314 review: a copy that works after a failed one takes the failed line away, from the badge again or from the
+        // second button (an iPhone's card has no Copy now).
+        for (const [why, again] of [['the badge again', 'iosStore'], ['"Have BeanPool already? Open your invite in it"', 'openAppBtn']] as const) {
             const tab2 = new Map<string, string>();
-            const after = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', storage: tab2 });
+            const after = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', storage: tab2 });
             after.click('iosStore');
             await settle();
             assert(after.el('copyNote').textContent === NOT_COPIED, `iPhone (${why}): the first tap failed and says so`);
             after.setCopy('yes', 'rejects');
             after.click(again);
             await settle();
-            assert(after.el('copyNote').textContent === COPIES && after.el('copyNote').className === 'copynote' && !after.text().includes(NOT_COPIED),
-                `iPhone (${why}): a copy that worked after a failed one puts the line back to "${COPIES}"`);
+            assert(after.el('copyNote').textContent === '' && !after.text().includes(NOT_COPIED) && !claims.test(after.text()),
+                `iPhone (${why}): a copy that worked after a failed one takes the failed line away, and says nothing in its place`);
             assert(JSON.parse(tab2.get('beanpool-invite-store-tap') ?? 'null')?.copy === 'copied', `iPhone (${why}): the tab's record says copied too, so a reload agrees with the page`);
         }
-        // The code card's Copy alone (no store tap) records nothing: a reload must not act as if the store was visited.
-        const cardOnly = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes', storage: new Map() });
-        cardOnly.click('copyBtn');
+        // The second button's copy alone (no store tap) records nothing: a reload must not act as if the store was visited.
+        const openOnly = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes', storage: new Map() });
+        openOnly.click('openAppBtn');
         await settle();
-        assert(!cardOnly.storage.has('beanpool-invite-store-tap') && cardOnly.installOrder()[0] === 'iosLead', 'iPhone: Copy with no store tap keeps no record and moves nothing');
+        assert(openOnly.writes.length === 1 && !openOnly.storage.has('beanpool-invite-store-tap') && openOnly.installOrder()[0] === 'iosLead', 'iPhone: the second button copies, and with no store tap keeps no record and moves nothing');
 
         // In the visitor's language: the catalog's words, marked with the language; right to left where it reads so.
-        const fr = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', lang: 'fr' });
+        const fr = runTrampoline(Q, IPHONE, RIVER, { exec: 'no', clipboard: 'rejects', lang: 'fr' });
         const frW = wordsIn('fr');
         assert(fr.el('iosLead').textContent === frW.t(W.lead) && frW.t(W.lead) !== LEAD && fr.el('iosLead').getAttribute('lang') === 'fr', 'iPhone in French: the line over the badge is the catalog\'s, marked as French');
-        assert(fr.el('codeAt').textContent === frW.t(W.codeAt).replace('{address}', 'riverside.example') && fr.el('copyBtn').textContent === frW.t(W.copy), 'iPhone in French: the code card\'s words are the catalog\'s, the address filled in');
+        assert(fr.el('codeFold').textContent === frW.t(W.typeCode) && frW.t(W.typeCode) !== TYPE_CODE && fr.el('codeFold').getAttribute('lang') === 'fr', 'iPhone in French: the fold line is the catalog\'s, marked as French');
+        assert(fr.el('codeAt').textContent === frW.t(W.codeAt).replace('{address}', 'riverside.example') && fr.el('codeLabel').textContent === frW.t(W.codeLabel), 'iPhone in French: the code card\'s words are the catalog\'s, the address filled in');
+        const frBefore = fr.text();
         fr.click('iosStore');
         await settle();
         fr.leaveAndComeBack();
         assert(fr.el('copyNote').textContent === frW.t(W.notCopied) && fr.el('openAppBtn').textContent === frW.t(W.openBack) && fr.el('openAppBtn').getAttribute('lang') === 'fr', 'iPhone in French: the failed line and the button on top are the catalog\'s');
-        const ar = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes', lang: 'ar' });
-        assert(ar.el('iosLead').getAttribute('dir') === 'rtl' && ar.el('iosLead').getAttribute('lang') === 'ar', 'iPhone in Arabic: the lines read right to left');
+        const frOk = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes', lang: 'fr' });
+        frOk.click('iosStore');
+        await settle();
+        frOk.leaveAndComeBack();
+        assert(frOk.text() === frBefore, 'iPhone in French: after a copy that worked, nothing more is said');
+        const ar = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes', lang: 'ar' });
+        assert(ar.el('iosLead').getAttribute('dir') === 'rtl' && ar.el('iosLead').getAttribute('lang') === 'ar' && ar.el('codeFold').getAttribute('dir') === 'rtl', 'iPhone in Arabic: the lines read right to left');
         useCatalogsForTests('tr', { server: {} });
-        const trBare = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes', lang: 'tr' });
+        const trBare = runTrampoline(Q, IPHONE, RIVER, { exec: 'yes', lang: 'tr' });
         useCatalogsForTests('tr', null);
-        assert(trBare.el('iosLead').textContent === LEAD && trBare.el('iosLead').getAttribute('lang') === null, 'iPhone in a language whose catalog lacks the words: the English, unmarked');
+        assert(trBare.el('iosLead').textContent === LEAD && trBare.el('iosLead').getAttribute('lang') === null && trBare.el('codeFold').textContent === TYPE_CODE, 'iPhone in a language whose catalog lacks the words: the English, unmarked');
         let everyLanguage = true;
         for (const lang of LANGS.filter((l) => l !== 'en')) {
             const w = wordsIn(lang);
@@ -606,19 +689,41 @@ async function main() {
             }
             // The failed line names the button by the very words the button shows, in each language.
             if (!w.t(W.notCopied).includes(w.t(W.openBack))) { everyLanguage = false; console.error(`  ${lang}: the failed line does not name "${w.t(W.openBack)}"`); }
+            // The fold line ends in the same opening mark (mirrored by the browser where the language reads right to left).
+            if (!w.t(W.typeCode).endsWith(' ›')) { everyLanguage = false; console.error(`  ${lang}: the fold line does not end in " ›"`); }
         }
-        assert(everyLanguage, `iPhone: all ${LANGS.length - 1} languages have the page's words (machine drafts), with their placeholders and BeanPool, and the failed line names the button as it reads`);
+        assert(everyLanguage, `iPhone: all ${LANGS.length - 1} languages have the page's words (machine drafts), with their placeholders and BeanPool, the failed line names the button as it reads, and the fold line ends in "›"`);
         assert(/^#[0-9a-f]{6}$/i.test(WARN.tint) && /^#[0-9a-f]{6}$/i.test(WARN.ink) && html.includes(`background:${WARN.tint}; color:${WARN.ink};`), 'iPhone: the failed line\'s colours are the warning chip\'s, from core\'s colour library');
+        assert(/\.copynote:empty \{ padding:0; margin:0; \}/.test(html), 'iPhone: the line under the badge takes no room while it is empty');
 
-        // Android's part is as it was: no iPhone lines, the code card where it was, its own words and steps.
-        const and = runTrampoline('?invite=INV-AB12-CD34', ANDROID, RIVER, { exec: 'yes' });
+        // Android: no iPhone lines, its own words, steps and order, the code card where it was, but folded; opened, it has
+        // its "Copy code", which says "Copied ✓" only when it was.
+        const and = runTrampoline(Q, ANDROID, RIVER, { exec: 'yes' });
         assert(and.el('iosLead').hidden && and.el('copyNote').hidden && and.el('codeAt').hidden, 'Android: none of the iPhone\'s lines');
-        assert(and.el('codecard').nextSibling === and.el('installArea') && and.el('copyBtn').textContent === 'Copy code', 'Android: the code card is where it was, with "Copy code"');
+        assert(and.el('codeArea').nextSibling === and.el('installArea'), 'Android: the code card is where it was, over the install area');
         assert(and.text().includes('Tap Open your invite in BeanPool') && and.text().includes('Choose a callsign and you’re in'), 'Android: its three steps are as they were');
+        assert(and.el('codecard').hidden && shows(and.el('codeFold')) && and.el('codeFold').textContent === TYPE_CODE && !and.text().includes('INV-AB12-CD34'), 'Android: the code card is folded behind "Type the code instead ›"');
+        and.click('codeFold');
+        assert(!and.el('codecard').hidden && and.el('codeFold').hidden && and.text().includes('INV-AB12-CD34') && !and.el('copyBtn').hidden && and.el('copyBtn').textContent === 'Copy code',
+            'Android: "Type the code instead ›" opens the card in place, with its "Copy code"');
         and.click('installBtn');
         assert(and.copied[0] === LINK, 'Android: the main button still copies the invite link');
-        const desk = runTrampoline('?invite=INV-AB12-CD34', 'Mozilla/5.0 (X11; Linux x86_64)', RIVER, { exec: 'yes' });
+        and.click('copyBtn');
+        await settle();
+        assert(and.el('copyBtn').textContent === 'Copied ✓' && and.writes[and.writes.length - 1].types['text/uri-list'] === LINK, 'Android: Copy code that worked says "Copied ✓", both forms written');
+        const andNo = runTrampoline(Q, ANDROID, RIVER, { exec: 'no', clipboard: 'rejects' });
+        andNo.click('codeFold');
+        andNo.click('copyBtn');
+        await settle();
+        assert(andNo.el('copyBtn').textContent === 'Copy code', 'Android: Copy code that failed never says "Copied"');
+        const andFr = runTrampoline(Q, ANDROID, RIVER, { exec: 'yes', lang: 'fr' });
+        assert(andFr.el('codeFold').textContent === frW.t(W.typeCode) && andFr.el('codeFold').getAttribute('lang') === 'fr', 'Android in French: the fold line is the catalog\'s, marked as French');
+
+        // Desktop: as it was, the card open with its "Copy code" (a desktop visitor types the code into their phone).
+        const desk = runTrampoline(Q, DESKTOP, RIVER, { exec: 'yes' });
         assert(desk.el('iosLead').hidden && desk.el('copyNote').hidden && desk.text().includes('Open this invite link on your phone'), 'desktop: none of the iPhone\'s lines, the nudge to a phone as before');
+        assert(!desk.el('codecard').hidden && desk.el('codeFold').hidden && desk.text().includes('INV-AB12-CD34') && !desk.el('copyBtn').hidden && desk.el('copyBtn').textContent === 'Copy code',
+            'desktop: the code card stays open, with its "Copy code"');
     }
 
     // 2. Integration HTTP tests with running HTTPS server

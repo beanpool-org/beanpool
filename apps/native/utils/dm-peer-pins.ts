@@ -389,6 +389,8 @@ export function pinsWithCarried(here: string | null, carried: string, now: strin
  * The stored value's own member names: object keys that are never a conversation's id ({@link salvagePinIds} skips them).
  * The four the case 14 rule names (`pins`, `offered`, `heard`, `nodeSays`), and the rest of the format's (a pin's, an
  * offer's, a first sight's, what the listing said, the reset's marker), which would otherwise come back as inert ids.
+ * `verified` is no longer one (S7c): a damaged value written by 1.4.6 or 1.4.7 can hand the guard list an inert id
+ * `verified`, which only adds DM-ness to an id no node uses (harmless; #3316 review).
  */
 const PIN_FORMAT_NAMES = new Set([
     'pins', 'offered', 'heard', 'nodeSays',
@@ -841,9 +843,10 @@ export function judgeFirstSight(lines: ReadonlyArray<string | null>, listed: str
  * keeps it all (a thread with no line has nothing to say; a DM with nothing kept is pinned to `listed` unchecked). Rules
  * 2-4 pin the key the lines placed, checked, with `listed` offered when it differs. Rule 5 keeps no pin, only the record.
  * A rule-5 record is replaced only by rule 3 or 4 (a pause the member decides on), never by rule 1 or 2, which would take
- * the listed key with no question after lines were seen that it couldn't place (R5). A pin already checked, one the
- * member or a handover chose, or one on a key the member verified (`verified`) is never judged again. True when the pins
- * changed.
+ * the listed key with no question after lines were seen that it couldn't place (R5). A pin already checked, or one the
+ * member or a handover chose, is never judged again; nor is an unchecked one on a key the member verified (`verified`)
+ * while it holds a pause or another key is listed, so no judgement moves it off that key. With its own key listed and
+ * nothing offered it is judged, and the lines can only add a key to `former` (#3316 F1). True when the pins changed.
  */
 export function applySightVerdict(pins: DmPeerPins, conversationId: string, verdict: SightVerdict, listed: string | null, heard: DmHeard | undefined, now: string, verified: DmVerifiedKeys): boolean {
     const id = dmPinId(conversationId);
@@ -857,10 +860,16 @@ function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: str
     // A heldLost mark is judged only on the update's held lines (db.ts), and that judgement replaces it as if none were kept.
     const lost = isHeldLostSight(ownPin(pins, id));
     const held = lost ? undefined : ownPin(pins, id);
-    // A pin on a key the list holds is never judged again (a prune and relist can't move it), nor a pause one holds while
-    // the list can't be read. An unchecked pin with no pause IS judged then, fail closed: lines under an older key make
-    // that key the pin and the listed one only offered (below), never a send to the listed key on the node's word.
-    if (held && !isUnplacedSight(held) && (held.checked || held.by !== 'first-seen' || showsVerifiedMark(held, verified) || (isVerifiedPin(held, verified) && !!held.offered))) return false;
+    // A pin checked, or one the member or a handover chose, is never judged again. An unchecked first-seen pin is, with two
+    // exceptions that keep a judgement from moving it off a key the list holds: a pause it holds (also while the list can't
+    // be read), and a listed key other than its own. On a verified key with its own key listed and nothing offered, its
+    // lines can only add the key they place to `former` (the ordinary result below: the member checked the listed key), so
+    // the person's older lines still open (#3316 F1). While the list can't be read, an unchecked pin with no pause is judged
+    // fail closed: lines under an older key make that key the pin and the listed one only offered (below).
+    if (held && !isUnplacedSight(held)) {
+        if (held.checked || held.by !== 'first-seen') return false;
+        if (held.offered ? isVerifiedPin(held, verified) : (showsVerifiedMark(held, verified) && pinKeyOf(listed) !== held.peer)) return false;
+    }
     const key = pinKeyOf(listed);
     if (verdict.rule === 1) {
         if (held || lost || !key) return false;
@@ -870,11 +879,14 @@ function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: str
     // Signal's model (DESIGN-dm-key-signal-model §2.4): one listed key is the key. Rules 3 and 4 keep the key the lines
     // opened under as former (every line reads) and write one notice; rule 5 writes none, since it can't say a key
     // changed, only that some lines didn't open (they keep their own mark). Unless the lines opened under a key the member
-    // verified (DESIGN-s7-blocks-verified-everywhere §3.3 row 3): they prove the chat was with that key, so it is pinned and
-    // the listed key only offered: the verified card's pause, as when this phone already held the chat.
+    // verified and the listed key is not one (DESIGN-s7-blocks-verified-everywhere §3.3 row 3): they prove the chat was with
+    // that key, so it is pinned and the listed key only offered: the verified card's pause, as when this phone already held
+    // the chat. A listed key the member checked too takes the ordinary result, whether or not the sync pinned it unchecked
+    // before this judgement (the node picks which ran first, so a pause on one path would guard nothing); while the list
+    // can't be read, no listed key counts as checked, and the pause stands.
     if (key) {
         const placed = verdict.rule === 3 || verdict.rule === 4 ? verdict.pin : null;
-        if (placed && placed !== key && isVerifiedPin({ peer: placed }, verified)) {
+        if (placed && placed !== key && isVerifiedPin({ peer: placed }, verified) && !showsVerifiedMark({ peer: key }, verified)) {
             const offered: DmPeerOffer = { peer: key, at: now };
             const rekeyedAt = rekeyDateOf(heard?.rekeyedAt);
             if (rekeyedAt) offered.nodeSays = { rekeyedAt };

@@ -111,7 +111,11 @@ export function isDmVerifiedFullError(e: unknown): e is DmVerifiedFullError {
     return e instanceof DmVerifiedFullError || (e as { name?: unknown } | null)?.name === 'DmVerifiedFullError';
 }
 
-/** The stored value read as key → date. Throws DmVerifiedStoreError for anything that isn't the list. Nothing stored: empty. */
+/**
+ * The stored value read as key → date. Throws DmVerifiedStoreError for anything that isn't the list. Nothing stored: empty.
+ * Residual (#3316 review): a value that parses but isn't `{ keys: {...} }` stays unreadable until the app is reinstalled,
+ * since no reset touches it, so a paused chat can't Continue; only this file writes the value.
+ */
 function storedKeysOf(raw: string | null): Map<string, string> {
     const keys = new Map<string, string>();
     if (raw == null) return keys;

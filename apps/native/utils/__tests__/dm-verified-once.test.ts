@@ -411,6 +411,61 @@ const ROWS: Row[] = [
         },
     },
     {
+        name: 'first sight on a key the member checked elsewhere: lines under K1, the community lists K2, K2 already on the list from the other community\'s chat (#3316 F1)',
+        run: async (c, origin) => {
+            // Ben re-keyed to K2 at the other community first, and the member put K2 on the list there: Continue on the card
+            // when K1 was marked (the list holds both), Mark as verified when it wasn't (the list holds K2 alone).
+            if (c === 'list unreadable') expect(await mark(other(origin))).toBe(true); else await stand(c, origin);
+            await relist(other(origin), benNew);
+            if (c === 'not marked') expect(await mark(other(origin))).toBe(true);
+            else expect(await db.acceptOfferedPeer(chats[other(origin)].id, benNew.publicKey, at(other(origin)))).toBe(true);
+            expect(listKeys()).toEqual((c === 'not marked' ? [benNew.publicKey] : [ben.publicKey, benNew.publicKey]).sort());
+            if (c === 'list unreadable') {
+                h.store.set(dmVerifiedKeysStoreKey(me.publicKey), '{ this is not a list');
+                db._resetDmPeerPinsForTests();
+            }
+            // The phone first meets the chat here: Ben wrote in it under K1 before he re-keyed, and it lists K2 now. The listing
+            // pins K2 at first sight, unchecked, and the send judges the thread's line, under K1. In use: a chat the sync has
+            // never listed. Held: the chat's pin gone from the value (which stays: no re-seed), so the in-place refresh is
+            // its first sight (a held community's new chats come only with a sync while the phone is set there).
+            let olderId: string;
+            if (origin === HELD) {
+                olderId = nodes.get(HELD)!.lines[0].id;
+                const value = JSON.parse(pinsValue(HELD)!);
+                delete value.pins[chats[HELD].id.toLowerCase()];
+                h.store.set(dmPeerPinsStoreKey(me.publicKey, HELD_FILE), JSON.stringify(value));
+                db._resetDmPeerPinsForTests();
+            } else {
+                const conv: Conv = { id: randomUUID(), type: 'dm', participants: [me.publicKey, benNew.publicKey] };
+                nodes.get(IN_USE)!.convs.push(conv);
+                nodeLine(IN_USE, conv, ben, me.publicKey, `hello from Ben in ${IN_USE}`);
+                olderId = nodes.get(IN_USE)!.lines[nodes.get(IN_USE)!.lines.length - 1].id;
+                chats[IN_USE] = conv;
+            }
+            await relist(origin, benNew);
+            expect(pinOf(origin)).toMatchObject({ peer: benNew.publicKey, by: 'first-seen' });
+            expect(pinOf(origin).checked).toBeUndefined();
+            const r = await send(origin, 'first words here');
+            acting(origin);
+            const old = (await db.getMessages(chats[origin].id, { community: at(origin) })).find((m: any) => m.id === olderId);
+            if (c === 'list unreadable') {
+                // Fail closed: lines under K1 make K1 the pin and K2 only offered.
+                expect(r).toEqual({ err: 'DmKeyChangedError', posts: 0, opens: null });
+                expect(pinOf(origin)).toMatchObject({ peer: ben.publicKey, offered: { peer: benNew.publicKey } });
+                expect(await tag(origin)).toBe(true);
+            } else {
+                // K2 stays the pin (the member checked it), K1 is kept as former: Ben's older lines open, one notice, no pause.
+                expect(r).toEqual({ err: null, posts: 1, opens: 'K2' });
+                expect(pinOf(origin)).toMatchObject({ peer: benNew.publicKey, checked: true, former: [ben.publicKey] });
+                expect(pinOf(origin).offered).toBeUndefined();
+                expect(await notices(origin)).toBe(1);
+                expect(await tag(origin)).toBe(false);
+                expect(old?.text).toBe(`hello from Ben in ${origin}`);
+                expect(await checkmark(origin)).toEqual({ shown: true, listUnread: false });
+            }
+        },
+    },
+    {
         name: 'the resting rule: Remove verification in the other community\'s chat ends this chat\'s pause at its next check, with the notice',
         run: async (c, origin) => {
             await stand(c, origin);

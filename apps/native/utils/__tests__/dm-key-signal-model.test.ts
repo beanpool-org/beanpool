@@ -228,7 +228,7 @@ const ROWS: Row[] = [
         },
     },
     {
-        id: 'T7 first sight, one other key X (rule 3) or X then the listed key (rule 4), one key listed: pin the listed key, X as former, one notice, the send goes; VERIFIED: lines under a verified key pin it and only offer the listed one (§3.3 row 3), and a pin on a verified key is never judged',
+        id: 'T7 first sight, one other key X (rule 3) or X then the listed key (rule 4), one key listed: pin the listed key, X as former, one notice, the send goes; VERIFIED: lines under a verified key pin it and only offer the listed one (§3.3 row 3); a verified pin checked, or waiting on an offer, is never judged; an unchecked one with its own key listed keeps X as former and stays (#3316 F1)',
         run: (impl) => {
             for (const lines of [[X, X], [X, K2]]) {
                 const p: DmPeerPins = {};
@@ -248,11 +248,28 @@ const ROWS: Row[] = [
                 expect(send(impl, f, keys)).toBe('paused');
                 expect(shows(f, keys)).toEqual({ card: true, notices: 0, continueTo: K2 });
             }
-            // Verified: never judged again, checked or not (a prune and relist can't move it).
-            for (const v of [pinned(), { [D0]: { peer: K1, since: NOW, by: 'first-seen' } } as DmPeerPins]) {
+            // Verified and checked: never judged again (a prune and relist can't move it). Verified, unchecked, with an offer
+            // waiting (the listing named PUPPET; the judgement is handed it, as db.ts does): untouched, the member decides.
+            // Verified, unchecked, another key listed with nothing offered: untouched too. No judgement moves a verified pin.
+            const waiting = { [D0]: { peer: K1, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW } } } as DmPeerPins;
+            for (const v of [pinned(), waiting, { [D0]: { peer: K1, since: NOW, by: 'first-seen' } } as DmPeerPins]) {
                 const before = JSON.stringify(v);
                 expect(impl.applySightVerdict(v, D0, judgeFirstSight([PUPPET, PUPPET], PUPPET), PUPPET, undefined, LATER, listOf(marked(K1)))).toBe(false);
                 expect(JSON.stringify(v)).toBe(before);
+            }
+            expect(send(impl, waiting, marked(K1))).toBe('paused');
+            // Verified, unchecked, its own key listed and nothing offered (the sync's first-sight pin on a chat met in place,
+            // #3316 F1): judged. Lines under an older key X keep X as former and the pin doesn't move: one notice, every line
+            // reads, the send goes to K1, Verified ✓ stays. Not row 3's pause: the member checked K1.
+            for (const lines of [[X, X], [X, K1]]) {
+                const keys = marked(K1);
+                const u = { [D0]: { peer: K1, since: NOW, by: 'first-seen' } } as DmPeerPins;
+                expect(impl.applySightVerdict(u, D0, judgeFirstSight(lines, K1), K1, undefined, LATER, listOf(keys))).toBe(true);
+                expect(pinOf(u)).toEqual({ peer: K1, since: LATER, by: 'listing', checked: true, former: [X], changedAt: [LATER] });
+                expect(dmOpenPeers(pinOf(u))).toEqual([K1, X]);
+                expect(send(impl, u, keys)).toBe(K1);
+                expect(shows(u, keys)).toEqual({ card: false, notices: 1, continueTo: null });
+                expect(showsVerifiedMark(pinOf(u), listOf(keys))).toBe(true);
             }
         },
     },
@@ -509,6 +526,16 @@ const MUTANTS: Array<{ name: string; row: string; impl: Impl }> = [
     {
         name: 'first sight ignoring the list (S7c §4)', row: 'T7 first sight',
         impl: { ...REAL, applySightVerdict: (p, id, v: SightVerdict, l, h, now) => applySightVerdict(p, id, v, l, h, now, NOBODY) },
+    },
+    {
+        name: 'an unchecked pin on a verified key never judged (#3316 F1: its older key never kept, its lines never open)', row: 'T7 first sight',
+        impl: {
+            ...REAL,
+            applySightVerdict: (p, id, s: SightVerdict, l, h, now, v) => {
+                const pin = dmPinFor(p, id);
+                return pin && !pin.checked && showsVerifiedMark(pin, v) ? false : applySightVerdict(p, id, s, l, h, now, v);
+            },
+        },
     },
     {
         name: 'an unchecked pin left unjudged while the list can\'t be read (every pin "verified")', row: 'T17 the list can\'t be read',

@@ -374,7 +374,7 @@ const NATIVE_WORDS = path.resolve(__dirname, '../../words');
 const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8'));
 
 /** Written by members or communities, or never translated: shown as written in every language. */
-const AS_WRITTEN = ['BeanPool', 'Mullum Community', 'Sally', 'Kim', 'Ana', 'Mullum', 'mullum.beanpool.org', 'global.beanpool.org', 'Riverbend Open', 'open.riverbend.example', 'WIPE', 'Google', 'Apple', 'Facebook', ...WORDS, ...OUT_WORDS];
+const AS_WRITTEN = ['BeanPool', 'Riverside Commons', 'Sally', 'Kim', 'Ana', 'Mullum', 'mullum.beanpool.org', 'global.beanpool.org', 'Riverbend Open', 'open.riverbend.example', 'WIPE', 'Google', 'Apple', 'Facebook', ...WORDS, ...OUT_WORDS];
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -1186,16 +1186,18 @@ describe('which community the join screens name (N1): the greeting', () => {
         expect(host!.textContent).not.toContain('Join BeanPool');
     });
 
-    it('the check as soon as the invite is found (a link): "Ana invited you to Mullum", a read with nothing redeemed', async () => {
-        params.now = { invite: 'INV-ABCD-EFGH', server: 'https://mullum.beanpool.org', t: '1' };
+    it('the check as soon as the invite is found (a link): "Ana invited you to Riverside Commons", a read with nothing redeemed', async () => {
+        params.now = { invite: 'INV-ABCD-EFGH', server: 'https://riverside.example', t: '1' };
+        phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside Commons' };
         await mount('en');
-        await vi.waitFor(() => expect(titles()).toContain('Ana invited you to Mullum'), { timeout: 3000 });
+        await vi.waitFor(() => expect(titles()).toContain('Ana invited you to Riverside Commons'), { timeout: 3000 });
         expect(all('input').some((i) => i.getAttribute('aria-label') === 'Invite link or code')).toBe(false);
     });
 
     it('no answer from the check (offline): "You\'re invited", and Join is there as before', async () => {
-        params.now = { invite: 'INV-ABCD-EFGH', server: 'https://mullum.beanpool.org', t: '1' };
-        phone.invite = null;
+        params.now = { invite: 'INV-ABCD-EFGH', server: 'https://riverside.example', t: '1' };
+        // No answer from the check (checkInvite gives null offline).
+        (phone as { invite: unknown }).invite = null;
         await mount('en');
         await new Promise((r) => setTimeout(r, 700));
         await settle();
@@ -1206,23 +1208,23 @@ describe('which community the join screens name (N1): the greeting', () => {
     it('once the node has checked the code and named its community: named, even when it refused the code', async () => {
         await mount('en');
         await fill('en');
-        phone.invite = { valid: false, reason: 'used', communityName: 'Mullum Community' };
+        phone.invite = { valid: false, reason: 'used', communityName: 'Riverside Commons' };
         await press('Next →', 'en');
-        expect(titles()).toContain("You're invited to Mullum Community");
+        expect(titles()).toContain("You're invited to Riverside Commons");
     });
 
     it('a name read at one address is never claimed for another: the address changes, the greeting goes back to the plain one', async () => {
         await mount('en');
         await fill('en');
-        phone.invite = { valid: false, reason: 'used', communityName: 'Mullum Community' };
+        phone.invite = { valid: false, reason: 'used', communityName: 'Riverside Commons' };
         await press('Next →', 'en');
-        expect(titles()).toContain("You're invited to Mullum Community");
+        expect(titles()).toContain("You're invited to Riverside Commons");
         await type('Community name or address (e.g. riverside)', 'castlemaine', 'en');
         expect(titles()).toContain("You're invited");
-        expect(titles()).not.toContain("You're invited to Mullum Community");
+        expect(titles()).not.toContain("You're invited to Riverside Commons");
         // And back at the address it was read for, the name is true again.
         await type('Community name or address (e.g. riverside)', 'mullum', 'en');
-        expect(titles()).toContain("You're invited to Mullum Community");
+        expect(titles()).toContain("You're invited to Riverside Commons");
     });
 
     it('a node that names no community (an older one): the plain greeting stays', async () => {
@@ -1238,9 +1240,9 @@ describe('which community the join screens name (N1): the greeting', () => {
         await fill('xx');
         expect(titles()).toContain(pseudoLocalise("You're invited"));
         check('the name screen, before the check');
-        phone.invite = { valid: false, reason: 'used', communityName: 'Mullum Community' };
+        phone.invite = { valid: false, reason: 'used', communityName: 'Riverside Commons' };
         await press('Next →', 'xx');
-        expect(titles()).toContain(pseudoLocalise("You're invited to {community}").replace('{community}', 'Mullum Community'));
+        expect(titles()).toContain(pseudoLocalise("You're invited to {community}").replace('{community}', 'Riverside Commons'));
         check('the name screen, named');
     });
 

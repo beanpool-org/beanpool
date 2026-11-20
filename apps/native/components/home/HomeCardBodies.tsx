@@ -95,7 +95,7 @@ export function StepsBody({ lines, left, count, note, colors, onStep }: {
             {/* Its colours inline, where the contrast check reads them (s.* from homeStyles is a table it cannot follow). */}
             {!!count && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: 12, marginBottom: 6 }}>
-                    <ProgressRing done={done} of={lines.length} ink={colors.brand.primary} track={colors.surface.subtle} hole={colors.surface.card} />
+                    <ProgressRing done={done} of={lines.length} ink={colors.brand.primary} track={colors.border.strong} hole={colors.surface.card} />
                     <Text style={{ flex: 1, fontSize: 18, lineHeight: 24, fontWeight: '800', color: colors.text.heading }} testID="home-steps-count">{count}</Text>
                 </View>
             )}

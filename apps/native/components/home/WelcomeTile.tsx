@@ -184,7 +184,8 @@ export function ProgressRing({ done, of, ink, track, hole, size = 40, stroke = 6
 
 export const welcomeTileStyles = StyleSheet.create({
     tile: { marginHorizontal: HOME_GUTTER_DP, borderRadius: 22, overflow: 'hidden', paddingTop: 86, paddingHorizontal: 16, paddingBottom: 16, marginBottom: 10 },
-    wave: { position: 'absolute', width: '150%', height: 150, left: '-25%', bottom: -70, borderRadius: 999 },
+    // The top of a circle much wider than the tile: a gentle arc behind the buttons.
+    wave: { position: 'absolute', width: 720, height: 720, borderRadius: 360, left: -216, bottom: -640 },
     sun: { position: 'absolute', width: 128, height: 128, top: -50, right: -36, borderRadius: 64 },
     bean: { position: 'absolute', width: 78, height: 50, top: 22, right: 86, borderTopLeftRadius: 40, borderTopRightRadius: 26, borderBottomRightRadius: 34, borderBottomLeftRadius: 24, transform: [{ rotate: '-24deg' }] },
     ring: { position: 'absolute', width: 54, height: 54, top: 18, left: -20, borderRadius: 27, borderWidth: 10 },
@@ -205,8 +206,8 @@ export const welcomeTileStyles = StyleSheet.create({
     ghost: { borderWidth: 2 },
     buttonText: { fontSize: 16, fontWeight: '800', textAlign: 'center' },
     band: { marginHorizontal: HOME_GUTTER_DP, flexDirection: 'row', alignItems: 'center', borderRadius: 16, marginBottom: 10, overflow: 'hidden' },
-    bandOpen: { flex: 1, minHeight: TARGET, justifyContent: 'center', paddingLeft: 16, paddingRight: 8 },
-    bandText: { fontSize: 16, fontWeight: '800' },
+    bandOpen: { flex: 1, minHeight: TARGET, justifyContent: 'center', paddingLeft: 16, paddingRight: 8, paddingVertical: 8 },
+    bandText: { fontSize: 16, lineHeight: 21, fontWeight: '800' },
     bandX: { minWidth: TARGET, minHeight: TARGET, alignItems: 'center', justifyContent: 'center' },
     bandXText: { fontSize: 22, fontWeight: '700' },
 });

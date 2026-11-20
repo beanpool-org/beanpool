@@ -2377,6 +2377,7 @@ export default function WelcomeScreen() {
     function goBack() {
         setMode('home');
         setError(null);
+        setInviteNote(null);
     }
 
     // --- Onboarding Progress Stepper ---
@@ -4342,7 +4343,7 @@ export default function WelcomeScreen() {
                             onJoin={(line) => startKnockJoin({ url: line.url, invite: line.invite, name: line.name })}
                             onGotIt={(line) => { void forgetWaitLine(line); }}
                             onAskAnother={() => router.push('/find-community')}
-                            onJoinWithInvite={() => { setError(null); setCallsign(c => c || accountOnPhone.callsign || ''); setMode('create'); }}
+                            onJoinWithInvite={() => { setError(null); setInviteNote(null); setCallsign(c => c || accountOnPhone.callsign || ''); setMode('create'); }}
                             onRestore={() => setMode('member')}
                             styles={styles}
                             accent={colors.text.inverse}

@@ -1552,9 +1552,10 @@ export default function HomeScreen() {
     // is the truth: what is drawn is what a drop saves).
     const listCards = list.filter(c => c.type !== 'community');
     // The community's own welcome (DESIGN-onboarding-home-landing-fable.md §4.1 item 2, slice S7): under BeanPool's tile, or
-    // where the tile would stand (under Needs you and a pinned Find your community); not arrangeable, it leaves by its ×.
+    // where the tile would stand (under Needs you and a pinned Find your community); not arrangeable, it leaves by its ×. Drawn
+    // once this account's once-per-phone mark is read, as the tile is, so it never stands on top and then jumps under the tile.
     const communityWelcomeAt = shown?.dismissed?.[COMMUNITY_WELCOME_DISMISSED_KEY] ?? null;
-    const communityWelcome = answer ? (
+    const communityWelcome = answer && markRead ? (
         <CommunityWelcomeCard
             answer={answer}
             role={role}

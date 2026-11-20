@@ -25,7 +25,7 @@ const one = (type: string) => ({ id: type, type });
 
 describe('D0: the default list (§2.2)', () => {
     it("a newcomer's list is the seventeen, Welcome first, the Pulse after Coming up (DESIGN-pulse-home-fable.md §3.5, P0), Learn something local after Asked near you (DESIGN-local-knowledge-amend-fable.md §3.6, K7)", () => {
-        const sixteen = ['start', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky'];
+        const sixteen = ['start', 'safety', 'steps', 'market', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky'];
         expect(HOME_DEFAULT_LIST).toEqual(sixteen);
         // The same list on the worldwide community and on a local one: the card is there on both (§3.8).
         for (const p of ['local', 'global'] as const) expect(ids(defaultCards(p))).toEqual(sixteen);

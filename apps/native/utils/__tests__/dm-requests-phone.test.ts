@@ -78,7 +78,7 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 
 vi.mock('../../components/MemberAvatar', () => ({
-    MemberAvatar: ({ callsign }: any) => createElement('span', { 'data-testid': 'avatar' }, callsign),
+    MemberAvatar: ({ callsign, avatarUrl }: any) => createElement('span', { 'data-testid': 'avatar', 'data-avatar-url': avatarUrl ?? '' }, callsign),
 }));
 
 const blockMocks = vi.hoisted(() => ({
@@ -571,7 +571,7 @@ describe('MessageRequestsPane on phone', () => {
         const pane = (extra: Record<string, unknown> = {}) => render(createElement(MessageRequestsPane, {
             entries: [], count: 0, identity: { publicKey: 'me-pubkey' },
             onOpen: () => {}, onBack: () => {}, onAccepted: () => {}, onChanged: () => {},
-            inPlace: [{ place, entries: [away] }], ...extra,
+            inPlace: [{ place, entries: [away], count: 1 }], ...extra,
         }));
         const awayCard = () => within(screen.getByTestId(`message-requests-in-place-${RIVER}`));
 
@@ -618,8 +618,37 @@ describe('MessageRequestsPane on phone', () => {
         });
 
         it('a group with no requests left draws nothing', () => {
-            pane({ inPlace: [{ place, entries: [] }] });
+            pane({ inPlace: [{ place, entries: [], count: 0 }] });
             expect(screen.queryByTestId(`message-requests-in-place-${RIVER}`)).toBeNull();
+        });
+
+        // #3309 review F3: a group listing some of what waits there says how many more, as this community's cards do.
+        it.each([
+            ['all of them listed', 1, null],
+            ['more waiting than listed', 140, 'and 139 more'],
+            ['more than the cards drawn', 0, 'and 10 more'],
+        ] as const)('a group with %s says so under its cards', (_what, count, said) => {
+            const many = count === 0;
+            const entries = many ? Array.from({ length: 60 }, (_, i) => ({ ...away, id: `conv-away-${i}` })) : [away];
+            pane({ inPlace: [{ place, entries, count: many ? 60 : count }] });
+            expect(awayCard().getAllByTestId('request-card').length).toBe(many ? 50 : 1);
+            if (said) expect(awayCard().getByText(said)).toBeTruthy();
+            else expect(awayCard().queryByText(/^and \d+ more$/)).toBeNull();
+        });
+
+        // #3309 review F2: a card in place draws its person's photo from its own community, never the one in use, whatever
+        // filled it: a path is made whole on that community; a whole address stays as it is; this community's cards as before.
+        it.each([
+            ['a path on that community\'s server', `/api/avatar/cleo-pubkey?size=thumb&v=r1&k=face`, `${RIVER}/api/avatar/cleo-pubkey?size=thumb&v=r1&k=face`],
+            ['a whole address on that community', `${RIVER}/api/avatar/cleo-pubkey?size=thumb&v=r1&k=face`, `${RIVER}/api/avatar/cleo-pubkey?size=thumb&v=r1&k=face`],
+            ['none', null, ''],
+        ] as const)('its photo, given as %s, is that community\'s', (_what, given, drawn) => {
+            pane({ inPlace: [{ place, entries: [{ ...away, peerAvatar: given }], count: 1 }], entries: [{ ...entry, peerAvatar: '/api/avatar/bob-pubkey?size=thumb&v=r2' }], count: 1 });
+            expect(awayCard().getByTestId('avatar').getAttribute('data-avatar-url')).toBe(drawn);
+            if (drawn) expect(new URL(drawn).origin).toBe(RIVER);
+            // This community's card: its path as before, for MemberAvatar to put the community in use in front of.
+            const here = screen.getAllByTestId('avatar').find((a) => !screen.getByTestId(`message-requests-in-place-${RIVER}`).contains(a))!;
+            expect(here.getAttribute('data-avatar-url')).toBe('/api/avatar/bob-pubkey?size=thumb&v=r2');
         });
     });
 });

@@ -22,7 +22,7 @@
  * routing (that community's list and its report) is pinned in blocks-reach-community.test.ts; here blockUser is a stand-in
  * that records the community it was handed.
  */
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import Module from 'node:module';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -111,6 +111,7 @@ import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { sealDmLine } from '../e2e-crypto';
 import { messageRequestsStoreKey } from '../storage-keys';
 import { reportRequestAndBlock } from '../request-report';
+import { getBlockedUsers } from '../blocklist';
 
 const realLoad = (Module as any)._load;
 (Module as any)._load = function (request: string, ...rest: any[]) {
@@ -501,5 +502,143 @@ describe('the list read there in place: what it may write, and where it is kept'
         db.enterChatInPlace(A);
         await readThere();
         await db.leaveChatInPlace(A);
+    });
+});
+
+/**
+ * #3309 review: what the list read in place hands a card, and what it writes.
+ * - F1 (close the class): a request whose opener this phone's account blocked never comes back as a card, by any key the
+ *   person is known by in A's copy (the listing's people, the copy's pin for the chat), as Chat's list judges a DM.
+ * - F2 (close the class): every address a listing carries comes back whole on A, the card's community, never as a path the
+ *   community in use (B) would be asked for; one row per field, and a guard that reads the engine's listing for any field
+ *   named like an address.
+ * - F3: the count kept, less each listed request left out here.
+ * - The pins note (§3.4 amendment 5): A's pins are read first, and a pinned DM's people are [me, the pinned key].
+ */
+describe('the list read in place: blocked people, addresses, the count and the pins (#3309 review)', () => {
+    afterEach(async () => {
+        vi.mocked(getBlockedUsers).mockResolvedValue([]);
+        await db.leaveChatInPlace(A);
+    });
+
+    /** A's list, as its server answers it, changed by `change` first (a field a node of another build sends, a request more). */
+    async function withListing<T>(change: (requests: { count: number; conversations: any[] }) => void, run: () => Promise<T>): Promise<T> {
+        const page = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementation(async (url: string, init: any = {}) => {
+            const res: any = await page(url, init);
+            if (!new URL(url).pathname.startsWith('/api/messages/conversations/')) return res;
+            const body = await res.json();
+            change(body.requests);
+            return answer(200, body);
+        });
+        try {
+            return await run();
+        } finally {
+            fetchMock.mockImplementation(page);
+        }
+    }
+    const keptForA = () => JSON.parse(h.store.get(messageRequestsStoreKey(me.publicKey, A_FILE)) ?? 'null');
+    const peopleOf = (id: string) => (rowsOf(A_FILE)!.conversation_participants as any[]).filter((p) => p.conversation_id === id).map((p) => p.public_key).sort();
+
+    /**
+     * The person behind `peer`'s DM in A re-keyed since the phone left A: A now lists that chat as a request from their new
+     * key. A's copy pinned the chat to their old key, which the listing no longer names.
+     */
+    function rekeyedRequestOnTheDm(): { now: Person; listing: any } {
+        const now = person();
+        const listing = { id: dm.id, type: 'dm', name: null, participants: [now.publicKey, me.publicKey], createdBy: now.publicKey, createdAt: '2026-11-20T00:00:00.000Z', request: { from: now.publicKey, state: 'pending', at: tick() } };
+        return { now, listing };
+    }
+
+    // F1: each way the person can be known in A's copy, by the key the block list holds.
+    it.each([
+        ['the key A lists them under', () => [asker.publicKey], () => req.id],
+        ['the key A\'s copy pinned the chat to (they re-keyed since; the listing names only their new key)', () => [peer.publicKey], () => dm.id],
+    ] as const)('someone blocked, by %s: no card, nothing written, the count less it', async (_how, blockedKeys, chat) => {
+        expect(peopleOf(dm.id), 'A\'s copy holds the DM with peer, pinned there').toEqual([me.publicKey, peer.publicKey].sort());
+        const rekeyed = rekeyedRequestOnTheDm();
+        vi.mocked(getBlockedUsers).mockResolvedValue(blockedKeys());
+        const read = await withListing((r) => { r.conversations.push(rekeyed.listing); r.count += 1; }, () => db.requestsInPlace(me.publicKey, A));
+        const shown = read!.conversations.map((c: any) => c.id);
+        expect(shown).not.toContain(chat());
+        expect(shown).toHaveLength(1);
+        expect(read!.count).toBe(1);
+        // Kept for A's own file without them too, and nothing of theirs written into A's copy.
+        expect(keptForA().conversations.map((c: any) => c.id)).toEqual(shown);
+        if (chat() === req.id) expect((rowsOf(A_FILE)!.conversations as any[]).some((c) => c.id === req.id)).toBe(false);
+        expect(peopleOf(dm.id)).toEqual([me.publicKey, peer.publicKey].sort());
+    });
+
+    it('control: someone else blocked: both cards stay', async () => {
+        const rekeyed = rekeyedRequestOnTheDm();
+        vi.mocked(getBlockedUsers).mockResolvedValue([person().publicKey]);
+        const read = await withListing((r) => { r.conversations.push(rekeyed.listing); r.count += 1; }, () => db.requestsInPlace(me.publicKey, A));
+        expect(read!.conversations.map((c: any) => c.id).sort()).toEqual([req.id, dm.id].sort());
+        expect(read!.count).toBe(2);
+    });
+
+    // The pins note: a pinned DM's people are [me, the pinned key], never the listing's new key beside them.
+    it('a request on a DM A\'s copy pinned: its people stay [me, the pinned key]; the listing\'s new key is not written beside them', async () => {
+        const rekeyed = rekeyedRequestOnTheDm();
+        const read = await withListing((r) => { r.conversations.push(rekeyed.listing); r.count += 1; }, () => db.requestsInPlace(me.publicKey, A));
+        expect(read!.conversations.map((c: any) => c.id)).toContain(dm.id);
+        expect(peopleOf(dm.id)).toEqual([me.publicKey, peer.publicKey].sort());
+        expect(peopleOf(dm.id)).not.toContain(rekeyed.now.publicKey);
+        // A request on a chat A's copy never pinned: the listing's people, as before.
+        expect(peopleOf(req.id)).toEqual([me.publicKey, asker.publicKey].sort());
+    });
+
+    // F3: the node's count, less each listed one left out here.
+    it('the count: the node\'s, less each listed one left out here (blocked, or not a direct chat for the member)', async () => {
+        const group = { id: randomUUID(), type: 'group_thread', name: null, participants: [asker.publicKey, me.publicKey], createdBy: asker.publicKey, createdAt: '2026-11-20T00:00:00.000Z', request: { from: asker.publicKey, state: 'pending', at: tick() } };
+        const rekeyed = rekeyedRequestOnTheDm();
+        vi.mocked(getBlockedUsers).mockResolvedValue([rekeyed.now.publicKey]);
+        // A lists three of the 140 waiting there: one shown, one blocked, one a group.
+        const read = await withListing((r) => { r.conversations.push(rekeyed.listing, group); r.count = 140; }, () => db.requestsInPlace(me.publicKey, A));
+        expect(read!.conversations.map((c: any) => c.id)).toEqual([req.id]);
+        expect(read!.count).toBe(138);
+    });
+
+    // F2: one row per address field: what comes back is whole on A, never a path B would be asked for.
+    it.each(db.LISTED_ADDRESS_FIELDS.map((f) => [f] as const))('%s, a path on A\'s server, comes back whole on A, never on the community in use', async (field) => {
+        const where = `/api/avatar/${asker.publicKey}?size=thumb&v=r1&k=facekey`;
+        const read = await withListing((r) => { for (const c of r.conversations) c[field] = where; }, () => db.requestsInPlace(me.publicKey, A));
+        const got = read!.conversations[0][field];
+        expect(new URL(got).origin).toBe(A);
+        expect(new URL(got).origin).not.toBe(h.store.get(ANCHOR));
+        expect(got).toBe(`${A}${where}`);
+        // Kept for A's own file as A listed it: read there, with the phone set to A, the path is A's.
+        expect(keptForA().conversations[0][field]).toBe(where);
+    });
+
+    it('a whole address, or none, comes back as it was listed', async () => {
+        const whole = `${A}/uploads/listing-photo.jpg`;
+        const read = await withListing((r) => { for (const c of r.conversations) { c.peerAvatar = whole; c.postPhoto = null; } }, () => db.requestsInPlace(me.publicKey, A));
+        expect(read!.conversations[0].peerAvatar).toBe(whole);
+        expect(read!.conversations[0].postPhoto).toBeNull();
+    });
+
+    it('swept: with every address field a path, no value anywhere in what comes back is a path the community in use could be asked for', async () => {
+        const read = await withListing((r) => {
+            for (const c of r.conversations) for (const f of db.LISTED_ADDRESS_FIELDS) c[f] = `/uploads/${f}.jpg?k=secret`;
+        }, () => db.requestsInPlace(me.publicKey, A));
+        const paths: string[] = [];
+        const walk = (v: unknown, at: string) => {
+            if (typeof v === 'string' && v.startsWith('/')) paths.push(`${at}=${v}`);
+            else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, `${at}.${k}`);
+        };
+        walk(read, 'read');
+        expect(paths).toEqual([]);
+    });
+
+    it('guard: every field of the engine\'s conversation listing named like an address is made whole in place (LISTED_ADDRESS_FIELDS)', () => {
+        const source = fs.readFileSync(path.join(__dirname, '../../../../packages/beanpool-engine/src/messaging.ts'), 'utf8');
+        const block = source.slice(source.indexOf('export interface Conversation {'));
+        const body = block.slice(0, block.indexOf('\n}'));
+        const fields = [...body.matchAll(/^\s{4}(\w+)\??:/gm)].map((m) => m[1]);
+        expect(fields.length, 'the interface was read').toBeGreaterThan(10);
+        const addressLike = fields.filter((f) => /(avatar|photo|photos|url|picture|image|thumb|link)$/i.test(f));
+        expect(addressLike.length).toBeGreaterThanOrEqual(3);
+        for (const f of addressLike) expect(db.LISTED_ADDRESS_FIELDS, f).toContain(f);
     });
 });

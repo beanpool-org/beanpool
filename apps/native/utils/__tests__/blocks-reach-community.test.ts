@@ -1644,6 +1644,47 @@ describe('a block made on another community\'s request card, in place (slice S3)
         expect(await app.isUserBlocked(HARASSER)).toBe(true);
     });
 
+    // #3309 review F1: someone already on this phone's block list (blocked while the phone was set to NODE: until S7 a block
+    // reaches only the community the phone is set to) whose request waits at OTHER. Report and block on OTHER's card sends
+    // OTHER the block and the person's report all the same, or OTHER goes on listing the request and the card comes back.
+    // Each way the card blocks: with the reporter (no line to report), and without (the line's report went).
+    it.each([
+        ['with the person\'s report (no line left to report)', true],
+        ['with the line\'s report gone already (no reporter)', false],
+    ] as const)('blocked on this phone already, blocked again on that community\'s card %s: that community still hears it', async (_how, reporter) => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam')).toBe(true);
+        await app.blockSyncsEndedForTests();
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
+        expect([...listAt(OTHER, ana.publicKey)]).toEqual([]);
+        net.sent = [];
+
+        const again = reporter
+            ? await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam', undefined, OTHER)
+            : await app.blockUser(HARASSER, undefined, undefined, undefined, OTHER);
+        expect(again, 'not a new block on the phone').toBe(false);
+        await app.blockSyncsEndedForTests();
+
+        expect(blockChanges().filter((c) => c.at.startsWith(OTHER))).toContainEqual({ at: `${OTHER}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } });
+        expect([...listAt(OTHER, ana.publicKey)]).toEqual([HARASSER]);
+        expect(reportsAt()).toEqual(reporter ? [OTHER] : []);
+        // Nothing more to NODE, which holds it already.
+        expect(net.sent.filter((s) => s.url.startsWith(NODE))).toEqual([]);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+    });
+
+    it('control: blocked on this phone already, with no community named: nothing is sent again, as before', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam')).toBe(true);
+        await app.blockSyncsEndedForTests();
+        net.sent = [];
+        expect(await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam')).toBe(false);
+        await app.blockSyncsEndedForTests();
+        expect(net.sent).toEqual([]);
+    });
+
     it('control: with no community named, the report goes to the community the phone is set to, as before', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);

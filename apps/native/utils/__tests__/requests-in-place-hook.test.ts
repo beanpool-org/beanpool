@@ -41,6 +41,12 @@ describe('which places are read in place', () => {
         await readRequestsInPlace('me', [place(RIVER, 1), place(HILL, 2)], () => left-- > 0);
         expect(calls.log).toEqual([`read ${RIVER}`]);
     });
+
+    it('each group keeps its read\'s count, which may be more than it lists (#3309 review F3)', async () => {
+        calls.lists.set(RIVER, { count: 140, conversations: [{ id: 'r1' }] });
+        const read = await readRequestsInPlace('me', [place(RIVER, 140), place(HILL, 2)], () => true);
+        expect(read.map((g) => [g.place.url, g.count, g.entries.length])).toEqual([[RIVER, 140, 1], [HILL, 2, 2]]);
+    });
 });
 
 describe('useRequestsInPlace: held while the list shows, let go after', () => {

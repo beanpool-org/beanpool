@@ -9697,23 +9697,27 @@ export async function saveMessageRequests(myPubkey: string, file: string, reques
 /**
  * Accept, Ignore or Cancel request on the node. Its answer (200) is the request as the member now reads it, and it goes
  * into this phone's row before this returns (requestDecided): the chat opened next, as after Accept on a Requests card,
- * reads the decided request, and so does every reread of the row after it (PR #2540 review 4395706539).
+ * reads the decided request, and so does every reread of the row after it (PR #2540 review 4395706539). `quietSince`: let in
+ * once's quiet accept (slice S3b), from a list read when that many decisions had been taken here; refused
+ * (isAnsweredByMember) when the member answered the request since, or is answering it now.
  */
 export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel', community?: ChatCommunity, quietSince?: number): Promise<{ success: boolean; request?: any }> {
-    // The member's own answer is on its way from now (memberAnsweredSince); let in once's quiet accept (`quietSince`) is not.
-    const members = quietSince === undefined;
-    if (members) answeringRequest(conversationId, 1);
+    // A tap: the member's own answer is on its way from now, before any await (memberAnsweredSince). Let in once's quiet
+    // accept (`quietSince`) is not counted.
+    const tapped = quietSince === undefined;
+    if (tapped) answeringRequest(conversationId, 1);
     try {
         // In place, only a direct chat that community's copy holds (#3305 review F1).
         const here = await onlyDmInPlace(await chatCopyForRequest(community), conversationId);
         // Let in once (slice S3b): never over an answer of the member's taken since its list was read (`quietSince`
-        // decisions then), or on its way (#3319 review F2). Asked here, with no await before the POST.
-        if (!members && memberAnsweredSince(conversationId, here.file, quietSince)) throw new AnsweredByMemberError();
+        // decisions then), or on its way (#3319 review F2). Asked after every await on the way here, as the POST is made
+        // (only its signing comes between).
+        if (!tapped && memberAnsweredSince(conversationId, here.file, quietSince)) throw new AnsweredByMemberError();
         const answer = await _signedRequest('/api/messages/request', { conversationId, decision }, here.anchorUrl);
         await requestDecided(here, conversationId, answer?.request);
         return answer;
     } finally {
-        if (members) answeringRequest(conversationId, -1);
+        if (tapped) answeringRequest(conversationId, -1);
     }
 }
 

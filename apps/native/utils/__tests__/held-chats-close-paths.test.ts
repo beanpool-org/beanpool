@@ -485,6 +485,35 @@ describe('held chats: a second closer waits for a close under way (#3302 review 
     });
 });
 
+describe('a list asked while a round or a chat in place lets go of the copy (#3310 review, measured: red before the fix)', () => {
+    // As a round of B lets go of B's copy (utils/outside-chat-live.ts: enterChatInPlace ... leaveChatInPlace), its read-only
+    // handle with it, while Chat lists again (the round's OUTSIDE_CHATS_UPDATED, a return to Chat). Both of Chat's held lists.
+    const LISTS: Array<[string, () => Promise<string[] | null>]> = [
+        ['the direct chats (slice S1)', async () => (await db.getHeldConversations(h.me, B))?.map((c) => c.id) ?? null],
+        ['the across chats (slice S4)', async () => (await db.getHeldOutsideChats(h.me, B))?.map((c) => c.id) ?? null],
+    ];
+    it.each(LISTS)('%s: the list waits for the close, then reads B afresh: B\'s chats stay listed', async (_name, list) => {
+        const sql = new DatabaseSync(path.join(h.dir, B_FILE));
+        sql.prepare(`INSERT INTO outside_chats (id, me, peer_key, peer_home, peer_name, state, created_at, updated_at)
+                     VALUES ('across-1', ?, ?, 'faraway.example', 'Pia', 'open', 1, 1)`).run(h.me, PEER);
+        sql.close();
+        const before = await list();
+        expect(before?.length).toBeGreaterThan(0);
+        const gate = holdHeldClose(B_FILE);
+        db.enterChatInPlace(B);
+        const closing = db.leaveChatInPlace(B);
+        await gate.started;
+        const listing = list();
+        await ticks();
+        gate.release();
+        await closing;
+        expect(await listing).toEqual(before);
+        expect(h.log[0]).toBe(`held closed ${B_FILE}`);
+        expect(h.cutMidRead).toEqual([]);
+        await db.closeHeldCopies();
+    });
+});
+
 describe('held chats: Settings Forget goes through removeCommunityCaches (#3302 review F2)', () => {
     it('forgetCommunityCopy(B): its cursors, and its file with the WAL and its index, in expo-sqlite\'s own directory', async () => {
         await db.getHeldConversations(h.me, B);

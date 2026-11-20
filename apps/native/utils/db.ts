@@ -1948,6 +1948,20 @@ const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
 });
 
 /**
+ * One of Chat's held list reads (slices S1 and S4): a read answered null by a close of that file's read-only handle under
+ * way (a round of that community, or a chat open there in place, letting go of the copy as Chat lists it: outside-chat-live.ts,
+ * leaveChatInPlace) waits for that close, then asks once more on a handle of its own, as heldChatIsDm does; so the list never
+ * drops that community's chats for the moment a close runs (#3310 review, measured: held-chats-close-paths.test.ts). A pause,
+ * a move, the copy in use: null still, as the second ask finds them.
+ */
+async function heldListRead<T>(file: string, statement: HeldStatement, params: readonly unknown[]): Promise<T[] | null> {
+    const rows = await heldCopies.all<T>(file, statement, params);
+    if (rows) return rows;
+    await heldCopies.readsSettled(file);
+    return heldCopies.all<T>(file, statement, params);
+}
+
+/**
  * This account's across chats kept in `community`'s file, another community this phone holds (slice S4,
  * scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Where an across chat lives": same file, same rule, visible
  * always), read through a held, read-only handle, never through getDb() nor the address in use, each with its newest line
@@ -1957,10 +1971,10 @@ const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
 export async function getHeldOutsideChats(myPubkey: string, community: string): Promise<OutsideChat[] | null> {
     const file = getDatabaseFilenameForNode(community);
     try {
-        const rows = await heldCopies.all<any>(file, 'outsideChats', [myPubkey]);
+        const rows = await heldListRead<any>(file, 'outsideChats', [myPubkey]);
         if (!rows) return null;
         if (!rows.length) return [];
-        const changes = (await heldCopies.all<any>(file, 'outsideLastChanges', [myPubkey])) ?? [];
+        const changes = (await heldListRead<any>(file, 'outsideLastChanges', [myPubkey])) ?? [];
         return outsideChatsFromHeld(myPubkey, rows, changes);
     } catch (e) {
         console.warn(`[Held] Could not list the chats across held for ${file}`, e);
@@ -1988,7 +2002,7 @@ export async function getHeldConversations(myPubkey: string, community: string):
     if (!(await AsyncStorage.getItem(syncedCursorKeyOf(file)))) return null;
     let rows: any[] | null;
     try {
-        rows = await heldCopies.all<any>(file, 'conversations', [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+        rows = await heldListRead<any>(file, 'conversations', [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
     } catch (e) {
         console.warn(`[Held] Could not list the chats held for ${file}`, e);
         return null;

@@ -109,11 +109,13 @@ describe('the welcome for new members in Settings', () => {
         box.focus();
         fireEvent.change(box, { target: { value: 'Half-typed welcome' } });
         for (let tick = 0; tick < 3; tick++) view.rerender(<CommunityWelcomePanel activeNode={singleNode()} viewer={{ ...owner }} />);
-        await new Promise((r) => setTimeout(r, 0));
-        const after = screen.getByTestId('community-welcome-text') as HTMLTextAreaElement;
-        expect(after).toBe(box);
-        expect(after.value).toBe('Half-typed welcome');
+        // rerender flushes the effects, so a box the effect unmounted is gone by now: the same box, still focused.
+        expect(screen.getByTestId('community-welcome-text')).toBe(box);
         expect(document.activeElement).toBe(box);
+        // Then any read the re-render sent has its turn to answer, and must not have been sent at all.
+        await new Promise((r) => setTimeout(r, 0));
+        expect(screen.getByTestId('community-welcome-text')).toBe(box);
+        expect(box.value).toBe('Half-typed welcome');
         expect(sent.filter((s) => s.method === 'GET')).toHaveLength(1);
     });
 

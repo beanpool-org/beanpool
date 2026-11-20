@@ -723,9 +723,10 @@ describe('a community that has the account as no member yet (403 not_a_member, r
         vi.setSystemTime(new Date('2026-10-23T08:00:00Z'));
     });
 
-    // S7a (design §2.2): asked again in an hour, or at once at a join there (blocksAtJoin), not every 5-minute round: a
-    // saved community is not always one the account belongs to, and the phone now asks every one it holds.
-    it('holds no block back for a day: asked again within the hour, not every round, and then the block goes', async () => {
+    // The community in use is asked at every round, as before S7a (blocklist.ts askedEachRound; design §2.2: "today's
+    // every-round rule fits one community"): the hour's wait is for the other communities the phone holds (the S7a table's
+    // "held, not a member" column, and its "becoming a member again" table).
+    it('holds no block back for a day: once the account is a member there, the next sync sends it', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         net.refuse.set(NODE, { status: 403, code: 'not_a_member' });
@@ -734,15 +735,10 @@ describe('a community that has the account as no member yet (403 not_a_member, r
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect(await app.isUserBlocked(HARASSER)).toBe(true);
 
-        // She is let in some other way than an invite on this phone; the 5-minute tick asks nothing yet.
+        // She joins; the 5-minute tick.
         net.refuse.delete(NODE);
         vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
         net.sent = [];
-        await app.syncBlocks();
-        expect(blockChanges()).toEqual([]);
-
-        // The hour is up: the next round sends it.
-        vi.setSystemTime(new Date(Date.now() + 55 * 60 * 1000));
         await app.syncBlocks();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
@@ -765,10 +761,6 @@ describe('a community that has the account as no member yet (403 not_a_member, r
         net.sent = [];
         await app.blockUser(SPAMMER, ana.publicKey);
         await app.blockSyncsEndedForTests();
-        // Within the hour: nothing, not even at the tap (S7a).
-        expect(blockChanges()).toEqual([]);
-        vi.setSystemTime(new Date(Date.now() + 55 * 60 * 1000));
-        await app.syncBlocks();
         expect(blockChanges()).toEqual([
             { at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } },
             { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } },
@@ -794,10 +786,8 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
     /** A vote brings her back (decisions-engine.ts reinstate_member): the same key and account, with no list. */
     const reinstateAna = () => net.refuse.delete(NODE);
     const fiveMinutesOn = () => vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
-    /** The rest of the hour a "no member" answer is waited for (S7a, design §2.2). */
-    const restOfTheHour = () => vi.setSystemTime(new Date(Date.now() + 55 * 60 * 1000));
 
-    it('removed, then brought back by a vote: once the phone has heard she was removed, the first round after the hour\'s wait puts her blocks back', async () => {
+    it('removed, then brought back by a vote: once the phone has heard she was removed, the next sync puts her blocks back', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
@@ -813,10 +803,6 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
         fiveMinutesOn();
         net.sent = [];
         await app.syncBlocks();
-        // That sync was answered account_closed: asked again within the hour, not every round (S7a).
-        expect(blockChanges()).toEqual([]);
-        restOfTheHour();
-        await app.syncBlocks();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
         expect(await app.isUserBlocked(HARASSER)).toBe(true);
@@ -826,7 +812,7 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
         expect(blockChanges()).toEqual([]);
     });
 
-    it('removed, a block made meanwhile is refused (403 account_closed): nothing waits a day, and once she is back the first round after the hour puts every block back', async () => {
+    it('removed, a block made meanwhile is refused (403 account_closed): nothing waits a day, and once she is back the next sync puts every block back', async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
@@ -841,10 +827,6 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
         reinstateAna();
         fiveMinutesOn();
         net.sent = [];
-        await app.syncBlocks();
-        // Within the hour of the account_closed answer: nothing (S7a); then every block goes back.
-        expect(blockChanges()).toEqual([]);
-        restOfTheHour();
         await app.syncBlocks();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkeys: [HARASSER, SPAMMER] } }]);
         expect([...listAt(NODE, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
@@ -2075,6 +2057,129 @@ describe('a block reaches every community this phone holds (slice S7a)', () => {
             await app.syncBlocks();
             await app.blockSyncsEndedForTests();
             expect(heard(IN_USE, joined)).toEqual([]);
+        });
+    });
+
+    /**
+     * Fix round r2 (CI red: blocks-reach-community-e2e.test.ts :234 and :291; the deciding review's note on a vote back):
+     * every way the account becomes a member of a community again, with that community waiting after a "no member" answer
+     * or not, and the next sync there sends the whole list (design §2.2: "asked again in an hour or at a join"). Each way's
+     * own line: a join with an invite and an answered request to join (its yes is an invite: join-another-community.ts) go
+     * through db.ts redeemInvite → blocksAtJoin; the phone's check saying "member" (NodeStatusContext, at start, on each
+     * return, and for each account that comes on the phone) through blocksAtMember; a member let in or brought back with no
+     * word to the phone through the round at the community in use (askedEachRound), as on the real node.
+     */
+    describe('becoming a member again: the next sync sends the list, however the phone hears of it (or doesn\'t)', () => {
+        type Way = {
+            /** Where she becomes a member again. */
+            at: () => string;
+            /** What the phone does or hears as she does; nothing for a vote that tells the phone nothing. */
+            becomes: (app: App) => Promise<void>;
+            /** 'at once': the list goes with what the phone heard, before any round; 'the next round': at the next sync. */
+            goes: 'at once' | 'the next round';
+        };
+        const answerYes = async (app: App, url: string) => {
+            const { joinAnotherCommunity } = await import('../join-another-community');
+            const { redeemInvite } = await import('../db');
+            await joinAnotherCommunity({ targetUrl: url, code: 'INV-KNOCK-0001', identity: ana, returnUrl: IN_USE }, {
+                closeDB: async () => {},
+                initDB: async () => {},
+                redeemInvite,
+                addSavedNode: async () => {},
+                clearGuestNode: app.nodes.clearGuestNode,
+                requestSync: async () => {},
+            });
+        };
+        const WAYS: Record<string, Way> = {
+            'an invite join (db.ts redeemInvite)': {
+                at: () => IN_USE,
+                becomes: async () => { const { redeemInvite } = await import('../db'); await redeemInvite('INV-ABCD-1234', 'Ana', ana); },
+                goes: 'at once',
+            },
+            'a request to join answered yes, at a held community (join-another-community.ts → redeemInvite)': {
+                at: () => HELD,
+                becomes: (app) => answerYes(app, HELD),
+                goes: 'at once',
+            },
+            'a vote brings her back, and tells the phone nothing (decisions-engine.ts reinstate_member)': {
+                at: () => IN_USE,
+                becomes: async () => {},
+                goes: 'the next round',
+            },
+            'the phone\'s check says "member" (NodeStatusContext → blocksAtMember)': {
+                at: () => IN_USE,
+                becomes: async (app) => { await app.blocksAtMember(ana.publicKey, `${IN_USE}/`); },
+                goes: 'at once',
+            },
+            'her account switched back onto the phone, and its check says "member"': {
+                at: () => IN_USE,
+                becomes: async (app) => {
+                    await app.signOut(ana);
+                    await app.identity.importIdentity(ben);
+                    await app.signOut(ben);
+                    await app.identity.importIdentity(ana);
+                    // NodeStatusContext checks again for each account that comes on the phone ([recheck] effect).
+                    await app.blocksAtMember(ana.publicKey, IN_USE);
+                },
+                goes: 'at once',
+            },
+        };
+        const STATES: Record<string, (app: App, at: string) => Promise<void>> = {
+            // It answered a block "no member" (403 not_a_member) 5 minutes ago: the hour's wait holds it.
+            'waiting after a "no member" answer': async (app, at) => {
+                net.refuse.set(at, { status: 403, code: 'not_a_member' });
+                await app.blockUser(HARASSER);
+                await app.blockSyncsEndedForTests();
+                expect(heard(at, 0)).toEqual(['block H']);
+                expect(listOf(at, ana.publicKey)).toEqual([]);
+            },
+            // She was removed there (her list went with her) and the phone's check heard it; nothing refused since.
+            'not waiting': async (app, at) => {
+                await app.blockUser(HARASSER);
+                await app.blockSyncsEndedForTests();
+                listAt(at, ana.publicKey).clear();
+                net.refuse.set(at, { status: 403, code: 'account_closed' });
+                await app.communityKeepsNoBlocks(ana.publicKey, at);
+                await app.blockSyncsEndedForTests();
+            },
+        };
+        const CASES = Object.keys(WAYS).flatMap((w) => Object.keys(STATES).map((s) => [w, s] as const));
+
+        it.each(CASES)('%s; %s', async (way, state) => {
+            vi.setSystemTime(new Date('2026-11-21T08:00:00Z'));
+            const app = await phoneHolding(['in use', 'held and reachable']);
+            const { at, becomes, goes } = WAYS[way];
+            const community = at();
+            await STATES[state](app, community);
+            vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
+            // She is a member there again.
+            net.refuse.delete(community);
+            const from = net.sent.length;
+            await becomes(app);
+            await app.blockSyncsEndedForTests();
+            expect(heard(community, from), 'with what the phone heard').toEqual(goes === 'at once' ? ['block H'] : []);
+            const round = net.sent.length;
+            await app.followRekeyedBlocks();
+            await app.syncBlocks();
+            await app.blockSyncsEndedForTests();
+            expect(heard(community, round).filter((r) => r !== 'read'), 'at the next round').toEqual(goes === 'at once' ? [] : ['block H']);
+            expect(listOf(community, ana.publicKey)).toEqual(['H']);
+            // Only ever hers: no block or report went in Ben's name while he was on the phone, nor after.
+            expect(net.sent.slice(from).filter((s) => /\/api\/(blocks|reports)/.test(s.url) && s.signedBy !== ana.publicKey)).toEqual([]);
+            // And the round after sends nothing more.
+            const after = net.sent.length;
+            await app.syncBlocks();
+            await app.blockSyncsEndedForTests();
+            expect(heard(community, after)).toEqual([]);
+        });
+
+        it('the phone\'s check of its community calls blocksAtMember on "member", and checks again for each account that comes on the phone', async () => {
+            const { readFileSync } = await import('node:fs');
+            const { join } = await import('node:path');
+            const ctx = readFileSync(join(__dirname, '..', '..', 'app', 'NodeStatusContext.tsx'), 'utf8');
+            expect(ctx).toMatch(/if \(result === 'member'\) \{\s*void import\('\.\.\/utils\/blocklist'\)\s*\.then\(\(\{ blocksAtMember \}\) => blocksAtMember\(identity\.publicKey, url\)\)/);
+            expect(ctx).toMatch(/useEffect\(\(\) => \{ recheck\(\); \}, \[recheck\]\);/);
+            expect(ctx).toMatch(/const recheck = useCallback\([\s\S]*?\}, \[identity\?\.publicKey\]\);/);
         });
     });
 

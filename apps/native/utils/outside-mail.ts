@@ -313,8 +313,21 @@ export async function outsideQuiet(store: OutsideChatStore, me: string, key: str
  * shows is what my server holds. Throws OutsideMailError with my server's words when it refuses (a server from before S4
  * has no such route), and nothing is kept.
  */
+/**
+ * How long a quiet request may take when its caller gives no signal of its own (#3310 r3 review F1): React Native's fetch never
+ * gives up by itself, and Block, Report and the bell await this one, so a stalled connection would hold them forever. The same
+ * 20 s as a send (outside-chat-live.ts OUTSIDE_SEND_MS).
+ */
+export const QUIET_SEND_MS = 20_000;
+
 export async function setOutsideQuiet(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'store' | 'signal'>, key: string, quiet: boolean): Promise<void> {
-    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/quiet', { key, quiet }, ctx.identity as BeanPoolIdentity, ctx.signal));
+    const own = ctx.signal ? null : new AbortController();
+    const timer = own ? setTimeout(() => own.abort(), QUIET_SEND_MS) : undefined;
+    try {
+        await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/quiet', { key, quiet }, ctx.identity as BeanPoolIdentity, ctx.signal ?? own!.signal));
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
     await ctx.store.setMeta(quietMeta(ctx.identity.publicKey, key), quiet ? '1' : '0');
 }
 

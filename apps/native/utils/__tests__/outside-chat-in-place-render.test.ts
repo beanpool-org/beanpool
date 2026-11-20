@@ -319,6 +319,41 @@ describe('every action on an across chat tells A, the community that carries it,
     });
 });
 
+describe('a quiet request that never answers holds nothing up (#3310 r3 review F1)', () => {
+    it('Block in place: the quiet at A stalls, and still the chat is declined and the block reaches A', async () => {
+        const a = originOf(A);
+        const realSetTimeout = globalThis.setTimeout;
+        // The quiet's own deadline (QUIET_SEND_MS) runs out at once; every other timer as it is.
+        const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: (...x: any[]) => void, ms?: number, ...rest: any[]) =>
+            realSetTimeout(fn, ms === 20_000 ? 5 : ms, ...rest)) as typeof setTimeout);
+        const answer = (globalThis.fetch as any).getMockImplementation();
+        (globalThis.fetch as any).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = new URL(String(input));
+            if (url.origin === a && url.pathname === '/api/mail/quiet') {
+                net.asked.push({ origin: url.origin, method: init?.method ?? 'GET', path: url.pathname, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+                return new Promise((_resolve, reject) => {
+                    const signal = init?.signal;
+                    if (!signal) return; // no deadline: this stalls for good (the bug)
+                    signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+                });
+            }
+            return answer(input, init);
+        });
+        try {
+            await open(B);
+            await click(host.querySelector(`[aria-label="Block Pia"]`));
+            await press('Block');
+            await blockSyncsEndedForTests();
+            await settle(60);
+            expect(files.decided, 'the chat is declined in A\'s file').toEqual([{ community: a, state: 'declined' }]);
+            expect(net.asked.filter((r) => r.origin === a).map((r) => `${r.method} ${r.path}`)).toEqual(expect.arrayContaining(['POST /api/blocks', 'POST /api/mail/quiet']));
+            expect(files.meta.get(`${a} quiet:${ME.publicKey}:${peer}`), 'no quiet mark for a quiet that never went').toBeUndefined();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+});
+
 describe('the screen in place holds A, and its own rounds go to A (#3310 r3 F5, M14)', () => {
     it('opened in place: A is held before the chat\'s first read, its round asks A, and A is let go as the screen goes', async () => {
         mem.map.set('beanpool_anchor_url', B);

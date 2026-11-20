@@ -233,7 +233,7 @@ afterEach(async () => {
 async function open(setTo: string): Promise<void> {
     mem.map.set('beanpool_anchor_url', setTo);
     files.params = setTo === A ? { id: CHAT } : { id: CHAT, community: A };
-    await act(async () => { root.render(createElement(OutsideChatScreen)); });
+    await act(async () => { root.render(createElement(OutsideChatScreen) as any); });
     await settle();
     expect(host.textContent, 'the chat is drawn from A\'s file').toContain('Bikes at 3');
     net.asked = [];
@@ -323,7 +323,7 @@ describe('the screen in place holds A, and its own rounds go to A (#3310 r3 F5, 
     it('opened in place: A is held before the chat\'s first read, its round asks A, and A is let go as the screen goes', async () => {
         mem.map.set('beanpool_anchor_url', B);
         files.params = { id: CHAT, community: A };
-        await act(async () => { root.render(createElement(OutsideChatScreen)); });
+        await act(async () => { root.render(createElement(OutsideChatScreen) as any); });
         await settle();
         const a = originOf(A);
         const firstRead = files.events.indexOf(`read ${a}`);

@@ -1319,9 +1319,10 @@ describe('a block is of a person, from every screen that blocks or unblocks, at 
         'app/treasury-detail.tsx blockUser': 'block',
         'app/post/[id].tsx blockUser': 'block',
         'app/forum/[id].tsx blockUser': 'block',
-        'app/outside-chat/[id].tsx blockUser': 'block',
         'components/Bills.tsx blockUser': 'block',
         'utils/request-report.ts blockUser': 'block',
+        // An across chat's Block and Report (app/outside-chat/[id].tsx), told to the community that carries it too (#3310 r3 F1).
+        'utils/outside-chat-live.ts blockUser': 'block',
     };
 
     /** Each file and function that blocks or unblocks, read from the app's own code (screens, components, utils). */

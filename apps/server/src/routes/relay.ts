@@ -46,7 +46,7 @@ import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 import { StorageNearlyFullError } from '../engine/photo-upload-budget.js';
 import type { NodeOrigin } from '../engine/node-signature.js';
 import {
-    MAIL_FETCH_PAGE, confirmMail, forgetMailDevice, heldBlobFor, heldMailFor, isMailDevice, mailQuietKeys, noteMailDevice, receiveRelayItems, setMailQuiet,
+    MAIL_FETCH_PAGE, confirmMail, forgetMailDevice, heldBlobFor, heldMailFor, isMailDevice, mailQuietKeys, MailQuietLimitError, noteMailDevice, receiveRelayItems, setMailQuiet,
 } from '../engine/relay-mail.js';
 import { StandbyLedgerError } from '../config/node-role.js';
 import { OutboxError, outboxStatesFor, sendRelayItems } from '../engine/relay-outbox.js';
@@ -203,6 +203,11 @@ export function createRelayRoutes(): Router {
         try {
             ctx.body = { quiet: setMailQuiet(member, key, body.quiet) };
         } catch (e) {
+            if (e instanceof MailQuietLimitError) {
+                ctx.status = e.status;
+                ctx.body = { error: e.message, code: e.code };
+                return;
+            }
             if (!(e instanceof StandbyLedgerError)) throw e;
             ctx.status = e.status;
             ctx.body = { error: e.message, code: e.code };

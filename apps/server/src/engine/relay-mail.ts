@@ -432,10 +432,36 @@ export function mailQuiet(member: string, key: string, now = Date.now()): boolea
     }
 }
 
-/** `member` makes `key` quiet (`quiet` true) or not. The route checks the key (64 lower-case hex, not their own). */
+/**
+ * The most keys one member can keep quiet (#3310 review F3, "bound what the client authored"): the route takes any 64-hex key,
+ * so without a cap one member could grow `chat_mutes` without end and every mailbox page would carry the list. The same
+ * number as a member's blocks (engine/member-blocks.ts MEMBER_BLOCKS_MAX).
+ */
+export const MAIL_QUIET_MAX = 500;
+
+/** A new quiet key past {@link MAIL_QUIET_MAX}: refused (409 quiet_limit); nothing kept. */
+export class MailQuietLimitError extends Error {
+    readonly status = 409;
+    readonly code = 'quiet_limit';
+    constructor() {
+        super(`You can keep up to ${MAIL_QUIET_MAX} people quiet. Let someone ring again to keep another quiet.`);
+        this.name = 'MailQuietLimitError';
+    }
+}
+
+const quietRowsOf = (member: string): number =>
+    count('SELECT COUNT(*) AS n FROM chat_mutes WHERE member_pubkey = ? AND substr(conversation_id, 1, ?) = ?', member, QUIET_PREFIX.length, QUIET_PREFIX);
+
+/**
+ * `member` makes `key` quiet (`quiet` true) or not. The route checks the key (64 lower-case hex, not their own). A key already
+ * quiet, and making one ring again, always pass; a NEW quiet key past {@link MAIL_QUIET_MAX} throws {@link MailQuietLimitError}.
+ */
 export function setMailQuiet(member: string, key: string, quiet: boolean): boolean {
-    if (quiet) setChatMute(quietId(key), member, 'always');
-    else clearChatMute(quietId(key), member);
+    if (quiet) {
+        const already = !!db.prepare('SELECT 1 FROM chat_mutes WHERE conversation_id = ? AND member_pubkey = ?').get(quietId(key), member);
+        if (!already && quietRowsOf(member) >= MAIL_QUIET_MAX) throw new MailQuietLimitError();
+        setChatMute(quietId(key), member, 'always');
+    } else clearChatMute(quietId(key), member);
     return quiet;
 }
 
@@ -445,8 +471,8 @@ export function setMailQuiet(member: string, key: string, quiet: boolean): boole
  * chat muted, as this server holds it. Their own state alone.
  */
 export function mailQuietKeys(member: string): string[] {
-    const rows = db.prepare('SELECT conversation_id FROM chat_mutes WHERE member_pubkey = ? AND substr(conversation_id, 1, ?) = ? ORDER BY conversation_id')
-        .all(member, QUIET_PREFIX.length, QUIET_PREFIX) as Array<{ conversation_id: string }>;
+    const rows = db.prepare('SELECT conversation_id FROM chat_mutes WHERE member_pubkey = ? AND substr(conversation_id, 1, ?) = ? ORDER BY conversation_id LIMIT ?')
+        .all(member, QUIET_PREFIX.length, QUIET_PREFIX, MAIL_QUIET_MAX) as Array<{ conversation_id: string }>;
     return rows.map((r) => r.conversation_id.slice(QUIET_PREFIX.length)).filter((key) => /^[0-9a-f]{64}$/.test(key));
 }
 

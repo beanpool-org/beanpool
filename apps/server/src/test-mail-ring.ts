@@ -10,7 +10,8 @@
  *      alerts are on. A sender the member blocked: dropped, so never a ring. Several lines in one request: one ring.
  *   2  `mail` in GET /api/me/unread: the items held for the signer, per member, never another's; down once confirmed
  *   3  POST /api/mail/quiet: the signer's own; refused for a key that isn't one, their own key, a quiet that isn't true or
- *      false, and a key that is no member here; quiet, then not: the ring follows
+ *      false, and a key that is no member here; quiet, then not: the ring follows; at most MAIL_QUIET_MAX new quiet keys
+ *      (#3310 review F3), a key already quiet and ringing again always pass
  *   4  the mute goes with the member (#3310 review F2), one table: quiet, then {an admin re-key (engine/key-move.ts), a
  *      restore from 12 words (the same key on a new device)}: the other person's next line rings nothing, the key the
  *      member holds now reads quiet, and the mailbox's answer to that key's device lists the quiet key (`quiet`), so a new
@@ -216,6 +217,21 @@ async function main(): Promise<void> {
     assert(off.status === 200 && off.body?.quiet === false && !mail.mailQuiet(jo.key, kit.key), '3f. not quiet any more');
     await bring([await item(kit, jo.key)]);
     assert(rings(jo).length === 1, `3g. their next line rings (rings ${rings(jo).length})`);
+    // #3310 review F3: a member keeps at most MAIL_QUIET_MAX keys quiet; a key already quiet, and ringing again, always pass.
+    const fill = db.prepare("INSERT INTO chat_mutes (conversation_id, member_pubkey, muted_until) VALUES (?, ?, NULL)");
+    db.transaction(() => { for (let i = 0; i < mail.MAIL_QUIET_MAX; i++) fill.run(`quiet:${crypto.randomBytes(32).toString('hex')}`, jo.key); })();
+    const atCap = await asMember(jo, 'POST', '/api/mail/quiet', { key: kit.key, quiet: true });
+    assert(atCap.status === 409 && atCap.body?.code === 'quiet_limit' && !mail.mailQuiet(jo.key, kit.key), `3h. at the cap a new quiet key is refused (409 quiet_limit), nothing kept (got ${atCap.status})`);
+    const listedKey = mail.mailQuietKeys(jo.key)[0];
+    const again = await asMember(jo, 'POST', '/api/mail/quiet', { key: listedKey, quiet: true });
+    assert(again.status === 200 && again.body?.quiet === true, `3i. at the cap, quiet on a key already quiet still passes (got ${again.status})`);
+    const lift = await asMember(jo, 'POST', '/api/mail/quiet', { key: listedKey, quiet: false });
+    assert(lift.status === 200 && !mail.mailQuiet(jo.key, listedKey), `3j. at the cap, ringing again still passes (got ${lift.status})`);
+    const room = await asMember(jo, 'POST', '/api/mail/quiet', { key: kit.key, quiet: true });
+    assert(room.status === 200 && mail.mailQuiet(jo.key, kit.key) && mail.mailQuietKeys(jo.key).length === mail.MAIL_QUIET_MAX, `3k. one let go, one new fits; the mailbox lists at most the cap (got ${room.status}, ${mail.mailQuietKeys(jo.key).length})`);
+    fill.run(`quiet:${crypto.randomBytes(32).toString('hex')}`, jo.key); // one row past the cap, as an older node could hold
+    assert(mail.mailQuietKeys(jo.key).length === mail.MAIL_QUIET_MAX, `3l. the mailbox's list never passes the cap (got ${mail.mailQuietKeys(jo.key).length})`);
+    db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ? AND substr(conversation_id, 1, 6) = 'quiet:'").run(jo.key);
 
     // ── 4. The mute goes with the member ──────────────────────────────────────────────────
     console.log('\n4. The across mute after a re-key, and after a restore from 12 words');

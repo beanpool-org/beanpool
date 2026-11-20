@@ -157,7 +157,8 @@ test('when Android refuses the file, every page says what to do, with the app\'s
         assert.ok(note.includes(`<span data-apk="version">${r.version}</span>`), `${lang}: it names this release's version`);
         assert.match(note, /<a href="#words">/, `${lang}: it sends you to your 12 words first`);
         const words = lang === 'en' ? null : JSON.parse(fs.readFileSync(path.join(ROOT, 'apps/native/words', `${lang}.json`), 'utf8'));
-        for (const key of ['Already a Member? Restore Account', 'Recover with 12 Words']) {
+        // After a reinstall the phone has no account: its first screen is the front door (onboarding S1, 21 Nov 2026).
+        for (const key of ["I've used BeanPool before", 'Recover with 12 Words']) {
             const shown = html(words ? words[key] : key);
             assert.ok(note.includes(`<strong>${shown}</strong>`), `${lang}: it names the app's button "${shown}"`);
         }

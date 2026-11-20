@@ -361,6 +361,48 @@ describe('the welcome screen\'s wiring (app/welcome.tsx)', () => {
     });
 });
 
+// Review of #3317: the front door has no "Already a Member? Restore Account", "I'm New Here" or "Installed BeanPool on a
+// server? Claim it", and its invite button is "I have an invite". Every place outside the phone that tells a person what to
+// tap on a phone with no account names the front door's buttons, as the door draws them; one row per place.
+describe('every place that tells a new phone what to tap names the front door\'s buttons', () => {
+    const repo = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../../..', rel), 'utf-8');
+    const OLD = ['Already a Member? Restore Account', 'tap **Already a member**', "I'm New Here", 'I&apos;m New Here', 'Installed BeanPool on a server? Claim it'];
+
+    it('the front door draws the buttons these places name', () => {
+        for (const label of ["{t(\"I've used BeanPool before\")}", "{t('More ways in ›')}", "{t('Claim a server you installed')}", "{t('I have an invite')}"]) {
+            expect(doorSource, label).toContain(label);
+        }
+    });
+
+    it.each([
+        // [file, what it says (each once at least), how many times the first]
+        ['apps/pwa/src/components/BringToPhone.tsx', ["tap I've used BeanPool before, then Scan from a browser"], 1],
+        ['apps/pwa/src/lib/global-entry.ts', ["install the app, tap **I've used BeanPool before**"], 6],
+        ['packages/beanpool-core/src/recovery-kit-lines.ts', ["Tap “I've used BeanPool before”."], 1],
+        ['packages/beanpool-core/src/recovery-kit.ts', ["Tap “I've used BeanPool before”."], 1],
+        ['apps/manager/src/components/modules/BringBackMemberWizard.tsx', ['on the new phone → <strong>I&apos;ve used BeanPool before</strong> → <strong>An admin gave me a re-key code</strong>'], 1],
+        ['apps/manager/src/components/modules/RekeyMemberWizard.tsx', ['open BeanPool → <strong>I&apos;ve used BeanPool before</strong> → <strong>An admin gave me a re-key code</strong>'], 1],
+        ['apps/manager/src/components/auth/UnclaimedCard.tsx', ['tap <strong className="text-nature-100">More ways in ›</strong> on its first screen, then <strong className="text-nature-100">Claim a server you installed</strong>'], 1],
+        ['README.md', ['tap **More ways in ›** on its first screen, then **Claim a server you installed**'], 1],
+        ['apps/server/src/claim-command.ts', ['tap "More ways in ›" on its first screen, then'], 2],
+        ['apps/server/static/settings.js', ['tap "More ways in ›" on its first screen, then "Claim a server you installed"'], 1],
+        ['apps/website/start.html', ['tap <strong>More ways in ›</strong> on its first screen, then <strong>Claim a server you installed</strong>'], 1],
+        ['apps/website/android.html', ["tap <strong>I've used BeanPool before</strong>, then <strong>Recover with 12 Words</strong>"], 1],
+        ['apps/website/getting-started.html', ['Install the app, tap <strong>I have an invite</strong>'], 1],
+    ] as const)('%s', (file, says, times) => {
+        const text = repo(file);
+        for (const s of says) expect(text, `${file} says ${s}`).toContain(s);
+        expect(text.split(says[0]).length - 1, `${file}: "${says[0]}"`).toBe(times);
+        // Getting Started names the web app's own first button beside the phone's: "(in the web app, I'm New Here)" is right.
+        const web = file === 'apps/website/getting-started.html' ? ["I'm New Here"] : [];
+        for (const old of OLD.filter((o) => !web.includes(o))) expect(text, `${file} still names "${old}"`).not.toContain(old);
+        if (web.length) {
+            expect(text).toContain("(in the web app, <strong>I'm New Here</strong>)");
+            expect(text).not.toContain('Install the app, tap <strong>Join with an invite</strong>');
+        }
+    });
+});
+
 describe('text at 1.3×: the invite is above the fold in every language, on the smallest phone that draws it', () => {
     const picker = read('components/LanguagePicker.tsx');
     const style = (src: string, name: string) => {

@@ -18,8 +18,8 @@ describe('recoveryKitHtml', () => {
         expect(back).toBeGreaterThan(0);
         expect(phone).toBeGreaterThan(back);
         expect(web).toBeGreaterThan(phone);
-        expect(html.indexOf('Already a Member? Restore Account')).toBeGreaterThan(phone);
-        expect(html.indexOf('Already a Member? Restore Account')).toBeLessThan(web);
+        expect(html.indexOf('I&#39;ve used BeanPool before')).toBeGreaterThan(phone);
+        expect(html.indexOf('I&#39;ve used BeanPool before')).toBeLessThan(web);
         expect(html.indexOf('Restore Existing Identity')).toBeGreaterThan(web);
         expect(KIT_RESTORE_STEPS).toHaveLength(6);
         expect(KIT_WEB_RESTORE_STEPS[0]).toBe('Open your community’s address (written above) in a web browser.');

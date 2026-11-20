@@ -14,7 +14,7 @@ if (params.get('dark') === '1') {
 }
 
 const samplePhoneLater = [
-    'To use BeanPool on your phone later: install the app, tap **Already a member**, choose **Global community** and type your 12 words.',
+    'To use BeanPool on your phone later: install the app, tap **I\'ve used BeanPool before**, choose **Global community** and type your 12 words.',
     'If you joined with Google, **Recover with Social** works too.',
 ];
 

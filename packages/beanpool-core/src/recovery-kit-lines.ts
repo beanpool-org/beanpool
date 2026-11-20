@@ -51,7 +51,7 @@ const LINES = {
 /** On a phone, worded as the app's restore screens are (the same steps recovery-kit.ts holds in English). */
 const PHONE_STEPS = [
     word('Install BeanPool on your phone and open it.'),
-    word('Tap “🔑 Already a Member? Restore Account →”.'),
+    word("Tap “I've used BeanPool before”."),
     word('Tap “🔑 Recover with 12 Words”.'),
     word('Type your 12 words in order, one in each box.'),
     word('Type your community’s name or address (written above).'),

@@ -373,21 +373,21 @@ describe('the words screen says how to put the same account on a phone (W1)', ()
     const OURS = { ...GLOBAL_OPEN, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' };
     const ENROLLED = { enrolled: true, generation: 1, provider: 'google', enrolledSso: ['google'] };
 
-    it('at global.beanpool.org, the sign-in enrolled: Already a member, Global community, these words; and Recover with Social', async () => {
+    it('at global.beanpool.org, the sign-in enrolled: I\'ve used BeanPool before, Global community, these words; and Recover with Social', async () => {
         const lines = await toTheWordsAt(OURS, ENROLLED);
         expect(Array.from(lines.querySelectorAll('p')).map((p) => p.textContent)).toEqual([
-            'To use BeanPool on your phone later: install the app, tap Already a member, choose Global community and type these 12 words.',
+            'To use BeanPool on your phone later: install the app, tap I\'ve used BeanPool before, choose Global community and type these 12 words.',
             'If you joined with Google, Recover with Social works too.',
         ]);
         // The buttons a member taps, in bold, as the phone names them.
         expect(within(lines).getAllByText(/.+/, { selector: 'strong' }).map((b) => b.textContent))
-            .toEqual(['Already a member', 'Global community', 'Recover with Social']);
+            .toEqual(["I've used BeanPool before", 'Global community', 'Recover with Social']);
         expect(lines).not.toHaveTextContent(/I'm new/);
     });
 
     it('the sign-in not enrolled: the words line alone, never Recover with Social', async () => {
         const lines = await toTheWordsAt(OURS, { enrolled: false, error: 'The recovery keeper could not be stored.' });
-        expect(lines.textContent).toBe('To use BeanPool on your phone later: install the app, tap Already a member, choose Global community and type these 12 words.');
+        expect(lines.textContent).toBe('To use BeanPool on your phone later: install the app, tap I\'ve used BeanPool before, choose Global community and type these 12 words.');
         expect(lines).not.toHaveTextContent(/Recover with Social/);
     });
 
@@ -395,7 +395,7 @@ describe('the words screen says how to put the same account on a phone (W1)', ()
         const lines = await toTheWordsAt({ ...GLOBAL_OPEN, addresses: ['global.example.org'] }, null);
         // jsdom serves the page at http://localhost:3000: the address the phone is told to type is the one this page is
         // at, port and all (review 4302869884; lib/former-address.test.ts has https://mynode.example.org:8443).
-        expect(lines.textContent).toBe("To use BeanPool on your phone later: install the app, tap Already a member and type these 12 words and this community's address, localhost:3000.");
+        expect(lines.textContent).toBe("To use BeanPool on your phone later: install the app, tap I've used BeanPool before and type these 12 words and this community's address, localhost:3000.");
         expect(lines).not.toHaveTextContent(/Global community/);
     });
 });

@@ -907,6 +907,8 @@ export function newCopyGeneration(): void {
  * A write that follows still() goes through its copy's handle, which a clear or a switch closes, so nothing is written
  * after it changes either. Taken with no await, so nothing comes between it and the ask; after the copy the read writes
  * into is open, since opening a copy below this build's schema starts a generation of its own.
+ * Not in the class: refreshHeldDms (slice S2b) reads that list too, but writes, keeps and shows nothing of it; it only names
+ * the chats whose own polls then run, each after the account is read again (its loop), each poll its own read.
  */
 export interface OwnListRead {
     still(): Promise<{ identity: BeanPoolIdentity | null } | null>;

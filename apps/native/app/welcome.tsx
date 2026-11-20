@@ -2735,10 +2735,14 @@ export default function WelcomeScreen() {
                         {/* One recovery truth (rehearsal 14 Oct S5, recoveryTruth.test.ts): How it Works' Getting Back In card
                             said it until slice S5 took that screen off the join; a 12-words member already reads it in the note
                             above (WordsBackupNote), so it is said here for everyone else whose words are shown. */}
-                        <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }} testID="words-no-reset">
+                        <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
                             {t('💡 Write them down on paper and keep it somewhere safe.')}
-                            {!wordsMember && <>{' '}{t('Nobody can reset them: not us, not this community.')}</>}
                         </Text>
+                        {!wordsMember && (
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }} testID="words-no-reset">
+                                {t('Nobody can reset them: not us, not this community.')}
+                            </Text>
+                        )}
                         {/*
                           Says out loud that this screen is not the only chance. Without it,
                           removing the gate just leaves people guessing whether skipping

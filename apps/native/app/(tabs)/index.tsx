@@ -9,6 +9,7 @@ import {
     ARRANGE_WORDS, TIPS_ALL_SEEN, arrangeMovedLine, reorderIds, tipText, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, welcomeTileLines, WELCOME_TILE_WORDS, type TourProgress,
+    COMMUNITY_WELCOME_DISMISSED_KEY, communityWelcomeAgainLine, communityWelcomeCard, communityWelcomeWords,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
     starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout,
 } from '@beanpool/core';
@@ -53,13 +54,14 @@ import {
     AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import { WelcomeTile } from '../../components/home/WelcomeTile';
+import { CommunityWelcomeAgain, CommunityWelcomeCard } from '../../components/home/CommunityWelcomeCard';
 import { loadWelcomePart, markWelcomePart, welcomePartElsewhere, type WelcomePartMark } from '../../utils/welcome-part';
 import { LearnBody } from '../../components/home/LearnBody';
 import { ForumHomeBody } from '../../components/home/ForumHomeBody';
 import { ForumVisitorHomeBody } from '../../components/home/ForumVisitorHomeBody';
 import {
     HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
-    canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
+    canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissCommunityWelcome, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
     effectiveInterests, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst,
     welcomeFacts, welcomeShapeFor, welcomeUp, LEARN_OPENS, isArrivingCard, keepCard,
@@ -1341,20 +1343,15 @@ export default function HomeScreen() {
                 // from: the Ledger step is in whenever its tab shows (the showcase included).
                 if (!welcomeShape) return null;
                 const total = tourSteps('phone', { global: answer.profile === 'global', beans: !hiddenTabsFor(answer.features).includes('ledger') }).length;
+                // Whose invite brought them, or "You're the first one here.": the community's welcome card under it (slice S7).
                 const welcome = welcomeFacts(answer);
-                const inviter = welcome.inviter;
                 return (
                     <WelcomeTile
                         shape={welcomeShape}
                         place={welcome.place}
-                        // Until the community's own welcome carries it (slice S7): no newcomer loses "Say hello" between slices.
-                        inviter={inviter?.name ?? null}
-                        firstHere={welcome.firstHere}
                         lines={welcomeTileLines({ profile: String(answer.profile), beans: showsBeans })}
                         tourLabel={tourProgress && tourProgress.step > 0 ? startCardButton(tourProgress, total) : t(WELCOME_TILE_WORDS.tour)}
                         colors={colors}
-                        onSayHello={() => { if (inviter) void sayHello(inviter.key); }}
-                        onInvite={invitesForReader(answer.features, role) ? () => router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } }) : undefined}
                         onTour={() => {
                             const pk = identityRef.current?.publicKey;
                             if (pk) startTour(pk, resumeStep(tourProgress, total));
@@ -1478,6 +1475,7 @@ export default function HomeScreen() {
                     onArrange={tailor ? () => startArrange() : undefined}
                     arrangeRef={arrangeLink}
                     onLearn={() => router.push('/learn')}
+                    welcomeAgain={welcomeAgain}
                 />,
             );
             case 'tools': {
@@ -1536,6 +1534,7 @@ export default function HomeScreen() {
             testID={`home-slot-${c.id}`}
         >
             {card(c)}
+            {c.id === communityWelcomeAfter && communityWelcome}
             {hint && tailor && c.id === firstDrawn?.id && (
                 <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
                     <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.hint)}</Text>
@@ -1552,6 +1551,32 @@ export default function HomeScreen() {
     // The list as drawn: in the member's order, or, while a card is carried, with it at the place it would land (the preview
     // is the truth: what is drawn is what a drop saves).
     const listCards = list.filter(c => c.type !== 'community');
+    // The community's own welcome (DESIGN-onboarding-home-landing-fable.md §4.1 item 2, slice S7): under BeanPool's tile, or
+    // where the tile would stand (under Needs you and a pinned Find your community); not arrangeable, it leaves by its ×.
+    const communityWelcomeAt = shown?.dismissed?.[COMMUNITY_WELCOME_DISMISSED_KEY] ?? null;
+    const communityWelcome = answer ? (
+        <CommunityWelcomeCard
+            answer={answer}
+            role={role}
+            dismissedAt={communityWelcomeAt}
+            now={now}
+            nodeUrl={url}
+            identity={identity}
+            colors={colors}
+            quiet={arrangeOn}
+            onPutAway={() => changeLayout(dismissCommunityWelcome(layoutRef.current, Date.now()))}
+            onSayHello={key => { void sayHello(key); }}
+            onInvite={invitesForReader(answer.features, role) ? () => router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } }) : undefined}
+        />
+    ) : null;
+    const communityWelcomeAfter = listCards.find(c => c.type === 'start')?.id
+        ?? listCards.find(c => c.type === 'find' && pins.includes('find'))?.id
+        ?? listCards.find(c => c.type === 'needs')?.id
+        ?? null;
+    // "Riverside's welcome ›" on the community card: the owners' words again whenever the welcome card is not drawn (§4.2).
+    const welcomeAgainWords = answer && !communityWelcomeCard(answer, { dismissedAt: communityWelcomeAt, now }) ? communityWelcomeWords(answer) : null;
+    const welcomeAgainLine = welcomeAgainWords && answer ? communityWelcomeAgainLine(answer) : null;
+    const welcomeAgain = welcomeAgainWords && welcomeAgainLine ? <CommunityWelcomeAgain line={welcomeAgainLine} words={welcomeAgainWords} colors={colors} /> : null;
     const drawnCards = drag.lifted ? reorderIds(listCards, dragMovableIds, drag.lifted.id, drag.lifted.to) : listCards;
     const ghostCard = drag.ghost && answer ? list.find(c => c.id === drag.ghost) ?? null : null;
 
@@ -1658,6 +1683,7 @@ export default function HomeScreen() {
                         {/* The community card is always last (`FIXED_LAST`), so Home is these cards and then it. Each stays in its own slot of this
                             list in both states: React must not rebuild a card that Arrange only quiets (the bodies of tool cards and of Find your
                             community hold what they have read), so the community card is not moved to another parent when Arrange opens. */}
+                        {communityWelcomeAfter === null && communityWelcome}
                         {drawnCards.map(listed)}
                         {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
                         {arrangeOn && (

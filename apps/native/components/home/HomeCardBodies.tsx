@@ -761,7 +761,7 @@ function LearnFigure({ n, colors, onLearn }: { n: unknown; colors: AppColors; on
  * The community's card, last on Home, with the frame's two ways in (CARD-FRAME §1.1): "Add a card ›" and "Arrange ›",
  * each its own 48 dp target in a row that wraps (at 320 dp with text at 1.3× they stand on two rows, right-aligned).
  */
-export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onArrange, arrangeRef, onLearn }: {
+export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onArrange, arrangeRef, onLearn, welcomeAgain }: {
     card: HomeCards['community'] | undefined;
     profile: string;
     invitesOn: boolean;
@@ -775,6 +775,11 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
     arrangeRef?: React.RefObject<View | null>;
     /** Opens Learn, from the "{n} things worth knowing" figure (slice K7). */
     onLearn?: () => void;
+    /**
+     * "Riverside's welcome ›" (DESIGN-onboarding-home-landing-fable.md §4.2 "Day 30", slice S7): the owners' words again once
+     * the community's welcome card has gone (CommunityWelcomeCard.tsx CommunityWelcomeAgain); absent where there are none.
+     */
+    welcomeAgain?: React.ReactNode;
 }) {
     const shapeSummary = communityShapeSummary(features);
     const isFirstMember = profile !== 'global' && (card?.members ?? 0) <= 1;
@@ -816,6 +821,7 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
                 <HomeRow colors={colors} text={row1Text} a11y={row1Text} lines={2} testID="home-community-row-members" />
                 {row2Text && <HomeRow colors={colors} text={row2Text} a11y={row2Text} lines={2} testID="home-community-row-trades" />}
                 {row3Text && <HomeRow colors={colors} text={row3Text} a11y={row3Text} lines={2} testID="home-community-row-listings" />}
+                {welcomeAgain}
                 <LearnFigure n={card.knowledge} colors={colors} onLearn={onLearn} />
                 {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
                 {(onAdd || onArrange) && (
@@ -831,6 +837,7 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
     return (
         <>
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
+            {welcomeAgain}
             <LearnFigure n={card?.knowledge} colors={colors} onLearn={onLearn} />
             {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
             {(onAdd || onArrange) && (

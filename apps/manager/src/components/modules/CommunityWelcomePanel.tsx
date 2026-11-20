@@ -7,9 +7,14 @@
  * The read is GET and the change POST /api/local/admin/community-welcome; the change is an owner's, so anyone else reads it
  * with the box closed. The phone draws it on Home in a later slice (S7). Operators' Settings is English for launch
  * (lib/fresh-proof); the sentences go through t() so a catalog can come later.
+ *
+ * The count and the Save button read core's own cleaning (cleanedWelcomeText, cleanCommunityWelcome), so they always agree; when
+ * Save won't take the text, the reason is said beside the count in core's words, the sentence the server would refuse it with.
  */
 import React, { useEffect, useState } from 'react';
-import { cleanCommunityWelcome, welcomeLineBreaks, COMMUNITY_WELCOME_MAX_CHARS, COMMUNITY_WELCOME_MAX_LINE_BREAKS } from '@beanpool/core';
+import {
+    cleanCommunityWelcome, cleanedWelcomeText, welcomeLineBreaks, COMMUNITY_WELCOME_MAX_CHARS, COMMUNITY_WELCOME_MAX_LINE_BREAKS, COMMUNITY_WELCOME_WORDS,
+} from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import { buildAdminHeaders, resolveNodeApiUrl } from '../../lib/node-client';
@@ -36,12 +41,16 @@ export function CommunityWelcomePanel({ activeNode, viewer = { kind: 'token' } }
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<Message | null>(null);
 
+    // The node as values, not the object: single-node Settings makes a new activeNode on every App render (the 5-second
+    // diagnostics poll among them), and keyed on the object this would read again each time and put the saved words back over
+    // what the owner is typing (#3313 review; NodeIdentityPanel and EverydayRuleRows key the same way).
+    const credential = nodeCredential(activeNode);
     useEffect(() => {
         let mounted = true;
         setLoad('loading');
         (async () => {
             try {
-                const res = await fetch(resolveNodeApiUrl(activeNode.url, ROUTE), { headers: buildAdminHeaders(nodeCredential(activeNode)), cache: 'no-store' });
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, ROUTE), { headers: buildAdminHeaders(credential), cache: 'no-store' });
                 const read = res.ok ? readWelcome(await res.json().catch(() => null)) : ({ ok: false } as const);
                 if (!mounted) return;
                 if (read.ok) { setSaved(read.welcome); setText(read.welcome ?? ''); setLoad('loaded'); } else setLoad('failed');
@@ -50,11 +59,15 @@ export function CommunityWelcomePanel({ activeNode, viewer = { kind: 'token' } }
             }
         })();
         return () => { mounted = false; };
-    }, [activeNode]);
+    }, [activeNode.id, activeNode.url, credential]);
 
     const check = cleanCommunityWelcome(text);
     const changed = check.ok && check.text !== (saved ?? '');
-    const lines = text.trim() ? welcomeLineBreaks(text.trim()) + 1 : 0;
+    // Counted on the text as core keeps it: a pasted line separator or a Windows line end counts as the line break it becomes.
+    const cleaned = cleanedWelcomeText(text);
+    const chars = cleaned.length;
+    const lines = cleaned ? welcomeLineBreaks(cleaned) + 1 : 0;
+    const over = chars > COMMUNITY_WELCOME_MAX_CHARS || lines > MAX_LINES;
 
     const save = async () => {
         setSaving(true);
@@ -111,9 +124,14 @@ export function CommunityWelcomePanel({ activeNode, viewer = { kind: 'token' } }
                             placeholder={t('e.g. Welcome! Market day is Saturday at the hall.')}
                             className="w-full bg-nature-950 border border-nature-700 text-white rounded-xl px-3 py-2 text-sm leading-relaxed resize-y focus:outline-none focus:border-terra-500 disabled:opacity-50"
                         />
-                        <p data-testid="community-welcome-count" className={`text-[11px] m-0 leading-normal ${lines > MAX_LINES ? 'text-bp-ink-warning' : 'text-nature-400'}`}>
-                            {t('{n} of {max} characters, {lines} of {maxLines} lines', { n: text.length, max: COMMUNITY_WELCOME_MAX_CHARS, lines, maxLines: MAX_LINES })}
+                        <p data-testid="community-welcome-count" className={`text-[11px] m-0 leading-normal ${over ? 'text-bp-ink-warning' : 'text-nature-400'}`}>
+                            {t('{n} of {max} characters, {lines} of {maxLines} lines', { n: chars, max: COMMUNITY_WELCOME_MAX_CHARS, lines, maxLines: MAX_LINES })}
                         </p>
+                        {!check.ok && (
+                            <p data-testid="community-welcome-problem" role="status" className="text-xs text-bp-ink-warning m-0 leading-normal break-words">
+                                {t(COMMUNITY_WELCOME_WORDS[check.problem])}
+                            </p>
+                        )}
                         {!isOwner && (
                             <p data-testid="community-welcome-owner-only" className="text-xs text-nature-400 m-0 leading-normal">
                                 {t('Only an owner can change the welcome.')}

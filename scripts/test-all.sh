@@ -398,6 +398,13 @@ run_check "deploy_health" bash scripts/test-deploy-health.sh
 # a node's data/ and .env out of a build node's Docker build. Pure shell; nothing is contacted.
 run_check "deploy_package" bash scripts/test-deploy-package.sh
 
+# The read-only check a director runs before a deploy (scripts/deploy/schema-drift.mjs, docs/schema-drift-check.md): the
+# tables a node already holds in a shape schema.sql's CREATE TABLE IF NOT EXISTS won't change (16 Nov 2026: a CHECK edited
+# in place reached fresh installs and no kept node's table, #3233, #3244). Fixture databases in a temp dir, the packed
+# copy through `node -`, this checkout's schema.sql and manifest, and one traced boot of its db.ts through tsx on a kept
+# 1.4.0 file in a temp dir. Nothing is contacted; a few seconds.
+run_check "schema_drift" node --test scripts/deploy/schema-drift.test.mjs
+
 # The report below has to NAME what failed. On PR #1065 it did not: the Failure Details block prints the
 # last 150 lines of the failing task, and a Testing Library failure buries the `FAIL <file> > <test>` line
 # under its own DOM dump, so a run that failed 1 of 723 tests never said which one and was re-run as a

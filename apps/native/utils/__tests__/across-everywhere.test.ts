@@ -126,6 +126,8 @@ const mail = vi.hoisted(() => ({
     /** What each server was told of the across mute (POST /api/mail/quiet), and whether it refuses one. */
     quiet: [] as Array<{ origin: string; key: string; quiet: boolean }>,
     refuseQuiet: false,
+    /** What each server holds of it, by `origin member`: the keys its mailbox answer lists as `quiet`. */
+    held_quiet: new Map<string, Set<string>>(),
 }));
 vi.mock('../node-post', async (orig) => {
     const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
@@ -139,14 +141,17 @@ vi.mock('../node-post', async (orig) => {
     };
     return {
         ...(await orig<any>()),
-        signedGet: vi.fn(async (url: string, p: string) => {
+        signedGet: vi.fn(async (url: string, p: string, who?: { publicKey: string }) => {
             const origin = new URL(url).origin;
             mail.asked.push({ origin, method: 'GET', path: p.split('?')[0] });
             await waitIfHeld('GET', p.split('?')[0]);
-            if (p.startsWith('/api/mail?')) return answer(200, { items: mail.held.get(origin) ?? [], more: false, outbox: [], outboxMore: false });
+            if (p.startsWith('/api/mail?')) {
+                const quiet = [...(mail.held_quiet.get(`${origin} ${who?.publicKey}`) ?? [])];
+                return answer(200, { items: mail.held.get(origin) ?? [], more: false, outbox: [], outboxMore: false, quiet });
+            }
             return answer(404, { error: 'not here' });
         }),
-        signedPost: vi.fn(async (url: string, p: string, body: any) => {
+        signedPost: vi.fn(async (url: string, p: string, body: any, who?: { publicKey: string }) => {
             const origin = new URL(url).origin;
             mail.asked.push({ origin, method: 'POST', path: p });
             await waitIfHeld('POST', p);
@@ -158,6 +163,9 @@ vi.mock('../node-post', async (orig) => {
             if (p === '/api/mail/quiet') {
                 if (mail.refuseQuiet) return answer(404, { error: 'Not found' });
                 mail.quiet.push({ origin, key: body.key, quiet: body.quiet });
+                const kept = mail.held_quiet.get(`${origin} ${who?.publicKey}`) ?? new Set<string>();
+                if (body.quiet) kept.add(body.key); else kept.delete(body.key);
+                mail.held_quiet.set(`${origin} ${who?.publicKey}`, kept);
                 return answer(200, { quiet: body.quiet });
             }
             return answer(404, { error: 'not here' });
@@ -260,6 +268,7 @@ async function phone(setTo: string): Promise<void> {
     peer = person();
     h.me = { publicKey: me.publicKey, privateKey: me.privateKey };
     mail.held = new Map();
+    mail.held_quiet = new Map();
     mail.asked = [];
     mail.hold = null;
     chatId = relayConversationId(me.publicKey, peer.publicKey);
@@ -513,17 +522,85 @@ describe('the across mute: told to the carrying community\'s server, kept in its
         const ctx = (await outsideContext(A))!;
         await setOutsideQuiet(ctx, peer.publicKey, true);
         expect(mail.quiet).toEqual([{ origin: A, key: peer.publicKey, quiet: true }]);
-        expect(await outsideQuiet(ctx.store, peer.publicKey)).toBe(true);
+        expect(await outsideQuiet(ctx.store, me.publicKey, peer.publicKey)).toBe(true);
         // A server that refuses (one from before S4 has no such route): nothing kept, the chat still says quiet.
         mail.refuseQuiet = true;
         await expect(setOutsideQuiet(ctx, peer.publicKey, false)).rejects.toThrow();
-        expect(await outsideQuiet(ctx.store, peer.publicKey)).toBe(true);
+        expect(await outsideQuiet(ctx.store, me.publicKey, peer.publicKey)).toBe(true);
         mail.refuseQuiet = false;
         await setOutsideQuiet(ctx, peer.publicKey, false);
-        expect(await outsideQuiet(ctx.store, peer.publicKey)).toBe(false);
+        expect(await outsideQuiet(ctx.store, me.publicKey, peer.publicKey)).toBe(false);
         if (setTo !== A) await db.leaveChatInPlace(A);
         expect(acrossRowsOf(B_FILE), 'B\'s file').toEqual(bBefore);
         expect(mail.asked.every((r) => r.origin === A)).toBe(true);
+    });
+});
+
+/** A new phone holding `who`'s account, set to A, with nothing of it kept yet: a re-key's new phone, or one restored from 12 words. */
+async function newPhoneFor(who: Person): Promise<void> {
+    await db.closeDB();
+    db._resetChatsInPlaceForTests();
+    h.dir = path.join(root, `phone-${++phoneN}`);
+    fs.mkdirSync(h.dir);
+    h.store.clear();
+    h.store.set(CACHE_NAMES_DONE_KEY, '1');
+    h.store.set(SAVED_NODES_STORE_KEY, JSON.stringify([A, B].map((url) => ({ url, lastConnected: '2026-11-20T00:00:00.000Z' }))));
+    h.store.set(ANCHOR, A);
+    me = who;
+    h.me = { publicKey: who.publicKey, privateKey: who.privateKey };
+    await db.initDB();
+    mail.asked = [];
+}
+
+describe('the across mute goes with the account (#3310 review F2): a re-key, a restore from 12 words, another account on the phone', () => {
+    // My server carries the mute to the key I hold after a re-key (server: engine/relay-mail.ts quietId, test-mail-ring
+    // section 4: the other person's line rings nothing); the phone shows it after its first round.
+    const AFTER: Array<[string, (old: Person) => Person]> = [
+        ['an admin re-key: a new phone with the new key', (old) => {
+            const moved = person();
+            for (const origin of [A, B]) {
+                const kept = mail.held_quiet.get(`${origin} ${old.publicKey}`);
+                if (kept) { mail.held_quiet.set(`${origin} ${moved.publicKey}`, kept); mail.held_quiet.delete(`${origin} ${old.publicKey}`); }
+            }
+            return moved;
+        }],
+        ['a restore from 12 words: a new phone with the same key', (old) => old],
+    ];
+    it.each(AFTER)('muted, then %s: the chat shows muted after its first round; another account there is not muted', async (_name, after) => {
+        await phone(B);
+        db.enterChatInPlace(A);
+        await setOutsideQuiet((await outsideContext(A))!, peer.publicKey, true);
+        await db.leaveChatInPlace(A);
+        const theirs = peer.publicKey;
+        const now = after(me);
+        await newPhoneFor(now);
+        const store = db.outsideStore(A);
+        expect(await outsideQuiet(store, now.publicKey, theirs), 'nothing kept on the new phone yet').toBe(false);
+        expect(await syncOutsideMailNow(30_000)).not.toBeNull();
+        expect(await outsideQuiet(store, now.publicKey, theirs), 'muted, as my server holds it').toBe(true);
+        expect(await outsideQuiet(store, person().publicKey, theirs), 'another account on this phone').toBe(false);
+    });
+
+    it('another account on the same phone is never muted by mine', async () => {
+        await phone(A);
+        const ctx = (await outsideContext(A))!;
+        await setOutsideQuiet(ctx, peer.publicKey, true);
+        expect(await outsideQuiet(ctx.store, me.publicKey, peer.publicKey)).toBe(true);
+        const other = person();
+        expect(await outsideQuiet(ctx.store, other.publicKey, peer.publicKey)).toBe(false);
+        // Nothing kept under the other person's key alone, which any account here would read.
+        expect(await ctx.store.getMeta(`quiet:${peer.publicKey}`)).toBeNull();
+    });
+
+    it('my own Unmute here stands against a page asked before my server was told', async () => {
+        await phone(A);
+        const ctx = (await outsideContext(A))!;
+        await setOutsideQuiet(ctx, peer.publicKey, true);
+        await setOutsideQuiet(ctx, peer.publicKey, false);
+        // A page from before the Unmute landed still lists the key.
+        mail.held_quiet.set(`${A} ${me.publicKey}`, new Set([peer.publicKey]));
+        await syncOutsideMailNow(30_000);
+        expect(await outsideQuiet(ctx.store, me.publicKey, peer.publicKey)).toBe(false);
     });
 });
 

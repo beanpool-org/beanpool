@@ -11,6 +11,10 @@
  *   2  `mail` in GET /api/me/unread: the items held for the signer, per member, never another's; down once confirmed
  *   3  POST /api/mail/quiet: the signer's own; refused for a key that isn't one, their own key, a quiet that isn't true or
  *      false, and a key that is no member here; quiet, then not: the ring follows
+ *   4  the mute goes with the member (#3310 review F2), one table: quiet, then {an admin re-key (engine/key-move.ts), a
+ *      restore from 12 words (the same key on a new device)}: the other person's next line rings nothing, the key the
+ *      member holds now reads quiet, and the mailbox's answer to that key's device lists the quiet key (`quiet`), so a new
+ *      phone shows the chat muted; another member's never does
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-mail-ring.ts
  */
@@ -212,6 +216,44 @@ async function main(): Promise<void> {
     assert(off.status === 200 && off.body?.quiet === false && !mail.mailQuiet(jo.key, kit.key), '3f. not quiet any more');
     await bring([await item(kit, jo.key)]);
     assert(rings(jo).length === 1, `3g. their next line rings (rings ${rings(jo).length})`);
+
+    // ── 4. The mute goes with the member ──────────────────────────────────────────────────
+    console.log('\n4. The across mute after a re-key, and after a restore from 12 words');
+    const { moveMemberKeyRows } = await import('./engine/key-move.js');
+    const AFTER: Array<[string, (old: Keys) => Keys]> = [
+        ['an admin re-key', (old) => {
+            const moved = keys();
+            db.transaction(() => moveMemberKeyRows(old.key, moved.key, new Date().toISOString(), { keepStamps: false }))();
+            return moved;
+        }],
+        ['a restore from 12 words (the same key, a new device)', (old) => old],
+    ];
+    for (const [name, after] of AFTER) {
+        const lou = member(`Lou ${name}`);
+        const mae = keys();
+        wrote(lou, mae.key, 3);
+        const q = await asMember(lou, 'POST', '/api/mail/quiet', { key: mae.key, quiet: true });
+        assert(q.status === 200 && mail.mailQuiet(lou.key, mae.key), `4. ${name}: quiet first (got ${q.status})`);
+        const now = after(lou);
+        // Written to from the key held now (a re-key's new phone writes from the new key), so the 30-day rule would ring.
+        wrote(now, mae.key, 0);
+        assert(mail.mailQuiet(now.key, mae.key), `4. ${name}: the key held now reads quiet`);
+        assert(mail.ringsFor({ kind: 'dm-line', recipient: now.key, senderKey: mae.key }) === false, `4. ${name}: ringsFor says no ring`);
+        await bring([await item(mae, now.key)]);
+        assert(held(now) === 1 && rings(now).length === 0, `4. ${name}: their next line is held and rings nothing (rings ${rings(now).length})`);
+        const device = crypto.randomBytes(16).toString('hex');
+        const page = await asMember(now, 'GET', `/api/mail?device=${device}`);
+        assert(page.status === 200 && JSON.stringify(page.body?.quiet) === JSON.stringify([mae.key]),
+            `4. ${name}: the mailbox's answer to a new device lists the quiet key (got ${JSON.stringify(page.body?.quiet)})`);
+        const other = member(`Other ${name}`);
+        wrote(other, mae.key, 1);
+        const othersPage = await asMember(other, 'GET', `/api/mail?device=${device}`);
+        assert(!mail.mailQuiet(other.key, mae.key) && JSON.stringify(othersPage.body?.quiet) === '[]',
+            `4. ${name}: another member is not quiet for that key, and hears none of it (got ${JSON.stringify(othersPage.body?.quiet)})`);
+        if (now.key !== lou.key) {
+            assert(!mail.mailQuiet(lou.key, mae.key), `4. ${name}: nothing left under the old key`);
+        }
+    }
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;

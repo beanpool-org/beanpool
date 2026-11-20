@@ -51,7 +51,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    OUTSIDE_DEVICE_ID, PUSH_NOTICE_KINDS, checkRelayItem, relayConversationId, word, type RelayEnvelope, type RelayItem, type RelayItemDrop, type RelayItemKind,
+    OUTSIDE_DEVICE_ID, PUSH_NOTICE_KINDS, checkRelayItem, word, type RelayEnvelope, type RelayItem, type RelayItemDrop, type RelayItemKind,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -412,24 +412,42 @@ function ringHeldMail(rings: ReadonlyMap<string, string>): void {
 }
 
 /**
+ * The across mute's row (slice S4, "Mutes"), kept as a chat mute (engine/chat-mutes.ts) under the member's key and an id that
+ * names the other person's key alone (#3310 review F2): a re-key moves `member_pubkey` (engine/key-move.ts), so the mute goes
+ * with the member to the new key. An id made from both keys (core relayConversationId) could not be made again for the new
+ * key, and the move would leave the mute behind. Never the id of a chat here: those are made by this server, never `quiet:`.
+ */
+const QUIET_PREFIX = 'quiet:';
+const quietId = (key: string): string => `${QUIET_PREFIX}${key}`;
+
+/**
  * A key `member` made quiet (slice S4, "Mutes": the across mute, kept on the member's device and told here): no push for a
- * line from it. Kept as that chat's mute (engine/chat-mutes.ts), under the id both apps name the chat by (core
- * relayConversationId of the two keys): one table, copied to a standby as every mute is, gone with the member.
+ * line from it. One table, copied to a standby as every mute is, carried by a re-key, gone with the member.
  */
 export function mailQuiet(member: string, key: string, now = Date.now()): boolean {
     try {
-        return !!getChatMute(relayConversationId(member, key), member, now);
+        return !!getChatMute(quietId(key), member, now);
     } catch {
         return false;
     }
 }
 
-/** `member` makes `key` quiet (`quiet` true) or not. Throws on a key that isn't one (64 lower-case hex, not their own). */
+/** `member` makes `key` quiet (`quiet` true) or not. The route checks the key (64 lower-case hex, not their own). */
 export function setMailQuiet(member: string, key: string, quiet: boolean): boolean {
-    const id = relayConversationId(member, key);
-    if (quiet) setChatMute(id, member, 'always');
-    else clearChatMute(id, member);
+    if (quiet) setChatMute(quietId(key), member, 'always');
+    else clearChatMute(quietId(key), member);
     return quiet;
+}
+
+/**
+ * The keys `member` made quiet (slice S4, #3310 review F2), in the mailbox's answer (GET /api/mail): a device that has never
+ * kept a mark for one of them (a new phone after a re-key, a restore from 12 words, a browser signed in afresh) shows that
+ * chat muted, as this server holds it. Their own state alone.
+ */
+export function mailQuietKeys(member: string): string[] {
+    const rows = db.prepare('SELECT conversation_id FROM chat_mutes WHERE member_pubkey = ? AND substr(conversation_id, 1, ?) = ? ORDER BY conversation_id')
+        .all(member, QUIET_PREFIX.length, QUIET_PREFIX) as Array<{ conversation_id: string }>;
+    return rows.map((r) => r.conversation_id.slice(QUIET_PREFIX.length)).filter((key) => /^[0-9a-f]{64}$/.test(key));
 }
 
 /**

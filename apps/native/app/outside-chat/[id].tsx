@@ -92,7 +92,7 @@ export default function OutsideChatScreen() {
         setChat(c);
         setLines(c ? await ctx.store.lines(c.id).catch(() => []) : []);
         setChanges(c ? await ctx.store.changes(c.id).catch(() => []) : []);
-        setQuiet(c ? await outsideQuiet(ctx.store, c.peerKey).catch(() => false) : false);
+        setQuiet(c ? await outsideQuiet(ctx.store, ctx.identity.publicKey, c.peerKey).catch(() => false) : false);
     }, [id, where]);
 
     useEffect(() => {

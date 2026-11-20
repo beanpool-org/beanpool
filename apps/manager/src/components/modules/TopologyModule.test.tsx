@@ -77,6 +77,28 @@ describe('TopologyModule Component', () => {
         expect(await screen.findByText('http://localhost:3001')).toBeInTheDocument();
     });
 
+    // #3292 r2: a node that shares no counts (Share Member Count off) is harvested with none, and its row says so: never
+    // "0 members · 0 posts", which it never said.
+    it.each([
+        ['shares its counts', 3, 7, '3 members · 7 posts'],
+        ['shares no counts', null, null, 'Counts not shared'],
+    ] as const)('a harvested node that %s: its row says what the node gave', async (_name, memberCount, postCount, says) => {
+        mockFetchHarvesterStatus.mockResolvedValue({
+            harvestState: {
+                'node-1': {
+                    nodeId: 'node-1', nodeName: mockNode.name, nodeUrl: mockNode.url, lastHarvestAt: null, lastSuccessAt: null,
+                    status: 'ok', error: null, dbSizeBytes: 2048, memberCount, postCount,
+                    identityStatus: 'missing', identityFiles: [], historyCount: 0,
+                },
+            },
+        });
+        await act(async () => {
+            render(<TopologyModule activeNode={mockNode} profiles={[mockNode]} diag={null} onRefresh={() => {}} />);
+        });
+        expect(await screen.findByText(says)).toBeInTheDocument();
+        expect(screen.queryByText(/^0 members/)).not.toBeInTheDocument();
+    });
+
     it('switches tabs between fleet backups, snapshots, replication, domain claims, and runbook', async () => {
         await act(async () => {
             render(

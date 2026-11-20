@@ -65,8 +65,10 @@ export interface NodeHarvestState {
     status: 'idle' | 'harvesting' | 'ok' | 'error';
     error: string | null;
     dbSizeBytes: number;
-    memberCount: number;
-    postCount: number;
+    /** The node's member and post counts at the last harvest, or null when it shares none (its owners turned "Share Member
+     *  Count" off, #3292): never a 0 the node didn't say, which the dashboard printed as "0 members · 0 posts". */
+    memberCount: number | null;
+    postCount: number | null;
     /** When the last pull came through: a node that shares no counts is pulled again UNSHARED_COUNTS_PULL_MS after it. */
     lastPullAt?: string;
     /** 'secured' = a locked backup is held, and it carries the node keys. 'partial' = only a readable backup (no keys). */
@@ -182,22 +184,24 @@ function normalizeUrl(url: string): string {
  */
 export const UNSHARED_COUNTS_PULL_MS = 60 * 60_000;
 
+/** The node's counts as the public /api/community/info gives them: both numbers, or `shared: false` and no figures. */
+type RemoteCounts = { shared: true; members: number; posts: number } | { shared: false; members: null; posts: null };
+
 /**
- * Fetch remote counts from the public /api/community/info: it needs no credential, so none is sent. `shared: false` when
- * the node answered without them (its owners turned "Share Member Count" off): the harvester then pulls on the clock.
+ * Fetch remote counts from the public /api/community/info: it needs no credential, so none is sent. `shared: false`, and
+ * no figures, when the node answered without them (its owners turned "Share Member Count" off): the harvester then pulls
+ * on the clock, and keeps null rather than a 0 the node never said.
  */
-async function fetchRemoteCounts(node: FleetNodeConfig): Promise<{ members: number; posts: number; shared: boolean } | null> {
+async function fetchRemoteCounts(node: FleetNodeConfig): Promise<RemoteCounts | null> {
     try {
         const baseUrl = normalizeUrl(node.url);
         const res = await fetch(`${baseUrl}/api/community/info`, { signal: AbortSignal.timeout(10000) });
         if (res.ok) {
             const data = await res.json() as any;
-            const shared = typeof data?.memberCount === 'number' && typeof data?.postCount === 'number';
-            return {
-                members: Number(data.memberCount) || 0,
-                posts: Number(data.postCount) || 0,
-                shared,
-            };
+            const members = data?.memberCount;
+            const posts = data?.postCount;
+            if (Number.isFinite(members) && Number.isFinite(posts)) return { shared: true, members, posts };
+            return { shared: false, members: null, posts: null };
         }
     } catch { /* ignore error and return null */ }
     return null;
@@ -969,8 +973,8 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
         status: 'idle',
         error: null,
         dbSizeBytes: 0,
-        memberCount: 0,
-        postCount: 0,
+        memberCount: null,
+        postCount: null,
         identityStatus: 'missing',
         identityFiles: [],
         historyCount: 0,
@@ -989,8 +993,9 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
     try {
         const counts = await fetchRemoteCounts(node);
         // Also pull once after this update (backupLock unset), to learn whether the node's backups are locked.
-        const hasDrift = force || !counts || counts.members !== prev.memberCount || counts.posts !== prev.postCount
-            || prev.dbSizeBytes === 0 || prev.backupLock === undefined || (!counts.shared && unsharedPullDue(prev));
+        // A count is compared only where the node gave one: with none, the clock decides (unsharedPullDue).
+        const hasDrift = force || !counts || prev.dbSizeBytes === 0 || prev.backupLock === undefined
+            || (counts.shared ? counts.members !== prev.memberCount || counts.posts !== prev.postCount : unsharedPullDue(prev));
         const waitUntil = prev.pullBackoff ? Date.parse(prev.pullBackoff.nextPullAt) : 0;
 
         if (hasDrift && !force && waitUntil > Date.now()) {
@@ -1060,6 +1065,7 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
             }
         }
 
+        // The node's figures, or null for both when it shares none (never a 0 it didn't say).
         if (counts) {
             prev.memberCount = counts.members;
             prev.postCount = counts.posts;

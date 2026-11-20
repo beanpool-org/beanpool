@@ -476,6 +476,31 @@ describe('a line\'s signature, and its report', () => {
     });
 });
 
+// sendImageMessage writes its line after the node's 200 (#3300 r2 decide). A poll that writes the same line inside that window
+// (the node's own row, by its id) came first, and the send's plain INSERT then failed on the id: the photo had gone, and the
+// member was told it hadn't.
+describe('a photo whose line a poll writes before the send does', () => {
+    it('the send ends well, and the line is one row: the one the poll wrote, the node\'s', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        (globalThis as any).fetch = async (url: string, init?: any) => {
+            const r: any = await fetchMock(url, init);
+            if ((init?.method ?? 'GET') === 'POST' && new URL(url).pathname === '/api/messages/send' && r.ok) {
+                (globalThis as any).fetch = fetchMock;
+                await syncMessages(ana.publicKey);   // the poll, between the 200 and the send's own write
+            }
+            return r;
+        };
+        const sent = node.lines.length;
+        await expect(sendImageMessage(dm.id, 'data:image/jpeg;base64,UkFDRQ==', 'the gate')).resolves.toBeUndefined();
+        expect(node.lines.length).toBe(sent + 1);
+        const line = node.lines.at(-1)!;
+        expect(sql.prepare('SELECT ciphertext, nonce, type FROM messages WHERE id = ?').all(line.id))
+            .toEqual([{ ciphertext: line.ciphertext, nonce: line.nonce, type: 'image' }]);
+        expect(await lineOf(dm, line.id)).toMatchObject({ from: ana.publicKey, text: 'the gate', note: null });
+    });
+});
+
 describe('what the node can do to it', () => {
     it('show Ana\'s line as Ben\'s: Ben\'s phone never shows her words as his', async () => {
         await phoneOf(ana);

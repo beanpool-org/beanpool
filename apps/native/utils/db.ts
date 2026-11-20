@@ -8168,10 +8168,12 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
     ownLineTaken(conversationId);
     const serverMsg = (await res.json()).message;
     // Written into the photo's community's file only: once the phone has switched, its next sync there brings the line.
+    // A poll may have written it already, between the node's answer and here (#3300 r2): that row is the node's own, by
+    // the same id, and stays; a plain INSERT failed on the id and said the sent photo hadn't gone.
     const copy = await here.handle();
     if (!copy) return;
     await copy.runAsync(
-        'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING',
         [serverMsg.id, conversationId, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image', metadata || null, serverMsg.timestamp]
     );
     await requestLineTaken(copy, conversationId, identity.publicKey);

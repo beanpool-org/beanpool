@@ -143,6 +143,7 @@
     },
     "plugins": [
       "./plugins/withAndroidLargeHeap",
+      "./plugins/withPortraitNotRequired",
       "./plugins/withAppLanguages",
       "./plugins/withPodDeploymentTarget",
       "expo-router",

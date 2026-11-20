@@ -16,6 +16,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 import { joinSteps, stepDot, type JoinStep } from '../join-steps';
 import { resumePlan, type OnboardingFlow, type PendingOnboarding } from '../onboarding-state';
+import { GLOBAL_NODE_URL } from '../global-node-url';
 
 const welcome = fs.readFileSync(path.join(__dirname, '..', '..', 'app/welcome.tsx'), 'utf8');
 
@@ -132,7 +133,7 @@ describe('the step bar: one dot per screen the join shows', () => {
             const record = {
                 step: r.step, flow: r.flow, callsign: 'Sam', redeemed: true, newKey: KEY,
                 inviteCode: r.flow === 'invite' ? 'BP-ABCD-1234' : '',
-                anchorUrl: r.flow === 'invite' ? 'https://riverside.example' : r.flow === 'claim' ? 'https://beans.example.org' : 'https://global.beanpool.org',
+                anchorUrl: r.flow === 'invite' ? 'https://riverside.example' : r.flow === 'claim' ? 'https://beans.example.org' : GLOBAL_NODE_URL,
             } as PendingOnboarding;
             const plan = resumePlan(record, STORED);
             expect(plan.action, `${r.flow} at ${r.step}`).toBe('resume');

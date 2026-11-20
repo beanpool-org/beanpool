@@ -105,14 +105,17 @@ describe('onboarding screens follow dark mode', () => {
         });
     });
 
-    describe('UI outlines and the stepper tick read at 3:1 or better', () => {
-        it('the stepper tick reads on the green done-dot (fixed colours, the same in light and dark)', () => {
-            const src = read('app/welcome.tsx');
-            expect(src).toMatch(/dotCompleted: \{\s*backgroundColor: palette\.green500,/);
-            expect(src).toMatch(/dotCheck: \{[^}]*color: palette\.green950,/);
-            expect(contrast(palette.green950, palette.green500)).toBeGreaterThanOrEqual(3);
-        });
+    describe('UI outlines and the step dots read at 3:1 or better', () => {
         const { colors } = onboardingColors('dark');
+        it('the step dots (slice S3: no tick, no labels) are the brand ink from the theme, readable on the page and the card in dark', () => {
+            const src = read('components/welcome/StepDots.tsx');
+            expect(src).toContain('const ink = colors.brand.primary;');
+            expect(src).toMatch(/style=\{\[styles\.dot, \{ borderColor: ink \}, i < dot\.at && \{ backgroundColor: ink \}\]\}/);
+            expect(read('app/welcome.tsx')).not.toMatch(/dotCompleted|dotCheck/);
+            for (const ground of [colors.surface.page, colors.surface.card]) {
+                expect(contrast(colors.brand.primary, ground), ground).toBeGreaterThanOrEqual(3);
+            }
+        });
         // Inputs are filled with the card (welcome) or app (profile setup) colour and sit on the card or the page.
         const grounds = { page: colors.surface.page, app: colors.surface.app, card: colors.surface.card, subtle: colors.surface.subtle };
         for (const [groundName, ground] of Object.entries(grounds)) {

@@ -292,6 +292,32 @@ describe('#3316 max review: where main was stricter, main\'s behaviour (real db.
         expect(await send('the door code is 4821')).toEqual(REFUSED);
     }, 60_000);
 
+    it('P2c (N2) Continue the same way: a sync whose listing names a third key lands while Continue\'s list write is in flight: it waits for the tap\'s turn, so Continue says true (PUPPET pinned by the member, Ben kept as former) and the third key pauses the chat PUPPET now holds; nothing goes to it', async () => {
+        k1 = person();
+        await phone({ benLine: true });
+        expect(await db.getDmKeyChange(conv.id)).toBeNull();
+        expect(await db.markDmPeerVerified(conv.id, ben.publicKey)).toBe(true);
+        conv.participants = [me.publicKey, puppet.publicKey];
+        expect(await db.syncMessages(me.publicKey)).toBe(true);
+        expect(await card()).toEqual({ offered: 'PUPPET', verified: true });
+        h.holdPrefix = dmVerifiedKeysStoreKey(me.publicKey);
+        const continuing = db.acceptOfferedPeer(conv.id, puppet.publicKey);
+        for (let i = 0; i < 200 && !h.held; i++) await new Promise((r) => setTimeout(r, 5));
+        expect(h.held).toBe(true);
+        conv.participants = [me.publicKey, k1.publicKey];
+        let syncDone = false;
+        const syncing = db.syncMessages(me.publicKey).then((v) => { syncDone = true; return v; });
+        for (let i = 0; i < 100 && !syncDone; i++) await new Promise((r) => setTimeout(r, 5));
+        expect(syncDone).toBe(false);
+        h.release!();
+        expect(await continuing).toBe(true);
+        expect(await syncing).toBe(true);
+        expect(listOf()).toEqual(['BEN', 'PUPPET']);
+        expect(pinView()).toMatchObject({ peer: 'PUPPET', by: 'member', former: ['BEN'], offered: 'K1' });
+        expect(await card()).toEqual({ offered: 'K1', verified: true });
+        expect(await send('the door code is 4821')).toEqual(REFUSED);
+    }, 60_000);
+
     it('reset (N3) §3.3 row 3 after the member\'s reset: a chat first met on K1 whose lines are Ben\'s, Ben marked verified elsewhere, is re-seeded with the member\'s list: Ben pinned, K1 only offered, nothing sent — the same as the check without a reset', async () => {
         const run = async (reset: boolean) => {
             k1 = person();

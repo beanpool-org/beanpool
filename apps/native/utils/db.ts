@@ -6506,10 +6506,11 @@ const dmPins = createDmPinBook<SQLite.SQLiteDatabase>(AsyncStorage, (database) =
 const dmVerified = createDmVerifiedBook(AsyncStorage);
 
 /**
- * A pin rule run in the pins' turn with the member's list as it stands in that turn (#3316 N2). The member's taps change
- * the list inside the tapped chat's pins turn (markDmPeerVerified, acceptOfferedPeer, removeDmPeerVerification), so a sync,
- * a check or a refresh queued behind a tap reads what the tap wrote, and one queued before it acts first: a listing that
- * lands mid-Mark waits and pauses, as when the mark lived on the pin.
+ * A pin rule run in the pins' turn with the member's list as it stands in that turn (#3316 N2). Mark and Continue add to
+ * the list inside the tapped chat's pins turn (markDmPeerVerified, acceptOfferedPeer), so a sync, a check or a refresh
+ * queued behind a tap reads what the tap wrote, and one queued before it acts first: a listing that lands mid-Mark waits
+ * and pauses, as when the mark lived on the pin. (Remove takes a key off first and rests the chat after, in its own turn:
+ * a listing heard in between pauses, and that rest then moves it, the same end as one heard after.)
  */
 function updatePinsWithList(me: string, database: SQLite.SQLiteDatabase, change: (pins: DmPeerPins, verified: DmVerifiedKeys) => boolean): Promise<boolean> {
     return dmPins.update(me, database, async (pins) => change(pins, await dmVerified.read(me)));
@@ -7335,27 +7336,23 @@ export async function markDmPeerVerified(conversationId: string, expectedPeer: s
 /**
  * The member's "Remove verification" (§3.3 Unverify): the key this chat is sealed to comes off the member's list, so no
  * chat sealed to it, in any community, is verified from now. In this chat a pause for one offered key then ends with the
- * pin moved to it (the resting rule, with its notice); every other chat rests at its own next check. In one pins turn,
- * as Mark (#3316 N2). Throws DmPinStoreError when the pins can't be read or written, DmVerifiedStoreError when the list
- * can't be read or written.
+ * pin moved to it (the resting rule, with its notice); every other chat rests at its own next check. Throws
+ * DmPinStoreError when the pins can't be read or written, DmVerifiedStoreError when the list can't be read or written.
  */
 export async function removeDmPeerVerification(conversationId: string, community?: ChatCommunity): Promise<boolean> {
     const me = (await loadIdentity())?.publicKey;
     if (!me) return false;
     const database = await pinsCopyFor(community, conversationId);
     if (!database) return false;
-    if (!(await dmVerified.read(me)).readable) throw new DmVerifiedStoreError();
-    let removed = false;
-    await dmPins.update(me, database, async (pins) => {
-        const before = await dmVerified.read(me);
-        if (!before.readable) throw new DmVerifiedStoreError();
-        const pin = dmPinFor(pins, conversationId);
-        if (!pin || !isVerifiedPin(pin, before)) return false;
-        if ((await dmVerified.remove(me, pin.peer)) !== 'removed') return false;
-        removed = true;
-        return restDmEntry(pins, conversationId, new Date().toISOString(), await dmVerified.read(me));
-    });
-    return removed;
+    const before = await dmVerified.read(me);
+    if (!before.readable) throw new DmVerifiedStoreError();
+    const pin = dmPinFor(await dmPins.read(me, database), conversationId);
+    if (!pin || !isVerifiedPin(pin, before)) return false;
+    if ((await dmVerified.remove(me, pin.peer)) !== 'removed') return false;
+    const after = await dmVerified.read(me);
+    const now = new Date().toISOString();
+    await dmPins.update(me, database, (pins) => restDmEntry(pins, conversationId, now, after));
+    return true;
 }
 
 /**

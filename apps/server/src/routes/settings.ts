@@ -39,6 +39,7 @@ import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS, word, VOUCH_PRESETS, VOUCH_MAX, VOUCHER_BUDGET_MAX } from '@beanpool/core';
 import { myVouching, readVoucherCard, VoucherError, tellVoucherNotice } from '../engine/vouchers.js';
 import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
+import { readCommunityWelcome, setCommunityWelcome } from '../config/community-welcome.js';
 import { cleanLabel, AREA_NAME_MAX } from '../config/clean-label.js';
 import { cardLanguage, serveCommunityCard } from './community-card.js';
 import { servePeekPage } from './peek.js';
@@ -375,6 +376,30 @@ router.post('/api/local/admin/start-community-url', async (ctx) => {
         return;
     }
     ctx.body = { startCommunityUrl: set.startCommunityUrl };
+});
+
+// The welcome for new members (config/community-welcome.ts, onboarding slice S6): an owner's or an admin's to read in
+// Settings, an owner's only to change. `{ welcome }`: plain text, or null or empty to have none. A welcome core's rule
+// refuses is answered 400 in words with its `code`, and nothing is stored. The text is never logged: an owner's words
+// might name people.
+router.get('/api/local/admin/community-welcome', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can read its welcome for new members.')) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { welcome: readCommunityWelcome() };
+});
+
+router.post('/api/local/admin/community-welcome', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change its welcome for new members.')) return;
+    const set = setCommunityWelcome(((ctx as any).requestBody || {}).welcome);
+    if (!set.ok) {
+        ctx.status = 400;
+        ctx.body = { error: set.error, code: set.problem };
+        return;
+    }
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { welcome: set.welcome };
 });
 
 router.post('/api/local/admin/community-health', async (ctx) => {

@@ -206,7 +206,7 @@ const STRANGER_REFUSED = new Set<string>([
     'POST /api/local/admin/backup-status', 'POST /api/local/admin/backup/verify', 'POST /api/local/admin/branches/:pubkey/pause',
     'POST /api/local/admin/branches/:pubkey/prune', 'POST /api/local/admin/bursts/:id/undo', 'POST /api/local/admin/commons/projects',
     'POST /api/local/admin/commons/reject', 'POST /api/local/admin/community-health', 'POST /api/local/admin/community-shape',
-    'POST /api/local/admin/community-shape/advice', 'POST /api/local/admin/csrf-token', 'POST /api/local/admin/data',
+    'POST /api/local/admin/community-shape/advice', 'POST /api/local/admin/community-welcome', 'POST /api/local/admin/csrf-token', 'POST /api/local/admin/data',
     'POST /api/local/admin/data/members', 'POST /api/local/admin/data/posts', 'POST /api/local/admin/decisions',
     'POST /api/local/admin/decisions/:id/accelerate', 'POST /api/local/admin/decisions/:id/halt',
     'POST /api/local/admin/decisions/:id/hide-case', 'POST /api/local/admin/decisions/:id/hide-reply',

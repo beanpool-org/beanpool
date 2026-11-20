@@ -164,8 +164,14 @@ const liveCount = (now: number) => (db.prepare(`SELECT COUNT(*) AS n FROM invite
 export function listInviteAsks(limit: number, offset: number, now = Date.now()): { asks: InviteAskToAnswer[]; total: number } {
     const rows = db.prepare(`SELECT * FROM invite_asks WHERE ${LIVE} ORDER BY asked_at ASC, id ASC LIMIT ? OFFSET ?`)
         .all(liveSince(now), limit, offset) as AskRow[];
+    // Bolt: Batch asker callsigns across listed invite asks to avoid N+1 member queries.
+    const askerCallsigns = new Map<string, string>(
+        (db.prepare(`SELECT public_key, callsign FROM members WHERE public_key IN (SELECT value FROM json_each(?))`)
+            .all(JSON.stringify(rows.map(r => r.asker_pubkey))) as { public_key: string; callsign: string }[])
+            .map(r => [r.public_key, r.callsign])
+    );
     return {
-        asks: rows.map((r) => ({ ...toWaiting(r), askerPubkey: r.asker_pubkey, askerCallsign: getMember(db, r.asker_pubkey)?.callsign ?? '' })),
+        asks: rows.map((r) => ({ ...toWaiting(r), askerPubkey: r.asker_pubkey, askerCallsign: askerCallsigns.get(r.asker_pubkey) ?? '' })),
         total: liveCount(now),
     };
 }

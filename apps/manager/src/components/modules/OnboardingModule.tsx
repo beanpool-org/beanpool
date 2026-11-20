@@ -371,7 +371,12 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
                                 className="p-3 rounded-xl bg-nature-800/60 border border-nature-700 flex items-center gap-4"
                             >
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-bold text-white truncate">{step.label}</div>
+                                    {/*
+                                      Wraps rather than truncating: at 320 px and 1.3x text "Turned notifications on" and
+                                      "The phone said no" were cut to "Turned notifica…" and "The phone said…", and the
+                                      label is what tells those rows apart.
+                                    */}
+                                    <div className="text-sm font-bold text-white break-words">{step.label}</div>
                                     <div className="text-[10px] text-nature-500">{step.hint}</div>
                                 </div>
                                 <div className="text-right shrink-0">

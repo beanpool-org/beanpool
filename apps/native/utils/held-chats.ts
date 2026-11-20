@@ -10,13 +10,15 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { closeHeldCopies, getHeldConversations, heldChatIsDm, type HeldConversation } from './db';
+import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { sameCommunity } from './push-pins';
 import { communityName } from './community-name';
 import { getBlockedUsers } from './blocklist';
 import { talkShowsChat } from './dm-blocked';
+import { noticeCountFor, readNoticeCounts } from './notice-counts';
+import { heldChatOpensInPlace } from './held-chat-in-place';
 
 export interface HeldChatRow extends HeldConversation {
     /** The row's key in Chat's list: never that of a chat in the community in use, nor of the same id in another. */
@@ -26,6 +28,12 @@ export interface HeldChatRow extends HeldConversation {
     community: string;
     /** Its name as the phone saved it, in grey under the person's. */
     communityName: string;
+    /** Its own unread count, as its community's copy has it (slice S2b, {@link heldChatsFilledIn}): absent until read. */
+    unread?: number;
+    /** Its newest line's preview (slice S2b): absent until read, null when the pins can't place it. */
+    lastMessage?: string | null;
+    /** The preview is BeanPool's own sentence, translated where shown (chat-line-words.ts chatPreviewWords). */
+    lastMessageFromApp?: boolean;
 }
 
 export { heldChatInPlaceParams, heldChatOpensInPlace } from './held-chat-in-place';
@@ -141,4 +149,96 @@ export async function chatInPlaceRoute(myPubkey: string | null | undefined, id: 
         // chat doesn't wait for that close: the copy it opens in place is a connection of its own.
         void closeUnlessInView().catch(() => {});
     }
+}
+
+/** What Chat adds to a held row once the rows show (slice S2b): its own unread count and its newest line's preview. */
+export interface HeldRowFill {
+    unread: number;
+    /** Null: no preview (not among the newest {@link HELD_PREVIEWS_MAX}, not a direct chat, or the pins can't place it). */
+    lastMessage: string | null;
+    lastMessageFromApp: boolean;
+}
+
+/** Newest first: by each held row's newest line, else when the chat was made. */
+function newestFirst(a: HeldChatRow, b: HeldChatRow): number {
+    const at = (c: HeldChatRow) => c.rawTimestamp ?? c.createdAt ?? '';
+    return at(a) < at(b) ? 1 : at(a) > at(b) ? -1 : 0;
+}
+
+/**
+ * Each held row's own unread count and, for the {@link HELD_PREVIEWS_MAX} newest held direct chats across every community,
+ * its newest line's preview (slice S2b; DESIGN-no-switch-messaging-fable.md §3, "The list shows each row's own count").
+ * Read AFTER the rows show (Chat's first paint pays nothing), each community from its own copy by its name (db.ts
+ * getHeldLatest, getHeldPreviews), by key. `view`: as {@link heldChatRows}, once Chat is left no further community is read.
+ */
+export async function heldChatsFilledIn(myPubkey: string, rows: readonly HeldChatRow[], view?: HeldChatsView): Promise<Map<string, HeldRowFill>> {
+    const inView = view ? view.inView : () => true;
+    const out = new Map<string, HeldRowFill>();
+    try {
+        const previewed = new Set([...rows].filter((r) => heldChatOpensInPlace(r)).sort(newestFirst).slice(0, HELD_PREVIEWS_MAX).map((r) => r.key));
+        const byCommunity = new Map<string, HeldChatRow[]>();
+        for (const row of rows) byCommunity.set(row.community, [...(byCommunity.get(row.community) ?? []), row]);
+        for (const [community, chats] of byCommunity) {
+            if (!inView()) break;
+            const latest = await getHeldLatest(myPubkey, community);
+            const ids = chats.filter((c) => previewed.has(c.key)).map((c) => c.id);
+            const previews = ids.length > 0 && inView() ? await getHeldPreviews(myPubkey, community, ids) : null;
+            const unreadOf = new Map((latest ?? []).map((l) => [l.id, l.unread] as const));
+            for (const c of chats) {
+                const preview = previews?.[c.id] ?? null;
+                out.set(c.key, { unread: unreadOf.get(c.id) ?? 0, lastMessage: preview?.lastMessage ?? null, lastMessageFromApp: preview?.lastMessageFromApp ?? true });
+            }
+        }
+    } finally {
+        if (view && !view.inView()) await closeUnlessInView();
+    }
+    return out;
+}
+
+/** Each held community's number as Chat last refreshed it, or saw it fall, by account and file: a rise from there refreshes it once. */
+const refreshedAt = new Map<string, number>();
+/** One refresh pass at a time: a rise while one runs is looked at once it is done. */
+let refreshing: Promise<unknown> = Promise.resolve();
+
+/**
+ * Freshness (slice S2b; DESIGN §3 "Live typing and instant arrival": away chats refresh on a push, no second socket). For
+ * each community among Chat's held rows whose own number (notice-counts.ts, the one the BeanPool sheet and the badge read:
+ * a round's count or a push's) rose since Chat last refreshed it, bring its newest lines into its own copy (db.ts
+ * refreshHeldDms: one list read, at most HELD_REFRESH_MAX chats, through S2's write path), once per rise. A number that
+ * falls is noted, so the next rise from there refreshes. Resolves to the communities whose copy took something, for Chat
+ * to read their rows again. Never throws.
+ */
+export function refreshHeldWhereRose(myPubkey: string, rows: readonly HeldChatRow[], view: HeldChatsView): Promise<string[]> {
+    const run = refreshing.then(() => refreshOnce(myPubkey, rows, view)).catch((e) => {
+        console.warn('[Held] A refresh of the other communities failed', e);
+        return [] as string[];
+    });
+    refreshing = run;
+    return run;
+}
+
+async function refreshOnce(myPubkey: string, rows: readonly HeldChatRow[], view: HeldChatsView): Promise<string[]> {
+    const counts = await readNoticeCounts(AsyncStorage);
+    const brought: string[] = [];
+    const files = new Set<string>();
+    for (const row of rows) {
+        const file = getDatabaseFilenameForNode(row.community);
+        if (files.has(file)) continue;
+        files.add(file);
+        if (!view.inView()) break;
+        const key = `${myPubkey}\n${file}`;
+        const number = noticeCountFor(counts, row.community);
+        const was = refreshedAt.get(key) ?? 0;
+        // Noted before the refresh: one refresh per rise, whatever it brings.
+        refreshedAt.set(key, number);
+        if (number <= was) continue;
+        if ((await refreshHeldDms(myPubkey, row.community, view.inView)) > 0) brought.push(row.community);
+    }
+    return brought;
+}
+
+/** For tests: a new app run (no number noted as refreshed). */
+export function _resetHeldRefreshForTests(): void {
+    refreshedAt.clear();
+    refreshing = Promise.resolve();
 }

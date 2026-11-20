@@ -10655,9 +10655,10 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
     if (filter?.search) params.set('q', filter.search);
 
     try {
-        // The groups of the community asked, kept in its file only (chatCopyForRequest): switched meanwhile, they are
-        // shown and not kept. Each names the asking account's role in it: an answer that lands after that account left the
-        // phone is neither kept (its role written as the next account's) nor shown (ownListRead, #3309 review N2's class).
+        // The groups of the community asked, kept in its file only (chatCopyForRequest). Each names the asking account's
+        // role in it. An answer that lands after the phone switched community, or after that account left the phone, is
+        // neither kept (its role written as the next account's) nor shown: the copy in use's own groups are (ownListRead,
+        // #3309 review N2's class).
         const here = await chatCopyForRequest();
         const asked = ownListRead((await loadIdentity())?.publicKey);
         const res = await signedGet(`/api/groups${params.toString() ? '?' + params.toString() : ''}`, { anchorUrl: here.anchorUrl });
@@ -10667,7 +10668,7 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
             if (Array.isArray(data) && now) {
                 // Update local cache
                 const database = await here.handle();
-                if (!database) return data;
+                if (!database) return localGroups(filter);
                 const identity = now.identity;
                 for (const g of data) {
                     if (!asked.copiesAsAsked()) return localGroups(filter);

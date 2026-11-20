@@ -109,7 +109,7 @@ import { removeCommunityCaches } from '../community-cache';
 import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { sealDmLine } from '../e2e-crypto';
-import { messageRequestsStoreKey } from '../storage-keys';
+import { messageRequestsStoreKey, dmPeerPinsStoreKey, MESSAGE_REQUESTS_STORE_PREFIX } from '../storage-keys';
 import { reportRequestAndBlock } from '../request-report';
 import { getBlockedUsers } from '../blocklist';
 import { LISTED_ADDRESS_FIELDS } from '../listed-address-fields';
@@ -146,7 +146,7 @@ function person(): Person {
 
 interface Line { id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; type: string; metadata: string | null; timestamp: string; editedAt: string | null }
 interface Conv { id: string; type: string; participants: string[]; request?: { from: string; state: string; at: string } }
-const node = { convs: [] as Conv[], lines: [] as Line[] };
+const node = { convs: [] as Conv[], lines: [] as Line[], groups: [] as any[] };
 let clock = Date.parse('2026-11-20T00:00:00.000Z');
 const tick = () => new Date((clock += 1000)).toISOString();
 let asked: Array<{ method: string; url: string; body?: any }> = [];
@@ -203,6 +203,8 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
         return answer(200, { conversation: view(conv), messages: node.lines.filter((l) => l.conversationId === conv.id).map((l) => ({ ...l })) });
     }
     if (u.pathname === '/api/members') return answer(200, []);
+    // The member's groups, each with the asking member's role in it (routes/groups.ts viewerRole, viewerStatus).
+    if (u.pathname === '/api/groups' && method === 'GET') return answer(200, node.groups);
     return answer(404, { error: 'not here' });
 });
 
@@ -267,6 +269,7 @@ async function phoneOnBWithARequestAway(): Promise<void> {
     dm = { id: randomUUID(), type: 'dm', participants: [me.publicKey, peer.publicKey] };
     node.convs = [dm];
     node.lines = [];
+    node.groups = [];
     nodeLine(dm, peer, 'an old friend');
     hold = null;
     (globalThis as any).fetch = fetchMock;
@@ -641,5 +644,273 @@ describe('the list read in place: blocked people, addresses, the count and the p
         const addressLike = fields.filter((f) => /(avatar|photo|photos|url|picture|image|thumb|link)$/i.test(f));
         expect(addressLike.length).toBeGreaterThanOrEqual(3);
         for (const f of addressLike) expect(LISTED_ADDRESS_FIELDS, f).toContain(f);
+    });
+});
+
+/**
+ * #3309 review N2 (probes P3 and P5), the class closed: every read of the member's own list whose answer is written, kept or
+ * handed back after its network await goes through one guard (db.ts ownListRead): requestsInPlace, syncMessages and
+ * fetchGroups (found by grep: the reads of the member's conversations list, and the groups list that names the member's
+ * role). Each x what can change while its answer is out: Sign Out with the next account set to the community read, the
+ * account switched, a switch to another community. Nothing is written into any copy, nothing kept under any key, nothing
+ * handed back. A control row (nothing meanwhile) shows each read writes when nothing changes, so the others prove something.
+ */
+describe('the member\'s own list reads, with the account or the community changing while the answer is out (#3309 review N2, P3, P5)', () => {
+    const GROUP = {
+        id: 'garden-group', name: 'Garden', slug: 'garden', description: null, avatarUrl: null, category: 'general', createdBy: 'founder',
+        joinPolicy: 'open', createdAt: '2026-11-20T00:00:00.000Z', updatedAt: '2026-11-20T00:00:00.000Z', viewerRole: 'admin', viewerStatus: 'active',
+    };
+    const listRead = (m: string, p: string) => m === 'GET' && p.startsWith('/api/messages/conversations/');
+    interface OwnRead { name: string; read: string; held: (m: string, p: string) => boolean; act: () => Promise<any>; dropped: (r: any) => boolean; landed: (r: any) => boolean }
+    const READS: OwnRead[] = [
+        {
+            name: 'requestsInPlace (A, read in place)', read: A, held: listRead,
+            act: () => db.requestsInPlace(me.publicKey, A),
+            dropped: (r) => r === null,
+            landed: (r) => r?.conversations?.[0]?.id === req.id && (rowsOf(A_FILE)!.conversations as any[]).some((c) => c.id === req.id)
+                && JSON.parse(h.store.get(messageRequestsStoreKey(me.publicKey, A_FILE)) ?? 'null')?.conversations?.[0]?.id === req.id,
+        },
+        {
+            name: 'syncMessages (B, the community in use)', read: B, held: listRead,
+            act: () => db.syncMessages(me.publicKey),
+            dropped: (r) => r === false,
+            landed: (r) => r === true && JSON.parse(h.store.get(messageRequestsStoreKey(me.publicKey, B_FILE)) ?? 'null')?.conversations?.[0]?.id === req.id,
+        },
+        {
+            name: 'fetchGroups (B, the community in use)', read: B, held: (m, p) => m === 'GET' && p === '/api/groups',
+            act: () => db.fetchGroups(),
+            dropped: (r) => Array.isArray(r) && !r.some((g: any) => g.id === GROUP.id),
+            landed: (r) => r.some((g: any) => g.id === GROUP.id)
+                && (rowsOf(B_FILE)!.group_members as any[]).some((m) => m.group_id === GROUP.id && m.member_pubkey === me.publicKey && m.role === 'admin'),
+        },
+    ];
+    /** Another account on the phone from here. */
+    const nextAccount = () => { const next = person(); h.me = { publicKey: next.publicKey, privateKey: next.privateKey }; };
+    const MID: Record<string, ((read: string) => Promise<void>) | null> = {
+        'nothing (control)': null,
+        // As Sign Out leaves the phone (P3): the copies cleared and removed, the kept lists wiped (identity.ts), then the next
+        // account set to the very community the read was asked of.
+        'Sign Out, and the next account set to the community read': async (where) => {
+            await db.clearDB({ identityLeaves: true });
+            await removeCommunityCaches([A, B], { everyCopy: true });
+            for (const k of [...h.store.keys()]) if (k.startsWith(MESSAGE_REQUESTS_STORE_PREFIX)) h.store.delete(k);
+            nextAccount();
+            await switchPhoneTo(where);
+        },
+        'the account switched (another account on the phone, no copy cleared)': async () => { nextAccount(); },
+        // A new copy is made at this build's schema (a new copy generation); one already on the phone is only opened.
+        'a switch to another community (its copy new)': async () => { await switchPhoneTo(C); },
+        'a switch to another community (its copy on the phone already)': async () => {
+            fs.copyFileSync(fileOn(B_FILE), fileOn(C_FILE));
+            await switchPhoneTo(C);
+        },
+    };
+
+    afterEach(async () => { await db.leaveChatInPlace(A); });
+
+    const cases = READS.flatMap((r) => Object.keys(MID).map((w) => [r.name, w, r] as const));
+    it.each(cases)('%s, with %s while it is out', async (_name, whatName, row) => {
+        node.groups = [GROUP];
+        const asking = me.publicKey;
+        asked = [];
+        hold = holdFor(row.held);
+        let result: unknown;
+        let thrown: unknown = null;
+        const running = row.act().then((r) => { result = r; }, (e) => { thrown = e; });
+        await hold.seen;
+        const what = MID[whatName];
+        if (what) await what(row.read);
+        await settle();
+        const before = { A: rowsOf(A_FILE), B: rowsOf(B_FILE), C: rowsOf(C_FILE), stored: Object.fromEntries([...h.store.entries()].sort()) };
+
+        hold.release();
+        await running;
+        await settle();
+        hold = null;
+
+        expect(thrown, String((thrown as any)?.message ?? '')).toBeNull();
+        if (!what) {
+            expect(row.landed(result), 'nothing changed: the read writes, keeps and hands back').toBe(true);
+            return;
+        }
+        expect(row.dropped(result), `nothing handed back: ${JSON.stringify(result)?.slice(0, 200)}`).toBe(true);
+        // Nothing written into any copy, the next account's included, and nothing kept under any key.
+        expect({ A: rowsOf(A_FILE), B: rowsOf(B_FILE), C: rowsOf(C_FILE), stored: Object.fromEntries([...h.store.entries()].sort()) }).toEqual(before);
+        // The next account reads no request of the account that asked, wherever the phone is set (P5).
+        if (h.me.publicKey !== asking) expect(await db.getMessageRequests(h.me.publicKey)).toBeNull();
+    });
+});
+
+/** #3309 review N2 (probe P4): the list read in place ends at its deadline, so a community that never answers is no answer. */
+describe('the list read in place ends at its deadline (#3309 review N2, P4)', () => {
+    afterEach(async () => {
+        db._setRequestsInPlaceDeadlineForTests(null);
+        hold?.release();
+        hold = null;
+        await settle();
+        await db.leaveChatInPlace(A);
+    });
+    const listRead = (m: string, p: string) => m === 'GET' && p.startsWith('/api/messages/conversations/');
+
+    it('a community that never answers: no answer once the deadline passes; nothing written or kept, then or when the answer comes after', async () => {
+        db._setRequestsInPlaceDeadlineForTests(40);
+        hold = holdFor(listRead);
+        const before = { A: rowsOf(A_FILE), stored: storedFor(A_FILE) };
+        expect(await db.requestsInPlace(me.publicKey, A)).toBeNull();
+        expect({ A: rowsOf(A_FILE), stored: storedFor(A_FILE) }).toEqual(before);
+        hold.release();
+        await settle();
+        expect({ A: rowsOf(A_FILE), stored: storedFor(A_FILE) }).toEqual(before);
+    });
+
+    it('an answer whose body never ends: no answer once the deadline passes, nothing written or kept', async () => {
+        db._setRequestsInPlaceDeadlineForTests(40);
+        const page = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementation(async (url: string, init: any = {}) => {
+            if (!new URL(url).pathname.startsWith('/api/messages/conversations/')) return page(url, init);
+            return { ok: true, status: 200, headers: { get: () => null }, json: () => new Promise(() => {}), text: () => new Promise(() => {}) } as any;
+        });
+        try {
+            const before = { A: rowsOf(A_FILE), stored: storedFor(A_FILE) };
+            expect(await db.requestsInPlace(me.publicKey, A)).toBeNull();
+            expect({ A: rowsOf(A_FILE), stored: storedFor(A_FILE) }).toEqual(before);
+        } finally {
+            fetchMock.mockImplementation(page);
+        }
+    });
+
+    it('control: an answer inside the deadline is read as before', async () => {
+        db._setRequestsInPlaceDeadlineForTests(5_000);
+        hold = holdFor(listRead);
+        const reading = db.requestsInPlace(me.publicKey, A);
+        await hold.seen;
+        await new Promise((r) => setTimeout(r, 60));
+        hold.release();
+        expect((await reading)?.conversations.map((c: any) => c.id)).toEqual([req.id]);
+    });
+});
+
+/**
+ * #3309 review N1 (probe P2 as a table): a request in place is judged by every key the person is known by in A's copy (the
+ * listing's, A's own participant rows for the chat, its pin), as Talk, the held rows and the chat screen judge a DM. Pinned
+ * or unpinned x blocked by each kind of key, or by none. A DM with no pin has no pin's key to be blocked by (its rows named
+ * more than one key at the seed, a rule-5 record, past the seed's budget, the member reset their pins): there its own rows
+ * are what's left, which is the gap N1 measured.
+ */
+describe('a blocked person, by every key A\'s copy knows them by, pinned DM or not (#3309 review N1, P2)', () => {
+    afterEach(async () => {
+        vi.mocked(getBlockedUsers).mockResolvedValue([]);
+        await db.leaveChatInPlace(A);
+    });
+    const peopleOf = (id: string) => (rowsOf(A_FILE)!.conversation_participants as any[]).filter((p) => p.conversation_id === id).map((p) => p.public_key).sort();
+    function addRows(id: string, keys: string[], newRow: boolean): void {
+        const sql = new DatabaseSync(fileOn(A_FILE));
+        if (newRow) sql.prepare("INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, 'dm', ?, ?)").run(id, keys[0], tick());
+        for (const k of keys) sql.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(id, k);
+        sql.close();
+    }
+
+    type By = 'the listing\'s key' | 'the pin\'s key' | 'a key in the copy\'s own rows' | 'nobody of theirs';
+    const ROWS: Array<['pinned' | 'unpinned', By, boolean]> = [
+        ['pinned', 'the listing\'s key', true], ['pinned', 'the pin\'s key', true], ['pinned', 'a key in the copy\'s own rows', true], ['pinned', 'nobody of theirs', false],
+        ['unpinned', 'the listing\'s key', true], ['unpinned', 'a key in the copy\'s own rows', true], ['unpinned', 'nobody of theirs', false],
+    ];
+    it.each(ROWS)('%s DM, blocked by %s: card hidden %s', async (pinning, by, hidden) => {
+        const kNew = person().publicKey;
+        const kRow = person().publicKey;
+        let chat: string;
+        if (pinning === 'pinned') {
+            // A's copy pinned its DM with peer at the seed; for the copy-row case a stray key sits in its rows beside the pin's.
+            chat = dm.id;
+            if (by === 'a key in the copy\'s own rows') addRows(chat, [kRow], false);
+        } else {
+            // A DM A's copy holds with no pin: written into A's file after its pins were seeded, its rows [kRow, me].
+            chat = randomUUID();
+            addRows(chat, [kRow, me.publicKey], true);
+        }
+        const rowsBefore = peopleOf(chat);
+        const blockedKey = {
+            'the listing\'s key': kNew, 'the pin\'s key': peer.publicKey, 'a key in the copy\'s own rows': kRow, 'nobody of theirs': person().publicKey,
+        }[by];
+        vi.mocked(getBlockedUsers).mockResolvedValue([blockedKey]);
+        // A lists the chat as a request from the person's new key.
+        const listing = { id: chat, type: 'dm', name: null, participants: [kNew, me.publicKey], createdBy: kNew, createdAt: '2026-11-20T00:00:00.000Z', request: { from: kNew, state: 'pending', at: tick() } };
+        const page = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementation(async (url: string, init: any = {}) => {
+            const res: any = await page(url, init);
+            if (!new URL(url).pathname.startsWith('/api/messages/conversations/')) return res;
+            const body = await res.json();
+            body.requests.conversations.push(listing);
+            body.requests.count += 1;
+            return answer(200, body);
+        });
+        let read: any;
+        try {
+            read = await db.requestsInPlace(me.publicKey, A);
+        } finally {
+            fetchMock.mockImplementation(page);
+        }
+        const shown = read!.conversations.map((c: any) => c.id);
+        expect(shown.includes(chat), 'its card').toBe(!hidden);
+        expect(shown).toContain(req.id);
+        expect(read!.count).toBe(hidden ? 1 : 2);
+        if (hidden || pinning === 'pinned') {
+            // Hidden: nothing of theirs written (the new key never beside the blocked one). Pinned: [me, the pin's key] stay.
+            expect(peopleOf(chat)).toEqual(rowsBefore);
+        } else {
+            // Unpinned and shown: the listing's people go beside the rows A held, so this row is the no-pin case it says.
+            expect(peopleOf(chat)).toEqual([...rowsBefore, kNew].sort());
+        }
+    });
+});
+
+describe('what the list read in place hands back: only what A\'s copy holds; its pins first (#3309 review N3, N4 R7)', () => {
+    afterEach(async () => { await db.leaveChatInPlace(A); });
+    const keptForA = () => JSON.parse(h.store.get(messageRequestsStoreKey(me.publicKey, A_FILE)) ?? 'null');
+
+    it('a listed request A\'s copy won\'t write (group keys under its id): no card, not counted, not kept (N3, probe P1)', async () => {
+        const sql = new DatabaseSync(fileOn(A_FILE));
+        sql.prepare('INSERT INTO group_chat_key_state (group_id, highest) VALUES (?, ?)').run(`${me.publicKey}/${req.id.toLowerCase()}`, 2);
+        sql.close();
+        const read = await db.requestsInPlace(me.publicKey, A);
+        expect(read!.conversations).toEqual([]);
+        expect(read!.count).toBe(0);
+        expect(keptForA().conversations).toEqual([]);
+        expect((rowsOf(A_FILE)!.conversations as any[]).some((c) => c.id === req.id)).toBe(false);
+    });
+
+    it('A\'s pins unreadable: nothing written into A\'s copy, nothing kept, no cards (R7)', async () => {
+        h.store.set(dmPeerPinsStoreKey(me.publicKey, A_FILE), '{ this is not a pin store');
+        db._resetDmPeerPinsForTests();
+        const before = { A: rowsOf(A_FILE), kept: h.store.get(messageRequestsStoreKey(me.publicKey, A_FILE)) ?? null };
+        expect(await db.requestsInPlace(me.publicKey, A)).toBeNull();
+        expect({ A: rowsOf(A_FILE), kept: h.store.get(messageRequestsStoreKey(me.publicKey, A_FILE)) ?? null }).toEqual(before);
+    });
+});
+
+describe('reportDmLine in place: only a line of that direct chat, as A\'s copy holds it (#3309 review N4 D1, D2)', () => {
+    afterEach(async () => { await db.leaveChatInPlace(A); });
+
+    it('a chat A\'s copy holds as a group: refused before anything is asked (D1)', async () => {
+        const group = randomUUID();
+        const line = randomUUID();
+        const sql = new DatabaseSync(fileOn(A_FILE));
+        sql.prepare("INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, 'group_thread', ?, ?)").run(group, asker.publicKey, tick());
+        sql.prepare("INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce) VALUES (?, ?, ?, 'a group line', 'plaintext-v1')").run(line, group, asker.publicKey);
+        sql.close();
+        asked = [];
+        await expect(db.reportDmLine(group, line, 'a group line', 'Spam or scam', A)).rejects.toSatisfy((e: unknown) => db.isNoCopyInPlace(e));
+        expect(asked).toEqual([]);
+    });
+
+    it('a line of another direct chat, named with this request: refused, nothing asked; its own line goes (D2)', async () => {
+        await previewThere();
+        const another = node.lines.find((l) => l.conversationId === dm.id)!;
+        expect((rowsOf(A_FILE)!.messages as any[]).some((m) => m.id === another.id), 'A\'s copy holds the other chat\'s line').toBe(true);
+        asked = [];
+        await expect(db.reportDmLine(req.id, another.id, 'an old friend', 'Spam or scam', A)).rejects.toThrow('Message not found');
+        expect(asked).toEqual([]);
+        expect((await db.reportDmLine(req.id, askerLine.id, ASKER_WORDS, 'Spam or scam', A))?.success).toBe(true);
+        expect(asked.map((r) => `${r.method} ${new URL(r.url).origin}${new URL(r.url).pathname}`)).toEqual([`POST ${A}/api/messages/report`]);
     });
 });

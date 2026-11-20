@@ -258,7 +258,8 @@ describe('the sweep: every phone, record and day against the invariants', () => 
     it('"Later" is never final: a Later 8 days ago asks as if there had been none', () => {
         for (const r of records) {
             if (r.laterAt !== ago(8) || r.state === 'declined') continue;
-            const { laterAt: _gone, ...without } = r;
+            const without = { ...r };
+            delete without.laterAt;
             for (const p of Object.values(PHONES)) for (const input of inputs) {
                 expect(notifyAsks({ record: r, phone: p, now: NOW, ...input })).toEqual(notifyAsks({ record: without, phone: p, now: NOW, ...input }));
             }

@@ -557,7 +557,7 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         await type('Your name or nickname', 'Sally', 'xx');
         phone.invite = { valid: false, reason: 'used' };
-        await press('Next →', 'xx');
+        await press('Join', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).'));
         // The way to Recover still shows under the screen's own sentence, in any language (it read the English before).
         button('🔑 Recover an existing account with seed phrase →', 'xx');
@@ -572,30 +572,32 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         await enterInvite('BP-ABCD-1234', 'xx');
         await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         await type('Your name or nickname', 'Sally', 'xx');
-        await press('Next →', 'xx');
+        await press('Join', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('Failed to register identity: {reason}').replace('{reason}', pseudoLocalise(noAnswer)));
         check('Join BeanPool, the redeem with no answer');
     });
 
     // How it Works left the path (slice S5, DESIGN-onboarding-home-landing-fable.md §3.1): Safety Backup is the last step, its
     // main button "Let's Begin! 🚀" into Home, where the WELCOME TO BEANPOOL! tile says what How it Works said.
-    it('Your Photo, then Safety Backup (words shown, and the Go back? alert) as the last step', async () => {
+    it('Your photo, then Safety Backup (words shown, and the Go back? alert from ‹) as the last step', async () => {
         await mount('xx');
         await enterInvite('BP-ABCD-1234', 'xx');
         await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         await type('Your name or nickname', 'Sally', 'xx');
-        await press('Next →', 'xx');
-        // The invite's line: one sentence, the inviter's and the community's names in it as written.
-        expect(host!.textContent).toContain(pseudoLocalise('🎟️ Your invite from {inviter} checks out — welcome to {community}!').replace('{inviter}', 'Ana').replace('{community}', 'Mullum'));
+        await press('Join', 'xx');
+        // Your photo (slice S3): its title, the step bar's second dot, and no second greeting (the name screen's band said it).
+        expect(host!.textContent).toContain(pseudoLocalise('Choose your look'));
+        expect(all('[aria-label]').map((e) => e.getAttribute('aria-label'))).toContain(pseudoLocalise('Step {n} of {total}').replace('{n}', '2').replace('{total}', '3'));
+        expect(host!.textContent).not.toContain('Ana');
         check('Your Photo');
 
-        await press('Next →', 'xx');
+        await press('Skip for now', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.'));
         // The 12 words as written: never looked up. Each cell's spoken name places the word in the sentence.
         for (const [i, w] of WORDS.entries()) expect(all('[aria-label]').map((e) => e.getAttribute('aria-label'))).toContain(pseudoLocalise('Word {n}: {word}').replace('{n}', String(i + 1)).replace('{word}', w));
         for (const w of WORDS) expect(host!.textContent).toContain(w);
         check('Safety Backup, words shown');
-        await press('← Back', 'xx');
+        await press('Back', 'xx');
         expect(alerts.said).toEqual(expect.arrayContaining([pseudoLocalise('Have you saved your words?'), pseudoLocalise("If you go back now, you'll need to start over."), pseudoLocalise('Stay'), pseudoLocalise('Go Back')]));
         check('Safety Backup, the Go back? alert');
 
@@ -994,16 +996,18 @@ describe('a language picked on an open step redraws it, live', () => {
         phone.stored = SALLY;
         phone.pending = { step: 'seedBackup', inviteCode: 'BP-1', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
         const page = await mount('en', [createElement(LanguageSwitch, { key: 'switch' })]);
-        expect(page.textContent).toContain('Safety Backup');
+        expect(page.textContent).toContain("Let's Begin! 🚀");
         const fr = catalog('fr');
         await act(async () => { (page.querySelector('[data-testid="language-switch"]') as HTMLElement).click(); });
         await settle();
         await act(async () => { (page.querySelector('[data-testid="language-fr"]') as HTMLElement).click(); });
         await settle();
-        // The stepper and the step's main button (Let's Begin, the last step since S5) are in the catalog: French now, on the same open step.
-        expect(page.textContent).toContain(fr['Safety Backup'] as string);
+        // The step's main button (Let's Begin, the last step since S5) and the step bar's spoken words are in the catalog:
+        // French now, on the same open step.
         expect(page.textContent).toContain(fr["Let's Begin! 🚀"] as string);
-        expect(page.textContent).not.toContain('Safety Backup');
+        expect(page.textContent).not.toContain("Let's Begin! 🚀");
+        const spoken = Array.from(page.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label'));
+        expect(spoken).toContain((fr['Step {n} of {total}'] as string).replace('{n}', '3').replace('{total}', '3'));
         // A sentence of this sweep's the catalog doesn't have yet: its English, never a gap.
         const pen = 'No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.';
         expect(page.textContent).toContain(typeof fr[pen] === 'string' ? fr[pen] as string : pen);
@@ -1181,14 +1185,14 @@ describe('which community the join screens name (N1): the greeting', () => {
         await new Promise((r) => setTimeout(r, 700));
         await settle();
         expect(titles()).toContain("You're invited");
-        expect(button('Next →', 'en')).toBeTruthy();
+        expect(button('Join', 'en')).toBeTruthy();
     });
 
     it('once the node has checked the code and named its community: named, even when it refused the code', async () => {
         await mount('en');
         await fill('en');
         phone.invite = { valid: false, reason: 'used', communityName: 'Riverside Commons' };
-        await press('Next →', 'en');
+        await press('Join', 'en');
         expect(titles()).toContain("You're invited to Riverside Commons");
     });
 
@@ -1196,7 +1200,7 @@ describe('which community the join screens name (N1): the greeting', () => {
         await mount('en');
         await fill('en');
         phone.invite = { valid: false, reason: 'used', communityName: 'Riverside Commons' };
-        await press('Next →', 'en');
+        await press('Join', 'en');
         expect(titles()).toContain("You're invited to Riverside Commons");
         await type('Community name or address (e.g. riverside)', 'castlemaine', 'en');
         expect(titles()).toContain("You're invited");
@@ -1210,7 +1214,7 @@ describe('which community the join screens name (N1): the greeting', () => {
         await mount('en');
         await fill('en');
         phone.invite = { valid: false, reason: 'used' };
-        await press('Next →', 'en');
+        await press('Join', 'en');
         expect(titles()).toContain("You're invited");
     });
 
@@ -1220,7 +1224,7 @@ describe('which community the join screens name (N1): the greeting', () => {
         expect(titles()).toContain(pseudoLocalise("You're invited"));
         check('the name screen, before the check');
         phone.invite = { valid: false, reason: 'used', communityName: 'Riverside Commons' };
-        await press('Next →', 'xx');
+        await press('Join', 'xx');
         expect(titles()).toContain(pseudoLocalise("You're invited to {community}").replace('{community}', 'Riverside Commons'));
         check('the name screen, named');
     });

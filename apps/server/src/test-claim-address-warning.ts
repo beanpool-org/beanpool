@@ -23,7 +23,7 @@
  *      on its way, and the way out is --name again. A node that took it (still asking, or the name awaits approval):
  *      the name is on its way. No line before the warning says the phone uses the public http:// address it refuses.
  *   9. The words: every line fits, nothing says a beanpool.org name is required, and a public IP is offered to --ip. The
- *      usage names "I'm New Here" before the claim link, and the bean's "Set up a new community server" (#3209).
+ *      usage names "More ways in ›" before the claim, and the bean's "Set up a new community server" (#3209).
  *  10. https by a public IP once the server has a certificate for it (HTTPS S2): not warned when this run saw it answer
  *      as this server with a certificate (--ip, --address, or a run with no address on a server that keeps one); when
  *      it did not, the scheduler's reason, the way out behind a home router, a QR with no address, and the warning
@@ -267,13 +267,13 @@ async function main(): Promise<void> {
     check(ownLines.length === BLOCK && ownLines.every(l => l.length <= 120), 'the form for an own address on its way: as many lines, each fits');
     check(phoneAddressWarning(`${PUBLIC}:80`).some(l => l.includes('beanpool claim --ip 203.0.113.7')),
         'a public http:// IP address: the way out names the IP to give with --ip');
-    // The usage names the phone's routes as the steps after the QR do: a phone with no account opens on "Used BeanPool
-    // before?" and draws the claim link only after "I'm New Here" (#3209; the manual's two lines and this one skipped it).
+    // The usage names the phone's routes as the steps after the QR do: a phone with no account opens on the front door, whose
+    // "More ways in ›" sheet holds the claim (onboarding S1, 21 Nov 2026; before it, "I'm New Here" then the claim link, #3209).
     const usage = CLAIM_USAGE.replace(/\s+/g, ' ');
-    const newHere = usage.indexOf('tap "I\'m New Here"');
-    check(newHere >= 0 && newHere < usage.indexOf('"Installed BeanPool on a server? Claim it"')
+    const moreWays = usage.indexOf('tap "More ways in ›"');
+    check(moreWays >= 0 && moreWays < usage.indexOf('"Claim a server you installed"')
         && usage.includes('the bean at the top, then "Set up a new community server"'),
-        'the usage: "I\'m New Here" before the claim link, and the route with an account (the bean, then "Set up a new community server")');
+        'the usage: "More ways in ›" before the claim, and the route with an account (the bean, then "Set up a new community server")');
 
     console.log('\n10. An https IP address: warned until this run sees it answer with a certificate phones trust');
     // A stand-in for the node (services/public-address-agent.ts storeOwnAddress): takes an ip/domain request and keeps the

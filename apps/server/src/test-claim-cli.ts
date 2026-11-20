@@ -251,7 +251,7 @@ async function main(): Promise<void> {
                     '     type this server\'s address under "Server address", tap "Check this server", type your name under "Your name here" and tap "Claim and become owner". That makes your account on the phone, with 12 words to write on paper.',
                 ]),
                 '     Already have BeanPool and an account on this phone? Scan the code: the account you have becomes the owner.',
-                '  3. No camera, and no account yet? Open BeanPool, tap "I\'m New Here" on its first screen, then "Installed BeanPool on a server? Claim it" at the bottom.',
+                '  3. No camera, and no account yet? Open BeanPool, tap "More ways in ›" on its first screen, then "Claim a server you installed".',
                 `     Type ${where} under "Server address", tap "Check this server", type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".`,
                 '  4. No camera, and an account already? Open BeanPool, tap the bean at the top, then tap "Set up a new community server":',
                 `     type ${where} under "Server address", tap "Check this server", type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".`,
@@ -281,14 +281,14 @@ async function main(): Promise<void> {
         const read = (rel: string) => fs.readFileSync(path.join(nativeApp, rel), 'utf8');
         const claimScreen = read('app/claim-community.tsx');
         const welcome = read('app/welcome.tsx');
-        const usedBefore = read('components/welcome/UsedBefore.tsx');
+        const frontDoor = read('components/welcome/FrontDoor.tsx');
         const sheet = read('app/beanpool.tsx');
         const setUpRow = read('components/SetUpServerRow.tsx');
         const settingsScreen = read('app/(tabs)/settings.tsx');
         const header = read('components/GlobalHeader.tsx');
         check(["t('Claim {name}'", "t('Claim code')", "t('Your name here')", "t('Claim and become owner')", "t('Claim a community')", "t('Server address')", "t('Check this server')"].every(l => claimScreen.includes(l))
-            && usedBefore.includes('{t("I\'m New Here")}')
-            && welcome.includes("{t('Installed BeanPool on a server? Claim it →')}") && welcome.includes('router.push(CLAIM_NEW_SERVER_ROUTE)'),
+            && frontDoor.includes("{t('More ways in ›')}") && frontDoor.includes("{t('Claim a server you installed')}")
+            && welcome.includes('onClaim={() => router.push(CLAIM_NEW_SERVER_ROUTE)}'),
             'every label the steps name is still on the phone');
         // The routes with an account: the bean at the top opens the BeanPool sheet; its "Add a community" leads to the address
         // field and "Add & Connect" in Settings; "Set up a new community server" is SetUpServerRow's title, which opens the claim screen.

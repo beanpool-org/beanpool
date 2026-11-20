@@ -119,8 +119,8 @@ describe('Settings → Chat memory at 320dp with 1.3× text (amendment 6 §3)', 
         act(() => button(page, CHAT_MEMORY_COPY.reset, 1).click());
         whole(page, chatMemoryConfirmTitle(COMMUNITIES[1].name));
         whole(page, CHAT_MEMORY_COPY.confirm);
-        // The marks go with the pins (DESIGN-dm-key-signal-model §4): one more sentence, whole, under the confirmation.
-        whole(page, CHAT_MEMORY_COPY.verifiedGo);
+        // S7c: the marks are no longer the community's, so no sentence about verified people follows the confirmation.
+        expect(page.textContent).not.toMatch(/verified/);
         expect(onReset).not.toHaveBeenCalled();
         act(() => button(page, CHAT_MEMORY_COPY.cancel).click());
         expect(span(page, CHAT_MEMORY_COPY.confirm)).toBeUndefined();
@@ -148,7 +148,7 @@ describe('Settings → Chat memory at 320dp with 1.3× text (amendment 6 §3)', 
         expect([CARD_INNER, row, confirm]).toEqual([240, 214, 188]);
         expect(widthOf(longestWord(CHAT_MEMORY_COPY.body), s.body.fontSize)).toBeLessThanOrEqual(CARD_INNER);
         expect(widthOf(longestWord(COMMUNITIES[1].name), s.name.fontSize)).toBeLessThanOrEqual(row);
-        for (const text of [CHAT_MEMORY_COPY.confirm, CHAT_MEMORY_COPY.verifiedGo, chatMemoryConfirmTitle(COMMUNITIES[1].name)]) expect(widthOf(longestWord(text), s.confirmTitle.fontSize)).toBeLessThanOrEqual(confirm);
+        for (const text of [CHAT_MEMORY_COPY.confirm, chatMemoryConfirmTitle(COMMUNITIES[1].name)]) expect(widthOf(longestWord(text), s.confirmTitle.fontSize)).toBeLessThanOrEqual(confirm);
         expect(widthOf(longestWord(chatMemoryDoneLine(COMMUNITIES[1].name)), s.doneLine.fontSize)).toBeLessThanOrEqual(row);
         expect(widthOf(CHAT_MEMORY_COPY.reset, s.resetText.fontSize)).toBeLessThanOrEqual(row - 2 * (s.resetBtn.paddingHorizontal + s.resetBtn.borderWidth));
         expect(widthOf(CHAT_MEMORY_COPY.reset, s.confirmBtnText.fontSize)).toBeLessThanOrEqual(confirm - 2 * (s.confirmBtn.paddingHorizontal + s.confirmBtn.borderWidth));

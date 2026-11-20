@@ -107,20 +107,23 @@ export function dmKeyChangedNoticeText(peerName?: string | null): string {
 /**
  * What the key code screen is showing (§3): exactly one of these under the code. 'paused': a verified person's new key
  * waits at the top of the chat; 'waiting': a pause with no single key listed (several, none, or listings that disagree),
- * verified or not, with nothing to mark while it lasts (S2).
+ * verified or not, with nothing to mark while it lasts (S2); 'list-unread': the member's list of verified keys can't be
+ * read, so nothing can be marked or removed and no ✓ shows (DESIGN-s7-blocks-verified-everywhere §3.2).
  */
-export type DmKeyCodeState = 'not-verified' | 'verified' | 'paused' | 'waiting' | 'none';
+export type DmKeyCodeState = 'not-verified' | 'verified' | 'paused' | 'waiting' | 'list-unread' | 'none';
 
 /** What the screen reads to pick its state: utils/db.ts DmKeyCodeInfo's flags. */
 export interface DmKeyCodeFlags {
     verified: boolean;
     paused: boolean;
     offersKey: boolean;
+    listUnread?: boolean;
 }
 
 /** The key code screen's one state under the code, for the code it shows (null: there is none). */
 export function dmKeyCodeState(info: DmKeyCodeFlags | null | undefined, code: string | null): DmKeyCodeState {
     if (!code) return 'none';
+    if (info?.listUnread) return 'list-unread';
     if (info?.offersKey) return 'paused';
     if (info?.paused) return 'waiting';
     return info?.verified ? 'verified' : 'not-verified';
@@ -166,13 +169,14 @@ export function dmKeyCodeCopy(peerName: string | null | undefined, whilePaused =
             ? t('Ask {name} to open Settings, then Account Protection, and read you My key code. Do it in person or on a call. If every digit matches, this chat is really with {name}.', { name })
             : t('Ask the other person to open Settings, then Account Protection, and read you My key code. Do it in person or on a call. If every digit matches, this chat is really with them.'),
         mark: t('Mark as verified'),
+        // Verified is of the key, in every community on the phone (DESIGN-s7-blocks-verified-everywhere §3.4).
         markNote: name
-            ? t('After that, this phone asks you before it sends to a new key for {name}. Kept on this phone only.', { name })
-            : t('After that, this phone asks you before it sends to a new key for this person. Kept on this phone only.'),
+            ? t('After that, this phone asks you before it sends to a new key for {name}, in every community on this phone. Kept on this phone only.', { name })
+            : t('After that, this phone asks you before it sends to a new key for this person, in every community on this phone. Kept on this phone only.'),
         verified: t('Verified ✓'),
         verifiedNote: name
-            ? t('This phone asks you before it sends to a new key for {name}. Kept on this phone only.', { name })
-            : t('This phone asks you before it sends to a new key for this person. Kept on this phone only.'),
+            ? t('This phone asks you before it sends to a new key for {name}, in every community on this phone. Kept on this phone only.', { name })
+            : t('This phone asks you before it sends to a new key for this person, in every community on this phone. Kept on this phone only.'),
         remove: t('Remove verification'),
         paused: name ? t("{name}'s key changed. The new code is at the top of the chat.", { name }) : t("This chat's key changed. The new code is at the top of the chat."),
         waiting: name
@@ -183,7 +187,9 @@ export function dmKeyCodeCopy(peerName: string | null | undefined, whilePaused =
         removeConfirmTitle: t('Remove verification?'),
         removeConfirmBody: whilePaused
             ? (name ? t("This chat will carry on with {name}'s new key, without the check.", { name }) : t("This chat will carry on with the other person's new key, without the check."))
-            : (name ? t('This phone will stop asking before it sends to a new key for {name}.', { name }) : t('This phone will stop asking before it sends to a new key for this person.')),
+            : (name
+                ? t('This phone will stop asking before it sends to a new key for {name}, in every community on this phone.', { name })
+                : t('This phone will stop asking before it sends to a new key for this person, in every community on this phone.')),
         cancel: t('Cancel'),
     };
 }

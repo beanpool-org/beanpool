@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmSightFor, judgeFirstSight, applySightVerdict, settleFirstSight, dmOpenPeers, acceptOffer, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, markHeldLost, noRoomForFirstSight, rekeyDateOf, DmPinsFullError, DM_PINS_MAX_BYTES, FORMER_MAX, salvagePinIds, restDmEntry, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
 import { dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey } from '../storage-keys';
+import { dmVerifiedKeysOf } from '../dm-verified-keys';
 
 // The pin store itself (utils/dm-peer-pins.ts): what a listing may do to a pin, and what an unreadable store does. The
 // phone's real sync and send over it are in dm-line-binding.test.ts.
@@ -16,6 +17,9 @@ const NOW = '2026-10-14T00:00:00.000Z';
 const record = (pins: Record<string, unknown>) => JSON.stringify({ pins });
 const FA = 'community_a.db';
 const FB = 'community_b.db';
+/** The member's list of verified keys (utils/dm-verified-keys.ts, S7c): nobody, or Ben. */
+const NONE = dmVerifiedKeysOf([]);
+const VB = dmVerifiedKeysOf([BEN]);
 
 function memory(seed: Record<string, string> = {}) {
     const data = new Map(Object.entries(seed));
@@ -65,49 +69,48 @@ describe('readDmPeerPins', () => {
 
 // Signal's model (DESIGN-dm-key-signal-model §2.3, 16 Nov): only a pin the member marked verified waits when the listing
 // changes; one not marked follows the listing (utils/__tests__/dm-key-signal-model.test.ts holds the whole table). These
-// keep the verified half: the port rule (§6) marks the pin before the listing changes.
+// keep the verified half: the port rule (§6) marks the pin before the listing changes (S7c: Ben's key on the member's list, VB).
 describe('applyDmListings: a listing only offers on a pin the member marked verified, never moves it', () => {
-    const V = { peer: BEN, at: NOW };
-    const pinned = (): DmPeerPins => ({ [D0]: { peer: BEN, since: NOW, by: 'first-seen', verified: { ...V } } });
+    const pinned = (): DmPeerPins => ({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } });
 
     it('no pin: one other key in every listing pins it at first sight; disagreeing listings, several others or none pin nothing', () => {
         let p: DmPeerPins = {};
-        expect(applyDmListings(p, D0.toUpperCase(), [[BEN]], NOW)).toBe(true);
+        expect(applyDmListings(p, D0.toUpperCase(), [[BEN]], NOW, NONE)).toBe(true);
         expect(p).toEqual({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } });
         for (const listings of [[[BEN], [PUPPET]], [[BEN, PUPPET]], [[]], []]) {
             p = {};
-            expect(applyDmListings(p, D0, listings, NOW)).toBe(false);
+            expect(applyDmListings(p, D0, listings, NOW, NONE)).toBe(false);
             expect(p).toEqual({});
         }
     });
 
     it('a listing without the pinned key offers the other key and leaves the pin; one with it as well as others changes nothing', () => {
         const p = pinned();
-        expect(applyDmListings(p, D0, [[BEN, PUPPET]], NOW)).toBe(false);
+        expect(applyDmListings(p, D0, [[BEN, PUPPET]], NOW, VB)).toBe(false);
         expect((p[D0] as DmPeerPin).offered).toBeUndefined();
-        expect(applyDmListings(p, D0, [[PUPPET]], NOW)).toBe(true);
-        expect(p[D0]).toEqual({ peer: BEN, since: NOW, by: 'first-seen', verified: V, offered: { peer: PUPPET, at: NOW } });
-        expect(applyDmListings(p, D0, [[PUPPET]], '2026-10-15T00:00:00.000Z')).toBe(false);   // the same offer keeps its time
+        expect(applyDmListings(p, D0, [[PUPPET]], NOW, VB)).toBe(true);
+        expect(p[D0]).toEqual({ peer: BEN, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW } });
+        expect(applyDmListings(p, D0, [[PUPPET]], '2026-10-15T00:00:00.000Z', VB)).toBe(false);   // the same offer keeps its time
         expect((p[D0] as DmPeerPin).offered?.at).toBe(NOW);
     });
 
     it('a twin listed beside the DM (the same id in capitals) that disagrees offers no single key (§2.3: the listings disagree); the offer clears only once every listing names the pinned key', () => {
         const p = pinned();
-        expect(applyDmListings(p, D0, [[BEN], [PUPPET]], NOW)).toBe(true);
+        expect(applyDmListings(p, D0, [[BEN], [PUPPET]], NOW, VB)).toBe(true);
         expect((p[D0] as DmPeerPin).offered).toEqual({ peer: null, at: NOW });
-        expect(applyDmListings(p, D0, [[BEN], []], NOW)).toBe(false);
+        expect(applyDmListings(p, D0, [[BEN], []], NOW, VB)).toBe(false);
         expect((p[D0] as DmPeerPin).offered).toBeDefined();
-        expect(applyDmListings(p, D0, [[BEN]], NOW)).toBe(true);
-        expect(p[D0]).toEqual({ peer: BEN, since: NOW, by: 'first-seen', verified: V });
+        expect(applyDmListings(p, D0, [[BEN]], NOW, VB)).toBe(true);
+        expect(p[D0]).toEqual({ peer: BEN, since: NOW, by: 'first-seen' });
         // Not verified, the same disagreement moves nothing either: there is no one key to follow.
         const q: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen' } };
-        expect(applyDmListings(q, D0, [[BEN], [PUPPET]], NOW)).toBe(true);
+        expect(applyDmListings(q, D0, [[BEN], [PUPPET]], NOW, NONE)).toBe(true);
         expect(q[D0]).toEqual({ peer: BEN, since: NOW, by: 'first-seen', offered: { peer: null, at: NOW } });
     });
 
     it('several other keys and not the pinned one: sends stop, with no key offered', () => {
         const p = pinned();
-        expect(applyDmListings(p, D0, [[PUPPET, OTHER]], NOW)).toBe(true);
+        expect(applyDmListings(p, D0, [[PUPPET, OTHER]], NOW, VB)).toBe(true);
         expect((p[D0] as DmPeerPin).offered).toEqual({ peer: null, at: NOW });
         expect((p[D0] as DmPeerPin).peer).toBe(BEN);
     });
@@ -115,42 +118,42 @@ describe('applyDmListings: a listing only offers on a pin the member marked veri
     it('a stored pause the member\'s reset made, on a pin not marked verified, follows the next one-key listing — Signal\'s model (16 Nov): its flags are no longer read (§2.6)', () => {
         const LATER = '2026-10-15T00:00:00.000Z';
         const p: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW, firstSight: true } } };
-        expect(applyDmListings(p, D0, [[OTHER]], LATER)).toBe(true);
+        expect(applyDmListings(p, D0, [[OTHER]], LATER, NONE)).toBe(true);
         expect(p[D0]).toEqual({ peer: OTHER, since: LATER, by: 'listing', checked: true, former: [BEN], changedAt: [LATER] });
     });
 
     it('a stored first-sight pause is no longer the member\'s alone — Signal\'s model (16 Nov): a listing naming the pin clears it, one naming another key moves the pin (§2.6, option H retired)', () => {
         const LATER = '2026-10-15T00:00:00.000Z';
         const p: DmPeerPins = { [D0]: { peer: PUPPET, since: NOW, by: 'first-seen', checked: true, offered: { peer: BEN, at: NOW, firstSight: true } } };
-        expect(applyDmListings(p, D0, [[PUPPET]], LATER)).toBe(true);    // the node names the pin: the pause ends
+        expect(applyDmListings(p, D0, [[PUPPET]], LATER, NONE)).toBe(true);    // the node names the pin: the pause ends
         expect(p[D0]).toEqual({ peer: PUPPET, since: NOW, by: 'first-seen', checked: true });
-        expect(applyDmListings(p, D0, [[OTHER, BEN]], LATER)).toBe(true); // several keys, none the pin: nobody to seal to
+        expect(applyDmListings(p, D0, [[OTHER, BEN]], LATER, NONE)).toBe(true); // several keys, none the pin: nobody to seal to
         expect((p[D0] as DmPeerPin).offered).toEqual({ peer: null, at: LATER });
-        expect(applyDmListings(p, D0, [[OTHER]], LATER)).toBe(true);     // one key: the pin follows it
+        expect(applyDmListings(p, D0, [[OTHER]], LATER, NONE)).toBe(true);     // one key: the pin follows it
         expect(p[D0]).toEqual({ peer: OTHER, since: LATER, by: 'listing', checked: true, former: [PUPPET], changedAt: [LATER] });
         // A verified pin's offer (the existing phone's) still clears when the listing names the pin again, and never moves it.
         const q = pinned();
-        applyDmListings(q, D0, [[PUPPET]], NOW);
-        applyDmListings(q, D0, [[OTHER]], NOW);
+        applyDmListings(q, D0, [[PUPPET]], NOW, VB);
+        applyDmListings(q, D0, [[OTHER]], NOW, VB);
         expect((q[D0] as DmPeerPin).offered).toEqual({ peer: OTHER, at: NOW });
-        expect(applyDmListings(q, D0, [[BEN]], NOW)).toBe(true);
+        expect(applyDmListings(q, D0, [[BEN]], NOW, VB)).toBe(true);
         expect((q[D0] as DmPeerPin).offered).toBeUndefined();
-        expect(q[D0]).toMatchObject({ peer: BEN, verified: V });
+        expect(q[D0]).toMatchObject({ peer: BEN });
     });
 
     it('N1 under Signal\'s model (16 Nov): a first-sight pause born with no key to offer clears when every listing names the pinned key, extras or not (§2.3 row 1), never on a listing naming nobody', () => {
         const LATER = '2026-10-15T00:00:00.000Z';
         const p: DmPeerPins = {};
-        expect(applySightVerdict(p, D0, judgeFirstSight([BEN, BEN], null), null, undefined, NOW)).toBe(true);
+        expect(applySightVerdict(p, D0, judgeFirstSight([BEN, BEN], null), null, undefined, NOW, NONE)).toBe(true);
         expect((p[D0] as DmPeerPin).offered).toEqual({ peer: null, at: NOW, firstSight: true, keyless: true });
-        expect(applyDmListings(p, D0, [[]], LATER)).toBe(false);
-        expect(applyDmListings(p, D0, [[BEN], []], LATER)).toBe(false);   // one listing names nobody: not every listing names Ben
+        expect(applyDmListings(p, D0, [[]], LATER, NONE)).toBe(false);
+        expect(applyDmListings(p, D0, [[BEN], []], LATER, NONE)).toBe(false);   // one listing names nobody: not every listing names Ben
         expect((p[D0] as DmPeerPin).offered).toMatchObject({ peer: null, keyless: true });
-        expect(applyDmListings(p, D0, [[BEN], [BEN, OTHER]], LATER)).toBe(true); // Ben in every listing, an extra in one: sealed to Ben
+        expect(applyDmListings(p, D0, [[BEN], [BEN, OTHER]], LATER, NONE)).toBe(true); // Ben in every listing, an extra in one: sealed to Ben
         expect(dmPinFor(p, D0)).toEqual({ peer: BEN, since: NOW, by: 'first-seen', checked: true });
         // Kept through the store's read.
         const kept: DmPeerPins = {};
-        applySightVerdict(kept, D0, judgeFirstSight([BEN], null), null, undefined, NOW);
+        applySightVerdict(kept, D0, judgeFirstSight([BEN], null), null, undefined, NOW, NONE);
         expect(JSON.parse(JSON.stringify(kept))[D0.toLowerCase()].offered.keyless).toBe(true);
     });
 
@@ -158,16 +161,16 @@ describe('applyDmListings: a listing only offers on a pin the member marked veri
         const LATER = '2026-10-15T00:00:00.000Z';
         // Born keyless (rule 3 with several listed), then one key listed: the pin follows it, PUPPET kept as former, one notice.
         const p: DmPeerPins = {};
-        applySightVerdict(p, D0, judgeFirstSight([PUPPET], null), null, undefined, NOW);
-        expect(applyDmListings(p, D0, [[BEN]], LATER)).toBe(true);
+        applySightVerdict(p, D0, judgeFirstSight([PUPPET], null), null, undefined, NOW, NONE);
+        expect(applyDmListings(p, D0, [[BEN]], LATER, NONE)).toBe(true);
         expect(p[D0]).toEqual({ peer: BEN, since: LATER, by: 'listing', checked: true, former: [PUPPET], changedAt: [LATER] });
         // Rules 3-4 against one listed key: the listed key, the lines' key kept as former, one notice.
         const q: DmPeerPins = {};
-        applySightVerdict(q, D0, judgeFirstSight([PUPPET], BEN), BEN, undefined, NOW);
+        applySightVerdict(q, D0, judgeFirstSight([PUPPET], BEN), BEN, undefined, NOW, NONE);
         expect(q[D0]).toEqual({ peer: BEN, since: NOW, by: 'listing', checked: true, former: [PUPPET], changedAt: [NOW] });
         // A null first-sight pause with no mark (an older build's): a listing naming the pin clears it (§2.3 row 1).
         const r: DmPeerPins = { [D0]: { peer: PUPPET, since: NOW, by: 'first-seen', checked: true, offered: { peer: null, at: NOW, firstSight: true } } };
-        expect(applyDmListings(r, D0, [[PUPPET]], LATER)).toBe(true);
+        expect(applyDmListings(r, D0, [[PUPPET]], LATER, NONE)).toBe(true);
         expect(dmPinFor(r, D0)?.offered).toBeUndefined();
     });
 });
@@ -190,11 +193,11 @@ describe('acceptOffer: the member\'s "Continue with the new key" (slice 2)', () 
     const LATER = '2026-10-15T00:00:00.000Z';
     const D1 = '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed';
     const D2 = '6ec0bd7f-11c0-43da-975e-2a8ad9ebae0b';
-    it('moves the pin to the key on offer, by the member, the old key first in former (pick 3), the offer gone, one notice date; a verified person stays verified, on the new key (question 1, Fable\'s pick)', () => {
-        const pins: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', former: [OTHER], verified: { peer: BEN, at: NOW }, offered: { peer: PUPPET, at: NOW } } };
+    it('moves the pin to the key on offer, by the member, the old key first in former (pick 3), the offer gone, one notice date; the pin only (S7c: the new key goes on the member\'s list in db.ts acceptOfferedPeer)', () => {
+        const pins: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', former: [OTHER], offered: { peer: PUPPET, at: NOW } } };
         expect(acceptOffer(pins, D0.toUpperCase(), PUPPET.toUpperCase(), LATER)).toBe(true);
-        expect(pins[D0]).toEqual({ peer: PUPPET, since: LATER, by: 'member', former: [BEN, OTHER], changedAt: [LATER], verified: { peer: PUPPET, at: LATER } });
-        // A pin with no mark (an offer the resting rule hasn't moved yet) never gains one from Continue.
+        expect(pins[D0]).toEqual({ peer: PUPPET, since: LATER, by: 'member', former: [BEN, OTHER], changedAt: [LATER] });
+        expect(pins[D0]).not.toHaveProperty('verified');
         const plain: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW } } };
         expect(acceptOffer(plain, D0, PUPPET, LATER)).toBe(true);
         expect(plain[D0]).toEqual({ peer: PUPPET, since: LATER, by: 'member', former: [BEN], changedAt: [LATER] });
@@ -234,12 +237,12 @@ describe('acceptOffer: the member\'s "Continue with the new key" (slice 2)', () 
         for (const id of [D0, D1, D2]) for (const k of [BEN, PUPPET, PUPPET.toUpperCase(), OTHER, 'not a key']) expect(acceptOffer(pins, id, k, LATER)).toBe(false);
         expect(JSON.stringify(pins)).toBe(before);
         // What takes the listed key instead: the resting rule, with no former and no notice (no key was ever placed).
-        expect(restDmEntry(pins, D0, LATER)).toBe(true);
+        expect(restDmEntry(pins, D0, LATER, NONE)).toBe(true);
         expect(pins[D0]).toEqual({ peer: PUPPET, since: LATER, by: 'listing', checked: true });
-        expect(restDmEntry(pins, D1, LATER)).toBe(true);
+        expect(restDmEntry(pins, D1, LATER, NONE)).toBe(true);
         expect(pins[D1]).toEqual({ peer: BEN, since: LATER, by: 'listing', checked: true });
         expect(dmOpenPeers(dmPinFor(pins, D1)!)).toEqual([BEN]);
-        expect(restDmEntry(pins, D2, LATER)).toBe(false);
+        expect(restDmEntry(pins, D2, LATER, NONE)).toBe(false);
         expect(pins[D2]).toEqual({ unplaced: true, since: NOW, listed: null });
     });
     it('a first-sight pause (rules 3-4) continues to the key on offer only; the verdict, the offer and what was heard go', () => {
@@ -424,27 +427,27 @@ describe('first sight judged on the thread (§3.4 amendment): judgeFirstSight, a
 
     it('rule 5 keeps no pin, only a record, while no single key is listed; neither rule 1 nor 2 pins over it — Signal\'s model (16 Nov): one listed key makes it a pin on that key, with no former and no notice (§2.3 row 5, §2.4)', () => {
         const p: DmPeerPins = {};
-        expect(applySightVerdict(p, D0, { rule: 5 }, null, undefined, NOW)).toBe(true);
+        expect(applySightVerdict(p, D0, { rule: 5 }, null, undefined, NOW, NONE)).toBe(true);
         expect(dmPinFor(p, D0)).toBeNull();
         expect(dmSightFor(p, D0)).toEqual({ unplaced: true, since: NOW, listed: null });
         expect(pinAtFirstSight(p, D0, L, NOW)).toBe(false);
-        expect(applySightVerdict(p, D0, { rule: 1 }, null, undefined, NOW)).toBe(false);
+        expect(applySightVerdict(p, D0, { rule: 1 }, null, undefined, NOW, NONE)).toBe(false);
         expect(dmPinFor(p, D0)).toBeNull();
         // Several keys listed: the record only hears it, for the next judgement.
-        expect(applyDmListings(p, D0, [[L, OTHER]], NOW, { tryKeys: [BEN] })).toBe(true);
+        expect(applyDmListings(p, D0, [[L, OTHER]], NOW, NONE, { tryKeys: [BEN] })).toBe(true);
         expect(dmSightFor(p, D0)).toMatchObject({ unplaced: true, stale: true, listed: null });
-        expect(applySightVerdict(p, D0, { rule: 2, pin: L, offer: false }, null, undefined, NOW)).toBe(true);
+        expect(applySightVerdict(p, D0, { rule: 2, pin: L, offer: false }, null, undefined, NOW, NONE)).toBe(true);
         expect(dmPinFor(p, D0)).toBeNull();
         expect(dmSightFor(p, D0)).not.toHaveProperty('stale');
         // One key listed: the record becomes a pin on it, checked, no former, no notice.
-        expect(applyDmListings(p, D0, [[L]], NOW)).toBe(true);
+        expect(applyDmListings(p, D0, [[L]], NOW, NONE)).toBe(true);
         expect(dmPinFor(p, D0)).toEqual({ peer: L, since: NOW, by: 'listing', checked: true });
         // First sight's rule 5 with one listed key pins it the same way; rule 4 pins it with the older key as former and one notice.
         const q: DmPeerPins = {};
-        expect(applySightVerdict(q, D0, { rule: 5 }, L, undefined, NOW)).toBe(true);
+        expect(applySightVerdict(q, D0, { rule: 5 }, L, undefined, NOW, NONE)).toBe(true);
         expect(dmPinFor(q, D0)).toEqual({ peer: L, since: NOW, by: 'listing', checked: true });
         const r: DmPeerPins = {};
-        expect(applySightVerdict(r, D0, { rule: 4, pin: BEN, offer: true }, L, { tryKeys: [BEN], rekeyedAt: NOW }, NOW)).toBe(true);
+        expect(applySightVerdict(r, D0, { rule: 4, pin: BEN, offer: true }, L, { tryKeys: [BEN], rekeyedAt: NOW }, NOW, NONE)).toBe(true);
         expect(dmPinFor(r, D0)).toEqual({ peer: L, since: NOW, by: 'listing', checked: true, former: [BEN], changedAt: [NOW] });
     });
 
@@ -452,17 +455,17 @@ describe('first sight judged on the thread (§3.4 amendment): judgeFirstSight, a
         const p: DmPeerPins = {};
         pinAtFirstSight(p, D0, L, NOW);
         expect(dmPinFor(p, D0)?.checked).toBeUndefined();
-        expect(applySightVerdict(p, D0, { rule: 1 }, L, undefined, NOW)).toBe(false);
+        expect(applySightVerdict(p, D0, { rule: 1 }, L, undefined, NOW, NONE)).toBe(false);
         expect(settleFirstSight(p, D0)).toBe(true);
         expect(dmPinFor(p, D0)?.checked).toBe(true);
-        expect(applySightVerdict(p, D0, { rule: 3, pin: BEN, offer: true }, L, undefined, NOW)).toBe(false);
+        expect(applySightVerdict(p, D0, { rule: 3, pin: BEN, offer: true }, L, undefined, NOW, NONE)).toBe(false);
         expect(dmPinFor(p, D0)?.peer).toBe(L);
         const q: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'member' } };
-        expect(applySightVerdict(q, D0, { rule: 3, pin: OTHER, offer: true }, L, undefined, NOW)).toBe(false);
+        expect(applySightVerdict(q, D0, { rule: 3, pin: OTHER, offer: true }, L, undefined, NOW, NONE)).toBe(false);
         // An offer stops a settle: nothing is sealed while one waits.
         const r: DmPeerPins = {};
         pinAtFirstSight(r, D0, BEN, NOW);
-        applyDmListings(r, D0, [[L]], NOW);
+        applyDmListings(r, D0, [[L]], NOW, NONE);
         expect(settleFirstSight(r, D0)).toBe(false);
     });
 
@@ -470,7 +473,7 @@ describe('first sight judged on the thread (§3.4 amendment): judgeFirstSight, a
         const s = memory();
         const p: DmPeerPins = {};
         pinAtFirstSight(p, D0, BEN, NOW, { tryKeys: [OTHER], rekeyedAt: NOW }, true);
-        applySightVerdict(p, D1, { rule: 5 }, null, { tryKeys: [BEN] }, NOW);
+        applySightVerdict(p, D1, { rule: 5 }, null, { tryKeys: [BEN] }, NOW, NONE);
         await writeDmPeerPins(s, ME, FA, p);
         const back = await readDmPeerPins(s, ME, FA);
         expect(dmSightFor(back, D0)).toEqual({ peer: BEN, since: NOW, by: 'first-seen', checked: true, heard: { tryKeys: [OTHER], rekeyedAt: NOW } });
@@ -486,9 +489,9 @@ describe('the caps: a node can\'t make the phone keep unbounded pins (§3.4 amen
         const p: DmPeerPins = {};
         const long = 'a'.repeat(65);
         expect(pinAtFirstSight(p, long, BEN, NOW)).toBe(false);
-        expect(applyDmListings(p, long, [[BEN]], NOW)).toBe(false);
-        expect(applySightVerdict(p, long, { rule: 2, pin: BEN, offer: false }, BEN, undefined, NOW)).toBe(false);
-        expect(applySightVerdict(p, long, { rule: 5 }, BEN, undefined, NOW)).toBe(false);
+        expect(applyDmListings(p, long, [[BEN]], NOW, NONE)).toBe(false);
+        expect(applySightVerdict(p, long, { rule: 2, pin: BEN, offer: false }, BEN, undefined, NOW, NONE)).toBe(false);
+        expect(applySightVerdict(p, long, { rule: 5 }, BEN, undefined, NOW, NONE)).toBe(false);
         expect(markHeldLost(p, [long, long.toUpperCase()], NOW)).toBe(false);
         expect(Object.keys(p)).toEqual([]);
         const ok = 'B'.repeat(64);
@@ -508,24 +511,24 @@ describe('the caps: a node can\'t make the phone keep unbounded pins (§3.4 amen
     });
 
     it('in a book: a new first-sight pin is added only while the value stays within the cap, a change to a kept pin always applies, and a write still over the cap is refused (DmPinsFullError): the copy dropped and read again', async () => {
-        // Ben marked verified, so a changed listing is offered on his pin (Signal's model: an unmarked pin would follow it).
-        const verified = { peer: BEN, at: NOW };
-        const frame = JSON.stringify({ pins: { [D0]: { peer: BEN, since: '', by: 'first-seen', verified } } }).length;
-        const s = memory({ [dmPeerPinsStoreKey(ME, FA)]: record({ [D0]: { peer: BEN, since: 'a'.repeat(DM_PINS_MAX_BYTES - 150 - frame), by: 'first-seen', verified } }) });
+        // Ben marked verified (his key on the member's list, VB), so a changed listing is offered on his pin (Signal's model: an
+        // unmarked pin would follow it).
+        const frame = JSON.stringify({ pins: { [D0]: { peer: BEN, since: '', by: 'first-seen' } } }).length;
+        const s = memory({ [dmPeerPinsStoreKey(ME, FA)]: record({ [D0]: { peer: BEN, since: 'a'.repeat(DM_PINS_MAX_BYTES - 150 - frame), by: 'first-seen' } }) });
         const writes: string[] = [];
         const book = createDmPinBook<string>({ ...s, setItem: async (k, v) => { writes.push(v); await s.setItem(k, v); } }, (f) => f);
         expect(Buffer.byteLength(s.data.get(dmPeerPinsStoreKey(ME, FA))!)).toBe(DM_PINS_MAX_BYTES - 150);
         // A first-sight pin under a UUID takes 168 bytes with its comma: no room. Refused, nothing written.
         expect(noRoomForFirstSight(await book.read(ME, FA), D1)).toBe(true);
         expect(await book.update(ME, FA, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).toBe(false);
-        expect(await book.update(ME, FA, (p) => applyDmListings(p, D1, [[PUPPET]], NOW))).toBe(false);
-        expect(await book.update(ME, FA, (p) => applySightVerdict(p, D1, { rule: 1 }, PUPPET, undefined, NOW))).toBe(false);
+        expect(await book.update(ME, FA, (p) => applyDmListings(p, D1, [[PUPPET]], NOW, VB))).toBe(false);
+        expect(await book.update(ME, FA, (p) => applySightVerdict(p, D1, { rule: 1 }, PUPPET, undefined, NOW, VB))).toBe(false);
         expect(writes).toEqual([]);
         // An offer on the kept pin (118 bytes) always applies.
-        expect(await book.update(ME, FA, (p) => applyDmListings(p, D0, [[PUPPET]], NOW))).toBe(true);
+        expect(await book.update(ME, FA, (p) => applyDmListings(p, D0, [[PUPPET]], NOW, VB))).toBe(true);
         expect(Buffer.byteLength(writes[0])).toBe(DM_PINS_MAX_BYTES - 32);
         // A judgement on a DM with nothing kept is a replacement too: it applies, and the write is over: refused whole.
-        await expect(book.update(ME, FA, (p) => applySightVerdict(p, D2, { rule: 3, pin: BEN, offer: true }, PUPPET, undefined, NOW))).rejects.toBeInstanceOf(DmPinsFullError);
+        await expect(book.update(ME, FA, (p) => applySightVerdict(p, D2, { rule: 3, pin: BEN, offer: true }, PUPPET, undefined, NOW, VB))).rejects.toBeInstanceOf(DmPinsFullError);
         expect(writes).toHaveLength(1);
         const again = await book.read(ME, FA);
         expect(dmSightFor(again, D2)).toBeNull();

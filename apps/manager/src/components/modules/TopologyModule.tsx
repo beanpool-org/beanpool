@@ -584,7 +584,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                 </td>
                                                 <td className="px-4 py-3 text-nature-300">
                                                     {state ? (
-                                                        <span>{state.memberCount} members · {state.postCount} posts</span>
+                                                        // A node that shares no counts (Share Member Count off, #3292) has none here: never "0 members".
+                                                        typeof state.memberCount === 'number' && typeof state.postCount === 'number'
+                                                            ? <span>{state.memberCount} members · {state.postCount} posts</span>
+                                                            : <span data-testid="harvest-counts-not-shared">Counts not shared</span>
                                                     ) : '—'}
                                                 </td>
                                                 <td className="px-4 py-3">

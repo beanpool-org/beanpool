@@ -12,6 +12,9 @@
  *   3. a phone that installed from the store, the install referrer (`invite=…&server=…&post=…`).
  * And the cases that must change nothing: an invite with no listing, a listing that is no id, a refused redeem.
  * And 4: the name box beside the invite box refuses an invite or a link, and moves an invite into the invite box.
+ * And 5: how an invite is found on a new phone (DESIGN-onboarding-home-landing-fable.md §3.1 B, DESIGN-ios-invite-paste-fable.md
+ * §4.1), one row per arrival: which screen, which button, which words; no read of the clipboard before a tap; and what a tap
+ * brings back that isn't an invite is never shown or sent.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -24,6 +27,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).React = ReactAll;
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
+/** The phone: Android, an iPhone with Apple's paste button (iOS 16+), or one without it (iOS 15). */
+const plat = vi.hoisted(() => ({ OS: 'android', paste: false, select: (o: Record<string, unknown>) => o.android ?? o.default }));
 const prompts = vi.hoisted(() => ({ asked: [] as string[] }));
 /** The phone's back button: its handlers, as React Native keeps them (the latest first). */
 const backs = vi.hoisted(() => ({ handlers: new Set<() => boolean>() }));
@@ -52,7 +57,7 @@ vi.mock('react-native', () => {
     };
     const listener = () => ({ remove() {} });
     return {
-        Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
+        Platform: plat,
         Image: el('img'),
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), FlatList: el('div'),
         TouchableOpacity: el('button'), SafeAreaView: el('div'), ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
@@ -99,11 +104,22 @@ vi.mock('expo-router', async () => {
 });
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-linking', () => ({ useURL: () => null, parse: () => ({ queryParams: {} }), openURL: async () => {}, addEventListener: () => ({ remove() {} }), createURL: (p: string) => `beanpool://${p}` }));
-const clip = vi.hoisted(() => ({ has: false, text: '' }));
-vi.mock('expo-clipboard', () => ({
-    hasStringAsync: async () => clip.has, getStringAsync: async () => clip.text, setStringAsync: async () => true,
-    isPasteButtonAvailable: false, ClipboardPasteButton: () => null,
-}));
+/** `reads`: our own reads of the clipboard (getStringAsync); `asks`: the presence checks, which read nothing. */
+const clip = vi.hoisted(() => ({ has: false, text: '', reads: 0, asks: 0, apple: [] as Array<Record<string, any>> }));
+vi.mock('expo-clipboard', async () => {
+    const { createElement: h } = await import('react');
+    return {
+        hasStringAsync: async () => { clip.asks++; return clip.has; },
+        getStringAsync: async () => { clip.reads++; return clip.text; },
+        setStringAsync: async () => true,
+        get isPasteButtonAvailable() { return plat.paste; },
+        // Apple's button: the system reads what was copied and hands it over at its tap; our code never calls a read for it.
+        ClipboardPasteButton: (props: Record<string, any>) => {
+            clip.apple.push(props);
+            return h('button', { 'data-testid': 'apple-paste', onClick: () => props.onPress({ type: 'text', text: clip.text }) });
+        },
+    };
+});
 vi.mock('expo-image-picker', () => ({}));
 const referrer = vi.hoisted(() => ({ value: null as string | null }));
 vi.mock('expo-application', () => ({ getInstallReferrerAsync: async () => referrer.value }));
@@ -169,6 +185,8 @@ const phone = vi.hoisted(() => ({
     pending: null as any,
     enrolment: null as any,
     invite: { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' } as Record<string, unknown>,
+    /** The node's invite check by code, where a test needs one (else every code gets `invite`). */
+    checkFor: null as null | ((code: string) => Promise<unknown>),
     outgoing: null as any,
     redeemFails: null as string | null,
     /** Every redeem the screen sent: the code and the name. */
@@ -219,7 +237,7 @@ vi.mock('../onboarding-state', async (importOriginal) => {
     };
 });
 vi.mock('../db', () => ({
-    checkInvite: async () => phone.invite,
+    checkInvite: async (code: string) => (phone.checkFor ? phone.checkFor(code) : phone.invite),
     redeemInvite: async (code: string, callsign: string) => { phone.redeems.push({ code, callsign }); if (phone.redeemFails) throw new Error(phone.redeemFails); return {}; },
     updateMemberProfile: async () => {},
     fetchNodeCallsign: async () => 'Sally',
@@ -388,9 +406,11 @@ beforeEach(() => {
     backs.handlers.clear();
     nav.replaced.length = 0; nav.pushed.length = 0;
     work.started.length = 0; work.keysDrafted = 0;
-    clip.has = false; clip.text = '';
+    clip.has = false; clip.text = ''; clip.reads = 0; clip.asks = 0; clip.apple.length = 0;
+    plat.OS = 'android'; plat.paste = false;
     phone.stored = { ...KNOCKER }; phone.pending = null; phone.records = []; phone.redeemFails = null; phone.outgoing = null; phone.redeems = [];
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' };
+    phone.checkFor = null;
     keyItem.value = null; keyItem.throws = false;
     knocking.asked = [knockAt(RIVERSIDE, 'Riverside')];
     knocking.statuses = {};
@@ -446,12 +466,14 @@ const POST = '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34';
 const HELD_KEY = 'beanpool_post_after_join';
 const field = (label: string) => all('input').find((i) => i.getAttribute('aria-label') === label) as HTMLInputElement | undefined;
 const held = () => { const raw = store.map.get(HELD_KEY); return raw ? JSON.parse(raw) : null; };
+/** A found invite skips the box (onboarding §3.1 B): the name screen with its greeting band, and no invite box on it. */
+const onNameScreen = () => !!byId('invite-greeting') && !field('Invite link or code');
 
 describe('1. the app opened by the link: the root layout hands welcome the listing as a param', () => {
     it('Next joins, lands on Your Photo, and the listing is held for the landing, for this community', async () => {
         params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, post: POST, t: '1' };
         await mount();
-        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(onNameScreen()).toBe(true);
         await press('Next');
         expect(host!.textContent).toContain('Your Photo');
         expect(held()).toMatchObject({ community: RIVERSIDE, id: POST });
@@ -492,10 +514,42 @@ describe('1. the app opened by the link: the root layout hands welcome the listi
     it('the listing belongs to its invite: a different code typed over it carries no listing', async () => {
         params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, post: POST, t: '1' };
         await mount();
+        // The pencil on the greeting: Your invite, with the invite in its box to change.
+        await press('Change the invite');
+        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
         await type('Invite link or code', 'INV-ZZZZ-YYYY');
+        await press('Next');
+        expect(onNameScreen()).toBe(true);
         await press('Next');
         expect(host!.textContent).toContain('Your Photo');
         expect(store.map.has(HELD_KEY)).toBe(false);
+    });
+
+    // Review of #3317: the greeting was matched to the invite by address only, but an inviter belongs to one code.
+    it('the greeting belongs to its code: Bob\'s code for the same community never shows Asha\'s name while its own check is unanswered', async () => {
+        const band = () => byId('invite-greeting')?.textContent ?? '';
+        const checkAnswers = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 700)); }); await settle(); };
+        // Asha's code is checked; Bob's check never answers (offline, or the node too slow).
+        phone.checkFor = (code) => (code === 'INV-ASHA-AAAA'
+            ? Promise.resolve({ valid: true, inviterCallsign: 'Asha', communityName: 'Riverside' })
+            : new Promise(() => {}));
+        params.now = { invite: 'INV-ASHA-AAAA', server: RIVERSIDE, t: '1' };
+        await mount();
+        await checkAnswers();
+        expect(band()).toContain('Asha invited you to Riverside');
+        await press('Change the invite');
+        await type('Invite link or code', 'INV-BOBB-BBBB');
+        await press('Next');
+        expect(onNameScreen()).toBe(true);
+        expect(band()).toContain("You're invited");
+        expect(band()).not.toContain('Asha');
+        await checkAnswers();
+        expect(band()).not.toContain('Asha');
+        // Asha's code back: her check still stands for it.
+        await press('Change the invite');
+        await type('Invite link or code', 'INV-ASHA-AAAA');
+        await press('Next');
+        expect(band()).toContain('Asha invited you to Riverside');
     });
 });
 
@@ -504,6 +558,8 @@ describe('2. the whole address pasted into the invite box', () => {
         await mount();
         await press('🎟️ Join with an invite');
         await type('Invite link or code', `${RIVERSIDE}/?invite=INV-ABCD-EFGH&post=${POST}`);
+        await press('Next');
+        expect(onNameScreen()).toBe(true);
         await press('Next');
         expect(host!.textContent).toContain('Your Photo');
         expect(held()).toMatchObject({ community: RIVERSIDE, id: POST });
@@ -514,6 +570,7 @@ describe('2. the whole address pasted into the invite box', () => {
         await press('🎟️ Join with an invite');
         await type('Invite link or code', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`);
         await press('Next');
+        await press('Next');
         expect(host!.textContent).toContain('Your Photo');
         expect(store.map.has(HELD_KEY)).toBe(false);
     });
@@ -523,7 +580,7 @@ describe('3. a phone that installed from the store: the install referrer', () =>
     it('invite, server and listing arrive together; Next joins and the listing is held', async () => {
         referrer.value = `invite=INV-ABCD-EFGH&server=${encodeURIComponent(RIVERSIDE)}&post=${POST}`;
         await mount();
-        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(onNameScreen()).toBe(true);
         await press('Next');
         expect(host!.textContent).toContain('Your Photo');
         expect(held()).toMatchObject({ community: RIVERSIDE, id: POST });
@@ -540,7 +597,7 @@ describe('3. a phone that installed from the store: the install referrer', () =>
     it('a referrer whose listing is no id: the invite is still used, with no listing', async () => {
         referrer.value = `invite=INV-ABCD-EFGH&server=${encodeURIComponent(RIVERSIDE)}&post=${encodeURIComponent('../x')}`;
         await mount();
-        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(onNameScreen()).toBe(true);
         await press('Next');
         expect(host!.textContent).toContain('Your Photo');
         expect(store.map.has(HELD_KEY)).toBe(false);
@@ -550,13 +607,19 @@ describe('3. a phone that installed from the store: the install referrer', () =>
 // The name box beside the invite box (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted into the
 // name box became her name on her community). The same real screen and harness as above.
 describe('4. the name box takes a name, never an invite or a link', () => {
-    it('an invite link pasted into the name box goes to the invite box, the name box is left empty, and one line says why', async () => {
+    it('an invite link pasted into the name box becomes the invite, the name box is left empty, and one line says why', async () => {
         await mount();
         await press('🎟️ Join with an invite');
+        await type('Invite link or code', `${RIVERSIDE}/?invite=INV-AAAA-BBBB`);
+        await press('Next');
         await type('Your name or nickname', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`);
-        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
         expect(field('Your name or nickname')?.value).toBe('');
-        expect(host!.textContent).toContain(NAME_BOX_WORDS.inviteLink);
+        // The name screen has no invite box, so its line is its own: core's "it goes in the invite box" is the web's (review
+        // of #3317). The invite is used: no box asks for it again.
+        expect(host!.textContent).toContain("That's an invite, not a name: it's your invite now.");
+        expect(host!.textContent).not.toContain(NAME_BOX_WORDS.inviteLink);
+        expect(host!.textContent).not.toContain(NAME_BOX_WORDS.inviteCode);
+        expect(field('Invite link or code')).toBeUndefined();
         expect(phone.redeems).toEqual([]);
         // A name, and Next joins with the invite under it.
         await type('Your name or nickname', 'Rowan');
@@ -568,10 +631,280 @@ describe('4. the name box takes a name, never an invite or a link', () => {
         await mount();
         await press('🎟️ Join with an invite');
         await type('Invite link or code', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`);
+        await press('Next');
         await type('Your name or nickname', 'www.rowan.com');
         await press('Next');
         expect(host!.textContent).toContain(NAME_BOX_WORDS.webLink);
         expect(phone.redeems).toEqual([]);
         expect(field('Your name or nickname')?.value).toBe('www.rowan.com');
+    });
+});
+
+describe('5. how an invite is found on a new phone: one row per arrival', () => {
+    const LINK = `${RIVERSIDE}/?invite=INV-ABCD-EFGH`;
+    const NOT_AN_INVITE = 'milk, eggs, bread';
+    const text = () => host!.textContent ?? '';
+    const inputs = () => all('input') as HTMLInputElement[];
+    /** Nothing a tap brought back that isn't an invite is on screen, in a box, or sent anywhere. */
+    const neverShownOrSent = () => {
+        expect(text()).not.toContain(NOT_AN_INVITE);
+        expect(inputs().some((i) => i.value.includes('milk'))).toBe(false);
+        expect(phone.redeems).toEqual([]);
+        expect(JSON.stringify(phone.records)).not.toContain('milk');
+    };
+    const newPhone = (os: 'android' | 'ios', paste: boolean) => {
+        phone.stored = null;
+        knocking.mark = null;
+        knocking.asked = [];
+        plat.OS = os; plat.paste = paste;
+    };
+    const greeted = () => !!byId('invite-greeting') && !field('Invite link or code');
+
+    it('Android, an invite copied: the front door, our "I have an invite" reads at the tap, the name screen greeted', async () => {
+        newPhone('android', false);
+        clip.has = true; clip.text = LINK;
+        await mount();
+        expect(byId('front-door')).toBeTruthy();
+        for (const words of ['Trade skills, goods and favours with your neighbours.', 'I have an invite', 'No invite? Look around', "I've used BeanPool before", 'More ways in ›']) expect(text()).toContain(words);
+        expect(byId('apple-paste')).toBeNull();
+        expect(clip.reads).toBe(0);
+        // Android never asks whether something is copied either: its button reads at its tap.
+        expect(clip.asks).toBe(0);
+        await press('I have an invite');
+        expect(clip.reads).toBe(1);
+        expect(greeted()).toBe(true);
+    });
+
+    it('Android, something else copied: Your invite, the copied text dropped (never shown or sent), no line', async () => {
+        newPhone('android', false);
+        clip.has = true; clip.text = NOT_AN_INVITE;
+        await mount();
+        await press('I have an invite');
+        expect(clip.reads).toBe(1);
+        expect(byId('your-invite')).toBeTruthy();
+        expect(text()).toContain('Your invite');
+        expect(text()).toContain('Have the link? Tap it again.');
+        expect(byId('your-invite-note')).toBeNull();
+        neverShownOrSent();
+    });
+
+    it('iOS 16+, an invite copied: the tile with Apple\'s icon-only button; its tap opens the name screen, our code reads nothing', async () => {
+        newPhone('ios', true);
+        clip.has = true; clip.text = LINK;
+        await mount();
+        expect(byId('front-door-invite-tile')).toBeTruthy();
+        expect(byId('front-door-invite')).toBeNull();
+        for (const words of ['I have an invite', 'Tap to open it', 'Scan or type it instead ›']) expect(text()).toContain(words);
+        // Apple's button as the design asks: icon only, our call to action's colours, large corners, full width, 52 dp.
+        const apple = clip.apple.at(-1)!;
+        expect(apple.displayMode).toBe('iconOnly');
+        expect(apple.cornerStyle).toBe('large');
+        expect(apple.backgroundColor).toBe('#b85236');
+        expect(apple.foregroundColor).toBe('#ffffff');
+        expect(apple.style).toMatchObject({ width: '100%', height: 52 });
+        expect(clip.reads).toBe(0);
+        await act(async () => { byId('apple-paste')!.click(); });
+        await settle();
+        expect(greeted()).toBe(true);
+        expect(clip.reads).toBe(0);
+    });
+
+    it('iOS 16+, something else copied: Apple\'s tap brings it, it is dropped: Your invite says so, and nothing is shown or sent', async () => {
+        newPhone('ios', true);
+        clip.has = true; clip.text = NOT_AN_INVITE;
+        await mount();
+        await act(async () => { byId('apple-paste')!.click(); });
+        await settle();
+        expect(byId('your-invite')).toBeTruthy();
+        expect(byId('your-invite-note')?.textContent).toBe("That isn't an invite. Type or scan it.");
+        expect(clip.reads).toBe(0);
+        neverShownOrSent();
+    });
+
+    it('iOS 16+, nothing copied: our "I have an invite" opens Your invite without reading anything', async () => {
+        newPhone('ios', true);
+        clip.has = false;
+        await mount();
+        expect(byId('front-door-invite-tile')).toBeNull();
+        expect(byId('apple-paste')).toBeNull();
+        await press('I have an invite');
+        expect(clip.reads).toBe(0);
+        expect(byId('your-invite')).toBeTruthy();
+        expect(byId('apple-paste')).toBeNull();
+        expect(text()).toContain('Have the link? Tap it again.');
+    });
+
+    it('iOS 16+, text copied, "Scan or type it instead ›": Your invite, with Apple\'s small icon button at the box\'s end', async () => {
+        newPhone('ios', true);
+        clip.has = true; clip.text = LINK;
+        await mount();
+        await press('Scan or type it instead ›');
+        expect(byId('your-invite')).toBeTruthy();
+        expect(byId('apple-paste')).toBeTruthy();
+        expect(clip.apple.at(-1)!.displayMode).toBe('iconOnly');
+        expect(clip.reads).toBe(0);
+        await act(async () => { byId('apple-paste')!.click(); });
+        await settle();
+        expect(greeted()).toBe(true);
+    });
+
+    it('iOS 15 (no Apple button): our "I have an invite" reads at the tap, as on Android; nothing is asked before it', async () => {
+        newPhone('ios', false);
+        clip.has = true; clip.text = LINK;
+        await mount();
+        expect(byId('front-door-invite')).toBeTruthy();
+        expect(byId('apple-paste')).toBeNull();
+        expect(clip.asks).toBe(0);
+        expect(clip.reads).toBe(0);
+        await press('I have an invite');
+        expect(clip.reads).toBe(1);
+        expect(greeted()).toBe(true);
+    });
+
+    it('an invite link: the name screen at once, no front door, no box, the clipboard untouched', async () => {
+        newPhone('ios', true);
+        clip.has = true; clip.text = NOT_AN_INVITE;
+        params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+        await mount();
+        expect(byId('front-door')).toBeNull();
+        expect(greeted()).toBe(true);
+        expect(clip.reads).toBe(0);
+        neverShownOrSent();
+    });
+
+    it('an invite held on the phone: the name screen at once, the clipboard untouched', async () => {
+        newPhone('android', false);
+        store.map.set('beanpool_held_invite', JSON.stringify({ invite: 'INV-ABCD-EFGH', server: RIVERSIDE, at: Date.now() }));
+        await mount();
+        expect(byId('front-door')).toBeNull();
+        expect(greeted()).toBe(true);
+        expect(clip.reads).toBe(0);
+    });
+
+    it('Android\'s install referrer: the name screen at once, the clipboard untouched', async () => {
+        newPhone('android', false);
+        referrer.value = `invite=INV-ABCD-EFGH&server=${encodeURIComponent(RIVERSIDE)}`;
+        await mount();
+        expect(byId('front-door')).toBeNull();
+        expect(greeted()).toBe(true);
+        expect(clip.reads).toBe(0);
+    });
+
+    // Review of #3317 at c41a6d34: an invite found earlier stayed in hand after ← Back to Home, so "Scan or type it instead ›"
+    // (FrontDoor.tsx: "the Your invite screen") drew the name screen again. It is set aside in Your invite's box, as the pencil
+    // does: never dropped, Next uses it, and the copy held on the phone stays until it is redeemed.
+    const HELD_INVITE = 'beanpool_held_invite';
+    const arrivals = [
+        ['an invite link', () => { params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' }; }],
+        ['an invite held on the phone', () => { store.map.set(HELD_INVITE, JSON.stringify({ invite: 'INV-ABCD-EFGH', server: RIVERSIDE, at: Date.now() })); }],
+    ] as const;
+    it.each(arrivals)('iOS 16+, %s, ← Back to Home, then "Scan or type it instead ›": Your invite, the invite set aside in its box; Next uses it', async (_arrival, arrive) => {
+        newPhone('ios', true);
+        clip.has = true; clip.text = NOT_AN_INVITE;
+        arrive();
+        const heldBefore = store.map.get(HELD_INVITE) ?? null;
+        await mount();
+        expect(greeted()).toBe(true);
+        await press('Back to Home');
+        expect(byId('front-door-invite-tile')).toBeTruthy();
+        await press('Scan or type it instead ›');
+        expect(byId('your-invite')).toBeTruthy();
+        expect(onNameScreen()).toBe(false);
+        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(byId('your-invite-note')).toBeNull();
+        // Not lost: the phone's held copy is as it was, and nothing was redeemed or read on the way.
+        expect(store.map.get(HELD_INVITE) ?? null).toBe(heldBefore);
+        expect(phone.redeems).toEqual([]);
+        expect(clip.reads).toBe(0);
+        await press('Next');
+        expect(greeted()).toBe(true);
+    });
+
+    it('iOS 16+, an invite link, ← Back to Home, then Apple\'s tap brings something that isn\'t one: Your invite, its line seen, the invite kept in the box', async () => {
+        newPhone('ios', true);
+        clip.has = true; clip.text = NOT_AN_INVITE;
+        params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+        await mount();
+        expect(greeted()).toBe(true);
+        await press('Back to Home');
+        await act(async () => { byId('apple-paste')!.click(); });
+        await settle();
+        expect(byId('your-invite')).toBeTruthy();
+        expect(byId('your-invite-note')?.textContent).toBe("That isn't an invite. Type or scan it.");
+        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(clip.reads).toBe(0);
+        neverShownOrSent();
+    });
+});
+
+describe('6. "I\'ve used BeanPool before": every way back opens from the front door (review of #3317)', () => {
+    const text = () => host!.textContent ?? '';
+    /** A row of Restore your account, by the words it starts with (the third and fifth carry their hint under the label). */
+    const row = (label: string) => {
+        const found = all('button, [role="button"]').find((b) => (b.textContent ?? '').startsWith(label));
+        expect(found, `a row "${label}"`).toBeTruthy();
+        return found!;
+    };
+    const tapRow = async (label: string) => { const r = row(label); await act(async () => { r.click(); }); await settle(); };
+    const onWaysBack = () => text().includes('🔑 Restore your account') && !byId('front-door');
+    async function toWaysBack(): Promise<void> {
+        phone.stored = null;
+        knocking.mark = null;
+        knocking.asked = [];
+        await mount();
+        expect(byId('front-door')).toBeTruthy();
+        await press("I've used BeanPool before");
+        expect(onWaysBack()).toBe(true);
+    }
+
+    it('opens Restore your account: the five rows, Start a new account instead, Back; nothing is made or sent', async () => {
+        await toWaysBack();
+        for (const label of ['🌐 Recover with Social', '🔑 Recover with 12 Words', '🤝 My community can bring me back', '🪪 An admin gave me a re-key code', '💻 Scan from a browser']) row(label);
+        button('Start a new account instead');
+        button('Back to Home');
+        expect(work.keysDrafted).toBe(0);
+        expect(phone.records).toEqual([]);
+        expect(phone.redeems).toEqual([]);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('Social: the sign-in restore, and its Back returns to the ways back', async () => {
+        await toWaysBack();
+        await press('Recover with Social Sign-In');
+        expect(text()).toContain('🌐 Recover with Social Sign-In');
+        expect(text()).not.toContain('🔑 Restore your account');
+        await press('Back to Restore Options');
+        expect(onWaysBack()).toBe(true);
+    });
+
+    it('12 Words: the words screen, and its Back returns to the ways back', async () => {
+        await toWaysBack();
+        await tapRow('🔑 Recover with 12 Words');
+        expect(text()).toContain('🔑 Recover Identity');
+        expect(text()).not.toContain('🔑 Restore your account');
+        await press('Back to Restore Options');
+        expect(onWaysBack()).toBe(true);
+    });
+
+    it.each([
+        ['🤝 My community can bring me back', { pathname: '/rekey-code', params: { bringBack: '1' } }],
+        ['🪪 An admin gave me a re-key code', '/rekey-code'],
+        ['💻 Scan from a browser', '/pair-in'],
+    ] as const)('%s opens its own screen, and only that one', async (label, to) => {
+        await toWaysBack();
+        await tapRow(label);
+        expect(nav.pushed).toEqual([to]);
+        expect(work.keysDrafted).toBe(0);
+    });
+
+    it('Back to Home and Start a new account instead both return to the front door', async () => {
+        await toWaysBack();
+        await press('Back to Home');
+        expect(byId('front-door')).toBeTruthy();
+        await press("I've used BeanPool before");
+        expect(onWaysBack()).toBe(true);
+        await press('Start a new account instead');
+        expect(byId('front-door')).toBeTruthy();
+        expect(work.keysDrafted).toBe(0);
     });
 });

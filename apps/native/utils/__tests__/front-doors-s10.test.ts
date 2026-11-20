@@ -34,14 +34,15 @@ describe('what Scan a QR code takes as an invite', () => {
     });
 });
 
-describe('Join with an invite: Scan a QR code, beside Paste', () => {
-    const create = between("    if (mode === 'create') {", '// --- THE GLOBAL COMMUNITY\'S DOOR');
+describe('Your invite: Scan a QR code, before the box', () => {
+    // Your invite (onboarding §3.1 B): its own branch of the invite step, drawn only when no invite was found.
+    const create = between("    if (mode === 'create' && !inviteCode.trim()) {", "    if (mode === 'create') {");
 
-    it('is a button in the join step, after the paste offer and before the code field', () => {
+    it('is a button on Your invite, under its title and before the code field', () => {
         const scan = create.indexOf('testID="join-scan-invite"');
         expect(scan).toBeGreaterThan(-1);
-        expect(scan).toBeGreaterThan(create.indexOf('pasteCard'));
-        expect(scan).toBeLessThan(create.indexOf("placeholder={t('Paste your invite link or code')}"));
+        expect(scan).toBeGreaterThan(create.indexOf("{t('Your invite')}"));
+        expect(scan).toBeLessThan(create.indexOf("placeholder={t('Invite link or code')}"));
         expect(create).toContain("{t('Scan a QR code')}");
         // A 48 dp target.
         expect(welcome).toMatch(/\n\s*scanInviteBtn: \{[^}]*minHeight: 48/);
@@ -50,7 +51,7 @@ describe('Join with an invite: Scan a QR code, beside Paste', () => {
     it('opens the claim\'s camera screen (ScanCodeModal) and hands an invite to the invite step', () => {
         expect(create).toContain('<Scanner');
         expect(create).toContain('onRead={onInviteScanned}');
-        expect(welcome).toMatch(/const onInviteScanned = \(data: string\): boolean => \{\s*const raw = inviteFromScan\(data\);\s*if \(!raw\) return false;[\s\S]*?applyInviteContent\(raw, 'join'\)[\s\S]*?return true;/);
+        expect(welcome).toMatch(/const onInviteScanned = \(data: string\): boolean => \{\s*const raw = inviteFromScan\(data\);\s*if \(!raw\) return false;[\s\S]*?takeInvite\(raw\)[\s\S]*?return true;/);
     });
 
     it('asks for the camera only at the tap: the camera screen is loaded then, and the welcome screen never asks', () => {
@@ -132,10 +133,11 @@ describe('no permission prompt after a restore', () => {
         });
     }
 
-    it('the only place welcome asks for notifications is the tap on the onboarding guide\'s card', () => {
-        const uses = Array.from(welcome.matchAll(/turnOnNotifications\(/g)).length;
-        expect(uses).toBe(1);
-        expect(welcome.indexOf('turnOnNotifications(pendingIdentity')).toBeGreaterThan(welcome.indexOf("if (mode === 'onboardingGuide' && pendingIdentity)"));
+    // The onboarding guide's card was the one place it asked; How it Works left the path in slice S5
+    // (DESIGN-onboarding-home-landing-fable.md §2), so the join asks nowhere: First steps' "Hear when someone answers you"
+    // asks at that tap on Home.
+    it('welcome never asks for notifications: First steps asks at its own tap', () => {
+        expect(Array.from(welcome.matchAll(/turnOnNotifications\(|requestPermissionsAsync|declineNotifications\(/g))).toHaveLength(0);
     });
 });
 

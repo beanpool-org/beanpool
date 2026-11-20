@@ -953,7 +953,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     // the other accepts. Not an edit of that line, which the node and the web allow (PR #2540 review 4394827275).
     const requestLine = requestMode === 'to-me' ? requestLineIn(messages, identity?.publicKey, heldRequest?.at) : null;
     // With no line here, only the node's word says none is left: this phone may just not have it yet.
-    const canReportRequest = !at && (!!requestLine || nodeAnswered);
+    // In place too (slice S3): its report and block go to the chat's own community (submitLineReport, `at`).
+    const canReportRequest = !!requestLine || nodeAnswered;
     const requestHoldsSends = requestMode === 'to-me' || requestMode === 'mine-loading' || (requestMode === 'mine-waiting' && !editingMessage);
     // Asked before the composer empties the box, so a refused send keeps what was typed.
     const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && !requestLineId && !requestHoldsSends;
@@ -1386,20 +1387,20 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         myPubkey: identity?.publicKey ?? null,
         canPost: !isPeerBlocked,
         isModerator: false,
-        // A report goes to the community in use's moderators: not offered in place (slice S2).
-        reportsLines: !at,
-    }), [identity?.publicKey, isPeerBlocked, at]);
+        // A report goes to the moderators of the chat's own community: in place, that community's (slice S3).
+        reportsLines: true,
+    }), [identity?.publicKey, isPeerBlocked]);
 
     // One line reported to the moderators, as its sender's signature and these words (core dm-line-report.ts). `blocks`:
     // Report on a request, which blocks its sender too (utils/request-report.ts). The sheet stays under the dialog until OK.
+    // In place (slice S3), every part of it goes to the chat's own community by name (`at`), never the one in use.
     const submitLineReport = async (reason: string) => {
-        // A report goes to the community in use's moderators: never from a chat in place (slice S2).
-        if (!reportingLine || at) return;
+        if (!reportingLine) return;
         const { item, blocks } = reportingLine;
         try {
             let outcome: RequestReportOutcome = 'reported';
-            if (blocks) outcome = await reportRequestAndBlock(String(id), item, blocks, reason, identity?.publicKey ?? '');
-            else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason);
+            if (blocks) outcome = await reportRequestAndBlock(String(id), item, blocks, reason, identity?.publicKey ?? '', ...(at ? [at] as const : [] as const));
+            else await reportDmLine(String(id), String(item.id), wordsOfLine(item), reason, at);
             hapticSuccess();
             const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);
             // A report that did not go whole still blocked them (each such sentence ends "They are blocked."): that is the title,

@@ -5,9 +5,11 @@
  * 320 dp and 1.3× text.
  *
  * Only a verified person's key change stops a chat (Signal's model): marking someone verified makes this phone ask before it
- * sends to a new key for them. The mark is on this phone only, per community and chat. The screen reads the pins without
- * judging or writing anything; Mark and Remove go through the pins' one queue (utils/db.ts markDmPeerVerified,
+ * sends to a new key for them. The mark is of the key, on this phone only, and holds in every community on it
+ * (DESIGN-s7-blocks-verified-everywhere §3): the member's one list (utils/dm-verified-keys.ts). The screen reads the pins
+ * and the list without judging or writing anything; Mark and Remove write the list (utils/db.ts markDmPeerVerified,
  * removeDmPeerVerification), and Mark refuses when the key moved since the screen read it, which the screen then says.
+ * While the list can't be read the screen says so, in place of Mark, Remove and ✓.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
@@ -21,6 +23,14 @@ import { dmKeyChangeStyleSpec, dmKeyCodeCopy, dmKeyCodeShowsVerified, dmKeyCodeS
 import { keyCodeOf, keyCodeSpoken } from '../../utils/key-code';
 import { enterChatInPlace, getDmKeyCodeInfo, leaveChatInPlace, markDmPeerVerified, removeDmPeerVerification, type DmKeyCodeInfo } from '../../utils/db';
 import { DM_PINS_WORDS } from '../../utils/dm-peer-pins';
+import { DM_VERIFIED_WORDS, isDmVerifiedFullError, isDmVerifiedStoreError } from '../../utils/dm-verified-keys';
+
+/** What a refused Mark or Remove says: the list's own sentence when the list refused, else the pins'. */
+function refusedText(e: unknown): string {
+    if (isDmVerifiedFullError(e)) return t(DM_VERIFIED_WORDS.full);
+    if (isDmVerifiedStoreError(e)) return t(DM_VERIFIED_WORDS.unread);
+    return t(DM_PINS_WORDS.storeUnread);
+}
 
 export { ErrorBoundary };
 
@@ -68,8 +78,8 @@ export default function DmKeyCodeScreen() {
             // The key whose code this screen shows: a sync that moved it since writes nothing, and the screen shows the new one.
             const marked = await markDmPeerVerified(String(id), info.peer, at);
             setMoved(!marked);
-        } catch {
-            Alert.alert(copy.title, t(DM_PINS_WORDS.storeUnread));
+        } catch (e) {
+            Alert.alert(copy.title, refusedText(e));
         } finally {
             setBusy(false);
             await load();
@@ -84,8 +94,8 @@ export default function DmKeyCodeScreen() {
                     setBusy(true);
                     try {
                         await removeDmPeerVerification(String(id), at);
-                    } catch {
-                        Alert.alert(copy.title, t(DM_PINS_WORDS.storeUnread));
+                    } catch (e) {
+                        Alert.alert(copy.title, refusedText(e));
                     } finally {
                         setBusy(false);
                         setMoved(false);
@@ -119,6 +129,7 @@ export default function DmKeyCodeScreen() {
                         {code && <Text style={styles.keyCodeBody}>{copy.howTo}</Text>}
                         {moved && <Text style={styles.keyCodeBody} accessibilityRole="alert">{copy.moved}</Text>}
                         {state === 'none' && <Text style={styles.keyCodeBody}>{copy.none}</Text>}
+                        {state === 'list-unread' && <Text style={styles.keyCodeBody}>{t(DM_VERIFIED_WORDS.unread)}</Text>}
                         {state === 'paused' && <Text style={styles.keyCodeBody}>{copy.paused}</Text>}
                         {state === 'not-verified' && (
                             <>
@@ -131,7 +142,7 @@ export default function DmKeyCodeScreen() {
                         {showsVerified && <Text style={styles.verifiedText}>{copy.verified}</Text>}
                         {state === 'verified' && <Text style={styles.keyCodeBody}>{copy.verifiedNote}</Text>}
                         {state === 'waiting' && <Text style={styles.keyCodeBody}>{copy.waiting}</Text>}
-                        {info?.verified && state !== 'none' && (
+                        {info?.verified && state !== 'none' && state !== 'list-unread' && (
                             <Pressable style={styles.removeBtn} onPress={remove} disabled={busy} accessibilityRole="button" accessibilityState={{ disabled: busy }} accessibilityLabel={copy.remove}>
                                 <Text style={styles.removeText}>{copy.remove}</Text>
                             </Pressable>

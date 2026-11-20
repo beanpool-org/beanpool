@@ -88,7 +88,7 @@ export function setupRedirect(segments: readonly string[], { hasIdentity, pendin
     // `find-community`: ask a community to let you in, by its address or its code (DESIGN-account-without-global-fable.md
     // §2.4, slice S3). The knock makes the account, at Send: a stranger who knows a community needs nothing of ours. With no
     // account the directory of communities near you is not read.
-    // `pair-in`: Already a member → Scan from this browser (front doors S9, app/pair-in.tsx): the account a member's
+    // `pair-in`: I've used BeanPool before → Scan from a browser (front doors S9, app/pair-in.tsx): the account a member's
     // browser holds comes to a phone with none, restored from its 12 words at the member's tap.
     if (!hasIdentity) {
         // These stay ahead of the look's check, looking around or not: another community's door link opened while the

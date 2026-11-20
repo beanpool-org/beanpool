@@ -4,7 +4,7 @@
  * welcome screen (app/welcome.tsx) with the harness of welcome-words-render.test.ts: React Native's host components as
  * plain tags, the node, the vault, the sign-ins and the phone's key store stubbed. Nothing is contacted.
  *
- * 1. A phone with no account taps Explore BeanPool worldwide: the global community is looked at first (the visit with
+ * 1. A phone with no account taps No invite? Look around (the front door): the global community is looked at first (the visit with
  *    no identity), and the phone goes to the Market. No key is drafted and none of the door's work starts: that is
  *    Join's. Before S12 the tap opened the door at once, which drafted the key and started the 12-words work.
  * 2. Where it can't be looked at (the door shut or unreachable, an offline first open): the door opens as before, says
@@ -16,11 +16,9 @@
  * 5. The phone's back button at the look's door is the door's own Back: shut while the sign-in is out.
  * 6. A phone whose key can't be read (no account in the context: loadIdentity answers null) is an account all the same,
  *    read through identity.ts readStoredIdentity: Explore opens the door as before, and the phone is not looking around.
- * 7. Join with an invite tapped while Explore is asking (it works all the while): the visit, answering after, is told the
+ * 7. I have an invite tapped while Look around is asking (it works all the while): the visit, answering after, is told the
  *    first screen has moved on (its `proceed`), so nothing is marked, saved or switched behind the invite form (PR #2559
  *    review).
- * 8. Back on the doors to "Used BeanPool before?" while Explore is asking: the doors are gone though the screen is still
- *    on its home, so the answer moves nothing: no guest mark, no Market, no door (PR #3209 review).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -399,20 +397,8 @@ async function mount(): Promise<void> {
         root!.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(WelcomeScreen, { key: 'welcome' })) as any);
     });
     await settle();
-    await answerNewHere();
 }
 
-/**
- * A phone with no account is asked "Used BeanPool before?" first (components/welcome/UsedBefore.tsx, utils/first-question.ts).
- * These are a new person's screens: when the question is up, they answer I'm New Here, as a new person does, and the doors
- * are drawn. A screen that opens elsewhere (an invite, a waiting account) never shows the question, and nothing is pressed.
- */
-async function answerNewHere(): Promise<void> {
-    const isNew = host!.querySelector('[data-testid="used-before-new"]') as HTMLElement | null;
-    if (!isNew) return;
-    await act(async () => { isNew.click(); });
-    await settle();
-}
 const all = (sel: string) => Array.from(host!.querySelectorAll(sel)) as HTMLElement[];
 function button(name: string): HTMLElement {
     const found = all('button, [role="button"]').find((b) => b.getAttribute('aria-label') === name || b.textContent === name);
@@ -451,10 +437,10 @@ async function phoneBack() {
 const doorOpen = () => all('[data-later-sweep="DoorChoices"]').length > 0;
 
 describe('look before you join on a new phone (slice S12)', () => {
-    it('1. Explore BeanPool worldwide with no account: looked at first, then the Market; no key drafted, no door work started', async () => {
+    it('1. No invite? Look around with no account: looked at first, then the Market; no key drafted, no door work started', async () => {
         await mount();
         expect(doorOpen()).toBe(false);
-        await press('Explore BeanPool worldwide');
+        await press('No invite? Look around');
         expect(look.askedFor).toEqual([null]);
         expect(look.proceeded).toEqual([true]);
         expect(nav.replaced).toEqual(['/(tabs)/market']);
@@ -466,7 +452,7 @@ describe('look before you join on a new phone (slice S12)', () => {
     it('2. where it can\'t be looked at (an offline first open, a shut door): the door as before, and its work starts there', async () => {
         look.answer = { kind: 'door' };
         await mount();
-        await press('Explore BeanPool worldwide');
+        await press('No invite? Look around');
         expect(look.askedFor).toEqual([null]);
         expect(nav.replaced).toEqual([]);
         expect(doorOpen()).toBe(true);
@@ -487,11 +473,11 @@ describe('look before you join on a new phone (slice S12)', () => {
     it('3b. not from the look, the door\'s Back is the first screen\'s, as before', async () => {
         look.answer = { kind: 'door' };
         await mount();
-        await press('Explore BeanPool worldwide');
+        await press('No invite? Look around');
         await press('Back to Home');
         expect(nav.replaced).toEqual([]);
         expect(doorOpen()).toBe(false);
-        expect(button('Explore BeanPool worldwide')).toBeTruthy();
+        expect(button('No invite? Look around')).toBeTruthy();
     });
 
     it('4a. a phone that looked around, then sent an invite with its server: the invite\'s server is the one used, not the look\'s', async () => {
@@ -504,16 +490,18 @@ describe('look before you join on a new phone (slice S12)', () => {
     it('4b. a phone that looked around, a bare invite code: the community field is empty, as on a new phone, never the look\'s', async () => {
         lookedAround();
         await mount();
-        await press('Join with an invite');
+        await press('I have an invite');
         await type('Invite link or code', 'MULL-1234');
+        await press('Next');
         expect(communityField()).toBe('');
     });
 
     it('4c. not looking around (the community in use is no guest visit): the field holds the phone\'s community, as before', async () => {
         store.map.set('beanpool_anchor_url', MULLUM);
         await mount();
-        await press('Join with an invite');
+        await press('I have an invite');
         await type('Invite link or code', 'MULL-1234');
+        await press('Next');
         expect(communityField()).toBe(MULLUM);
     });
 
@@ -541,7 +529,7 @@ describe('look before you join on a new phone (slice S12)', () => {
             Object.assign(keyItem, item);
             look.askedFor.length = 0; nav.replaced.length = 0;
             await mount();
-            await press('Explore BeanPool worldwide');
+            await press('No invite? Look around');
             expect(look.askedFor, JSON.stringify(item)).toEqual([]);
             expect(nav.replaced).toEqual([]);
             expect(doorOpen()).toBe(true);
@@ -550,14 +538,14 @@ describe('look before you join on a new phone (slice S12)', () => {
         }
     });
 
-    it('7. Join with an invite while Explore is asking: the visit is told the first screen moved on, and nothing moves behind the form', async () => {
+    it('7. I have an invite while Look around is asking: the visit is told the first screen moved on, and nothing moves behind the form', async () => {
         let answered!: () => void;
         look.gate = new Promise<void>((resolve) => { answered = resolve; });
         await mount();
-        await press('Explore BeanPool worldwide');
+        await press('No invite? Look around');
         expect(look.askedFor).toEqual([null]);
         expect(all('span').some((s) => s.textContent === 'Connecting to the global community…')).toBe(true);
-        await press('Join with an invite');
+        await press('I have an invite');
         expect(all('input').some((i) => i.getAttribute('aria-label') === 'Invite link or code')).toBe(true);
         answered();
         await settle();
@@ -570,40 +558,13 @@ describe('look before you join on a new phone (slice S12)', () => {
         expect(all('input').some((i) => i.getAttribute('aria-label') === 'Invite link or code')).toBe(true);
     });
 
-    // Back on the doors goes to "Used BeanPool before?" with the screen still on its home (utils/first-question.ts): the
-    // answer only, not the mode. An Explore still asking reads that the doors are gone, as it reads a mode that left home
-    // (PR #3209 review): whatever the answer, the phone stays on the question.
-    it.each([
-        ['it can be looked at: no guest mark, no Market', { kind: 'guest' }],
-        ['it can\'t be looked at: the door stays shut', { kind: 'door' }],
-    ] as const)('8. Back to the question while Explore is asking, and %s', async (_case, answer) => {
-        look.answer = answer;
-        let answered!: () => void;
-        look.gate = new Promise<void>((resolve) => { answered = resolve; });
-        await mount();
-        await press('Explore BeanPool worldwide');
-        expect(look.askedFor).toEqual([null]);
-        expect(all('span').some((s) => s.textContent === 'Connecting to the global community…')).toBe(true);
-        await press('Back');
-        const onQuestion = () => all('[data-testid="used-before-new"]').length > 0;
-        expect(onQuestion()).toBe(true);
-        answered();
-        await settle();
-        // Asked once the answer came, where it is asked at all: the doors were gone, so the visit wrote nothing (its `left`).
-        expect(look.proceeded).toEqual(answer.kind === 'guest' ? [false] : []);
-        expect(nav.replaced).toEqual([]);
-        expect(onQuestion()).toBe(true);
-        expect(doorOpen()).toBe(false);
-        expect(work.keysDrafted).toBe(0);
-        expect(work.started).toEqual([]);
-    });
-
     it('6b. a key the phone can\'t read, with guest marks of its own: not looking around, so its community fills the field as before', async () => {
         lookedAround();
         keyItem.throws = true;
         await mount();
-        await press('Join with an invite');
+        await press('I have an invite');
         await type('Invite link or code', 'MULL-1234');
+        await press('Next');
         expect(communityField()).toBe(GLOBAL);
     });
 });

@@ -18,6 +18,7 @@ import {
 } from '../../lib/node-client';
 import { restoreDoneWords } from '../../lib/restore-words';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
+import { CommunityWelcomePanel } from './CommunityWelcomePanel';
 import { EverydayRuleRows } from './EverydayRuleRows';
 import { ListingPromisePanel } from './ListingPromisePanel';
 import { AddressesPanel } from './AddressesPanel';
@@ -1262,6 +1263,8 @@ export function ApplianceSection({
                         diag={diag}
                         onRefreshDiag={onRefreshDiag}
                     />
+                    {/* The welcome for new members (onboarding S6): beside the name and place, an owner's words members read on Home. */}
+                    <CommunityWelcomePanel key={`welcome-${activeNode.id}`} activeNode={activeNode} viewer={rolesViewer} />
                     <div className="mt-6">
                         <EverydayRuleRows
                             key={`found-${activeNode.id}`}

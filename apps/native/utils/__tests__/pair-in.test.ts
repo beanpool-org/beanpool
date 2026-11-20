@@ -1,5 +1,5 @@
 /**
- * Already a member → Scan from a browser (front doors S9; utils/pair-in.ts, app/pair-in.tsx). What the phone reads from
+ * I've used BeanPool before → Scan from a browser (front doors S9; utils/pair-in.ts, app/pair-in.tsx). What the phone reads from
  * the browser's code, what it takes from the browser's seal, how a link from the camera app reaches the screen, and that a
  * phone with no account may stay on it.
  */

@@ -11,6 +11,7 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import type { OutsideChat } from '../utils/outside-chat-store';
 import type { RequestsPlace } from '../utils/requests-elsewhere';
+import type { RequestsInPlaceGroup } from '../utils/requests-in-place';
 import { RequestsElsewhereCards } from './RequestsElsewhereCards';
 
 const REQUEST_CARDS_SHOWN = 50;
@@ -22,12 +23,26 @@ interface RequestCardProps {
     onOpen: (entry: any) => void;
     onAccepted: (entry: any) => void;
     onChanged: () => void;
+    /**
+     * Another community this phone holds, by its saved address (slice S3): the card's request lives there, and its preview,
+     * Accept, Decline and Report each go to that community's copy and server by name (db.ts chatCopyForRequest), never the
+     * one in use. Left out: the community in use, as before.
+     */
+    community?: string;
 }
 
-function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: RequestCardProps) {
+function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged, community }: RequestCardProps) {
+    // Every request this card makes names its community in place (slice S3); for the community in use, none, as before.
+    const there = community ? [community] as const : [] as const;
     const { theme, colors } = useTheme();
     const peer = entry.participants?.find((p: string) => p !== myPubkey) || entry.request?.from || '';
     const name = entry.peerCallsign || entry.name || peer.slice(0, 8);
+    // In place, a photo's path is that community's: made whole there, never left for MemberAvatar to ask the community in
+    // use, which would be handed the person's key and that community's face key (#3309 review F2; db.ts requestsInPlace
+    // makes it whole first, and this holds for any other way a card in place is filled).
+    const avatarUrl = community && typeof entry.peerAvatar === 'string' && entry.peerAvatar.startsWith('/')
+        ? `${community.replace(/\/+$/, '')}${entry.peerAvatar}`
+        : entry.peerAvatar;
     // `line` is the one Report hands over (null: none left), `canReport` that this phone can tell.
     const [preview, setPreview] = useState<{ text?: string; photo?: boolean; loading: boolean; line?: any; canReport?: boolean }>({ loading: true });
     const [busy, setBusy] = useState(false);
@@ -42,8 +57,8 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
             try {
                 // The node's word first, then the copy here: a line its opener withdrew (Cancel request) never shows from
                 // this phone's copy, and their new one does (PR #2540 review 4393642158). With no answer, the copy here.
-                const answered = await syncSingleConversation(entry.id).catch(() => false);
-                const msgs = await getMessages(entry.id, { limit: 20 });
+                const answered = await syncSingleConversation(entry.id, ...there).catch(() => false);
+                const msgs = await getMessages(entry.id, community ? { limit: 20, community } : { limit: 20 });
                 if (!alive) return;
                 const last = msgs[msgs.length - 1];
                 // The newest row may be no line of theirs (a tombstone, a failed line of mine). With none here, only the
@@ -62,13 +77,13 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         };
         loadPreview();
         return () => { alive = false; };
-    }, [entry.id, entry.request?.at, myPubkey]);
+    }, [entry.id, entry.request?.at, myPubkey, community]);
 
     const handleDecide = async (decision: 'accept' | 'ignore') => {
         if (busy) return;
         setBusy(true);
         try {
-            await decideMessageRequest(entry.id, decision);
+            await decideMessageRequest(entry.id, decision, ...there);
             if (decision === 'accept') {
                 onAccepted(entry);
             } else {
@@ -86,7 +101,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
     // Report: the line's report and a block of its sender (utils/request-report.ts). The sheet stays under the dialog until OK.
     const submitReport = async (reason: string) => {
         try {
-            const outcome = await reportRequestAndBlock(entry.id, preview.line ?? null, peer, reason, myPubkey);
+            const outcome = await reportRequestAndBlock(entry.id, preview.line ?? null, peer, reason, myPubkey, ...there);
             const notSent = outcome === 'reported' ? null : requestReportNotSentWords(outcome);
             // A report that did not go whole still blocked them (each such sentence ends "They are blocked."): that is the title,
             // and the sentence is the message, since Android cuts a title at two lines.
@@ -233,7 +248,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
     return (
         <View style={styles.card} testID="request-card">
             <View style={styles.header}>
-                <MemberAvatar avatarUrl={entry.peerAvatar} pubkey={peer} callsign={name} size={44} />
+                <MemberAvatar avatarUrl={avatarUrl} pubkey={peer} callsign={name} size={44} />
                 <View style={styles.headerInfo}>
                     <Text style={styles.peerName} numberOfLines={1}>{name}</Text>
                     <Text style={styles.subtitle}>{t('{name} wants to message you', { name })}</Text>
@@ -339,9 +354,17 @@ interface MessageRequestsPaneProps {
     /** Invitations to a group's chat in another community, kept on this phone (G2): each opens it, to accept or decline. */
     guestInvites?: GuestChat[];
     onOpenGuest?: (chat: GuestChat) => void;
+    /**
+     * Requests of the phone's other communities, read there in place (slice S3, utils/db.ts requestsInPlace): under "In
+     * {community}", each card answered in that community by name, with no switch. A community not read in place keeps its
+     * S0 card in `elsewhere`.
+     */
+    inPlace?: ReadonlyArray<RequestsInPlaceGroup>;
+    onOpenInPlace?: (entry: any, place: RequestsPlace) => void;
+    onAcceptedInPlace?: (entry: any, place: RequestsPlace) => void;
 }
 
-export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, elsewhere = [], onOpenElsewhere, elsewhereBusy = false, elsewhereNote, outside = [], onOpenOutside, guestInvites = [], onOpenGuest }: MessageRequestsPaneProps) {
+export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, elsewhere = [], onOpenElsewhere, elsewhereBusy = false, elsewhereNote, outside = [], onOpenOutside, guestInvites = [], onOpenGuest, inPlace = [], onOpenInPlace, onAcceptedInPlace }: MessageRequestsPaneProps) {
     const { theme, colors } = useTheme();
     const [ignoringAll, setIgnoringAll] = useState(false);
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
@@ -450,9 +473,33 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                 <Text aria-hidden={true} importantForAccessibility="no" style={styles.backText}>‹ </Text>
                 <Text style={styles.backText}>{t('Back to chats')}</Text>
             </Pressable>
+            {inPlace.filter((g) => g.entries.length > 0).map(({ place, entries: there, count: waiting }) => {
+                const shownThere = there.slice(0, REQUEST_CARDS_SHOWN);
+                // The rest waiting there, as this community's own cards say it (#3309 review F3).
+                const moreThere = waiting - shownThere.length;
+                return (
+                    <View key={place.address} testID={`message-requests-in-place-${place.address}`}>
+                        <Text style={styles.title}>{t('In {community}', { community: place.name })}</Text>
+                        {shownThere.map((entry: any) => (
+                            <RequestCard
+                                key={`${place.address}\n${entry.id}`}
+                                entry={entry}
+                                myPubkey={identity?.publicKey || ''}
+                                community={place.url}
+                                onOpen={(e) => onOpenInPlace?.(e, place)}
+                                onAccepted={(e) => onAcceptedInPlace?.(e, place)}
+                                onChanged={onChanged}
+                            />
+                        ))}
+                        {moreThere > 0 && (
+                            <Text style={styles.moreText}>{tn(moreThere, 'and {n} more', 'and {n} more')}</Text>
+                        )}
+                    </View>
+                );
+            })}
             <RequestsElsewhereCards places={elsewhere} busy={elsewhereBusy} note={elsewhereNote} onOpen={(place) => onOpenElsewhere?.(place)} />
             {outside.map((c) => (
-                <Pressable key={c.id} accessibilityRole="button" testID="outside-request-card" style={styles.emptyCard} onPress={() => onOpenOutside?.(c)}>
+                <Pressable key={(c as { key?: string }).key ?? c.id} accessibilityRole="button" testID="outside-request-card" style={styles.emptyCard} onPress={() => onOpenOutside?.(c)}>
                     <Text style={styles.title}>{t('{name} · {community}', { name: c.peerName ?? t('Someone in another community'), community: c.peerHome })}</Text>
                     <Text style={styles.emptyText}>{t('{name} wants to message you', { name: c.peerName ?? c.peerHome })}</Text>
                     {!!c.lastText && <Text style={styles.emptyText} numberOfLines={4}>{c.lastText}</Text>}
@@ -466,7 +513,7 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                     <Text style={styles.backText}>{t('Open to accept or decline')}</Text>
                 </Pressable>
             ))}
-            {count === 0 && (elsewhere.length > 0 || outside.length > 0 || guestInvites.length > 0) ? null : count === 0 ? (
+            {count === 0 && (elsewhere.length > 0 || outside.length > 0 || guestInvites.length > 0 || inPlace.some((g) => g.entries.length > 0)) ? null : count === 0 ? (
                 <View style={styles.emptyCard}>
                     <Text style={styles.emptyText}>
                         {t("No requests. A first message from someone you haven't added or talked to arrives here.")}

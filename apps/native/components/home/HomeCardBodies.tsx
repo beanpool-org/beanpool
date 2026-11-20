@@ -22,6 +22,7 @@ import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, 
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
+import { ProgressRing } from './WelcomeTile';
 
 /**
  * What each Home card says (design §3.1, §9), from the answer the screen holds. Every line is one target into a screen
@@ -60,10 +61,17 @@ export function NeedsBody({ entries, colors, onOpen }: { entries: NeedsYouEntry[
     );
 }
 
-export function StepsBody({ left, count, note, colors, onStep }: {
-    /** Only the lines left (DESIGN-home-default-fable.md §2.4): a finished row is never drawn, the count says it. */
+/**
+ * First steps as a tick list (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.1 item 4, slice S5): a progress
+ * ring beside "1 of 4 done" on top, then one round tick per line, each an action a few words long. A line left opens its
+ * action; a line done is ticked and opens nothing. The card still leaves when no line is left or its days are up.
+ */
+export function StepsBody({ lines, left, count, note, colors, onStep }: {
+    /** Every line, done or not, in their order: the done ones ticked. */
+    lines: StepLine[];
+    /** The lines left: each opens its action. */
     left: StepLine[];
-    /** "2 of 5 done" (core `firstStepsCount`), one quiet line under the rows. */
+    /** "2 of 5 done" (core `firstStepsCount`), beside the ring. */
     count: string;
     /** The global node's new-account limits in a sentence (utils/home-cards.ts `probationSentence`), under the lines. */
     note?: string | null;
@@ -72,22 +80,38 @@ export function StepsBody({ left, count, note, colors, onStep }: {
 }) {
     const s = homeStyles(colors);
     const offerUndone = left.some(l => l.id === 'offer');
+    const done = lines.filter(l => l.done).length;
+    const tick = (on: boolean) => (
+        <View
+            style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: on ? colors.brand.primary : colors.text.secondary, backgroundColor: on ? colors.brand.primary : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}
+            importantForAccessibility="no-hide-descendants"
+            testID={on ? 'home-steps-tick-on' : 'home-steps-tick-off'}
+        >
+            {on && <Text style={{ fontSize: 14, lineHeight: 16, fontWeight: '900', color: colors.surface.card }}>✓</Text>}
+        </View>
+    );
     return (
         <>
-            {left.map(l => (
+            {/* Its colours inline, where the contrast check reads them (s.* from homeStyles is a table it cannot follow). */}
+            {!!count && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: 12, marginBottom: 6 }}>
+                    <ProgressRing done={done} of={lines.length} ink={colors.brand.primary} track={colors.border.strong} hole={colors.surface.card} />
+                    <Text style={{ flex: 1, fontSize: 18, lineHeight: 24, fontWeight: '800', color: colors.text.heading }} testID="home-steps-count">{count}</Text>
+                </View>
+            )}
+            {lines.map(l => (
                 <HomeRow
                     key={l.id}
                     colors={colors}
                     text={l.text}
-                    a11y={t('{step}, not done yet', { step: l.text })}
-                    onPress={() => onStep(l.id)}
+                    a11y={l.done ? t('{step}, done', { step: l.text }) : t('{step}, not done yet', { step: l.text })}
+                    onPress={l.done ? undefined : () => onStep(l.id)}
                     testID={`home-step-${l.id}`}
                     lines={4}
-                    left={<Text style={[s.trailing, { fontSize: 18, color: colors.text.secondary }]} importantForAccessibility="no">☐</Text>}
+                    left={tick(l.done)}
+                    right={l.done ? undefined : <Text style={[s.trailing, { fontSize: 18, color: colors.text.secondary }]} importantForAccessibility="no">›</Text>}
                 />
             ))}
-            {/* Its colours inline, where the contrast check reads them (s.* from homeStyles is a table it cannot follow). */}
-            {!!count && <Text style={{ fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 4, marginBottom: 6 }} testID="home-steps-count">{count}</Text>}
             {!!note && <Text style={[s.note, { marginTop: 4 }]} testID="home-steps-limits">{note}</Text>}
             {offerUndone && (
                 <FabAware id="steps:offer" style={s.buttonRow}>
@@ -902,62 +926,5 @@ export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore
                     a11y={q ? t('See more listings for {words} in the Market', { words: q }) : t('See more listings for this search in the Market')} onPress={() => onMore(q)} testID="home-search-more" />
             )}
         </>
-    );
-}
-
-/**
- * Welcome (DESIGN-home-default-fable.md §2.3, the Getting started card re-cut): where you are, who brought you, and the
- * one-minute tour, as plain links, never a filled button (that pushed the Market off the first screen at 320 dp x 1.3,
- * and a filled button says "do this first" about the one thing that is optional). Each link keeps a 44 dp row and wraps
- * whole to its own row where the two don't fit. No "…": Not now is its way out.
- *
- * - `place`: "You're in Byron Shire BeanPool." (null when the community's name isn't known: the line isn't drawn).
- * - `inviter`: "Ana invited you. Say hello ›", opening the chat with them (the node's `me.invitedBy`; none, not drawn).
- * - `firstHere`: an owner alone on a new community: "You're the first one here." with "Invite someone ›" where they can.
- */
-export function WelcomeBody({ place, inviter, firstHere, tourLabel, colors, onSayHello, onInvite, onTour, onNotNow }: {
-    place: string | null;
-    inviter: string | null;
-    firstHere: boolean;
-    tourLabel: string;
-    colors: AppColors;
-    onSayHello: () => void;
-    /** Absent: the reader can't invite here, so "You're the first one here." stands alone. */
-    onInvite?: () => void;
-    onTour: () => void;
-    onNotNow: () => void;
-}) {
-    const s = homeStyles(colors);
-    const link = (text: string, onPress: () => void, testID: string, a11y?: string) => (
-        <Pressable
-            onPress={onPress}
-            style={({ pressed }) => [{ minHeight: HOME_TARGET_DP, justifyContent: 'center' }, pressed && { backgroundColor: colors.surface.subtle }]}
-            accessibilityRole="button"
-            accessibilityLabel={a11y ?? text}
-            testID={testID}
-        >
-            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.link }}>{text}</Text>
-        </Pressable>
-    );
-    const say = { fontSize: 15, lineHeight: 21, color: colors.text.body } as const;
-    return (
-        <View>
-            {!!place && <Text style={[say, { fontWeight: '700', color: colors.text.heading }]} testID="home-start-words">{place}</Text>}
-            {firstHere ? (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 }}>
-                    <Text style={say} testID="home-start-first">{t("You're the first one here.")}</Text>
-                    {onInvite && link(t('Invite someone ›'), onInvite, 'home-start-invite')}
-                </View>
-            ) : inviter ? (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 }}>
-                    <Text style={say} testID="home-start-inviter">{t('{name} invited you.', { name: inviter })}</Text>
-                    {link(t('Say hello ›'), onSayHello, 'home-start-hello', t('Say hello to {name}', { name: inviter }))}
-                </View>
-            ) : null}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: 20 }}>
-                {link(tourLabel, onTour, 'home-start-look')}
-                {link(t('Not now'), onNotNow, 'home-start-skip', t('Skip the tour'))}
-            </View>
-        </View>
     );
 }

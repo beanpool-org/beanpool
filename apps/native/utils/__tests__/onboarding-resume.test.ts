@@ -76,7 +76,7 @@ describe('resuming a claim that made the account (DESIGN-account-without-global 
     });
 
     it('the claim in: the wizard\'s steps, words member, its key new, the community\'s name for the owner\'s card', () => {
-        for (const step of ['profileSetup', 'seedBackup', 'onboardingGuide', 'ownerCard'] as const) {
+        for (const step of ['profileSetup', 'seedBackup', 'ownerCard'] as const) {
             const record: PendingOnboarding = {
                 step, flow: 'claim', inviteCode: '', anchorUrl: ORIGIN, callsign: 'Ada', redeemed: true,
                 newKey: KEY, joinDoor: 'words', communityName: 'Bean\u202eTown',
@@ -173,7 +173,7 @@ describe("resuming a join at another community's open door (S2)", () => {
         expect(resumePlan({ ...globalAtDoor, anchorUrl: '' }, STORED)).toMatchObject({ action: 'resume', anchorUrl: '' });
         expect(doorResumeUrl(resumePlan({ ...globalAtDoor, anchorUrl: '' }, STORED))).toBeNull();
         // Past the door, every step is the welcome screen's, at that address.
-        for (const step of ['profileSetup', 'seedBackup', 'onboardingGuide'] as const) {
+        for (const step of ['profileSetup', 'seedBackup'] as const) {
             const later = resumePlan({ ...atSelf, step, freshKey: undefined, newKey: KEY, redeemed: true }, STORED);
             expect(later, step).toMatchObject({ action: 'resume', mode: step, flow: 'global', anchorUrl: SELF, newKey: true });
             expect(doorResumeUrl(later), step).toBeNull();
@@ -192,10 +192,23 @@ describe("resuming a join at another community's open door (S2)", () => {
         }
     });
 
-    it('its name, when the door knew it, comes back for How it Works, cleaned; the global community\'s never has one', () => {
-        const later = { ...atSelf, step: 'onboardingGuide' as const, communityName: 'Riverbend\u202e Open\n' };
+    it('its name, when the door knew it, comes back for Safety Backup\'s sentences, cleaned; the global community\'s never has one', () => {
+        const later = { ...atSelf, step: 'seedBackup' as const, communityName: 'Riverbend\u202e Open\n' };
         expect(resumePlan(later, STORED)).toMatchObject({ communityName: 'Riverbend Open' });
-        expect(resumePlan({ ...globalAtDoor, step: 'onboardingGuide', communityName: 'Riverbend' }, STORED)).toMatchObject({ communityName: null });
+        expect(resumePlan({ ...globalAtDoor, step: 'seedBackup', communityName: 'Riverbend' }, STORED)).toMatchObject({ communityName: null });
+    });
+
+    // Slice S5 (DESIGN-onboarding-home-landing-fable.md \u00a74.3): How it Works left the path. A join a 1.4.7 phone left there
+    // resumes on the way back, the step before it, for every door; the record is read as it is, never rewritten.
+    it('a 1.4.7 join left at How it Works resumes on the way back (Safety Backup), on every door', () => {
+        const at147 = [
+            { ...atSelf, step: 'onboardingGuide' as const, freshKey: undefined, newKey: KEY, redeemed: true },
+            { step: 'onboardingGuide' as const, flow: 'claim' as const, inviteCode: '', anchorUrl: 'https://beans.example.org', callsign: 'Ada', redeemed: true, newKey: KEY },
+            { step: 'onboardingGuide' as const, flow: 'invite' as const, inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://riverside.example', callsign: 'Sam', redeemed: true },
+        ];
+        for (const record of at147) {
+            expect(resumePlan(record as PendingOnboarding, STORED), record.flow).toMatchObject({ action: 'resume', mode: 'seedBackup', flow: record.flow });
+        }
     });
 
     it('holds the root guard to the door screen only while that join is at the door (doorJoinOut, wizardHold)', () => {
@@ -239,13 +252,16 @@ describe('the welcome screen', () => {
 
     // One line in English at the floor's width, shrinking first; a second line for a longer language, which one line
     // can't hold even at 0.6 (21 of the 24 other languages: utils/__tests__/language-switch-render.test.ts).
-    it('offers the two doors as two full-width buttons of at most two lines, and no longer says BeanPool is invite-only', () => {
-        // The doors are drawn by components/WelcomeDoors.tsx (DESIGN-global-entry §B.3).
-        const s = src() + fs.readFileSync(path.resolve(__dirname, '../../components/WelcomeDoors.tsx'), 'utf-8');
-        expect(s).toMatch(/numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>\{t\('🎟️ Join with an invite'\)\}</);
-        expect(s).toMatch(/onPress=\{openGlobalDoor\}[^>]*>\s*<Text style=\{styles\.memberBtnText\} numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}>\{t\('🌍 Explore BeanPool worldwide'\)\}</);
+    it('offers the front door\'s three buttons, whose words wrap, and no longer says BeanPool is invite-only', () => {
+        // The front door is drawn by components/welcome/FrontDoor.tsx (DESIGN-onboarding-home-landing-fable.md §3.1 A).
+        const door = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/FrontDoor.tsx'), 'utf-8');
+        const s = src() + door;
+        expect(s).toMatch(/onPress=\{onInvite\}[^>]*>\s*<Text style=\{styles\.mainBtnText\}>\{t\('I have an invite'\)\}</);
+        expect(s).toMatch(/onPress=\{onLookAround\}[^>]*>\s*<Text style=\{styles\.quietBtnText\}>\{t\('No invite\? Look around'\)\}</);
+        expect(s).toMatch(/onPress=\{onUsedBefore\}[^>]*>\s*<Text style=\{styles\.quietBtnText\}>\{t\("I've used BeanPool before"\)\}</);
+        // Wrapped, never cut off or shrunk: no line limit on the front door's words.
+        expect(door).not.toMatch(/numberOfLines/);
         expect(s).not.toMatch(/BeanPool is invite-only/);
-        expect(s).toMatch(/No invite\? Explore BeanPool worldwide and find a community near you\./);
     });
 
     it('signs in at the door and joins through utils/global-join.ts, and never opens the enrolment sheet for it', () => {

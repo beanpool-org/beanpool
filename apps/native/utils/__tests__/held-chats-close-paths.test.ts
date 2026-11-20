@@ -148,7 +148,7 @@ vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction
 vi.mock('../blocklist', () => ({ getBlockedUsers: vi.fn(async () => h.blocked) }));
 
 import * as db from '../db';
-import { heldChatRows, heldChatsInView, heldChatsShown } from '../held-chats';
+import { heldChatRows, heldChatsInView, heldChatsShown, refreshHeldWhereRose, _resetHeldRefreshForTests, type HeldChatRow } from '../held-chats';
 import { forgetCommunityCopy, removeCommunityCaches } from '../community-cache';
 import { writeDmPeerPins } from '../dm-peer-pins';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -156,7 +156,8 @@ import { switchPhoneTo } from '../reconnect';
 import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { syncedCursorKeyOf } from '../../services/pillar-sync';
-import { SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { NOTICE_COUNTS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { communityAddress } from '../push-pins';
 
 // A switch ends with require('react-native') for a nudge: answered at node's loader for the file.
 const realLoad = (Module as any)._load;
@@ -485,6 +486,42 @@ describe('held chats: a second closer waits for a close under way (#3302 review 
     });
 });
 
+describe('a list asked while a round or a chat in place lets go of the copy (#3310 review, measured: red before the fix)', () => {
+    // As a round of B lets go of B's copy (utils/outside-chat-live.ts: enterChatInPlace ... leaveChatInPlace), its read-only
+    // handle with it, while Chat lists again (the round's OUTSIDE_CHATS_UPDATED, a return to Chat). Both of Chat's held lists.
+    const LISTS: Array<[string, () => Promise<string[] | null>]> = [
+        ['the direct chats (slice S1)', async () => (await db.getHeldConversations(h.me, B))?.map((c) => c.id) ?? null],
+        ['the across chats (slice S4)', async () => (await db.getHeldOutsideChats(h.me, B))?.map((c) => c.id) ?? null],
+        // Slice S2b's two reads of the same copy as Chat fills its rows in (merge of #3312 into #3310): a close under way
+        // never leaves B's rows with no count or preview until the next read.
+        ['each chat\'s own count (slice S2b)', async () => (await db.getHeldLatest(h.me, B))?.map((c) => `${c.id}:${c.unread}`) ?? null],
+        ['the newest lines\' previews (slice S2b)', async () => {
+            const previews = await db.getHeldPreviews(h.me, B, ['b-dm', 'b-deal']);
+            return previews ? Object.keys(previews).sort() : null;
+        }],
+    ];
+    it.each(LISTS)('%s: the list waits for the close, then reads B afresh: B\'s chats stay listed', async (_name, list) => {
+        const sql = new DatabaseSync(path.join(h.dir, B_FILE));
+        sql.prepare(`INSERT INTO outside_chats (id, me, peer_key, peer_home, peer_name, state, created_at, updated_at)
+                     VALUES ('across-1', ?, ?, 'faraway.example', 'Pia', 'open', 1, 1)`).run(h.me, PEER);
+        sql.close();
+        const before = await list();
+        expect(before?.length).toBeGreaterThan(0);
+        const gate = holdHeldClose(B_FILE);
+        db.enterChatInPlace(B);
+        const closing = db.leaveChatInPlace(B);
+        await gate.started;
+        const listing = list();
+        await ticks();
+        gate.release();
+        await closing;
+        expect(await listing).toEqual(before);
+        expect(h.log[0]).toBe(`held closed ${B_FILE}`);
+        expect(h.cutMidRead).toEqual([]);
+        await db.closeHeldCopies();
+    });
+});
+
 describe('held chats: Settings Forget goes through removeCommunityCaches (#3302 review F2)', () => {
     it('forgetCommunityCopy(B): its cursors, and its file with the WAL and its index, in expo-sqlite\'s own directory', async () => {
         await db.getHeldConversations(h.me, B);
@@ -559,6 +596,108 @@ describe('held chats: no handle opened after Chat is left stays open (#3302 revi
         // Left twice is left once.
         await again.leave();
         expect(db.heldCopyFiles()).toEqual([]);
+    });
+});
+
+describe('held chats: a refresh Chat is left during leaves no held handle open, on every way out of it (#3312 review F2)', () => {
+    /** Chat's held row for B's DM, as the refresh is handed it (it reads only the row's community). */
+    const rowsOfB = [{ id: 'b-dm', key: `held:${B_FILE}:b-dm`, held: true, community: B, communityName: 'Hilltop' }] as unknown as HeldChatRow[];
+    const reply = (status: number, body: unknown) => ({
+        ok: status >= 200 && status < 300, status, headers: { get: () => null }, json: async () => body, text: async () => JSON.stringify(body),
+    });
+    type ListAnswer = 'refused' | 'fails' | 'runs out' | 'nothing newer' | 'a newer line there';
+    let listAnswer: ListAnswer = 'nothing newer';
+    let listHold: { seen: Promise<void>; seenNow: () => void; release: () => void; released: Promise<void> } | null = null;
+    const asked: string[] = [];
+    const holdList = () => {
+        let seenNow!: () => void;
+        let release!: () => void;
+        const seen = new Promise<void>((r) => { seenNow = r; });
+        const released = new Promise<void>((r) => { release = r; });
+        listHold = { seen, seenNow, release, released };
+        return listHold;
+    };
+
+    beforeEach(() => {
+        _resetHeldRefreshForTests();
+        asked.length = 0;
+        listHold = null;
+        listAnswer = 'nothing newer';
+        // B's number is 1: Chat's refresh asks there.
+        h.store.set(NOTICE_COUNTS_STORE_KEY, JSON.stringify({ [communityAddress(B)!]: { n: 0, seen: {}, server: 1, alerts: 1 } }));
+        (globalThis as any).fetch = vi.fn(async (url: string, init: any = {}) => {
+            const u = new URL(url);
+            asked.push(`${init.method || 'GET'} ${u.origin}${u.pathname}`);
+            if (!/^\/api\/messages\/conversations\//.test(u.pathname)) return reply(404, { error: 'not here' });
+            if (listHold) {
+                const g = listHold;
+                listHold = null;
+                g.seenNow();
+                await g.released;
+            }
+            if (listAnswer === 'refused') return reply(503, { error: 'busy' });
+            if (listAnswer === 'fails') throw new TypeError('Network request failed');
+            if (listAnswer === 'runs out') throw Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
+            const lastMessageAt = listAnswer === 'a newer line there' ? '2026-11-19T00:00:00.000Z' : '2026-11-18T10:00:00.000Z';
+            return reply(200, { conversations: [{ id: 'b-dm', type: 'dm', lastMessageAt }] });
+        });
+    });
+
+    interface RefreshRow {
+        name: string;
+        /** Where Chat is left: as the refresh reads the guest list (before B's copy is read), or with its list read on its way. */
+        leaveAt: 'before the copy is read' | 'during the list read';
+        before?: () => void;
+        /** What changes while the refresh waits there. */
+        meanwhile?: () => void;
+        answer?: ListAnswer;
+        /** B's held handle is opened by the refresh after the close as Chat was left. */
+        opensAfterTheClose?: boolean;
+    }
+    const ROWS: RefreshRow[] = [
+        { name: "before B's copy is read (it opens after the close): no list read", leaveAt: 'before the copy is read', opensAfterTheClose: true },
+        {
+            name: "before B's copy is read (it opens after the close), B holding no direct chat", leaveAt: 'before the copy is read', opensAfterTheClose: true,
+            before: () => {
+                const sql = new DatabaseSync(path.join(h.dir, B_FILE));
+                sql.exec("DELETE FROM messages WHERE conversation_id IN ('b-dm', 'b-deal'); DELETE FROM conversation_participants WHERE conversation_id IN ('b-dm', 'b-deal'); DELETE FROM conversations WHERE id IN ('b-dm', 'b-deal');");
+                sql.close();
+            },
+        },
+        { name: "before B's copy is read, B a guest look by then: back before any held read", leaveAt: 'before the copy is read', meanwhile: () => { h.store.set('beanpool_guest_nodes', JSON.stringify([B])); } },
+        { name: "before B's copy is read, the phone set to B by then: back before any held read", leaveAt: 'before the copy is read', meanwhile: () => { h.store.set(ANCHOR, B); } },
+        { name: 'during the list read, refused', leaveAt: 'during the list read', answer: 'refused' },
+        { name: 'during the list read, cut by the network', leaveAt: 'during the list read', answer: 'fails' },
+        { name: 'during the list read, run out (aborted)', leaveAt: 'during the list read', answer: 'runs out' },
+        { name: 'during the list read, nothing newer there', leaveAt: 'during the list read', answer: 'nothing newer' },
+        { name: 'during the list read, a newer line there: no page asked', leaveAt: 'during the list read', answer: 'a newer line there' },
+    ];
+
+    it.each(ROWS.map((r) => [r.name, r] as const))('Chat left %s: once it settles, no held handle is open', async (_name, row) => {
+        row.before?.();
+        listAnswer = row.answer ?? 'nothing newer';
+        const view = heldChatsInView();
+        const guestRead = row.leaveAt === 'before the copy is read' ? holdStorageRead('beanpool_guest_nodes') : null;
+        const list = row.leaveAt === 'during the list read' ? holdList() : null;
+        const refreshing = refreshHeldWhereRose(h.me, rowsOfB, view);
+        await (guestRead ? guestRead.started : list!.seen);
+        row.meanwhile?.();
+        await view.leave();
+        guestRead?.release();
+        list?.release();
+        expect(await refreshing).toEqual([]);
+        await ticks();
+        expect(db.heldCopyFiles()).toEqual([]);
+        expect(h.cutMidRead).toEqual([]);
+        const lists = asked.filter((a) => a.includes('/api/messages/conversations/'));
+        expect(lists.length).toBe(row.leaveAt === 'during the list read' ? 1 : 0);
+        // Never a page: Chat was left before any could be asked.
+        expect(asked.filter((a) => !a.includes('/api/messages/conversations/'))).toEqual([]);
+        if (row.opensAfterTheClose) {
+            // The case the guard is for: B opened by the refresh after the close as Chat was left, and closed as it ended.
+            expect(h.opens.filter((o) => o.file === B_FILE && o.queryOnly).length).toBe(1);
+            expect(h.log).toEqual([`held closed ${B_FILE}`]);
+        }
     });
 });
 

@@ -20,7 +20,7 @@ function slice(s: string, start: string, end: string): string {
 const count = (s: string, needle: string) => s.split(needle).length - 1;
 
 describe('joining: the Safety Backup step', () => {
-    const step = () => slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'onboardingGuide'");
+    const step = () => slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'ownerCard' && pendingIdentity)");
 
     it('offers the kit for the words it shows, after the words', () => {
         const s = step();
@@ -33,7 +33,9 @@ describe('joining: the Safety Backup step', () => {
         const next = slice(s, '<Pressable', 'Next →');
         const nextBlock = s.slice(s.lastIndexOf('<Pressable', s.indexOf('Next →')), s.indexOf('Next →'));
         expect(nextBlock).toContain('disabled={loading}');
-        expect(nextBlock).toContain("setMode('onboardingGuide')");
+        // How it Works left the path (S5): a claim goes on to the owner's card, every other join to Home.
+        expect(nextBlock).toContain("setMode('ownerCard')");
+        expect(nextBlock).toContain('void handleConfirmSeed();');
         expect(nextBlock).not.toMatch(/kit|Kit/);
         expect(nextBlock).not.toContain('seedConfirmed &&');
         expect(next.length).toBeGreaterThan(0);
@@ -70,7 +72,7 @@ describe("Settings: both reveals of the 12 words", () => {
 // to the kit hands it a Yes that records "I still have my 12 words" for its account (utils/words-kept.ts keepWords).
 describe('every entry to the kit records a Yes the same way', () => {
     it('the joining step, and both of Settings\' reveals (where the Home card\'s Show my 12 words lands), pass onKept to keepWords', () => {
-        const welcome = slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'onboardingGuide'");
+        const welcome = slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'ownerCard' && pendingIdentity)");
         expect(welcome).toContain('<RecoveryKitButtons words={pendingWords} colors={colors} onKept={keptFromKit} />');
         expect(slice(welcome, 'const keptFromKit = () => {', '};')).toContain('keepWords(u, who)');
         const settings = read('app/(tabs)/settings.tsx');
@@ -83,8 +85,8 @@ describe('every entry to the kit records a Yes the same way', () => {
     // carries it past Next (pages/WelcomePage.tsx); the phone's set only an analytics value, so a member who ticked on the
     // phone was still "not kept" on the account, and the reminder ran on every device.
     it('the tick "I\'ve saved these words", carried past Next, records it on the account the same way, and only when ticked', () => {
-        const welcome = slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'onboardingGuide'");
-        const next = slice(welcome, "recordOnboardingEvent('protection_choice'", "setMode('onboardingGuide')");
+        const welcome = slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'ownerCard' && pendingIdentity)");
+        const next = slice(welcome, "recordOnboardingEvent('protection_choice'", "if (joinFlow === 'claim') {");
         const ticked = slice(next, 'if (seedConfirmed) {', '}');
         expect(ticked).toContain("AsyncStorage.getItem('beanpool_anchor_url')");
         expect(ticked).toContain('keepWords(u, who)');

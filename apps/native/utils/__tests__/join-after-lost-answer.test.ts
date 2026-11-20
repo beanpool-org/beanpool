@@ -622,7 +622,7 @@ describe('welcome.tsx: "Your Name" is not left while Next is out', () => {
         expect(welcome()).toContain('const nextOutRef = useRef(false);');
     });
 
-    it('Back to Home, Restore Existing Identity and the Recover link are disabled while it is out, and do nothing if tapped', () => {
+    it('Back to Home, Restore Existing Identity, the Recover link and the greeting\'s pencil are disabled while it is out, and do nothing if tapped', () => {
         const s = createStep();
         expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, goBack\)\}\s*disabled=\{loading\}\s*accessibilityRole="button"\s*accessibilityLabel=\{t\('Back to Home'\)\}/);
         expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, \(\) => \{ setMode\('member'\); setError\(null\); \}\)\}\s*disabled=\{loading\}/);
@@ -630,9 +630,11 @@ describe('welcome.tsx: "Your Name" is not left while Next is out', () => {
         // No other way off the step: every change of step on it goes through that gate.
         expect(s).not.toContain('onPress={goBack}');
         expect(s.match(/setMode\(/g)).toHaveLength(2);
-        expect(s.match(/leaveUnlessNextIsOut\(nextOutRef, /g)).toHaveLength(3);
+        // The pencil on the greeting (onboarding §3.1 C) back to Your invite: through the same gate, faded and disabled too.
+        expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, \(\) => \{ setInviteDraft\(inviteCode\); setInviteCode\(''\); setInviteNote\(null\); setError\(null\); \}\)\}\s*disabled=\{loading\}/);
+        expect(s.match(/leaveUnlessNextIsOut\(nextOutRef, /g)).toHaveLength(4);
         // Drawn faded as well as disabled.
-        expect(s.match(/loading && styles\.closedWhileNextIsOut/g)).toHaveLength(2);
+        expect(s.match(/loading && styles\.closedWhileNextIsOut/g)).toHaveLength(3);
     });
 
     it('the redeem is bounded, so the step can always be left again', () => {

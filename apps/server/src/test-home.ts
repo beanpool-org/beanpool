@@ -98,6 +98,8 @@ import { lockedDm } from './dm-test-payload.js';
 // Node 22 the next request then reused a socket the server had closed ("fetch failed", four runs on 24 Oct).
 import { localFetch } from './keepalive-test-fetch.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+// Event dates are in Y27, a year laid out as 2027 is, always ahead (future-year-test-helper.ts).
+import { Y27 } from './future-year-test-helper.js';
 
 const MODE = `[${RUN}]`;
 let run = 0, passed = 0;
@@ -1376,11 +1378,11 @@ async function main(): Promise<void> {
         // D2 (event times slice 5): a repeating event's line carries its pattern and last date for the ↻ caption, never the
         // host's clock or each date's length; a one-off carries neither.
         db.prepare('UPDATE posts SET event_repeat = ?, event_repeat_until = ? WHERE id = ?')
-            .run('{"freq":"weekly","interval":1,"byDay":"FR","time":"18:00","minutes":120}', '2027-12-17', cafe.id);
+            .run('{"freq":"weekly","interval":1,"byDay":"FR","time":"18:00","minutes":120}', `${Y27}-12-17`, cafe.id);
         const rep = await get('/api/home?cards=events', alice);
         const repItems = rep.body?.cards?.events?.items ?? [];
         const series = repItems.find((i: any) => i.id === cafe.id);
-        assert(JSON.stringify(series?.repeat) === '{"freq":"weekly","interval":1,"byDay":"FR"}' && series?.repeatUntil === '2027-12-17'
+        assert(JSON.stringify(series?.repeat) === '{"freq":"weekly","interval":1,"byDay":"FR"}' && series?.repeatUntil === `${Y27}-12-17`
             && repItems.filter((i: any) => i.id !== cafe.id).every((i: any) => i.repeat === undefined && i.repeatUntil === undefined),
             `D2: the series' line says how it repeats, the one-offs nothing (${JSON.stringify(series)})`);
 

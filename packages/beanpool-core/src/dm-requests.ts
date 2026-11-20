@@ -26,6 +26,9 @@ export interface UnreadAnswer {
     /** The number of the member's locked contacts list this community keeps, or null (none, or the community keeps none):
      *  absent from a server from before private contacts (DESIGN-private-contacts-fable.md §4.4). */
     contacts?: { seq: number } | null;
+    /** The items held here for the member from other communities (slice S4): a phone's round fetches only where some wait.
+     *  Absent from a server from before S4: the phone fetches as it always did. */
+    mail?: number;
     asOf: string;
 }
 

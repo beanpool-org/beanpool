@@ -140,6 +140,39 @@ const rowToChange = (r: any): KeptOutsideChange => ({
 });
 const bare = ({ state: _state, ...c }: KeptOutsideChange): OutsideChange => c;
 
+/**
+ * The across chats a held copy keeps for one account (slice S4, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3
+ * "Where an across chat lives": the file of the community that carries it, visible always), read through a held, read-only
+ * handle (utils/held-copies.ts runs one plain SELECT at a time, no SQL from a caller): each chat with its newest line, and
+ * the changes to those newest lines. {@link outsideChatsFromHeld} makes of them what {@link outsideChatStore}'s chats() gives.
+ */
+export const OUTSIDE_CHATS_HELD_SQL = `
+    SELECT c.id, c.peer_key, c.peer_home, c.peer_name, c.state, c.restored, c.updated_at,
+           l.id AS last_id, l.author AS last_author, l.text AS last_line, l.at AS last_at
+    FROM outside_chats c
+    LEFT JOIN outside_lines l ON l.id = (SELECT x.id FROM outside_lines x WHERE x.chat_id = c.id ORDER BY x.at DESC, x.id DESC LIMIT 1)
+    WHERE c.me = ?
+    ORDER BY c.updated_at DESC
+`;
+export const OUTSIDE_LAST_CHANGES_HELD_SQL = `
+    SELECT x.* FROM outside_changes x JOIN outside_chats c ON c.id = x.chat_id
+    WHERE c.me = ? AND x.line_id = (SELECT l.id FROM outside_lines l WHERE l.chat_id = c.id ORDER BY l.at DESC, l.id DESC LIMIT 1)
+`;
+
+/** A held copy's rows of {@link OUTSIDE_CHATS_HELD_SQL} and {@link OUTSIDE_LAST_CHANGES_HELD_SQL}, as chats() gives them (its `withLast` rule). */
+export function outsideChatsFromHeld(me: string, rows: any[], changeRows: any[]): OutsideChat[] {
+    const changesOf = new Map<string, OutsideChange[]>();
+    for (const r of changeRows) {
+        const at = `${r.chat_id}\n${r.line_id}`;
+        changesOf.set(at, [...(changesOf.get(at) ?? []), bare(rowToChange(r))]);
+    }
+    return rows.map((r) => rowToChat({
+        ...r,
+        last_text: r.last_id ? outsideLineWords({ id: r.last_id, author: r.last_author, text: r.last_line }, changesOf.get(`${r.id}\n${r.last_id}`) ?? [], me) : null,
+        last_at: r.last_id ? r.last_at : null,
+    }));
+}
+
 /** The store over one community's file. Every read and write is for the account `me` alone. */
 export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
     const db = getDb;

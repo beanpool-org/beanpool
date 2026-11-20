@@ -38,9 +38,9 @@ The code isn't secret. It's safe to read out.
 
 **Mark as verified** makes your phone ask you before it sends to a new key for this person. The key code screen then shows **Verified ✓**, and so does the top of the chat, beside **🔒 End-to-end encrypted** under their name.
 
-The mark is kept on this phone only, for this chat in this community. The web app doesn't have it, and resetting the community's chat memory (below) removes it.
+The mark is of their key, and it holds in every community on this phone: any chat with that same key, in any of your communities, shows **Verified ✓** too, with no second tap. It is kept on this phone only. The web app doesn't have it, and resetting a community's chat memory (below) doesn't remove it.
 
-To take it back, open **Key code** again, tap **Remove verification**, and confirm with **Remove verification**.
+To take it back, open **Key code** in a chat with them, tap **Remove verification**, and confirm with **Remove verification**. That takes it back for that key in every community on this phone.
 
 ## If the key of someone you marked as verified changes
 
@@ -55,6 +55,8 @@ If the code doesn't match, or you can't check, tap **Not now**. Nothing is sent 
 If the code doesn't match, don't continue. Tell the person and your community's admins: someone may be trying to read your messages.
 
 On the key code screen, **Remove verification** ends the pause too: the chat carries on with the new key, without the check.
+
+If you have the same person in more than one community, each community's chat asks you on its own, when that community lists their new key. A community that still lists the key you checked carries on as before: one community's list never pauses a chat in another.
 
 ## If the community gives a date
 
@@ -76,13 +78,13 @@ If your phone can't match some of them to any key, the chat still carries on wit
 
 ## Chat memory
 
-Your phone keeps a small memory for each community: which key each of your chats is with, who you marked as verified, and which chats are private. It is kept on the phone. It stays on the phone when you sign out, so signing out and back in doesn't clear it. The phone never resets it on its own.
+Your phone keeps a small memory for each community: which key each of your chats is with, and which chats are private. Who you marked as verified is kept apart from it, once for all your communities. It is kept on the phone. It stays on the phone when you sign out, so signing out and back in doesn't clear it. The phone never resets it on its own.
 
 You can reset it for one community: open **Settings**, tap **Chat memory** under **Account & identity**, tap **Reset** next to the community, read the warning, and tap **Reset** again. The app points you here only when it says it couldn't read that memory and trying again didn't help.
 
 After a reset, your phone checks every chat in that community again from the start, from the messages it holds, as it does after a restore.
 
-The warning says what can change before you confirm. A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. People you marked as verified in this community go back to not verified. Check the key code, or who's in a chat, before you send.
+The warning says what can change before you confirm. A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Chat may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send. People you marked as verified stay verified.
 
 This is on the phone app. The web app has no chat memory.
 

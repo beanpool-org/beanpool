@@ -205,7 +205,7 @@ Opening Re-Key changes nothing. It shows the checklist, or the code that is alre
 
 With them in front of you:
 
-- They open BeanPool on their new phone, tap **I'm Already a Member →** on its first screen, then **An admin gave me a re-key code**, and scan the QR on your screen (or type the code and your community's name or address). In a browser, the QR's link opens the same screen.
+- They open BeanPool on their new phone, tap **I've used BeanPool before** on its first screen, then **An admin gave me a re-key code**, and scan the QR on your screen (or type the code and your community's name or address). In a browser, the QR's link opens the same screen.
 - Their phone shows a two-digit number, and under it the address of the community it asked: check that is yours. On your screen, a card says **A phone asked at** the time and the start of its key. Your screen never shows the number.
 - **Type the number on their phone**, then press **Bind their phone**. The server binds the phone showing that number: their account moves to it at once, and their phone says so.
 

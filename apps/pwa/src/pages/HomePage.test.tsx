@@ -3912,9 +3912,10 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
         await screen.findByTestId('home-card-community');
     }
 
-    // DESIGN-home-default-fable.md §6, slice D3: the newcomer's first screen is Welcome, New in the Market and First steps,
-    // in that order in one column, and side by side on a wide screen (§2.2: "On a desktop the first three land side by side").
-    it("a new member's Home draws Welcome, Market, First steps in order at one, two and three columns", async () => {
+    // DESIGN-home-default-fable.md §6, slice D3: the newcomer's first screen is its first three cards in one column, and side
+    // by side on a wide screen (§2.2: "On a desktop the first three land side by side"). First steps stands above the Market
+    // since DESIGN-onboarding-home-landing-fable.md §4.1 item 6 (slice S5): core's one default list, both apps.
+    it("a new member's Home draws Welcome, First steps, Market in order at one, two and three columns", async () => {
         const joined = new Date(Date.now() - 60_000).toISOString();
         const steps = { joinedAt: joined, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null, words: false };
         const base = answer({ layout: null }, { steps } as HomeAnswer['cards']);
@@ -3927,20 +3928,20 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
             render(<HomePage identity={ME} onNavigate={vi.fn()} />);
             await screen.findByTestId('home-card-community');
             expect(screen.getByTestId('home-page'), String(w)).toHaveAttribute('data-columns', String(cols));
-            expect(cardIds().slice(0, 3), String(w)).toEqual(['start', 'market', 'steps']);
+            expect(cardIds().slice(0, 3), String(w)).toEqual(['start', 'steps', 'market']);
             // The 12-words card is not on day one: First steps' line says it (§2.5).
             expect(cardIds(), String(w)).not.toContain('safety');
             if (cols === 1) {
-                for (const id of ['start', 'market', 'steps']) expect(screen.getByTestId(`home-card-${id}`).style.gridColumn, String(w)).toBe('');
+                for (const id of ['start', 'steps', 'market']) expect(screen.getByTestId(`home-card-${id}`).style.gridColumn, String(w)).toBe('');
             } else {
                 await waitFor(() => expect(screen.getByTestId('home-card-start').style.gridColumn).toBe('1'));
-                expect(screen.getByTestId('home-card-market').style.gridColumn, String(w)).toBe('2');
-                // Three columns: side by side on the first row. Two: First steps goes under the shorter, Welcome.
-                expect(screen.getByTestId('home-card-steps').style.gridColumn, String(w)).toBe(cols === 3 ? '3' : '1');
+                expect(screen.getByTestId('home-card-steps').style.gridColumn, String(w)).toBe('2');
+                // Three columns: side by side on the first row. Two: the Market goes under the shorter, Welcome.
+                expect(screen.getByTestId('home-card-market').style.gridColumn, String(w)).toBe(cols === 3 ? '3' : '1');
                 const top = (id: string) => Number(screen.getByTestId(`home-card-${id}`).style.gridRow.split(' / ')[0]);
-                expect(top('market'), String(w)).toBe(top('start'));
-                if (cols === 3) expect(top('steps'), String(w)).toBe(top('start'));
-                else expect(top('steps'), String(w)).toBeGreaterThan(top('start'));
+                expect(top('steps'), String(w)).toBe(top('start'));
+                if (cols === 3) expect(top('market'), String(w)).toBe(top('start'));
+                else expect(top('market'), String(w)).toBeGreaterThan(top('start'));
             }
             cleanup();
         }

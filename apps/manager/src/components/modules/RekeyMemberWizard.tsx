@@ -681,7 +681,7 @@ export function RekeyMemberWizard({
 
                         {issuedCode && !codeExpired && (
                             <p className="text-[11px] leading-relaxed text-nature-300 m-0 break-words" data-testid="rekey-scan-help">
-                                Have them open BeanPool → <strong>Already a Member? Restore Account</strong> → <strong>An admin gave me a re-key code</strong>, and scan this or type the code and your community's name.
+                                Have them open BeanPool → <strong>I&apos;ve used BeanPool before</strong> → <strong>An admin gave me a re-key code</strong>, and scan this or type the code and your community's name.
                             </p>
                         )}
 

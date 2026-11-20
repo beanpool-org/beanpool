@@ -238,6 +238,38 @@ export async function setDoor(ctx: Pick<OutsideMailContext, 'store' | 'identity'
     await ctx.store.setMeta(ctx.identity.publicKey, DOOR_META, open ? 'open' : 'closed');
 }
 
+/** The across mute's mark, kept with the chats by the other person's key (slice S4; the phone's utils/outside-mail.ts). */
+const quietMeta = (key: string) => `quiet:${key}`;
+
+/** Whether the member made `key` quiet in this browser (slice S4, the across mute). */
+export async function outsideQuiet(ctx: Pick<OutsideMailContext, 'store' | 'identity'>, key: string): Promise<boolean> {
+    return (await ctx.store.getMeta(ctx.identity.publicKey, quietMeta(key))) === '1';
+}
+
+/**
+ * The across mute (slice S4, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Mutes"), the phone's rule: my
+ * server told first, "no push for this key" (POST /api/mail/quiet), then kept here with the chats. Throws OutsideMailError
+ * with my server's words when it refuses, and nothing is kept.
+ */
+export async function setOutsideQuiet(ctx: OutsideMailContext, key: string, quiet: boolean): Promise<void> {
+    await post(ctx, '/api/mail/quiet', { key, quiet });
+    await ctx.store.setMeta(ctx.identity.publicKey, quietMeta(key), quiet ? '1' : '0');
+}
+
+/**
+ * The keys my server says I made quiet (its mailbox answer's `quiet`, #3310 review F2; the phone's utils/outside-mail.ts),
+ * kept for this account where this browser never kept a mark of its own for that key: signed in afresh after a re-key or a
+ * restore, the chat shows muted as my server holds it. A mark kept here (the member's own Mute or Unmute) stands.
+ */
+async function learnQuiet(ctx: Pick<OutsideMailContext, 'identity' | 'store'>, keys: unknown): Promise<void> {
+    if (!Array.isArray(keys)) return;
+    const me = ctx.identity.publicKey;
+    for (const key of keys) {
+        if (typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key) || key === me) continue;
+        if ((await ctx.store.getMeta(me, quietMeta(key))) === null) await ctx.store.setMeta(me, quietMeta(key), '1');
+    }
+}
+
 // ── Finding someone in another community by name (N1, @beanpool/core find-by-name.ts; the phone's utils/outside-mail.ts) ──
 
 /** Whether people in other communities can find me by name: my community's switch, the same on every device. */
@@ -505,6 +537,8 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         // another device) opens here first. While more ticks wait, this page's items are left: unconfirmed, they come again
         // with the next page, and are judged once every tick is in.
         out.ticks += await applyTicks(ctx, Array.isArray(answer?.outbox) ? answer.outbox : [], now);
+        // The keys I made quiet, as my server holds them (#3310 review F2): kept where this browser kept no mark of its own.
+        if (page === 0) await learnQuiet(ctx, answer?.quiet).catch((e) => console.warn('[OutsideMail] The quiet keys wait for the next round:', e?.message ?? e));
         if (answer?.outboxMore) continue;
         const held: any[] = Array.isArray(answer?.items) ? answer.items : [];
         const done: string[] = [];

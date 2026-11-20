@@ -494,7 +494,7 @@ describe('a chat in place: every action lands in the file and on the server of t
         }
     });
 
-    it('a page naming a request for me (requests in place are slice S3): nothing of the request is written into A\'s copy', async () => {
+    it('a page naming a request for me in a DM A holds (slice S3, which lifts S2\'s carve-out): its people go into A\'s copy as when set there, and into no other', async () => {
         // My row in A's chat gone (as for a request that reached a phone before its people did), and the node naming the request.
         const sql = new DatabaseSync(fileOn(A_FILE));
         sql.prepare('DELETE FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').run(dm.id, me.publicKey);
@@ -507,10 +507,14 @@ describe('a chat in place: every action lands in the file and on the server of t
             body.conversation.request = { from: peer.publicKey, state: 'pending', at: tick() };
             return answer(200, body);
         });
+        const bBefore = rowsOf(B_FILE);
         try {
-            await db.syncSingleConversation(dm.id, A);
+            expect(await db.syncSingleConversation(dm.id, A)).toBe(true);
             const people = (rowsOf(A_FILE)!.conversation_participants as any[]).filter((r) => r.conversation_id === dm.id).map((r) => r.public_key);
-            expect(people).not.toContain(me.publicKey);
+            expect(people).toContain(me.publicKey);
+            expect(JSON.parse(String((rowsOf(A_FILE)!.conversations as any[]).find((c) => c.id === dm.id)?.request)).from).toBe(peer.publicKey);
+            expect(rowsOf(B_FILE)).toEqual(bBefore);
+            for (const r of asked) expect(new URL(r.url).origin).toBe(A);
         } finally {
             fetchMock.mockImplementation(page);
             await db.leaveChatInPlace(A);

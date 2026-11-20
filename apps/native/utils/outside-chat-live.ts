@@ -2,26 +2,149 @@
  * Chats with people in other communities, as the screens and the syncs reach them (slice X3): the context for the community
  * the phone is set to (utils/outside-mail.ts), one round at a time, and the event screens listen to. Where the community
  * does not take messages from other communities (its node says nothing, or the owner's switch is off), nothing is asked.
+ *
+ * Slice S4 (scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3, §6): an across chat lives in the file of the
+ * community that carries it (its mailbox is that community's server), and now shows and is fetched whatever community the
+ * phone is set to. A context, and a round, may name another community this phone holds as a member: its own address, its own
+ * mailbox, and its own file, reached through its copy open in place (db.ts outsideStoreOf), held open for the round only
+ * (enterChatInPlace ... leaveChatInPlace). No data moves between files. A counts answer that says mail waits there starts
+ * that community's round ({@link roundWhereMailWaits}); a ring from it while the app is open does too ({@link roundOnRing});
+ * Chat as it opens and the background task fetch every held community, whatever its last answer said (#3310 review F1).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
 import { t } from '@beanpool/core';
 import { loadIdentity } from './identity';
-import { isUserBlocked } from './blocklist';
+import { blocksOwedAt, blockUser, isUserBlocked, syncBlocksAt } from './blocklist';
 import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn } from './node-profile';
-import { failUnsent, syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
+import { failUnsent, setOutsideQuiet, syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
+import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy } from './nodes';
+import { isPlainNodeAddress } from './node-url';
 
 /** Emitted after a round that changed anything here: a line in, a state moved, a chat made. */
 export const OUTSIDE_CHATS_UPDATED = 'outside_chats_updated';
 
-/** The context for the community the phone is set to, or null with no community or no account. */
-export async function outsideContext(): Promise<OutsideMailContext | null> {
+/**
+ * The context for the community the phone is set to, or null with no community or no account. `community` (slice S4):
+ * another community this phone holds, whose across chats it reaches by name ({@link contextFor}).
+ */
+export async function outsideContext(community?: string | null): Promise<OutsideMailContext | null> {
+    return (await contextFor(community))?.ctx ?? null;
+}
+
+/**
+ * The context for `community`'s across chats (slice S4), and the address it holds in place when that is not the community
+ * in use. No community, or the one in use however spelled: the community in use, as before (its store throws once the
+ * phone has switched). Another community this phone saved, as a member (not a guest's look), at a plain address: that one,
+ * at the address the phone saved for it, never a link's own spelling. Anything else, no account, or no community set: null.
+ */
+async function contextFor(community?: string | null): Promise<{ ctx: OutsideMailContext; inPlace: string | null } | null> {
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
     if (!anchor) return null;
     const identity = await loadIdentity().catch(() => null);
     if (!identity?.privateKey) return null;
-    const { outsideStore } = await import('./db');
-    return { nodeUrl: anchor.replace(/\/+$/, ''), identity, store: outsideStore(anchor), isBlocked: isUserBlocked };
+    const db = await import('./db');
+    const file = community ? getDatabaseFilenameForNode(community) : null;
+    if (!file || file === getDatabaseFilenameForNode(anchor)) {
+        return { ctx: { nodeUrl: anchor.replace(/\/+$/, ''), identity, store: db.outsideStore(anchor), isBlocked: isUserBlocked }, inPlace: null };
+    }
+    const saved = (await getSavedNodes().catch(() => [])).find((n) => getDatabaseFilenameForNode(n.url) === file);
+    if (!saved || !isPlainNodeAddress(saved.url) || await isGuestCopy(saved.url).catch(() => true)) return null;
+    return { ctx: { nodeUrl: saved.url.replace(/\/+$/, ''), identity, store: db.outsideStoreOf(saved.url), isBlocked: isUserBlocked }, inPlace: saved.url };
+}
+
+/**
+ * Block, from an across chat (#3310 review F1): `key` blocked for the account on this phone, and the community in use hears it,
+ * as it hears every block (blocklist.ts blockUser). When another community this phone holds carries the chat (`community`, the
+ * screen's in place), that community hears it too, at the address the phone saved for it and signed for its name (blockUser's
+ * `community`, syncBlocksAt): its mailbox holds that key's lines and rings for them (server engine/relay-mail.ts). And the key
+ * is made quiet there at once (setOutsideQuiet), so it rings nothing even before that community holds the block. A quiet that
+ * doesn't go (offline, an old server, the 500 limit) leaves the block as it is. Never throws.
+ */
+export async function blockFromAcross(community: string | null | undefined, key: string): Promise<void> {
+    const found = await contextFor(community).catch(() => null);
+    await blockUser(key, undefined, undefined, undefined, found?.inPlace ?? undefined);
+    if (found) await setOutsideQuiet(found.ctx, key, true).catch(() => {});
+}
+
+/**
+ * The other communities this phone holds as a member, whose files may carry across chats (slice S4): saved, at a plain
+ * address, not a guest's look, not the one in use, one per file however spelled.
+ */
+export async function heldMailCommunities(): Promise<string[]> {
+    const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+    const files = new Set<string>([getDatabaseFilenameForNode(anchor)]);
+    const out: string[] = [];
+    for (const node of await getSavedNodes().catch(() => [])) {
+        const file = getDatabaseFilenameForNode(node.url);
+        if (files.has(file) || !isPlainNodeAddress(node.url) || await isGuestCopy(node.url).catch(() => true)) continue;
+        files.add(file);
+        out.push(node.url);
+    }
+    return out;
+}
+
+/**
+ * Whether a counts answer (other-communities-unread.ts, `heard`) says across mail waits there for this member (`mail`, server
+ * GET /api/me/unread). Nothing is kept of one that says none (#3310 review F1): a line can land there, and ring, a minute
+ * later, and no later answer would come to lift a kept 0 in the background, where no counts round runs.
+ */
+export function mailWaits(body: unknown): boolean {
+    const mail = body && typeof body === 'object' ? (body as { mail?: unknown }).mail : undefined;
+    return typeof mail === 'number' && Number.isSafeInteger(mail) && mail > 0;
+}
+
+/**
+ * A held community's counts answer, as the round while the app is open hears it (services/push-notifications.ts
+ * askOtherCommunitiesNow): its mailbox fetched now, into its own file, when mail waits there; else nothing (a node too old
+ * to say `mail` included: Chat's round and the background task fetch it). Never throws.
+ */
+export function roundWhereMailWaits(community: string, body: unknown): Promise<SyncOutcome | null> | null {
+    return mailWaits(body) ? syncOutsideMailNow(undefined, community) : null;
+}
+
+/**
+ * A notice another community this phone holds signed for this account landed while the app is open (services/
+ * push-notifications.ts handleNotification; design §3 "Live typing and instant arrival": across chats refresh on a push). A
+ * `chat.message` (the ring of a line held there, engine/relay-mail.ts ringHeldMail, or a direct line there) fetches that
+ * community's across mail now, into its own file, at the address the phone saved for it: the line shows in Chat and its
+ * sender's Delivered goes, whatever that community's last counts answer said (#3310 review F1). The community in use, or one
+ * the phone doesn't hold as a member: nothing (its own rounds fetch it). Null when no round was started. Never throws.
+ */
+export async function roundOnRing(notice: { community: string; kind: string | null; active: boolean }): Promise<SyncOutcome | null> {
+    if (notice.active || notice.kind !== 'chat.message') return null;
+    const file = getDatabaseFilenameForNode(notice.community);
+    const held = (await heldMailCommunities().catch(() => [])).find((c) => getDatabaseFilenameForNode(c) === file);
+    return held ? syncOutsideMailNow(undefined, held) : null;
+}
+
+/**
+ * A round for each held community (slice S4): Chat as it opens, and the background task after the community in use's ({@link
+ * mailAfterBackgroundSync}). Side by side, each with its own deadline at the end of the one budget (#3310 r3 review F2: one
+ * after another, a community that never answers used the whole budget, and no other was fetched), each community fetched
+ * whatever its last counts answer said (#3310 review F1: a `mail: 0` heard earlier never hides a line that came, and rang,
+ * since). Returns how many rounds ran.
+ */
+export async function syncHeldMailNow(budgetMs: number = OUTSIDE_ROUND_MS): Promise<number> {
+    const end = Date.now() + budgetMs;
+    const held = await heldMailCommunities().catch(() => []);
+    const left = end - Date.now();
+    if (held.length === 0 || left < BACKGROUND_MIN_MS) return 0;
+    await Promise.all(held.map((community) => syncOutsideMailNow(left, community).catch(() => null)));
+    return held.length;
+}
+
+/**
+ * The background task's mail step (services/background-task.ts), `wokeAt` when the task woke: the community in use's round
+ * under its own budget, then every held community's in what is left of iOS's window, none skipped for a `mail: 0` heard while
+ * the app was open (#3310 review F1: nothing in the background asks for counts, and a ring shown by the phone runs no app
+ * code). Too little left: skipped, and the mail waits for the next wake or the app.
+ */
+export async function mailAfterBackgroundSync(wokeAt: number): Promise<void> {
+    const budget = backgroundMailBudget(Date.now() - wokeAt);
+    if (budget > 0) await syncOutsideMailNow(budget);
+    const left = backgroundMailBudget(Date.now() - wokeAt);
+    if (left > 0) await syncHeldMailNow(left);
 }
 
 /**
@@ -61,23 +184,28 @@ export function backgroundMailBudget(elapsedMs: number): number {
     return left < BACKGROUND_MIN_MS ? 0 : Math.min(OUTSIDE_BACKGROUND_MS, left);
 }
 
-let running: Promise<SyncOutcome | null> | null = null;
+/** The rounds running: the community in use's (''), and each held community's by its file. */
+const running = new Map<string, Promise<SyncOutcome | null>>();
 
 /**
- * One round, never two at once; null when nothing was asked (no community, no account, the switch off, unreachable) or the
- * round ran out of time. A round has a deadline, `budgetMs`: at it, every request still out is aborted, the round answers
- * null and is let go, so one stalled request never stops the rounds after it (the chat's poll, the Chat tab, the background
- * task). A caller that finds a round running shares it, but waits no longer than its own budget.
+ * One round, never two at once for one community; null when nothing was asked (no community, no account, the switch off,
+ * unreachable) or the round ran out of time. A round has a deadline, `budgetMs`: at it, every request still out is aborted,
+ * the round answers null and is let go, so one stalled request never stops the rounds after it (the chat's poll, the Chat
+ * tab, the background task). A caller that finds a round running shares it, but waits no longer than its own budget.
+ * `community` (slice S4): another community this phone holds, whose mailbox and file the round reaches by name; left out,
+ * the one in use, as before.
  */
-export function syncOutsideMailNow(budgetMs: number = OUTSIDE_ROUND_MS): Promise<SyncOutcome | null> {
-    if (running) return atMost(running, budgetMs);
-    const round = roundWithDeadline(budgetMs);
-    running = round;
-    void round.finally(() => { if (running === round) running = null; });
+export function syncOutsideMailNow(budgetMs: number = OUTSIDE_ROUND_MS, community?: string | null): Promise<SyncOutcome | null> {
+    const key = community ? getDatabaseFilenameForNode(community) : '';
+    const under = running.get(key);
+    if (under) return atMost(under, budgetMs);
+    const round = roundWithDeadline(budgetMs, community);
+    running.set(key, round);
+    void round.finally(() => { if (running.get(key) === round) running.delete(key); });
     return round;
 }
 
-function roundWithDeadline(deadlineMs: number): Promise<SyncOutcome | null> {
+function roundWithDeadline(deadlineMs: number, community?: string | null): Promise<SyncOutcome | null> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<null>((resolve) => {
@@ -88,9 +216,20 @@ function roundWithDeadline(deadlineMs: number): Promise<SyncOutcome | null> {
         }, deadlineMs);
     });
     const work = (async (): Promise<SyncOutcome | null> => {
+        // Another community's copy is held open in place for this round only (slice S4), from before its first statement.
+        let held: string | null = null;
         try {
-            const ctx = await outsideContext();
-            if (!ctx) return null;
+            const found = await contextFor(community);
+            if (!found) return null;
+            const { ctx } = found;
+            if (found.inPlace) {
+                held = found.inPlace;
+                (await import('./db')).enterChatInPlace(held);
+                // A block from one of its chats whose answer never came (offline, the minute's limit: #3310 r3 review F1): sent
+                // there again, outside this round's deadline. Until S7 nothing else sends a block to a community not in use.
+                const owedAt = held;
+                void (async () => { if (await blocksOwedAt(owedAt)) await syncBlocksAt(owedAt); })().catch(() => {});
+            }
             const profile = await profileHere(ctx.nodeUrl);
             if (!outsideMessagesOn(profile?.features)) {
                 // Read, and off: my server would refuse my waiting lines (403), and no round will run to send them. They fail
@@ -106,6 +245,8 @@ function roundWithDeadline(deadlineMs: number): Promise<SyncOutcome | null> {
         } catch (e) {
             if (!controller.signal.aborted) console.warn('[OutsideMail] This round did not finish:', (e as Error)?.message ?? e);
             return null;
+        } finally {
+            if (held) await (await import('./db')).leaveChatInPlace(held).catch(() => {});
         }
     })();
     return Promise.race([work, timedOut]).finally(() => clearTimeout(timer));

@@ -22,6 +22,12 @@ import { GLOBAL_NODE_URL } from './global-node-url';
  * redeem survived at the end of the wizard for so long — see `redeemed` below.)
  */
 export type OnboardingStep = 'create' | 'globalJoin' | 'claim' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'ownerCard';
+/**
+ * The steps the wizard has now. `onboardingGuide` (How it Works) left the path in slice S5
+ * (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §3.1, §4.3): this app never writes it, and a record a 1.4.7
+ * phone left there resumes on the step before it, the way back ({@link resumePlan}). Nothing stored is rewritten.
+ */
+export type WizardStep = Exclude<OnboardingStep, 'onboardingGuide'>;
 
 /**
  * Which door the wizard came in by. Absent is `invite`: every record written before the global
@@ -197,7 +203,7 @@ export type ResumePlan =
     | { action: 'clear' }
     | {
         action: 'resume';
-        mode: OnboardingStep;
+        mode: WizardStep;
         flow: OnboardingFlow;
         callsign: string;
         inviteCode: string;
@@ -285,7 +291,8 @@ export function resumePlan(
     const doorFlow = flow === 'global' || flow === 'claim';
     return {
         action: 'resume',
-        mode: pending.step,
+        // A join a 1.4.7 phone left at How it Works resumes on the way back, the step before it (S5, §4.3).
+        mode: pending.step === 'onboardingGuide' ? 'seedBackup' : pending.step,
         flow,
         callsign: pending.callsign || stored.callsign,
         inviteCode: pending.inviteCode || '',

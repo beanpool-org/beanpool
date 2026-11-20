@@ -79,6 +79,8 @@ import { OWNER_TAKEDOWN_TOOLS } from './agent/owner-takedowns.js';
 import { resetSuggestions } from './agent/suggestions.js';
 import type { AgentGrant, ToolResult } from './agent/tools.js';
 import { getNodeRole, setNodeRole } from './config/node-role.js';
+// Event dates are in Y27, a year laid out as 2027 is, always ahead (future-year-test-helper.ts).
+import { Y27 } from './future-year-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -700,11 +702,11 @@ async function main(): Promise<void> {
         assert(sweepTakedowns() === 1 && row(a3).status === 'cancelled', 'once the deal is over, the sweep finishes it');
         // A repeating event moves to its next date on its own row, so a takedown holds across it.
         const weekly = createPost('event', 'community', 'Weekly fake meet-up', 'Words.', 0, 'fixed', sam.pub, -28.55, 153.5, [AVATAR], false, undefined, false,
-            { eventStartLocal: '2027-10-01T20:50', eventEndLocal: '2027-10-01T22:50', eventTz: 'Australia/Sydney', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' }, eventPlaceName: 'The hall' })!.id;
+            { eventStartLocal: `${Y27}-10-01T20:50`, eventEndLocal: `${Y27}-10-01T22:50`, eventTz: 'Australia/Sydney', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' }, eventPlaceName: 'The hall' })!.id;
         await a.callTool({ name: 'take_down', arguments: { post_id: weekly, reason: 'rules', why: WHY } });
         const dateOf = () => (db.prepare('SELECT event_start_at FROM posts WHERE id = ?').get(weekly) as { event_start_at: string }).event_start_at;
         const firstDate = dateOf();
-        rollDueSeries(undefined, Date.parse('2027-10-02T00:00:00.000Z'));
+        rollDueSeries(undefined, Date.parse(`${Y27}-10-02T00:00:00.000Z`));
         assert(dateOf() > firstDate && !!row(weekly).hidden_by_reports_at && !!row(weekly).removed_by_moderator_at && row(weekly).active === 1,
             `a repeating event rolls to its next date still taken down (${firstDate} → ${dateOf()})`);
 

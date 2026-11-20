@@ -172,6 +172,16 @@ export function dmPeerPinsStoreKey(publicKey: string, file: string): string {
 }
 
 /**
+ * The keys one account marked as verified on this phone (utils/dm-verified-keys.ts, DESIGN-s7-blocks-verified-everywhere §3.2):
+ * `{ keys: { <key>: <date> } }`. One per account, outside every community's file: a chat in any community is verified
+ * exactly when the key it is sealed to is here. Written only by the member's own taps; no sync, carry or community reset
+ * touches it. Kept when the account leaves the phone, as its block list is, and never read for another account.
+ */
+export function dmVerifiedKeysStoreKey(publicKey: string): string {
+    return `beanpool_dm_verified_keys:${publicKey.toLowerCase()}`;
+}
+
+/**
  * What the member's reset of one community's chat memory set aside (utils/dm-peer-pins.ts, §3.4 amendment 6 §3): the raw
  * pins value as storage returned it, the newest kept. Never read by the app; kept for the record, as the pins are.
  */
@@ -431,6 +441,16 @@ export const HOME_STORE_PREFIX = 'beanpool_home:';
 
 /** The community a Home key is kept under: its record's name (community-index.ts), in one spelling. */
 const homeCommunity = (url: string) => communityKeyOf(url).trim().replace(/\/+$/, '').toLowerCase();
+
+/**
+ * BeanPool's part of Home's welcome, seen once per phone (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.3,
+ * slice S5): the community whose Home first drew the WELCOME TO BEANPOOL! tile for this account here, named in the value
+ * through the community's record (utils/welcome-part.ts), so a second community on the same phone shows only its own
+ * welcome. A Home key, so it leaves with the account; lost with the app's data, which only shows the tile once more.
+ */
+export function homeWelcomePartStoreKey(publicKey: string): string {
+    return `${HOME_STORE_PREFIX}welcome-part:${publicKey.toLowerCase()}`;
+}
 
 export function homeAnswerStoreKey(publicKey: string, url: string): string {
     return `${HOME_STORE_PREFIX}answer:${publicKey.toLowerCase()}:${homeCommunity(url)}`;

@@ -1,5 +1,5 @@
 /**
- * Already a member → Scan from this browser (front doors S9): the account a member's browser holds comes to this phone,
+ * I've used BeanPool before → Scan from a browser (front doors S9; the front door since onboarding S1): the account a member's browser holds comes to this phone,
  * which has none, without typing the 12 words. utils/pair-in.ts says what is checked; apps/server pairing-relay.ts how
  * the relay holds it.
  *

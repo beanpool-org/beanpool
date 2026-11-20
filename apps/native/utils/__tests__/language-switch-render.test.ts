@@ -324,14 +324,14 @@ describe('Your area at 320 dp with 1.3× text, in xx, ru, fr, ar (left to right 
  * whole 3,800-line screen would need its 67 imports stubbed. The words are the catalogs' (or the pseudo-locale's).
  */
 describe('the welcome and join screens\' words at 320 dp with 1.3× text', () => {
-    // The home screen's two doors and the lines under them are components/WelcomeDoors.tsx's (DESIGN-global-entry §B.3):
+    // The home screen's front door and the line under Look around are components/welcome/FrontDoor.tsx's (onboarding §3.1 A):
     // its words and lines are the screen's, so they are read with it.
-    const doorsSource = fs.readFileSync(path.resolve(__dirname, '../../components/WelcomeDoors.tsx'), 'utf8');
+    const doorsSource = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/FrontDoor.tsx'), 'utf8');
     const source = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8') + '\n' + doorsSource;
-    // The home screen's two big buttons: one line in English, a second line for a longer language, shrinking to 0.6 at most.
-    const ONE_LINE_BUTTONS = ['🎟️ Join with an invite', '🌍 Explore BeanPool worldwide'];
-    // homeContent padding 24 a side, memberBtn paddingHorizontal 12 a side: the label's line.
-    const BUTTON_LINE = FLOOR - 2 * 24 - 2 * 12;
+    // The front door's three buttons (mainBtnText 18, quietBtnText 17): their words wrap, never cut off or shrunk.
+    const DOOR_BUTTONS: Record<string, number> = { 'I have an invite': 18, 'No invite? Look around': 17, "I've used BeanPool before": 17 };
+    // homeContent padding 24 a side, the buttons' paddingHorizontal 16 a side: the label's line.
+    const BUTTON_LINE = FLOOR - 2 * 24 - 2 * 16;
     // The join card: scroll padding 24 a side, card padding 24 a side.
     const CARD_LINE = FLOOR - 2 * 24 - 2 * 24;
     // Each sentence's size where it differs from the 16 of body text (welcome.tsx makeStyles: headerTitle 24, title 20,
@@ -340,8 +340,11 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
         // The card titles at 20 (styles.title: the invite step's, then "Join {name}" once its code is checked, and the global
         // door's): they wrap, never truncate. "🎟️ Join with an invite" is also the home button at 18; its one-line fit is
         // measured at 18 above, and here it is held to the title's larger size on the card.
-        'Welcome to BeanPool': 24, '🎟️ Join with an invite': 20, 'Join {name}': 20, '🌍 Join the global community': 20,
-        'What should we call you?': 18, '🌍 Explore BeanPool worldwide': 18,
+        'Welcome to BeanPool': 24, '🎟️ Join with an invite': 20, '🌍 Join the global community': 20, 'Your invite': 20,
+        'What should we call you?': 18, ...DOOR_BUTTONS,
+        // The front door's line on the colour block (17), and the name screen's greeting (17; the community's name, at 22, is its own).
+        'Trade skills, goods and favours with your neighbours.': 17,
+        '{inviter} invited you to {community}': 17, "You're invited to {community}": 17, "You're invited": 17,
         // The join card's helper lines (fieldHint, callsignHelper, callsignTip 13).
         "Required — the community node you're joining. Ask whoever invited you if you're unsure.": 13,
         'This is your display name — how the community sees you, e.g. Sarah. You can change it later.': 13,
@@ -354,11 +357,11 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     // The home screen's column (homeContent padding 24 a side): the title's line, wider than the join card's.
     const HOME_LINE = FLOOR - 2 * 24;
     const LINE_OF: Record<string, number> = { 'Welcome to BeanPool': HOME_LINE };
-    // The onboarding stepper (welcome.tsx stepperStyles): four equal quarters of the row inside the scroll's 24dp and the
-    // row's 8dp padding, less three 12dp connectors with 2dp margins; labels at 11, up to three lines, shrinking to 0.7.
+    // The onboarding stepper (welcome.tsx stepperStyles): three equal thirds (How it Works left the path, S5) of the row inside the scroll's 24dp and the
+    // row's 8dp padding, less two 12dp connectors with 2dp margins; labels at 11, up to three lines, shrinking to 0.7.
     // Every real language holds in two; the third line is for the pseudo-locale's +35%.
-    const STEPS = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
-    const STEP_WIDTH = (FLOOR - 2 * 24 - 2 * 8 - 3 * (12 + 2 * 2)) / 4;
+    const STEPS = ['Your Name', 'Your Photo', 'Safety Backup'];
+    const STEP_WIDTH = (FLOOR - 2 * 24 - 2 * 8 - 2 * (12 + 2 * 2)) / 3;
     const ALL_LANGS: UiLang[] = ['xx', ...fs.readdirSync(NATIVE_WORDS).filter((f) => /^[A-Za-z-]+\.json$/.test(f)).map((f) => f.slice(0, -5) as UiLang)];
     /**
      * The source with what is not on a phone's card taken out: every call that hands its words to one of the phone's own
@@ -389,45 +392,43 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
      */
     const readIn = (lang: UiLang, key: string) => (lang === 'xx' ? inLang(lang, key) : ((catalog(NATIVE_WORDS, lang)[key] as string | undefined) ?? key));
 
-    it('the screens\' sentences are through t(), and the two big buttons and Restore are the only lines with a limit (two lines)', () => {
-        for (const key of ONE_LINE_BUTTONS) expect(keys).toContain(key);
+    it('the screens\' sentences are through t(), and the front door draws no line limit: its words wrap', () => {
+        for (const key of Object.keys(DOOR_BUTTONS)) expect(keys).toContain(key);
         expect(keys.length).toBeGreaterThanOrEqual(40);
-        const home = source.slice(source.indexOf('// --- MAIN WELCOME SCREEN ---'), source.indexOf('function makeStyles(')) + doorsSource;
-        // The two doors and, since front doors S10, Already a member? Restore under them (components/WelcomeDoors.tsx).
-        expect((home.match(/numberOfLines=\{\d\}/g) ?? []).length).toBe(3);
-        expect((home.match(/numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}/g) ?? []).length).toBe(3);
-        expect((home.match(/adjustsFontSizeToFit minimumFontScale=\{0\.6\}/g) ?? []).length).toBe(3);
+        const home = source.slice(source.indexOf('// --- THE FRONT DOOR'), source.indexOf('function makeStyles(')) + doorsSource;
+        expect(home.match(/numberOfLines=\{\d\}/g) ?? []).toEqual([]);
+        expect(home.match(/adjustsFontSizeToFit/g) ?? []).toEqual([]);
         expect(home).toContain('<LanguageSwitch />');
-        // A wrapped label's two lines sit in the middle of the button (review of #1954, N5).
+        // A wrapped label's lines sit in the middle of the button (review of #1954, N5).
         expect(source).toMatch(/memberBtnText: \{[^}]*textAlign: 'center'/);
+        expect(doorsSource).toMatch(/mainBtnText: \{[^}]*textAlign: 'center'/);
+        expect(doorsSource).toMatch(/quietBtnText: \{[^}]*textAlign: 'center'/);
     });
 
-    it('the stepper\'s four labels are through t(), in four equal quarters, up to three centred lines at 0.7', () => {
-        expect(source).toContain("const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup'), t('How it Works')];");
+    it('the stepper\'s three labels are through t(), in three equal thirds, up to three centred lines at 0.7', () => {
+        // How it Works left the path (slice S5, DESIGN-onboarding-home-landing-fable.md §3.1): three steps, not four.
+        expect(source).toContain("const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup')];");
+        expect(source).not.toContain("t('How it Works')");
         expect(source).toMatch(/stepperStyles\.labelActive\]\} numberOfLines=\{3\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>\{label\}/);
         expect(source).toMatch(/stepItem: \{\s*alignItems: 'center',\s*flex: 1,/);
         expect(source).toMatch(/ {4}label: \{[^}]*textAlign: 'center'/);
         expect(source).toMatch(/ {4}line: \{\s*width: 12,/);
-        expect(STEP_WIDTH).toBe(52);
-        // English needs it too: on one line the four labels are 273dp at 0.7 by this model (237dp with real shaping) in
-        // a 184dp row, so one line cut them off before any translation.
-        expect(STEPS.reduce((w, k) => w + widthOf(k, 11) * 0.7, 0)).toBeGreaterThan(4 * STEP_WIDTH);
+        expect(STEP_WIDTH).toBeCloseTo(224 / 3, 5);
     });
 
     for (const lang of ALL_LANGS) {
         // Generous 60s timeout under CI load (default vitest timeout is 30s) so it doesn't flake on slow or heavily loaded runners (#2282).
-        it(`${lang}: each big button and stepper label fits its two lines at its smallest with no word cut, and no word is wider than its line`, () => {
+        it(`${lang}: each stepper label fits its lines at its smallest with no word cut, and no word of a front door button or any sentence is wider than its line`, () => {
             for (const key of STEPS) {
                 const label = inLang(lang, key);
                 expect(typeof label, `${key} has a ${lang} translation`).toBe('string');
                 expect(widthOf(label, 11) * 0.7, `"${label}" in ${lang}`).toBeLessThanOrEqual((lang === 'xx' ? 3 : 2) * STEP_WIDTH);
                 expect(widthOf(widestPiece(label), 11) * 0.7, `a word of "${label}" in ${lang}`).toBeLessThanOrEqual(STEP_WIDTH);
             }
-            for (const key of ONE_LINE_BUTTONS) {
+            for (const [key, size] of Object.entries(DOOR_BUTTONS)) {
                 const label = inLang(lang, key);
                 expect(typeof label, `${key} has a ${lang} translation`).toBe('string');
-                expect(widthOf(label, 18) * 0.6, `"${label}" in ${lang}`).toBeLessThanOrEqual(2 * BUTTON_LINE);
-                expect(widthOf(widestPiece(label), 18) * 0.6, `a word of "${label}" in ${lang}`).toBeLessThanOrEqual(BUTTON_LINE);
+                expect(widthOf(widestPiece(label), size), `a word of "${label}" in ${lang}`).toBeLessThanOrEqual(BUTTON_LINE);
             }
             for (const key of keys) {
                 // A sentence this language has is a real string, and that is what is measured. One it has not reached yet

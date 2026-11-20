@@ -37,6 +37,8 @@ const h = vi.hoisted(() => ({
     store: new Map<string, string>(),
     me: { publicKey: '', privateKey: '' },
     blocks: [] as unknown[][],
+    /** Called before each statement the phone writes (a row may change something mid-write). */
+    beforeRun: null as null | ((q: string, p: unknown[]) => void),
 }));
 
 vi.mock('expo-sqlite', async () => {
@@ -49,6 +51,7 @@ vi.mock('expo-sqlite', async () => {
             const sql = new Sqlite(join(h.dir, name));
             return {
                 runAsync: async (q: string, p?: unknown) => {
+                    h.beforeRun?.(q, params(p));
                     const r = sql.prepare(q).run(...params(p));
                     return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
                 },
@@ -262,6 +265,7 @@ async function phoneOnBWithARequestAway(): Promise<void> {
     h.store.set('bp_trust_sync_v3', 'true');
     h.store.set(ANCHOR, A);
     h.blocks = [];
+    h.beforeRun = null;
     me = person();
     peer = person();
     asker = person();
@@ -704,6 +708,11 @@ describe('the member\'s own list reads, with the account or the community changi
             fs.copyFileSync(fileOn(B_FILE), fileOn(C_FILE));
             await switchPhoneTo(C);
         },
+        // The same account, the community's copy made anew: the answer was for the copy that went.
+        'the community read taken off the phone and set to again (its copy made anew)': async (where) => {
+            await removeCommunityCaches([where]);
+            await switchPhoneTo(where);
+        },
     };
 
     afterEach(async () => { await db.leaveChatInPlace(A); });
@@ -738,6 +747,14 @@ describe('the member\'s own list reads, with the account or the community changi
         expect({ A: rowsOf(A_FILE), B: rowsOf(B_FILE), C: rowsOf(C_FILE), stored: Object.fromEntries([...h.store.entries()].sort()) }).toEqual(before);
         // The next account reads no request of the account that asked, wherever the phone is set (P5).
         if (h.me.publicKey !== asking) expect(await db.getMessageRequests(h.me.publicKey)).toBeNull();
+    });
+
+    it('requestsInPlace, with the account switched as the request is written into A\'s copy: nothing kept, nothing handed back', async () => {
+        h.beforeRun = (q, p) => { if (q.includes('INSERT INTO conversations') && p[0] === req.id) nextAccount(); };
+        const keptBefore = Object.fromEntries([...h.store.entries()].filter(([k]) => k.startsWith(MESSAGE_REQUESTS_STORE_PREFIX)));
+        expect(await db.requestsInPlace(me.publicKey, A)).toBeNull();
+        expect(h.me.publicKey, 'the account switched mid-write').not.toBe(me.publicKey);
+        expect(Object.fromEntries([...h.store.entries()].filter(([k]) => k.startsWith(MESSAGE_REQUESTS_STORE_PREFIX)))).toEqual(keptBefore);
     });
 });
 

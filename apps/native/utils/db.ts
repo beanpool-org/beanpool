@@ -898,25 +898,23 @@ export function newCopyGeneration(): void {
  * A read of the member's own list (their chats and requests, the groups they are in), taken as it is asked: the account it
  * is asked for (`asking`, its key; null with none) and the phone's copies as they are (copyGeneration) (#3309 review N2,
  * P3, P5). Every such read whose answer is written, kept or handed back after its network await goes through this one guard
- * (syncMessages, requestsInPlace, fetchGroups; utils/__tests__/own-list-read-account.test.ts):
- * - `still()`, after the answer and before anything of it is written, kept or handed back: the account, read again, while
- *   it is still the one that asked and no copy has been cleared or removed since (Sign Out, the next account, a wipe, a
- *   community taken off the phone). Else null, and the answer goes nowhere: written into no copy, kept under no key, shown
- *   on no card. Without it, an answer that landed after Sign Out was written into the file the next account then held,
- *   and kept under its key (the next account read the old account's message request as its own: P5).
- * - `copiesAsAsked()`, with no await, for each step of a pass that has read the account again already.
- * Taken with no await, so nothing comes between it and the ask; after the copy the read writes into is open, since opening
- * a copy below this build's schema starts a generation of its own.
+ * (syncMessages, requestsInPlace, fetchGroups; utils/__tests__/requests-in-place-wrong-file.test.ts, its table of them):
+ * `still()`, after the answer and before anything of it is written, kept or handed back: the account, read again, while it
+ * is still the one that asked and no copy has been cleared or removed since (Sign Out, the next account, a wipe, a
+ * community taken off the phone and set to again). Else null, and the answer goes nowhere: written into no copy, kept
+ * under no key, shown on no card. Without it, an answer that landed after Sign Out was written into the file the next
+ * account then held, and kept under its key (the next account read the old account's message request as its own: P5).
+ * A write that follows still() goes through its copy's handle, which a clear or a switch closes, so nothing is written
+ * after it changes either. Taken with no await, so nothing comes between it and the ask; after the copy the read writes
+ * into is open, since opening a copy below this build's schema starts a generation of its own.
  */
 export interface OwnListRead {
     still(): Promise<{ identity: BeanPoolIdentity | null } | null>;
-    copiesAsAsked(): boolean;
 }
 export function ownListRead(asking: string | null | undefined): OwnListRead {
     const generation = copyGeneration;
     const copiesAsAsked = () => copyGeneration === generation;
     return {
-        copiesAsAsked,
         still: async () => {
             if (!copiesAsAsked()) return null;
             const identity = await loadIdentity();
@@ -5559,7 +5557,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         // The account this list is asked for, and the copies as they are (ownListRead): the answer of an account that has
         // left the phone is written and kept nowhere, never under the next account's key or in its file (#3309 review P5).
         const asked = ownListRead(publicKey);
-        const onThisCopy = async (database: SQLite.SQLiteDatabase) => asked.copiesAsAsked() && (await here.handle()) === database;
+        const onThisCopy = async (database: SQLite.SQLiteDatabase) => (await here.handle()) === database;
 
         const expectedDbName = here.file;
         const kLastMembersSync = `pillar_sync_${expectedDbName}_members_last_sync`;
@@ -5650,7 +5648,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         // The list's community's copy, or nothing at all: the member switched while it was on its way (dropped, never
         // written into the community the phone is on now).
         const database = await here.handle();
-        if (!database || !asked.copiesAsAsked()) return false;
+        if (!database) return false;
 
         // The people in these chats who deleted their accounts: the older lines of theirs this phone holds are blanked here,
         // since no page below brings them again (blankLinesOfDeletedAccounts). A node from before this sends none.
@@ -5713,7 +5711,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         // writing the offered key in and each read taking it out again: #1872 ultrareview, U7).
         const pinsNow = myIdentity?.publicKey && !pinsUnread ? await dmPins.read(myIdentity.publicKey, database).catch(() => null) : null;
         // Kept for the community the list came from, and not at all if the phone has moved to another while it was out.
-        if (myIdentity?.publicKey && await onThisCopy(database) && await asked.still()) {
+        if (myIdentity?.publicKey && await onThisCopy(database)) {
             await saveMessageRequests(publicKey, expectedDbName, convData.requests ?? null);
         }
         // Whether every chat's page this pass asked for came back: one that didn't may hold the line a doorbell rang for. A
@@ -9276,7 +9274,6 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
     } finally {
         clearTimeout(timer);
     }
-    if (!(await asked.still())) return null;
     const listed = data?.requests;
     const direct: any[] | null = listed && typeof listed === 'object' && Array.isArray(listed.conversations)
         ? listed.conversations.filter((c: any) => isDirectRequestFor(c, myPubkey))
@@ -9305,7 +9302,6 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
     if (!(await asked.still())) return null;
     const admitted: any[] = [];
     for (const conv of kept) {
-        if (!asked.copiesAsAsked()) return null;
         try {
             if (await admitRequestInto(database, conv, myPubkey, pins)) admitted.push(conv);
         } catch (e: any) {
@@ -10671,7 +10667,6 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
                 if (!database) return localGroups(filter);
                 const identity = now.identity;
                 for (const g of data) {
-                    if (!asked.copiesAsAsked()) return localGroups(filter);
                     await database.runAsync(`
                         INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, join_policy, created_at, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

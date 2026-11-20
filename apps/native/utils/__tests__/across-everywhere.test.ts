@@ -14,8 +14,10 @@
  * - the action's effect is in A's file (after a switch, once A's next round has run), and nowhere else;
  * - the account leaving: nothing is written anywhere and no file is made again.
  *
- * Then the rounds and `mail` (the counts answer, server GET /api/me/unread): one table over what A's server last said
- * (nothing heard, an old node with no `mail`, 0, 2): A's round is skipped only on 0; and the answer that says more starts it.
+ * Then the rounds and `mail` (the counts answer, server GET /api/me/unread): what A's answer says (an old node with no
+ * `mail`, 0, 2, no count) starts A's round only where mail waits; and one table (#3310 review F1, close the class): `mail: 0`
+ * heard from A, then a line held there that rings, x {a ring while the app is open, Chat as it opens, the background task}:
+ * each fetches A's mailbox, and the line is in A's file.
  *
  * Real SQLite files on disk (node:sqlite, in a directory of this test's own), the real database module, real sealing and
  * signing between real keys; the mailbox is a stand-in that answers as routes/relay.ts does.
@@ -170,7 +172,7 @@ import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { heldChatsInView, heldOutsideChatsShown, outsideChatHref } from '../held-chats';
-import { _forgetMailHeardForTests, noteMailHeard, outsideContext, syncHeldMailNow, syncOutsideMailNow } from '../outside-chat-live';
+import { mailAfterBackgroundSync, outsideContext, roundOnRing, roundWhereMailWaits, syncHeldMailNow, syncOutsideMailNow } from '../outside-chat-live';
 import { chatsShown, outsideQuiet, sendFromBox, sendOutsideChange, setOutsideQuiet } from '../outside-mail';
 
 // A finished write may end with require('react-native') for a DeviceEventEmitter nudge: answered at node's loader.
@@ -248,7 +250,6 @@ async function heldAtA(text: string): Promise<string> {
 async function phone(setTo: string): Promise<void> {
     await db.closeDB();
     db._resetChatsInPlaceForTests();
-    _forgetMailHeardForTests();
     h.dir = path.join(root, `phone-${++phoneN}`);
     fs.mkdirSync(h.dir);
     h.store.clear();
@@ -412,36 +413,78 @@ describe('an across chat: every action lands in the carrying community\'s file a
     });
 });
 
-describe('rounds and `mail`: a held community\'s round is skipped only when its server last said none waits', () => {
-    const HEARD: Array<[string, unknown | undefined, boolean, boolean]> = [
-        // what A's counts answer said, body; does it start a round; is A fetched by the held rounds
-        ['nothing heard yet', undefined, false, true],
-        ['an old node, no `mail`', { unread: 0, requests: 0 }, false, true],
-        ['`mail: 0`', { unread: 0, requests: 0, mail: 0 }, false, false],
-        ['`mail: 2`', { unread: 0, requests: 0, mail: 2 }, true, true],
-        ['a `mail` that is no count', { mail: -1 }, false, true],
+describe('rounds and `mail`: an answer that says mail waits starts that community\'s round, and none it gives keeps a line from the next (#3310 review F1)', () => {
+    const HEARD: Array<[string, unknown, boolean]> = [
+        // what A's counts answer said, body; does it start A's round
+        ['an old node, no `mail`', { unread: 0, requests: 0 }, false],
+        ['`mail: 0`', { unread: 0, requests: 0, mail: 0 }, false],
+        ['`mail: 2`', { unread: 0, requests: 0, mail: 2 }, true],
+        ['a `mail` that is no count', { mail: -1 }, false],
     ];
-    it.each(HEARD)('%s', async (_name, body, starts, fetched) => {
+    it.each(HEARD)('%s', async (_name, body, starts) => {
         await phone(B);
-        if (body !== undefined) expect(noteMailHeard(A, body)).toBe(starts);
+        const id = await heldAtA('waiting at A');
         mail.asked = [];
-        await syncHeldMailNow(30_000);
-        expect(mail.asked.some((r) => r.origin === A && r.path === '/api/mail')).toBe(fetched);
-        // Never B (the community in use is the ordinary round's), never a community the phone doesn't hold.
-        expect(mail.asked.every((r) => r.origin === A || r.origin === C)).toBe(true);
+        const round = roundWhereMailWaits(A, body);
+        expect(round !== null).toBe(starts);
+        await round;
+        expect(mail.asked.some((r) => r.origin === A && r.path === '/api/mail')).toBe(starts);
+        expect(acrossRowsOf(A_FILE)!.outside_lines.some((l: any) => l.id === id)).toBe(starts);
+        expect(db.heldCopyFiles()).not.toContain(A_FILE);
     });
 
-    it('an answer that says more after a 0 starts the round again', async () => {
+    // `mail: 0` heard from A, then a line held at A for me from someone I wrote to (A's server rings: engine/relay-mail.ts).
+    // Mutation: put back a kept 0 that skips A in syncHeldMailNow (or one mailAfterBackgroundSync applies) -> the Chat or the
+    // background row goes red; drop roundOnRing's round -> the ring row goes red.
+    const WHEN: Array<[string, () => Promise<unknown>]> = [
+        ['a ring from A while the app is open (handleNotification)', () => roundOnRing({ community: A, kind: 'chat.message', active: false })],
+        ['Chat as it opens (its focus round)', () => syncHeldMailNow(30_000)],
+        ['the background task', () => mailAfterBackgroundSync(Date.now())],
+    ];
+    it.each(WHEN)('`mail: 0` heard from A, then a line there that rings; %s: A\'s mailbox is fetched, the line in A\'s file', async (_name, run) => {
         await phone(B);
-        noteMailHeard(A, { mail: 0 });
-        await heldAtA('after the zero');
+        expect(roundWhereMailWaits(A, { unread: 0, requests: 0, mail: 0 })).toBeNull();
+        const bBefore = acrossRowsOf(B_FILE);
+        const id = await heldAtA('rang a minute after the zero');
         mail.asked = [];
-        await syncHeldMailNow(30_000);
-        expect(mail.asked.some((r) => r.origin === A)).toBe(false);
-        expect(noteMailHeard(A, { mail: 1 })).toBe(true);
-        await syncHeldMailNow(30_000);
-        expect(acrossRowsOf(A_FILE)!.outside_lines.some((l: any) => l.text === 'after the zero')).toBe(true);
+        await run();
+        expect(mail.asked.some((r) => r.origin === A && r.path === '/api/mail')).toBe(true);
+        expect(acrossRowsOf(A_FILE)!.outside_lines.some((l: any) => l.id === id && l.text === 'rang a minute after the zero')).toBe(true);
+        expect(acrossRowsOf(B_FILE), 'B\'s file').toEqual(bBefore);
         expect(db.heldCopyFiles()).not.toContain(A_FILE);
+    });
+
+    it('a ring starts a round only for a chat line from another community this phone holds, at the address it saved', async () => {
+        await phone(B);
+        await heldAtA('one line');
+        const NOT: Array<[string, Parameters<typeof roundOnRing>[0]]> = [
+            ['a group\'s line', { community: A, kind: 'chat.group', active: false }],
+            ['a kind this build doesn\'t know', { community: A, kind: null, active: false }],
+            ['the community in use', { community: B, kind: 'chat.message', active: true }],
+            ['a community the phone doesn\'t hold', { community: 'https://faraway.example', kind: 'chat.message', active: false }],
+        ];
+        for (const [name, notice] of NOT) {
+            mail.asked = [];
+            expect(await roundOnRing(notice), name).toBeNull();
+            expect(mail.asked, name).toEqual([]);
+        }
+        // Another spelling of A: fetched at the address the phone saved for it.
+        mail.asked = [];
+        expect(await roundOnRing({ community: 'HTTPS://RIVERSIDE.EXAMPLE/', kind: 'chat.message', active: false })).not.toBeNull();
+        expect(mail.asked.length).toBeGreaterThan(0);
+        expect(mail.asked.every((r) => r.origin === A)).toBe(true);
+    });
+
+    it('wired: a checked notice while the app is open reaches roundOnRing; the background task runs mailAfterBackgroundSync; Chat\'s focus round fetches every held community', () => {
+        const read = (p: string) => fs.readFileSync(path.resolve(__dirname, p), 'utf8');
+        const service = read('../../services/push-notifications.ts');
+        const handler = service.slice(service.indexOf('handleNotification: async'), service.indexOf('return { shouldPlaySound'));
+        expect(handler).toMatch(/countForItsCommunity\(incoming\(notification\), recipient\)\.then\(\(notice\) => \{/);
+        expect(handler).toContain('roundOnRing(notice)');
+        expect(read('../../services/background-task.ts')).toContain('await mailAfterBackgroundSync(wokeAt);');
+        expect(read('../../app/(tabs)/chats.tsx')).toContain('void syncHeldMailNow().catch(() => 0);');
+        // Nothing keeps a counts answer's 0 (the skip this review found): no map of what was heard is left to apply.
+        expect(read('../outside-chat-live.ts')).not.toMatch(/mailHeard|=== 0\) continue/);
     });
 });
 

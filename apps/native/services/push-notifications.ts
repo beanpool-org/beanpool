@@ -36,12 +36,13 @@ function incoming(notification: Notification): IncomingNotice {
 
 /**
  * A notice its own community signed for this account, counted for that community unless it is the one in use (the
- * numbers on the BeanPool sheet's rows: utils/notice-counts.ts). Checked on the phone; nothing is asked of any community.
- * Never throws.
+ * numbers on the BeanPool sheet's rows: utils/notice-counts.ts), and returned, checked; null for any other. Checked on the
+ * phone; nothing is asked of any community. Never throws.
  */
-async function countForItsCommunity(n: IncomingNotice, recipient: string | null): Promise<void> {
+async function countForItsCommunity(n: IncomingNotice, recipient: string | null): Promise<Awaited<ReturnType<typeof verifiedNotice>>> {
     const notice = await verifiedNotice(n, { storage: AsyncStorage, recipient });
     if (notice) await countNotice(AsyncStorage, notice.community, notice.id);
+    return notice;
 }
 
 /**
@@ -96,12 +97,9 @@ export async function askOtherCommunitiesNow(): Promise<void> {
         // Each answer's number of the member's locked contacts copy there (utils/contacts-sync.ts): no request of its own.
         const heard = (community: string, body: unknown) => {
             void import('../utils/contacts-sync').then(({ contactsHeard }) => contactsHeard(me, community, body, true)).catch(() => {});
-            // Across mail waiting there (slice S4, `mail`): that community's mailbox is fetched now, into its own file; none
-            // waiting, its round is skipped until an answer says more (utils/outside-chat-live.ts noteMailHeard).
-            void import('../utils/outside-chat-live').then(({ noteMailHeard, syncOutsideMailNow }) => {
-                if (noteMailHeard(community, body)) return syncOutsideMailNow(undefined, community);
-                return null;
-            }).catch(() => {});
+            // Across mail waiting there (slice S4, `mail`): that community's mailbox is fetched now, into its own file. None
+            // waiting: nothing is kept of it (utils/outside-chat-live.ts roundWhereMailWaits).
+            void import('../utils/outside-chat-live').then(({ roundWhereMailWaits }) => roundWhereMailWaits(community, body)).catch(() => {});
         };
         await roundWhileOpen(AsyncStorage, me, phoneNotices, heard);
     } catch (e) {
@@ -122,7 +120,12 @@ if (!isExpoGo) {
             handleNotification: async (notification) => {
                 const recipient = (await loadIdentity().catch(() => null))?.publicKey ?? null;
                 const decision = await checkWhileOpen(incoming(notification), { storage: AsyncStorage, recipient });
-                void countForItsCommunity(incoming(notification), recipient).then(showBadgeSum);
+                void countForItsCommunity(incoming(notification), recipient).then((notice) => {
+                    void showBadgeSum();
+                    // A ring from another community this phone holds (slice S4): its across mail fetched now, into its own
+                    // file, so Chat shows the line (utils/outside-chat-live.ts roundOnRing; #3310 review F1).
+                    if (notice) void import('../utils/outside-chat-live').then(({ roundOnRing }) => roundOnRing(notice)).catch(() => {});
+                });
                 // A chat open in place reads its community again (slice S2): it has no socket of its own.
                 emitAppEvent(PUSH_RECEIVED_EVENT);
                 if (decision.kind === 'replace') {

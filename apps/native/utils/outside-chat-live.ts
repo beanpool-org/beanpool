@@ -7,8 +7,9 @@
  * community that carries it (its mailbox is that community's server), and now shows and is fetched whatever community the
  * phone is set to. A context, and a round, may name another community this phone holds as a member: its own address, its own
  * mailbox, and its own file, reached through its copy open in place (db.ts outsideStoreOf), held open for the round only
- * (enterChatInPlace ... leaveChatInPlace). No data moves between files. A held community's round is skipped while the last
- * counts answer it gave says `mail: 0` ({@link noteMailHeard}); a node too old to say `mail` is fetched as before.
+ * (enterChatInPlace ... leaveChatInPlace). No data moves between files. A counts answer that says mail waits there starts
+ * that community's round ({@link roundWhereMailWaits}); a ring from it while the app is open does too ({@link roundOnRing});
+ * Chat as it opens and the background task fetch every held community, whatever its last answer said (#3310 review F1).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
@@ -70,48 +71,67 @@ export async function heldMailCommunities(): Promise<string[]> {
 }
 
 /**
- * What each held community's counts answer last said waits there for this member (`mail`, server GET /api/me/unread), by
- * file. 0: its round is skipped until an answer says more. Absent (never heard, or a node too old to send it): fetched.
- * Kept while the app runs: a fresh start asks each once.
+ * Whether a counts answer (other-communities-unread.ts, `heard`) says across mail waits there for this member (`mail`, server
+ * GET /api/me/unread). Nothing is kept of one that says none (#3310 review F1): a line can land there, and ring, a minute
+ * later, and no later answer would come to lift a kept 0 in the background, where no counts round runs.
  */
-const mailHeard = new Map<string, number>();
-
-/**
- * A community's counts answer (other-communities-unread.ts, `heard`): its `mail`, kept. True when something waits there,
- * so the caller starts that community's round.
- */
-export function noteMailHeard(community: string, body: unknown): boolean {
-    const file = getDatabaseFilenameForNode(community);
+export function mailWaits(body: unknown): boolean {
     const mail = body && typeof body === 'object' ? (body as { mail?: unknown }).mail : undefined;
-    if (typeof mail !== 'number' || !Number.isSafeInteger(mail) || mail < 0) {
-        mailHeard.delete(file);
-        return false;
-    }
-    mailHeard.set(file, mail);
-    return mail > 0;
-}
-
-/** For tests: forget what was heard, as an app start does. */
-export function _forgetMailHeardForTests(): void {
-    mailHeard.clear();
+    return typeof mail === 'number' && Number.isSafeInteger(mail) && mail > 0;
 }
 
 /**
- * A round for each held community where mail may wait (slice S4): Chat as it opens, and the background task after the
- * community in use's. One after another under one budget; a community whose last answer said `mail: 0` is skipped. Returns
- * how many rounds ran.
+ * A held community's counts answer, as the round while the app is open hears it (services/push-notifications.ts
+ * askOtherCommunitiesNow): its mailbox fetched now, into its own file, when mail waits there; else nothing (a node too old
+ * to say `mail` included: Chat's round and the background task fetch it). Never throws.
+ */
+export function roundWhereMailWaits(community: string, body: unknown): Promise<SyncOutcome | null> | null {
+    return mailWaits(body) ? syncOutsideMailNow(undefined, community) : null;
+}
+
+/**
+ * A notice another community this phone holds signed for this account landed while the app is open (services/
+ * push-notifications.ts handleNotification; design §3 "Live typing and instant arrival": across chats refresh on a push). A
+ * `chat.message` (the ring of a line held there, engine/relay-mail.ts ringHeldMail, or a direct line there) fetches that
+ * community's across mail now, into its own file, at the address the phone saved for it: the line shows in Chat and its
+ * sender's Delivered goes, whatever that community's last counts answer said (#3310 review F1). The community in use, or one
+ * the phone doesn't hold as a member: nothing (its own rounds fetch it). Null when no round was started. Never throws.
+ */
+export async function roundOnRing(notice: { community: string; kind: string | null; active: boolean }): Promise<SyncOutcome | null> {
+    if (notice.active || notice.kind !== 'chat.message') return null;
+    const file = getDatabaseFilenameForNode(notice.community);
+    const held = (await heldMailCommunities().catch(() => [])).find((c) => getDatabaseFilenameForNode(c) === file);
+    return held ? syncOutsideMailNow(undefined, held) : null;
+}
+
+/**
+ * A round for each held community (slice S4): Chat as it opens, and the background task after the community in use's ({@link
+ * mailAfterBackgroundSync}). One after another under one budget, each community fetched whatever its last counts answer said
+ * (#3310 review F1: a `mail: 0` heard earlier never hides a line that came, and rang, since). Returns how many rounds ran.
  */
 export async function syncHeldMailNow(budgetMs: number = OUTSIDE_ROUND_MS): Promise<number> {
     const end = Date.now() + budgetMs;
     let ran = 0;
     for (const community of await heldMailCommunities().catch(() => [])) {
-        if (mailHeard.get(getDatabaseFilenameForNode(community)) === 0) continue;
         const left = end - Date.now();
         if (left < BACKGROUND_MIN_MS) break;
         await syncOutsideMailNow(left, community);
         ran++;
     }
     return ran;
+}
+
+/**
+ * The background task's mail step (services/background-task.ts), `wokeAt` when the task woke: the community in use's round
+ * under its own budget, then every held community's in what is left of iOS's window, none skipped for a `mail: 0` heard while
+ * the app was open (#3310 review F1: nothing in the background asks for counts, and a ring shown by the phone runs no app
+ * code). Too little left: skipped, and the mail waits for the next wake or the app.
+ */
+export async function mailAfterBackgroundSync(wokeAt: number): Promise<void> {
+    const budget = backgroundMailBudget(Date.now() - wokeAt);
+    if (budget > 0) await syncOutsideMailNow(budget);
+    const left = backgroundMailBudget(Date.now() - wokeAt);
+    if (left > 0) await syncHeldMailNow(left);
 }
 
 /**

@@ -14,7 +14,7 @@ import { COLOUR_SETS, type AppColors } from '../../constants/colors';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock('react-native', () => {
-    const roles: Record<string, string> = { button: 'button', progressbar: 'progressbar' };
+    const roles: Record<string, string> = { button: 'button' };
     const flat = (style: unknown): Record<string, unknown> => Object.assign({}, ...[style].flat(4).filter(Boolean));
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, accessibilityLabel, accessibilityRole, testID, disabled } = props;
@@ -39,7 +39,7 @@ vi.mock('../../components/LanguageProvider', async () => {
     return { useWords: () => ({ t }) };
 });
 
-const { StepDots } = await import('../../components/welcome/StepDots');
+const { StepBar, StepDots } = await import('../../components/welcome/StepDots');
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -79,7 +79,7 @@ describe('the step bar in every colour set, at 320 dp with 1.3× text', () => {
             // Dots, no words: nothing drawn as text; the step said once, to a screen reader.
             expect(host!.querySelectorAll('span')).toHaveLength(0);
             expect(host!.textContent).toBe('');
-            const bar = host!.querySelector('[role="progressbar"]');
+            const bar = host!.querySelector('[data-testid="step-dots-steps"]');
             expect(bar?.getAttribute('aria-label')).toBe('Step 2 of 3');
             expect(all('[data-testid="step-dots-on"]')).toHaveLength(2);
             expect(all('[data-testid="step-dots-off"]')).toHaveLength(1);
@@ -111,7 +111,7 @@ describe('the step bar in every colour set, at 320 dp with 1.3× text', () => {
         const dots = all('[data-testid^="step-dots-o"]');
         expect(dots).toHaveLength(4);
         const { width, borderWidth } = styleOf(dots[0]);
-        const gap = styleOf(host!.querySelector('[role="progressbar"]')).gap as number;
+        const gap = styleOf(host!.querySelector('[data-testid="step-dots-steps"]')).gap as number;
         // Dots don't scale with text: the row is the same at 1.3×.
         expect(48 + 4 * width + 3 * gap + 48).toBeLessThanOrEqual(320 - 2 * 24);
         expect(borderWidth).toBe(2);
@@ -121,7 +121,7 @@ describe('the step bar in every colour set, at 320 dp with 1.3× text', () => {
         theme.colors = COLOUR_SETS.dark as AppColors;
         draw(createElement(StepDots, { dot: { at: 1, of: 2 } }));
         expect(host!.querySelector('[data-testid="step-dots-back"]')).toBeNull();
-        expect(host!.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe('Step 1 of 2');
+        expect(host!.querySelector('[data-testid="step-dots-steps"]')?.getAttribute('aria-label')).toBe('Step 1 of 2');
     });
 
     it('while the step\'s request is out, ‹ is disabled and faded, and a tap does nothing', () => {
@@ -135,10 +135,23 @@ describe('the step bar in every colour set, at 320 dp with 1.3× text', () => {
         expect(back).not.toHaveBeenCalled();
     });
 
+    it('StepBar: the dot from the join\'s own steps (an invite 3, a claim 2); a step the join lacks and no ‹ draws nothing', () => {
+        theme.colors = COLOUR_SETS.light;
+        draw(createElement(StepBar, { step: 'photo', flow: 'invite', busy: false }));
+        expect(host!.querySelector('[data-testid="step-dots-steps"]')?.getAttribute('aria-label')).toBe('Step 2 of 3');
+        act(() => root?.unmount()); host?.remove();
+        draw(createElement(StepBar, { step: 'photo', flow: 'claim', busy: true, onBack: () => {} }));
+        expect(host!.querySelector('[data-testid="step-dots-steps"]')?.getAttribute('aria-label')).toBe('Step 1 of 2');
+        expect(host!.querySelector('[data-testid="step-dots-back"]')?.getAttribute('aria-disabled')).toBe('true');
+        act(() => root?.unmount()); host?.remove();
+        draw(createElement(StepBar, { step: 'name', flow: 'claim', busy: false }));
+        expect(host!.innerHTML).toBe('');
+    });
+
     it('‹ alone, with no dots (a single step): the way back stays', () => {
         theme.colors = COLOUR_SETS.light;
         draw(createElement(StepDots, { dot: null, onBack: () => {} }));
         expect(host!.querySelector('[data-testid="step-dots-back"]')).toBeTruthy();
-        expect(host!.querySelector('[role="progressbar"]')).toBeNull();
+        expect(host!.querySelector('[data-testid="step-dots-steps"]')).toBeNull();
     });
 });

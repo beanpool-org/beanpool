@@ -13,6 +13,26 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { useWords } from '../LanguageProvider';
+import { joinSteps, stepDot, type JoinStep } from '../../utils/join-steps';
+import type { OnboardingFlow } from '../../utils/onboarding-state';
+
+/**
+ * A join screen's bar: its dot among the steps this join shows (utils/join-steps.ts), and ‹ where it has a way back.
+ * Declared here, not inside the welcome screen's render: a component made anew on every render is a new type each time, so
+ * React would remount ‹ on every keystroke or answer that lands, and a screen reader's focus on it would be lost.
+ */
+export function StepBar({ step, flow, busy, onBack, backLabel }: {
+    step: JoinStep;
+    flow: OnboardingFlow;
+    /** The step's request is out: ‹ waits, faded (welcome.tsx's `loading`). */
+    busy: boolean;
+    onBack?: () => void;
+    backLabel?: string;
+}) {
+    const dot = stepDot(joinSteps(flow), step);
+    if (!dot && !onBack) return null;
+    return <StepDots dot={dot} onBack={onBack} backLabel={backLabel} backDisabled={busy} />;
+}
 
 export function StepDots({ dot, onBack, backLabel, backDisabled, testID = 'step-dots' }: {
     /** Where this step sits (utils/join-steps.ts `stepDot`); null: ‹ alone, no dots. */
@@ -44,12 +64,13 @@ export function StepDots({ dot, onBack, backLabel, backDisabled, testID = 'step-
                 ) : null}
             </View>
             {dot ? (
+                // Read as words, "Step 2 of 3": a progress bar's role would add a percentage after them.
                 <View
                     style={styles.dots}
                     accessible
-                    accessibilityRole="progressbar"
+                    accessibilityRole="text"
                     accessibilityLabel={t('Step {n} of {total}', { n: dot.at, total: dot.of })}
-                    accessibilityValue={{ min: 1, max: dot.of, now: dot.at }}
+                    testID={`${testID}-steps`}
                 >
                     {Array.from({ length: dot.of }, (_, i) => (
                         <View

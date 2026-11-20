@@ -104,8 +104,7 @@ import { holdPostAfterJoin } from '../utils/post-after-join';
 import { joinedForListing } from '../utils/listing-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
-import { StepDots } from '../components/welcome/StepDots';
-import { joinSteps, stepDot, type JoinStep } from '../utils/join-steps';
+import { StepBar } from '../components/welcome/StepDots';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
 
 /** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. Not
@@ -2373,13 +2372,6 @@ export default function WelcomeScreen() {
         setInviteNote(null);
     }
 
-    // --- The step bar: one dot per screen this join shows (utils/join-steps.ts, slice S3), ‹ where the step has a way back ---
-    function StepBar({ step, onBack, backLabel }: { step: JoinStep; onBack?: () => void; backLabel?: string }) {
-        const dot = stepDot(joinSteps(joinFlow), step);
-        if (!dot && !onBack) return null;
-        return <StepDots dot={dot} onBack={onBack} backLabel={backLabel} backDisabled={loading} />;
-    }
-
     // --- Copy seed phrase to clipboard ---
     async function handleCopySeed() {
         // What the step shows: the member's new words, or the phone's own account's once its lock has passed.
@@ -2513,6 +2505,8 @@ export default function WelcomeScreen() {
                         there is nothing to go back to: the door would only say "already a member", the claim "already owned". */}
                     <StepBar
                         step="photo"
+                        flow={joinFlow}
+                        busy={loading}
                         onBack={joinFlow === 'invite' ? () => {
                             updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
                             setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setInviteRedeemed(false); setShowAvatarPicker(false); setError(null);
@@ -2608,7 +2602,7 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
-                    <StepBar step="wayBack" onBack={handleSeedBackPress} />
+                    <StepBar step="wayBack" flow={joinFlow} busy={loading} onBack={handleSeedBackPress} />
                     <View style={styles.card}>
                         {/* In by 12 words (two-doors design §2.5): what the words are, first; a sign-in is offered below the
                             tickbox, as a second way back. Once one is added, the panel every sign-in member sees. */}
@@ -3042,7 +3036,7 @@ export default function WelcomeScreen() {
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
                     {/* ‹ is the front door. It waits while Join is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
-                    <StepBar step="name" onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
+                    <StepBar step="name" flow={joinFlow} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
                     <View style={styles.card}>
                         <View style={styles.greetingBand} testID="invite-greeting">
                             <Text style={styles.greetingText} accessibilityRole="header">
@@ -3212,7 +3206,7 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                        <StepBar step="name" />
+                        <StepBar step="name" flow={joinFlow} busy={loading} />
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
 

@@ -580,7 +580,9 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         check('Join BeanPool, the redeem with no answer');
     });
 
-    it('Your Photo, Safety Backup (words shown, and the Go back? alert) and How it Works', async () => {
+    // How it Works left the path (slice S5, DESIGN-onboarding-home-landing-fable.md §3.1): Safety Backup is the last step, its
+    // main button "Let's Begin! 🚀" into Home, where the WELCOME TO BEANPOOL! tile says what How it Works said.
+    it('Your Photo, then Safety Backup (words shown, and the Go back? alert) as the last step', async () => {
         await mount('xx');
         await press('🎟️ Join with an invite', 'xx');
         await type('Paste your invite link or code', 'BP-ABCD-1234', 'xx');
@@ -601,12 +603,14 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         expect(alerts.said).toEqual(expect.arrayContaining([pseudoLocalise('Have you saved your words?'), pseudoLocalise("If you go back now, you'll need to start over."), pseudoLocalise('Stay'), pseudoLocalise('Go Back')]));
         check('Safety Backup, the Go back? alert');
 
-        await press('Next →', 'xx');
-        expect(host!.textContent).toContain(pseudoLocalise('The best place to be is zero (0 Beans).'));
-        check('How it Works');
+        // The last step: its main button goes Home, and no How it Works words are anywhere on it.
+        expect(button("Let's Begin! 🚀", 'xx')).toBeTruthy();
+        expect(all('button, [role="button"]').map((b) => b.textContent)).not.toContain(pseudoLocalise('Next →'));
+        expect(host!.textContent).not.toContain(pseudoLocalise('The best place to be is zero (0 Beans).'));
+        expect(host!.textContent).not.toContain(pseudoLocalise('How it Works'));
     });
 
-    it('Safety Backup with a sign-in covering the account, one that used to protect another, and How it Works with no Beans', async () => {
+    it('Safety Backup with a sign-in covering the account, one that used to protect another: the last step, with no Beans words', async () => {
         phone.stored = SALLY;
         phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey,
             joinEnrolment: { enrolled: ['sso'], generation: 1, skipped: [], available: 1, enrolledSso: ['google'], threshold: 1, isSingleBlob: true, replaced: true } };
@@ -616,10 +620,10 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         check('Safety Backup, covered');
         await press('Rather write down 12 words?', 'xx');
         check('Safety Backup, covered, words shown');
-        await press('Next →', 'xx');
-        expect(host!.textContent).toContain(pseudoLocalise('🌍 A place to meet'));
+        // The global door's last step too (S5): Let's Begin into Home, no How it Works card.
+        expect(button("Let's Begin! 🚀", 'xx')).toBeTruthy();
+        expect(host!.textContent).not.toContain(pseudoLocalise('🌍 A place to meet'));
         expect(host!.textContent).not.toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
-        check('How it Works, no Beans');
     });
 
     // Vault rethink VR8 (design §6 door 7): the owner a claim makes is told at Safety Backup that their key also unlocks
@@ -713,34 +717,21 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         check('Safety Backup, in by 12 words, linked where the community keeps none since');
     });
 
-    // How it Works' Getting Back In card offers a sign-in for later only where the community keeps a copy for it, by the
-    // rule Safety Backup read; and by the rule read again as the guide opens, where an onboarding resumed there.
-    const SIGN_IN_LATER = '🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.';
-    it('How it Works after Safety Backup, at a community that keeps no copies: Getting Back In offers no sign-in', async () => {
-        useVault();
-        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
-        door.cachedRule = 'none';
-        phone.stored = SALLY;
-        phone.pending = { step: 'seedBackup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
-        await mount('xx');
-        expect(host!.querySelector('[data-testid="no-copies-row"]'), 'Safety Backup says the community keeps none').toBeTruthy();
-        await press('Next →', 'xx');
-        expect(host!.textContent).toContain(pseudoLocalise('🔑 Getting Back In'));
-        expect(host!.textContent, 'no copy is kept, so no sign-in is offered for later').not.toContain(pseudoLocalise(SIGN_IN_LATER));
-        check('How it Works after Safety Backup, none');
-    });
-    for (const rule of ['vault', 'server', 'none'] as const) {
-        it(`How it Works, resumed at a community whose rule is ${rule}: Getting Back In offers a sign-in only where a copy is kept`, async () => {
+    // How it Works left the path (slice S5, DESIGN-onboarding-home-landing-fable.md §4.3): a join a 1.4.7 phone left at it
+    // resumes on the step before, Safety Backup, by the community's rule as that step reads it, in the member's language.
+    for (const rule of ['vault', 'none'] as const) {
+        it(`a 1.4.7 join left at How it Works resumes on Safety Backup (the rule ${rule}), never on How it Works`, async () => {
             useVault();
             store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
             door.cachedRule = rule;
             phone.stored = SALLY;
             phone.pending = { step: 'onboardingGuide', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
             await mount('xx');
-            expect(host!.textContent).toContain(pseudoLocalise('🔑 Getting Back In'));
-            if (rule === 'none') expect(host!.textContent, 'no copy is kept, so no sign-in is offered for later').not.toContain(pseudoLocalise(SIGN_IN_LATER));
-            else expect(host!.textContent, 'a kept copy is a way back').toContain(pseudoLocalise(SIGN_IN_LATER));
-            check(`How it Works, resumed, ${rule}`);
+            expect(host!.querySelector('[data-testid="step-footer-words"]'), 'Safety Backup is open').toBeTruthy();
+            expect(host!.textContent).not.toContain(pseudoLocalise('🔑 Getting Back In'));
+            if (rule === 'none') expect(host!.querySelector('[data-testid="no-copies-row"]'), 'the step says the community keeps none').toBeTruthy();
+            expect(button("Let's Begin! 🚀", 'xx')).toBeTruthy();
+            check(`Safety Backup, resumed from How it Works, ${rule}`);
         });
     }
 });
@@ -1016,9 +1007,9 @@ describe('a language picked on an open step redraws it, live', () => {
         await settle();
         await act(async () => { (page.querySelector('[data-testid="language-fr"]') as HTMLElement).click(); });
         await settle();
-        // The stepper and Next are in the catalog: French now, on the same open step.
+        // The stepper and the step's main button (Let's Begin, the last step since S5) are in the catalog: French now, on the same open step.
         expect(page.textContent).toContain(fr['Safety Backup'] as string);
-        expect(page.textContent).toContain(fr['Next →'] as string);
+        expect(page.textContent).toContain(fr["Let's Begin! 🚀"] as string);
         expect(page.textContent).not.toContain('Safety Backup');
         // A sentence of this sweep's the catalog doesn't have yet: its English, never a gap.
         const pen = 'No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.';

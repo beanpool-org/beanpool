@@ -463,7 +463,8 @@ export async function blockUser(
     /**
      * Another community this phone holds, where the member blocked from (slice S3: a request card "In {community}", its
      * saved address): its report goes there and nowhere else, and that community hears the block now as well
-     * ({@link syncBlocksAt}). Left out: the community the phone is set to, as before. The block itself is the account's,
+     * ({@link syncBlocksAt}), even when the person was blocked on this phone already (then false comes back, as for any
+     * block that is not new). Left out: the community the phone is set to, as before. The block itself is the account's,
      * on every community on this phone either way.
      */
     community?: string,
@@ -489,6 +490,13 @@ export async function blockUser(
             if (community) void syncBlocksAt(community);
             await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId, community);
             return true;
+        }
+        if (community) {
+            // Blocked on this phone already (from another community: until S7 a block reaches only the community the phone
+            // is set to), yet blocked again from this community's card in place: this community may never have heard it,
+            // and goes on listing their request until it does (#3309 review F1). It hears it now, and has the report.
+            void syncBlocksAt(community);
+            await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId, community);
         }
     } catch (e) {
         console.error('[blocklist] Failed to block user', e);

@@ -18,7 +18,7 @@ import {
     noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, restDmEntry, dmEntryRestless, dmEntryWaitsForMember, isVerifiedPin,
     markVerified, removeVerified, type DmPeerPins, type DmPeerPin, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
-import { dmPeerKeys, dmPeerName, isDmType } from './dm-blocked';
+import { dmPeerKeys, dmPeerName, isDmBlocked, isDmType } from './dm-blocked';
 import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError, readDmSeen } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
@@ -9189,11 +9189,21 @@ export async function decideMessageRequest(conversationId: string, decision: 'ac
  *   writes a request when the phone is set there (`conv.type || 'dm'`), and never over a group whose keys that copy holds
  *   or a row of another kind (newDmFitsIn, #3305 review F1). A link can't reach this: only that server's list of the
  *   member's own requests. From then on S2's path (the preview's poll, the chat in place, Accept, Decline, Report) holds it.
- * - The list is kept for that community's file alone (saveMessageRequests), where the phone set there reads it.
+ * - Never a request whose opener this phone's account blocked, by any key the person is known by there (the listing's
+ *   people and that copy's pin for the chat, as Chat's list judges a DM: dm-blocked.ts talkShowsChat; the block list names
+ *   every key of a re-keyed person): no card, no line read, nothing written (#3309 review F1). `count` leaves those out.
+ * - That copy's DM pins are read first, through the handle the rows are written with (§3.4 amendment 5: every writer reads
+ *   the pins first), and a pinned DM's people are [me, the pinned key], as writeConversationFromNode writes them. Pins
+ *   unread: nothing is written, and null.
+ * - The list is kept for that community's file alone (saveMessageRequests), where the phone set there reads it, as its
+ *   server listed it (its addresses are that server's own paths).
+ * - What comes back is for a card drawn while the phone is set elsewhere: each address a listing carries
+ *   ({@link LISTED_ADDRESS_FIELDS}) is made whole on `community`, never left as a path the community in use would be
+ *   asked for (a member's photo carries their key and that community's face key: #3309 review F2).
  * - Written after the answer only through `here.handle()`: a switch, a removal, the account leaving or a close while the
  *   list was on its way writes nothing anywhere (that copy's next read brings it).
- * Null: no copy in place to read (the community in use, one not saved, a guest's look, a copy not on the phone), or no
- * answer; the card then moves the phone there, as in S0.
+ * Null: no copy in place to read (the community in use, one not saved, a guest's look, a copy not on the phone), no
+ * answer, or that copy's pins unread; the card then moves the phone there, as in S0.
  */
 export async function requestsInPlace(myPubkey: string, community: ChatCommunity): Promise<{ count: number; conversations: any[] } | null> {
     if (!myPubkey || !community) return null;
@@ -9213,23 +9223,54 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
         return null;
     }
     const listed = data?.requests;
-    const requests = listed && typeof listed === 'object' && Array.isArray(listed.conversations)
-        ? {
-            count: Number.isSafeInteger(listed.count) && listed.count >= 0 ? listed.count : listed.conversations.length,
-            conversations: listed.conversations.filter((c: any) => isDirectRequestFor(c, myPubkey)),
-        }
+    const direct: any[] | null = listed && typeof listed === 'object' && Array.isArray(listed.conversations)
+        ? listed.conversations.filter((c: any) => isDirectRequestFor(c, myPubkey))
         : null;
+    // The account's block list (one per account on this phone), read before the copy is taken.
+    const { getBlockedUsers } = await import('./blocklist');
+    const blocked = await getBlockedUsers();
     const database = await here.handle();
     if (!database) return null;
-    for (const conv of requests?.conversations ?? []) {
+    // That copy's DM pins first, through this handle (§3.4 amendment 5): unread, nothing is written into a DM there.
+    let pins: DmPeerPins;
+    try {
+        pins = await dmPins.read(myPubkey, database);
+    } catch {
+        return null;
+    }
+    const kept = (direct ?? []).filter((c) => !isDmBlocked(dmPeerKeys(c.participants.filter((p: string) => p !== myPubkey), dmPinFor(pins, c.id)), blocked));
+    const requests = direct
+        ? {
+            // The node's count, less each listed one left out here (not a direct chat for the member, or blocked).
+            count: Math.max(kept.length, (Number.isSafeInteger(listed.count) && listed.count >= 0 ? listed.count : listed.conversations.length) - (listed.conversations.length - kept.length)),
+            conversations: kept,
+        }
+        : null;
+    for (const conv of kept) {
         try {
-            await admitRequestInto(database, conv);
+            await admitRequestInto(database, conv, myPubkey, pins);
         } catch (e: any) {
             console.warn(`[Requests] Could not keep a request in place: ${e?.message || e}`);
         }
     }
     await saveMessageRequests(myPubkey, here.file, requests);
-    return requests;
+    return requests && { count: requests.count, conversations: kept.map((c) => listedOnCommunity(here.anchorUrl!, c)) };
+}
+
+/**
+ * Every field of a conversation's listing (engine messaging.ts `Conversation`, as routes/messaging.ts lists it) that holds an
+ * address: a path on the server that listed it, some carrying a key (a member's photo: their key and the community's face
+ * key, `k=`). A card of another community drawn while the phone is set elsewhere gets each made whole on that community
+ * ({@link listedOnCommunity}). utils/__tests__/requests-in-place-wrong-file.test.ts reads the engine's listing for every
+ * field named like an address, so one added there and not here goes red.
+ */
+export const LISTED_ADDRESS_FIELDS = Object.freeze(['peerAvatar', 'postPhoto', 'avatarUrl'] as const);
+
+/** `conv` as `community`'s server listed it, each of its addresses on that server ({@link onCommunity}). */
+function listedOnCommunity(community: string, conv: any): any {
+    const out = { ...conv };
+    for (const field of LISTED_ADDRESS_FIELDS) if (field in out) out[field] = onCommunity(community, out[field]);
+    return out;
 }
 
 /** A listed request that is a direct chat for `me`: the node types it `dm`, two people, `me` one, the other its opener. */
@@ -9241,15 +9282,20 @@ function isDirectRequestFor(conv: any, me: string): boolean {
         && typeof from === 'string' && from !== me && people.includes(from);
 }
 
-/** One listed request's row and people, into the copy `database` (requestsInPlace): nothing over a row it doesn't fit. */
-async function admitRequestInto(database: SQLite.SQLiteDatabase, conv: any): Promise<void> {
+/**
+ * One listed request's row and people, into the copy `database` (requestsInPlace): nothing over a row it doesn't fit. `pins`:
+ * that copy's, read first through this handle; a pinned DM's people are [me, the pinned key], as the sync and
+ * writeConversationFromNode write them (the listing is heard by the pin at the chat's poll in place).
+ */
+async function admitRequestInto(database: SQLite.SQLiteDatabase, conv: any, me: string, pins: DmPeerPins): Promise<void> {
     if (!(await newDmFitsIn(database, conv.id))) return;
     await database.runAsync(
         `INSERT INTO conversations (id, type, post_id, name, created_by, created_at, request) VALUES (?, 'dm', NULL, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
         [conv.id, conv.name ?? null, conv.createdBy ?? '', conv.createdAt ?? new Date().toISOString(), JSON.stringify(conv.request)]
     );
-    for (const p of conv.participants) {
+    const pinned = dmPinFor(pins, conv.id);
+    for (const p of pinned ? [me, pinned.peer] : conv.participants) {
         await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, p]);
     }
 }

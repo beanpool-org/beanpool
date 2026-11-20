@@ -37,6 +37,12 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged, community
     const { theme, colors } = useTheme();
     const peer = entry.participants?.find((p: string) => p !== myPubkey) || entry.request?.from || '';
     const name = entry.peerCallsign || entry.name || peer.slice(0, 8);
+    // In place, a photo's path is that community's: made whole there, never left for MemberAvatar to ask the community in
+    // use, which would be handed the person's key and that community's face key (#3309 review F2; db.ts requestsInPlace
+    // makes it whole first, and this holds for any other way a card in place is filled).
+    const avatarUrl = community && typeof entry.peerAvatar === 'string' && entry.peerAvatar.startsWith('/')
+        ? `${community.replace(/\/+$/, '')}${entry.peerAvatar}`
+        : entry.peerAvatar;
     // `line` is the one Report hands over (null: none left), `canReport` that this phone can tell.
     const [preview, setPreview] = useState<{ text?: string; photo?: boolean; loading: boolean; line?: any; canReport?: boolean }>({ loading: true });
     const [busy, setBusy] = useState(false);
@@ -242,7 +248,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged, community
     return (
         <View style={styles.card} testID="request-card">
             <View style={styles.header}>
-                <MemberAvatar avatarUrl={entry.peerAvatar} pubkey={peer} callsign={name} size={44} />
+                <MemberAvatar avatarUrl={avatarUrl} pubkey={peer} callsign={name} size={44} />
                 <View style={styles.headerInfo}>
                     <Text style={styles.peerName} numberOfLines={1}>{name}</Text>
                     <Text style={styles.subtitle}>{t('{name} wants to message you', { name })}</Text>
@@ -467,22 +473,30 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                 <Text aria-hidden={true} importantForAccessibility="no" style={styles.backText}>‹ </Text>
                 <Text style={styles.backText}>{t('Back to chats')}</Text>
             </Pressable>
-            {inPlace.filter((g) => g.entries.length > 0).map(({ place, entries: there }) => (
-                <View key={place.address} testID={`message-requests-in-place-${place.address}`}>
-                    <Text style={styles.title}>{t('In {community}', { community: place.name })}</Text>
-                    {there.slice(0, REQUEST_CARDS_SHOWN).map((entry: any) => (
-                        <RequestCard
-                            key={`${place.address}\n${entry.id}`}
-                            entry={entry}
-                            myPubkey={identity?.publicKey || ''}
-                            community={place.url}
-                            onOpen={(e) => onOpenInPlace?.(e, place)}
-                            onAccepted={(e) => onAcceptedInPlace?.(e, place)}
-                            onChanged={onChanged}
-                        />
-                    ))}
-                </View>
-            ))}
+            {inPlace.filter((g) => g.entries.length > 0).map(({ place, entries: there, count: waiting }) => {
+                const shownThere = there.slice(0, REQUEST_CARDS_SHOWN);
+                // The rest waiting there, as this community's own cards say it (#3309 review F3).
+                const moreThere = waiting - shownThere.length;
+                return (
+                    <View key={place.address} testID={`message-requests-in-place-${place.address}`}>
+                        <Text style={styles.title}>{t('In {community}', { community: place.name })}</Text>
+                        {shownThere.map((entry: any) => (
+                            <RequestCard
+                                key={`${place.address}\n${entry.id}`}
+                                entry={entry}
+                                myPubkey={identity?.publicKey || ''}
+                                community={place.url}
+                                onOpen={(e) => onOpenInPlace?.(e, place)}
+                                onAccepted={(e) => onAcceptedInPlace?.(e, place)}
+                                onChanged={onChanged}
+                            />
+                        ))}
+                        {moreThere > 0 && (
+                            <Text style={styles.moreText}>{tn(moreThere, 'and {n} more', 'and {n} more')}</Text>
+                        )}
+                    </View>
+                );
+            })}
             <RequestsElsewhereCards places={elsewhere} busy={elsewhereBusy} note={elsewhereNote} onOpen={(place) => onOpenElsewhere?.(place)} />
             {outside.map((c) => (
                 <Pressable key={c.id} accessibilityRole="button" testID="outside-request-card" style={styles.emptyCard} onPress={() => onOpenOutside?.(c)}>

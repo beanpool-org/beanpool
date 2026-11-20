@@ -21,6 +21,8 @@ import type { RequestsPlace } from './requests-elsewhere';
 export interface RequestsInPlaceGroup {
     place: RequestsPlace;
     entries: any[];
+    /** How many wait there, as its read counts them: more than `entries` when it lists only some (#3309 review F3). */
+    count: number;
 }
 
 /** The places a read in place is asked for: those with requests waiting, once each, in the order the row has them. */
@@ -47,7 +49,7 @@ export async function readRequestsInPlace(
     for (const place of places) {
         if (!stillWanted()) break;
         const requests = await read(myPubkey, place.url).catch(() => null);
-        if (requests) groups.push({ place, entries: requests.conversations });
+        if (requests) groups.push({ place, entries: requests.conversations, count: requests.count });
     }
     return groups;
 }

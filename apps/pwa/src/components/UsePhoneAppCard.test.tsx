@@ -101,7 +101,7 @@ describe('UsePhoneAppCard & S4 Settings rows', () => {
 
         it('renders phoneLater lines when provided', () => {
             const lines = [
-                'To use BeanPool on your phone later: install the app, tap **Already a member** and type your 12 words.',
+                'To use BeanPool on your phone later: install the app, tap **I\'ve used BeanPool before** and type your 12 words.',
             ];
             render(<UsePhoneAppCard publicKey="pk123" phoneLater={lines} />);
 

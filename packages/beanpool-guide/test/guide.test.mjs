@@ -1267,14 +1267,13 @@ const CLAIM_PATH_PAGES = [
     path.join(CONTENT_DIR, 'getting-started', 'beans-and-the-global-community.md'),
 ];
 /** Where the phone draws the claim path: the claim screen, the first screen's link, the BeanPool sheet and its row, Settings. */
-// With no account, the claim link is under the doors, after "Used BeanPool before?" is answered I'm New Here
-// (components/welcome/UsedBefore.tsx).
+// With no account, the claim is in the front door's "More ways in ›" sheet (components/welcome/FrontDoor.tsx; onboarding S1).
 const CLAIM_PATH_PHONE_FILES = [
-    'app/claim-community.tsx', 'app/welcome.tsx', 'components/welcome/UsedBefore.tsx', 'app/beanpool.tsx',
+    'app/claim-community.tsx', 'app/welcome.tsx', 'components/welcome/FrontDoor.tsx', 'app/beanpool.tsx',
     'components/SetUpServerRow.tsx', 'components/NoOwnerCard.tsx', 'app/(tabs)/settings.tsx',
 ];
-/** Each line of a page that tells someone how to claim: it names the first screen's claim link. */
-const claimLines = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(l => l.includes('Claim it**'));
+/** Each line of a page that tells someone how to claim: it names the front door's claim, or the claim screen's own button. */
+const claimLines = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(l => l.includes('**Claim a server you installed**'));
 
 test("the claim path (operator path S5): every page names both phone routes, and each bold label on a claim line is a t() string the phone draws", () => {
     const phone = CLAIM_PATH_PHONE_FILES.map(rel => fs.readFileSync(path.join(NATIVE_APP, rel), 'utf8')).join('\n');
@@ -1288,13 +1287,13 @@ test("the claim path (operator path S5): every page names both phone routes, and
         const lines = claimLines(file);
         assert.ok(lines.length > 0, `${rel} says how to claim`);
         const text = lines.join('\n');
-        assert.ok(text.includes('**Installed BeanPool on a server? Claim it**'), `${rel}: the route with no account, the first screen's link`);
-        // A phone with no account opens on "Used BeanPool before?" and draws the claim link only after I'm New Here (#3209), so
-        // each line that names the link names that answer first (two manual lines skipped it: #3209's round-2 note).
-        for (const l of lines.filter(x => x.includes('**Installed BeanPool on a server? Claim it**'))) {
-            const answer = l.indexOf("**I'm New Here**");
-            assert.ok(answer >= 0 && answer < l.indexOf('**Installed BeanPool on a server? Claim it**'),
-                `${rel}: a claim line names **I'm New Here** before the claim link: ${l.slice(0, 120)}…`);
+        assert.ok(text.includes('**Claim a server you installed**'), `${rel}: the route with no account, the front door's sheet`);
+        // A phone with no account opens on the front door, whose "More ways in ›" sheet holds the claim (onboarding S1), so each
+        // line that names the claim names that button first (#3209's rule, kept for the new door).
+        for (const l of lines.filter(x => x.includes('**Claim a server you installed**'))) {
+            const answer = l.indexOf('**More ways in ›**');
+            assert.ok(answer >= 0 && answer < l.indexOf('**Claim a server you installed**'),
+                `${rel}: a claim line names **More ways in ›** before the claim: ${l.slice(0, 120)}…`);
         }
         assert.ok(text.includes('the bean at the top') && text.includes('**Set up a new community server**'),
             `${rel}: the route with an account, the bean at the top and then Set up a new community server`);

@@ -33,7 +33,7 @@ const QRCode: React.FC<{ value: string; size: number; level: string; marginSize:
 export const BRING_TO_PHONE_WORDS = {
     open: word('Put your account on your phone'),
     openSub: word('Scan a code with the BeanPool app. No typing your 12 words.'),
-    steps: word('On your phone, open the BeanPool app, tap Already a Member? Restore Account, then Scan from a browser. Scan this code.'),
+    steps: word("On your phone, open the BeanPool app, tap I've used BeanPool before, then Scan from a browser. Scan this code."),
     samePhone: word('Using BeanPool in the browser on the same phone? Open the app from here instead.'),
     openApp: word('Open the BeanPool app'),
     qrLabel: word('QR code to bring your account to the BeanPool app'),

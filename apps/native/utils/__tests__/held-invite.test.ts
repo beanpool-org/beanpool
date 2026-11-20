@@ -110,11 +110,13 @@ describe('the screens use it (Damo\'s route: a warm start\'s link lands on a new
         expect(caught).toMatch(/checkInvite\(heldCode, nodeUrl\)[\s\S]*DEAD_INVITE_REASONS\.has\(again\.reason\)\) void forgetHeldInvite\(AsyncStorage, heldCode\)/);
     });
 
-    it('"Join with an invite" on the first screen fills the step from a held invite before any scan', () => {
-        expect(welcome).toMatch(/<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{openInviteStep\}/);
-        const open = welcome.slice(welcome.indexOf('const openInviteStep'), welcome.indexOf('const openInviteStep') + 600);
+    it('"I have an invite" on the front door fills the step from a held invite before any scan or clipboard read', () => {
+        expect(welcome).toMatch(/onInvite=\{\(\) => \{ void handleInviteTap\(\); \}\}/);
+        const open = welcome.slice(welcome.indexOf('async function handleInviteTap'), welcome.indexOf('function handleInviteNext'));
         expect(open).toMatch(/readHeldInvite\(AsyncStorage\)/);
         expect(open).toMatch(/setInviteCode\(held\.invite\)/);
         expect(open).toMatch(/setCreateAnchorUrl\(held\.server\)/);
+        // The held invite is read first; the clipboard only when none is held.
+        expect(open.indexOf('readHeldInvite(AsyncStorage)')).toBeLessThan(open.indexOf('Clipboard.getStringAsync()'));
     });
 });

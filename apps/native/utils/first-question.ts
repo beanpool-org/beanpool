@@ -1,21 +1,17 @@
 /**
- * Which first screen the welcome home draws (app/welcome.tsx; Marty, 12 Nov idea 2, yes on 15 Nov):
+ * Which first screen the welcome home draws (app/welcome.tsx):
  *
  * - `waiting`: an account on this phone that is a member nowhere yet (utils/waiting-to-join.ts): its waiting mode, as before.
- * - `question`: no account on this phone and no answer yet: "Used BeanPool before?" (components/welcome/UsedBefore.tsx),
- *   so someone who lost a phone brings their account back instead of making a second one.
- * - `doors`: "I'm New Here" was chosen (or "Start a new account instead" from the ways back), or an account is on this
- *   phone already (one identity per device: the question would offer nothing it doesn't have): today's join.
+ * - `door`: anything else: the front door (components/welcome/FrontDoor.tsx; DESIGN-onboarding-home-landing-fable.md
+ *   §3.1 A, Marty 21 Nov 2026). Its third button, "I've used BeanPool before", keeps the job of the 12 Nov question "Used
+ *   BeanPool before?", so someone who lost a phone meets their way back on the very first screen, before any join.
  *
- * The answer lives in the screen's memory only: a new start of the app asks again. Nothing is stored, so there is
- * nothing to carry over or convert.
+ * Nothing is stored, so there is nothing to carry over or convert.
  */
-export type FirstAnswer = 'new' | null;
-export type HomeView = 'waiting' | 'question' | 'doors';
+export type HomeView = 'waiting' | 'door';
 
-export function homeView({ hasAccount, waiting, answer }: { hasAccount: boolean; waiting: boolean; answer: FirstAnswer }): HomeView {
-    if (hasAccount) return waiting ? 'waiting' : 'doors';
-    return answer === 'new' ? 'doors' : 'question';
+export function homeView({ hasAccount, waiting }: { hasAccount: boolean; waiting: boolean }): HomeView {
+    return hasAccount && waiting ? 'waiting' : 'door';
 }
 
 /** "Start a new account instead" belongs under the ways back only where there is no account on this phone to keep. */

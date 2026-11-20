@@ -309,7 +309,7 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         const card = await screen.findByTestId('signin-recovery');
         await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/choose Global community/));
         expect(lines()).toEqual([
-            'To use BeanPool on your phone later: install the app, tap Already a member, choose Global community and type your 12 words.',
+            'To use BeanPool on your phone later: install the app, tap I\'ve used BeanPool before, choose Global community and type your 12 words.',
             'If you joined with Google, Recover with Social works too.',
         ]);
         expect(card).toContainElement(screen.getByTestId('signin-recovery-phone-later'));
@@ -322,7 +322,7 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         renderSettings();
         await screen.findByTestId('signin-recovery');
         await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/choose Global community/));
-        expect(lines()).toEqual(['To use BeanPool on your phone later: install the app, tap Already a member, choose Global community and type your 12 words.']);
+        expect(lines()).toEqual(['To use BeanPool on your phone later: install the app, tap I\'ve used BeanPool before, choose Global community and type your 12 words.']);
         expect(document.body.textContent).not.toMatch(/Recover with Social/);
     });
 
@@ -333,7 +333,7 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         await screen.findByTestId('signin-recovery');
         await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/Recover with Social/));
         // Review 4302869392: on its own, never "works too" pointing at a line that isn't drawn.
-        expect(lines()).toEqual(['To use BeanPool on your phone later: install the app, tap Already a member, then Recover with Social and sign in with Google.']);
+        expect(lines()).toEqual(['To use BeanPool on your phone later: install the app, tap I\'ve used BeanPool before, then Recover with Social and sign in with Google.']);
     });
 
     it('a browser without its 12 words on a local community: the sign-in line names its address', async () => {
@@ -343,7 +343,7 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         await screen.findByTestId('signin-recovery');
         await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/Recover with Social/));
         expect(lines()).toEqual([
-            `To use BeanPool on your phone later: install the app, tap Already a member, then Recover with Social, sign in with Google and type this community's address, localhost:3000.`,
+            `To use BeanPool on your phone later: install the app, tap I've used BeanPool before, then Recover with Social, sign in with Google and type this community's address, localhost:3000.`,
         ]);
     });
 
@@ -363,7 +363,7 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
         expect(row).toHaveTextContent(about);
         expect(row).toHaveAccessibleDescription(about);
         // jsdom serves the page at http://localhost:3000: the address keeps its port (review 4302869884).
-        expect(lines()).toEqual(["To use BeanPool on your phone later: install the app, tap Already a member and type your 12 words and this community's address, localhost:3000."]);
+        expect(lines()).toEqual(["To use BeanPool on your phone later: install the app, tap I've used BeanPool before and type your 12 words and this community's address, localhost:3000."]);
     });
 
     it('a community served on a port of its own: the phone is told the port too, as the Node line says it (review 4302869884)', async () => {
@@ -377,7 +377,7 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
             await screen.findByTestId('signin-recovery');
             await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/12 words/));
             expect(lines()).toEqual([
-                "To use BeanPool on your phone later: install the app, tap Already a member and type your 12 words and this community's address, mynode.example.org:8443.",
+                "To use BeanPool on your phone later: install the app, tap I've used BeanPool before and type your 12 words and this community's address, mynode.example.org:8443.",
                 'If you joined with Google, Recover with Social works too.',
             ]);
             cleanup();
@@ -388,7 +388,7 @@ describe('Settings: on your phone later, and the global community (W1)', () => {
             await screen.findByTestId('signin-recovery');
             await waitFor(() => expect(screen.getByTestId('signin-recovery-phone-later')).toHaveTextContent(/Recover with Social/));
             expect(lines()).toEqual([
-                "To use BeanPool on your phone later: install the app, tap Already a member, then Recover with Social, sign in with Google and type this community's address, mynode.example.org:8443.",
+                "To use BeanPool on your phone later: install the app, tap I've used BeanPool before, then Recover with Social, sign in with Google and type this community's address, mynode.example.org:8443.",
             ]);
         } finally {
             vi.unstubAllGlobals();

@@ -24,7 +24,7 @@ const SCROLLS: Array<[string, number]> = [
     ['app/node-mismatch.tsx', 1],
     ['app/channels.tsx', 1],
     ['app/pulse-intake.tsx', 1],
-    ['app/welcome.tsx', 6],
+    ['app/welcome.tsx', 7],
     ['app/beanpool.tsx', 1],
     ['app/old-words-unlock.tsx', 1],
     ['app/profile-setup.tsx', 1],

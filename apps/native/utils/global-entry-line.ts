@@ -10,7 +10,7 @@ import type { GlobalEntryState } from './global-entry';
  * no answer reads only "can't reach it", never a try again the tap doesn't do. `visit`: the row's tap opens the global
  * community as a guest first (the BeanPool sheet's, while the phone isn't on it: utils/global-guest-visit.ts), so its
  * open door reads as that. Null for `noAccount`: no row is drawn for it (the first screen's door is a phone with no
- * account's, components/WelcomeDoors.tsx).
+ * account's, components/welcome/FrontDoor.tsx).
  */
 export function globalEntryLine(state: GlobalEntryState, opts: { host: string; wordsDoor: boolean; saved?: boolean; visit?: boolean }): string | null {
     switch (state) {

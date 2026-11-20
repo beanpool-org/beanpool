@@ -223,15 +223,15 @@ describe("openDoorAppDoors: the app's door link for the page's own address, carr
 });
 
 describe('phoneLaterLines: how to put this same account on a phone (§D)', () => {
-    it('Safety Backup at the app\'s global: Already a member, Global community, these 12 words', () => {
+    it('Safety Backup at the app\'s global: I\'ve used BeanPool before, Global community, these 12 words', () => {
         expect(phoneLaterLines({ where: 'backup', appsGlobal: true, host: 'global.beanpool.org', signIns: null })).toEqual([
-            'To use BeanPool on your phone later: install the app, tap **Already a member**, choose **Global community** and type these 12 words.',
+            'To use BeanPool on your phone later: install the app, tap **I\'ve used BeanPool before**, choose **Global community** and type these 12 words.',
         ]);
     });
 
     it('the sign-in line only when a sign-in brings the account back', () => {
         expect(phoneLaterLines({ where: 'backup', appsGlobal: true, host: 'global.beanpool.org', signIns: 'Google' })).toEqual([
-            'To use BeanPool on your phone later: install the app, tap **Already a member**, choose **Global community** and type these 12 words.',
+            'To use BeanPool on your phone later: install the app, tap **I\'ve used BeanPool before**, choose **Global community** and type these 12 words.',
             'If you joined with Google, **Recover with Social** works too.',
         ]);
         expect(phoneLaterLines({ where: 'settings', appsGlobal: true, host: null, signIns: '' }).join(' ')).not.toMatch(/Recover with Social/);
@@ -239,7 +239,7 @@ describe('phoneLaterLines: how to put this same account on a phone (§D)', () =>
 
     it('Settings, where the words are not on screen: "your 12 words"', () => {
         expect(phoneLaterLines({ where: 'settings', appsGlobal: true, host: 'global.beanpool.org', signIns: 'Google and Apple' })).toEqual([
-            'To use BeanPool on your phone later: install the app, tap **Already a member**, choose **Global community** and type your 12 words.',
+            'To use BeanPool on your phone later: install the app, tap **I\'ve used BeanPool before**, choose **Global community** and type your 12 words.',
             'If you joined with Google and Apple, **Recover with Social** works too.',
         ]);
     });
@@ -247,10 +247,10 @@ describe('phoneLaterLines: how to put this same account on a phone (§D)', () =>
     it('any other community: its address, typed with the words; never "Global community", which would restore elsewhere', () => {
         const backup = phoneLaterLines({ where: 'backup', appsGlobal: false, host: 'mullum.beanpool.org', signIns: null });
         expect(backup).toEqual([
-            "To use BeanPool on your phone later: install the app, tap **Already a member** and type these 12 words and this community's address, mullum.beanpool.org.",
+            "To use BeanPool on your phone later: install the app, tap **I've used BeanPool before** and type these 12 words and this community's address, mullum.beanpool.org.",
         ]);
         expect(phoneLaterLines({ where: 'settings', appsGlobal: false, host: 'global.example.org', signIns: null })).toEqual([
-            "To use BeanPool on your phone later: install the app, tap **Already a member** and type your 12 words and this community's address, global.example.org.",
+            "To use BeanPool on your phone later: install the app, tap **I've used BeanPool before** and type your 12 words and this community's address, global.example.org.",
         ]);
         expect(phoneLaterLines({ where: 'backup', appsGlobal: false, host: null, signIns: null })).toEqual([]);
     });
@@ -259,14 +259,14 @@ describe('phoneLaterLines: how to put this same account on a phone (§D)', () =>
         expect(phoneLaterLines({ where: 'settings', appsGlobal: false, host: 'mullum.beanpool.org', hasWords: false, signIns: null })).toEqual([]);
     });
 
-    it('without the words line, the sign-in line stands alone: the app, Already a member, Recover with Social (review 4302869392)', () => {
+    it('without the words line, the sign-in line stands alone: the app, I\'ve used BeanPool before, Recover with Social (review 4302869392)', () => {
         // The app's global: the phone fills it in after the sign-in, so no address.
         expect(phoneLaterLines({ where: 'settings', appsGlobal: true, host: 'global.beanpool.org', hasWords: false, signIns: 'Google' })).toEqual([
-            'To use BeanPool on your phone later: install the app, tap **Already a member**, then **Recover with Social** and sign in with Google.',
+            'To use BeanPool on your phone later: install the app, tap **I\'ve used BeanPool before**, then **Recover with Social** and sign in with Google.',
         ]);
         // Any other community: its address, which the phone asks for after the sign-in.
         expect(phoneLaterLines({ where: 'settings', appsGlobal: false, host: 'mullum.beanpool.org', hasWords: false, signIns: 'Google' })).toEqual([
-            "To use BeanPool on your phone later: install the app, tap **Already a member**, then **Recover with Social**, sign in with Google and type this community's address, mullum.beanpool.org.",
+            "To use BeanPool on your phone later: install the app, tap **I've used BeanPool before**, then **Recover with Social**, sign in with Google and type this community's address, mullum.beanpool.org.",
         ]);
         // No address to give: nothing, never a sign-in line that would restore into the global community instead.
         expect(phoneLaterLines({ where: 'settings', appsGlobal: false, host: null, hasWords: false, signIns: 'Google' })).toEqual([]);

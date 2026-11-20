@@ -209,6 +209,7 @@ import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
+import { useOwnHostAndScheme } from './forwarded-host.js';
 import { adminIpAllowed } from './config/gateway.js';
 import { countWebAppPageLoad } from './engine/web-visits.js';
 import { isWebAppPageFile, serveWebAppPage, WEB_APP_NOINDEX } from './web-app-robots.js';
@@ -1357,11 +1358,14 @@ export function getUpgradeHandler(): UpgradeHandler | null { return _upgradeHand
 export async function startHttpsServer(port: number): Promise<number> {
     checkEnvAddresses();
     const app = new Koa();
-    app.proxy = true;
+    // Koa's ctx.host, ctx.protocol and all that reads them (origin, href, URL, secure, the cookies' Secure flag) by one rule:
+    // the Host header the request carried, and the scheme the socket had or a proxy we trust says (forwarded-host.ts). Koa's
+    // own app.proxy believed X-Forwarded-Host and X-Forwarded-Proto from any peer.
+    useOwnHostAndScheme(app);
     _koaApp = app;
     const router = new Router();
 
-    // With app.proxy on, Koa's ctx.ip is the leftmost X-Forwarded-For from ANY peer — the client's own claim.
+    // Koa's ctx.ip would be the socket's peer (with app.proxy on, it was the leftmost X-Forwarded-For from ANY peer).
     // Replace it with the real client (forwarding headers believed only from our own tunnel/proxy, see
     // client-ip.ts) before anything reads it.
     app.use(async (ctx, next) => {

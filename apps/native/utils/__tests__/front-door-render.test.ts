@@ -235,6 +235,20 @@ describe('the iPhone invite tile (iOS 16 and later, text copied)', () => {
     });
 });
 
+describe('every button on the door is at least 48 dp tall: the floor e2e/front-doors-s10-320.mjs measures (review of #3317)', () => {
+    // The door's tap targets, by style. The backdrop and the sheet are the sheet's own surfaces, not buttons.
+    const TARGETS = ['mainBtn', 'tileLink', 'quietBtn', 'moreLink', 'sheetRow', 'sheetCancel'];
+    it('no Pressable on the door has a style this list does not hold', () => {
+        const used = new Set([...doorSource.matchAll(/<Pressable style=\{styles\.(\w+)\}/g)].map((m) => m[1]));
+        expect(used).toEqual(new Set([...TARGETS, 'backdrop', 'sheet']));
+    });
+    it.each(TARGETS)('%s', (name) => {
+        const m = doorSource.match(new RegExp(`\\n\\s*${name}: \\{([^}]*)\\}`));
+        expect(m, name).not.toBeNull();
+        expect(Number(m![1].match(/\bminHeight: (\d+)/)?.[1] ?? 0)).toBeGreaterThanOrEqual(48);
+    });
+});
+
 describe('which invite affordance, and who may read (utils/invite-arrival.ts)', () => {
     it.each([
         // [phone, Apple's button exists, text copied, the door draws, our button reads at its tap]

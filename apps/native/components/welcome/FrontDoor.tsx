@@ -155,12 +155,13 @@ function makeStyles(colors: AppColors) {
         tileTitle: { color: colors.text.heading, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
         appleButton: { width: '100%', height: 52 },
         tileUnder: { color: colors.text.secondary, fontSize: 15, textAlign: 'center', marginTop: 8 },
-        tileLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
+        // The two links are 48 dp targets, as every button here (the floor the 320 dp harnesses measure).
+        tileLink: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 12 },
         // The two quiet buttons: an outline, no fill, 52 dp; words in the heading ink on the page.
         quietBtn: { minHeight: 52, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
         quietBtnText: { color: colors.text.heading, fontSize: 17, fontWeight: '700', textAlign: 'center' },
         doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginTop: -4, marginBottom: 12 },
-        moreLink: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
+        moreLink: { alignSelf: 'center', minHeight: 48, justifyContent: 'center', paddingHorizontal: 12 },
         // The brand green as words (`ink.brand`: emerald-700 in light, emerald-400 in dark).
         linkText: { color: colors.brand.primary, fontSize: 16, fontWeight: '700', textAlign: 'center' },
         backdrop: { flex: 1, backgroundColor: colors.overlay.scrim, justifyContent: 'flex-end' },

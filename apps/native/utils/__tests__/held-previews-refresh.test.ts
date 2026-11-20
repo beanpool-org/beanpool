@@ -11,7 +11,8 @@
  * the pins can't place), every request to A's own server, and a removed copy never made again.
  *
  * Then: a refresh is bounded (one list read, at most HELD_REFRESH_MAX pages, the newest first) and runs once per rise of
- * the community's number; the preview pass reads at most HELD_PREVIEWS_MAX lines; and the cost row at 500 chats.
+ * the community's number; the preview pass reads at most HELD_PREVIEWS_MAX lines; the table of how Chat can see (or miss)
+ * a line waiting there, each fetching it exactly once (#3312 review F1); and the cost row at 500 chats.
  *
  * Real SQLite files on disk (node:sqlite), the real db.ts, the real DM pins, real DM sealing between real keys; the node is
  * a stand-in that answers as routes/messaging.ts does.
@@ -616,6 +617,7 @@ describe('S2b: a line that waits in a held community is fetched exactly once, ho
     let skew = 0;
     const realNow = Date.now;
     const realSetTimeout = globalThis.setTimeout;
+    let spies: Array<{ mockRestore: () => void }> = [];
 
     beforeEach(async () => {
         // A's copy holds every line there first (the walk's two new lines brought), then the row's own line arrives.
@@ -623,13 +625,15 @@ describe('S2b: a line that waits in a held community is fetched exactly once, ho
         expect(messagesIn(A_FILE).length).toBe(node.lines.length);
         asked = [];
         skew = 0;
-        vi.spyOn(Date, 'now').mockImplementation(() => realNow() + skew);
-        // The refresh's own wait for the list runs out at once (its 10 s), so "times out" is the real timer and abort.
-        vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: (...a: any[]) => void, ms?: number, ...rest: any[]) =>
-            realSetTimeout(fn, ms === db.HELD_REFRESH_LIST_MS ? 0 : ms, ...rest)) as typeof setTimeout);
+        spies = [
+            vi.spyOn(Date, 'now').mockImplementation(() => realNow() + skew),
+            // The refresh's own wait for the list runs out at once (its 10 s), so "times out" is the real timer and abort.
+            vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: (...a: any[]) => void, ms?: number, ...rest: any[]) =>
+                realSetTimeout(fn, ms === db.HELD_REFRESH_LIST_MS ? 0 : ms, ...rest)) as typeof setTimeout),
+        ];
     });
     afterEach(() => {
-        vi.restoreAllMocks();
+        for (const spy of spies) spy.mockRestore();
     });
 
     /** Each row ends in the stretch of Chat that should have brought the line, and hands it back. */

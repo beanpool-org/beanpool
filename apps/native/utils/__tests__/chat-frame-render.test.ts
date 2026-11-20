@@ -260,6 +260,7 @@ vi.mock('../outside-mail', async (importOriginal) => ({
     reportOutsideLine: async (_ctx: unknown, lineId: string, reason: string) => { outside.reported.push({ lineId, reason }); },
 }));
 import ChatsScreen from '../../app/(tabs)/chats';
+import { HELD_QUIET_REFRESH_MS } from '../held-chats';
 import OutsideChatScreen from '../../app/outside-chat/[id]';
 
 const NODE = 'https://riverside.example';
@@ -804,6 +805,44 @@ describe("Chat's own held wiring (slices S1 and S2, #3302 review F6): the rows, 
         const rowan = heldRows().find((r) => r.textContent?.includes('Rowan'))!;
         expect(rowan.querySelector('[data-testid="held-chat-preview"]')).toBeNull();
         expect(rowan.querySelector('[data-testid="held-chat-unread"]')).toBeNull();
+    });
+
+    it('S2b (#3312 review F1): a community with its alerts off refreshes as Chat opens and on the beat while it stays in view, and not once Chat is left', async () => {
+        store.map.set('beanpool_push_alerts_off', JSON.stringify([HILL]));
+        net.answer = community({ getHeldConversations: HELD, closeHeldCopies: undefined, getHeldLatest: [], getHeldPreviews: {}, refreshHeldDms: { brought: 0, answered: true } });
+        const every = vi.spyOn(globalThis, 'setInterval');
+        const stop = vi.spyOn(globalThis, 'clearInterval');
+        const clock = vi.spyOn(Date, 'now');
+        try {
+            const refreshes = () => net.calls.filter((c) => c === 'db.refreshHeldDms').length;
+            await renderIn('en');
+            // As Chat opens: one refresh of that community (it has no number to rise).
+            expect(refreshes()).toBe(1);
+            const at = every.mock.calls.findIndex((c) => c[1] === HELD_QUIET_REFRESH_MS);
+            expect(at).toBeGreaterThanOrEqual(0);
+            const beat = every.mock.calls[at][0] as () => void;
+            // A beat before its time asks nothing; once it is due, one more refresh.
+            await act(async () => { beat(); });
+            await settle();
+            expect(refreshes()).toBe(1);
+            const later = Date.now() + HELD_QUIET_REFRESH_MS;
+            clock.mockImplementation(() => later);
+            await act(async () => { beat(); });
+            await settle();
+            expect(refreshes()).toBe(2);
+            // Chat left: the beat stops, and one that still fires asks nothing.
+            act(() => root.unmount());
+            expect(stop.mock.calls.map((c) => c[0])).toContain(every.mock.results[at].value);
+            clock.mockImplementation(() => later + 2 * HELD_QUIET_REFRESH_MS);
+            beat();
+            await new Promise((r) => setTimeout(r, 0));
+            expect(refreshes()).toBe(2);
+            root = createRoot(host);
+        } finally {
+            every.mockRestore();
+            stop.mockRestore();
+            clock.mockRestore();
+        }
     });
 
     it("a tap on a direct chat opens it in place (S2): that chat by its own id, in that community by its address, and no switch", async () => {

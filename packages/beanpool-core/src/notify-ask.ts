@@ -137,8 +137,8 @@ export function notifyTurnOn(p: NotifyPhone): 'ask' | 'settings' | 'none' {
 
 /**
  * First steps' line "Hear when someone answers you", for itself: null where it has no place (nothing to turn on here; the
- * phone allows them without being asked, as Android 8 to 12 does; or the phone said no, and the line leaves), false while
- * the phone has to ask (a "Later" leaves it there for its 30 days), true once allowed through one of our asks.
+ * phone allows them without being asked, as Android 8 to 12 does; or the phone said no, and the line goes), false while
+ * the phone has to ask (it stays through a "Later", for its 30 days), true once allowed through one of our asks.
  * {@link notifyAsks} also hides it while the once card is up.
  */
 export function notifyFirstStepsLine(r: NotifyAskRecord, p: NotifyPhone): boolean | null {

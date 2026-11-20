@@ -14,9 +14,13 @@
 //     only offers "Open", which starts the app with no link and no referrer, so
 //     the invite was lost (Damo, 9 Nov). Every button also copies the link, so
 //     the app's Paste offer has it whichever way the member gets there.
-//   - iOS: copies the code to the clipboard on tap (no Play-referrer equivalent
-//     on iOS) so the app can offer paste on first launch; the code is also shown
-//     with a Copy button as the floor that always works.
+//   - iOS (no Play-referrer equivalent; DESIGN-ios-invite-paste-fable.md §4.2-4.3, Marty 21 Nov: all Fable's picks):
+//     the App Store badge copies the invite link INSIDE its tap, in a way the page can check (copyInvite, below), and
+//     the page says only what happened: nothing claims a copy before the tap, and a copy that failed says so, with the
+//     way that needs no clipboard. That way is the second button, "Open your invite in BeanPool": the app's own
+//     domain-free link with the invite in it, which goes to the top once the person comes back from the store. The
+//     code card, with the address it belongs to, stays as the floor that always works. No Safari smart banner: with
+//     no app it sends people to the store past the copy (the design's option D′).
 //   - A de-emphasised "continue in your browser" escape hatch behind an explicit
 //     confirmation routes the rare user who wants the web PWA to
 //     /app?invite=<code>&webjoin=1 (the only path the PWA will redeem on).
@@ -45,13 +49,17 @@
 //     page, both the same height.
 //   - Apple's preferred black badge, and a plain background that the badge's own edge stands out from.
 
-import { word, type Lang } from '@beanpool/core';
+import { brandCssVariableMap, word, type Lang } from '@beanpool/core';
 import { wordsIn } from '../member-words.js';
 import { RTL, escapeHtml } from './community-card.js';
 import { APP_STORE_BADGE_SVG, GOOGLE_PLAY_BADGE_SVG, svgDataUri } from './store-badge-art.js';
 
 const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
 const PLAY_BASE_URL = 'https://play.google.com/store/apps/details?id=org.beanpool.pillar';
+
+/** The failed copy's line: the warning chip's pair from core's one colour library, in dark (this page is dark only). */
+const DARK = brandCssVariableMap('dark');
+export const WARN = { tint: DARK['--bp-chip-warn-tint'], ink: DARK['--bp-chip-warn-ink'] } as const;
 
 /** Both badges are this tall, in px (Apple asks 40 at least, Google 28; Google's must be no smaller than Apple's). */
 export const BADGE_HEIGHT_PX = 48;
@@ -67,16 +75,59 @@ export const BADGE_WORDS = {
     googlePlay: word('Get it on Google Play'),
 } as const;
 
+/**
+ * The page's words on an iPhone (DESIGN-ios-invite-paste-fable.md §4.2), in the visitor's language as the badges' alt text
+ * is. The rest of the page is still English; its words join the catalogs in a later slice.
+ */
+export const INVITE_PAGE_WORDS = {
+    /** Over the App Store badge: the one line a newcomer needs. "I have an invite" is the app's own button. */
+    lead: word('New here? Get BeanPool, then tap “I have an invite”.'),
+    /** Under the badge, before and after a copy that worked: what the tap does, never that it has happened. */
+    copies: word('Tapping the badge copies your invite.'),
+    /** In its place when the copy failed: the way that needs no clipboard. Names the button below by its words. */
+    notCopied: word('Your invite wasn’t copied. After installing, come back here and tap Open your invite in BeanPool.'),
+    /** The second button, a real one, under the badge. */
+    openFirst: word('Have BeanPool already? Open your invite in it'),
+    /** The same button, solid and on top, once the person is back from the store. */
+    openBack: word('Open your invite in BeanPool'),
+    codeLabel: word('Your invite code'),
+    /** Under the code: the community's address, which the app asks for when the code is typed. */
+    codeAt: word('at {address}'),
+    copy: word('Copy'),
+    copied: word('Copied'),
+} as const;
+
+/** JSON safe inside a `<script>` block: `<`, `>`, `&` and the two JS line terminators escaped (routes/apple-probe.ts). */
+function jsonForScript(value: unknown): string {
+    return JSON.stringify(value)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
 export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | null }): string {
     const lang = opts.lang ?? null;
     const english = wordsIn(null);
     const words = wordsIn(lang);
-    // The alt text and the language it is in: a sentence the catalog does not have shows in English, and says so.
-    const alt = (key: typeof BADGE_WORDS[keyof typeof BADGE_WORDS]) => {
+    // A sentence in the visitor's language, and the language it is in: one the catalog does not have shows in English,
+    // and says so (no language mark, so a screen reader reads it as the page's English).
+    const say = (key: typeof BADGE_WORDS[keyof typeof BADGE_WORDS] | typeof INVITE_PAGE_WORDS[keyof typeof INVITE_PAGE_WORDS]) => {
         const text = words.t(key);
         const tag = lang && lang !== 'en' && text !== english.t(key) ? lang : null;
-        return `alt="${escapeHtml(text)}"${tag ? ` lang="${escapeHtml(tag)}"${RTL.has(tag) ? ' dir="rtl"' : ''}` : ''}`;
+        return { text, tag, dir: tag && RTL.has(tag) ? 'rtl' as const : null };
     };
+    const alt = (key: typeof BADGE_WORDS[keyof typeof BADGE_WORDS]) => {
+        const { text, tag, dir } = say(key);
+        return `alt="${escapeHtml(text)}"${tag ? ` lang="${escapeHtml(tag)}"${dir ? ' dir="rtl"' : ''}` : ''}`;
+    };
+    // The iPhone's words, for the page's script: each from this node's catalogs, never from the request.
+    const iphoneWords: Record<string, { t: string; lang?: string; dir?: string }> = {};
+    for (const [name, key] of Object.entries(INVITE_PAGE_WORDS)) {
+        const { text, tag, dir } = say(key);
+        iphoneWords[name] = { t: text, ...(tag ? { lang: tag } : {}), ...(dir ? { dir } : {}) };
+    }
     const badgeImg = (svg: string, aspect: number, key: typeof BADGE_WORDS[keyof typeof BADGE_WORDS]) =>
         `<img src="${svgDataUri(svg)}" ${alt(key)} width="${Math.round(BADGE_HEIGHT_PX * aspect)}" height="${BADGE_HEIGHT_PX}">`;
     return `<!doctype html>
@@ -137,6 +188,14 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
   .badge img { display:block; height:${BADGE_HEIGHT_PX}px; width:auto; }
   .badge:focus-visible { outline:3px solid var(--accent); outline-offset:-3px; }
 
+  [hidden] { display:none !important; }
+  /* The iPhone's lines round the App Store badge. The failed copy's line takes the warning chip's colours (core's brand-colours.ts, dark: this page is dark). */
+  .lead { text-align:center; font-size:16px; font-weight:620; margin:0 0 4px; text-wrap:balance; }
+  .copynote { text-align:center; color:var(--muted); font-size:13px; margin:0 0 16px; }
+  .copynote.warn { text-align:start; background:${WARN.tint}; color:${WARN.ink}; border-radius:12px; padding:10px 12px;
+    font-size:14px; font-weight:600; line-height:1.4; }
+  .codeat { color:var(--muted); font-size:12.5px; margin-top:4px; overflow-wrap:anywhere; }
+
   .desktop-note { display:none; text-align:center; color:var(--muted); font-size:14px;
     background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px;
     margin-bottom:16px; }
@@ -171,21 +230,24 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
   <div class="banner" id="banner"></div>
 
   <div class="codecard" id="codecard">
-    <div class="codelabel">Your invite code</div>
+    <div class="codelabel" id="codeLabel">Your invite code</div>
     <div class="coderow">
       <span id="code">—</span>
       <button class="copybtn" id="copyBtn" type="button">Copy code</button>
     </div>
+    <div class="codeat" id="codeAt" hidden></div>
   </div>
 
   <div id="installArea">
     <ol class="steps" id="steps"></ol>
     <a class="cta" id="installBtn" href="#" rel="noopener" style="display:none;">Get the app</a>
+    <p class="lead" id="iosLead" hidden></p>
     <div class="badges" id="badges">
       <a class="badge" id="iosStore" href="${escapeHtml(APP_STORE_URL)}" rel="noopener">${badgeImg(APP_STORE_BADGE_SVG, APP_STORE_ASPECT, BADGE_WORDS.appStore)}</a>
       <a class="badge" id="androidStore" href="${escapeHtml(PLAY_BASE_URL)}" rel="noopener">${badgeImg(GOOGLE_PLAY_BADGE_SVG, GOOGLE_PLAY_ASPECT, BADGE_WORDS.googlePlay)}</a>
     </div>
-    <a class="cta secondary" id="openAppBtn" href="#" style="margin-top:10px; display:none;">Already have the app? Open BeanPool →</a>
+    <p class="copynote" id="copyNote" role="status" hidden></p>
+    <a class="cta secondary" id="openAppBtn" href="#" style="margin-top:10px; display:none;">Have BeanPool already? Open your invite in it</a>
     <div class="desktop-note" id="desktopNote">Open this invite link on your phone to install the app.</div>
   </div>
 
@@ -233,6 +295,14 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
   // Android: the app itself when installed, with the invite; when it isn't, the browser goes to the Play link with its referrer.
   function androidAppUrl(){ return 'intent://' + appQuery + '#Intent;scheme=beanpool;package=org.beanpool.pillar;S.browser_fallback_url=' + encodeURIComponent(playUrl()) + ';end'; }
 
+  // The iPhone's words, in the visitor's language where this node's catalogs have them (renderInviteTrampoline).
+  var W = ${jsonForScript(iphoneWords)};
+  function put(el, w){
+    el.textContent = w.t;
+    if (w.lang) el.setAttribute('lang', w.lang); else el.removeAttribute('lang');
+    if (w.dir) el.setAttribute('dir', w.dir); else el.removeAttribute('dir');
+  }
+
   var codeEl = document.getElementById('code');
   codeEl.textContent = code || '—';
   // Copy the FULL invite link (not just the bare code): it carries the node
@@ -240,16 +310,71 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
   // clipboard/paste parser extracts both the code and the server from it.
   var inviteLink = origin + '/?invite=' + code + (post ? '&post=' + post : '');
 
+  // The link, copied INSIDE the tap that calls this, in a way the page can check (DESIGN-ios-invite-paste-fable.md §4.3),
+  // as plain text and as a link (text/uri-list, which Safari keeps). First the old synchronous way: a copy event the page
+  // fills, fired by execCommand('copy'). It works on plain http:// (where navigator.clipboard does not exist), it is done
+  // before the tap leaves for the store, and it answers true or false. Only when it says no, navigator.clipboard, still in
+  // the same tap. Resolves true only when a write said yes; never rejects.
   function copyInvite(){
-    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(inviteLink);
-    return Promise.reject(new Error('no clipboard'));
+    if (copyByEvent()) return Promise.resolve(true);
+    return copyByClipboard();
+  }
+  function copyByEvent(){
+    var filled = function(e){
+      if (!e.clipboardData) return; // the browser copies the selected link below as text
+      try {
+        e.clipboardData.setData('text/plain', inviteLink);
+        e.clipboardData.setData('text/uri-list', inviteLink);
+        e.preventDefault();
+      } catch (_) {}
+    };
+    // The link selected in a box nobody sees: Safari copies only with something selected, and a browser that ignores the
+    // page's own data still copies the link. Read-only, so no keyboard; 12pt, so iOS does not zoom.
+    var box = document.createElement('textarea');
+    box.value = inviteLink;
+    box.setAttribute('readonly', '');
+    box.setAttribute('aria-hidden', 'true');
+    box.style.position = 'fixed'; box.style.top = '0'; box.style.left = '-9999px';
+    box.style.fontSize = '12pt'; box.style.border = '0'; box.style.padding = '0'; box.style.opacity = '0';
+    var ok = false;
+    try {
+      document.body.appendChild(box);
+      box.select();
+      box.setSelectionRange(0, inviteLink.length);
+      document.addEventListener('copy', filled);
+      ok = document.execCommand('copy') === true;
+    } catch (_) { ok = false; }
+    document.removeEventListener('copy', filled);
+    try { document.body.removeChild(box); } catch (_) {}
+    try { window.getSelection().removeAllRanges(); } catch (_) {}
+    return ok;
+  }
+  function copyByClipboard(){
+    var c = navigator.clipboard;
+    var yes = function(){ return true; }, no = function(){ return false; };
+    if (!c) return Promise.resolve(false); // plain http://: there is none
+    var asText = function(){ return c.writeText ? c.writeText(inviteLink).then(yes, no) : Promise.resolve(false); };
+    var Item = window.ClipboardItem;
+    var bothForms = c.write && typeof Item === 'function' && !(Item.supports && !Item.supports('text/uri-list'));
+    if (!bothForms) return asText();
+    try {
+      return c.write([new Item({
+        'text/plain': new Blob([inviteLink], { type: 'text/plain' }),
+        'text/uri-list': new Blob([inviteLink], { type: 'text/uri-list' })
+      })]).then(yes, asText);
+    } catch (_) { return asText(); }
   }
   var copyBtn = document.getElementById('copyBtn');
+  // The button's words: English here, the iPhone's own below.
+  var copyWord = { t: 'Copy code' }, copiedWord = { t: 'Copied ✓' };
   copyBtn.addEventListener('click', function(){
-    copyInvite().then(function(){
-      copyBtn.textContent = 'Copied ✓';
-      setTimeout(function(){ copyBtn.textContent = 'Copy code'; }, 2000);
-    }).catch(function(){
+    copyInvite().then(function(ok){
+      if (ok) {
+        put(copyBtn, copiedWord);
+        setTimeout(function(){ put(copyBtn, copyWord); }, 2000);
+        return;
+      }
+      // Not copied: the code is selected, for the phone's own Copy.
       try { var r = document.createRange(); r.selectNode(codeEl);
         var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } catch(e){}
     });
@@ -297,11 +422,58 @@ export function renderInviteTrampoline(opts: { webJoin: boolean; lang?: Lang | n
     step('3', 'Choose a callsign and you\\u2019re in');
   } else if (isIOS) {
     androidStore.style.display = 'none';
-    // No install-referrer on iOS: copy the code so the app can offer paste after install.
-    iosStore.addEventListener('click', function(){ copyInvite().catch(function(){}); });
-    step('1', 'Install BeanPool from the App Store', 'We\\u2019ve copied your code to the clipboard.');
-    step('2', 'Open the app and paste your code', 'Or type the code shown above.');
-    step('3', 'Choose a callsign and you\\u2019re in');
+    // No install-referrer on iOS (DESIGN-ios-invite-paste-fable.md §4.2-4.3): one line over the App Store badge, one under
+    // it, the second button, and the code card under them all. The badge's tap copies the link; until then nothing says
+    // anything was copied, and after it only what happened.
+    var installArea = document.getElementById('installArea');
+    var codecard = document.getElementById('codecard');
+    var lead = document.getElementById('iosLead');
+    var note = document.getElementById('copyNote');
+    var codeAt = document.getElementById('codeAt');
+    stepsEl.style.display = 'none';
+    put(lead, W.lead); lead.hidden = false;
+    put(note, W.copies); note.hidden = false;
+    put(openAppBtn, W.openFirst);
+    put(document.getElementById('codeLabel'), W.codeLabel);
+    copyWord = W.copy; copiedWord = { t: W.copied.t + ' ✓', lang: W.copied.lang, dir: W.copied.dir };
+    put(copyBtn, copyWord);
+    // The address the app asks for beside a typed code: the host on https, the whole origin on plain http.
+    put(codeAt, { t: W.codeAt.t.split('{address}').join(location.protocol === 'https:' ? location.host : origin), lang: W.codeAt.lang, dir: W.codeAt.dir });
+    codeAt.hidden = false;
+    installArea.parentNode.insertBefore(codecard, installArea.nextSibling);
+
+    // The store tap, kept for this tab (sessionStorage) so a page iOS reloads on the way back still knows it.
+    var KEPT = 'beanpool-invite-store-tap';
+    var tapped = false, back = false;
+    function keep(copy){ try { window.sessionStorage.setItem(KEPT, JSON.stringify({ code: code, copy: copy })); } catch (_) {} }
+    function failed(){ note.className = 'copynote warn'; put(note, W.notCopied); }
+    // Back from the store: the button that carries the invite itself goes on top, solid. It works with or without the copy.
+    function cameBack(){
+      if (!tapped || back) return;
+      back = true;
+      installArea.insertBefore(openAppBtn, installArea.firstChild);
+      openAppBtn.className = 'cta';
+      openAppBtn.style.marginTop = '0';
+      put(openAppBtn, W.openBack);
+    }
+    iosStore.addEventListener('click', function(){
+      tapped = true;
+      keep('pending');
+      copyInvite().then(function(ok){
+        keep(ok ? 'copied' : 'failed');
+        if (!ok) failed();
+      });
+    });
+    document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') cameBack(); });
+    window.addEventListener('pageshow', cameBack);
+    try {
+      var kept = JSON.parse(window.sessionStorage.getItem(KEPT) || 'null');
+      if (kept && kept.code === code) {
+        tapped = true;
+        if (kept.copy === 'failed') failed();
+        cameBack();
+      }
+    } catch (_) {}
   } else {
     // Desktop / unknown — both stores stay, plus a nudge to use a phone.
     document.getElementById('desktopNote').classList.add('show');

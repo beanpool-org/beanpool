@@ -412,6 +412,32 @@ describe('a request waiting for this member, on the phone', () => {
         });
     });
 
+    // #3309 review N4 C2: S3 lets a request in place be reported from its chat. Every part goes to the chat's own community by
+    // name: without it the line would be looked for in the community in use's copy, and the person's report (with the
+    // member's reason) would go to that community's moderators.
+    it('in place (S3): Report on a request reports its line to the chat\'s own community and blocks them there, never the community in use', async () => {
+        const RIVER = 'https://riverside.example';
+        params.now = { id: 'dm1', community: RIVER, communityName: 'Riverside' };
+        holdsCommunity(RIVER, 'Riverside');
+        const reported: unknown[][] = [];
+        standIn({
+            getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
+            getMessages: [{ id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'hello Ana', rawTimestamp: iso(now - 60_000), timestamp: '' }],
+            syncSingleConversation: true,
+            enterChatInPlace: () => undefined, leaveChatInPlace: () => undefined,
+            reportDmLine: (...a: unknown[]) => { reported.push(a); return Promise.resolve({ success: true }); },
+        });
+        await open();
+        await tap('Report');
+        const reasonChip = Array.from(host.querySelectorAll<HTMLElement>('[data-modal] button')).find((b) => b.textContent === 'Spam or scam');
+        await act(async () => { reasonChip!.click(); });
+        await tap('Submit report');
+        expect(reported).toEqual([['dm1', 'k1', 'hello Ana', 'Spam or scam', RIVER]]);
+        expect(blocks.made).toEqual(['kofi-key']);
+        // The line's report went, so the block adds no report of its own; it goes to that community, named.
+        expect(blocks.reports).toEqual([[undefined, undefined, undefined, RIVER]]);
+    });
+
     it('a request with no line here and no word from the node: Report waits, for this phone can\'t yet tell deleted from not here yet', async () => {
         standIn({
             getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },

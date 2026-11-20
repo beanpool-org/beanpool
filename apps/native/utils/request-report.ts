@@ -48,11 +48,15 @@ export function wordsOfLine(line: { text?: string | null; unattributed?: boolean
  * Report `line` (null: none is left to hand over) and block `peer`: what became of the report, once they are blocked.
  * `myPubkey` is the account on this phone, which reports the person when the line's report can't go.
  */
-export async function reportRequestAndBlock(conversationId: string, line: { id: string; text?: string | null; unattributed?: boolean } | null, peer: string, reason: string, myPubkey: string): Promise<RequestReportOutcome> {
+export async function reportRequestAndBlock(conversationId: string, line: { id: string; text?: string | null; unattributed?: boolean } | null, peer: string, reason: string, myPubkey: string, community?: string): Promise<RequestReportOutcome> {
+    // `community`: a request of another community this phone holds, answered there in place (slice S3): the line's report,
+    // the person's report and the block each go to THAT community's server, signed for its name, never the one in use.
+    // The community in use: each call exactly as before, with no community named.
+    const there = community ? [community] as const : [] as const;
     let outcome: RequestReportOutcome = 'no_line';
     if (line) {
         try {
-            await reportDmLine(conversationId, String(line.id), wordsOfLine(line), reason);
+            await reportDmLine(conversationId, String(line.id), wordsOfLine(line), reason, ...there);
             outcome = 'reported';
         } catch (e: any) {
             const refused = requestReportRefused(e);
@@ -60,7 +64,9 @@ export async function reportRequestAndBlock(conversationId: string, line: { id: 
             outcome = refused;
         }
     }
-    const blocked = await (outcome === 'no_line' || outcome === 'refused' ? blockUser(peer, myPubkey, reason) : blockUser(peer));
+    const blocked = await (outcome === 'no_line' || outcome === 'refused'
+        ? (community ? blockUser(peer, myPubkey, reason, undefined, community) : blockUser(peer, myPubkey, reason))
+        : (community ? blockUser(peer, undefined, undefined, undefined, community) : blockUser(peer)));
     // blockUser says false rather than throwing (no account on the phone, the list not written, or blocked already).
     if (!blocked && !(await isUserBlocked(peer))) {
         throw outcome === 'reported' ? new ReportedNotBlockedError() : new Error(t('That did not go through. Please try again.'));

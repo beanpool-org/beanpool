@@ -18,8 +18,9 @@ import {
     noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, restDmEntry, dmEntryRestless, dmEntryWaitsForMember, isVerifiedPin,
     markVerified, removeVerified, type DmPeerPins, type DmPeerPin, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
-import { dmPeerKeys, dmPeerName, isDmType } from './dm-blocked';
+import { dmPeerKeys, dmPeerName, isDmBlocked, isDmType } from './dm-blocked';
 import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
+import { LISTED_ADDRESS_FIELDS } from './listed-address-fields';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError, readDmSeen } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode, getSavedNodes, isGuestCopy } from './nodes';
@@ -891,6 +892,38 @@ export async function copyForRead(): Promise<{ dbName: string | undefined; gener
 /** A new copy generation: every sync cycle in flight writes and stores nothing more (copyGeneration). */
 export function newCopyGeneration(): void {
     copyGeneration++;
+}
+
+/**
+ * A read of the member's own list (their chats and requests, the groups they are in), taken as it is asked: the account it
+ * is asked for (`asking`, its key; null with none) and the phone's copies as they are (copyGeneration) (#3309 review N2,
+ * P3, P5). Every such read whose answer is written, kept or handed back after its network await goes through this one guard
+ * (syncMessages, requestsInPlace, fetchGroups; utils/__tests__/requests-in-place-wrong-file.test.ts, its table of them):
+ * `still()`, after the answer and before anything of it is written, kept or handed back: the account, read again, while it
+ * is still the one that asked and no copy has been cleared or removed since (Sign Out, the next account, a wipe, a
+ * community taken off the phone and set to again). Else null, and the answer goes nowhere: written into no copy, kept
+ * under no key, shown on no card. Without it, an answer that landed after Sign Out was written into the file the next
+ * account then held, and kept under its key (the next account read the old account's message request as its own: P5).
+ * A write that follows still() goes through its copy's handle, which a clear or a switch closes, so nothing is written
+ * after it changes either. Taken with no await, so nothing comes between it and the ask; after the copy the read writes
+ * into is open, since opening a copy below this build's schema starts a generation of its own.
+ * Not in the class: refreshHeldDms (slice S2b) reads that list too, but writes, keeps and shows nothing of it; it only names
+ * the chats whose own polls then run, each after the account is read again (its loop), each poll its own read.
+ */
+export interface OwnListRead {
+    still(): Promise<{ identity: BeanPoolIdentity | null } | null>;
+}
+export function ownListRead(asking: string | null | undefined): OwnListRead {
+    const generation = copyGeneration;
+    const copiesAsAsked = () => copyGeneration === generation;
+    return {
+        still: async () => {
+            if (!copiesAsAsked()) return null;
+            const identity = await loadIdentity();
+            if ((identity?.publicKey || null) !== (asking || null) || !copiesAsAsked()) return null;
+            return { identity };
+        },
+    };
 }
 
 /** Said when a chat action started as the phone was switching community: nothing was sent (chat-line-words.ts translates it). */
@@ -5711,8 +5744,11 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         const here = await chatCopyForRequest();
         const anchorUrl = here.anchorUrl;
         if (!anchorUrl) return false;
+        // The account this list is asked for, and the copies as they are (ownListRead): the answer of an account that has
+        // left the phone is written and kept nowhere, never under the next account's key or in its file (#3309 review P5).
+        const asked = ownListRead(publicKey);
         const onThisCopy = async (database: SQLite.SQLiteDatabase) => (await here.handle()) === database;
-        
+
         const expectedDbName = here.file;
         const kLastMembersSync = `pillar_sync_${expectedDbName}_members_last_sync`;
         const lastMembersSync = await AsyncStorage.getItem(kLastMembersSync);
@@ -5794,8 +5830,11 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         const convData = await convRes.json();
         if (!convData.conversations) return false;
 
-        // Identity, so we can attribute the peer's read cursor (read receipts).
-        const myIdentity = await loadIdentity();
+        // Identity, so we can attribute the peer's read cursor (read receipts): the account that asked, still the phone's,
+        // with no copy cleared since, or nothing of this list is written or kept (ownListRead).
+        const now = await asked.still();
+        if (!now) return false;
+        const myIdentity = now.identity;
         // The list's community's copy, or nothing at all: the member switched while it was on its way (dropped, never
         // written into the community the phone is on now).
         const database = await here.handle();
@@ -5863,7 +5902,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         const pinsNow = myIdentity?.publicKey && !pinsUnread ? await dmPins.read(myIdentity.publicKey, database).catch(() => null) : null;
         // Kept for the community the list came from, and not at all if the phone has moved to another while it was out.
         if (myIdentity?.publicKey && await onThisCopy(database)) {
-            await saveMessageRequests(myIdentity.publicKey, expectedDbName, convData.requests ?? null);
+            await saveMessageRequests(publicKey, expectedDbName, convData.requests ?? null);
         }
         // Whether every chat's page this pass asked for came back: one that didn't may hold the line a doorbell rang for. A
         // chat left out of the pass to wait for the next one counts as not read too, so the next tick reads it.
@@ -6266,10 +6305,10 @@ async function syncSingleConversationOnce(conversationId: string, community?: Ch
         // pins are unread: the gate above.
         let withdrawn = 0;
         const req = msgData.conversation?.request;
-        // Never in place: a request for this reader is answered in its own community (requests in place are slice S3).
-        if (here.inPlace && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity?.publicKey) {
-            // Nothing of it is written here.
-        } else if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity.publicKey) {
+        // In place too (slice S3): the gate above let only a chat that community's copy holds as a direct one through (a request
+        // listed for this member by that community's own server is written there as one: requestsInPlace), so its people and
+        // its withdrawn lines are written into that copy exactly as when the phone is set there.
+        if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity.publicKey) {
             try {
                 const mine = await database.getFirstAsync('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?', [conversationId, myIdentity.publicKey]);
                 if (!mine) await writeConversationFromNode(database, { ...msgData.conversation, id: conversationId }, decidedBefore);
@@ -9366,6 +9405,175 @@ export async function decideMessageRequest(conversationId: string, decision: 'ac
     return answer;
 }
 
+/**
+ * The message requests waiting for this member in `community`, another community this phone holds (slice S3,
+ * scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Message requests", §6 S3): its "In {community}" cards act
+ * there in place, with no switch.
+ * - Asked of that community's own server (its saved address, signed for its name) through the chat request copy in place
+ *   (chatCopyForRequest): the same list its own sync reads when the phone is set there, which only the member can read.
+ *   One read per open of the requests and per decision; at 500 chats there it is the one answer the phone's round asks
+ *   of the community in use every 120 s.
+ * - Each listed request for this member that is a direct chat (the node types it `dm`, two people, the member one of them,
+ *   the other its opener) is written into THAT community's copy as a DM row with its request and its people, as the poll
+ *   writes a request when the phone is set there (`conv.type || 'dm'`), and never over a group whose keys that copy holds
+ *   or a row of another kind (newDmFitsIn, #3305 review F1). A link can't reach this: only that server's list of the
+ *   member's own requests. From then on S2's path (the preview's poll, the chat in place, Accept, Decline, Report) holds it.
+ * - Never a request whose opener this phone's account blocked, by any key the person is known by there (the listing's
+ *   people, that copy's own participant rows for the chat and its pin, as Chat's list, the held rows and the chat screen
+ *   judge a DM: dm-blocked.ts talkShowsChat; the block list names every key of a re-keyed person): no card, no line read,
+ *   nothing written (#3309 review F1, N1). `count` leaves those out.
+ * - That copy's DM pins are read first, through the handle the rows are written with (§3.4 amendment 5: every writer reads
+ *   the pins first), and a pinned DM's people are [me, the pinned key], as writeConversationFromNode writes them. Pins
+ *   unread: nothing is written, and null.
+ * - The list is kept for that community's file alone (saveMessageRequests), where the phone set there reads it, as its
+ *   server listed it (its addresses are that server's own paths).
+ * - What comes back is for a card drawn while the phone is set elsewhere: each address a listing carries
+ *   (listed-address-fields.ts) is made whole on `community`, never left as a path the community in use would be
+ *   asked for (a member's photo carries their key and that community's face key: #3309 review F2).
+ * - Only what that copy now holds comes back, and is kept: a listed request it would not write (group keys under its id, a
+ *   row of another kind) is no card, and `count` leaves it out too (#3309 review N3): its Accept could only say the switch
+ *   sentence, and its group would hide the card that moves the phone there.
+ * - Written after the answer only through `here.handle()`: a switch, a removal, the account leaving or a close while the
+ *   list was on its way writes nothing anywhere (that copy's next read brings it).
+ * - The account that asked, still the phone's, with no copy cleared or removed since (ownListRead), before the first write
+ *   and again before the list is kept and handed back: else nothing is written, kept or shown (#3309 review N2, P3).
+ * - A deadline (REQUESTS_IN_PLACE_DEADLINE_MS, as the chat's poll), on the answer and its body: a community that never
+ *   answers is no answer, and holds back no other community's cards (#3309 review N2, P4).
+ * Null: no copy in place to read (the community in use, one not saved, a guest's look, a copy not on the phone), no
+ * answer in time, that copy's pins unread, or the account or the copies changed; the card then moves the phone there, as
+ * in S0.
+ */
+export async function requestsInPlace(myPubkey: string, community: ChatCommunity): Promise<{ count: number; conversations: any[] } | null> {
+    if (!myPubkey || !community) return null;
+    let here: ChatRequestCopy;
+    try {
+        here = await chatCopyForRequest(community);
+    } catch {
+        return null;
+    }
+    if (!here.inPlace || !here.anchorUrl) return null;
+    const asked = ownListRead(myPubkey);
+    let data: any;
+    const deadline = new AbortController();
+    const timer = setTimeout(() => deadline.abort(), requestsInPlaceDeadlineMs);
+    try {
+        // Ended by the deadline even where a fetch doesn't give up on its abort.
+        const res = await untilAborted(signedGet(`/api/messages/conversations/${myPubkey}`, { anchorUrl: here.anchorUrl, signal: deadline.signal }), deadline.signal);
+        if (!res.ok) return null;
+        data = await untilAborted(res.json(), deadline.signal);
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+    const listed = data?.requests;
+    const direct: any[] | null = listed && typeof listed === 'object' && Array.isArray(listed.conversations)
+        ? listed.conversations.filter((c: any) => isDirectRequestFor(c, myPubkey))
+        : null;
+    // The account's block list (one per account on this phone), read before the copy is taken.
+    const { getBlockedUsers } = await import('./blocklist');
+    const blocked = await getBlockedUsers();
+    const database = await here.handle();
+    if (!database) return null;
+    // That copy's DM pins first, through this handle (§3.4 amendment 5): unread, nothing is written into a DM there.
+    let pins: DmPeerPins;
+    try {
+        pins = await dmPins.read(myPubkey, database);
+    } catch {
+        return null;
+    }
+    // Every key the person is known by in that copy: the listing's, the copy's own rows for the chat, its pin (N1).
+    const kept: any[] = [];
+    for (const c of direct ?? []) {
+        const held = await database.getFirstAsync<{ otherKeys: string | null }>(`SELECT ${otherKeysSql('?')} AS otherKeys`, [c.id, myPubkey]).catch(() => null);
+        if (!held) return null;
+        const keys = [...c.participants.filter((p: string) => p !== myPubkey), ...(held.otherKeys ? held.otherKeys.split(',') : [])];
+        if (!isDmBlocked(dmPeerKeys(keys, dmPinFor(pins, c.id)), blocked)) kept.push(c);
+    }
+    // Before the first write: the account that asked is still the phone's (N2).
+    if (!(await asked.still())) return null;
+    const admitted: any[] = [];
+    for (const conv of kept) {
+        try {
+            if (await admitRequestInto(database, conv, myPubkey, pins)) admitted.push(conv);
+        } catch (e: any) {
+            console.warn(`[Requests] Could not keep a request in place: ${e?.message || e}`);
+        }
+    }
+    const requests = direct
+        ? {
+            // The node's count, less each listed one left out here (not a direct chat for the member, blocked, or not
+            // written into that copy).
+            count: Math.max(admitted.length, (Number.isSafeInteger(listed.count) && listed.count >= 0 ? listed.count : listed.conversations.length) - (listed.conversations.length - admitted.length)),
+            conversations: admitted,
+        }
+        : null;
+    // Kept and handed back only for the account that asked (N2): never put back after it left the phone.
+    if (!(await asked.still())) return null;
+    await saveMessageRequests(myPubkey, here.file, requests);
+    return requests && { count: requests.count, conversations: admitted.map((c) => listedOnCommunity(here.anchorUrl!, c)) };
+}
+
+/** The list read in place's deadline, on its answer and the answer's body (requestsInPlace): as the chat's poll, 12 s. */
+const REQUESTS_IN_PLACE_DEADLINE_MS = 12_000;
+let requestsInPlaceDeadlineMs = REQUESTS_IN_PLACE_DEADLINE_MS;
+/** For tests: the deadline, shortened (null: back to 12 s). */
+export function _setRequestsInPlaceDeadlineForTests(ms: number | null): void {
+    requestsInPlaceDeadlineMs = ms ?? REQUESTS_IN_PLACE_DEADLINE_MS;
+}
+
+/** `work`, or a throw once `signal` aborts: a fetch or a body read that never ends is ended by the deadline it was asked under. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) {
+        work.catch(() => {});
+        return Promise.reject(new Error('timed out'));
+    }
+    return new Promise<T>((resolve, reject) => {
+        const stop = () => reject(new Error('timed out'));
+        signal.addEventListener('abort', stop, { once: true });
+        work.then(
+            (v) => { signal.removeEventListener('abort', stop); resolve(v); },
+            (e) => { signal.removeEventListener('abort', stop); reject(e); },
+        );
+    });
+}
+
+/** `conv` as `community`'s server listed it, each of its addresses (listed-address-fields.ts) on that server ({@link onCommunity}). */
+function listedOnCommunity(community: string, conv: any): any {
+    const out = { ...conv };
+    for (const field of LISTED_ADDRESS_FIELDS) if (field in out) out[field] = onCommunity(community, out[field]);
+    return out;
+}
+
+/** A listed request that is a direct chat for `me`: the node types it `dm`, two people, `me` one, the other its opener. */
+function isDirectRequestFor(conv: any, me: string): boolean {
+    const people = Array.isArray(conv?.participants) ? conv.participants : [];
+    const from = conv?.request?.from;
+    return typeof conv?.id === 'string' && !!conv.id && conv.type === 'dm' && people.length === 2
+        && people.every((p: unknown) => typeof p === 'string' && !!p) && people.includes(me)
+        && typeof from === 'string' && from !== me && people.includes(from);
+}
+
+/**
+ * One listed request's row and people, into the copy `database` (requestsInPlace): nothing over a row it doesn't fit. `pins`:
+ * that copy's, read first through this handle; a pinned DM's people are [me, the pinned key], as the sync and
+ * writeConversationFromNode write them (the listing is heard by the pin at the chat's poll in place). True once that copy
+ * holds it as a DM (written now, or held already); false when it doesn't fit and nothing was written (#3309 review N3).
+ */
+async function admitRequestInto(database: SQLite.SQLiteDatabase, conv: any, me: string, pins: DmPeerPins): Promise<boolean> {
+    if (!(await newDmFitsIn(database, conv.id))) return false;
+    await database.runAsync(
+        `INSERT INTO conversations (id, type, post_id, name, created_by, created_at, request) VALUES (?, 'dm', NULL, ?, ?, ?, ?)
+         ON CONFLICT(id) DO NOTHING`,
+        [conv.id, conv.name ?? null, conv.createdBy ?? '', conv.createdAt ?? new Date().toISOString(), JSON.stringify(conv.request)]
+    );
+    const pinned = dmPinFor(pins, conv.id);
+    for (const p of pinned ? [me, pinned.peer] : conv.participants) {
+        await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, p]);
+    }
+    return true;
+}
+
 export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ignored: number }> {
     return _signedRequest('/api/messages/request/ignore-all', {});
 }
@@ -10635,17 +10843,21 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
     if (filter?.search) params.set('q', filter.search);
 
     try {
-        // The groups of the community asked, kept in its file only (chatCopyForRequest): switched meanwhile, they are
-        // shown and not kept.
+        // The groups of the community asked, kept in its file only (chatCopyForRequest). Each names the asking account's
+        // role in it. An answer that lands after the phone switched community, or after that account left the phone, is
+        // neither kept (its role written as the next account's) nor shown: the copy in use's own groups are (ownListRead,
+        // #3309 review N2's class).
         const here = await chatCopyForRequest();
+        const asked = ownListRead((await loadIdentity())?.publicKey);
         const res = await signedGet(`/api/groups${params.toString() ? '?' + params.toString() : ''}`, { anchorUrl: here.anchorUrl });
         if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data)) {
+            const now = await asked.still();
+            if (Array.isArray(data) && now) {
                 // Update local cache
                 const database = await here.handle();
-                if (!database) return data;
-                const identity = await loadIdentity();
+                if (!database) return localGroups(filter);
+                const identity = now.identity;
                 for (const g of data) {
                     await database.runAsync(`
                         INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, join_policy, created_at, updated_at)
@@ -11319,15 +11531,18 @@ export async function removeGroupChatMessage(groupId: string, messageId: string)
  * Report one line of a direct message to the community's moderators (core dm-line-report.ts): the sealed line as this phone
  * holds it, its sender's signature, and `words`, what it reads as here. No key goes, and nothing else of the chat.
  */
-export async function reportDmLine(conversationId: string, messageId: string, words: string, reason: string): Promise<any> {
-    const database = await getDb();
-    const row = await database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?', [messageId]);
-    if (!row) throw new Error('Message not found');
+export async function reportDmLine(conversationId: string, messageId: string, words: string, reason: string, community?: ChatCommunity): Promise<any> {
+    // `community`: a request or chat of another community this phone holds (slice S3): the line is read from that
+    // community's copy, only a line of a direct chat it holds (#3305 review F1), and the report goes to its moderators.
+    // Left out: the community in use, its copy and address taken together (chatCopyForRequest).
+    const here = await onlyDmLineInPlace(await onlyDmInPlace(await chatCopyForRequest(community), conversationId), messageId);
+    const row = await here.database.getFirstAsync<any>('SELECT ciphertext, nonce, metadata, conversation_id FROM messages WHERE id = ?', [messageId]);
+    if (!row || (here.inPlace && row.conversation_id !== conversationId)) throw new Error('Message not found');
     try {
         return await _signedRequest('/api/messages/report', {
             messageId, reason,
             disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId }, words),
-        });
+        }, here.anchorUrl);
     } catch (e: any) {
         throw reportRefusal(e);
     }

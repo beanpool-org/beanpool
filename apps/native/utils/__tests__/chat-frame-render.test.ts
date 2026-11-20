@@ -815,8 +815,10 @@ describe("Chat's own held wiring (slices S1 and S2, #3302 review F6): the rows, 
         await click(host.querySelector('[data-testid="message-requests-row"]'), 'Message requests');
         await settle(24);
         expect(asked.sort()).toEqual([HILL, BROOK].sort());
-        expect(pane.last?.inPlace?.map((g: any) => g.place.address)).toEqual([HILL]);
-        expect(pane.last?.elsewhere?.map((p: any) => p.address)).toEqual([BROOK]);
+        // What Chat handed the pane last (set by the pane's stand-in as it drew).
+        const handed = pane.last as Record<string, any> | null;
+        expect(handed?.inPlace?.map((g: any) => g.place.address)).toEqual([HILL]);
+        expect(handed?.elsewhere?.map((p: any) => p.address)).toEqual([BROOK]);
     });
 
     it("a tap on a direct chat opens it in place (S2): that chat by its own id, in that community by its address, and no switch", async () => {

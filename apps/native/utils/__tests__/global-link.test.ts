@@ -328,7 +328,7 @@ describe('a door a link opened holds its signed work until the member taps (app/
 });
 
 describe('the first screen and the link (doorFromLink): an invite or a wizard wins, and nothing the member is doing is interrupted', () => {
-    const MODES: WelcomeMode[] = ['home', 'member', 'create', 'globalJoin', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'];
+    const MODES: WelcomeMode[] = ['home', 'member', 'create', 'globalJoin', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'confirmReplace'];
     const OPENS = new Set<WelcomeMode>(['home', 'member', 'create']);
 
     it.each(MODES)('%s', (mode) => {

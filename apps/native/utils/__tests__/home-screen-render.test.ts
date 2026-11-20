@@ -200,7 +200,7 @@ import * as tourStore from '../tour-store';
 import { DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, HOME_STARTER_SET, START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
 import { lightColors } from '../../constants/colors';
 import { QUIET_OPACITY } from '../../components/home/quiet';
-import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
+import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey, homeWelcomePartStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
@@ -392,7 +392,7 @@ const homeReads = () => node.requests.filter(r => new URL(r.url).pathname === '/
  * (DESIGN-home-default-fable.md §2.2), each card drawn only where the fixture gives it something to say. The Pulse after
  * Coming up since DESIGN-pulse-home-fable.md §3.5 (P0): the fixture has a neighbour's link this week.
  */
-const NEWCOMER_DRAWN = ['market', 'steps', 'interests', 'events', 'pulse', 'beans', 'joined', 'tips', 'community'];
+const NEWCOMER_DRAWN = ['steps', 'market', 'interests', 'events', 'pulse', 'beans', 'joined', 'tips', 'community'];
 /** The default list less Welcome, less Coming up; and less the Market too (the edits the standby tests make). */
 const STARTER_LESS_EVENTS = HOME_STARTER_SET.filter(id => id !== 'events');
 const STARTER_LESS_BOTH = HOME_STARTER_SET.filter(id => id !== 'events' && id !== 'market');
@@ -566,11 +566,12 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
 
     // DESIGN-home-default-fable.md §2.4 (slice D2): only what is left is drawn; the count says what is done. The done line
     // used to stay as a ticked row that opened nothing.
-    it('First steps: once a Need is posted the line leaves and the count says it; before the first Offer, or from a node that sent no fact, there is no line', async () => {
+    it('First steps: once a Need is posted the line is ticked (S5\'s tick list) and the count says it; before the first Offer, or from a node that sent no fact, there is no line', async () => {
         node.answer = withAsked({ firstNeed: true });
         await render();
-        expect(document.querySelector('[data-testid="home-step-need"]')).toBeNull();
-        expect(byLabel("Ask for one thing you'd pay a neighbour for, done")).toBeNull();
+        // Ticked, and no longer a button: it opens nothing.
+        expect(byLabel("Ask for one thing you'd pay a neighbour for, done")!.getAttribute('role')).not.toBe('button');
+        expect(byLabel("Ask for one thing you'd pay a neighbour for, not done yet")).toBeNull();
         expect(document.querySelector('[data-testid="home-steps-count"]')!.textContent).toMatch(/^\d+ of \d+ done$/);
         await act(async () => { root!.unmount(); });
         host!.remove();
@@ -1190,8 +1191,8 @@ describe('every line on Home opens a screen this node shows, with what the line 
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
         expect(cards()).toContain('steps');
-        // The post made is a line done: not drawn, counted (DESIGN-home-default-fable.md §2.4, §2.9; slice D2).
-        expect(document.querySelector('[data-testid="home-card-steps"]')!.textContent).not.toContain('Post something free or for swap');
+        // The post made is a line done: drawn ticked, opening nothing, and counted (S5's tick list, DESIGN-onboarding-home-landing-fable.md §4.1).
+        expect(byLabel('Post something free or for swap, done')!.getAttribute('role')).not.toBe('button');
         expect(document.querySelector('[data-testid="home-steps-count"]')!.textContent).toMatch(/^[1-9]\d* of \d+ done$/);
         expect(document.querySelector('[data-testid="home-step-watch"]')).not.toBeNull();
         expect(document.querySelector('[data-testid="home-step-ask"]')).toBeNull();
@@ -2522,9 +2523,10 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
         const steps = document.querySelector('[data-testid="home-card-steps"]')!;
-        // Only what is left is drawn ("Choose a name" is done from the start), and the count says it (§2.4, §2.9; slice D2).
+        // Every line in its order, "Choose a name" ticked from the start (S5's tick list), and the count says it.
         expect(Array.from(steps.querySelectorAll('[data-testid^="home-step-"]')).filter(e => e.getAttribute('data-testid') !== 'home-step-post-offer').map(e => e.getAttribute('aria-label')))
             .toEqual([
+                'Choose a name, done',
                 'Say roughly where you are, not done yet',
                 'Add a picture (a preset counts), not done yet',
                 'Look at an example Ledger, not done yet',
@@ -4177,17 +4179,23 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
     });
 
-    it('a newcomer sees Welcome first and the default list under it: where they are, Take the tour and Not now as links, no "…"; nothing folds behind it', async () => {
+    it('a newcomer sees the WELCOME TO BEANPOOL! tile first and the default list under it: where they are, three facts, Show me around and Got it, no "…"; nothing folds behind it', async () => {
         await render();
-        // DESIGN-home-default-fable.md §2.2: the cards are there from the first second.
+        // DESIGN-home-default-fable.md §2.2: the cards are there from the first second. First steps above the Market (S5).
         expect(cards()).toEqual(['start', ...NEWCOMER_DRAWN]);
-        // §2.3 (slice D2): Welcome's body. Its caption is "Welcome"; the old instruction and its filled button are gone.
-        expect(document.querySelector('[data-testid="home-card-start"]')!.textContent).toContain('Welcome');
+        // DESIGN-onboarding-home-landing-fable.md §4.1 (slice S5): How it Works' 363 words as the tile's 39.
+        expect(document.querySelector('[data-testid="home-welcome-title"]')!.textContent).toBe('Welcome to BeanPool!');
         expect(document.querySelector('[data-testid="home-start-words"]')!.textContent).toBe("You're in Mullumbimby.");
+        expect(Array.from(document.querySelectorAll('[data-testid^="home-welcome-fact-"]')).map(e => e.textContent)).toEqual([
+            'Offer something first. Then ask for anything.',
+            "Beans keep score: about 40 for an hour's help.",
+            'Zero is a good balance: you give as much as you get.',
+        ]);
         expect(document.body.textContent).not.toContain(START_CARD_WORDS);
-        expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe('Take the tour ›');
-        expect(document.querySelector('[data-testid="home-start-skip"]')!.textContent).toBe('Not now');
-        expect(byLabel('Skip the tour')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe('Show me around');
+        expect(document.querySelector('[data-testid="home-start-skip"]')!.textContent).toBe('Got it');
+        // Full on day one: no band.
+        expect(document.querySelector('[data-testid="home-welcome-band-open"]')).toBeNull();
         // No inviter heard (this answer names none): no "Say hello" line.
         expect(document.querySelector('[data-testid="home-start-hello"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-card-start-menu"]')).toBeNull();
@@ -4197,12 +4205,12 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(tourStore.currentTour()).toBeNull();
     });
 
-    // DESIGN-home-default-fable.md §6, slice D2's first test. The window is 320 x 569 dp with text at 1.3x (this file's
-    // useWindowDimensions); nothing here lays out a frame, so what is checked is what decides the first screen: nothing
-    // above Welcome but the page title (no notifications card, no 12-words card on day one, no one-time line), New in
-    // the Market straight under it with its first row, and Welcome's actions as links, never a filled button. Its height
-    // at 320 x 1.3 is home-layout-320.test.ts's; the pixels are the emulator's (the PR's screenshots).
-    it('320 x 569 x 1.3: the first screen holds Welcome and the first Market row', async () => {
+    // DESIGN-onboarding-home-landing-fable.md §4.1, §4.4 (slice S5; D2's links-only card is superseded): the window is 320 x
+    // 569 dp with text at 1.3x (this file's useWindowDimensions); nothing here lays out a frame, so what is checked is the
+    // order that decides the first screen: nothing above the tile but the page title (no notifications card, no 12-words
+    // card on day one, no one-time line), then First steps, then New in the Market with its first row; the tile's two
+    // actions are its own buttons. Its measures at 320 x 1.3 are home-layout-320.test.ts's; the pixels are the emulator's.
+    it('320 x 569 x 1.3: the tile on top, then First steps, then the Market and its first row', async () => {
         await render();
         const scroll = document.querySelector('[data-testid="home-scroll"]')!;
         const firstSlot = scroll.querySelector('[data-testid^="home-slot-"]')!;
@@ -4213,9 +4221,9 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(document.body.textContent).not.toContain('Turn on notifications?');
         // The slots that draw something (Your way back in keeps an empty slot while its card is put away: no row).
         const slots = Array.from(scroll.querySelectorAll('[data-testid^="home-slot-"]')).filter(e => e.childElementCount > 0).map(e => e.getAttribute('data-testid'));
-        expect(slots.slice(0, 2)).toEqual(['home-slot-start', 'home-slot-market']);
+        expect(slots.slice(0, 3)).toEqual(['home-slot-start', 'home-slot-steps', 'home-slot-market']);
         expect(document.querySelector('[data-testid="home-slot-market"] [data-testid^="home-market-p"]')).not.toBeNull();
-        // Two plain links, each its own 44 dp target (HomeParts' filled HomeButton is not used: home-layout-320.test.ts).
+        // The tile's two actions, each its own 48 dp target (home-layout-320.test.ts measures them).
         const welcome = document.querySelector('[data-testid="home-card-start"]')!;
         expect(Array.from(welcome.querySelectorAll('[role="button"]')).map(b => b.getAttribute('data-testid')).filter(Boolean))
             .toEqual(['home-start-look', 'home-start-skip']);
@@ -4234,10 +4242,10 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(document.querySelector('[data-testid="add-card-sheet"]')).not.toBeNull();
     });
 
-    it('Skip: one layout write, the default list less Welcome (nothing added), the account\'s record "skipped", the card gone', async () => {
+    it('Got it: one layout write, the default list less Welcome (nothing added), the account\'s record "skipped" (1.4.7 Not now\'s), the tile gone', async () => {
         await render();
         const from = node.requests.length;
-        await act(async () => { byLabel('Skip the tour')!.click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-start-skip"]') as HTMLElement).click(); });
         await settle(20);
         const posts = prefsPosts(from).map(r => JSON.parse(r.body).preferences);
         const layoutWrite = posts.find(p => 'home.layout' in p);
@@ -4280,7 +4288,7 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
     it('a Skip made offline is kept on the phone and sent on the next Home open', async () => {
         await render();
         node.down = true;
-        await act(async () => { byLabel('Skip the tour')!.click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-start-skip"]') as HTMLElement).click(); });
         await settle(20);
         expect(await tourStore.pendingTourRecord(who.identity.publicKey)).toMatchObject({ state: 'skipped' });
         act(() => root?.unmount());
@@ -4317,15 +4325,58 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         });
     }
 
-    it('a newcomer 8 days in who never took the tour: no Welcome (seven days at most), the rest of the default list as it was', async () => {
+    // DESIGN-onboarding-home-landing-fable.md §4.2 (slice S5): after seven days the tile folds to one band with its ×, never
+    // gone without the member's tap; the band opens the tile again, and its × is Got it.
+    it('a newcomer 8 days in who never tapped Got it: the tile folded to one band on top, the rest of the default list as it was', async () => {
         node.answer = { ...newcomer(), me: { ...newcomer().me!, joinedAt: iso(Date.now() - 8 * 24 * H) } };
         await render();
-        expect(cards()).not.toContain('start');
-        expect(cards()).toEqual(NEWCOMER_DRAWN);
-        // Inside the seven days it is there.
+        expect(cards()).toEqual(['start', ...NEWCOMER_DRAWN]);
+        expect(document.querySelector('[data-testid="home-welcome-band-open"]')!.textContent).toBe('Welcome to BeanPool ›');
+        expect(document.querySelector('[data-testid="home-welcome-title"]')).toBeNull();
+        expect(byLabel('Put the welcome away')).not.toBeNull();
+        // The band opens the full tile in place; nothing is written by it.
+        const from = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="home-welcome-band-open"]') as HTMLElement).click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="home-welcome-title"]')).not.toBeNull();
+        expect(prefsPosts(from)).toEqual([]);
+        // Inside the seven days it is the full tile.
         act(() => root?.unmount());
         host?.remove();
         node.answer = { ...newcomer(), me: { ...newcomer().me!, joinedAt: iso(Date.now() - 6 * 24 * H) } };
+        await render();
+        expect(cards()[0]).toBe('start');
+        expect(document.querySelector('[data-testid="home-welcome-title"]')).not.toBeNull();
+    });
+
+    it("the band's × is Got it: the account's record 'skipped', the tile gone", async () => {
+        node.answer = { ...newcomer(), me: { ...newcomer().me!, joinedAt: iso(Date.now() - 9 * 24 * H) } };
+        await render();
+        const from = node.requests.length;
+        await act(async () => { byLabel('Put the welcome away')!.click(); });
+        await settle(20);
+        expect(prefsPosts(from).map(r => JSON.parse(r.body).preferences).find(p => 'tour' in p)?.tour).toMatchObject({ v: 1, state: 'skipped' });
+        expect(cards()).not.toContain('start');
+    });
+
+    it("BeanPool's part once per phone: a second community on this phone draws no tile; the first keeps it", async () => {
+        // The mark names another community: this one leaves BeanPool's part out.
+        mem.store.set(homeWelcomePartStoreKey(who.identity.publicKey), JSON.stringify({ v: 1, where: 'hilltop.example', at: iso(Date.now() - H) }));
+        await render();
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
+        act(() => root?.unmount());
+        host?.remove();
+        // No mark yet: this community draws it and the mark then names it.
+        mem.store.delete(homeWelcomePartStoreKey(who.identity.publicKey));
+        await render();
+        await settle(5);
+        expect(cards()[0]).toBe('start');
+        const mark = JSON.parse(mem.store.get(homeWelcomePartStoreKey(who.identity.publicKey))!);
+        expect(mark).toMatchObject({ v: 1 });
+        expect(mark.where).not.toBe('hilltop.example');
+        // Opened again: the mark is its own, so the tile stays.
+        act(() => root?.unmount());
+        host?.remove();
         await render();
         expect(cards()[0]).toBe('start');
     });
@@ -4389,7 +4440,7 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
             mem.store.set(`beanpool_tour_progress_${who.identity.publicKey}`, JSON.stringify({ v: 1, step: 7, startedAt: iso(Date.now() - H) }));
             await render();
             // The default list under the pinned Find your community (DESIGN-home-default-fable.md §2.9): nothing folds behind Welcome.
-            expect(cards()).toEqual(['needs', 'find', 'start', 'market', 'steps', 'events', 'pulse', 'groups', 'notices', 'joined', 'tips', 'community']);
+            expect(cards()).toEqual(['needs', 'find', 'start', 'steps', 'market', 'events', 'pulse', 'groups', 'notices', 'joined', 'tips', 'community']);
             const step = showcase ? 7 : 5;
             expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe(`Pick up the tour at step ${step + 1} ›`);
             await act(async () => { (document.querySelector('[data-testid="home-start-look"]') as HTMLElement).click(); });
@@ -4461,7 +4512,7 @@ describe('the Your Beans card where Beans are previewed: its own card, put away 
         expect(cards().slice(0, 3)).toEqual(['needs', 'find', 'start']);
         expect(cards()).toContain('steps');
         expect(beansCard()).toBeNull();
-        await act(async () => { byLabel('Skip the tour')!.click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-start-skip"]') as HTMLElement).click(); });
         await settle(20);
         const ids = cards();
         expect(ids).not.toContain('start');
@@ -5368,14 +5419,20 @@ describe('What could you offer? (cold start O2): the sheet First steps opens, th
 
     // DESIGN-home-default-fable.md §2.4 (slice D2): a step already done is not drawn at all (it used to be a ticked row
     // that opened nothing); the count says it.
-    it('a step already done is not drawn, so it opens nothing; the count says it', async () => {
+    // First steps as a tick list (DESIGN-onboarding-home-landing-fable.md §4.1 item 4, slice S5): a line done stays, ticked,
+    // and opens nothing; the ring and the count say how far along.
+    it('a step already done is drawn ticked and opens nothing; the count says it', async () => {
         const a = localMember();
         node.answer = { ...a, cards: { ...a.cards, steps: { ...a.cards.steps!, firstOffer: true, firstPost: true, photo: false, invited: false } } };
         await render();
         expect(document.querySelector('[data-testid="home-step-post-offer"]')).toBeNull();
-        expect(document.querySelector('[data-testid="home-step-offer"]')).toBeNull();
-        expect(byLabel('Post your first Offer, done')).toBeNull();
+        const done = byLabel('Post your first Offer, done')!;
+        expect(done).not.toBeNull();
+        expect(done.getAttribute('role')).not.toBe('button');
+        expect(done.querySelector('[data-testid="home-steps-tick-on"]')).not.toBeNull();
+        await act(async () => { done.click(); });
         expect(document.querySelector('[data-testid="home-steps-count"]')!.textContent).toMatch(/^1 of \d+ done$/);
+        expect(document.querySelector('[data-testid="home-steps-ring"]')).not.toBeNull();
         expect(sheet()).toBeNull();
     });
 });

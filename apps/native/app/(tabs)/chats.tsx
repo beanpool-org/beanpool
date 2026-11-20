@@ -1,14 +1,16 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl, AppState } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
-import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsInView, heldChatsShown, heldOutsideChatsShown, outsideChatHref, type HeldChatRow as HeldChat, type HeldOutsideChat } from '../../utils/held-chats';
+import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsFilledIn, heldChatsInView, heldChatsShown, heldOutsideChatsShown, outsideChatHref, refreshHeldWhereRose, HELD_QUIET_REFRESH_MS, type HeldChatRow as HeldChat, type HeldOutsideChat, type HeldRowFill } from '../../utils/held-chats';
+import { onNoticeCounts } from '../../utils/notice-counts';
 import { HeldChatRow } from '../../components/HeldChatRow';
 import { requestsWaitingOnGlobal } from '../../utils/global-requests';
 import { elsewhereCounts, requestsElsewhere, useHeldRequests } from '../../utils/requests-elsewhere';
+import { placesThatMoveElsewhere, useRequestsInPlace } from '../../utils/requests-in-place';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { talkShowsChat } from '../../utils/dm-blocked';
@@ -170,6 +172,8 @@ export default function ChatsScreen() {
     // Chats in the other communities this phone holds (slice S1, utils/held-chats.ts): each read from that community's own
     // copy, its name in grey; a tap moves there and opens the chat (openHeldChat).
     const [heldChats, setHeldChats] = useState<HeldChat[]>([]);
+    // Each held row's own unread count and its newest line's preview (slice S2b), by its key: read after the rows show.
+    const [heldFilled, setHeldFilled] = useState<Map<string, HeldRowFill>>(() => new Map());
     const otherNotices = useOtherCommunitiesNotices();
     // Requests waiting in every other community this phone holds, global's door count among them (Marty, 19 Nov 2026,
     // decision 4 of DESIGN-no-switch-messaging-fable.md, S0; utils/requests-elsewhere.ts): in the row's count and dot, and a
@@ -185,6 +189,15 @@ export default function ChatsScreen() {
         [requestsHere, outsideRequests, guestInvites, placesElsewhere],
     );
     const requestsCount = requestsRowCount(requestsWaitingNow);
+    // The other communities' requests, read and answered there in place while Message requests shows (slice S3,
+    // utils/requests-in-place.ts); a place that can't be read in place keeps its card that moves the phone there (S0).
+    const [requestsInPlace, readInPlaceAgain] = useRequestsInPlace(identity?.publicKey, waitingElsewhere, messagesFilter === 'requests');
+    const movesElsewhere = React.useMemo(
+        () => placesThatMoveElsewhere(waitingElsewhere, requestsInPlace),
+        [waitingElsewhere, requestsInPlace],
+    );
+    const openRequestInPlace = (entry: any, place: { url: string; name: string }) =>
+        router.push({ pathname: '/chat/[id]', params: heldChatInPlaceParams({ id: String(entry.id), community: place.url, communityName: place.name }) });
     const requestsUnseenNow = useRequestsUnseen(identity?.publicKey, communityUrl, requestsWaitingNow, messagesFilter === 'requests' && !!requestsHere);
     const [switchingCommunity, setSwitchingCommunity] = useState(false);
     // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
@@ -239,6 +252,7 @@ export default function ChatsScreen() {
     useFocusEffect(React.useCallback(() => {
         // Chat in view (utils/held-chats.ts): every held handle closes as it is left, one a list on its way opened after that too.
         const view = heldChatsInView();
+        let rows: HeldChat[] = [];
         const loadHeld = async () => {
             if (!identity?.publicKey) {
                 if (view.inView()) { setHeldChats([]); setHeldOutside([]); }
@@ -247,24 +261,47 @@ export default function ChatsScreen() {
             try {
                 // A DM with someone the member blocked, under any key that chat names them by there, is not listed.
                 const shown = await heldChatsShown(identity.publicKey, view);
+                rows = shown;
                 if (view.inView()) setHeldChats((prev) => (JSON.stringify(prev) === JSON.stringify(shown) ? prev : shown));
-                // Across chats and their requests kept in those files (slice S4), none with someone the account blocked.
+                // Across chats and their requests kept in those files (slice S4), none with someone the account blocked; listed
+                // before the previews are read, so they wait for none of them either.
                 const across = await heldOutsideChatsShown(identity.publicKey, view);
                 if (view.inView()) setHeldOutside((prev) => (JSON.stringify(prev) === JSON.stringify(across) ? prev : across));
+                // Slice S2b: each row's own count and the newest ones' previews, read once the rows are set, so Chat's
+                // first paint waits for none of it.
+                const filled = await heldChatsFilledIn(identity.publicKey, shown, view);
+                if (view.inView()) setHeldFilled((prev) => (JSON.stringify([...prev]) === JSON.stringify([...filled]) ? prev : filled));
             } catch (e) {
                 console.warn('[Held] Could not list the chats of the other communities', e);
                 if (view.inView()) { setHeldChats([]); setHeldOutside([]); }
             }
         };
-        void loadHeld();
+        // Slice S2b: a held community where something may wait (its number above 0 as Chat opens, then each rise: a round's
+        // count, or its push) brings its newest lines into its own copy, and its rows are read again; no second socket.
+        const freshen = async () => {
+            if (!identity?.publicKey || !view.inView()) return;
+            if ((await refreshHeldWhereRose(identity.publicKey, rows, view)).length > 0 && view.inView()) await loadHeld();
+        };
+        void loadHeld().then(freshen);
         // Their across mail fetched into their own files (slice S4): every held community, whatever its server last said, side
         // by side; the list read again after a round that changed anything.
         if (identity?.publicKey) void syncHeldMailNow().catch(() => 0);
         const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); });
         const acrossSub = DeviceEventEmitter.addListener(OUTSIDE_CHATS_UPDATED, () => { void loadHeld(); });
+        const countsSub = onNoticeCounts(() => { void freshen(); });
+        // The beat while Chat stays in view and the app is in front (#3312 review F1): a held community with its alerts off
+        // (no number to rise) refreshes on it, and a list read that failed is asked again. One pass at a time, no loop.
+        let beating = false;
+        const beat = setInterval(() => {
+            if (beating || AppState.currentState !== 'active') return;
+            beating = true;
+            void freshen().finally(() => { beating = false; });
+        }, HELD_QUIET_REFRESH_MS);
         return () => {
             blockSub.remove();
             acrossSub.remove();
+            countsSub();
+            clearInterval(beat);
             void view.leave();
         };
     }, [identity, communityUrl]));
@@ -463,7 +500,12 @@ export default function ChatsScreen() {
                 id: c.id, outside: true, guest: true, peer: c.name, peerPubkey: c.id, outsideHome: c.host,
                 lastMessage: last?.text ?? '', rawTimestamp: new Date(last?.at ?? c.updatedAt).toISOString(), unread: 0,
             };
-        }), ...heldChats.map((c) => ({ ...c, id: c.key, heldChat: c, lastMessage: '', unread: 0 }))];
+        }), ...heldChats.map((c) => {
+            // Slice S2b: its own count and preview once read (the Unread filter and the search read them as any row's).
+            const fill = heldFilled.get(c.key);
+            const heldChat: HeldChat = fill ? { ...c, ...fill } : c;
+            return { ...heldChat, id: c.key, heldChat, lastMessage: fill?.lastMessage ?? '', unread: fill?.unread ?? 0 };
+        })];
 
         // 1. Text Search Filter
         if (searchQuery.trim() !== '') {
@@ -528,7 +570,7 @@ export default function ChatsScreen() {
         regular = orderTalkRows(regular, sortBy);
 
         return { actionRequired, regularConversations: regular };
-    }, [conversations, outsideChats, heldOutside, guestChats, heldChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
+    }, [conversations, outsideChats, heldOutside, guestChats, heldChats, heldFilled, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
 
     const resetFilters = () => {
         setSearchQuery('');
@@ -1185,8 +1227,14 @@ export default function ChatsScreen() {
                 <MessageRequestsPane
                     entries={requestsHere.conversations}
                     count={requestsHere.count}
-                    elsewhere={waitingElsewhere}
+                    elsewhere={movesElsewhere}
                     onOpenElsewhere={(place) => void openOtherCommunity(place.url, 'requests')}
+                    inPlace={requestsInPlace}
+                    onOpenInPlace={openRequestInPlace}
+                    onAcceptedInPlace={(entry, place) => {
+                        setMessagesFilter('all');
+                        openRequestInPlace(entry, place);
+                    }}
                     elsewhereBusy={switchingCommunity}
                     elsewhereNote={switchNote}
                     outside={outsideRequests}
@@ -1203,6 +1251,7 @@ export default function ChatsScreen() {
                     }}
                     onChanged={() => {
                         if (identity?.publicKey) void syncMessages(identity.publicKey);
+                        readInPlaceAgain();
                     }}
                     onBack={() => setMessagesFilter('all')}
                 />

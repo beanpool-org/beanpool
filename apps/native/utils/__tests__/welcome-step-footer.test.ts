@@ -31,7 +31,6 @@ const STEPS: Array<{ mode: string; scroll: string; button: RegExp; testID: strin
     { mode: 'create', scroll: '</KeyboardAwareScrollView>', button: /onPress=\{handleCreate\}/, testID: 'step-footer-invite' },
     { mode: 'profileSetup', scroll: '</ScrollView>', button: /onPress=\{handleCompleteProfile\}/, testID: 'step-footer-profile' },
     { mode: 'seedBackup', scroll: '</ScrollView>', button: /recordOnboardingEvent\('protection_choice'/, testID: 'step-footer-words' },
-    { mode: 'onboardingGuide', scroll: '</ScrollView>', button: /t\("Let's Begin! 🚀"\)/, testID: 'step-footer-guide' },
     { mode: 'ownerCard', scroll: '</ScrollView>', button: /t\("Let's Begin! 🚀"\)/, testID: 'step-footer-owner' },
 ];
 

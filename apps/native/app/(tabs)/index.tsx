@@ -8,7 +8,7 @@ import * as Location from 'expo-location';
 import {
     ARRANGE_WORDS, TIPS_ALL_SEEN, arrangeMovedLine, reorderIds, tipText, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
-    endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, type TourProgress,
+    endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, welcomeTileLines, WELCOME_TILE_WORDS, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
     starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout,
 } from '@beanpool/core';
@@ -50,8 +50,10 @@ import { ShopHomeBody } from '../../components/shop/ShopHomeBody';
 import { readTypedPlace } from '../../utils/typed-place';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
-    AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody, WelcomeBody,
+    AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
+import { WelcomeTile } from '../../components/home/WelcomeTile';
+import { loadWelcomePart, markWelcomePart, welcomePartElsewhere, type WelcomePartMark } from '../../utils/welcome-part';
 import { LearnBody } from '../../components/home/LearnBody';
 import { ForumHomeBody } from '../../components/home/ForumHomeBody';
 import { ForumVisitorHomeBody } from '../../components/home/ForumVisitorHomeBody';
@@ -60,7 +62,7 @@ import {
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
     effectiveInterests, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst,
-    welcomeFacts, welcomeUp, LEARN_OPENS, isArrivingCard, keepCard,
+    welcomeFacts, welcomeShapeFor, welcomeUp, LEARN_OPENS, isArrivingCard, keepCard,
     type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -253,6 +255,11 @@ export default function HomeScreen() {
     const [tourOpen, setTourOpen] = useState(false);
     /** A tour part way on this phone, for "Pick up the tour at step n ›". */
     const [tourProgress, setTourProgress] = useState<TourProgress | null>(null);
+    /**
+     * BeanPool's part of the welcome, once per phone (utils/welcome-part.ts): the community whose Home drew the tile first.
+     * `undefined` until read, and no tile meanwhile, so a second community never flashes it.
+     */
+    const [welcomeMark, setWelcomeMark] = useState<{ pk: string; mark: WelcomePartMark | null } | undefined>(undefined);
     const { run: tourRun } = useTour();
     /** The member's role here, asked only where only admins invite (undefined: not heard, so no invite asked of them). */
     const [role, setRole] = useState<HomeRole>(undefined);
@@ -1042,7 +1049,21 @@ export default function HomeScreen() {
     // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
     const tipsList = answer ? tipsFor(answer, role) : [];
     const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
-    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver, tourOpen, notify }) : [];
+    // The welcome mark read for this account: else no tile yet. Read, it hides BeanPool's part only where another community drew it first.
+    const markRead = !!identity && welcomeMark?.pk === identity.publicKey;
+    const welcomeElsewhere = !markRead || (!!url && welcomePartElsewhere(welcomeMark!.mark, url));
+    const welcomeCtx = { tourOver, tourOpen, now, welcomeElsewhere };
+    const welcomeShape = answer ? welcomeShapeFor(answer, welcomeCtx) : null;
+    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver, tourOpen, notify, welcomeElsewhere }) : [];
+    const welcomeDrawnHere = drawn.some(c => c.type === 'start');
+    // The tile drawn here: the mark names this community, once, for the first community only.
+    useEffect(() => {
+        const pk = identity?.publicKey;
+        if (!welcomeDrawnHere || !pk || !url || !markRead || welcomeMark?.mark) return;
+        void markWelcomePart(homeAccount(pk), url).then(mark => {
+            if (identityRef.current?.publicKey === pk) setWelcomeMark({ pk, mark });
+        });
+    }, [welcomeDrawnHere, identity?.publicKey, url, markRead, welcomeMark]);
     // Find your community's pin (the global node: a member's first 30 days, then while a knock or watch is open): no "…", no move, at the top.
     const pins = currentPins(answer, now);
     const interestsUp = drawn.some(c => c.type === 'interests');
@@ -1132,7 +1153,7 @@ export default function HomeScreen() {
     const idle = arrangeOn && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins).filter(c => !drawn.some(d => d.id === c.id) && !isArrivingCard(shown, c.id)) : [];
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
     const picker = answer && tailor && addOpen
-        ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}, welcomeUp(answer, { tourOver, tourOpen, now }) ? [] : ['start'])
+        ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}, welcomeUp(answer, welcomeCtx) ? [] : ['start'])
         : null;
 
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
@@ -1184,6 +1205,12 @@ export default function HomeScreen() {
     useEffect(() => () => lendTourHome(null), []);
     // Another account on the phone: this one's tour words go; a tour part way here is read again whenever the bar closes.
     useEffect(() => { setTourOver(false); setTourOpen(false); }, [identity?.publicKey]);
+    // The welcome mark, read once per account on the phone (utils/welcome-part.ts).
+    useEffect(() => {
+        const pk = identity?.publicKey;
+        if (!pk) return;
+        void loadWelcomePart(pk).then(mark => { if (identityRef.current?.publicKey === pk) setWelcomeMark({ pk, mark }); });
+    }, [identity?.publicKey]);
     useEffect(() => {
         const pk = identity?.publicKey;
         if (!pk || tourRun) return;
@@ -1306,19 +1333,25 @@ export default function HomeScreen() {
             case 'steps': {
                 if (!c.steps) return null;
                 const steps = firstSteps(answer, { interests, role, knocked, notify });
-                return frame(<StepsBody left={steps.left} count={steps.count} note={steps.note} colors={colors} onStep={onStep} />);
+                return frame(<StepsBody lines={steps.lines} left={steps.left} count={steps.count} note={steps.note} colors={colors} onStep={onStep} />);
             }
             case 'start': {
-                // The same rule the tab layout builds the running tour from: the Ledger step is in whenever its tab shows (the showcase included).
+                // The WELCOME TO BEANPOOL! tile (DESIGN-onboarding-home-landing-fable.md §4.1, slice S5): its own look, no card
+                // band, not arrangeable; full for seven days, then one band. The same rule the tab layout builds the running tour
+                // from: the Ledger step is in whenever its tab shows (the showcase included).
+                if (!welcomeShape) return null;
                 const total = tourSteps('phone', { global: answer.profile === 'global', beans: !hiddenTabsFor(answer.features).includes('ledger') }).length;
                 const welcome = welcomeFacts(answer);
                 const inviter = welcome.inviter;
-                return frame(
-                    <WelcomeBody
+                return (
+                    <WelcomeTile
+                        shape={welcomeShape}
                         place={welcome.place}
+                        // Until the community's own welcome carries it (slice S7): no newcomer loses "Say hello" between slices.
                         inviter={inviter?.name ?? null}
                         firstHere={welcome.firstHere}
-                        tourLabel={tourProgress ? startCardButton(tourProgress, total) : t('Take the tour ›')}
+                        lines={welcomeTileLines({ profile: String(answer.profile), beans: showsBeans })}
+                        tourLabel={tourProgress && tourProgress.step > 0 ? startCardButton(tourProgress, total) : t(WELCOME_TILE_WORDS.tour)}
                         colors={colors}
                         onSayHello={() => { if (inviter) void sayHello(inviter.key); }}
                         onInvite={invitesForReader(answer.features, role) ? () => router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } }) : undefined}
@@ -1326,8 +1359,9 @@ export default function HomeScreen() {
                             const pk = identityRef.current?.publicKey;
                             if (pk) startTour(pk, resumeStep(tourProgress, total));
                         }}
-                        onNotNow={() => { closeTour(); void tourEnd('skipped'); }}
-                    />,
+                        // Got it (and the band's ×) writes the tour record 'skipped': the record 1.4.7's Not now writes.
+                        onGotIt={() => { closeTour(); void tourEnd('skipped'); }}
+                    />
                 );
             }
             case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} askedPush={askedPushOn(answer?.features)} />);
@@ -1476,7 +1510,8 @@ export default function HomeScreen() {
     // First steps done, removed or out of its days leaves it. While Getting started is up for a tour not yet ended it waits,
     // as the five do: a newcomer's Home is that card alone, and the tour's Ledger step is the example's way in
     // (DESIGN-getting-started-fable.md §0, pick 10).
-    const touring = drawn.some(c => c.type === 'start');
+    // The tile folded to its band (day 8 on) no longer holds the preview back.
+    const touring = drawn.some(c => c.type === 'start') && welcomeShape === 'full';
     const beansPreviewCard = !!answer && !touring && homeBeansPreview(answer);
     const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
 

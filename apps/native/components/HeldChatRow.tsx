@@ -7,12 +7,14 @@ import { MemberAvatar } from './MemberAvatar';
 import { rowTime } from '../utils/your-groups';
 import type { HeldChatRow as HeldChat } from '../utils/held-chats';
 import { heldChatOpensInPlace } from '../utils/held-chat-in-place';
+import { chatPreviewWords } from '../utils/chat-line-words';
 
 /**
  * A chat in another community this phone holds, in Chat's one list (slice S1, DESIGN-no-switch-messaging-fable.md §1, §6):
  * the other person, the time of the newest line the phone holds, and that community's name in grey. A direct chat opens in
  * place (slice S2), so its row says the community's name alone; any other still moves the phone there, so its row says
- * "· Switch". No preview of its lines (the PR of S2 says what that costs and where it went). The photo is that community's (utils/db.ts getHeldConversations), never one
+ * "· Switch". Once read (slice S2b, utils/held-chats.ts heldChatsFilledIn), its own unread count and, for the newest held
+ * direct chats, its newest line's preview, as Talk's own rows show them; none where the pins can't place the line. The photo is that community's (utils/db.ts getHeldConversations), never one
  * from the community in use. Drawn apart from the screen so the render tests draw this very row; at 320 dp with 1.3× text
  * the community's line wraps, never cut.
  */
@@ -33,7 +35,17 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
         time: { fontSize: 12, color: c.text.muted, fontWeight: '500', marginLeft: 8 },
         where: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
         whereText: { fontSize: 13, color: c.text.secondary, flexShrink: 1 },
+        // As Talk's own rows (app/(tabs)/chats.tsx): the preview, bold while unread, and the count's round badge.
+        nameUnread: { color: c.text.heading, fontWeight: '900' },
+        timeUnread: { color: c.accent.primary, fontWeight: '700' },
+        messageRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },
+        preview: { fontSize: 14, color: c.text.secondary, flex: 1, paddingRight: 16 },
+        previewUnread: { color: c.text.heading, fontWeight: '700' },
+        unreadBadge: { backgroundColor: c.accent.fill, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, justifyContent: 'center', alignItems: 'center', marginLeft: 'auto' },
+        unreadCount: { color: c.text.onAccent, fontSize: 11, fontWeight: '800' },
     }));
+    const unread = item.unread ?? 0;
+    const preview = item.lastMessage ? chatPreviewWords(item) : null;
     return (
         <Pressable
             accessibilityRole="button"
@@ -50,13 +62,23 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
             </View>
             <View style={styles.details}>
                 <View style={styles.header}>
-                    <Text style={styles.name} numberOfLines={1}>{item.peer}</Text>
-                    <Text style={styles.time}>{rowTime(item.rawTimestamp ?? item.createdAt)}</Text>
+                    <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>{item.peer}</Text>
+                    <Text style={[styles.time, unread > 0 && styles.timeUnread]}>{rowTime(item.rawTimestamp ?? item.createdAt)}</Text>
                 </View>
                 <View style={styles.where}>
                     <MaterialCommunityIcons name="home-group" size={14} color={colors.text.secondary} />
                     <Text style={styles.whereText} testID="held-chat-community">{inPlace ? item.communityName : t('{community} · Switch', { community: item.communityName })}</Text>
                 </View>
+                {preview || unread > 0 ? (
+                    <View style={styles.messageRow}>
+                        {preview ? <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1} testID="held-chat-preview">{preview}</Text> : null}
+                        {unread > 0 ? (
+                            <View style={styles.unreadBadge} testID="held-chat-unread">
+                                <Text style={styles.unreadCount}>{unread}</Text>
+                            </View>
+                        ) : null}
+                    </View>
+                ) : null}
             </View>
         </Pressable>
     );

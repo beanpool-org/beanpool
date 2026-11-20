@@ -672,6 +672,7 @@ export const SUITES = [
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',
+    'test-community-welcome',
     'test-balance-rule-boot',
     'test-escrow-disputes',
     'test-lendable-offers',

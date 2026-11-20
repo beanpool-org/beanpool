@@ -14,7 +14,49 @@
  *
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
+import { PROTOCOL_CONSTANTS } from './protocol.js';
 import { t, word } from './words.js';
+
+/**
+ * The WELCOME TO BEANPOOL! tile's words (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.1 item 1, Marty's
+ * pick of 21 Nov 2026, slice S5): what How it Works said in 363 words, as three things to know. Shown through t().
+ */
+export const WELCOME_TILE_WORDS = {
+    title: word('Welcome to BeanPool!'),
+    offer: word('Offer something first. Then ask for anything.'),
+    beans: word("Beans keep score: about {n} for an hour's help."),
+    zero: word('Zero is a good balance: you give as much as you get.'),
+    meet: word('Meet people and find a community near you.'),
+    noBeans: word('No Beans here. Trading in Beans happens in local communities.'),
+    tour: word('Show me around'),
+    gotIt: word('Got it'),
+} as const;
+
+/** Which picture a tile line wears (the app maps it to an icon it bundles): give and take, the scales, zero, people. */
+export type WelcomeTileIcon = 'swap' | 'scale' | 'zero' | 'meet' | 'none';
+export interface WelcomeTileLine { icon: WelcomeTileIcon; text: string }
+
+/**
+ * The tile's lines, in the member's language. Where Beans are on: offer first, the hour's rate, zero is good (the rate is
+ * the protocol's reference rate, the same on every community, never a setting: protocol.ts `REFERENCE_RATE`). The global
+ * community, which has no Beans: who is here and where Beans live (§4.1). A local community with Beans off: the first line
+ * alone, since the other two would not be true there.
+ */
+export function welcomeTileLines(where: { profile: string; beans: boolean }): WelcomeTileLine[] {
+    if (where.profile === 'global') {
+        return [
+            { icon: 'meet', text: t(WELCOME_TILE_WORDS.meet) },
+            { icon: 'none', text: t(WELCOME_TILE_WORDS.noBeans) },
+        ];
+    }
+    const offer: WelcomeTileLine = { icon: 'swap', text: t(WELCOME_TILE_WORDS.offer) };
+    if (!where.beans) return [offer];
+    return [
+        offer,
+        { icon: 'scale', text: t(WELCOME_TILE_WORDS.beans, { n: Math.round(PROTOCOL_CONSTANTS.REFERENCE_RATE / 100) }) },
+        { icon: 'zero', text: t(WELCOME_TILE_WORDS.zero) },
+    ];
+}
 
 /** Welcome's sentences that say where the member is: shown through t() by {@link welcomeFacts}. */
 export const WELCOME_PLACE_WORDS = {

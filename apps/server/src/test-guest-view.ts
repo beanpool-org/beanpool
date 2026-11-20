@@ -1267,6 +1267,8 @@ async function main(): Promise<void> {
             'POST /api/names/health/settings': { debtLinePct: 90, quietDays: 30 },
             'POST /api/local/admin/community-health': { debtLinePct: 90 },
             'POST /api/local/admin/start-community-url': { url: 'https://start.example.org/how' },
+            // The welcome for new members (owner only): past the body checks to the write.
+            'POST /api/local/admin/community-welcome': { welcome: 'Sentinel welcome for new members' },
             // The listing promise's ticks and closing day (owner only): past the body checks to the write.
             'POST /api/local/admin/directory/promise': { reports: true, notice: true, closingOn: null },
             // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
@@ -1419,6 +1421,8 @@ async function main(): Promise<void> {
             'GET /api/local/admin/vouchers/me',
             'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health', 'GET /api/local/admin/community-shape', 'POST /api/local/admin/community-shape', 'POST /api/local/admin/community-shape/advice',
             'POST /api/local/admin/start-community-url',
+            // The welcome for new members (onboarding slice S6): an owner's or admin's read, an owner's change.
+            'GET /api/local/admin/community-welcome', 'POST /api/local/admin/community-welcome',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
             'POST /api/local/admin/members/:pubkey/burst/remove',

@@ -30,8 +30,8 @@
  * (apps/native/utils/force-update.ts). While that block applies, the server also refuses
  * such an app its gated reads and writes, 426 app_too_old (floorRefusing, https-server.ts
  * requireSignature), all but its ways out (floorLetsThrough). An app from 1.4.0 on reads
- * that answer and puts "Update required" up at once (#3043): one from 1.4.0 up to 1.4.5 does
- * so under the built-in floor 1.4.6. An older one doesn't: what it tries fails until its next
+ * that answer and puts "Update required" up at once (#3043): one from 1.4.0 up to 1.4.6 does
+ * so under the built-in floor 1.4.7. An older one doesn't: what it tries fails until its next
  * safe moment puts the screen up. An app from before the
  * full-screen update sends no version, so it is never refused, and shows its banner only.
  * So every rule here fails towards NOT stopping anyone: a floor is enforced only once that
@@ -44,7 +44,7 @@
  * unknown already means above: no phone is told of a newer build, and no floor is
  * enforced, so an app below one gets its banner only.
  *
- * APP_STORE_VERSIONS (e.g. `android=1.4.6,ios=1.4.6`) says what a store has in place of asking it, for a test community
+ * APP_STORE_VERSIONS (e.g. `android=1.4.7,ios=1.4.7`) says what a store has in place of asking it, for a test community
  * to try "Update required" before the stores have the build (storeVersionsSetting). A platform it names is never asked;
  * everything downstream reads the version it gives as a store's. It is the one setting here that can stop an app the
  * store cannot replace yet, which is why it is for a test community only, and why what it can't read stops nobody.
@@ -56,19 +56,21 @@ const IOS_BUNDLE_ID = 'org.beanpool.pillar';
 const ANDROID_PACKAGE = 'org.beanpool.pillar';
 
 /**
- * The oldest app build this node works with, as served to clients: 1.4.6, the phone build that goes with this node
- * release. It holds a price for all to the rule this node holds it to (#3220: the same as one by one, never more). A
- * phone before it holds the old rule, less than one by one, and gets a listing whose price for all is the same as one by
- * one wrong when it edits it, so it is told to update instead. It was 1.4.1, the release that offered a price for each
- * one (config/node-profile.ts PER_ITEM_BUILT, DESIGN-per-item-price-fable.md §6), until both stores carried phone 1.4.6
- * (Android 340, iOS 274); before that 1.4.0, the clean-slate cutover (DESIGN-clean-slate-cutover-fable.md §1). In code,
- * not .env, so every self-hoster's node holds old apps off without configuring anything. It is also the lowest floor
- * there is: a floor set in .env (MIN_APP_VERSION, or per platform) can raise it and never lower it. One below it is
- * ignored, and the log says so once, at start (noteFloorsBelowBuiltIn). It brings no grace date of its own: unless the
- * operator sets one (MIN_APP_VERSION_FROM), it stops apps below it as soon as their store has 1.4.6, and never before
- * (getPlatformFloorDetail). What a stopped app then does: the file comment above.
+ * The oldest app build this node works with, as served to clients: 1.4.7, the phone build that goes with this node
+ * release. It shows six digits when it approves a computer's sign-in or an AI assistant, as this node asks (#3294,
+ * settings-signin-pairing.ts: an app before it is refused those approvals, 426 "Update the BeanPool app ..."), and it
+ * confirms its member's copies on a node that keeps copies once a day (#3299, engine/copy-lease.ts: from a phone before
+ * it only an edit or its 30-day resend counts). So a phone before it is told to update. It was 1.4.6 (#3220: a price
+ * for all the same as one by one, never more) until both stores carried phone 1.4.7 (Android 341, iOS 275); before that
+ * 1.4.1, the release that offered a price for each one (config/node-profile.ts PER_ITEM_BUILT,
+ * DESIGN-per-item-price-fable.md §6), and 1.4.0, the clean-slate cutover (DESIGN-clean-slate-cutover-fable.md §1). In
+ * code, not .env, so every self-hoster's node holds old apps off without configuring anything. It is also the lowest
+ * floor there is: a floor set in .env (MIN_APP_VERSION, or per platform) can raise it and never lower it. One below it
+ * is ignored, and the log says so once, at start (noteFloorsBelowBuiltIn). It brings no grace date of its own: unless
+ * the operator sets one (MIN_APP_VERSION_FROM), it stops apps below it as soon as their store has 1.4.7, and never
+ * before (getPlatformFloorDetail). What a stopped app then does: the file comment above.
  */
-const DEFAULT_MIN_APP_VERSION = '1.4.6';
+const DEFAULT_MIN_APP_VERSION = '1.4.7';
 
 /** The floors an operator can set in .env, in the order the start-up line names them. */
 const FLOOR_ENV = ['MIN_APP_VERSION', 'MIN_APP_VERSION_ANDROID', 'MIN_APP_VERSION_IOS'] as const;
@@ -101,7 +103,7 @@ export function floorsBelowBuiltIn(): string[] {
 
 /**
  * At start (initAppStoreVersionChecks): one line in the log when a floor in .env is ignored for being below the built-in
- * one. A node that set a floor below it (G7's, set before 1.4.0, say, or 1.4.1, the floor before this one) would
+ * one. A node that set a floor below it (G7's, set before 1.4.0, say, or 1.4.6, the floor before this one) would
  * otherwise still read it there and never learn why its phones are held to the built-in floor. Returns the line, or null
  * when nothing is ignored.
  */
@@ -321,11 +323,11 @@ interface StoreVersionsSetting {
 
 /**
  * APP_STORE_VERSIONS: what a platform's store has, as the operator says, in place of asking it. Comma-separated
- * `platform=version` entries, `android=1.4.6,ios=1.4.6`, each version read as a store's is (normaliseVersion). It is for a
+ * `platform=version` entries, `android=1.4.7,ios=1.4.7`, each version read as a store's is (normaliseVersion). It is for a
  * test community, to try the update block before the stores have the build (Marty, 11 Nov: the stores still had 1.3.4, so
- * a 1.4.0 node let 1.3.4 in). With android=1.4.6 the floor 1.4.6 is enforced on Android as if Google Play had 1.4.6, so a
- * 1.4.1 Android app gets "Update required" and its gated requests 426 app_too_old, its ways out still answered. A value
- * left from the last release (android=1.4.1) is below this floor, so it holds it: it stops nobody.
+ * a 1.4.0 node let 1.3.4 in). With android=1.4.7 the floor 1.4.7 is enforced on Android as if Google Play had 1.4.7, so a
+ * 1.4.6 Android app gets "Update required" and its gated requests 426 app_too_old, its ways out still answered. A value
+ * left from the last release (android=1.4.6) is below this floor, so it holds it: it stops nobody.
  *
  * A platform it names is never asked (checkAppStoreVersions). One it doesn't name is asked as without it. Nothing else
  * changes: the floors, the grace dates, `blocking`, health's appVersions and appFloors, floorRefusing and the ways out read
@@ -336,7 +338,7 @@ interface StoreVersionsSetting {
  * On a real community it would stop older apps before their members can get the new build. So what it can't read stops
  * nobody: an entry it can't read leaves every platform it could mean with no store version, and asks no store for them
  * either, so a typo never falls back to a store that may meet the floor. That is the one platform an entry names
- * (`android=banana`, android named twice), or both when it names neither (`1.4.6`, `android:1.4.6`, `web=1.4.6`). The log
+ * (`android=banana`, android named twice), or both when it names neither (`1.4.7`, `android:1.4.7`, `web=1.4.7`). The log
  * says why, once each time the value changes.
  */
 function readStoreVersionsSetting(raw: string | undefined): StoreVersionsSetting {
@@ -385,7 +387,7 @@ function storeVersionsSetting(): StoreVersionsSetting {
     if (setting.unread.length) {
         const off = APP_PLATFORMS.filter(p => setting.stores[p] === null);
         logger.warn('SYS', `[AppVersions] APP_STORE_VERSIONS=${raw} can't be read: ${setting.unread.join('; ')}. Write it as `
-            + `android=1.4.6,ios=1.4.6. Until it is fixed, no ${off.join(' or ')} app is stopped for its version, and `
+            + `android=1.4.7,ios=1.4.7. Until it is fixed, no ${off.join(' or ')} app is stopped for its version, and `
             + `${off.map(p => STORE_NAME[p]).join(' and ')} ${off.length === 1 ? 'is' : 'are'} not asked`);
     }
     return setting;

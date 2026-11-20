@@ -74,12 +74,16 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
     const onDoneRef = useRef(onDone);
     onDoneRef.current = onDone;
 
+    // The node as values, not the object: single-node Settings makes a new activeNode on every App render (the 5-second
+    // diagnostics poll among them), and keyed on the object this would ask the server for its IDs again every few seconds,
+    // all through the restore and its restart (#3313 review).
+    const credential = nodeCredential(activeNode);
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-enroll'), {
-                    method: 'GET', headers: buildAdminHeaders(nodeCredential(activeNode)),
+                    method: 'GET', headers: buildAdminHeaders(credential),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (cancelled) return;
@@ -93,7 +97,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
             }
         })();
         return () => { cancelled = true; };
-    }, [activeNode]);
+    }, [activeNode.id, activeNode.url, credential]);
 
     const upload = async (extra: Record<string, string>) => {
         const headers = buildAdminHeaders(nodeCredential(activeNode));

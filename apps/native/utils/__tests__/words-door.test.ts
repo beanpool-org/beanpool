@@ -693,7 +693,7 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
     });
 
     it('Safety Backup for a 12-words member: the words note first, the tickbox, then "Add a sign-in as a second way back"', () => {
-        const backup = between(src('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'onboardingGuide' && pendingIdentity)");
+        const backup = between(src('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'ownerCard' && pendingIdentity)");
         // The note takes the screen's light/dark tokens (utils/onboarding-colors.ts).
         expect(backup).toMatch(/\{wordsMember \? \(\s*<WordsBackupNote colors=\{colors\} \/>/);
         const note = backup.indexOf('<WordsBackupNote colors={colors} />');

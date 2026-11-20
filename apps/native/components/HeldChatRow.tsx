@@ -32,6 +32,9 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
         details: { flex: 1 },
         header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
         name: { fontSize: 16, fontWeight: '700', color: c.text.body, flexShrink: 1 },
+        // A direct chat whose key changed and waits for the member there (DESIGN-s7-blocks-verified-everywhere §3.3): Chat's own tag.
+        keyChangedTag: { backgroundColor: c.feedback.warning.bg, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6, flexShrink: 0 },
+        keyChangedTagText: { fontSize: 11, fontWeight: '700', color: c.feedback.warning.fg },
         time: { fontSize: 12, color: c.text.muted, fontWeight: '500', marginLeft: 8 },
         where: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
         whereText: { fontSize: 13, color: c.text.secondary, flexShrink: 1 },
@@ -63,6 +66,12 @@ export function HeldChatRow({ item, busy, onOpen }: { item: HeldChat; busy: bool
             <View style={styles.details}>
                 <View style={styles.header}>
                     <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>{item.peer}</Text>
+                    {/* Its own words are its spoken name (no label of its own, as the row has none: WCAG 2.5.3). */}
+                    {item.keyChanged && (
+                        <View style={styles.keyChangedTag} testID="held-chat-key-changed">
+                            <Text style={styles.keyChangedTagText}>{t('key changed')}</Text>
+                        </View>
+                    )}
                     <Text style={[styles.time, unread > 0 && styles.timeUnread]}>{rowTime(item.rawTimestamp ?? item.createdAt)}</Text>
                 </View>
                 <View style={styles.where}>

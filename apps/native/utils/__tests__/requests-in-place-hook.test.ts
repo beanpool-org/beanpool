@@ -6,6 +6,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, cleanup } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const calls = vi.hoisted(() => ({ log: [] as string[], lists: new Map<string, any>() }));
 vi.mock('../db', () => ({
@@ -14,7 +16,7 @@ vi.mock('../db', () => ({
     requestsInPlace: async (_me: string, c: string) => { calls.log.push(`read ${c}`); return calls.lists.get(c) ?? null; },
 }));
 
-import { placesToReadInPlace, readRequestsInPlace, useRequestsInPlace } from '../requests-in-place';
+import { placesThatMoveElsewhere, placesToReadInPlace, readRequestsInPlace, useRequestsInPlace } from '../requests-in-place';
 
 const RIVER = 'https://riverside.example';
 const HILL = 'https://hilltop.example';
@@ -26,6 +28,28 @@ beforeEach(() => {
     calls.lists = new Map([[RIVER, { count: 1, conversations: [{ id: 'r1' }] }], [HILL, { count: 2, conversations: [{ id: 'h1' }, { id: 'h2' }] }]]);
 });
 afterEach(() => cleanup());
+
+describe('which places keep their card that moves the phone there (S0)', () => {
+    // #3309 review F4: a request whose opener is blocked on this phone is left out of the group read in place; when that
+    // leaves the group with nothing to draw, the S0 card must stay, or the row counts a request the member can't reach.
+    const group = (url: string, ids: string[], count: number) => ({ place: place(url, count), entries: ids.map((id) => ({ id })), count });
+    it.each([
+        ['a group with cards to draw hides its S0 card', [group(RIVER, ['r1'], 1)], [] as string[]],
+        ['an empty group (its only request from someone blocked here) keeps its S0 card', [group(RIVER, [], 0)], [RIVER]],
+        ['a place not read in place keeps its S0 card', [] as any[], [RIVER]],
+    ])('%s', (_name, groups, moving) => {
+        expect(placesThatMoveElsewhere([place(RIVER, 1)], groups).map((p) => p.url)).toEqual(moving);
+    });
+    it('Chat draws its S0 cards from this rule', () => {
+        const src = readFileSync(join(__dirname, '../../app/(tabs)/chats.tsx'), 'utf8');
+        expect(src).toContain('placesThatMoveElsewhere(waitingElsewhere, requestsInPlace)');
+        expect(src).not.toMatch(/waitingElsewhere\.filter\(\(p\) => !requestsInPlace\.some/);
+    });
+    it('each place is judged by its own group', () => {
+        const groups = [group(RIVER, [], 0), group(HILL, ['h1'], 2)];
+        expect(placesThatMoveElsewhere([place(RIVER, 1), place(HILL, 2), place(OPEN, 3)], groups).map((p) => p.url)).toEqual([RIVER, OPEN]);
+    });
+});
 
 describe('which places are read in place', () => {
     it('only those with requests waiting, each once', () => {

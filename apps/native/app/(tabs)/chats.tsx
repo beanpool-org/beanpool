@@ -9,7 +9,7 @@ import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsInView, heldChats
 import { HeldChatRow } from '../../components/HeldChatRow';
 import { requestsWaitingOnGlobal } from '../../utils/global-requests';
 import { elsewhereCounts, requestsElsewhere, useHeldRequests } from '../../utils/requests-elsewhere';
-import { useRequestsInPlace } from '../../utils/requests-in-place';
+import { placesThatMoveElsewhere, useRequestsInPlace } from '../../utils/requests-in-place';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { talkShowsChat } from '../../utils/dm-blocked';
@@ -184,7 +184,7 @@ export default function ChatsScreen() {
     // utils/requests-in-place.ts); a place that can't be read in place keeps its card that moves the phone there (S0).
     const [requestsInPlace, readInPlaceAgain] = useRequestsInPlace(identity?.publicKey, waitingElsewhere, messagesFilter === 'requests');
     const movesElsewhere = React.useMemo(
-        () => waitingElsewhere.filter((p) => !requestsInPlace.some((g) => g.place.address === p.address)),
+        () => placesThatMoveElsewhere(waitingElsewhere, requestsInPlace),
         [waitingElsewhere, requestsInPlace],
     );
     const openRequestInPlace = (entry: any, place: { url: string; name: string }) =>

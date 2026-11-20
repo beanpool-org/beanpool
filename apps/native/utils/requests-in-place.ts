@@ -36,6 +36,15 @@ export function placesToReadInPlace(places: readonly RequestsPlace[] | null | un
 }
 
 /**
+ * The places whose S0 card (it moves the phone there) still shows: every place waiting, less those whose group read in place
+ * has a card to draw. A group with nothing to draw (all its requests from people blocked on this phone) keeps the S0 card,
+ * so the member can still go there, where the block is sent and the count clears (#3309 review F4).
+ */
+export function placesThatMoveElsewhere<P extends { address: string }>(waiting: readonly P[], groups: readonly RequestsInPlaceGroup[]): P[] {
+    return waiting.filter((p) => !groups.some((g) => g.place.address === p.address && g.entries.length > 0));
+}
+
+/**
  * Reads `places` in place, one after another, each held while it is read and after: the groups read (a place that can't be
  * read in place is left out). `stillWanted` false stops before the next place.
  */

@@ -569,8 +569,12 @@ export interface DmPinBook<H> {
      * marker in their place) or storage can't be read.
      */
     peek(myPubkey: string, file: string): Promise<DmPeerPins | null>;
-    /** Run `change` on those pins after every change queued before it, once `at`'s file is seeded; written through when it returns true. */
-    update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean): Promise<boolean>;
+    /**
+     * Run `change` on those pins after every change queued before it, once `at`'s file is seeded; written through when it
+     * returns true. `change` may wait (db.ts reads the member's list in the turn, and the member's taps write it there:
+     * #3316 N2); it changes the pins only after its last wait, so no reader meets them half changed.
+     */
+    update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean | Promise<boolean>): Promise<boolean>;
     /**
      * The member's reset of one file's pins (Settings → Chat memory, §3.4 amendment 6 §3), never the phone's
      * own: the raw value is copied aside when storage returns it (a corrupt one reads as a string), the value is replaced
@@ -685,11 +689,11 @@ export function createDmPinBook<H>(
         // Reset since the seed: the file's turn seeds it again.
         return held.pins ?? inTurn(dmPeerPinsStoreKey(myPubkey, file), () => heldInTurn(myPubkey, at, file));
     }
-    async function update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean): Promise<boolean> {
+    async function update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean | Promise<boolean>): Promise<boolean> {
         const file = await seeded(myPubkey, at);
         return inTurn(dmPeerPinsStoreKey(myPubkey, file), async () => {
             const pins = await heldInTurn(myPubkey, at, file);
-            if (!change(pins)) return false;
+            if (!(await change(pins))) return false;
             await writeThrough(myPubkey, file, load(myPubkey, file), pins);
             return true;
         });
@@ -1108,6 +1112,17 @@ export function markableKey(pins: DmPeerPins, conversationId: string, expectedPe
 }
 
 /**
+ * The member's Mark settles the pin it marked (#3316 N1, as markVerified did before S7c): `checked`, so no line judged
+ * later can put a key into its `former` beside Verified ✓. Only for the pin {@link markableKey} named, still holding
+ * `key` with nothing offered. True when it changed.
+ */
+export function settleMarkedPin(pins: DmPeerPins, conversationId: string, key: string): boolean {
+    const pin = dmPinFor(pins, conversationId);
+    if (!pin || pin.checked || pin.offered || pin.peer !== pinKeyOf(key)) return false;
+    return resized(pins, dmPinId(conversationId), () => (pin.checked = true));
+}
+
+/**
  * The member's "Continue with the new key" (slice 2, pick 1): the key on offer becomes the pinned key, `by: 'member'`,
  * and the key before it goes first in `former`, so the old lines still open (pick 3). The offer and what the listing said
  * go with it: the member decided. Only the key on offer moves a pin; under Signal's model that is a verified person's
@@ -1125,6 +1140,18 @@ export function acceptOffer(pins: DmPeerPins, conversationId: string, peer: stri
     const former = [...new Set([pin.peer, ...(pin.former ?? [])])].filter((k) => k !== key).slice(0, FORMER_MAX);
     const moved: DmPeerPin = { peer: key, since: now, by: 'member', ...(former.length ? { former } : {}), changedAt: changedWith(pin.changedAt, now) };
     return resized(pins, id, () => setPin(pins, id, moved));
+}
+
+/**
+ * The former keys a chat's lines may be opened under as words (the thread, the Chats preview, a photo, a voice note): the
+ * pin's `former`, less the key on offer while an offer stands. An offer stands only while a verified chat waits for the
+ * member (an unverified pin follows a listing by itself), and no text from a key the member hasn't accepted is shown
+ * (design §3.4 amendment 2 §3, the R10 rule; #3316 N1): a line under the offered key reads "couldn't be verified", marked
+ * as the new key's, until the member continues with it, even when an earlier judgement put that key into `former`.
+ */
+export function dmShownFormer(pin: DmPeerPin | null | undefined): string[] {
+    const offered = pin?.offered?.peer;
+    return (pin?.former ?? []).filter((k) => k !== offered);
 }
 
 /** The keys a thread's old lines may open under: the pinned one, then the ones before it. */

@@ -218,3 +218,22 @@ describe('the table can fail: each mutant dies at its own row', () => {
         });
     }
 });
+
+describe('a twin spelling while the list can\'t be read (#3316 max review N3, dm-peer-pins.ts judged(): showsVerifiedMark, never isVerifiedPin, for a pin with nothing offered)', () => {
+    it('an unchecked first-seen pin on K1, Ben\'s lines under K0, and a twin in capitals listing another key (db.ts getDmKeyContext: no single key listed, rule 3 with offer): judged, so the keyless pause on K0; nothing is sealed to K1', () => {
+        const p = kept('unchecked, no offer');
+        expect(dmPinFor(p, D0)).toMatchObject({ peer: K1, by: 'first-seen' });
+        expect(dmPinFor(p, D0)!.checked).toBeFalsy();
+        const verdict = judgeFirstSight([K0, K0], K1) as SightVerdict;
+        expect(verdict.rule === 3 || verdict.rule === 4).toBe(true);
+        // getDmKeyContext's twin rule: rules 3-4 against a disagreeing twin become a keyless pause, and no key is listed.
+        const twinVerdict = { rule: 3, pin: (verdict as any).pin, offer: true } as SightVerdict;
+        applySightVerdict(p, D0, twinVerdict, null, undefined, LATER, DM_VERIFIED_UNREADABLE);
+        restDmEntry(p, D0, LATER, DM_VERIFIED_UNREADABLE);
+        const pin = dmPinFor(p, D0)!;
+        expect(pin).toEqual({ peer: K0, since: LATER, by: 'first-seen', checked: true, offered: { peer: null, at: LATER, firstSight: true, keyless: true } });
+        // The send's settle never runs on a pin that waits: nothing goes to K1 (or to K0) until one key is listed.
+        expect(settleFirstSight(p, D0)).toBe(false);
+        expect(pin.peer).not.toBe(K1);
+    });
+});

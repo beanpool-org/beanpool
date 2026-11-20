@@ -4625,7 +4625,10 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         expect(rel).toEqual({ peer: ben.publicKey, since: expect.any(String), by: 'listing', checked: true, former: [puppet.publicKey], changedAt: [expect.any(String)], offered: { peer: puppet.publicKey, at: expect.any(String) } });
         expect(verifiedKeysOf(ana)).toEqual([ben.publicKey]);
         expect(await keyNotices(relisted)).toHaveLength(1);
-        expect(await textsOf(relisted.id)).toEqual(['PUPPET after the relist']);
+        // PUPPET is both in `former` and on offer while the verified chat waits: its line shows no words, only the new key's
+        // fixed line, until the member continues (§3.4 amendment 2 §3, the R10 rule; #3316 max review N1: this read
+        // 'PUPPET after the relist' as words before).
+        expect((await getMessages(relisted.id)).map((m: any) => ({ text: m.text, offered: !!m.fromOfferedKey }))).toEqual([{ text: NOT_VERIFIED, offered: true }]);
         expect(await sendTo(relisted.id, 'The code is 4821')).toEqual({ err: 'DmKeyChangedError', posts: 0, readBy: [] });
         // The stated residual: a DM first met on the node's word, unchecked before the fault, whose only line is PUPPET's:
         // judged on it, rule 2 pins PUPPET (the confirmation says so: "may open with the new key").

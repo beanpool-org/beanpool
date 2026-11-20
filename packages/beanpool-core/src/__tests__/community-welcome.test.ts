@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-    cleanCommunityWelcome, isKeptCommunityWelcome, welcomeLineBreaks, COMMUNITY_WELCOME_MAX_CHARS, COMMUNITY_WELCOME_MAX_LINE_BREAKS,
+    cleanCommunityWelcome, cleanedWelcomeText, isKeptCommunityWelcome, welcomeLineBreaks, COMMUNITY_WELCOME_MAX_CHARS, COMMUNITY_WELCOME_MAX_LINE_BREAKS,
+    COMMUNITY_WELCOME_WORDS, type CommunityWelcomeProblem,
 } from '../community-welcome';
 
 describe('the community welcome (onboarding design §4.5, slice S6)', () => {
@@ -44,6 +45,26 @@ describe('the community welcome (onboarding design §4.5, slice S6)', () => {
         const got = cleanCommunityWelcome(raw);
         if ('text' in want) expect(got).toEqual({ ok: true, text: want.text });
         else expect(got).toEqual({ ok: false, problem: want.problem });
+    });
+
+    // A field counts on cleanedWelcomeText (#3313 review), so its count agrees with what cleanCommunityWelcome keeps or refuses.
+    it.each([
+        ['line and paragraph separators become breaks', 'one two three', 'one\ntwo\nthree'],
+        ['Windows and old-Mac line ends become one break each', 'a\r\nb\rc', 'a\nb\nc'],
+        ['a tab becomes a space, bidi marks go, the ends are trimmed', ' ⁨a\tb⁩ \n', 'a b'],
+        ['a control character is left in, for the check to refuse', 'one\u000ctwo', 'one\u000ctwo'],
+    ])('cleanedWelcomeText: %s', (_name, raw, want) => {
+        expect(cleanedWelcomeText(raw)).toBe(want);
+        const c = cleanCommunityWelcome(raw);
+        if (c.ok) expect(c.text).toBe(want);
+    });
+
+    it('every refusal has its sentence, and the sentences name the limits', () => {
+        const problems: CommunityWelcomeProblem[] = ['not_text', 'too_long', 'too_many_lines', 'control_character'];
+        expect(Object.keys(COMMUNITY_WELCOME_WORDS).sort()).toEqual([...problems].sort());
+        for (const p of problems) expect(COMMUNITY_WELCOME_WORDS[p].length).toBeGreaterThan(10);
+        expect(COMMUNITY_WELCOME_WORDS.too_long).toContain(String(COMMUNITY_WELCOME_MAX_CHARS));
+        expect(COMMUNITY_WELCOME_WORDS.too_many_lines).toContain(`${COMMUNITY_WELCOME_MAX_LINE_BREAKS + 1} lines`);
     });
 
     it('counts line breaks', () => {

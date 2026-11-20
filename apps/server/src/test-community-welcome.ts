@@ -24,6 +24,7 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
+import { COMMUNITY_WELCOME_WORDS, type CommunityWelcomeProblem } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, exportSyncState, getDirectoryInfo } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
@@ -225,8 +226,9 @@ async function main(): Promise<void> {
     ];
     for (const [what, welcome, code] of refusals) {
         const r = await call('POST', null, ROUTE, { welcome }, ownerAdmin);
-        assert(r.status === 400 && r.body?.code === code && typeof r.body?.error === 'string' && r.body.error.length > 10 && storedRow() === WELCOME,
-            `${what}: refused in words (${code}), nothing stored (${show(r)})`);
+        // Core's words, the sentence Settings shows beside the count before Save (one source of words, #3313 review).
+        assert(r.status === 400 && r.body?.code === code && r.body?.error === COMMUNITY_WELCOME_WORDS[code as CommunityWelcomeProblem] && storedRow() === WELCOME,
+            `${what}: refused in core's words (${code}), nothing stored (${show(r)})`);
     }
     const longest = `${'a'.repeat(70)}\n${'b'.repeat(70)}\n${'c'.repeat(70)}\n${'d'.repeat(67)}`;
     const kept = await call('POST', null, ROUTE, { welcome: longest }, ownerAdmin);

@@ -16,8 +16,12 @@
  * dropped (as config/clean-label.ts drops them from a name), and the ends are trimmed. Any other control character is
  * refused, never quietly removed: the owner sees what is wrong.
  *
+ * Why a welcome is refused is said in one set of words, {@link COMMUNITY_WELCOME_WORDS}: the server answers a refused change with
+ * them, and Settings shows the same sentence beside the count before Save is pressed, so a box Save won't take always says why.
+ *
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
+import { word, type WordKey } from './words.js';
 
 /** The most characters a welcome may hold (UTF-16 code units, as `maxLength` counts them). */
 export const COMMUNITY_WELCOME_MAX_CHARS = 280;
@@ -28,6 +32,17 @@ export const COMMUNITY_WELCOME_MAX_LINE_BREAKS = 3;
 export type CommunityWelcomeProblem = 'not_text' | 'too_long' | 'too_many_lines' | 'control_character';
 
 export type CommunityWelcomeCheck = { ok: true; text: string } | { ok: false; problem: CommunityWelcomeProblem };
+
+/**
+ * What the owner is told when a welcome can't be kept: the server's refusal and Settings' own line beside the count, the same
+ * sentence (operators' Settings is English for launch; marked so a catalog can come later).
+ */
+export const COMMUNITY_WELCOME_WORDS = {
+    not_text: word('The welcome must be plain text.'),
+    too_long: word('A welcome can be at most 280 characters.'),
+    too_many_lines: word('A welcome can be at most 4 lines.'),
+    control_character: word("The welcome holds a hidden control character that can't be shown. Type it again rather than pasting it."),
+} satisfies Record<CommunityWelcomeProblem, WordKey>;
 
 const LINE_ENDS = /\r\n|[\r\u2028\u2029]/g;
 const BIDI_MARKS = /[\u202a-\u202e\u2066-\u2069]/g;
@@ -43,6 +58,14 @@ export function welcomeLineBreaks(text: string): number {
 }
 
 /**
+ * A text as cleaning leaves it (the header's list: line ends, tabs, bidi marks, the ends), before anything is refused. What a
+ * field counts characters and lines on, so its count and its Save button always agree with {@link cleanCommunityWelcome}.
+ */
+export function cleanedWelcomeText(raw: string): string {
+    return raw.replace(LINE_ENDS, '\n').replace(/\t/g, ' ').replace(BIDI_MARKS, '').trim();
+}
+
+/**
  * The welcome as it is kept, or why it can't be. `null` or a text that is only spaces is the empty welcome (`''`), which
  * clears it; anything else that isn't text, a missing value included, is refused. The text kept is what the owner wrote,
  * cleaned as the header says; nothing else is changed.
@@ -51,7 +74,7 @@ export function cleanCommunityWelcome(raw: unknown): CommunityWelcomeCheck {
     // Only null is "none": a request that leaves the welcome out (undefined) is not one asking to erase it.
     if (raw === null) return { ok: true, text: '' };
     if (typeof raw !== 'string') return { ok: false, problem: 'not_text' };
-    const text = raw.replace(LINE_ENDS, '\n').replace(/\t/g, ' ').replace(BIDI_MARKS, '').trim();
+    const text = cleanedWelcomeText(raw);
     if (CONTROL.test(text)) return { ok: false, problem: 'control_character' };
     if (welcomeLineBreaks(text) > COMMUNITY_WELCOME_MAX_LINE_BREAKS) return { ok: false, problem: 'too_many_lines' };
     if (text.length > COMMUNITY_WELCOME_MAX_CHARS) return { ok: false, problem: 'too_long' };

@@ -12,7 +12,7 @@
  *   keeps the main server's, and a take-over installs it. The default, no welcome, is no row, so only an owner's words
  *   are stored.
  */
-import { cleanCommunityWelcome, isKeptCommunityWelcome, type CommunityWelcomeProblem } from '@beanpool/core';
+import { cleanCommunityWelcome, isKeptCommunityWelcome, wordsFor, COMMUNITY_WELCOME_WORDS, type CommunityWelcomeProblem } from '@beanpool/core';
 import { db } from '../db/db.js';
 
 export const COMMUNITY_WELCOME_KEY = 'community_welcome';
@@ -28,20 +28,21 @@ export function readCommunityWelcome(): string | null {
     return communityWelcomeFromRow(row?.value);
 }
 
-/** What the owner is told when a welcome can't be kept, in Settings (English, as operators' Settings is for launch). */
-export const COMMUNITY_WELCOME_REFUSALS: Readonly<Record<CommunityWelcomeProblem, string>> = {
-    not_text: 'The welcome must be plain text.',
-    too_long: 'A welcome can be at most 280 characters.',
-    too_many_lines: 'A welcome can be at most 4 lines.',
-    control_character: "The welcome holds a hidden control character that can't be shown. Type it again rather than pasting it.",
-};
+/**
+ * What the owner is told when a welcome can't be kept: core's words (COMMUNITY_WELCOME_WORDS), the same sentence Settings shows
+ * beside the count before Save is pressed. In English, as operators' Settings is for launch.
+ */
+const { t } = wordsFor('en');
+export function communityWelcomeRefusal(problem: CommunityWelcomeProblem): string {
+    return t(COMMUNITY_WELCOME_WORDS[problem]);
+}
 
 export type SetCommunityWelcome = { ok: true; welcome: string | null } | { ok: false; problem: CommunityWelcomeProblem; error: string };
 
 /** Keep the welcome as core cleans it; an empty one removes the row. Nothing is stored for a welcome that is refused. */
 export function setCommunityWelcome(raw: unknown): SetCommunityWelcome {
     const clean = cleanCommunityWelcome(raw);
-    if (!clean.ok) return { ok: false, problem: clean.problem, error: COMMUNITY_WELCOME_REFUSALS[clean.problem] };
+    if (!clean.ok) return { ok: false, problem: clean.problem, error: communityWelcomeRefusal(clean.problem) };
     if (clean.text === '') db.prepare('DELETE FROM node_config WHERE key = ?').run(COMMUNITY_WELCOME_KEY);
     else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(COMMUNITY_WELCOME_KEY, clean.text);
     return { ok: true, welcome: clean.text || null };

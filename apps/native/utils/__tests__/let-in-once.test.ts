@@ -10,8 +10,18 @@
  * row: accepted quietly (one POST /api/messages/request {accept} to the request's own community, and no card) or an ordinary
  * card (no POST, the request still waiting). Accepted exactly when the person was let in and nothing else holds.
  *
+ * Two more tables close the classes the deciding review found (#3319 at 2dd93abe):
+ * - Which key asks (F1) {their key now, the old key of a re-keyed person, a key a listing names as a former one, the key on
+ *   offer, the pinned key a chat waits over} x every source above x where the request waits: only the person's key now is let
+ *   in, whatever source names it; what a chat's pin in a third community says is enough.
+ * - What the member does between the list read and the accept (F2, F3) {nothing, Ignore answered, Ignore answered while the
+ *   list's answer was on its way, Decline still on its way, Decline all, Decline all still on its way, Block, a switch to a
+ *   third community, another account} x where the request waits: their own answer stands, a Block holds, and an accept goes
+ *   only to the community the list came from.
+ *
  * Then: the quiet POST is byte-equal to a tap's; nothing else is asked of any server; a direct chat lets in only the key it is
- * pinned to (never a former one); once per request; a copy in use lets in as a held one does; 500 chats timed.
+ * pinned to (never a former one); once per request; a copy in use lets in as a held one does; unreadable pins let nobody in;
+ * across, the old key isn't let in; an Ignored request isn't pressed later in the run; 500 chats timed.
  *
  * Real SQLite files on disk (node:sqlite), the real db.ts, the real blocklist (its block, unblock and remembered changes),
  * real held handles. The node is a stand-in that answers as routes/messaging.ts does and keeps no block list (404). The
@@ -37,6 +47,12 @@ const h = vi.hoisted(() => ({
     letInReads: 0,
     contacts: [] as Array<{ links: Array<{ key: string }> }>,
     contactsOpened: 0,
+    /** Run once as the contacts list is read, after every copy was (the last read before a quiet accept), its answer made first. */
+    afterContacts: null as null | (() => Promise<void>),
+    /** Run once while one community's list answer is on its way: made by the node, not yet read by the phone. */
+    duringList: null as null | { origin: string; act: () => Promise<void> },
+    /** An Ignore held at the node until this settles: the member's answer still on its way. */
+    holdIgnore: null as null | Promise<void>,
 }));
 
 vi.mock('react-native', () => ({
@@ -118,8 +134,13 @@ vi.mock('../contacts-store', async (orig) => ({
     ...(await orig<any>()),
     loadContacts: vi.fn(async (account: { publicKey: string }) => {
         h.contactsOpened++;
-        if (account.publicKey !== h.me.publicKey) return { onPhone: { kind: 'none' }, state: {} };
-        return { onPhone: h.contacts.length ? { kind: 'list', list: { v: 1, contacts: h.contacts, removed: [] }, seq: 1, copy: {} } : { kind: 'none' }, state: {} };
+        const read = account.publicKey !== h.me.publicKey
+            ? { onPhone: { kind: 'none' }, state: {} }
+            : { onPhone: h.contacts.length ? { kind: 'list', list: { v: 1, contacts: h.contacts, removed: [] }, seq: 1, copy: {} } : { kind: 'none' }, state: {} };
+        const after = h.afterContacts;
+        h.afterContacts = null;
+        if (after) await after();
+        return read;
     }),
 }));
 
@@ -130,7 +151,7 @@ import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { blockUser, unblockUser, blockSyncsEndedForTests } from '../blocklist';
-import { acceptLetIn, _resetLetInForTests } from '../let-in';
+import { acceptLetIn, letInFor, _resetLetInForTests } from '../let-in';
 
 const realLoad = (Module as any)._load;
 (Module as any)._load = function (request: string, ...rest: any[]) {
@@ -159,7 +180,8 @@ function person(): Person {
 
 // ── The node ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-interface Conv { id: string; type: string; participants: string[]; request?: { from: string; state: string; at: string } }
+/** `at`: the community whose node holds it, for Decline all (left out: every one, as the lists here are). */
+interface Conv { id: string; type: string; participants: string[]; request?: { from: string; state: string; at: string }; at?: string }
 const node = { convs: [] as Conv[] };
 interface Asked { method: string; url: string; body: string | undefined; headers: Record<string, string> }
 let asked: Asked[] = [];
@@ -177,16 +199,33 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     asked.push({ method, url, body: init.body, headers: { ...(init.headers || {}) } });
     const body = init.body ? JSON.parse(init.body) : {};
     if (method === 'POST' && u.pathname === '/api/messages/request') {
+        if (body.decision === 'ignore' && h.holdIgnore) await h.holdIgnore;
         const conv = node.convs.find((c) => c.id === body.conversationId);
-        if (!conv?.request || conv.request.state !== 'pending') return answer(404, { error: 'There is no message request for you in this chat.', code: 'request_not_found' });
-        conv.request = { ...conv.request, state: body.decision === 'accept' ? 'accepted' : 'ignored' };
+        if (!conv?.request) return answer(404, { error: 'There is no message request for you in this chat.', code: 'request_not_found' });
+        // As engine/dm-requests.ts decideRequest: an accept takes any request not accepted yet, one ignored included (and
+        // rings its opener); an ignore of one accepted is refused.
+        if (body.decision === 'accept') conv.request = { ...conv.request, state: 'accepted' };
+        else if (conv.request.state === 'accepted') return answer(409, { error: 'You have accepted this chat already, so it is no longer a request.', code: 'request_accepted' });
+        else conv.request = { ...conv.request, state: 'ignored' };
         return answer(200, { success: true, request: conv.request });
+    }
+    if (method === 'POST' && u.pathname === '/api/messages/request/ignore-all') {
+        if (h.holdIgnore) await h.holdIgnore;
+        const waiting = node.convs.filter((c) => c.request?.state === 'pending' && (c.at ?? u.origin) === u.origin);
+        for (const c of waiting) c.request = { ...c.request!, state: 'ignored' };
+        return answer(200, { success: true, ignored: waiting.length });
     }
     const list = u.pathname.match(/^\/api\/messages\/conversations\/([^/]+)$/);
     if (list) {
         const mine = node.convs.filter((c) => c.participants.includes(list[1]));
         const requests = mine.filter((c) => waitingFor(c, list[1]));
-        return answer(200, { conversations: mine.filter((c) => !requests.includes(c)).map(view), totalUnread: 0, deletedAccounts: [], requests: { count: requests.length, conversations: requests.map(view) } });
+        const listed = answer(200, { conversations: mine.filter((c) => !requests.includes(c)).map(view), totalUnread: 0, deletedAccounts: [], requests: { count: requests.length, conversations: requests.map(view) } });
+        const during = h.duringList;
+        if (during?.origin === u.origin) {
+            h.duringList = null;
+            await during.act();
+        }
+        return listed;
     }
     const page = u.pathname.match(/^\/api\/messages\/([^/]+)$/);
     if (page && method === 'GET') {
@@ -225,6 +264,9 @@ async function phoneHoldingThree(): Promise<void> {
     h.letInReads = 0;
     h.contacts = [];
     h.contactsOpened = 0;
+    h.afterContacts = null;
+    h.duringList = null;
+    h.holdIgnore = null;
     me = person();
     them = person();
     h.me = { ...me };
@@ -350,6 +392,148 @@ describe('let in once: one table, who x what else holds x where the request wait
     }
 });
 
+/**
+ * Which key asks (#3319 review F1): a let-in names only a key, and a friend, deal, payment or contact row keeps whatever key it
+ * was made with. What a chat's pin in a third community (neither the request's nor the let-in's) says about that key decides:
+ * the person's key now is let in; a key a re-key replaced, a key a listing names as a former one, a key on offer and the pinned
+ * key a verified chat waits over are not, from any source.
+ */
+interface KeyAsking { name: string; quiet: boolean; pin: (key: string) => object }
+const KEYS_ASKING: KeyAsking[] = [
+    { name: 'their key now', quiet: true, pin: (k) => ({ peer: k, since: iso(), by: 'listing', former: [person().publicKey] }) },
+    { name: 'the old key of a re-keyed person', quiet: false, pin: (k) => ({ peer: person().publicKey, since: iso(), by: 'listing', former: [k] }) },
+    { name: 'a key a listing names as a former one', quiet: false, pin: (k) => ({ peer: person().publicKey, since: iso(), by: 'first-seen', heard: { tryKeys: [k] } }) },
+    { name: 'the key on offer', quiet: false, pin: (k) => ({ peer: person().publicKey, since: iso(), by: 'member', offered: { peer: k, at: iso() } }) },
+    { name: 'the pinned key a chat waits over (another on offer)', quiet: false, pin: (k) => ({ peer: k, since: iso(), by: 'member', offered: { peer: person().publicKey, at: iso() } }) },
+];
+
+/** Keeps `pin` for a chat in `community`'s file, as the phone keeps its pins (dm-peer-pins.ts), read afresh. */
+function pinIn(community: string, pin: object): void {
+    h.store.set(dmPeerPinsStoreKey(me.publicKey, FILE[community]), JSON.stringify({ pins: { [randomUUID()]: pin } }));
+    db._resetDmPeerPinsForTests();
+}
+
+describe('let in once: which key asks x who let them in x where the request waits (#3319 review F1)', () => {
+    for (const place of PLACES) {
+        const third = [A, B, C].find((x) => x !== place.at && x !== place.source)!;
+        for (const source of SOURCES) {
+            for (const key of KEYS_ASKING) {
+                const quiet = source.letsIn && key.quiet;
+                it(`${place.name}; a chat pinned in a third | ${source.name} | ${key.name} asks -> ${quiet ? 'accepted quietly' : 'a card'}`, async () => {
+                    await phoneHoldingThree();
+                    source.put(place.source, them.publicKey);
+                    pinIn(third, key.pin(them.publicKey));
+                    const req: Conv = { id: randomUUID(), type: 'dm', participants: [them.publicKey, me.publicKey], request: { from: them.publicKey, state: 'pending', at: iso() } };
+                    node.convs.push(req);
+                    asked = [];
+                    await place.read();
+                    await settle();
+                    if (quiet) {
+                        expect(acceptsTo(place.at)).toEqual([{ origin: place.at, body: { conversationId: req.id, decision: 'accept' } }]);
+                        expect(req.request?.state).toBe('accepted');
+                    } else {
+                        expect(acceptsTo(place.at)).toEqual([]);
+                        expect(req.request?.state).toBe('pending');
+                        expect(keptRequestIds(place.at)).toContain(req.id);
+                    }
+                });
+            }
+        }
+    }
+});
+
+/**
+ * What the member does between the read of the request's list and its quiet accept (#3319 review F2, F3). `when`: 'list',
+ * while that list's answer is on its way (the node made it, then took the member's answer, then the phone read it);
+ * 'accept', after every copy was read, just before the accept. The member let them in as a linked contact, so the contacts
+ * list is the let-in's last read. Their own answer stands, a Block since holds, and an accept goes only to the community the
+ * list came from.
+ */
+interface Between {
+    name: string;
+    when: 'list' | 'accept';
+    act: (ctx: { req: Conv; place: Place; after: Array<() => Promise<void>> }) => Promise<void>;
+    quiet: (place: Place) => boolean;
+    state: (place: Place) => 'accepted' | 'ignored' | 'pending';
+}
+/** The community a tap on the request sends with (the chat screen's and the card's `community`): none in the community in use. */
+const tapCommunity = (place: Place) => (place.at === B ? undefined : place.at);
+const ignoreTapped = async ({ req, place }: { req: Conv; place: Place }) => { await db.decideMessageRequest(req.id, 'ignore', tapCommunity(place)); };
+const BETWEEN: Between[] = [
+    { name: 'nothing', when: 'accept', act: async () => {}, quiet: () => true, state: () => 'accepted' },
+    { name: 'Ignore tapped in the chat, its answer back', when: 'accept', act: ignoreTapped, quiet: () => false, state: () => 'ignored' },
+    { name: 'Ignore answered while the list\'s answer was on its way', when: 'list', act: ignoreTapped, quiet: () => false, state: () => 'ignored' },
+    {
+        name: 'Decline tapped on its card, its answer still on the way', when: 'accept', quiet: () => false, state: () => 'ignored',
+        act: async ({ req, place, after }) => {
+            let release = () => {};
+            h.holdIgnore = new Promise<void>((r) => { release = r; });
+            const answered = db.decideMessageRequest(req.id, 'ignore', tapCommunity(place)).catch((e) => e);
+            after.push(async () => { release(); h.holdIgnore = null; await answered; });
+        },
+    },
+    {
+        name: 'Decline all tapped (the community in use\'s requests)', when: 'accept', act: async () => { await db.ignoreAllMessageRequests(); },
+        quiet: (p) => p.at !== B, state: (p) => (p.at === B ? 'ignored' : 'accepted'),
+    },
+    {
+        // Which community's requests it ends isn't known until its answer: none is accepted quietly anywhere meanwhile.
+        name: 'Decline all tapped, its answer still on the way', when: 'accept', quiet: () => false, state: (p) => (p.at === B ? 'ignored' : 'pending'),
+        act: async ({ after }) => {
+            let release = () => {};
+            h.holdIgnore = new Promise<void>((r) => { release = r; });
+            const answered = db.ignoreAllMessageRequests().catch((e) => e);
+            after.push(async () => { release(); h.holdIgnore = null; await answered; });
+        },
+    },
+    { name: 'Block tapped', when: 'accept', act: async () => { await blockUser(them.publicKey); await blockSyncsEndedForTests(); }, quiet: () => false, state: () => 'pending' },
+    {
+        // In place, the accept still goes to the request's own community; the one in use's request has no copy in place there.
+        name: 'the phone switches to a third community', when: 'accept', act: async () => { await switchPhoneTo(C); },
+        quiet: (p) => p.at === A, state: (p) => (p.at === A ? 'accepted' : 'pending'),
+    },
+    {
+        name: 'the account on the phone changes', when: 'accept', quiet: () => false, state: () => 'pending',
+        act: async () => { const other = person(); h.me = { ...other }; announceAccountOnPhone(other.publicKey); },
+    },
+];
+/** The request's row in `community`'s copy as an earlier read in place left it (the card the member taps there was drawn from it). */
+function requestHeldIn(community: string, req: Conv): void {
+    intoCopy(community, (s) => {
+        s.prepare('INSERT INTO conversations (id, type, created_by, request) VALUES (?, \'dm\', ?, ?)').run(req.id, req.request!.from, JSON.stringify(req.request));
+        for (const k of req.participants) s.prepare('INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(req.id, k);
+    });
+}
+const acceptPosts = () => asked.filter((a) => a.method === 'POST' && new URL(a.url).pathname === '/api/messages/request' && a.body && JSON.parse(a.body).decision === 'accept')
+    .map((a) => ({ origin: new URL(a.url).origin, id: JSON.parse(a.body!).conversationId }));
+
+describe('let in once: what the member does between the list read and the accept x where the request waits (#3319 review F2, F3)', () => {
+    for (const place of PLACES) {
+        for (const between of BETWEEN) {
+            const quiet = between.quiet(place);
+            it(`${place.name} | ${between.name} -> ${quiet ? `accepted quietly, sent to ${new URL(place.at).host}` : 'a card, no accept sent anywhere'}`, async () => {
+                await phoneHoldingThree();
+                SOURCES.find((s) => s.name === 'a linked contact')!.put(place.source, them.publicKey);
+                const req: Conv = { id: randomUUID(), type: 'dm', participants: [them.publicKey, me.publicKey], request: { from: them.publicKey, state: 'pending', at: iso() }, at: place.at };
+                node.convs.push(req);
+                if (place.at === A) requestHeldIn(A, req);
+                const after: Array<() => Promise<void>> = [];
+                let acted = false;
+                const act = async () => { acted = true; await between.act({ req, place, after }); };
+                if (between.when === 'list') h.duringList = { origin: place.at, act };
+                else h.afterContacts = act;
+                asked = [];
+                await place.read();
+                for (const step of after) await step();
+                await settle();
+                expect(acted).toBe(true);
+                expect(acceptPosts()).toEqual(quiet ? [{ origin: place.at, id: req.id }] : []);
+                expect(req.request?.state).toBe(between.state(place));
+            });
+        }
+    }
+});
+
 describe('let in once: the rest of the rule', () => {
     beforeEach(async () => { await phoneHoldingThree(); });
 
@@ -471,6 +655,51 @@ describe('let in once: the rest of the rule', () => {
         SOURCES[2].put(C, them.publicKey);
         await acceptLetIn(me.publicKey, [{ id: randomUUID(), from: them.publicKey, keys: [them.publicKey] }], async () => ({}), async () => true);
         expect(db.heldCopyFiles()).toEqual([]);
+    });
+
+    it('a held copy\'s DM pins that can\'t be read: nobody is let in quietly, as what they know was replaced is unknown (F1)', async () => {
+        SOURCES[2].put(A, them.publicKey);
+        h.store.set(dmPeerPinsStoreKey(me.publicKey, FILE[C]), 'not the pins');
+        db._resetDmPeerPinsForTests();
+        const req: Conv = { id: randomUUID(), type: 'dm', participants: [them.publicKey, me.publicKey], request: { from: them.publicKey, state: 'pending', at: iso() } };
+        node.convs.push(req);
+        expect((await db.requestsInPlace(me.publicKey, A))?.conversations.map((c: any) => c.id)).toEqual([req.id]);
+        expect(acceptsTo(A)).toEqual([]);
+    });
+
+    it('the copy in use\'s DM pins that can\'t be read: nobody is let in quietly in place either (F1)', async () => {
+        SOURCES[2].put(C, them.publicKey);
+        h.store.set(dmPeerPinsStoreKey(me.publicKey, FILE[B]), 'not the pins');
+        db._resetDmPeerPinsForTests();
+        const req: Conv = { id: randomUUID(), type: 'dm', participants: [them.publicKey, me.publicKey], request: { from: them.publicKey, state: 'pending', at: iso() } };
+        node.convs.push(req);
+        expect((await db.requestsInPlace(me.publicKey, A))?.conversations.map((c: any) => c.id)).toEqual([req.id]);
+        expect(acceptsTo(A)).toEqual([]);
+    });
+
+    it('across: a first line from a re-keyed person\'s old key is not let in, from their key now it is (F1)', async () => {
+        const now = person();
+        SOURCES[2].put(C, them.publicKey);
+        SOURCES[2].put(C, now.publicKey);
+        pinIn(A, { peer: now.publicKey, since: iso(), by: 'listing', former: [them.publicKey] });
+        const letIn = letInFor(me.publicKey);
+        expect(await letIn(now.publicKey)).toBe(true);
+        expect(await letIn(them.publicKey)).toBe(false);
+    });
+
+    it('a request the member Ignored is never accepted quietly later in this run, though a list names it waiting again (F2)', async () => {
+        SOURCES[2].put(C, them.publicKey);
+        const req: Conv = { id: randomUUID(), type: 'dm', participants: [them.publicKey, me.publicKey], request: { from: them.publicKey, state: 'pending', at: iso() }, at: A };
+        node.convs.push(req);
+        requestHeldIn(A, req);
+        h.duringList ={ origin: A, act: async () => { await db.decideMessageRequest(req.id, 'ignore', A); } };
+        await db.requestsInPlace(me.publicKey, A);
+        expect(req.request?.state).toBe('ignored');
+        req.request = { ...req.request!, state: 'pending' };
+        asked = [];
+        expect((await db.requestsInPlace(me.publicKey, A))?.conversations.map((c: any) => c.id)).toEqual([req.id]);
+        expect(acceptPosts()).toEqual([]);
+        expect(req.request?.state).toBe('pending');
     });
 
     it('500 chats in each of two held copies and the copy in use: the let-in read, timed', async () => {

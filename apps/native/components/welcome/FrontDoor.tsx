@@ -137,13 +137,16 @@ function makeStyles(colors: AppColors) {
     return StyleSheet.create({
         door: { width: '100%', alignItems: 'stretch', marginTop: 8 },
         // The colour block: the brand green under white words (5.48:1), shapes in its corners, words never on a shape.
-        block: { backgroundColor: colors.brand.fill, borderRadius: 24, overflow: 'hidden', paddingTop: 72, paddingBottom: 28, paddingHorizontal: 22, marginBottom: 20 },
+        // At 320 dp × 1.3 the block and I have an invite end above the fold in every language (front-door-render.test.ts).
+        block: { backgroundColor: colors.brand.fill, borderRadius: 24, overflow: 'hidden', paddingTop: 64, paddingBottom: 22, paddingHorizontal: 22, marginBottom: 16 },
         shapes: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+        // The shapes keep to the corners: the ring and the sun above the words' first line (paddingTop 64), the bean in the
+        // bottom padding. The deeper wave may pass under words: white reads on it more strongly than on the block.
         wave: { position: 'absolute', width: 260, height: 260, borderRadius: 130, left: -150, bottom: -190, backgroundColor: SHAPES.commit.hover },
         ring: { position: 'absolute', width: 96, height: 96, borderRadius: 48, borderWidth: 10, borderColor: SHAPES.chip.ok.tint, left: -34, top: -38 },
-        sun: { position: 'absolute', width: 64, height: 64, borderRadius: 32, right: 18, top: 14, backgroundColor: SHAPES.gold.fill },
-        bean: { position: 'absolute', width: 54, height: 30, borderRadius: 15, right: -14, top: 62, backgroundColor: SHAPES.cta.fill, transform: [{ rotate: '-24deg' }] },
-        name: { color: colors.text.onBrand, fontSize: 34, fontWeight: '800', marginBottom: 8 },
+        sun: { position: 'absolute', width: 48, height: 48, borderRadius: 24, right: 16, top: 8, backgroundColor: SHAPES.gold.fill },
+        bean: { position: 'absolute', width: 54, height: 30, borderRadius: 15, right: 22, bottom: -12, backgroundColor: SHAPES.cta.fill, transform: [{ rotate: '-18deg' }] },
+        name: { color: colors.text.onBrand, fontSize: 32, fontWeight: '800', marginBottom: 8 },
         line: { color: colors.text.onBrand, fontSize: 17, lineHeight: 24, fontWeight: '600' },
         // The main button: the call to action's terracotta under white words (4.9:1), 52 dp at least; the label wraps.
         mainBtn: { backgroundColor: colors.action.cta, minHeight: 52, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },

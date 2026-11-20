@@ -20,8 +20,11 @@ const flat = (rel: string) => page(rel).replace(/\s+/g, ' ');
 describe("the guide's joining page: the phone's three steps", () => {
     const joining = flat('getting-started/joining.md');
 
-    it('the phone has Your Name, Your Photo and Safety Backup, Safety Backup last; How it Works only in a web browser', () => {
-        expect(joining).toContain('In the phone app the bar at the top shows **Your Name**, **Your Photo** and **Safety Backup**, and **Safety Backup** is the last step.');
+    it('the phone has dots for the name, Your Photo and Safety Backup, Safety Backup last; How it Works only in a web browser', () => {
+        // Slice S3: the labelled bar became dots and ‹ (components/welcome/StepDots.tsx); the steps and their order are the same.
+        expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo and **Safety Backup**, and **Safety Backup** is the last step.');
+        expect(joining).not.toContain('the bar at the top shows **Your Name**');
+        expect(joining).not.toContain('**Restore Existing Identity**');
         expect(joining).not.toContain('The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.');
         expect(joining).toContain('- **How it Works** (in a web browser only):');
     });

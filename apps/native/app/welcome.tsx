@@ -3274,7 +3274,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView key="invite" contentContainerStyle={styles.scroll} bottomOffset={24 + stepFooterHeight}>
+                <KeyboardAwareScrollView key="invite" contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
                     <View style={styles.card} testID="your-invite">
                         <Text style={styles.title} accessibilityRole="header">{t('Your invite')}</Text>
                         {/* The camera is asked for at this tap, never before (components/ScanCodeModal.tsx). */}
@@ -3338,7 +3338,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} bottomOffset={24 + stepFooterHeight}>
+                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
                     <OnboardingStepper step={1} />
                     <View style={styles.card}>
                         <View style={styles.greetingBand} testID="invite-greeting">

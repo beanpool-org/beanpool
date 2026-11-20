@@ -755,3 +755,75 @@ describe('5. how an invite is found on a new phone: one row per arrival', () => 
         expect(clip.reads).toBe(0);
     });
 });
+
+describe('6. "I\'ve used BeanPool before": every way back opens from the front door (review of #3317)', () => {
+    const text = () => host!.textContent ?? '';
+    /** A row of Restore your account, by the words it starts with (the third and fifth carry their hint under the label). */
+    const row = (label: string) => {
+        const found = all('button, [role="button"]').find((b) => (b.textContent ?? '').startsWith(label));
+        expect(found, `a row "${label}"`).toBeTruthy();
+        return found!;
+    };
+    const tapRow = async (label: string) => { const r = row(label); await act(async () => { r.click(); }); await settle(); };
+    const onWaysBack = () => text().includes('🔑 Restore your account') && !byId('front-door');
+    async function toWaysBack(): Promise<void> {
+        phone.stored = null;
+        knocking.mark = null;
+        knocking.asked = [];
+        await mount();
+        expect(byId('front-door')).toBeTruthy();
+        await press("I've used BeanPool before");
+        expect(onWaysBack()).toBe(true);
+    }
+
+    it('opens Restore your account: the five rows, Start a new account instead, Back; nothing is made or sent', async () => {
+        await toWaysBack();
+        for (const label of ['🌐 Recover with Social', '🔑 Recover with 12 Words', '🤝 My community can bring me back', '🪪 An admin gave me a re-key code', '💻 Scan from a browser']) row(label);
+        button('Start a new account instead');
+        button('Back to Home');
+        expect(work.keysDrafted).toBe(0);
+        expect(phone.records).toEqual([]);
+        expect(phone.redeems).toEqual([]);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('Social: the sign-in restore, and its Back returns to the ways back', async () => {
+        await toWaysBack();
+        await press('Recover with Social Sign-In');
+        expect(text()).toContain('🌐 Recover with Social Sign-In');
+        expect(text()).not.toContain('🔑 Restore your account');
+        await press('Back to Restore Options');
+        expect(onWaysBack()).toBe(true);
+    });
+
+    it('12 Words: the words screen, and its Back returns to the ways back', async () => {
+        await toWaysBack();
+        await tapRow('🔑 Recover with 12 Words');
+        expect(text()).toContain('🔑 Recover Identity');
+        expect(text()).not.toContain('🔑 Restore your account');
+        await press('Back to Restore Options');
+        expect(onWaysBack()).toBe(true);
+    });
+
+    it.each([
+        ['🤝 My community can bring me back', { pathname: '/rekey-code', params: { bringBack: '1' } }],
+        ['🪪 An admin gave me a re-key code', '/rekey-code'],
+        ['💻 Scan from a browser', '/pair-in'],
+    ] as const)('%s opens its own screen, and only that one', async (label, to) => {
+        await toWaysBack();
+        await tapRow(label);
+        expect(nav.pushed).toEqual([to]);
+        expect(work.keysDrafted).toBe(0);
+    });
+
+    it('Back to Home and Start a new account instead both return to the front door', async () => {
+        await toWaysBack();
+        await press('Back to Home');
+        expect(byId('front-door')).toBeTruthy();
+        await press("I've used BeanPool before");
+        expect(onWaysBack()).toBe(true);
+        await press('Start a new account instead');
+        expect(byId('front-door')).toBeTruthy();
+        expect(work.keysDrafted).toBe(0);
+    });
+});

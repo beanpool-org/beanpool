@@ -432,6 +432,19 @@ export const HOME_STORE_PREFIX = 'beanpool_home:';
 /** The community a Home key is kept under: its record's name (community-index.ts), in one spelling. */
 const homeCommunity = (url: string) => communityKeyOf(url).trim().replace(/\/+$/, '').toLowerCase();
 
+/**
+ * BeanPool's part of Home's welcome, seen once per phone (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.3,
+ * slice S5): the community whose Home first drew the WELCOME TO BEANPOOL! tile for this account here, in the one spelling
+ * of {@link homeWelcomeCommunity}, so a second community on the same phone shows only its own welcome. A Home key, so it
+ * leaves with the account; lost with the app's data, which only shows the tile once more.
+ */
+export function homeWelcomePartStoreKey(publicKey: string): string {
+    return `${HOME_STORE_PREFIX}welcome-part:${publicKey.toLowerCase()}`;
+}
+
+/** The community a Home is for, as the welcome mark names it (the spelling Home's keys use). */
+export const homeWelcomeCommunity = (url: string): string => homeCommunity(url);
+
 export function homeAnswerStoreKey(publicKey: string, url: string): string {
     return `${HOME_STORE_PREFIX}answer:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
 }

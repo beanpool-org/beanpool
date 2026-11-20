@@ -414,8 +414,8 @@ function MarketListingItem({
                 data-tile="picture"
                 className="w-full min-w-0 p-0 pb-1 text-left bg-transparent border-0 hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill"
             >
+                {/* The Market grid's own frame (core market-card-shell.ts photo.grid): 4:3, cropped towards the top third. */}
                 <div data-testid="home-photo-slot" className="relative w-full aspect-[4/3] rounded-xl overflow-hidden shrink-0 bg-bg-hover">
-                    {/* The Market grid's own frame (core market-card-shell.ts photo.grid): 4:3, cropped towards the top third. */}
                     <ListPhoto
                         photo={photo}
                         alt=""

@@ -272,7 +272,8 @@ describe('a tap anywhere on a tile opens the listing', () => {
 });
 
 describe('light and dark: every colour from the tokens, and each reads', () => {
-    it.each([['light', lightColors], ['dark', darkColors]] as const)('%s', async (name, colors) => {
+    // The dark set is the same shape with its own values (the app hands either to a card as AppColors).
+    it.each([['light', lightColors], ['dark', darkColors as unknown as AppColors]] as const)('%s', async (name, colors) => {
         look.dark = name === 'dark';
         await show(FOUR, { colors });
         const title = lineOf('h-eggs', 0)!;

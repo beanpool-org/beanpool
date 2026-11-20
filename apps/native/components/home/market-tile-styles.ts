@@ -1,4 +1,5 @@
 import { StyleSheet, type TextStyle } from 'react-native';
+import type { ImageContentPosition } from 'expo-image';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE } from '@beanpool/core';
 
 /**
@@ -8,6 +9,12 @@ import { MARKET_CARD_SHELL, MARKET_CARD_TYPE } from '@beanpool/core';
  */
 const GRID_TYPE = MARKET_CARD_TYPE.grid;
 const GRID_PHOTO = MARKET_CARD_SHELL.photo.grid;
+
+/**
+ * The photo's focus in its 4:3 frame, the grid's own (50% across, 33% down, as MarketCardPicture's MARKET_GRID_CROP), read
+ * from core here so the tile needs no import of the Market's picture (and the listing store it heals through).
+ */
+export const MARKET_TILE_CROP: ImageContentPosition = { top: `${GRID_PHOTO.cropY}%`, left: `${GRID_PHOTO.cropX}%` };
 
 export const marketTileStyles = StyleSheet.create({
     grid: { gap: 12, paddingTop: 4, paddingBottom: 2 },

@@ -5,12 +5,11 @@ import type { AppColors } from '../../constants/colors';
 import { categoryLabel } from '../../constants/categories';
 import { CategoryTile } from '../CategoryTile';
 import { ListPhoto } from '../ListPhoto';
-import { MARKET_GRID_CROP } from '../MarketCardPicture';
 import { formatDistance } from '../../utils/events';
 import { beansAmount, sentence, withPin, type HomeMarketItem } from '../../utils/home-cards';
 import { copyPriceLine, eventCopyOf, freePriceWords, isHundredths, perItemLine, perItemOf, t } from '@beanpool/core';
 import { homeStyles, onNode } from './HomeParts';
-import { marketTileStyles as tiles } from './market-tile-styles';
+import { MARKET_TILE_CROP, marketTileStyles as tiles } from './market-tile-styles';
 
 /**
  * "New in the Market" as picture tiles (DESIGN-onboarding-home-landing-fable.md §4.1 item 5, §4.4, slice S8): two tiles a
@@ -86,7 +85,7 @@ function MarketTile({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketI
                     photo={onNode(nodeUrl, p.photoUrl || p.bannerUrl)}
                     style={tiles.fill}
                     contentFit="cover"
-                    contentPosition={MARKET_GRID_CROP}
+                    contentPosition={MARKET_TILE_CROP}
                     accessibilityIgnoresInvertColors
                     fallback={<CategoryTile category={p.category} kind="listing" size="grid" />}
                 />

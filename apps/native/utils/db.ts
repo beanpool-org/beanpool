@@ -2114,7 +2114,7 @@ function heldPreviewOf(row: any, myPriv: string | null | undefined, pins: DmPeer
 /** The most held direct chats one refresh brings from their community (slice S2b): one list read, then a page each. */
 export const HELD_REFRESH_MAX = 5;
 /** How long a refresh waits for that community's list (exported for the test that lets it run out). */
-export const HELD_REFRESH_LIST_MS = 10_000;
+export const HELD_REFRESH_LIST_MS = 10000;
 
 /**
  * What one {@link refreshHeldDms} did: how many chats it brought, and whether it had its answer (`answered`): the

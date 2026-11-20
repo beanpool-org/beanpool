@@ -4422,7 +4422,6 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
     },
-    // "Installed BeanPool on a server? Claim it →": a quiet link under Restore, a 48dp target, the words wrapping.
     // The owner's card: the claimed community's full address, wrapped, never cut (the one thing a phishing server can't fake).
     ownerAddress: { fontSize: 15, color: colors.text.secondary, marginTop: 4, marginBottom: 8, lineHeight: 21, fontFamily: 'monospace' },
     restorePromptBox: {

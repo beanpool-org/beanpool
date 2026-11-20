@@ -64,7 +64,7 @@ import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     askedFacts, dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
     joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, promiseLine, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
-    pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, tourOverFor, usePhoneAppCardDue, wayBackOf, SKY_NO_PLACE_LINE, WELCOME_WORDS,
+    pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, tourOverFor, usePhoneAppCardDue, wayBackOf, SKY_NO_PLACE_LINE, WELCOME_ALONE,
     CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown, type ChatOpeners,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type HomeNeedItem, type NeedsItem, type StepLine,
     type HomeFind,
@@ -73,7 +73,7 @@ import {
     FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
     canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings,
     listOf, moveCard, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, removeCard, removedLine, LEARN_OPENS, isArrivingCard, keepCard,
-    resetLayout, undoResetLayout, RESET_DONE_LINE, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
+    resetLayout, undoResetLayout, RESET_DONE_LINE, sameList, settleHeights, dismissWelcomeFrom, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
 import { useArrangeDrag, type HeldPress } from '../lib/arrange-drag';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
@@ -99,7 +99,8 @@ import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
-import { defaultHomeLayout, firstStepsCount, firstStepsLeft, readerMayInvite, welcomeDrawn, welcomeFacts } from '@beanpool/core';
+import { defaultHomeLayout, firstStepsCount, firstStepsLeft, readerMayInvite, welcomeDrawn, welcomeFacts, welcomeShape, welcomeTileLines, communityWelcomeView, WELCOME_TILE_WORDS } from '@beanpool/core';
+import { HomeWelcomeRow, type CommunityWelcomeProps } from '../components/HomeWelcome';
 import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, tourRecordRefused, useTour,
 } from '../lib/tour-store';
@@ -223,8 +224,12 @@ function reducedMotion(): boolean {
 
 /** A card that spans the grid's row: Needs you at the top, the community card at the bottom, and the notes under the first card. */
 const FULL_ROW: React.CSSProperties = { gridColumn: '1 / -1' };
-/** Needs you and the community card are full rows of the grid; every other card is one cell (D1, D3). */
-const spansRow = (type: string) => type === FIXED_FIRST || type === FIXED_LAST;
+/**
+ * Needs you and the community card are full rows of the grid; so is the welcome's row (BeanPool's tile and the community's
+ * welcome, DESIGN-onboarding-home-landing-fable.md §5: "the tile takes a whole row of the packed grid"); every other card
+ * is one cell (D1, D3).
+ */
+const spansRow = (type: string) => type === FIXED_FIRST || type === FIXED_LAST || type === 'start' || type === WELCOME_ALONE;
 /** The one-time hint, when it stands in the grid, packed as a full row of it. */
 const NOTE_HINT = 'note-hint';
 /** Arrange's + Add a card tile, packed as a full row under the strip. */
@@ -1986,7 +1991,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     // nothing to show keep their slots in that list, untouched, which is what lets a card move among the ones a member sees.
     const savedIds = new Set(inArrange ? listOf(shownLayout(answer, layout, { tourOver })).map(c => c.id) : []);
     // A card drawn as arriving (slice K7) moves too: the move keeps it first (on the list, stamped), then moves it.
-    const movableNow = inArrange ? shown.filter(c => drawnNow(c) && canMoveCard(c.type, foldedPins) && (savedIds.has(c.id) || isArrivingCard(shownLayout(answer, layout, { tourOver }), c.id))) : [];
+    // The welcome's row is not arrangeable (DESIGN-onboarding-home-landing-fable.md §4.1): it keeps its place and leaves by its own buttons.
+    const movableNow = inArrange ? shown.filter(c => drawnNow(c) && c.type !== 'start' && canMoveCard(c.type, foldedPins) && (savedIds.has(c.id) || isArrivingCard(shownLayout(answer, layout, { tourOver }), c.id))) : [];
     // Dragging a card (A2): the lifted card's place is live, so the cards are laid out in the order the drop would make.
     const movableIds = movableNow.map(c => c.id);
     const drag = useArrangeDrag({ gridRef, enabled: inArrange, onDrop: dropInArrange, ids: movableIds, place: placeInArrange });
@@ -2301,13 +2307,33 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     // Welcome's "Invite someone ›" for an owner alone where only admins invite: the reader's role, asked once a page load
     // (lib/api.ts myNodeRoleOnce) and only then, as the phone holds it (core readerMayInvite). Not heard: no link.
     const [inviteRole, setInviteRole] = useState<string | null | undefined>(undefined);
-    const roleForWelcome = !!answer && member && answer.features.invites === true && answer.features.door === 'admins' && welcomeFacts(answer).firstHere;
+    // The community's welcome (core communityWelcomeView, slice W2): a newcomer's until its own ×. Its "Write your community's
+    // welcome ›" is an owner's, where the node says none is written, so the role is asked then too.
+    const welcomeView = answer && member ? communityWelcomeView(answer, layout, now) : null;
+    const roleForWelcome = !!answer && member && ((answer.features.invites === true && answer.features.door === 'admins' && welcomeFacts(answer).firstHere) || !!welcomeView?.unwritten);
     useEffect(() => {
         if (!roleForWelcome) return;
         let live = true;
         void myNodeRoleOnce().then((role) => { if (live) setInviteRole(role); });
         return () => { live = false; };
     }, [roleForWelcome]);
+    const communityWelcome: CommunityWelcomeProps | null = answer && welcomeView ? {
+        view: welcomeView,
+        inviter: welcomeFacts(answer).inviter,
+        firstHere: welcomeFacts(answer).firstHere,
+        onSayHello: (key) => onNavigate('messages', key),
+        // Only where the reader can invite (core readerMayInvite, the phone's rule): where only admins invite, once the node
+        // has said they are an owner or admin.
+        onInvite: readerMayInvite(answer.features, inviteRole) ? () => onNavigate('people-invites') : undefined,
+        // Written in the community's Settings (slice S6), which only its owners open.
+        writeHref: welcomeView.unwritten && inviteRole === 'owner' ? `${getNodeApiUrl()}/settings#from=pwa` : undefined,
+        // Its × is kept on the account (core dismissCommunityWelcome); focus goes to the first heading left, never to <body>.
+        onAway: () => {
+            if (changeLayout(current => dismissWelcomeFrom(current, Date.now()))) {
+                setTimeout(() => gridRef.current?.querySelector<HTMLElement>('h2[tabindex="-1"]')?.focus(), 0);
+            }
+        },
+    } : null;
     const chipsKey = chips.join(',');
     useEffect(() => {
         if (!member || !answer) { lendTourHome(null); return; }
@@ -3047,50 +3073,24 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     </HomeCard>
                 );
             }
-            case 'start': {
-                // Welcome (DESIGN-home-default-fable.md §2.3): where you are, who brought you, and the tour. No "…": Not now is
-                // its way out. It hides nothing, and two plain links (not a filled button) keep the Market on the first screen.
-                // What it says is core's one rule for both apps (home-welcome.ts welcomeFacts): the global community's own
-                // sentence, no line for an inviter with no name, and "the first one here" only for an owner nobody invited.
-                const welcome = welcomeFacts(a);
-                const inviter = welcome.inviter;
-                const link = 'min-h-[44px] px-1 -mx-1 bg-transparent border-0 rounded-lg text-sm font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer text-left break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
-                const said = 'm-0 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words';
+            case 'start':
+            case WELCOME_ALONE: {
+                // The welcome's row (DESIGN-onboarding-home-landing-fable.md §4.1-§4.3 and §5, slice W2), the phone's S5 tile:
+                // BeanPool's tile while it is drawn (full for seven days, then one band; core welcomeShape, the rule shownFrame
+                // drew it by), and the community's welcome beside it until its own ×. Not a card: no "…", no hold, no arrows.
+                const tile = card.type === 'start' && a.me ? {
+                    shape: welcomeShape(tourOver, a.me.joinedAt, now) ?? 'full',
+                    place: welcomeFacts(a).place,
+                    lines: welcomeTileLines({ profile: String(a.profile), beans: a.features.beans !== false }),
+                    tourLabel: tourProgress && tourProgress.step > 0 ? startCardButton(tourProgress, tourTotal) : t(WELCOME_TILE_WORDS.tour),
+                    onTour: () => { if (publicKey) startTour(publicKey, tourNode, resumeStep(tourProgress, tourTotal)); },
+                    // Got it (and the band's ×) ends the tour 'skipped': the record 1.4.7's Not now writes.
+                    onGotIt: () => applyTourEnd('skipped'),
+                } : null;
+                if (!tile && !communityWelcome) return null;
                 return (
-                    <HomeCard key={id} {...common} menu={undefined}>
-                        {welcome.place && <p data-testid="home-welcome-where" className={said}>{welcome.place}</p>}
-                        {welcome.firstHere ? (
-                            <p data-testid="home-welcome-first" className={`${said} flex flex-wrap items-center gap-x-2`}>
-                                <span className="min-w-0 break-words">{t(WELCOME_WORDS.firstHere)}</span>
-                                {/* Only where the reader can invite (core readerMayInvite, the phone's rule): where only admins
-                                    invite, once the node has said they are an owner or admin. */}
-                                {readerMayInvite(a.features, inviteRole) && (
-                                    <button type="button" data-testid="home-welcome-invite" onClick={() => onNavigate('people-invites')} className={link}>
-                                        {t(WELCOME_WORDS.inviteSomeone)}
-                                    </button>
-                                )}
-                            </p>
-                        ) : inviter ? (
-                            <p data-testid="home-welcome-invited" className={`${said} flex flex-wrap items-center gap-x-2`}>
-                                <span className="min-w-0 break-words">{t(WELCOME_WORDS.invitedYou, { name: inviter.name })}</span>
-                                <button type="button" data-testid="home-welcome-hello" onClick={() => onNavigate('messages', inviter.key)} className={link}>
-                                    {t(WELCOME_WORDS.sayHello)}
-                                </button>
-                            </p>
-                        ) : null}
-                        <div className="flex flex-wrap items-center justify-between gap-x-4">
-                            <button type="button" data-testid="home-start-look"
-                                onClick={() => { if (publicKey) startTour(publicKey, tourNode, resumeStep(tourProgress, tourTotal)); }}
-                                className={link}>
-                                {tourProgress && tourProgress.step > 0 ? startCardButton(tourProgress, tourTotal) : t(WELCOME_WORDS.tour)}
-                            </button>
-                            {/* Its name is its words (WCAG 2.5.3 Label in Name, review of #3114 finding 3): next to "Take the tour ›" they say what it skips. */}
-                            <button type="button" data-testid="home-start-skip" onClick={() => applyTourEnd('skipped')}
-                                className={`${link} text-nature-700 dark:text-nature-200`}>
-                                {t('Not now')}
-                            </button>
-                        </div>
-                    </HomeCard>
+                    <HomeWelcomeRow key={id} id={card.id} tile={tile} community={communityWelcome} side={cols > 1}
+                        quiet={inArrange} style={common.style} onHeight={common.onHeight} />
                 );
             }
             case 'tips': {
@@ -3449,7 +3449,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const offered = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
     // Welcome is offered only while it can be drawn (DESIGN-home-default-fable.md §2.3: until the tour is taken or Not now,
     // seven days at most): a card added that never shows is a promise the picker doesn't keep (review B2).
-    const welcomeCan = !!a.me && welcomeDrawn(tourOverFor(a, { tourOver }), a.me.joinedAt, now);
+    const welcomeCan = !!a.me && welcomeShape(tourOverFor(a, { tourOver }), a.me.joinedAt, now) !== null;
     const picker = offered && !welcomeCan
         ? { ...offered, groups: offered.groups.map(g => ({ ...g, rows: g.rows.filter(r => r.type !== 'start') })).filter(g => g.rows.length > 0) }
         : offered;

@@ -22,7 +22,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, resetHomeLayout, starterCards, t, word,
     newInstanceId, readChatSettings,
-    knockStillAnswerable, reorderIds, arrivingCards, keepArrivedCard, type LearnHomeOpens,
+    knockStillAnswerable, reorderIds, arrivingCards, keepArrivedCard, dismissCommunityWelcome, type LearnHomeOpens,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
 import { drawnToolCardTypes } from '../tools/cards';
@@ -428,6 +428,9 @@ export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLay
     const at = iso(editAt(layout, now));
     return { ...l, dismissed: { ...l.dismissed, safety: at }, updatedAt: at };
 }
+
+/** The community's welcome was put away (its ×, slice W2): core's one key for both apps, dated as every edit here is. */
+export const dismissWelcomeFrom = (layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 => dismissCommunityWelcome(layout, editAt(layout, now));
 
 /** These two are word() keys: Home shows them through t(). */
 /** The one-time hint (§1.3), as the web says it: its cards can be dragged (DESIGN-home-arrange-in-place-fable.md §2.9). The phone's own line says "hold a card to arrange" until its drag lands. */

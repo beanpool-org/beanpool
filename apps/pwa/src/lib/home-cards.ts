@@ -23,7 +23,7 @@ import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyTod
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { forumPublicOn } from '@beanpool/core';
 import { learnHomeLines, type HomeLearnCard } from '@beanpool/core';
-import { FIRST_STEPS_WORDS, firstStepsLeft, firstStepsOver, welcomeDrawn } from '@beanpool/core';
+import { FIRST_STEPS_WORDS, communityWelcomeView, firstStepsLeft, firstStepsOver, welcomeShape } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
@@ -302,6 +302,11 @@ export interface HomeCards {
         commonsPot_c?: number | null;
         /** The pages Learn shows this member, from 1 (slice K7): absent at 0, where Learn is off, and from an older node. */
         knowledge?: number;
+        /**
+         * The owners' welcome for new members (onboarding S6), as they wrote it, to a member; null where none is written;
+         * absent from a server from before it (core communityWelcomeView).
+         */
+        welcome?: string | null;
     };
 }
 
@@ -400,12 +405,13 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
                 return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? me.interests, now, opts.wordsKeptHere);
             case 'tips':
                 return !!opts.tipsUp;
-            // Welcome (DESIGN-home-default-fable.md §2.3), a member's only, seven days after joining at most (core
-            // welcomeDrawn). The tour's end takes it off: a Home never saved by shownLayout, a saved one by endTourLayout,
-            // and this browser's own Done or Not now at once (`tourOver`). The account's record is not read again here, so
-            // "Take the tour again" (which writes `open` and puts it back) draws it before the answer says `open`.
+            // The WELCOME TO BEANPOOL! tile (DESIGN-onboarding-home-landing-fable.md §4.1-§4.3, slice W2), a member's only:
+            // full for seven days after joining, a band to day 30, then never (core welcomeShape, the phone's rule). The
+            // tour's end takes it off: a Home never saved by shownLayout, a saved one by endTourLayout, and this browser's own
+            // Done or Got it at once (`tourOver`). The account's record is not read again here, so "Take the tour again"
+            // (which writes `open` and puts it back) draws it before the answer says `open`.
             case 'start':
-                return me.standing === 'member' && welcomeDrawn(!!opts.tourOver, me.joinedAt, now);
+                return me.standing === 'member' && welcomeShape(!!opts.tourOver, me.joinedAt, now) !== null;
             // Your way back in: for a member whose 12 words are the only way back (wayBackOf, §2.5); the card itself then
             // goes by its schedule (components/OneWayBack.tsx).
             case 'safety':
@@ -441,8 +447,21 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
         const market = shown.findIndex(c => c.type === 'market');
         shown.splice(market >= 0 ? market + 1 : shown.length - 1, 0, { id: 'interests', type: 'interests' });
     }
+    // The community's welcome once BeanPool's tile is not drawn (after Got it, or in a second community): it stays until its
+    // own × (core communityWelcomeView, DESIGN-onboarding-home-landing-fable.md §4.2), in the tile's place under Needs you
+    // and a pinned Find. While the tile is drawn it stands beside it, in the tile's row.
+    if (!shown.some(c => c.type === 'start') && communityWelcomeView(answer, layout, now)) {
+        const at = shown.findIndex(c => c.type !== 'needs' && !pins.includes(c.type));
+        shown.splice(at < 0 ? shown.length : at, 0, { id: WELCOME_ALONE, type: WELCOME_ALONE });
+    }
     return shown;
 }
+
+/**
+ * The community's welcome standing alone in Home's grid (slice W2): never a card on the member's list, never saved, asked
+ * for or offered; drawn where {@link shownFrame} puts it, a full row, and left by its own ×.
+ */
+export const WELCOME_ALONE = 'welcome-from';
 
 // ── First steps ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -516,16 +535,15 @@ export function stepsSaySomething(answer: HomeAnswer, interests: readonly string
 // ── Welcome ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Welcome's words (DESIGN-home-default-fable.md §2.3, §5.1): who invited you and the way to say hello, or for an owner
- * alone on a new community the way to invite someone; then the tour and Not now. Shown through t(). Where you are is
- * core's (home-welcome.ts `welcomeFacts`, the phone's too), with the global community's own sentence.
+ * The community welcome's lines of ours (DESIGN-onboarding-home-landing-fable.md §4.1 item 2, components/HomeWelcome.tsx):
+ * who invited you and the way to say hello, or for an owner alone on a new community the way to invite someone. Shown
+ * through t(). Where you are is core's (home-welcome.ts `welcomeFacts`, the phone's too), on BeanPool's tile.
  */
 export const WELCOME_WORDS = {
     invitedYou: word('{name} invited you.'),
     sayHello: word('Say hello ›'),
     firstHere: word("You're the first one here."),
     inviteSomeone: word('Invite someone ›'),
-    tour: word('Take the tour ›'),
 } as const;
 
 // ── Your way back in ──────────────────────────────────────────────────────────────────────────────────────────────────

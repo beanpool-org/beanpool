@@ -3022,7 +3022,7 @@ describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on 
     const layoutWrites = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1] as Record<string, unknown>).filter(p => 'home.layout' in p).map(p => (p['home.layout'] as { cards: { id: string }[] }).cards.map(c => c.id));
     beforeEach(() => { tourStore.closeTour(); });
 
-    it('a newcomer sees Welcome first and the default list under it, Take the tour and Not now, no "…"; it never starts by itself', async () => {
+    it('a newcomer sees the WELCOME TO BEANPOOL! tile first and the default list under it, Show me around and Got it, no "…"; it never starts by itself (W2)', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-start');
@@ -3031,14 +3031,16 @@ describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on 
         expect(cardIds()).toEqual(expect.arrayContaining(['market', 'events', 'beans']));
         expect(cardIds().indexOf('market')).toBeLessThan(cardIds().indexOf('events'));
         expect(cardIds().at(-1)).toBe('community');
-        // Its caption is Welcome; the old "This is your Home…" sentence is gone (§2.3, §5.1).
-        expect(within(screen.getByTestId('home-card-start')).getByRole('heading')).toHaveTextContent('Welcome');
+        // Its title is core's WELCOME TO BEANPOOL! (DESIGN-onboarding-home-landing-fable.md §4.1, slice W2); the old "This is your
+        // Home…" sentence is gone (§2.3, §5.1). The community's welcome beside it has its own caption.
+        expect(within(screen.getByTestId('home-welcome-tile')).getByRole('heading')).toHaveTextContent('Welcome to BeanPool!');
+        expect(within(screen.getByTestId('home-welcome-community')).getByRole('heading').textContent).toMatch(/^From \S/);
         expect(screen.queryByTestId('home-start-words')).toBeNull();
-        expect(screen.getByTestId('home-start-look')).toHaveTextContent('Take the tour ›');
-        expect(screen.getByTestId('home-start-skip')).toHaveTextContent('Not now');
-        // Its name is its words (WCAG 2.5.3 Label in Name, review of #3114 finding 3): "click Not now" reaches it.
-        expect(screen.getByTestId('home-start-skip')).toHaveAccessibleName('Not now');
-        expect(within(screen.getByTestId('home-card-start')).getByRole('button', { name: 'Not now' })).toBe(screen.getByTestId('home-start-skip'));
+        expect(screen.getByTestId('home-start-look')).toHaveTextContent('Show me around');
+        expect(screen.getByTestId('home-start-skip')).toHaveTextContent('Got it');
+        // Its name is its words (WCAG 2.5.3 Label in Name, review of #3114 finding 3): "click Got it" reaches it.
+        expect(screen.getByTestId('home-start-skip')).toHaveAccessibleName('Got it');
+        expect(within(screen.getByTestId('home-card-start')).getByRole('button', { name: 'Got it' })).toBe(screen.getByTestId('home-start-skip'));
         expect(within(screen.getByTestId('home-card-start')).queryByTestId('home-card-menu')).toBeNull();
         expect(screen.queryByTestId('home-hint')).toBeNull();
         expect(tourStore.currentTour()).toBeNull();
@@ -3178,17 +3180,27 @@ describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on 
         await waitFor(() => expect(layoutWrites().at(-1)).toContain('start'));
     });
 
-    it('seven days after joining, the tour never ended: Welcome is not drawn, and no card moves for it (§2.3)', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer({}, { joinedAt: new Date(Date.now() - 7 * 86_400_000 - 60_000).toISOString() })));
+    it('the tour never ended: full for seven days, one band from day 8, nothing from day 30, and no card moves for it (W2, core welcomeShape)', async () => {
+        const at = (days: number) => newcomer({}, { joinedAt: new Date(Date.now() - days * 86_400_000 - 60_000).toISOString() });
+        // Six days in: the full tile.
+        vi.mocked(api.getHome).mockResolvedValue(fresh(at(6)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-welcome-tile')).toHaveAttribute('data-shape', 'full');
+        cleanup();
+        // Day 8: one band, still first; nothing written.
+        vi.mocked(api.getHome).mockResolvedValue(fresh(at(7)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-welcome-tile')).toHaveAttribute('data-shape', 'band');
+        expect(cardIds()[0]).toBe('start');
+        expect(api.saveHomePreferences).not.toHaveBeenCalled();
+        cleanup();
+        // Day 31: no tile and no community welcome; the default list as it was.
+        vi.mocked(api.getHome).mockResolvedValue(fresh(at(30)));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
         expect(cardIds()).not.toContain('start');
+        expect(screen.queryByTestId('home-welcome-row')).toBeNull();
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
-        cleanup();
-        // Six days in: still there.
-        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer({}, { joinedAt: new Date(Date.now() - 6 * 86_400_000).toISOString() })));
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        expect(await screen.findByTestId('home-card-start')).toBeInTheDocument();
     });
 
     it('who invited them, with Say hello opening a chat with that member; no line when nobody did', async () => {
@@ -3303,6 +3315,249 @@ describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on 
         expect(cardIds()[0]).toBe('start');
         expect(layoutWrites().at(-1)![0]).toBe('start');
         expect(tourStore.currentTour()).toMatchObject({ publicKey: ME.publicKey, step: 0 });
+    });
+});
+
+// ── The welcome's row on the web (DESIGN-onboarding-home-landing-fable.md §4.1-§4.5, §5, slice W2) ─────────────────────
+describe("W2: the WELCOME TO BEANPOOL! tile and the community's welcome on the web's Home (320 px, 130% text, light and dark)", () => {
+    const DAY = 86_400_000;
+    /** A member who joined `days` ago in Riverside, never saved a Home, never ended the tour; `community` as the node sends it. */
+    const joinedAgo = (days: number, community: Record<string, unknown> = {}, over: Partial<HomeAnswer> = {}, meOver: Partial<NonNullable<HomeAnswer['me']>> = {}) => {
+        const a = answer({ layout: null });
+        const { tour: _t, ...me } = a.me!;
+        return {
+            ...a,
+            me: { ...me, joinedAt: new Date(Date.now() - days * DAY - 60_000).toISOString(), invitedBy: { key: 'ana-key', name: 'Ana' }, ...meOver },
+            cards: { ...a.cards, community: { name: 'Riverside', members: 84, ...community } },
+            ...over,
+        } as HomeAnswer;
+    };
+    const tourWrites = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1] as Record<string, unknown>).filter(p => 'tour' in p).map(p => p.tour as { state: string });
+    const layoutWrites = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1] as Record<string, unknown>).filter(p => 'home.layout' in p).map(p => p['home.layout'] as { cards: { id: string }[]; dismissed: Record<string, string> });
+    const WORDS = "G'day and welcome. Market day is Saturday at the hall.\nPost what you grow, make or can lend.";
+    let width: { mockRestore: () => void } | null = null;
+    /** Home at 320 px with the browser's text at 130%, light or dark. */
+    const at320 = (dark: boolean) => {
+        document.documentElement.style.fontSize = '130%';
+        if (dark) document.documentElement.classList.add('dark', 'dark-theme');
+        vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+        width = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+            return this.getAttribute('data-testid') === 'home-page' ? 320 : 0;
+        });
+    };
+    beforeEach(() => { tourStore.closeTour(); vi.mocked(api.myNodeRoleOnce).mockReset().mockResolvedValue(null); });
+    afterEach(() => {
+        width?.mockRestore();
+        width = null;
+        document.documentElement.style.fontSize = '';
+        document.documentElement.classList.remove('dark', 'dark-theme');
+    });
+    /** What holds the row together at 320 px and 130%: stacked, nothing wider than the column, every line free to wrap. */
+    const holdsAt320 = (what: string) => {
+        const row = screen.getByTestId('home-welcome-row');
+        expect(row, what).toHaveAttribute('data-side', 'false');
+        expect(row.className, what).toContain('flex-col');
+        expect(screen.getByTestId('home-page')).toHaveAttribute('data-columns', '1');
+        // Every element that carries words (a one-glyph × has none to wrap).
+        for (const el of Array.from(row.querySelectorAll<HTMLElement>('h2, p, li > span:last-child, button, a'))) {
+            const cls = el.className;
+            expect(cls, `${what}: ${el.textContent}`).not.toMatch(/\bw-\[\d{3,}px\]|\bmin-w-\[\d{3,}px\]|whitespace-nowrap|truncate/);
+            if ((el.textContent ?? '').trim().length > 1) expect(cls, `${what}: ${el.textContent}`).toMatch(/break-words/);
+        }
+        // Every control is at least 44 px to tap.
+        for (const b of Array.from(row.querySelectorAll<HTMLElement>('button, a'))) expect(b.className, `${what}: ${b.textContent}`).toMatch(/min-h-\[(44|48)px\]/);
+    };
+
+    for (const dark of [false, true]) {
+        const mode = dark ? 'dark' : 'light';
+
+        it(`${mode}: first arrival: the full tile (three things to know, where you are, Show me around, Got it), the community's welcome beside it, stacked, and nothing cut`, async () => {
+            at320(dark);
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0, { welcome: WORDS })));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            const tile = await screen.findByTestId('home-welcome-tile');
+            expect(cardIds()[0]).toBe('start');
+            expect(tile).toHaveAttribute('data-shape', 'full');
+            expect(within(tile).getByRole('heading')).toHaveTextContent('Welcome to BeanPool!');
+            expect(within(tile).getByTestId('home-welcome-where')).toHaveTextContent("You're in Riverside.");
+            expect(within(tile).getAllByRole('listitem').map(li => li.querySelector('span:last-child')!.textContent)).toEqual([
+                'Offer something first. Then ask for anything.',
+                "Beans keep score: about 40 for an hour's help.",
+                'Zero is a good balance: you give as much as you get.',
+            ]);
+            // The shapes are out of the reader's way, and the fills are the brand's tokens: the same tile in light and dark.
+            expect(within(tile).getByTestId('home-welcome-shapes')).toHaveAttribute('aria-hidden', 'true');
+            expect(tile.className).toContain('bg-bp-commit-fill');
+            expect(screen.getByTestId('home-start-look').className).toContain('bg-bp-gold-fill');
+            expect(screen.getByTestId('home-start-look').className).toContain('text-bp-gold-on');
+            // Not a card: no "…".
+            expect(within(screen.getByTestId('home-card-start')).queryByTestId('home-card-menu')).toBeNull();
+            const community = screen.getByTestId('home-welcome-community');
+            expect(within(community).getByRole('heading')).toHaveTextContent('From Riverside');
+            expect(within(community).getByTestId('home-welcome-invited')).toHaveTextContent('Ana invited you.');
+            expect(within(community).getByTestId('home-welcome-community-members')).toHaveTextContent('84 members');
+            holdsAt320('first arrival');
+            expect(api.saveHomePreferences).not.toHaveBeenCalled();
+        });
+
+        it(`${mode}: after Got it: the tile goes (the record "skipped"), the community's welcome stays alone in its place under Needs you, until its own ×`, async () => {
+            at320(dark);
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(1, { welcome: WORDS }, {}, {}), 'W/"a"'));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            fireEvent.click(await screen.findByTestId('home-start-skip'));
+            await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'skipped' })]));
+            await waitFor(() => expect(screen.queryByTestId('home-welcome-tile')).toBeNull());
+            expect(cardIds()).not.toContain('start');
+            expect(cardIds()[0]).toBe('welcome-from');
+            expect(screen.getByTestId('home-welcome-community-words')).toHaveTextContent("G'day and welcome.");
+            // Never on the member's list: the layout written by Got it names no such card.
+            expect(layoutWrites().at(-1)!.cards.map(c => c.id)).not.toContain('welcome-from');
+            holdsAt320('after Got it');
+        });
+
+        it(`${mode}: day 8: one band, "Welcome to BeanPool ›" with its ×; the band opens the tile for the visit and writes nothing; the × is Got it`, async () => {
+            at320(dark);
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(7)));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            const band = await screen.findByTestId('home-welcome-tile');
+            expect(band).toHaveAttribute('data-shape', 'band');
+            expect(screen.getByTestId('home-welcome-band-open')).toHaveTextContent('Welcome to BeanPool ›');
+            expect(screen.getByTestId('home-welcome-band-open')).toHaveAccessibleName('Welcome to BeanPool');
+            expect(screen.getByTestId('home-welcome-band-x')).toHaveAccessibleName('Put the welcome away');
+            // The community's welcome is still beside it: it is the community's, and inside the 30 days.
+            expect(screen.getByTestId('home-welcome-community')).toBeInTheDocument();
+            holdsAt320('day 8 band');
+            fireEvent.click(screen.getByTestId('home-welcome-band-open'));
+            expect(screen.getByTestId('home-welcome-tile')).toHaveAttribute('data-shape', 'full');
+            expect(api.saveHomePreferences).not.toHaveBeenCalled();
+            cleanup();
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(7)));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            fireEvent.click(await screen.findByTestId('home-welcome-band-x'));
+            await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'skipped' })]));
+            await waitFor(() => expect(screen.queryByTestId('home-welcome-tile')).toBeNull());
+        });
+
+        it(`${mode}: day 31: no tile, no band, no community welcome; the Home is the member's own`, async () => {
+            at320(dark);
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(30, { welcome: WORDS })));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('home-welcome-row')).toBeNull();
+            expect(cardIds()).not.toContain('start');
+            expect(cardIds()).not.toContain('welcome-from');
+            expect(document.body.textContent).not.toContain("G'day and welcome.");
+        });
+
+        it(`${mode}: Beans off: the first line alone where a local community has no Beans; on the global community its own two lines`, async () => {
+            at320(dark);
+            const off = joinedAgo(0);
+            vi.mocked(api.getHome).mockResolvedValue(fresh({ ...off, features: { ...off.features, beans: false } } as HomeAnswer));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            let tile = await screen.findByTestId('home-welcome-tile');
+            expect(within(tile).getAllByRole('listitem').map(li => li.getAttribute('data-testid'))).toEqual(['home-welcome-fact-swap']);
+            expect(tile.textContent).not.toMatch(/Beans keep score|Zero is a good balance/);
+            holdsAt320('Beans off');
+            cleanup();
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0, {}, { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true } })));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            tile = await screen.findByTestId('home-welcome-tile');
+            expect(within(tile).getAllByRole('listitem').map(li => li.querySelector('span:last-child')!.textContent)).toEqual([
+                'Meet people and find a community near you.',
+                'No Beans here. Trading in Beans happens in local communities.',
+            ]);
+            expect(within(tile).getByTestId('home-welcome-where').textContent).toBe("You're in the global community");
+        });
+
+        it(`${mode}: the community's welcome written: the owners' words as they wrote them, line breaks kept, in their own direction, never translated`, async () => {
+            at320(dark);
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0, { welcome: WORDS })));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            const words = await screen.findByTestId('home-welcome-community-words');
+            expect(words.textContent).toBe(WORDS);
+            expect(words.className).toContain('whitespace-pre-line');
+            expect(words).toHaveAttribute('dir', 'auto');
+            // Nobody is asked to write what is written.
+            expect(screen.queryByTestId('home-welcome-community-write')).toBeNull();
+            expect(api.myNodeRoleOnce).not.toHaveBeenCalled();
+            holdsAt320('written');
+        });
+
+        it(`${mode}: none written: an owner is asked to write it in Settings; a member is not; a server from before the setting asks nobody`, async () => {
+            at320(dark);
+            vi.mocked(api.myNodeRoleOnce).mockResolvedValue('owner');
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0, { welcome: null })));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            const write = await screen.findByTestId('home-welcome-community-write');
+            expect(write).toHaveTextContent("Write your community's welcome ›");
+            expect(write).toHaveAttribute('href', '/settings#from=pwa');
+            expect(screen.queryByTestId('home-welcome-community-words')).toBeNull();
+            // The inviter's line and the count alone (§4.1: "No owner's words yet: the inviter line and the count alone").
+            expect(screen.getByTestId('home-welcome-invited')).toHaveTextContent('Ana invited you.');
+            expect(screen.getByTestId('home-welcome-community-members')).toHaveTextContent('84 members');
+            holdsAt320('not written, owner');
+            cleanup();
+            vi.mocked(api.myNodeRoleOnce).mockResolvedValue('admin');
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0, { welcome: null })));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-welcome-community');
+            await pause();
+            expect(screen.queryByTestId('home-welcome-community-write')).toBeNull();
+            cleanup();
+            vi.mocked(api.myNodeRoleOnce).mockReset().mockResolvedValue('owner');
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0)));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-welcome-community');
+            await pause();
+            expect(screen.queryByTestId('home-welcome-community-write')).toBeNull();
+            expect(api.myNodeRoleOnce).not.toHaveBeenCalled();
+        });
+
+        it(`${mode}: after its ×: kept on the account as one more dismissed entry, gone here at once while the tile stays, and gone on the next open`, async () => {
+            at320(dark);
+            vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0, { welcome: WORDS })));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            const x = await screen.findByTestId('home-welcome-community-x');
+            expect(x).toHaveAccessibleName("Put Riverside's welcome away");
+            fireEvent.click(x);
+            await waitFor(() => expect(layoutWrites().at(-1)?.dismissed).toEqual({ 'welcome-community': expect.any(String) }));
+            // The cards are the newcomer's default list, untouched (Welcome still on it).
+            expect(layoutWrites().at(-1)!.cards.map(c => c.id)).toEqual(HOME_DEFAULT_LIST);
+            expect(screen.queryByTestId('home-welcome-community')).toBeNull();
+            expect(screen.getByTestId('home-welcome-tile')).toBeInTheDocument();
+            expect(tourWrites()).toEqual([]);
+            // Focus goes to the first heading left, never to the page's <body>.
+            await waitFor(() => expect(document.activeElement?.tagName).toBe('H2'));
+            cleanup();
+            // Another device, the next open: the account's layout carries the ×.
+            const saved = joinedAgo(0, { welcome: WORDS }, { layout: { v: 2, cards: HOME_DEFAULT_LIST.map(id => ({ id, type: id })), dismissed: { 'welcome-community': NOW }, updatedAt: NOW } as never });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(saved));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-welcome-tile');
+            expect(screen.queryByTestId('home-welcome-community')).toBeNull();
+        });
+    }
+
+    it('Arrange: the welcome\'s row keeps its place, goes quiet and has no arrows; the cards around it still move', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0, { welcome: WORDS })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-welcome-tile');
+        openArrange();
+        expect(await screen.findByTestId('card-body-start')).toHaveAttribute('data-quiet', 'true');
+        expect(screen.queryByTestId('home-arrange-up-start')).toBeNull();
+        expect(screen.queryByTestId('home-arrange-down-start')).toBeNull();
+        expect(screen.getByTestId('home-arrange-up-market')).toBeInTheDocument();
+        expect(cardIds()[0]).toBe('start');
+    });
+
+    it('a visitor or a suspended member sees neither part', async () => {
+        const suspended = joinedAgo(0, { welcome: WORDS }, {}, { standing: 'suspended' });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(suspended));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-page');
+        await pause();
+        expect(screen.queryByTestId('home-welcome-row')).toBeNull();
+        expect(document.body.textContent).not.toContain("G'day and welcome.");
     });
 });
 
@@ -3914,7 +4169,9 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
 
     // DESIGN-home-default-fable.md §6, slice D3: the newcomer's first screen is its first three cards in one column, and side
     // by side on a wide screen (§2.2: "On a desktop the first three land side by side"). First steps stands above the Market
-    // since DESIGN-onboarding-home-landing-fable.md §4.1 item 6 (slice S5): core's one default list, both apps.
+    // since DESIGN-onboarding-home-landing-fable.md §4.1 item 6 (slice S5): core's one default list, both apps. Since slice W2
+    // (§5: "On a wide screen the tile takes a whole row of the packed grid") the welcome is a full row, with First steps and
+    // the Market side by side under it.
     it("a new member's Home draws Welcome, First steps, Market in order at one, two and three columns", async () => {
         const joined = new Date(Date.now() - 60_000).toISOString();
         const steps = { joinedAt: joined, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null, words: false };
@@ -3932,16 +4189,20 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
             // The 12-words card is not on day one: First steps' line says it (§2.5).
             expect(cardIds(), String(w)).not.toContain('safety');
             if (cols === 1) {
-                for (const id of ['start', 'steps', 'market']) expect(screen.getByTestId(`home-card-${id}`).style.gridColumn, String(w)).toBe('');
+                // One column: the welcome is the column's width as every card is; nothing beside anything.
+                expect(screen.getByTestId('home-card-start').style.gridColumn, String(w)).toBe('1 / -1');
+                for (const id of ['steps', 'market']) expect(screen.getByTestId(`home-card-${id}`).style.gridColumn, String(w)).toBe('');
+                expect(screen.getByTestId('home-welcome-row'), String(w)).toHaveAttribute('data-side', 'false');
             } else {
-                await waitFor(() => expect(screen.getByTestId('home-card-start').style.gridColumn).toBe('1'));
-                expect(screen.getByTestId('home-card-steps').style.gridColumn, String(w)).toBe('2');
-                // Three columns: side by side on the first row. Two: the Market goes under the shorter, Welcome.
-                expect(screen.getByTestId('home-card-market').style.gridColumn, String(w)).toBe(cols === 3 ? '3' : '1');
+                // The welcome's row across the grid, BeanPool's tile beside the community's welcome; First steps and the Market
+                // side by side under it, on one row.
+                await waitFor(() => expect(screen.getByTestId('home-card-start').style.gridColumn).toBe('1 / -1'));
+                expect(screen.getByTestId('home-welcome-row'), String(w)).toHaveAttribute('data-side', 'true');
+                expect(screen.getByTestId('home-card-steps').style.gridColumn, String(w)).toBe('1');
+                expect(screen.getByTestId('home-card-market').style.gridColumn, String(w)).toBe('2');
                 const top = (id: string) => Number(screen.getByTestId(`home-card-${id}`).style.gridRow.split(' / ')[0]);
-                expect(top('steps'), String(w)).toBe(top('start'));
-                if (cols === 3) expect(top('market'), String(w)).toBe(top('start'));
-                else expect(top('market'), String(w)).toBeGreaterThan(top('start'));
+                expect(top('steps'), String(w)).toBeGreaterThan(top('start'));
+                expect(top('market'), String(w)).toBe(top('steps'));
             }
             cleanup();
         }

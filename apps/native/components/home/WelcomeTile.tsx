@@ -14,6 +14,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { WELCOME_TILE_WORDS, brandColours, t, type WelcomeTileIcon, type WelcomeTileLine } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
+import { HOME_GUTTER_DP, HOME_TARGET_DP } from './HomeParts';
 
 /** The pale ring and the facts' round badges: core's `chip.ok.tint` as the light set has it, on the tile in every set (§4.4). */
 const PALE = brandColours('light').chip.ok.tint;
@@ -26,8 +27,8 @@ const ICONS: Record<WelcomeTileIcon, React.ComponentProps<typeof MaterialCommuni
     none: 'map-marker-radius-outline',
 };
 
-/** At least 48 dp to tap (Home's rule). */
-const TARGET = 48;
+/** At least 48 dp to tap (Home's rule, HomeParts HOME_TARGET_DP). */
+const TARGET = HOME_TARGET_DP;
 
 export interface WelcomeTileProps {
     shape: 'full' | 'band';
@@ -55,24 +56,24 @@ export function WelcomeTile(props: WelcomeTileProps) {
     const on = colors.text.onBrand;
     if (shape === 'band' && !open) {
         return (
-            <View style={[st.band, { backgroundColor: ground }]} testID="home-welcome-band">
+            <View style={[welcomeTileStyles.band, { backgroundColor: ground }]} testID="home-card-start">
                 <Pressable
                     onPress={() => setOpen(true)}
-                    style={({ pressed }) => [st.bandOpen, pressed && { backgroundColor: colors.brand.fillPressed }]}
+                    style={({ pressed }) => [welcomeTileStyles.bandOpen, pressed && { backgroundColor: colors.brand.fillPressed }]}
                     accessibilityRole="button"
                     accessibilityLabel={t('Welcome to BeanPool')}
                     testID="home-welcome-band-open"
                 >
-                    <Text style={[st.bandText, { color: on }]} numberOfLines={2}>{t('Welcome to BeanPool')} ›</Text>
+                    <Text style={[welcomeTileStyles.bandText, { color: on }]} numberOfLines={2}>{t('Welcome to BeanPool')} ›</Text>
                 </Pressable>
                 <Pressable
                     onPress={props.onGotIt}
-                    style={({ pressed }) => [st.bandX, pressed && { backgroundColor: colors.brand.fillPressed }]}
+                    style={({ pressed }) => [welcomeTileStyles.bandX, pressed && { backgroundColor: colors.brand.fillPressed }]}
                     accessibilityRole="button"
                     accessibilityLabel={t('Put the welcome away')}
                     testID="home-welcome-band-x"
                 >
-                    <Text style={[st.bandXText, { color: on }]} importantForAccessibility="no">×</Text>
+                    <Text style={[welcomeTileStyles.bandXText, { color: on }]} importantForAccessibility="no">×</Text>
                 </Pressable>
             </View>
         );
@@ -86,61 +87,61 @@ function FullTile({ place, inviter, firstHere, lines, tourLabel, colors, onTour,
     const on = colors.text.onBrand;
     const gold = colors.feedback.warning.solid;
     const link = (text: string, onPress: () => void, testID: string, a11y?: string) => (
-        <Pressable onPress={onPress} style={st.link} accessibilityRole="button" accessibilityLabel={a11y ?? text} testID={testID}>
-            <Text style={[st.linkText, { color: on }]}>{text}</Text>
+        <Pressable onPress={onPress} style={welcomeTileStyles.link} accessibilityRole="button" accessibilityLabel={a11y ?? text} testID={testID}>
+            <Text style={[welcomeTileStyles.linkText, { color: on }]}>{text}</Text>
         </Pressable>
     );
     return (
-        <View style={[st.tile, { backgroundColor: ground }]} testID="home-welcome-tile" accessibilityLabel={t('Welcome to BeanPool')}>
+        <View style={[welcomeTileStyles.tile, { backgroundColor: ground }]} testID="home-card-start" accessibilityLabel={t('Welcome to BeanPool')}>
             {/* The shapes, behind everything and out of the reader's way. */}
             <View pointerEvents="none" importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
-                <View style={[st.wave, { backgroundColor: deep }]} />
-                <View style={[st.sun, { backgroundColor: gold }]} />
-                <View style={[st.bean, { backgroundColor: colors.action.cta }]} />
-                <View style={[st.ring, { borderColor: PALE }]} />
-                <View style={[st.dot1, { backgroundColor: PALE }]} />
-                <View style={[st.dot2, { backgroundColor: gold }]} />
+                <View style={[welcomeTileStyles.wave, { backgroundColor: deep }]} />
+                <View style={[welcomeTileStyles.sun, { backgroundColor: gold }]} />
+                <View style={[welcomeTileStyles.bean, { backgroundColor: colors.action.cta }]} />
+                <View style={[welcomeTileStyles.ring, { borderColor: PALE }]} />
+                <View style={[welcomeTileStyles.dot1, { backgroundColor: PALE }]} />
+                <View style={[welcomeTileStyles.dot2, { backgroundColor: gold }]} />
             </View>
-            <Text style={[st.title, { color: on }]} accessibilityRole="header" testID="home-welcome-title">{t(WELCOME_TILE_WORDS.title)}</Text>
-            {!!place && <Text style={[st.place, { color: on }]} testID="home-start-words">{place}</Text>}
+            <Text style={[welcomeTileStyles.title, { color: on }]} accessibilityRole="header" testID="home-welcome-title">{t(WELCOME_TILE_WORDS.title)}</Text>
+            {!!place && <Text style={[welcomeTileStyles.place, { color: on }]} testID="home-start-words">{place}</Text>}
             {firstHere ? (
-                <View style={st.row}>
-                    <Text style={[st.small, { color: on }]} testID="home-start-first">{t("You're the first one here.")}</Text>
+                <View style={welcomeTileStyles.row}>
+                    <Text style={[welcomeTileStyles.small, { color: on }]} testID="home-start-first">{t("You're the first one here.")}</Text>
                     {onInvite && link(t('Invite someone ›'), onInvite, 'home-start-invite')}
                 </View>
             ) : inviter ? (
-                <View style={st.row}>
-                    <Text style={[st.small, { color: on }]} testID="home-start-inviter">{t('{name} invited you.', { name: inviter })}</Text>
+                <View style={welcomeTileStyles.row}>
+                    <Text style={[welcomeTileStyles.small, { color: on }]} testID="home-start-inviter">{t('{name} invited you.', { name: inviter })}</Text>
                     {link(t('Say hello ›'), onSayHello, 'home-start-hello', t('Say hello to {name}', { name: inviter }))}
                 </View>
             ) : null}
-            <View style={st.facts}>
+            <View style={welcomeTileStyles.facts}>
                 {lines.map((l, i) => (
-                    <View key={i} style={st.fact} testID={`home-welcome-fact-${l.icon}`}>
-                        <View style={[st.badge, { backgroundColor: PALE }]} importantForAccessibility="no-hide-descendants">
+                    <View key={i} style={welcomeTileStyles.fact} testID={`home-welcome-fact-${l.icon}`}>
+                        <View style={[welcomeTileStyles.badge, { backgroundColor: PALE }]} importantForAccessibility="no-hide-descendants">
                             <MaterialCommunityIcons name={ICONS[l.icon]} size={20} color={deep} />
                         </View>
-                        <Text style={[st.factText, { color: on }]}>{l.text}</Text>
+                        <Text style={[welcomeTileStyles.factText, { color: on }]}>{l.text}</Text>
                     </View>
                 ))}
             </View>
             {/* Side by side where they fit, stacked at 320 dp and 1.3× text. */}
-            <View style={st.buttons}>
+            <View style={welcomeTileStyles.buttons}>
                 <Pressable
                     onPress={onTour}
-                    style={({ pressed }) => [st.button, { backgroundColor: gold }, pressed && { opacity: 0.85 }]}
+                    style={({ pressed }) => [welcomeTileStyles.button, { backgroundColor: gold }, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
                     testID="home-start-look"
                 >
-                    <Text style={[st.buttonText, { color: colors.text.onGold }]}>{tourLabel}</Text>
+                    <Text style={[welcomeTileStyles.buttonText, { color: colors.text.onGold }]}>{tourLabel}</Text>
                 </Pressable>
                 <Pressable
                     onPress={onGotIt}
-                    style={({ pressed }) => [st.button, st.ghost, { borderColor: on }, pressed && { backgroundColor: deep }]}
+                    style={({ pressed }) => [welcomeTileStyles.button, welcomeTileStyles.ghost, { borderColor: on }, pressed && { backgroundColor: deep }]}
                     accessibilityRole="button"
                     testID="home-start-skip"
                 >
-                    <Text style={[st.buttonText, { color: on }]}>{t(WELCOME_TILE_WORDS.gotIt)}</Text>
+                    <Text style={[welcomeTileStyles.buttonText, { color: on }]}>{t(WELCOME_TILE_WORDS.gotIt)}</Text>
                 </Pressable>
             </View>
         </View>
@@ -181,8 +182,8 @@ export function ProgressRing({ done, of, ink, track, hole, size = 40, stroke = 6
     );
 }
 
-const st = StyleSheet.create({
-    tile: { borderRadius: 22, overflow: 'hidden', paddingTop: 86, paddingHorizontal: 16, paddingBottom: 16, marginBottom: 12 },
+export const welcomeTileStyles = StyleSheet.create({
+    tile: { marginHorizontal: HOME_GUTTER_DP, borderRadius: 22, overflow: 'hidden', paddingTop: 86, paddingHorizontal: 16, paddingBottom: 16, marginBottom: 10 },
     wave: { position: 'absolute', width: '150%', height: 150, left: '-25%', bottom: -70, borderRadius: 999 },
     sun: { position: 'absolute', width: 128, height: 128, top: -50, right: -36, borderRadius: 64 },
     bean: { position: 'absolute', width: 78, height: 50, top: 22, right: 86, borderTopLeftRadius: 40, borderTopRightRadius: 26, borderBottomRightRadius: 34, borderBottomLeftRadius: 24, transform: [{ rotate: '-24deg' }] },
@@ -203,7 +204,7 @@ const st = StyleSheet.create({
     button: { flexGrow: 1, flexBasis: 130, minHeight: TARGET, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
     ghost: { borderWidth: 2 },
     buttonText: { fontSize: 16, fontWeight: '800', textAlign: 'center' },
-    band: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, marginBottom: 12, overflow: 'hidden' },
+    band: { marginHorizontal: HOME_GUTTER_DP, flexDirection: 'row', alignItems: 'center', borderRadius: 16, marginBottom: 10, overflow: 'hidden' },
     bandOpen: { flex: 1, minHeight: TARGET, justifyContent: 'center', paddingLeft: 16, paddingRight: 8 },
     bandText: { fontSize: 16, fontWeight: '800' },
     bandX: { minWidth: TARGET, minHeight: TARGET, alignItems: 'center', justifyContent: 'center' },

@@ -85,7 +85,7 @@ export function StepsBody({ lines, left, count, note, colors, onStep }: {
         <View
             style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: on ? colors.brand.primary : colors.text.secondary, backgroundColor: on ? colors.brand.primary : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}
             importantForAccessibility="no-hide-descendants"
-            testID={on ? 'home-step-tick-on' : 'home-step-tick-off'}
+            testID={on ? 'home-steps-tick-on' : 'home-steps-tick-off'}
         >
             {on && <Text style={{ fontSize: 14, lineHeight: 16, fontWeight: '900', color: colors.surface.card }}>✓</Text>}
         </View>

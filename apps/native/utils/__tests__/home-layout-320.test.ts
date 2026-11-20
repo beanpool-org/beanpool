@@ -24,12 +24,13 @@ import { contrastRatio } from '../readable-color';
 import { QUIET_OPACITY } from '../../components/home/quiet';
 import { POST_CATEGORIES } from '../../constants/categories';
 import { MAX_FONT_SCALE } from '../../constants/responsive';
-import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
+import { CAPTION_MAX_SCALE, HOME_GUTTER_DP, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
+import { welcomeTileStyles } from '../../components/home/WelcomeTile';
 import { sheetStyles } from '../../components/home/sheet-parts';
 import { STRIP_NAME_BASIS_DP, st as arrangeStyles } from '../../components/home/ArrangeParts';
 import { ADD_CARD_DOT_DP, ADD_CARD_DOT_GAP_DP, ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
 import { cardRowName, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
-import { ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest, PRICING_CATEGORIES, STARTER_OFFERS, starterSheet, t } from '@beanpool/core';
+import { WELCOME_TILE_WORDS, welcomeTileLines, ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest, PRICING_CATEGORIES, STARTER_OFFERS, starterSheet, t } from '@beanpool/core';
 import { starter } from '../../components/home/StarterOffersSheet';
 import { FAB_BAND_DP } from '../fab-band';
 import { chatCardStyles } from '../../components/home/chat-parts';
@@ -666,47 +667,80 @@ describe('"A chat" at 320dp × 1.3 (DESIGN-home-chosen-chat-fable.md §2, slice 
     });
 });
 
-// DESIGN-home-default-fable.md §2.3, §5.3, §6 (slice D2): Welcome at the floor. Two plain links, never a filled button
-// (in the mock-up a button and a Not now under it pushed the Market off the first screen at 320 dp x 1.3); each link
-// keeps a 44 dp row and wraps whole to its own row where the two don't fit. The model below is this file's (glyph widths
-// at 1.3x); the first screen's pixels are the emulator's.
-describe('Welcome at 320dp × 1.3 (DESIGN-home-default-fable.md §2.3)', () => {
-    const bodies = read('components/home/HomeCardBodies.tsx');
-    const welcome = bodies.slice(bodies.indexOf('export function WelcomeBody('), bodies.indexOf('\n}\n', bodies.indexOf('export function WelcomeBody(')));
+// The WELCOME TO BEANPOOL! tile at the floor (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.4, slice S5;
+// it replaces D2's links-only Welcome card): the title 28 heavy in capitals, the facts 16 beside a 34 dp badge, two buttons
+// that sit side by side where they fit and stack at 320 dp and 1.3x text, each a 48 dp target; after seven days one band
+// with its × (48 dp). The model is this file's (glyph widths at 1.3x); the pixels are the emulator walk's.
+describe('the welcome tile at 320dp × 1.3 (S5)', () => {
+    const w = welcomeTileStyles as unknown as Record<string, Record<string, unknown>>;
+    const TILE_INNER = SCREEN - 2 * num(w.tile.marginHorizontal) - 2 * num(w.tile.paddingHorizontal);
+    const words = (s: string) => t(s as never);
 
-    it('its actions are links in rows that wrap, each a 44 dp target; no filled button', () => {
-        expect(welcome.length).toBeGreaterThan(100);
-        expect(welcome).not.toMatch(/<HomeButton\b/);
-        expect(welcome).toMatch(/minHeight: HOME_TARGET_DP/);
-        expect(welcome.match(/flexWrap: 'wrap'/g)!.length).toBeGreaterThanOrEqual(3);
-        expect(HOME_TARGET_DP).toBeGreaterThanOrEqual(44);
+    it('sits in Home\'s gutters, like every card', () => {
+        expect(w.tile.marginHorizontal).toBe(HOME_GUTTER_DP);
+        expect(w.band.marginHorizontal).toBe(HOME_GUTTER_DP);
+        expect(TILE_INNER).toBe(256);
     });
 
-    it('Welcome, the Market\'s band and the top of its first row are on the first screen at 320 x 569 with text at 1.3x', () => {
-        const line = 21 * FONT_SCALE;
-        const rows = (text: string, size = 15) => Math.ceil(textWidth(text, size) / CARD_INNER);
-        // The design's own example (§2.3): "You're in Byron Shire BeanPool." and "Ana invited you. Say hello ›".
-        const place = rows("You're in Byron Shire BeanPool.") * line;
-        const inviter = textWidth('Ana invited you.', 15) + 8 + textWidth('Say hello ›', 15) <= CARD_INNER ? line : line + HOME_TARGET_DP;
-        const links = textWidth('Take the tour ›', 15) + 20 + textWidth('Not now', 15) <= CARD_INNER ? HOME_TARGET_DP : 2 * HOME_TARGET_DP;
-        const chrome = num(s.card.paddingTop) + num(s.card.paddingBottom) + 2 * num(s.card.borderWidth) + num(s.captionRow.minHeight) + num(s.captionRow.marginBottom) + num(s.captionRow.marginTop);
-        const welcomeH = chrome + place + inviter + links + num(s.card.marginBottom);
-        // New in the Market's band, then its first row's title line (the row's padding and one line at 1.3x).
-        const marketTitleAt = welcomeH + chrome + 6 + 20 * FONT_SCALE;
-        // Above and below the list, from the code: the status bar (24 dp on Android 8, assumed), the header's row
-        // (GlobalHeader.tsx HEADER_ROW_HEIGHT), the page title (PageTitle.tsx, its 36 dp line at 1.3x and its padding),
-        // and the tab strip ((tabs)/_layout.tsx TAB_BAR_HEIGHT).
-        const header = 24 + Number(/HEADER_ROW_HEIGHT = (\d+)/.exec(read('components/GlobalHeader.tsx'))![1]);
-        const titleSrc = read('components/PageTitle.tsx');
-        const title = Number(/PAGE_TITLE_TOP = (\d+)/.exec(titleSrc)![1]) + 36 * FONT_SCALE + Number(/PAGE_TITLE_BOTTOM = (\d+)/.exec(titleSrc)![1]);
-        const tabs = Number(/TAB_BAR_HEIGHT = (\d+)/.exec(read('app/(tabs)/_layout.tsx'))![1]);
-        const list = 569 - header - title - tabs;
-        // This file's glyph widths are generous (0.62em at a full 1.3x), so Welcome's links take two rows here. By it the first
-        // row starts about 42 dp above the tab strip and its title line ends about 2 dp under it (marketTitleAt 387.9 of
-        // 386.2 on 14 Nov 2026): the row is on the first screen, its price line just under, as the design inferred (§8).
-        // The emulator's screenshots are the pixels.
-        const marketRowAt = welcomeH + chrome;
-        expect(marketRowAt + HOME_TARGET_DP / 2).toBeLessThanOrEqual(list);
-        expect(marketTitleAt - list).toBeLessThan(HOME_TARGET_DP / 2);
+    it('the title\'s longest word fits in capitals at the app\'s font cap, and it wraps rather than shrinks', () => {
+        const title = words(WELCOME_TILE_WORDS.title).toUpperCase();
+        expect(w.title.textTransform).toBe('uppercase');
+        expect(longestWord(title, num(w.title.fontSize), { scale: MAX_FONT_SCALE, caps: true })).toBeLessThanOrEqual(TILE_INNER);
+    });
+
+    it('every fact line keeps its longest word beside its badge, for Beans on, Beans off and the global community', () => {
+        const room = TILE_INNER - num(w.badge.width) - num(w.fact.columnGap);
+        const all = [
+            ...welcomeTileLines({ profile: 'local', beans: true }),
+            ...welcomeTileLines({ profile: 'local', beans: false }),
+            ...welcomeTileLines({ profile: 'global', beans: false }),
+        ];
+        for (const l of all) expect(longestWord(l.text, num(w.factText.fontSize)), l.text).toBeLessThanOrEqual(room);
+        expect(w.factText.flex).toBe(1);
+    });
+
+    it('the two buttons are 48 dp targets that stack at 320 dp (side by side only where both fit their basis)', () => {
+        expect(num(w.button.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(w.buttons.flexWrap).toBe('wrap');
+        // Two bases and the gap are wider than the tile's inside at 320 dp, so they stack, each the whole width.
+        expect(2 * num(w.button.flexBasis) + num(w.buttons.gap)).toBeGreaterThan(TILE_INNER);
+        for (const label of [words(WELCOME_TILE_WORDS.tour), words(WELCOME_TILE_WORDS.gotIt), t('Pick up the tour at step {step} ›', { step: 7 })]) {
+            expect(longestWord(label, num(w.buttonText.fontSize)), label).toBeLessThanOrEqual(TILE_INNER - 2 * num(w.button.paddingHorizontal));
+        }
+    });
+
+    it('the band after seven days: its words beside a 48 dp ×, and the band itself a 48 dp target', () => {
+        expect(num(w.bandOpen.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(num(w.bandX.minWidth)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        const room = SCREEN - 2 * HOME_GUTTER_DP - num(w.bandX.minWidth) - num(w.bandOpen.paddingLeft) - num(w.bandOpen.paddingRight);
+        expect(longestWord(`${t('Welcome to BeanPool')} ›`, num(w.bandText.fontSize))).toBeLessThanOrEqual(room);
+    });
+
+    it('words sit on the emerald ground and the gold button only, each at 4.5:1 or more, the same in light and dark', () => {
+        for (const c of [lightColors, darkColors]) {
+            expect(contrastRatio(c.text.onBrand, c.brand.fill)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(c.text.onBrand, c.brand.fillPressed)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(c.text.onGold, c.feedback.warning.solid)).toBeGreaterThanOrEqual(4.5);
+        }
+        // The fills are one value in every set (§4.4): the same tile in light and dark.
+        expect(lightColors.brand.fill).toBe(darkColors.brand.fill);
+        expect(lightColors.feedback.warning.solid).toBe(darkColors.feedback.warning.solid);
     });
 });
+
+// First steps as a tick list (S5, §4.1 item 4): the ring beside the count, a round tick and the line's words in the row.
+describe('First steps as a tick list at 320dp × 1.3 (S5)', () => {
+    it('"5 of 5 done" fits beside the 40 dp ring; each line keeps its longest word beside its tick and chevron', () => {
+        const bodies = read('components/home/HomeCardBodies.tsx');
+        const steps = bodies.slice(bodies.indexOf('export function StepsBody('), bodies.indexOf('\n}\n', bodies.indexOf('export function StepsBody(')));
+        expect(steps).toContain('<ProgressRing');
+        expect(steps).toContain("onPress={l.done ? undefined : () => onStep(l.id)}");
+        const ring = 40 + 12;
+        expect(longestWord(t('{n} of {m} done', { n: 5, m: 5 }), 18)).toBeLessThanOrEqual(CARD_INNER - ring);
+        const tick = 24 + 10;
+        for (const line of [t('Keep your 12 words safe'), t('Hear when someone answers you'), t('Post your first Offer')]) {
+            expect(longestWord(line, num(s.rowLine.fontSize)), line).toBeLessThanOrEqual(CARD_INNER - tick - HOME_TARGET_DP);
+        }
+    });
+});
+

@@ -88,8 +88,8 @@ describe('the catalogue and the newcomer\'s Home (CARD-FRAME §2.2, §3)', () =>
         for (const t of HOME_DRAWN) expect(homeCardType(t)).toBeDefined();
         // DESIGN-home-default-fable.md §2.2: the seventeen (the Pulse after Coming up, DESIGN-pulse-home-fable.md §3.5; Learn something local after Asked near you, K7), between the fixed two.
         expect(ids(cardOrder(null))).toEqual(['needs', ...HOME_DEFAULT_LIST, 'community']);
-        // "Asked near you" comes after the Market (cold-start N1); this build draws it since N2.
-        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky', 'community']);
+        // "Asked near you" comes after the Market (cold-start N1); this build draws it since N2. First steps above the Market (S5).
+        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'steps', 'market', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky', 'community']);
         expect(HOME_DEFAULT_LIST.every(id => HOME_DRAWN.has(id as never))).toBe(true);
         expect(HOME_DRAWN.has('asked')).toBe(true);
     });
@@ -1213,7 +1213,7 @@ describe('the global node\'s Home (H4)', () => {
 
     it('pinned: under Needs you, and under "Your way back in" while that one leads; after the pin it is the picker\'s, like any card', () => {
         const pins: ['find'] = ['find'];
-        expect(ids(cardOrder(STARTER, pins)).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'market']);
+        expect(ids(cardOrder(STARTER, pins)).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);
         // A newcomer's Home: the pin under Needs you, then the default list, Welcome first (DESIGN-home-default-fable.md §2.9).
         expect(ids(cardOrder(null, pins))).toEqual(['needs', 'find', ...HOME_DEFAULT_LIST, 'community']);
         expect(ids(cardOrder(layout({ order: ['market', 'events'] }), pins)).slice(0, 4)).toEqual(['needs', 'find', 'market', 'events']);
@@ -1222,8 +1222,8 @@ describe('the global node\'s Home (H4)', () => {
         // A move made during the pin moves the two cards and nothing else.
         const moved = moveCard(STARTER, 'market', 'up', inst('find', 'events', 'market'), NOW, pins)!;
         // First steps and What are you into? are in the starter set but not among the cards this test draws (inst(...) above):
-        // they stay where they were, between the two (the default list, DESIGN-home-default-fable.md §2.2).
-        expect(ids(moved.cards)).toEqual(['safety', 'events', 'steps', 'interests', 'market', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
+        // they stay where they were (the default list, First steps above the Market since S5): only the two swap.
+        expect(ids(moved.cards)).toEqual(['safety', 'steps', 'events', 'interests', 'market', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
         // The newcomer's list doesn't hold `find`: once the pin ends, the picker brings it back (CARD-FRAME §1.2, §3).
         expect(ids(cardOrder(moved))).not.toContain('find');
         expect(ids(cardOrder(EVERY))).toContain('find');

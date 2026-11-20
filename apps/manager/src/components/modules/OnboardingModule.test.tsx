@@ -264,7 +264,12 @@ describe('OnboardingModule', () => {
             expect(within(section).getByText(NOTIFY_LABELS.no).closest('div.p-3')).toHaveTextContent(
                 "Tapped Turn on notifications, then said no to the phone's own question",
             );
-            expect(within(section).getByText(NOTIFY_LABELS.later).closest('div.p-3')).toHaveTextContent('Not a no: the app can ask again another day');
+            expect(within(section).getByText(NOTIFY_LABELS.later).closest('div.p-3')).toHaveTextContent(
+                'Not a no: they can still turn them on, and the app may ask again',
+            );
+            expect(within(section).getByText(NOTIFY_LABELS.shown).closest('div.p-3')).toHaveTextContent(
+                'In the join, after the way back; shown only on a phone that has to ask',
+            );
             expect(screen.getByText(/Counted once per person since/i)).toHaveTextContent('2026-11-22');
         });
     });

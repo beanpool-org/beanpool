@@ -40,7 +40,7 @@ const COHORT: { event: string; label: string; hint: string }[] = [
  */
 const NOTIFY_ANSWERS: Record<NotifyChoice, { label: string; hint: string }> = {
     on: { label: 'Turned notifications on', hint: 'Tapped Turn on notifications, and the phone said yes' },
-    later: { label: 'Chose Later', hint: 'Not a no: the app can ask again another day' },
+    later: { label: 'Chose Later', hint: 'Not a no: they can still turn them on, and the app may ask again' },
     no: { label: 'The phone said no', hint: "Tapped Turn on notifications, then said no to the phone's own question" },
 };
 
@@ -60,7 +60,7 @@ const IN_APP: { event: string; sub?: string; label: string; hint: string }[] = [
     { event: 'guide_complete', label: 'Way back step done', hint: 'Phone: Safety Backup finished. Web: How it Works finished' },
     // After the way back, the join's last screen on a phone that has to ask (DESIGN-notify-and-backup-asks-fable-amend2.md
     // §4.4, slice N1c): drawn, then one row per answer. A row with `sub` adds up only that answer (once:<sub>).
-    { event: NOTIFY_SHOWN, label: 'Saw the notifications screen', hint: "The join's last screen, shown only on a phone that has to ask" },
+    { event: NOTIFY_SHOWN, label: 'Saw the notifications screen', hint: "In the join, after the way back; shown only on a phone that has to ask" },
     ...NOTIFY_CHOICES.map(sub => ({ event: NOTIFY_CHOICE, sub, ...NOTIFY_ANSWERS[sub] })),
 ];
 

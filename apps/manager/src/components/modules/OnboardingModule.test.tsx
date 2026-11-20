@@ -170,7 +170,10 @@ describe('OnboardingModule', () => {
         expect(row('Saw the protection screen')).not.toHaveTextContent('56');
         // Both sub-types of the same step add up into one figure for the step.
         expect(row('Chose how to be protected')).toHaveTextContent('4');
-        expect(row('Finished the guide')).toHaveTextContent('4');
+        // guide_complete counts the join's last step: the phone's way-back step (Safety Backup) since slice S5.
+        expect(row('Way back step done')).toHaveTextContent('4');
+        expect(row('Way back step done')).toHaveTextContent('Phone: Safety Backup finished. Web: How it Works finished');
+        expect(screen.queryByText('Finished the guide')).toBeNull();
 
         // The earliest per-person day, not the earliest day in the window.
         expect(screen.getByText(/Counted once per person since/i)).toHaveTextContent('2026-09-10');

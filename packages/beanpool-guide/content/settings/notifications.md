@@ -104,7 +104,7 @@ Reminders arrive with your **Marketplace Activity** alerts, so they stop if you 
 
 ## No alerts at all?
 
-BeanPool asks for notification permission only when you tap to turn it on: from the card at the end of How it Works, on **Home** until answered, or when you send your first message or request to join. It never asks at install or when you create your account, and nothing is asked after you restore an account. If your phone already allows notifications for BeanPool, nothing is asked at all.
+BeanPool asks for notification permission only when you tap to turn it on: **Hear when someone answers you** in **First steps** on **Home**, or when you send your first message or request to join. It never asks at install, when you create your account or while you join, and nothing is asked after you restore an account. If your phone already allows notifications for BeanPool, nothing is asked at all.
 
 If your phone won't show its own question again (for example after you tapped **Don't Allow** on an iPhone), **Turn on** says notifications are off for BeanPool in your phone's settings, and **Open Settings** takes you there. The card stays on **Home** until your phone allows them or you tap **Not now**.
 

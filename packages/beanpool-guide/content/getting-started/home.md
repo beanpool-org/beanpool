@@ -16,13 +16,22 @@ In the web app, on a wide screen, the cards stand in two or three columns, in yo
 
 ## Welcome and the tour
 
-A new member's Home has its cards from the first second (see "Your cards", below). The first is **Welcome**, between **Needs you** and the rest (on the global community, **Find your community** stays above it). It says which community you are in, such as "You're in Riverside.", and who invited you, with **Say hello ›** to open a chat with them. An owner alone on a new community, whom nobody invited, sees "You're the first one here." instead, with **Invite someone ›** where they can invite. **Welcome** goes when the tour is done or skipped, when you tap **Not now**, or seven days after you joined, whichever comes first.
+A new member's Home has its cards from the first second (see "Your cards", below). The first is **Welcome**, between **Needs you** and the rest (on the global community, **Find your community** stays above it). It says which community you are in, such as "You're in Riverside.", and who invited you, with **Say hello ›** to open a chat with them. An owner alone on a new community, whom nobody invited, sees "You're the first one here." instead, with **Invite someone ›** where they can invite. The phone and the web app draw it differently until the web app's is redrawn too.
 
-- **Take the tour ›** starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with a caption such as **Step 2 of 8** above (the number depends on the app and on your community's tabs). Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.
+On the phone, **Welcome** is a green tile headed "Welcome to BeanPool!", and it is a newcomer's: it is there for your first 30 days at most.
+
+- Under who you are and where, it says three things to know: "Offer something first. Then ask for anything.", "Beans keep score: about 40 for an hour's help." and "Zero is a good balance: you give as much as you get." Where Beans are off, a local community shows only the first. The global community shows two lines instead: "Meet people and find a community near you." and "No Beans here. Trading in Beans happens in local communities."
+- **Show me around** starts the tour (below). **Got it** puts the tile away.
+- After 7 days, if you haven't tapped either, the tile folds to one line, "Welcome to BeanPool ›", with **×**. Tap the line to open the tile again; **×** puts it away, as **Got it** does. 30 days after you joined it is gone, whether or not you tapped anything.
+- It comes once per phone: a second community you join on the same phone doesn't show it again.
+
+In the web app, **Welcome** is a card with those first lines, **Take the tour ›** and **Not now**. It goes when the tour is done or skipped, when you tap **Not now**, or seven days after you joined, whichever comes first.
+
+- **Show me around** (in the web app, **Take the tour ›**) starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with a caption such as **Step 2 of 8** above (the number depends on the app and on your community's tabs). Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.
 - The last step comes back to Home and says "That's the tour. Home starts with a few cards. Add a card and Arrange are at the bottom." Tap **Done**.
-- **Skip** on the bar, or **Not now** on **Welcome**, ends the tour. Ending the tour, either way, takes **Welcome** off Home and adds nothing: your cards are already there.
-- The tour never starts by itself. If you close the app part way, the card says "Pick up the tour at step 3".
-- Done or Skip is kept on your account, so the card does not come back on your other phones or browsers. To see the tour again, tap **?** at the top and **Take the tour again**.
+- **Skip** on the bar, or **Got it** on the tile (in the web app, **Not now** on the card), ends the tour. Ending the tour, either way, takes **Welcome** off Home and adds nothing: your cards are already there.
+- The tour never starts by itself. If you close the app part way, **Welcome** says "Pick up the tour at step 3".
+- Done, Skip, **Got it** or **Not now** is kept on your account, so **Welcome** does not come back on your other phones or browsers. To see the tour again, tap **?** at the top and **Take the tour again**.
 - If you had set up your Home before the tour existed, nothing changes for you.
 
 After you tap **Skip** on the tour, a one-line tip appears under the first card. Tap **✕** to put it away. After **Done** it does not show.
@@ -32,7 +41,7 @@ After you tap **Skip** on the tour, a one-line tip appears under the first card.
 
 ## Your cards
 
-On the phone and in the web app, your Home is a list of cards you choose. A new member's Home starts with this list, in this order: **Welcome**, **Your way back in**, **New in the Market** (**Near you** on the global community), **First steps**, **What are you into?**, **Coming up**, **The Pulse**, **Your Beans**, **Asked near you**, **Learn something local**, **Your deals**, **Your groups**, **Decide**, **From your community**, **Who joined**, **Tips** and **Sun and moon**. Each shows only while it has something to say, so on your first day you see a few of them, and the others appear in their places when they have something. On the global community there is no **Your Beans**, **Your deals** or **Decide**. **Needs you** is always at the top and **Your community** always at the bottom. The web app stands the same order in its columns.
+On the phone and in the web app, your Home is a list of cards you choose. A new member's Home starts with this list, in this order: **Welcome**, **Your way back in**, **First steps**, **New in the Market** (**Near you** on the global community), **What are you into?**, **Coming up**, **The Pulse**, **Your Beans**, **Asked near you**, **Learn something local**, **Your deals**, **Your groups**, **Decide**, **From your community**, **Who joined**, **Tips** and **Sun and moon**. Each shows only while it has something to say, so on your first day you see a few of them, and the others appear in their places when they have something. On the global community there is no **Your Beans**, **Your deals** or **Decide**. **Needs you** is always at the top and **Your community** always at the bottom. The web app stands the same order in its columns.
 
 - **Add a card**, on your community's card at the bottom of Home, opens a list of every card your community can show, in three groups: **For you**, **Around you** and **Getting started**. Tap **Add** beside a card to put it on Home. It goes to the top, just under **Needs you**, and Home scrolls up to show it.
 - A card that is already on Home says **On Home** instead of **Add**. Some cards can be added more than once, such as **A saved search**: they say how many you have, such as "2 of 5 on Home".
@@ -85,7 +94,7 @@ On the phone, when your phone has moved to another address of your community by 
 
 Most cards have a **…** button at the top right. These do not:
 
-- **Needs you**, **Welcome** and **Your community**. **Welcome** has **Not now** instead.
+- **Needs you**, **Welcome** and **Your community**. **Welcome** has **Got it** instead on the phone, and **Not now** in the web app. On the phone it stays at the top, under **Needs you**, even on a Home you arranged, and **Arrange** doesn't move it.
 - **Your way back in**, on the phone. It has its own **✕**.
 - **Find your community**, during your first 30 days on the global community, and after that while a request to join is waiting for an answer (or its card has not been put away with **Got it**) or you have a watch for a community near you.
 

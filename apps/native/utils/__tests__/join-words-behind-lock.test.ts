@@ -97,7 +97,7 @@ function slice(s: string, start: string, end: string): string {
 const count = (s: string, needle: string) => s.split(needle).length - 1;
 
 describe("welcome.tsx: Safety Backup's words", () => {
-    const backup = () => slice(welcome(), "if (mode === 'seedBackup' && pendingIdentity) {", "if (mode === 'onboardingGuide' && pendingIdentity) {");
+    const backup = () => slice(welcome(), "if (mode === 'seedBackup' && pendingIdentity) {", "if (mode === 'ownerCard' && pendingIdentity)");
     const showBehindLock = () => slice(welcome(), 'async function handleShowPendingWords() {', '\n    }\n');
 
     it('are new only when this join made the key', () => {

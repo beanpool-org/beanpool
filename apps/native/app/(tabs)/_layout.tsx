@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
-import { FORUM_HOME_WORDS, dealsNeedingMe, forumOn, helpSheetFor, isOthersListingDoorbell, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { FORUM_HOME_WORDS, dealsNeedingMe, forumOn, helpSheetFor, isOthersListingDoorbell, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, welcomeTileLines, word } from '@beanpool/core';
 import { webSocketAliveSince } from '../../services/ws-client';
 import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
@@ -541,6 +541,8 @@ export default function TabLayout() {
                 sheet={helpWords}
                 tourOpen={tourRunning}
                 canTour={!!identity && !!tourHomeNow}
+                // A member's: the Home tile's words for this community (Beans on or off, global's own lines), DESIGN-onboarding-home-landing §4.2.
+                welcome={identity ? welcomeTileLines({ profile: isGlobal ? 'global' : 'local', beans: strip.profile?.features?.beans !== false }) : null}
                 colors={colors}
                 onClose={() => setHelpOpen(false)}
                 onReadPage={() => {

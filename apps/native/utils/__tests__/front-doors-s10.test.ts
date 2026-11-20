@@ -132,10 +132,11 @@ describe('no permission prompt after a restore', () => {
         });
     }
 
-    it('the only place welcome asks for notifications is the tap on the onboarding guide\'s card', () => {
-        const uses = Array.from(welcome.matchAll(/turnOnNotifications\(/g)).length;
-        expect(uses).toBe(1);
-        expect(welcome.indexOf('turnOnNotifications(pendingIdentity')).toBeGreaterThan(welcome.indexOf("if (mode === 'onboardingGuide' && pendingIdentity)"));
+    // The onboarding guide's card was the one place it asked; How it Works left the path in slice S5
+    // (DESIGN-onboarding-home-landing-fable.md §2), so the join asks nowhere: First steps' "Hear when someone answers you"
+    // asks at that tap on Home.
+    it('welcome never asks for notifications: First steps asks at its own tap', () => {
+        expect(Array.from(welcome.matchAll(/turnOnNotifications\(|requestPermissionsAsync|declineNotifications\(/g))).toHaveLength(0);
     });
 });
 

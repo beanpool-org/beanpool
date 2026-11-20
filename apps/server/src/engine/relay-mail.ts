@@ -51,18 +51,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    OUTSIDE_DEVICE_ID, checkRelayItem, word, type RelayEnvelope, type RelayItem, type RelayItemDrop, type RelayItemKind,
+    OUTSIDE_DEVICE_ID, PUSH_NOTICE_KINDS, checkRelayItem, word, wordsFor, type RelayEnvelope, type RelayItem, type RelayItemDrop, type RelayItemKind,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
-import { isNodeMember, readsAsMember } from '../state-engine.js';
+import { dispatchPushNotification, isNodeMember, readsAsMember } from '../state-engine.js';
+import { clearChatMute, getChatMute, setChatMute } from './chat-mutes.js';
 import { hasBlocked } from './member-blocks.js';
 import { isOwnNodeHome } from './node-key.js';
 import { GUEST_ITEM_KINDS, guestItemMaxChars, takeGuestItem, type GuestItemRefusal, type GuestItemTaken } from './group-guests.js';
 import { assertFolderFloorSpace, StorageNearlyFullError } from './photo-upload-budget.js';
 import { logger } from '../logger.js';
+// A refusal with a value in it, in English, its sentence marked for the way out to find again in the member's language
+// (member-words.ts), as engine/member-blocks.ts does.
+const { t: tr } = wordsFor('en');
 
 // ── What crosses, and how big ───────────────────────────────────────────────────────────────
 
@@ -279,12 +283,18 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
     // with (engine/group-guests.ts); nobody else hears anything.
     const answerOf = (item: RelayItem, said: GuestItemRefusal | GuestItemTaken): ReceivedItem => (typeof said === 'string'
         ? { itemId: item.envelope.itemId, refused: said } : { itemId: item.envelope.itemId, received: true, seq: said.seq });
+    // The members a line held now rings (ringsFor), each once for this request, and who wrote it.
+    const rings = new Map<string, string>();
     for (const item of newItems) {
-        const said = takeItem(origin, item, now);
+        const said = takeItem(origin, item, now, rings);
         if (!said) continue;
         const at = answerAt.get(`${item.envelope.senderKey}\n${item.envelope.itemId}`);
         if (at !== undefined) answers[at] = answerOf(item, said);
     }
+    // Rung once the answer is made, never within it (#3310 r3 review F4): the work of a ring (the member's alerts, their phones,
+    // a signed notice, the bell) is done only for a line that rings, so its time in the answer would tell the sending server
+    // whether the member made its sender quiet, or blocked them.
+    if (rings.size > 0) setImmediate(() => ringHeldMail(rings));
     // A guest's group item brought again by the server that brought it first (it never heard the answer): what it was told
     // then, never a bare "received": the refusal (relay_mail_refused), which its home would otherwise settle `sent`, or the
     // counter its yes, no or leave was stamped with (relay_mail_answered). Nothing is taken again.
@@ -306,7 +316,7 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
  * or what a guest in a group here hears of their own item: its refusal, or the counter their yes, no or leave was stamped
  * with (engine/group-guests.ts takeGuestItem).
  */
-function takeItem(origin: string, item: RelayItem, now: number): GuestItemRefusal | GuestItemTaken | null {
+function takeItem(origin: string, item: RelayItem, now: number, rings: Map<string, string>): GuestItemRefusal | GuestItemTaken | null {
     const env = item.envelope;
     const spent = db.prepare('INSERT INTO relay_mail_seen (sender_key, item_id, sender_home, seen_at) VALUES (?, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING')
         .run(env.senderKey, env.itemId, origin, now).changes === 1;
@@ -340,7 +350,7 @@ function takeItem(origin: string, item: RelayItem, now: number): GuestItemRefusa
         }
         return said;
     }
-    holdItem(item, now);
+    if (holdItem(item, now) && ringsFor(item.envelope, now)) rings.set(item.envelope.recipient, item.envelope.senderKey);
     return null;
 }
 
@@ -372,6 +382,119 @@ function holdItem(item: RelayItem, now: number): boolean {
 /** Whether `member` here has written to `key` (any item but a receipt, in the outbox's 30 days): the sender is no stranger to them. */
 function hasWrittenTo(member: string, key: string): boolean {
     return !!db.prepare("SELECT 1 FROM relay_outbox WHERE sender_key = ? AND recipient = ? AND kind != 'receipt' LIMIT 1").get(member, key);
+}
+
+// ── The ring: a held line from someone the member wrote to (slice S4) ──────────────────────────
+
+/**
+ * Whether an item just held rings its recipient's phones (slice S4, scratch/fable-design/DESIGN-no-switch-messaging-fable.md
+ * §3 "Alerts for across mail", §8 Spam): a line (never an edit, a reaction, a delete or a blob's bytes), from a key the
+ * recipient has written to in the last {@link MAIL_HELD_DAYS} days by this server's own outbox (the known-sender rule of
+ * {@link hasWrittenTo}, bounded by the day it was written: a stranger can never ring a phone, and a friend silent for a
+ * month stops ringing until the member writes again; their line is still held and found at the phone's next round), and not
+ * a key the member made quiet ({@link setMailQuiet}). Whether the member has alerts on is dispatchPushNotification's, as
+ * for every chat push (`notify_chat`).
+ */
+export function ringsFor(env: Pick<RelayEnvelope, 'kind' | 'recipient' | 'senderKey'>, now = Date.now()): boolean {
+    if (env.kind !== 'dm-line') return false;
+    const wrote = db.prepare(`SELECT 1 FROM relay_outbox WHERE sender_key = ? AND recipient = ? AND kind != 'receipt' AND created_at > ? LIMIT 1`)
+        .get(env.recipient, env.senderKey, now - MAIL_HELD_DAYS * DAY_MS);
+    return !!wrote && !mailQuiet(env.recipient, env.senderKey, now);
+}
+
+/**
+ * The push a ring sends: `chat.message` (core's fixed words, "You have a new message."), which every phone in the field knows
+ * and opens on Chats, with nothing in it of the sender, the chat or the line (the line is sealed: this server never read it).
+ * Its kept details name nothing either. One per member for a request, however many lines it held for them.
+ */
+function ringHeldMail(rings: ReadonlyMap<string, string>): void {
+    for (const [recipient, sender] of rings) {
+        try {
+            dispatchPushNotification([recipient], sender, '💬 New Message', PUSH_NOTICE_KINDS['chat.message'].body, {}, 'chat', 'chat.message');
+        } catch (e) {
+            logger.warn('SYS', `Mail from another community: a ring could not be sent (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
+        }
+    }
+}
+
+/**
+ * The across mute's row (slice S4, "Mutes"), kept as a chat mute (engine/chat-mutes.ts) under the member's key and an id that
+ * names the other person's key alone (#3310 review F2): a re-key moves `member_pubkey` (engine/key-move.ts), so the mute goes
+ * with the member to the new key. An id made from both keys (core relayConversationId) could not be made again for the new
+ * key, and the move would leave the mute behind. Never the id of a chat here: those are made by this server, never `quiet:`.
+ */
+const QUIET_PREFIX = 'quiet:';
+const quietId = (key: string): string => `${QUIET_PREFIX}${key}`;
+
+/**
+ * A key `member` made quiet (slice S4, "Mutes": the across mute, kept on the member's device and told here): no push for a
+ * line from it. One table, copied to a standby as every mute is, carried by a re-key, gone with the member.
+ */
+export function mailQuiet(member: string, key: string, now = Date.now()): boolean {
+    try {
+        return !!getChatMute(quietId(key), member, now);
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * The most keys one member can keep quiet (#3310 review F3, "bound what the client authored"): the route takes any 64-hex key,
+ * so without a cap one member could grow `chat_mutes` without end and every mailbox page would carry the list. The same
+ * number as a member's blocks (engine/member-blocks.ts MEMBER_BLOCKS_MAX).
+ */
+export const MAIL_QUIET_MAX = 500;
+
+// In a function, not at the top: the words layer's check keeps t() out of a module's top level. Its sentence is marked for
+// the way out to find again in the member's language (member-words.ts), as the blocks limit's is (member-blocks.ts).
+function quietLimitText(): string {
+    return tr('You can keep up to {n} people quiet. Let someone ring again to keep another quiet.', { n: MAIL_QUIET_MAX });
+}
+
+/** A new quiet key past {@link MAIL_QUIET_MAX}: refused (409 quiet_limit); nothing kept. */
+export class MailQuietLimitError extends Error {
+    readonly status = 409;
+    readonly code = 'quiet_limit';
+    constructor() {
+        super(quietLimitText());
+        this.name = 'MailQuietLimitError';
+    }
+}
+
+const quietRowsOf = (member: string): number =>
+    count('SELECT COUNT(*) AS n FROM chat_mutes WHERE member_pubkey = ? AND substr(conversation_id, 1, ?) = ?', member, QUIET_PREFIX.length, QUIET_PREFIX);
+
+/**
+ * `member` makes `key` quiet (`quiet` true) or not. The route checks the key (64 lower-case hex, not their own). A key already
+ * quiet, and making one ring again, always pass; a NEW quiet key past {@link MAIL_QUIET_MAX} throws {@link MailQuietLimitError}.
+ */
+export function setMailQuiet(member: string, key: string, quiet: boolean): boolean {
+    if (quiet) {
+        const already = !!db.prepare('SELECT 1 FROM chat_mutes WHERE conversation_id = ? AND member_pubkey = ?').get(quietId(key), member);
+        if (!already && quietRowsOf(member) >= MAIL_QUIET_MAX) throw new MailQuietLimitError();
+        setChatMute(quietId(key), member, 'always');
+    } else clearChatMute(quietId(key), member);
+    return quiet;
+}
+
+/**
+ * The keys `member` made quiet (slice S4, #3310 review F2), in the mailbox's answer (GET /api/mail): a device that has never
+ * kept a mark for one of them (a new phone after a re-key, a restore from 12 words, a browser signed in afresh) shows that
+ * chat muted, as this server holds it. Their own state alone.
+ */
+export function mailQuietKeys(member: string): string[] {
+    const rows = db.prepare('SELECT conversation_id FROM chat_mutes WHERE member_pubkey = ? AND substr(conversation_id, 1, ?) = ? ORDER BY conversation_id LIMIT ?')
+        .all(member, QUIET_PREFIX.length, QUIET_PREFIX, MAIL_QUIET_MAX) as Array<{ conversation_id: string }>;
+    return rows.map((r) => r.conversation_id.slice(QUIET_PREFIX.length)).filter((key) => /^[0-9a-f]{64}$/.test(key));
+}
+
+/**
+ * How many items wait here for `member` (slice S4: the counts answer's `mail`, GET /api/me/unread): every one still held for
+ * them, so a phone's round fetches only where something waits. Counted for the member, not a device: an item one device
+ * has and another not yet still counts, so a device may ask and find nothing, never miss one.
+ */
+export function mailWaitingFor(member: string): number {
+    return count('SELECT COUNT(*) AS n FROM relay_mail WHERE recipient = ?', member);
 }
 
 /**

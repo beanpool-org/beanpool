@@ -140,6 +140,10 @@ export const GUARD_TESTS = [
   'apps/pwa/src/lib/signing-source-rule.test.ts', //         #2770 #3090
   'apps/pwa/src/darkModeHover.test.ts', //                   #2484 #3148
   'apps/native/utils/__tests__/dark-mode-sources.test.ts', // #1844 #2536 #2994 #3035
+  // The phone's colour ceiling, the other tree scanner preflight.test.mjs holds a phone style change to. As a plain scanner
+  // it ran only while it sorted inside MAX_EXTRA by name: main had it 60th of 60 (21 Nov 2026) and #3310's sync, one more
+  // scanner test ahead of it, put it 61st (CI red on the merge ref).
+  'apps/native/utils/__tests__/static-colours-ceiling.test.ts',
 ];
 /** The plan's estimate stays under this many seconds (guards aside): vitest files past it are left to CI. */
 export const PLAN_SECS = Number(process.env.PREFLIGHT_PLAN_SECS || 330);

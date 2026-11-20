@@ -46,11 +46,11 @@ TaskManager.defineTask(TASK_NAME, async () => {
 
         // Mail from other communities (slice X3): fetched, written on this phone, then confirmed, so it is deleted there. Under
         // its own budget, inside what is left of iOS's ~30 seconds (utils/outside-chat-live.ts backgroundMailBudget); skipped
-        // when too little is left, so the mail waits for the next wake or the app.
+        // when too little is left, so the mail waits for the next wake or the app. Then the across mail of the phone's other
+        // communities (slice S4), in what is left, every one fetched (mailAfterBackgroundSync).
         try {
-            const { backgroundMailBudget, syncOutsideMailNow } = await import('../utils/outside-chat-live');
-            const budget = backgroundMailBudget(Date.now() - wokeAt);
-            if (budget > 0) await syncOutsideMailNow(budget);
+            const { mailAfterBackgroundSync } = await import('../utils/outside-chat-live');
+            await mailAfterBackgroundSync(wokeAt);
         } catch (e) {
             console.warn('[Pillar] Mail from other communities waits for the next round:', e);
         }

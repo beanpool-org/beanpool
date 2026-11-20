@@ -248,7 +248,7 @@ const STRANGER_REFUSED = new Set<string>([
     'POST /api/local/admin/ws-ticket', 'POST /api/local/claim', 'POST /api/local/connectors', 'POST /api/local/connectors/connect',
     'POST /api/local/connectors/credit-cap', 'POST /api/local/connectors/disconnect', 'POST /api/local/connectors/remove',
     'POST /api/local/federation/links/ceiling', 'POST /api/local/update-identity', 'POST /api/mail/confirm', 'POST /api/mail/device/forget',
-    'POST /api/mail/group/confirm', 'POST /api/mail/report', 'POST /api/mail/send', 'POST /api/marketplace/polls/close',
+    'POST /api/mail/group/confirm', 'POST /api/mail/quiet', 'POST /api/mail/report', 'POST /api/mail/send', 'POST /api/marketplace/polls/close',
     'POST /api/marketplace/polls/vote', 'POST /api/marketplace/posts', 'POST /api/marketplace/posts/:id/chat/message',
     'POST /api/marketplace/posts/:id/chat/remove', 'POST /api/marketplace/posts/:id/close', 'POST /api/marketplace/posts/:id/let-in',
     'POST /api/marketplace/posts/:id/other-answers/:answerId/remove', 'POST /api/marketplace/posts/:id/other-answers/:answerId/report',
@@ -348,6 +348,7 @@ const OWN_STATE: Record<string, string> = {
     'POST /api/member/channels': REACHED,
     'POST /api/member/pulse/items/:id/mute': REACHED,
     'POST /api/mail/device/forget': REACHED,
+    'POST /api/mail/quiet': REACHED,
     'DELETE /api/tools/:tool': REACHED,
     'POST /api/global/watches': GLOBAL_ONLY,
     'DELETE /api/global/watches/:id': GLOBAL_ONLY,
@@ -824,6 +825,8 @@ async function main(): Promise<void> {
         },
         // A phone's mail id forgotten (Alice's noted just before, so hers has one to forget).
         'POST /api/mail/device/forget': (x) => { if (x === alice) noteMailDevice(alice.pk, MAIL_DEVICE); return { device: MAIL_DEVICE }; },
+        // Someone in another community made quiet (slice S4): kept as that across chat's mute, the signer's own.
+        'POST /api/mail/quiet': () => ({ key: 'e'.repeat(64), quiet: true }),
         // One tap, no words (a body that says anything is refused before the engine is asked).
         'POST /api/vouchers/ask': () => ({}),
         // Both of a consent page's ticks on, as the page sends them (BAIT names neither, so it would ask for none): the

@@ -297,6 +297,56 @@ async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<A
 }
 
 /**
+ * The across mute's mark (slice S4), kept with the chats for this account and the other person's key (#3310 review F2): another
+ * account on this phone never reads it, as the web keeps it (lib/outside-mail.ts, getMeta(me, ...)).
+ */
+const quietMeta = (me: string, key: string) => `quiet:${me}:${key}`;
+
+/** Whether the member `me` made `key` quiet on this phone (slice S4, the across mute). */
+export async function outsideQuiet(store: OutsideChatStore, me: string, key: string): Promise<boolean> {
+    return (await store.getMeta(quietMeta(me, key))) === '1';
+}
+
+/**
+ * How long a quiet request may take when its caller gives no signal of its own (#3310 r3 review F1): React Native's fetch never
+ * gives up by itself, and Block, Report and the bell await this one, so a stalled connection would hold them forever. The same
+ * 20 s as a send (outside-chat-live.ts OUTSIDE_SEND_MS).
+ */
+export const QUIET_SEND_MS = 20_000;
+
+/**
+ * The across mute (slice S4, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "Mutes"): my server told first,
+ * "no push for this key" (POST /api/mail/quiet, routes/relay.ts), then kept on this phone with the chats, so what the chat
+ * shows is what my server holds. Throws OutsideMailError with my server's words when it refuses (a server from before S4
+ * has no such route), and nothing is kept.
+ */
+export async function setOutsideQuiet(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'store' | 'signal'>, key: string, quiet: boolean): Promise<void> {
+    const own = ctx.signal ? null : new AbortController();
+    const timer = own ? setTimeout(() => own.abort(), QUIET_SEND_MS) : undefined;
+    try {
+        await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/quiet', { key, quiet }, ctx.identity as BeanPoolIdentity, ctx.signal ?? own!.signal));
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+    await ctx.store.setMeta(quietMeta(ctx.identity.publicKey, key), quiet ? '1' : '0');
+}
+
+/**
+ * The keys my server says I made quiet (its mailbox answer's `quiet`, slice S4, #3310 review F2), kept for this account where
+ * this phone never kept a mark of its own for that key: a new phone after a re-key, or one restored from 12 words, shows the
+ * chat muted as my server holds it. A mark this phone kept (the member's own Mute or Unmute here) stands: it is what this
+ * phone last told my server, and a page asked before that was told can't undo it.
+ */
+async function learnQuiet(ctx: Pick<OutsideMailContext, 'identity' | 'store'>, keys: unknown): Promise<void> {
+    if (!Array.isArray(keys)) return;
+    const me = ctx.identity.publicKey;
+    for (const key of keys) {
+        if (typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key) || key === me) continue;
+        if ((await ctx.store.getMeta(quietMeta(me, key))) === null) await ctx.store.setMeta(quietMeta(me, key), '1');
+    }
+}
+
+/**
  * Report a line from another community (X5): the item as it came, kept on this phone (its sender's signed envelope and the
  * sealed line inside), and the words it opened to, to my own community's server. That server checks the sender's signatures,
  * blocks them for me, and tells their community, never naming me (server: engine/relay-complaint.ts). Throws
@@ -496,6 +546,8 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         // another device) opens here first. While more ticks wait, this page's items are left: unconfirmed, they come again
         // with the next page, and are judged once every tick is in.
         out.ticks += await applyTicks(ctx, Array.isArray(answer?.outbox) ? answer.outbox : [], now);
+        // The keys I made quiet, as my server holds them (#3310 review F2): kept where this phone kept no mark of its own.
+        if (page === 0) await learnQuiet(ctx, answer?.quiet).catch((e) => console.warn('[OutsideMail] The quiet keys wait for the next round:', e?.message ?? e));
         if (answer?.outboxMore) continue;
         const held: any[] = Array.isArray(answer?.items) ? answer.items : [];
         const done: string[] = [];

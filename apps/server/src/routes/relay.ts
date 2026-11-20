@@ -46,8 +46,9 @@ import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 import { StorageNearlyFullError } from '../engine/photo-upload-budget.js';
 import type { NodeOrigin } from '../engine/node-signature.js';
 import {
-    MAIL_FETCH_PAGE, confirmMail, forgetMailDevice, heldBlobFor, heldMailFor, isMailDevice, noteMailDevice, receiveRelayItems,
+    MAIL_FETCH_PAGE, confirmMail, forgetMailDevice, heldBlobFor, heldMailFor, isMailDevice, mailQuietKeys, MailQuietLimitError, noteMailDevice, receiveRelayItems, setMailQuiet,
 } from '../engine/relay-mail.js';
+import { StandbyLedgerError } from '../config/node-role.js';
 import { OutboxError, outboxStatesFor, sendRelayItems } from '../engine/relay-outbox.js';
 import { COMPLAINT_REPORTER_PREFIX, checkOutsideLineReport, readComplaintBody, receiveComplaint, submitOutsideLineReport, tellHomeOf } from '../engine/relay-complaint.js';
 import { noteNewReport } from '../services/alerts.js';
@@ -143,7 +144,9 @@ export function createRelayRoutes(): Router {
         noteMailDevice(member, device);
         const held = heldMailFor(member, device);
         const ticks = outboxStatesFor(member, Number.isSafeInteger(since) && since > 0 ? since : 0, sinceId);
-        ctx.body = { ...held, page: MAIL_FETCH_PAGE, outbox: ticks.ticks, outboxMore: ticks.more };
+        // `quiet` (slice S4, #3310 review F2): the keys the signer made quiet here, so a device that never kept a mark for one
+        // (a new phone after a re-key or a restore) shows that chat muted, as this server holds it.
+        ctx.body = { ...held, page: MAIL_FETCH_PAGE, outbox: ticks.ticks, outboxMore: ticks.more, quiet: mailQuietKeys(member) };
     });
 
     router.get('/api/mail/blob/:itemId', async (ctx) => {
@@ -182,6 +185,33 @@ export function createRelayRoutes(): Router {
         const device = deviceOf(ctx, ((ctx.request as any).body as { device?: unknown } | undefined)?.device);
         if (!device) return;
         ctx.body = { forgotten: forgetMailDevice(member, device) };
+    });
+
+    // The across mute (slice S4): the signer's phone says a key's lines ring nothing here (`quiet` true), or ring again.
+    // Their own state alone: kept as that across chat's mute, read only by the ring (engine/relay-mail.ts ringsFor).
+    router.post('/api/mail/quiet', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const member = memberHere(ctx);
+        if (!member) return;
+        const body = (ctx.request as any).body as { key?: unknown; quiet?: unknown } | undefined;
+        const key = body?.key;
+        if (typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key) || key === member || typeof body?.quiet !== 'boolean') {
+            ctx.status = 400;
+            ctx.body = { error: "key is another person's key (64 lowercase hex), and quiet is true or false.", code: 'bad_quiet' };
+            return;
+        }
+        try {
+            ctx.body = { quiet: setMailQuiet(member, key, body.quiet) };
+        } catch (e) {
+            if (e instanceof MailQuietLimitError) {
+                ctx.status = e.status;
+                ctx.body = { error: e.message, code: e.code };
+                return;
+            }
+            if (!(e instanceof StandbyLedgerError)) throw e;
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
+        }
     });
 
     router.post('/api/mail/report', async (ctx) => {

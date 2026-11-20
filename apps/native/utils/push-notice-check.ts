@@ -496,18 +496,19 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
 
 /**
  * The community that signed a notification's notice for this account, by the same check as {@link checkWhileOpen} and
- * {@link checkTap} (its pin, this account, its lifetime), for counting it (notice-counts.ts): the notice's id, and whether
- * that community is the one the phone is set to. Null for anything else: unsigned, signed by no community this phone
+ * {@link checkTap} (its pin, this account, its lifetime), for counting it (notice-counts.ts): the notice's id, its kind
+ * (null for one this build doesn't know; a ring of across mail is `chat.message`: outside-chat-live.ts roundOnRing), and whether that community is the one the
+ * phone is set to. Null for anything else: unsigned, signed by no community this phone
  * keeps, for another account, out of its time. Notes nothing and counts no drop, so it never changes what a later check
  * of the same notice decides. Asks no community anything. Never throws.
  */
-export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Promise<{ community: string; id: string; active: boolean } | null> {
+export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Promise<{ community: string; id: string; kind: PushNoticeKind | null; active: boolean } | null> {
     try {
         const notice = signedNotice(n.data);
         if (!notice) return null;
         const checked = await checkSigned(notice, ctx);
         if (!checked.ok) return null;
-        return { community: checked.pin.community, id: checked.id, active: checked.pin.community === checked.pins.anchor };
+        return { community: checked.pin.community, id: checked.id, kind: checked.kind, active: checked.pin.community === checked.pins.anchor };
     } catch {
         return null;
     }

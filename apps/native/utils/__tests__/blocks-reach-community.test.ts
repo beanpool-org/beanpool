@@ -2191,8 +2191,10 @@ describe('a block reaches every community this phone holds (slice S7a)', () => {
             expect(listOf(HELD, ana.publicKey)).toEqual(['H']);
         });
 
-        it('a community that never answers: it settles by the deadline, aborts the request, and the other owed one still gets it', async () => {
+        it('a community that never answers: it settles at the deadline, aborts the request, and the other owed one still gets it', async () => {
             vi.useRealTimers();
+            vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+            vi.setSystemTime(new Date('2026-11-21T08:00:00Z'));
             const app = await phoneHolding(['in use', 'held and reachable'], [IN_USE, THIRD, HELD]);
             net.down.add(HELD);
             net.down.add(THIRD);
@@ -2201,12 +2203,18 @@ describe('a block reaches every community this phone holds (slice S7a)', () => {
             net.down.clear();
             net.hang.add(THIRD);
             const from = net.sent.length;
-            const started = Date.now();
-            expect(await app.syncOwedBlocks(1500)).toBe(2);
-            expect(Date.now() - started).toBeLessThan(2500);
+            let owed: number | null = null;
+            void app.syncOwedBlocks(1500).then((n) => { owed = n; });
+            // A moment short of the budget: the one that answers has it, the other is still out, and nothing has settled.
+            await vi.advanceTimersByTimeAsync(1499);
             expect(heard(HELD, from)).toEqual(['block H']);
             expect(listOf(HELD, ana.publicKey)).toEqual(['H']);
-            await vi.waitFor(() => expect(net.hung.length > 0 && net.hung.every((s) => s?.aborted)).toBe(true));
+            expect(net.hung).toHaveLength(1);
+            expect(owed).toBeNull();
+            // At the budget: settled, and the request left out is aborted.
+            await vi.advanceTimersByTimeAsync(1);
+            expect(owed).toBe(2);
+            expect(net.hung.every((s) => s?.aborted)).toBe(true);
         });
 
         it('runs after the mail, inside what is left of the wake\'s window', async () => {

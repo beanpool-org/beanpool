@@ -9675,7 +9675,7 @@ async function quietlyLetIn(me: string, requests: readonly any[], people: Readon
     try {
         const { acceptLetIn } = await import('./let-in');
         return await acceptLetIn(me, requests.map((c) => ({ id: String(c.id), from: String(c.request?.from ?? ''), keys: people.get(c.id) ?? [] })),
-            (id) => decideMessageRequest(id, 'accept', community ?? undefined), asked.still);
+            (id) => decideMessageRequest(id, 'accept', community), asked.still);
     } catch (e) {
         console.warn('[LetIn] No request was accepted quietly', e);
         return new Set();

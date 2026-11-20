@@ -42,6 +42,8 @@ const IN_PLACE = [
     'unplacedKeyChange',
     // Slice S3: another community's request list read there in place, and a line of it reported to its moderators.
     'reportDmLine', 'requestsInPlace',
+    // Slice S3b: a request there from someone the member let in, accepted there by the very call a tap makes.
+    'quietlyLetIn',
 ].sort();
 /** A function the DM screen may call with no `at`: it reads neither a copy nor a server (this run's memory, by the chat's id). */
 const NO_COPY = new Set(['getKnownChatMute']);

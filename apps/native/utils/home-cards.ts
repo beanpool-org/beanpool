@@ -30,7 +30,7 @@ import {
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine, freePriceWords, FORUM_VISITOR_WORDS, forumPublicOn,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
-    FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeDrawn, welcomeFacts as coreWelcomeFacts, type WelcomeFacts,
+    FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeShape, type WelcomeShape, welcomeFacts as coreWelcomeFacts, type WelcomeFacts,
     readerMayInvite, arrivingCards, keepArrivedCard, learnHomeLines, type HomeLearnCard, type LearnHomeOpens,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
@@ -550,6 +550,10 @@ export function cardOrder(layout: HomeLayout | null, pinned: readonly HomeCardId
         count.set(c.type, n + 1);
         placed.push(c);
     }
+    // The welcome tile is not arrangeable (DESIGN-onboarding-home-landing-fable.md §4.1, slice S5): it stands at the top of the
+    // list wherever a saved Home has it, under Needs you (and under a pinned Find your community), and leaves by its own buttons.
+    const welcome = placed.findIndex(c => c.type === 'start');
+    if (welcome > 0) placed.unshift(...placed.splice(welcome, 1));
     const order: HomeCardInstance[] = [{ id: FIXED_FIRST, type: FIXED_FIRST }, ...placed, { id: FIXED_LAST, type: FIXED_LAST }];
     if (!pinned.includes('find')) return order;
     const at = order[1]?.type === 'safety' ? 2 : 1;
@@ -558,8 +562,11 @@ export function cardOrder(layout: HomeLayout | null, pinned: readonly HomeCardId
 
 /** Whether a card can be removed: everything but `needs`, `community` and a pinned card (§1.3). */
 export const canRemoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(type) && !pinned.includes(type);
-/** Whether a card can be moved: the same cards; `needs` stays first, a pinned card under it, and `community` last. */
-export const canMoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(type) && !pinned.includes(type);
+/**
+ * Whether a card can be moved: the same cards; `needs` stays first, a pinned card under it, and `community` last. Welcome
+ * stays at the top too (S5, {@link cardOrder}).
+ */
+export const canMoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(type) && !pinned.includes(type) && type !== 'start';
 
 /**
  * The cards Arrange folds, in `order` (DESIGN-home-layout-fable.md §3.2): whatever is drawn now, and every other card on
@@ -946,6 +953,8 @@ export interface HomeDrawContext {
     tourOver?: boolean;
     /** The tour was started again on this phone (Take the tour again) before the account's answer says "open". */
     tourOpen?: boolean;
+    /** BeanPool's part of the welcome was drawn first for another community on this phone (utils/welcome-part.ts): no tile here. */
+    welcomeElsewhere?: boolean;
     /** First steps' "Hear when someone answers you" (utils/notification-permission.ts `notifyStep`); absent or null: no such line. */
     notify?: boolean | null;
 }
@@ -967,12 +976,17 @@ export const tourOverFor = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawCo
     !!ctx.tourOver || tourEnded(answer.me?.tour);
 
 /**
- * Whether Welcome is drawn for this reader (DESIGN-home-default-fable.md §2.3, core `welcomeDrawn`): a member's, until the
- * tour ends (on the account, or on this phone just now), and at most seven days after joining. A join date not heard leaves
- * it to the tour alone.
+ * How the welcome tile is drawn for this reader (DESIGN-onboarding-home-landing-fable.md §4.2-§4.3, core `welcomeShape`): a
+ * member's, full for seven days after joining, then one band, until the tour ends or Got it (on the account, or on this phone
+ * just now). Never where BeanPool's part was drawn first for another community on this phone (`welcomeElsewhere`,
+ * utils/welcome-part.ts). A join date not heard keeps it full.
  */
-export const welcomeUp = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawContext, 'tourOver' | 'tourOpen' | 'now'> = {}): boolean =>
-    !!answer.me && welcomeDrawn(!ctx.tourOpen && tourOverFor(answer, ctx), answer.me.joinedAt, ctx.now ?? Date.now());
+export const welcomeShapeFor = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawContext, 'tourOver' | 'tourOpen' | 'now' | 'welcomeElsewhere'> = {}): WelcomeShape =>
+    !answer.me || ctx.welcomeElsewhere ? null : welcomeShape(!ctx.tourOpen && tourOverFor(answer, ctx), answer.me.joinedAt, ctx.now ?? Date.now());
+
+/** Whether the welcome tile is drawn at all, full or as its band ({@link welcomeShapeFor}). */
+export const welcomeUp = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawContext, 'tourOver' | 'tourOpen' | 'now' | 'welcomeElsewhere'> = {}): boolean =>
+    welcomeShapeFor(answer, ctx) !== null;
 
 /**
  * Welcome's lines (§2.3), from the one Home answer, by core's one rule for both apps (`welcomeFacts`, home-welcome.ts):
@@ -1211,8 +1225,8 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'find': return isFindCard(c.find);
             case 'steps': return firstSteps(answer, ctx).show;
             case 'interests': return !!answer.me && (ctx.interests.length === 0 || ctx.tuneOpen);
-            // Welcome (DESIGN-home-default-fable.md §2.3): a member's only, never a visitor's, until the tour is done, Not now,
-            // or seven days after joining, whichever comes first (core `welcomeDrawn`). The picker offers it only then.
+            // The welcome tile (DESIGN-onboarding-home-landing-fable.md §4.1-§4.3): a member's only, never a visitor's, until the
+            // tour is done or Got it; full for seven days, a band after (core `welcomeShape`). The picker offers it only then.
             case 'start': return welcomeUp(answer, ctx);
             // A member's only, never a visitor's; a suspended member still learns the app.
             case 'tips': return !!answer.me && !!ctx.tipsUp;

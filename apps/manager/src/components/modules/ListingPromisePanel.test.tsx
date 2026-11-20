@@ -146,6 +146,23 @@ describe('the listing promise in Settings', () => {
         expect(screen.queryByTestId('listing-promise-reports')).toBeNull();
     });
 
+    // #3313 review: single-node Settings makes a new activeNode on every App render (the 5-second diagnostics poll). An equal
+    // new object is the same node: no second read, and the owner's unsaved ticks and day stay.
+    it("a re-render with an equal new activeNode keeps the owner's unsaved ticks and day, and reads nothing again", async () => {
+        const sent: Sent[] = [];
+        const singleNode = (): NodeProfile => ({ id: 'local-node', name: 'Local Sovereign Node', url: 'http://localhost:8080', isPrimary: true });
+        mockNode(status(), sent);
+        const view = render(<ListingPromisePanel activeNode={singleNode()} />);
+        fireEvent.click(await screen.findByTestId('listing-promise-reports'));
+        const day = dayBounds().max;
+        fireEvent.change(screen.getByTestId('listing-promise-closing'), { target: { value: day } });
+        for (let tick = 0; tick < 3; tick++) view.rerender(<ListingPromisePanel activeNode={singleNode()} />);
+        await new Promise((r) => setTimeout(r, 0));
+        expect((screen.getByTestId('listing-promise-reports') as HTMLInputElement).checked).toBe(true);
+        expect((screen.getByTestId('listing-promise-closing') as HTMLInputElement).value).toBe(day);
+        expect(sent.filter((x) => x.method === 'GET')).toHaveLength(1);
+    });
+
     it('a read that fails says so and offers nothing to change', async () => {
         mockNode(json(500, { error: 'boom' }), []);
         render(<ListingPromisePanel activeNode={node} />);

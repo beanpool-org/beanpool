@@ -599,6 +599,7 @@ async function harvestLocalNode(): Promise<void> {
         const o2 = await harvestNode(oldNode, false);
         const o3 = await harvestNode(oldNode, false);
         assert(hits.old === 1, `an old node: pulled once over three harvests (${hits.old} pulls)`);
+        assert(o3.memberCount === 3 && o3.postCount === 7, `a node that shares its counts: they are kept (${o3.memberCount}, ${o3.postCount})`);
         assert(o1.status === 'ok' && fs.readFileSync(path.join(oldDir, 'state.db')).equals(oldStateDb) && fs.existsSync(path.join(oldDir, 'history', `beanpool-${today}.db`)),
             `an old node: its readable backup is kept as before (${o1.status}: ${o1.error})`);
         assert(o3.status === 'ok' && o3.backupLock?.locked === false && /older than locked backups/.test(o3.sealedBackup?.message || '') && o2.status === 'ok',
@@ -615,6 +616,10 @@ async function harvestLocalNode(): Promise<void> {
                 `a node that shares no counts: pulled once over three harvests a minute apart (${hits.unshared} pulls, ${u1.status}: ${u1.error})`);
             const stateFile = path.join(dataDir, 'harvester-state.json');
             const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+            // #3292 r2: no counts kept for it, never 0 members and 0 posts it didn't say (the dashboard printed those).
+            const keptCounts = Object.values(state).filter((s: any) => s?.nodeId === 'unshared-node').map((s: any) => [s.memberCount, s.postCount]);
+            assert(u1.memberCount === null && u1.postCount === null && keptCounts.length > 0 && keptCounts.every(([m, p]) => m === null && p === null),
+                `a node that shares no counts: its counts are kept as none, not 0 (${JSON.stringify([u1.memberCount, u1.postCount])}, kept ${JSON.stringify(keptCounts)})`);
             const hourAgo = new Date(Date.now() - UNSHARED_COUNTS_PULL_MS - 1000).toISOString();
             for (const k of Object.keys(state)) if (state[k]?.nodeId === 'unshared-node') state[k].lastPullAt = hourAgo;
             fs.writeFileSync(stateFile, JSON.stringify(state));

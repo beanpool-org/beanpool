@@ -570,6 +570,8 @@ export interface SyncCommunitySettings {
         core_settings_lock?: string | null;
         /** Whether members' locked contact lists are kept: `off`, or null for on, the default (apps/server config/contact-copies.ts). */
         contact_copies?: string | null;
+        /** The owners' welcome for new members, plain text, or null for none, the default (apps/server config/community-welcome.ts). */
+        community_welcome?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {

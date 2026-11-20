@@ -6,8 +6,8 @@
  * sign-in the node asks for work; the busy-level sentence with this browser's estimate; and every refusal a sentence.
  * A node without the feature looks exactly as today.
  *
- * The node is a stubbed fetch that issues real challenges and checks real solutions with core's door work (the node's
- * own check), so a join here is one the node would take. Nothing leaves the test.
+ * The node is a stubbed fetch that issues real challenges and checks the solutions with core's door work (the node's
+ * own check) on a cheap target (door-work.test-support.ts), so a join here carries counters that solve its challenge. Nothing leaves the test.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -23,6 +23,7 @@ import { loadIdentity, loadPendingJoin, savePendingJoin, generateIdentity, PENDI
 import { readAuthReturn, resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import type { DoorWorkProgress, DoorWorkRun, DoorWorkSolver } from '../lib/door-work';
+import { cheapDoorWorkDigest, cheapDoorWorkHashed, resetCheapDoorWorkHashed } from './door-work.test-support';
 
 const ORIGIN = 'https://global.beanpool.org';
 const NONCE = 'node-nonce-1';
@@ -65,7 +66,7 @@ function stubNode(o: { level?: (door: DoorWorkDoor) => number | null; life?: (nt
             if (door === 'words' || body.work) {
                 const c = checkDoorWorkChallenge(body.work?.challenge, { workKey: WORK_KEY, key, door });
                 if (!c.ok) return json(400, { error: `work ${c.reason}`, code: c.reason === 'expired' ? 'work_expired' : 'work_invalid' });
-                if (!checkDoorWorkSolution(body.work.challenge, body.work.counters).ok) return json(400, { error: 'bad counters', code: 'work_invalid' });
+                if (!checkDoorWorkSolution(body.work.challenge, body.work.counters, cheapDoorWorkDigest).ok) return json(400, { error: 'bad counters', code: 'work_invalid' });
             }
             members.add(key);
             return json(200, { success: true, member: { callsign: body.callsign }, ...(door === 'words' ? { door: 'words' } : { provider: body.provider }) });
@@ -94,7 +95,10 @@ function stubNode(o: { level?: (door: DoorWorkDoor) => number | null; life?: (nt
     };
 }
 
-/** A solver the test can hold back: core's synchronous solve, answered when `release()` is called (or at once). */
+/**
+ * A solver the test can hold back: core's synchronous solve on the cheap target the stubbed node checks
+ * (door-work.test-support.ts; the 19 Nov nightly), answered when `release()` is called (or at once).
+ */
 function heldSolver(hold = false) {
     const waiting: Array<() => void> = [];
     const progress: Array<(p: DoorWorkProgress) => void> = [];
@@ -102,7 +106,7 @@ function heldSolver(hold = false) {
         if (callbacks?.onProgress) progress.push(callbacks.onProgress);
         let cancelled = false;
         const done = new Promise<number[] | null>((resolve) => {
-            const answer = () => resolve(cancelled ? null : solveDoorWorkSync(challenge));
+            const answer = () => resolve(cancelled ? null : solveDoorWorkSync(challenge, cheapDoorWorkDigest));
             if (hold) waiting.push(answer);
             else setTimeout(answer, 0);
         });
@@ -370,12 +374,16 @@ describe('the two doors', () => {
                     : json(200, { success: true, member: { callsign: body.callsign }, door: 'words' })),
             },
         });
+        resetCheapDoorWorkHashed();
         const { onJoined } = renderJoin({ wordsDoor: true, solveWork: heldSolver().solver });
         await toTheDoors();
         fireEvent.click(screen.getByTestId('join-words'));
         await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
         expect(node.joins()).toHaveLength(2);
         expect(node.joins()[0].body.work.challenge).not.toBe(node.joins()[1].body.work.challenge);
+        // Two works solved on the cheap target (19 Nov nightly: this test timed out at 30 s while each was ~200 MB of SHA-256).
+        expect(cheapDoorWorkHashed()).toBeGreaterThan(0);
+        expect(cheapDoorWorkHashed()).toBeLessThan(1_000_000);
         cleanup();
 
         // Refused every time: once more by itself, then the sentence, back at the two doors with the same key.
@@ -427,7 +435,7 @@ describe('a sign-in the node asks for work (from the 30th join an hour from one 
                         return json(400, { error: 'Lots of people have joined from your network lately… Please update the BeanPool app, or try again later.', code: 'work_required' });
                     }
                     const c = checkDoorWorkChallenge(body.work?.challenge, { workKey: WORK_KEY, key: call.headers['X-Public-Key'], door: 'sign-in' });
-                    if (!c.ok || !checkDoorWorkSolution(body.work.challenge, body.work.counters).ok) return json(400, { code: 'work_invalid' });
+                    if (!c.ok || !checkDoorWorkSolution(body.work.challenge, body.work.counters, cheapDoorWorkDigest).ok) return json(400, { code: 'work_invalid' });
                     return json(200, { success: true, member: { callsign: body.callsign }, provider: 'google' });
                 },
             },

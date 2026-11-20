@@ -94,6 +94,7 @@ import type { RemovalDecider } from '../config/removal-decider.js';
 import { getNodeProfile, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
 import { getDoor, type Door } from '../config/door.js';
 import { getLocalConfig } from '../config/local-config.js';
+import { readCommunityWelcome } from '../config/community-welcome.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
 import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/knocks.js';
@@ -417,10 +418,13 @@ export interface HomeCards {
      * `place`: the node's own place (local-config `location`) to two decimals, for a member; absent when the node has none
      * and on the global profile. `knowledge`: the pages showing in Learn ("{n} things worth knowing", slice K7), to a member
      * where Learn is on, from 1; absent at 0, where Learn is off and to anyone else.
+     * `welcome`: the owners' welcome for new members (config/community-welcome.ts, onboarding slice S6), as they wrote it, to a
+     * reader who reads as a member, null where they have written none; absent to anyone else, and from a server from before it.
      */
     community?: {
         name: string | null; members: number; listings: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
         joined7d?: number | null; eventsSoon?: number | null; commonsPot_c?: number | null; knowledge?: number;
+        welcome?: string | null;
     };
     /**
      * A card of a type that comes in many is keyed by its instance id (`search-k7mq`), not its type; so is any card the
@@ -1616,6 +1620,17 @@ function communityCard(c: Ctx): HomeCards['community'] {
     // out, a quiet week dropped that card to one line with no listings (review of #3110).
     for (const key of ZERO_LEFT_OUT) if (card[key] === 0) delete card[key];
     for (const key of ZERO_SENT_EMPTY) if (card[key] === 0) card[key] = null;
+    // The owners' welcome for new members (onboarding slice S6): to a reader who reads as a member only, never to a visitor or
+    // a suspended member, last, so every other answer is what it was. Null where they wrote none: present, so an app can tell
+    // a community with none (an owner is asked to write one) from a server from before it, which answers no field. A read
+    // that fails leaves it out, never the card, as the Learn figure above.
+    if (c.member) {
+        try {
+            card.welcome = readCommunityWelcome();
+        } catch (e) {
+            console.warn('[Home] the community\'s welcome could not be read:', (e as Error)?.message || e);
+        }
+    }
     return card;
 }
 

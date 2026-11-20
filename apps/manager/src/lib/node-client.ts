@@ -2151,8 +2151,9 @@ export interface HarvesterNodeState {
     status: 'idle' | 'harvesting' | 'ok' | 'error';
     error: string | null;
     dbSizeBytes: number;
-    memberCount: number;
-    postCount: number;
+    /** Null when the node shares no counts (its owners turned "Share Member Count" off). */
+    memberCount: number | null;
+    postCount: number | null;
     identityStatus: 'secured' | 'partial' | 'missing';
     /** Why the keys are not secured, in words (e.g. a token-only node: database only). */
     identityNote?: string | null;

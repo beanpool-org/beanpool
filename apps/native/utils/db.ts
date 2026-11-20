@@ -1935,10 +1935,45 @@ const HELD_CONVERSATIONS_SQL = `
     ORDER BY timestamp DESC
 `;
 
+/**
+ * Each held chat's own unread count and the time of its newest line (slice S2b), as the held copy's own lines and its read
+ * mark have them, counted as Talk's own list counts them (getConversations' unreadCount). The same chats as
+ * HELD_CONVERSATIONS_SQL. Binds my key five times: the author, my read mark, the quiet rule, the participant row, the request.
+ */
+const HELD_LATEST_SQL = `
+    SELECT c.id, c.type as convType,
+           (SELECT MAX(msg.timestamp) FROM messages msg WHERE msg.conversation_id = c.id) as newest,
+           (SELECT COUNT(msg.id) FROM messages msg
+             WHERE msg.conversation_id = c.id AND msg.author_pubkey != ?
+               AND msg.timestamp > IFNULL((SELECT last_read_at FROM conversation_participants WHERE conversation_id = c.id AND public_key = ?), '2000-01-01')
+               AND ${countsAsUnreadSql('msg')}) as unread
+    FROM conversations c
+    WHERE c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
+      AND (c.type IS NULL OR c.type NOT IN ('group_thread', 'event_thread', 'enterprise_thread'))
+      AND ${NOT_A_REQUEST_FOR_ME('c.request')} = 1
+`;
+
+/**
+ * The newest line of each direct chat named (slice S2b): its one `?` is a JSON array of the ids, at most
+ * HELD_PREVIEWS_MAX of them (getHeldPreviews), so the cost is bounded whatever the copy holds.
+ */
+const HELD_PREVIEWS_SQL = `
+    SELECT c.id as conversationId, c.type as convType,
+           m.id as lastId, m.author_pubkey as lastAuthor, m.ciphertext as lastMessage, m.nonce as lastNonce,
+           m.type as lastMsgType, m.metadata as lastMetadata, m.timestamp as timestamp
+    FROM conversations c
+    JOIN messages m ON m.conversation_id = c.id AND m.id = (SELECT newest.id FROM messages newest WHERE newest.conversation_id = c.id
+                                                             ORDER BY newest.timestamp DESC, newest.rowid DESC LIMIT 1)
+    WHERE c.id IN (SELECT value FROM json_each(?))
+      AND (c.type IS NULL OR c.type = 'dm')
+`;
+
 /** The names of the statements a held copy runs (utils/held-copies.ts takes no SQL from a caller, only one of these). */
-type HeldStatement = 'conversations' | 'dmFacts';
+type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews';
 /** Every statement a held copy runs: one plain SELECT each (held-copies.ts isOneRead), refused at its use otherwise. */
-const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({ conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL });
+const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
+    conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL, latest: HELD_LATEST_SQL, previews: HELD_PREVIEWS_SQL,
+});
 
 /** A photo's address on `community`'s server: a path its node stored ("/uploads/…") is that server's, never the one in use. */
 function onCommunity(community: string, value: unknown): string | null {
@@ -1994,6 +2029,159 @@ export async function getHeldConversations(myPubkey: string, community: string):
             createdAt: row.createdAt || null,
         };
     });
+}
+
+/** A held chat's own unread count and newest line's time, as its community's copy has them (getHeldLatest, slice S2b). */
+export interface HeldLatest {
+    id: string;
+    type: string;
+    newest: string | null;
+    unread: number;
+}
+
+/**
+ * Each of `community`'s held chats' own unread count and newest line's time (slice S2b): read from that community's own
+ * copy through a held, read-only handle, never through getDb() nor the address in use. Null when there is nothing to read
+ * (as getHeldConversations). The app icon's badge doesn't add these: it is already the sum of every kept community's own
+ * number (other-communities-unread.ts), a held one's included.
+ */
+export async function getHeldLatest(myPubkey: string, community: string): Promise<HeldLatest[] | null> {
+    const file = getDatabaseFilenameForNode(community);
+    let rows: any[] | null;
+    try {
+        rows = await heldCopies.all<any>(file, 'latest', [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+    } catch (e) {
+        console.warn(`[Held] Could not count the chats held for ${file}`, e);
+        return null;
+    }
+    if (!rows) return null;
+    return rows.map((row) => ({ id: String(row.id), type: row.convType || 'dm', newest: row.newest || null, unread: Math.max(0, Number(row.unread) || 0) }));
+}
+
+/** The most held direct chats whose newest line Chat opens for a preview (slice S2b): the cost stays ~20 lines at 500 chats. */
+export const HELD_PREVIEWS_MAX = 20;
+
+/** A held chat's preview: its newest line's words, or BeanPool's own sentence for it (`fromApp`, translated where shown). */
+export interface HeldPreview {
+    lastMessage: string;
+    lastMessageFromApp: boolean;
+}
+
+/**
+ * The preview of the newest line of each of `ids` (at most {@link HELD_PREVIEWS_MAX}), direct chats in `community`, another
+ * community this phone holds (slice S2b): read through a held, read-only handle, and opened under that file's own pins
+ * as stored, read only (dmPins.peek: never seeded, never written, as getHeldConversations reads them). A line the pins
+ * can't place shows no preview (null): no pins stored or readable for that file, none for that chat, a line that doesn't
+ * open under its pinned key or a former one, one that isn't encrypted, the admins' or the node's own. Never a wrong one.
+ * Null when nothing could be read.
+ */
+export async function getHeldPreviews(myPubkey: string, community: string, ids: readonly string[]): Promise<Record<string, HeldPreview | null> | null> {
+    const file = getDatabaseFilenameForNode(community);
+    const asked = [...new Set(ids)].slice(0, HELD_PREVIEWS_MAX);
+    if (asked.length === 0) return {};
+    let rows: any[] | null;
+    try {
+        rows = await heldCopies.all<any>(file, 'previews', [JSON.stringify(asked)]);
+    } catch (e) {
+        console.warn(`[Held] Could not read the newest lines held for ${file}`, e);
+        return null;
+    }
+    if (!rows) return null;
+    const [identity, pins] = await Promise.all([loadIdentity().catch(() => null), dmPins.peek(myPubkey, file)]);
+    // The account the list was read for, or nothing opens (it left the phone, or another signed in, meanwhile).
+    const myPriv = identity?.publicKey === myPubkey ? identity.privateKey : null;
+    const out: Record<string, HeldPreview | null> = {};
+    for (const row of rows) out[String(row.conversationId)] = heldPreviewOf(row, myPriv, pins);
+    return out;
+}
+
+/** One held DM's newest line as its preview (getHeldPreviews), or null when the pins can't place it. */
+function heldPreviewOf(row: any, myPriv: string | null | undefined, pins: DmPeerPins | null): HeldPreview | null {
+    const id = String(row.conversationId);
+    if (!myPriv || !pins || !row.lastId || isNodeReadableChatType(row.convType)) return null;
+    const pin = dmPinFor(pins, id);
+    if (!pin?.peer) return null;
+    const line = { id: String(row.lastId), authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata, timestamp: row.timestamp };
+    // A deleted line's fixed text: BeanPool's own words.
+    if (dmLineKind(line) === 'tombstone') return { lastMessage: dmLineShownText(checkDmThread([line], null, id).get(line.id)), lastMessageFromApp: true };
+    const view = checkDmThread([line], { myEdPrivHex: myPriv, peerEdPubHex: pin.peer }, id, pin.former ?? []).get(line.id);
+    // Only a line that opened under the pinned key (or a former one) and was signed by its sender: format 4.
+    if (!view || view.format !== 4 || view.mark === 'not-verified') return null;
+    if (row.lastMsgType === 'voice') return { lastMessage: '🎤 Voice message', lastMessageFromApp: true };
+    return { lastMessage: dmLineShownText(view), lastMessageFromApp: false };
+}
+
+/** The most held direct chats one refresh brings from their community (slice S2b): one list read, then a page each. */
+export const HELD_REFRESH_MAX = 5;
+/** How long a refresh waits for that community's list (exported for the test that lets it run out). */
+export const HELD_REFRESH_LIST_MS = 10000;
+
+/**
+ * What one {@link refreshHeldDms} did: how many chats it brought, and whether it had its answer (`answered`): the
+ * community's list answered, or there was nothing there to ask about (not saved, a guest's look, the community in use, no
+ * direct chat held). False when Chat was left before the list read, or the list read failed, timed out or was refused:
+ * whatever the refresh was for is still to be asked (utils/held-chats.ts notes a number only once answered).
+ */
+export interface HeldRefresh {
+    brought: number;
+    answered: boolean;
+}
+
+/**
+ * Bring `community`'s newest lines into its own copy (slice S2b): the phone is set to another community, and something
+ * may wait in that one (Chat: utils/held-chats.ts refreshHeldWhereRose). One signed read of the member's chat list there, at the
+ * address the phone saved for it, then, for at most {@link HELD_REFRESH_MAX} direct chats its copy already holds whose
+ * newest line there is newer than the copy's, newest first, that chat's poll in place (syncSingleConversation, slice S2's
+ * one write path into another community's file, through its copy open in place, closed again here). One at a time, once:
+ * no loop, no socket. It stops before the next chat once `still()` is false (Chat left) or another account is on the
+ * phone. A switch, a removal or the account leaving mid-way: S2's path writes into that community's file or nowhere
+ * (#3300's rule). Nothing for the community in use, one not saved, a guest's look, or an address that isn't plain.
+ * The held, read-only handle it reads the copy's newest lines through is Chat's: Chat closes it as it is left, and the
+ * refresh's caller closes it again as it ends once Chat was left (held-chats.ts refreshOnce, #3312 review F2).
+ */
+export async function refreshHeldDms(myPubkey: string, community: string, still: () => boolean = () => true): Promise<HeldRefresh> {
+    const nothing = (answered: boolean): HeldRefresh => ({ brought: 0, answered });
+    const file = getDatabaseFilenameForNode(community);
+    const saved = (await getSavedNodes().catch(() => [])).find((n) => getDatabaseFilenameForNode(n.url) === file);
+    if (!saved || !isPlainNodeAddress(saved.url) || await isGuestCopy(saved.url).catch(() => true)) return nothing(true);
+    if (getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) === file) return nothing(true);
+    const held = await getHeldLatest(myPubkey, saved.url);
+    const newestHeld = new Map((held ?? []).filter((c) => c.type === 'dm').map((c) => [c.id, c.newest ?? ''] as const));
+    if (!still()) return nothing(false);
+    if (newestHeld.size === 0) return nothing(true);
+    let listed: unknown[] = [];
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), HELD_REFRESH_LIST_MS);
+    try {
+        const res = await signedGet(`/api/messages/conversations/${myPubkey}`, { signal: controller.signal, anchorUrl: saved.url });
+        if (!res.ok) return nothing(false);
+        const body = await res.json();
+        listed = Array.isArray(body?.conversations) ? body.conversations : [];
+    } catch (e: any) {
+        console.warn(`[Held] Could not read the chat list of ${file}: ${e?.message || e}`);
+        return nothing(false);
+    } finally {
+        clearTimeout(timer);
+    }
+    const due = listed
+        .filter((c: any): c is { id: string; lastMessageAt: string } => !!c && c.type === 'dm' && typeof c.id === 'string'
+            && newestHeld.has(c.id) && typeof c.lastMessageAt === 'string' && c.lastMessageAt > (newestHeld.get(c.id) ?? ''))
+        .sort((a, b) => (a.lastMessageAt < b.lastMessageAt ? 1 : a.lastMessageAt > b.lastMessageAt ? -1 : 0))
+        .slice(0, HELD_REFRESH_MAX)
+        .map((c) => c.id);
+    if (due.length === 0) return nothing(true);
+    let brought = 0;
+    // Held in place while it runs, as a chat on screen holds it: the copy open in place closes as the last holder lets go.
+    enterChatInPlace(saved.url);
+    try {
+        for (const id of due) {
+            if (!still() || (await loadIdentity().catch(() => null))?.publicKey !== myPubkey) break;
+            if (await syncSingleConversation(id, saved.url)) brought++;
+        }
+    } finally {
+        await leaveChatInPlace(saved.url);
+    }
+    return { brought, answered: true };
 }
 
 /**
@@ -8168,10 +8356,12 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
     ownLineTaken(conversationId);
     const serverMsg = (await res.json()).message;
     // Written into the photo's community's file only: once the phone has switched, its next sync there brings the line.
+    // A poll may have written it already, between the node's answer and here (#3300 r2): that row is the node's own, by
+    // the same id, and stays; a plain INSERT failed on the id and said the sent photo hadn't gone.
     const copy = await here.handle();
     if (!copy) return;
     await copy.runAsync(
-        'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING',
         [serverMsg.id, conversationId, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image', metadata || null, serverMsg.timestamp]
     );
     await requestLineTaken(copy, conversationId, identity.publicKey);

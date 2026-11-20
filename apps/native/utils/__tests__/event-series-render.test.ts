@@ -138,6 +138,10 @@ const draw = async (view: any) => {
 };
 
 describe('the detail, drawn at 320 dp and 1.3×', () => {
+    // Now is a month before the series' first date (#3303 date bombs): the series is in 2027, and on the wall's clock its
+    // dates pass and Next dates goes stale. Only Date is held; the timers stay real.
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'], now: new Date('2027-09-15T00:00:00.000Z'), shouldAdvanceTime: true }); });
+    afterEach(() => { vi.useRealTimers(); });
     it.each(['light', 'dark'] as const)('a member (%s): the ↻ caption, Next dates with the cancelled one marked, no host controls; nothing cut to one line', async (name) => {
         theme.name = name;
         me.key = 'me'.repeat(32);

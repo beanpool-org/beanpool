@@ -37,6 +37,8 @@ const h = vi.hoisted(() => ({
     dir: '',
     store: new Map<string, string>(),
     me: { publicKey: '', privateKey: '' },
+    /** The keys this account blocked, as the block list answers (#3310 r3 review F5, M10). */
+    blocked: new Set<string>(),
 }));
 
 vi.mock('react-native', () => ({
@@ -100,7 +102,14 @@ vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => {}) }));
-vi.mock('../blocklist', () => ({ getBlockedUsers: vi.fn(async () => []), isUserBlocked: vi.fn(async () => false) }));
+vi.mock('../blocklist', () => ({
+    getBlockedUsers: vi.fn(async () => [...h.blocked]),
+    isUserBlocked: vi.fn(async (key: string) => h.blocked.has(key)),
+    // A block from an across chat, and one owed to a held community: outside-chat-in-place-render.test.ts's.
+    blocksOwedAt: vi.fn(async () => false),
+    syncBlocksAt: vi.fn(async () => {}),
+    blockUser: vi.fn(async () => true),
+}));
 // Every community here takes messages from other communities.
 vi.mock('../node-profile', async (orig) => ({
     ...(await orig<any>()),
@@ -122,7 +131,7 @@ const mail = vi.hoisted(() => ({
     held: new Map<string, any[]>(),
     asked: [] as Array<{ origin: string; method: string; path: string }>,
     /** The next request matching `matches` waits for `release` (an action on its way while something happens). */
-    hold: null as null | { matches: (method: string, p: string) => boolean; seenNow: () => void; released: Promise<void>; taken: boolean },
+    hold: null as null | { matches: (method: string, p: string, origin: string) => boolean; seenNow: () => void; released: Promise<void>; taken: boolean },
     /** What each server was told of the across mute (POST /api/mail/quiet), and whether it refuses one. */
     quiet: [] as Array<{ origin: string; key: string; quiet: boolean }>,
     refuseQuiet: false,
@@ -131,9 +140,9 @@ const mail = vi.hoisted(() => ({
 }));
 vi.mock('../node-post', async (orig) => {
     const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
-    const waitIfHeld = async (method: string, p: string) => {
+    const waitIfHeld = async (method: string, p: string, origin: string) => {
         const hold = mail.hold;
-        if (hold && !hold.taken && hold.matches(method, p)) {
+        if (hold && !hold.taken && hold.matches(method, p, origin)) {
             hold.taken = true;
             hold.seenNow();
             await hold.released;
@@ -144,7 +153,7 @@ vi.mock('../node-post', async (orig) => {
         signedGet: vi.fn(async (url: string, p: string, who?: { publicKey: string }) => {
             const origin = new URL(url).origin;
             mail.asked.push({ origin, method: 'GET', path: p.split('?')[0] });
-            await waitIfHeld('GET', p.split('?')[0]);
+            await waitIfHeld('GET', p.split('?')[0], origin);
             if (p.startsWith('/api/mail?')) {
                 const quiet = [...(mail.held_quiet.get(`${origin} ${who?.publicKey}`) ?? [])];
                 return answer(200, { items: mail.held.get(origin) ?? [], more: false, outbox: [], outboxMore: false, quiet });
@@ -154,7 +163,7 @@ vi.mock('../node-post', async (orig) => {
         signedPost: vi.fn(async (url: string, p: string, body: any, who?: { publicKey: string }) => {
             const origin = new URL(url).origin;
             mail.asked.push({ origin, method: 'POST', path: p });
-            await waitIfHeld('POST', p);
+            await waitIfHeld('POST', p, origin);
             if (p === '/api/mail/confirm') {
                 mail.held.set(origin, (mail.held.get(origin) ?? []).filter((i) => !body.ids.includes(i.envelope.itemId)));
                 return answer(200, { confirmed: body.ids.length });
@@ -239,15 +248,15 @@ function setChatState(file: string, state: string): void {
     sql.close();
 }
 
-/** A line `peer` writes me, sealed on their phone, held at A's mailbox for me. */
-async function heldAtA(text: string): Promise<string> {
+/** A line `peer` writes me, sealed on their phone, held at A's mailbox for me (or `at`'s). */
+async function heldAtA(text: string, at: string = A): Promise<string> {
     const itemId = uuid();
     const payload = sealOutsideLine({ text, name: 'Pia', myEdPrivHex: peer.privateKey, myKey: peer.publicKey, peerKey: me.publicKey, messageId: itemId });
     const envelope = await signRelayEnvelope({
-        kind: 'dm-line', itemId, senderKey: peer.publicKey, senderHome: PEER_HOME, recipient: me.publicKey, recipientHome: new URL(A).host,
+        kind: 'dm-line', itemId, senderKey: peer.publicKey, senderHome: PEER_HOME, recipient: me.publicKey, recipientHome: new URL(at).host,
         at: Date.now(), payloadHash: relayPayloadHash(payload),
     }, ed25519Signer(Buffer.from(peer.privateKey, 'hex')));
-    mail.held.set(A, [...(mail.held.get(A) ?? []), { kind: 'dm-line', envelope, payload, bytes: payload.length, receivedAt: Date.now() }]);
+    mail.held.set(at, [...(mail.held.get(at) ?? []), { kind: 'dm-line', envelope, payload, bytes: payload.length, receivedAt: Date.now() }]);
     return itemId;
 }
 
@@ -271,6 +280,7 @@ async function phone(setTo: string): Promise<void> {
     mail.held_quiet = new Map();
     mail.asked = [];
     mail.hold = null;
+    h.blocked.clear();
     chatId = relayConversationId(me.publicKey, peer.publicKey);
 
     // Made while set to A, as today: the chat lives in A's file, A's mailbox is its home.
@@ -498,6 +508,20 @@ describe('rounds and `mail`: an answer that says mail waits starts that communit
 });
 
 describe('listed only where it opens', () => {
+    // #3310 r3 review F5 (M10): the held rows' block filter (held-chats.ts heldOutsideChatsShown) is seen. Mutation: drop it -> red.
+    it('a blocked person\'s across chat kept in A\'s file is not listed while the phone is set to B', async () => {
+        await phone(B);
+        const view = heldChatsInView();
+        try {
+            expect((await heldOutsideChatsShown(me.publicKey, view)).some((c) => c.id === chatId), 'listed before the block').toBe(true);
+            h.blocked.add(peer.publicKey);
+            expect((await heldOutsideChatsShown(me.publicKey, view)).some((c) => c.id === chatId), 'not listed once blocked').toBe(false);
+            expect((await heldOutsideChatsShown(person().publicKey, view)).length, 'no other account\'s chats either').toBe(0);
+        } finally {
+            await view.leave();
+        }
+    });
+
     it('a guest mark naming the carrying community under another spelling: its across chats are not listed, and none opens there', async () => {
         await phone(B);
         const view = heldChatsInView();
@@ -510,6 +534,40 @@ describe('listed only where it opens', () => {
             await view.leave();
         }
     });
+});
+
+describe('one held community that never answers holds no other back (#3310 r3 review F2)', () => {
+    // A (first in the saved list) takes the round's request and never answers; C, held too with its own copy, has a line
+    // waiting. Mutation: the held rounds one after another again (syncHeldMailNow) -> both rows red: A used the whole budget.
+    const RUNS: Array<[string, () => Promise<unknown>]> = [
+        ['Chat as it opens (a 3 s budget)', () => syncHeldMailNow(3_000)],
+        ['the background task (its 8 s share)', () => mailAfterBackgroundSync(Date.now())],
+    ];
+    it.each(RUNS)('%s: C is fetched, its line in C\'s file', async (_name, run) => {
+        await phone(B);
+        // C held as a member with a copy of its own on this phone, carrying an across chat with the same person (its own
+        // mailbox, C's home): made as A's was, then the phone set back to B.
+        await db.closeDB();
+        fs.copyFileSync(fileOn(A_FILE), fileOn(C_FILE));
+        const cFile = new DatabaseSync(fileOn(C_FILE));
+        cFile.prepare("UPDATE outside_meta SET v = ? WHERE k = 'home'").run(`${new URL(C).host} ${Date.now()}`);
+        cFile.close();
+        await db.initDB();
+        const id = await heldAtA('waiting at C', C);
+        let release: () => void = () => {};
+        mail.hold = { matches: (m, p, origin) => origin === A && m === 'GET' && p === '/api/mail', seenNow: () => {}, released: new Promise<void>((r) => { release = r; }), taken: false };
+        mail.asked = [];
+        try {
+            await run();
+            expect(mail.hold.taken, 'A was asked, and never answered').toBe(true);
+            expect(mail.asked.some((r) => r.origin === C && r.path === '/api/mail'), 'C asked').toBe(true);
+            expect(acrossRowsOf(C_FILE)!.outside_lines.some((l: any) => l.id === id && l.text === 'waiting at C'), 'C\'s line in C\'s file').toBe(true);
+            expect(acrossRowsOf(A_FILE)!.outside_lines.some((l: any) => l.id === id), 'never in A\'s').toBe(false);
+        } finally {
+            release();
+            await settle();
+        }
+    }, 20_000);
 });
 
 describe('the across mute: told to the carrying community\'s server, kept in its file, wherever the phone is set', () => {

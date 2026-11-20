@@ -51,7 +51,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    OUTSIDE_DEVICE_ID, PUSH_NOTICE_KINDS, checkRelayItem, word, type RelayEnvelope, type RelayItem, type RelayItemDrop, type RelayItemKind,
+    OUTSIDE_DEVICE_ID, PUSH_NOTICE_KINDS, checkRelayItem, word, wordsFor, type RelayEnvelope, type RelayItem, type RelayItemDrop, type RelayItemKind,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -64,6 +64,9 @@ import { isOwnNodeHome } from './node-key.js';
 import { GUEST_ITEM_KINDS, guestItemMaxChars, takeGuestItem, type GuestItemRefusal, type GuestItemTaken } from './group-guests.js';
 import { assertFolderFloorSpace, StorageNearlyFullError } from './photo-upload-budget.js';
 import { logger } from '../logger.js';
+// A refusal with a value in it, in English, its sentence marked for the way out to find again in the member's language
+// (member-words.ts), as engine/member-blocks.ts does.
+const { t: tr } = wordsFor('en');
 
 // ── What crosses, and how big ───────────────────────────────────────────────────────────────
 
@@ -288,7 +291,10 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
         const at = answerAt.get(`${item.envelope.senderKey}\n${item.envelope.itemId}`);
         if (at !== undefined) answers[at] = answerOf(item, said);
     }
-    ringHeldMail(rings);
+    // Rung once the answer is made, never within it (#3310 r3 review F4): the work of a ring (the member's alerts, their phones,
+    // a signed notice, the bell) is done only for a line that rings, so its time in the answer would tell the sending server
+    // whether the member made its sender quiet, or blocked them.
+    if (rings.size > 0) setImmediate(() => ringHeldMail(rings));
     // A guest's group item brought again by the server that brought it first (it never heard the answer): what it was told
     // then, never a bare "received": the refusal (relay_mail_refused), which its home would otherwise settle `sent`, or the
     // counter its yes, no or leave was stamped with (relay_mail_answered). Nothing is taken again.
@@ -439,12 +445,18 @@ export function mailQuiet(member: string, key: string, now = Date.now()): boolea
  */
 export const MAIL_QUIET_MAX = 500;
 
+// In a function, not at the top: the words layer's check keeps t() out of a module's top level. Its sentence is marked for
+// the way out to find again in the member's language (member-words.ts), as the blocks limit's is (member-blocks.ts).
+function quietLimitText(): string {
+    return tr('You can keep up to {n} people quiet. Let someone ring again to keep another quiet.', { n: MAIL_QUIET_MAX });
+}
+
 /** A new quiet key past {@link MAIL_QUIET_MAX}: refused (409 quiet_limit); nothing kept. */
 export class MailQuietLimitError extends Error {
     readonly status = 409;
     readonly code = 'quiet_limit';
     constructor() {
-        super(`You can keep up to ${MAIL_QUIET_MAX} people quiet. Let someone ring again to keep another quiet.`);
+        super(quietLimitText());
         this.name = 'MailQuietLimitError';
     }
 }

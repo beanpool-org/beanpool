@@ -30,7 +30,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    NODE_KEY_VALIDITY_MS, buildNodeRequestHeaders, relayPayloadHash, signNodeKeyDocument, signRelayEnvelope,
+    LANGUAGE_HEADER, NODE_KEY_VALIDITY_MS, buildNodeRequestHeaders, relayPayloadHash, signNodeKeyDocument, signRelayEnvelope,
     type RelayItem, type RelayItemKind,
 } from '@beanpool/core';
 import { signedHeaders } from './signed-request-test-helper.js';
@@ -104,7 +104,10 @@ async function main(): Promise<void> {
     async function bring(items: RelayItem[]): Promise<Answer> {
         const body = JSON.stringify({ items });
         const headers = await buildNodeRequestHeaders({ method: 'POST', url: 'https://b.example/api/relay/mail', body, origin: 'a.example', keyHex: A.key, sign: signerOf(A.seed) });
-        return send('POST', '/api/relay/mail', headers, body);
+        const answer = await send('POST', '/api/relay/mail', headers, body);
+        // A ring goes straight after the answer, never within it (#3310 r3 review F4): read once it has gone.
+        await new Promise((r) => setImmediate(r));
+        return answer;
     }
     async function asMember(who: Keys, method: 'GET' | 'POST', pathAndQuery: string, body?: unknown): Promise<Answer> {
         const text = body === undefined ? '' : JSON.stringify(body);
@@ -165,6 +168,18 @@ async function main(): Promise<void> {
     await bring([await item(fay, eve.key)]);
     assert(held(eve) === 0 && rings(eve).length === 0, '1. a sender the member blocked, written to or not: dropped, never a ring');
 
+    // #3310 r3 review F4: the answer never waits on a ring, so its time tells the sending server nothing of whether the member
+    // made its sender quiet or blocked them. Called as the route calls it: when the answer is made, no ring has gone; it goes
+    // straight after. Mutation: ring inside the request again (ringHeldMail(rings) before the answer) -> red.
+    const ivo = member('Ivo');
+    const jem = keys();
+    wrote(ivo, jem.key, 1);
+    const direct = mail.receiveRelayItems('a.example', [await item(jem, ivo.key)]);
+    const ringsAtAnswer = rings(ivo).length;
+    await new Promise((r) => setImmediate(r));
+    assert(direct.status === 202 && held(ivo) === 1 && ringsAtAnswer === 0 && rings(ivo).length === 1,
+        `1. the answer is made before the ring, and the ring goes straight after (status ${direct.status}, rings at the answer ${ringsAtAnswer}, after ${rings(ivo).length})`);
+
     const ringsForDirect = mail.ringsFor({ kind: 'dm-line', recipient: cy.key, senderKey: dee.key });
     assert(ringsForDirect === true && mail.ringsFor({ kind: 'dm-line', recipient: cy.key, senderKey: keys().key }) === false,
         '1. ringsFor: a key written to rings; a stranger never does');
@@ -222,6 +237,16 @@ async function main(): Promise<void> {
     db.transaction(() => { for (let i = 0; i < mail.MAIL_QUIET_MAX; i++) fill.run(`quiet:${crypto.randomBytes(32).toString('hex')}`, jo.key); })();
     const atCap = await asMember(jo, 'POST', '/api/mail/quiet', { key: kit.key, quiet: true });
     assert(atCap.status === 409 && atCap.body?.code === 'quiet_limit' && !mail.mailQuiet(jo.key, kit.key), `3h. at the cap a new quiet key is refused (409 quiet_limit), nothing kept (got ${atCap.status})`);
+    // #3310 r3 review F3: its words are in the words index, as the blocks limit's are: in English as written, and in the member's
+    // language on the way out (member-words.ts), from the server's catalog. Mutation: the sentence outside tr() -> words:check red
+    // ("no source uses this key", 24 catalogs); this row pins the English and its French on the way out.
+    const limitWords = 'You can keep up to {n} people quiet. Let someone ring again to keep another quiet.';
+    assert(atCap.body?.error === limitWords.replace('{n}', String(mail.MAIL_QUIET_MAX)), `3h. the refusal's words, in English (got ${JSON.stringify(atCap.body?.error)})`);
+    const frDraft = (JSON.parse(fs.readFileSync(new URL('../words/fr.json', import.meta.url), 'utf8')) as Record<string, string>)[limitWords];
+    const capText = JSON.stringify({ key: kit.key, quiet: true });
+    const atCapFr = await send('POST', '/api/mail/quiet', { ...signedHeaders({ method: 'POST', path: '/api/mail/quiet', body: capText, publicKeyHex: jo.key, key: jo.seed, host: 'b.example' }), [LANGUAGE_HEADER]: 'fr' }, capText);
+    assert(typeof frDraft === 'string' && atCapFr.status === 409 && atCapFr.body?.error === frDraft.replace('{n}', String(mail.MAIL_QUIET_MAX)),
+        `3h. the refusal's words in the member's language (got ${JSON.stringify(atCapFr.body?.error)})`);
     const listedKey = mail.mailQuietKeys(jo.key)[0];
     const again = await asMember(jo, 'POST', '/api/mail/quiet', { key: listedKey, quiet: true });
     assert(again.status === 200 && again.body?.quiet === true, `3i. at the cap, quiet on a key already quiet still passes (got ${again.status})`);

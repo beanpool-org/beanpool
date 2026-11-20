@@ -23,7 +23,7 @@ import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyTod
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { forumPublicOn } from '@beanpool/core';
 import { learnHomeLines, type HomeLearnCard } from '@beanpool/core';
-import { FIRST_STEPS_WORDS, communityWelcomeView, firstStepsLeft, firstStepsOver, welcomeShape } from '@beanpool/core';
+import { FIRST_STEPS_WORDS, firstStepsLeft, firstStepsOver, welcomeShape } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
@@ -351,6 +351,11 @@ export interface ShownOptions {
     knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[];
     /** The member said here that they still have their 12 words, before the node's answer says so (wayBackOf). */
     wordsKeptHere?: boolean;
+    /**
+     * The community's welcome is up and has something to say (core communityWelcomeView and communityWelcomeSays, slice W2):
+     * the page works it out, since it knows the reader's role. Absent: not drawn.
+     */
+    communityWelcome?: boolean;
 }
 
 /** Whether the tour has ended for this reader: the account says so, or this browser just ended it. */
@@ -447,10 +452,10 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
         const market = shown.findIndex(c => c.type === 'market');
         shown.splice(market >= 0 ? market + 1 : shown.length - 1, 0, { id: 'interests', type: 'interests' });
     }
-    // The community's welcome once BeanPool's tile is not drawn (after Got it, or in a second community): it stays until its
-    // own × (core communityWelcomeView, DESIGN-onboarding-home-landing-fable.md §4.2), in the tile's place under Needs you
-    // and a pinned Find. While the tile is drawn it stands beside it, in the tile's row.
-    if (!shown.some(c => c.type === 'start') && communityWelcomeView(answer, layout, now)) {
+    // The community's welcome once BeanPool's tile is not drawn (after Got it): it stays until its own × (core
+    // communityWelcomeView, DESIGN-onboarding-home-landing-fable.md §4.2), in the tile's place under Needs you and a pinned
+    // Find. While the tile is drawn it stands beside it, in the tile's row.
+    if (!shown.some(c => c.type === 'start') && opts.communityWelcome) {
         const at = shown.findIndex(c => c.type !== 'needs' && !pins.includes(c.type));
         shown.splice(at < 0 ? shown.length : at, 0, { id: WELCOME_ALONE, type: WELCOME_ALONE });
     }

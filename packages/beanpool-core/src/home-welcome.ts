@@ -169,6 +169,7 @@ export interface CommunityWelcomeView {
  * welcome stays until its own ×"). A join date the node didn't send or can't be read keeps it, never hides it, as
  * home-frame.ts `welcomeShape` does. With no owners' words it still says who brought them and the count (§4.1: "No
  * owner's words yet: the inviter line and the count alone"); the inviter's line is the app's, from {@link welcomeFacts}.
+ * Whether it says enough to be drawn is {@link communityWelcomeSays}.
  *
  * Only a welcome as one is kept is shown ({@link isKeptCommunityWelcome}): anything else is no words, never a stand-in.
  */
@@ -195,6 +196,21 @@ export function communityWelcomeView(
             ? tn(count, COMMUNITY_CARD_WORDS.members.one, COMMUNITY_CARD_WORDS.members.other, { n: formatCount(count) })
             : null,
     };
+}
+
+/**
+ * Whether the community's welcome has anything to say, so is drawn at all (Home's rule: a card with nothing to show takes no
+ * room): the owners' words, who brought the member or "You're the first one here." ({@link welcomeFacts}), or, to an owner
+ * where the node says none is written, the way to write one. The count alone is not enough: the community card at the foot
+ * of Home already says it.
+ */
+export function communityWelcomeSays(
+    view: CommunityWelcomeView | null,
+    facts: Pick<WelcomeFacts, 'inviter' | 'firstHere'>,
+    readerIsOwner: boolean,
+): boolean {
+    if (!view) return false;
+    return view.text !== null || !!facts.inviter || facts.firstHere || (readerIsOwner && view.unwritten);
 }
 
 /**

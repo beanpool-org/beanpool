@@ -99,7 +99,7 @@ import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
-import { defaultHomeLayout, firstStepsCount, firstStepsLeft, readerMayInvite, welcomeDrawn, welcomeFacts, welcomeShape, welcomeTileLines, communityWelcomeView, WELCOME_TILE_WORDS } from '@beanpool/core';
+import { defaultHomeLayout, firstStepsCount, firstStepsLeft, readerMayInvite, welcomeDrawn, welcomeFacts, welcomeShape, welcomeTileLines, communityWelcomeSays, communityWelcomeView, WELCOME_TILE_WORDS } from '@beanpool/core';
 import { HomeWelcomeRow, type CommunityWelcomeProps } from '../components/HomeWelcome';
 import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, tourRecordRefused, useTour,
@@ -1967,7 +1967,30 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
     const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
-    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver, hasOpenKnock, knocks, wordsKeptHere }) : [];
+    /** The reader's role, when Welcome's links need it (roleForWelcome, below). */
+    const [inviteRole, setInviteRole] = useState<string | null | undefined>(undefined);
+    // The community's welcome (core communityWelcomeView, slice W2): a newcomer's until its own ×, drawn only with something to
+    // say (core communityWelcomeSays): the owners' words, who brought them, the first one here, or an owner's way to write one.
+    const welcomeView = answer && answer.me && !answer.welcome && !visitor ? communityWelcomeView(answer, layout, now) : null;
+    const welcomeSaid = answer ? welcomeFacts(answer) : null;
+    const communityWelcome: CommunityWelcomeProps | null = answer && welcomeView && welcomeSaid && communityWelcomeSays(welcomeView, welcomeSaid, inviteRole === 'owner') ? {
+        view: welcomeView,
+        inviter: welcomeSaid.inviter,
+        firstHere: welcomeSaid.firstHere,
+        onSayHello: (key) => onNavigate('messages', key),
+        // Only where the reader can invite (core readerMayInvite, the phone's rule): where only admins invite, once the node
+        // has said they are an owner or admin.
+        onInvite: readerMayInvite(answer.features, inviteRole) ? () => onNavigate('people-invites') : undefined,
+        // Written in the community's Settings (slice S6), which only its owners open.
+        writeHref: welcomeView.unwritten && inviteRole === 'owner' ? `${getNodeApiUrl()}/settings#from=pwa` : undefined,
+        // Its × is kept on the account (core dismissCommunityWelcome); focus goes to the first heading left, never to <body>.
+        onAway: () => {
+            if (changeLayout(current => dismissWelcomeFrom(current, Date.now()))) {
+                setTimeout(() => gridRef.current?.querySelector<HTMLElement>('h2[tabindex="-1"]')?.focus(), 0);
+            }
+        },
+    } : null;
+    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver, hasOpenKnock, knocks, wordsKeptHere, communityWelcome: !!communityWelcome }) : [];
     /** The layout edits start from: the one drawn, or the starter set for a Home never saved once the tour has ended. */
     const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
     const startUp = shown.some(c => c.type === 'start');
@@ -2304,12 +2327,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     useEffect(() => {
         if (publicKey && member) void resendWordsKept(publicKey);
     }, [publicKey, member, landing]);
-    // Welcome's "Invite someone ›" for an owner alone where only admins invite: the reader's role, asked once a page load
-    // (lib/api.ts myNodeRoleOnce) and only then, as the phone holds it (core readerMayInvite). Not heard: no link.
-    const [inviteRole, setInviteRole] = useState<string | null | undefined>(undefined);
-    // The community's welcome (core communityWelcomeView, slice W2): a newcomer's until its own ×. Its "Write your community's
-    // welcome ›" is an owner's, where the node says none is written, so the role is asked then too.
-    const welcomeView = answer && member ? communityWelcomeView(answer, layout, now) : null;
+    // Welcome's "Invite someone ›" for an owner alone where only admins invite, and "Write your community's welcome ›" for an
+    // owner where none is written: the reader's role, asked once a page load (lib/api.ts myNodeRoleOnce) and only then, as the
+    // phone holds it (core readerMayInvite). Not heard: no link.
     const roleForWelcome = !!answer && member && ((answer.features.invites === true && answer.features.door === 'admins' && welcomeFacts(answer).firstHere) || !!welcomeView?.unwritten);
     useEffect(() => {
         if (!roleForWelcome) return;
@@ -2317,23 +2337,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         void myNodeRoleOnce().then((role) => { if (live) setInviteRole(role); });
         return () => { live = false; };
     }, [roleForWelcome]);
-    const communityWelcome: CommunityWelcomeProps | null = answer && welcomeView ? {
-        view: welcomeView,
-        inviter: welcomeFacts(answer).inviter,
-        firstHere: welcomeFacts(answer).firstHere,
-        onSayHello: (key) => onNavigate('messages', key),
-        // Only where the reader can invite (core readerMayInvite, the phone's rule): where only admins invite, once the node
-        // has said they are an owner or admin.
-        onInvite: readerMayInvite(answer.features, inviteRole) ? () => onNavigate('people-invites') : undefined,
-        // Written in the community's Settings (slice S6), which only its owners open.
-        writeHref: welcomeView.unwritten && inviteRole === 'owner' ? `${getNodeApiUrl()}/settings#from=pwa` : undefined,
-        // Its × is kept on the account (core dismissCommunityWelcome); focus goes to the first heading left, never to <body>.
-        onAway: () => {
-            if (changeLayout(current => dismissWelcomeFrom(current, Date.now()))) {
-                setTimeout(() => gridRef.current?.querySelector<HTMLElement>('h2[tabindex="-1"]')?.focus(), 0);
-            }
-        },
-    } : null;
     const chipsKey = chips.join(',');
     useEffect(() => {
         if (!member || !answer) { lendTourHome(null); return; }

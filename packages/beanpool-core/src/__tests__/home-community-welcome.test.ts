@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { WELCOME_BAND_DAYS, checkHomeLayout, defaultHomeLayout, type HomeLayoutV2 } from '../home-frame.js';
 import {
-    COMMUNITY_WELCOME_DISMISSED, COMMUNITY_WELCOME_HOME_WORDS, communityWelcomeView, dismissCommunityWelcome,
+    COMMUNITY_WELCOME_DISMISSED, COMMUNITY_WELCOME_HOME_WORDS, communityWelcomeSays, communityWelcomeView, dismissCommunityWelcome,
     type CommunityWelcomeAnswer,
 } from '../home-welcome.js';
 
@@ -70,6 +70,28 @@ describe("the community's welcome on Home: who sees it and for how long", () => 
         expect(communityWelcomeView(answer({ members: 2310 }), null, NOW)!.members).toBe('2,310 members');
         expect(communityWelcomeView(answer({ members: 0 }), null, NOW)!.members).toBeNull();
         expect(COMMUNITY_WELCOME_HOME_WORDS.write).toBe("Write your community's welcome ›");
+    });
+});
+
+describe("the community's welcome is drawn only with something to say: never the count alone", () => {
+    it('the table: words, an inviter, the first one here, or an owner asked to write one', () => {
+        type Facts = { inviter: { key: string; name: string } | null; firstHere: boolean };
+        const none: Facts = { inviter: null, firstHere: false };
+        const ana: Facts = { inviter: { key: 'ana-key', name: 'Ana' }, firstHere: false };
+        const written = communityWelcomeView(answer({ welcome: 'Market day is Saturday.' }), null, NOW);
+        const unwritten = communityWelcomeView(answer({ welcome: null }), null, NOW);
+        const older = communityWelcomeView(answer(), null, NOW);
+        const rows: [string, ReturnType<typeof communityWelcomeView>, Facts, boolean, boolean][] = [
+            ["the owners' words", written, none, false, true],
+            ['an inviter with a name', older, ana, false, true],
+            ['the first one here', older, { inviter: null, firstHere: true }, false, true],
+            ['an owner, none written', unwritten, none, true, true],
+            ['a member, none written: the count alone', unwritten, none, false, false],
+            ['an owner on a server from before the setting: nothing to write in', older, none, true, false],
+            ['the count alone', older, none, false, false],
+            ['not drawn at all', null, ana, true, false],
+        ];
+        for (const [what, view, facts, owner, says] of rows) expect(communityWelcomeSays(view, facts, owner), what).toBe(says);
     });
 });
 

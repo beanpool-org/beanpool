@@ -3034,7 +3034,9 @@ describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on 
         // Its title is core's WELCOME TO BEANPOOL! (DESIGN-onboarding-home-landing-fable.md §4.1, slice W2); the old "This is your
         // Home…" sentence is gone (§2.3, §5.1). The community's welcome beside it has its own caption.
         expect(within(screen.getByTestId('home-welcome-tile')).getByRole('heading')).toHaveTextContent('Welcome to BeanPool!');
-        expect(within(screen.getByTestId('home-welcome-community')).getByRole('heading').textContent).toMatch(/^From \S/);
+        // With nothing to say (no owners' words, nobody named who invited them) the community's welcome takes no room: the
+        // count alone is the community card's (core communityWelcomeSays).
+        expect(screen.queryByTestId('home-welcome-community')).toBeNull();
         expect(screen.queryByTestId('home-start-words')).toBeNull();
         expect(screen.getByTestId('home-start-look')).toHaveTextContent('Show me around');
         expect(screen.getByTestId('home-start-skip')).toHaveTextContent('Got it');
@@ -4177,7 +4179,8 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
         const steps = { joinedAt: joined, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null, words: false };
         const base = answer({ layout: null }, { steps } as HomeAnswer['cards']);
         const { tour: _t, ...me } = base.me!;
-        const newcomer = { ...base, cards: { ...answer().cards, ...base.cards }, me: { ...me, joinedAt: joined, wayBack: 'words' } } as HomeAnswer;
+        // Invited by Ana, so the community's welcome has something to say and stands beside the tile (W2).
+        const newcomer = { ...base, cards: { ...answer().cards, ...base.cards }, me: { ...me, joinedAt: joined, wayBack: 'words', invitedBy: { key: 'ana-key', name: 'Ana' } } } as HomeAnswer;
         for (const [w, cols] of [[360, 1], [800, 2], [1400, 3]] as const) {
             width = w;
             heights = { 'home-card-start': 120, 'home-card-market': 200, 'home-card-steps': 160, 'home-card-events': 100, 'home-card-beans': 80, 'home-card-tips': 90, 'home-card-community': 90 };

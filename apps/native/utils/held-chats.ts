@@ -10,7 +10,7 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation } from './db';
+import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { communityAddress, sameCommunity } from './push-pins';
@@ -117,6 +117,20 @@ async function heldCommunities(): Promise<Array<{ url: string; file: string; nam
         out.push({ url, file, name: typeof savedName === 'string' && savedName.trim() ? savedName.trim() : communityName(node) });
     }
     return out;
+}
+
+/**
+ * Whom each other community's copy lets in (slice S3b, let-in.ts), read through held, read-only handles (db.ts getHeldLetIn):
+ * the same communities Chat reads. The handles are Chat's: what this opened closes as it ends, unless Chat is in view.
+ */
+export async function heldLetIn(myPubkey: string): Promise<string[]> {
+    try {
+        const out: string[] = [];
+        for (const { url } of await heldCommunities()) out.push(...((await getHeldLetIn(myPubkey, url)) ?? []));
+        return out;
+    } finally {
+        await closeUnlessInView();
+    }
 }
 
 async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promise<HeldChatRow[]> {

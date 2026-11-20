@@ -2004,13 +2004,86 @@ const HELD_PREVIEWS_SQL = `
       AND (c.type IS NULL OR c.type = 'dm')
 `;
 
+/**
+ * The people this member let in, as one copy holds them (slice S3b, DESIGN-no-switch-messaging-fable.md §3 "Let in once"):
+ * derived at each read, never stored or sent. Rows of two kinds: `dm`, a direct chat the member wrote a line in or whose
+ * request reads accepted, with its other people's keys (letInOfRows takes the chat's pinned key); `key`, a friend the member
+ * added, the other side of a deal both took up (pending or completed: a deal only asked, declined or cancelled before that
+ * is one person's word), or someone the member paid. A payment received is not here: anyone can send a member a Bean.
+ * Binds my key seven times: the chat's other people, the participant row, my line, friends, my buys, my sales, my payments.
+ */
+const LET_IN_SQL = `
+    SELECT 'dm' AS kind, c.id AS id, ${otherKeysSql()} AS keys FROM conversations c
+    WHERE (c.type IS NULL OR c.type = 'dm')
+      AND c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
+      AND (EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.author_pubkey = ? AND IFNULL(m.type, 'text') != 'system')
+           OR (CASE WHEN json_valid(c.request) THEN json_extract(c.request, '$.state') = 'accepted' ELSE 0 END))
+    UNION ALL SELECT 'key', NULL, friend_pubkey FROM friends WHERE owner_pubkey = ?
+    UNION ALL SELECT 'key', NULL, seller_pubkey FROM marketplace_transactions WHERE buyer_pubkey = ? AND status IN ('pending', 'completed')
+    UNION ALL SELECT 'key', NULL, buyer_pubkey FROM marketplace_transactions WHERE seller_pubkey = ? AND status IN ('pending', 'completed')
+    UNION ALL SELECT 'key', NULL, to_pubkey FROM transactions WHERE from_pubkey = ?
+`;
+const letInParams = (me: string): string[] => [me, me, me, me, me, me, me];
+
+/**
+ * The keys one copy's {@link LET_IN_SQL} rows let in. A direct chat lets in only the key it is sealed to: its pin's (never a
+ * key pinned before it, nor one a listing offers), or with no pin its one other person; none when its rows name several.
+ */
+function letInOfRows(rows: readonly any[], pins: DmPeerPins | null, me: string): string[] {
+    const out = new Set<string>();
+    for (const row of rows) {
+        if (row.kind === 'key') {
+            if (typeof row.keys === 'string' && row.keys && row.keys !== me) out.add(row.keys);
+            continue;
+        }
+        const pinned = pins ? dmPinFor(pins, String(row.id)) : null;
+        const others = typeof row.keys === 'string' && row.keys ? row.keys.split(',') : [];
+        const key = pinned?.peer ?? (others.length === 1 ? others[0] : null);
+        if (key && key !== me) out.add(key);
+    }
+    return [...out];
+}
+
+/**
+ * Whom `community`'s copy lets in (slice S3b), another community this phone holds: read through a held, read-only handle
+ * (never getDb() nor the address in use), its DM pins as stored for that file, never seeded. Null when nothing could be read.
+ */
+export async function getHeldLetIn(myPubkey: string, community: string): Promise<string[] | null> {
+    try {
+        const rows = await heldListRead<any>(community, 'letIn', letInParams(myPubkey));
+        if (!rows) return null;
+        return letInOfRows(rows, await dmPins.peek(myPubkey, getDatabaseFilenameForNode(community)), myPubkey);
+    } catch (e) {
+        console.warn('[LetIn] A held copy could not be read', e);
+        return null;
+    }
+}
+
+/**
+ * Whom the copy in use lets in (slice S3b), with its DM pins as stored, never seeded. None for a guest's look (its copy holds
+ * no chat, friend or deal of the member's) or a copy that can't be read.
+ */
+export async function getLetInHere(myPubkey: string): Promise<string[]> {
+    try {
+        const here = await chatCopyForRequest();
+        if (!here.anchorUrl || await isGuestCopy(here.anchorUrl)) return [];
+        const rows = await here.database.getAllAsync<any>(LET_IN_SQL, letInParams(myPubkey));
+        return letInOfRows(rows, await dmPins.peek(myPubkey, here.file), myPubkey);
+    } catch (e) {
+        console.warn('[LetIn] The copy in use could not be read', e);
+        return [];
+    }
+}
+
 /** The names of the statements a held copy runs (utils/held-copies.ts takes no SQL from a caller, only one of these). */
-type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews' | 'outsideChats' | 'outsideLastChanges';
+type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews' | 'outsideChats' | 'outsideLastChanges' | 'letIn';
 /** Every statement a held copy runs: one plain SELECT each (held-copies.ts isOneRead), refused at its use otherwise. */
 const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
     conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL, latest: HELD_LATEST_SQL, previews: HELD_PREVIEWS_SQL,
     // Across chats (slice S4): utils/outside-chat-store.ts, read as its chats() reads them.
     outsideChats: OUTSIDE_CHATS_HELD_SQL, outsideLastChanges: OUTSIDE_LAST_CHANGES_HELD_SQL,
+    // The people the member let in (slice S3b).
+    letIn: LET_IN_SQL,
 });
 
 /**
@@ -6180,6 +6253,22 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         await rememberDmConversations(convData.conversations.filter((c: any) => c?.id && (c.type || 'dm') === 'dm').map((c: any) => c.id), database);
         await holdDmTypes(database);
 
+        // Let in once (slice S3b): a request waiting here from someone the member let in is accepted now, as a tap on its card
+        // would (none with the pins unread: the block check needs every key the opener is known by here). The list kept loses
+        // it, and one more pass brings the chat, as after the card's Accept (app/(tabs)/chats.tsx onAccepted).
+        const listedRequests: any[] = Array.isArray(convData.requests?.conversations) ? convData.requests.conversations : [];
+        const direct = listedRequests.filter((c) => isDirectRequestFor(c, publicKey));
+        if (direct.length > 0 && pinsNow && !(await isGuestCopy(anchorUrl))) {
+            const people = await requestPeople(database, direct, publicKey, pinsNow);
+            const quiet = people ? await quietlyLetIn(publicKey, direct, people, undefined, asked) : new Set<string>();
+            if (quiet.size > 0 && await onThisCopy(database) && await asked.still()) {
+                const left = listedRequests.filter((c) => !quiet.has(String(c.id)));
+                const count = Number.isSafeInteger(convData.requests.count) ? convData.requests.count : listedRequests.length;
+                await saveMessageRequests(publicKey, expectedDbName, { ...convData.requests, count: Math.max(left.length, count - quiet.size), conversations: left });
+                setTimeout(() => { void syncMessages(publicKey); }, 0);
+            }
+        }
+
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
         return everyPageRead;
@@ -9530,13 +9619,9 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
         return null;
     }
     // Every key the person is known by in that copy: the listing's, the copy's own rows for the chat, its pin (N1).
-    const kept: any[] = [];
-    for (const c of direct ?? []) {
-        const held = await database.getFirstAsync<{ otherKeys: string | null }>(`SELECT ${otherKeysSql('?')} AS otherKeys`, [c.id, myPubkey]).catch(() => null);
-        if (!held) return null;
-        const keys = [...c.participants.filter((p: string) => p !== myPubkey), ...(held.otherKeys ? held.otherKeys.split(',') : [])];
-        if (!isDmBlocked(dmPeerKeys(keys, dmPinFor(pins, c.id)), blocked)) kept.push(c);
-    }
+    const people = await requestPeople(database, direct ?? [], myPubkey, pins);
+    if (!people) return null;
+    const kept = (direct ?? []).filter((c) => !isDmBlocked(people.get(c.id) ?? [], blocked));
     // Before the first write: the account that asked is still the phone's (N2).
     if (!(await asked.still())) return null;
     const admitted: any[] = [];
@@ -9547,18 +9632,54 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
             console.warn(`[Requests] Could not keep a request in place: ${e?.message || e}`);
         }
     }
+    // Let in once (slice S3b): one from someone the member let in is accepted there now, as a tap would, and shows no card.
+    const quiet = await quietlyLetIn(myPubkey, admitted, people, community, asked);
+    const waiting = admitted.filter((c) => !quiet.has(c.id));
     const requests = direct
         ? {
             // The node's count, less each listed one left out here (not a direct chat for the member, blocked, or not
-            // written into that copy).
-            count: Math.max(admitted.length, (Number.isSafeInteger(listed.count) && listed.count >= 0 ? listed.count : listed.conversations.length) - (listed.conversations.length - admitted.length)),
-            conversations: admitted,
+            // written into that copy) and each accepted quietly.
+            count: Math.max(waiting.length, (Number.isSafeInteger(listed.count) && listed.count >= 0 ? listed.count : listed.conversations.length) - (listed.conversations.length - admitted.length) - quiet.size),
+            conversations: waiting,
         }
         : null;
     // Kept and handed back only for the account that asked (N2): never put back after it left the phone.
     if (!(await asked.still())) return null;
     await saveMessageRequests(myPubkey, here.file, requests);
-    return requests && { count: requests.count, conversations: admitted.map((c) => listedOnCommunity(here.anchorUrl!, c)) };
+    return requests && { count: requests.count, conversations: waiting.map((c) => listedOnCommunity(here.anchorUrl!, c)) };
+}
+
+/**
+ * Every key the opener of each listed direct request is known by in `database`'s copy: the listing's people, that copy's own
+ * participant rows for the chat, and its pin (#3309 review N1). Null when the copy can't be read.
+ */
+async function requestPeople(database: SQLite.SQLiteDatabase, requests: readonly any[], me: string, pins: DmPeerPins): Promise<Map<string, string[]> | null> {
+    const out = new Map<string, string[]>();
+    for (const c of requests) {
+        const held = await database.getFirstAsync<{ otherKeys: string | null }>(`SELECT ${otherKeysSql('?')} AS otherKeys`, [c.id, me]).catch(() => null);
+        if (!held) return null;
+        const keys = [...c.participants.filter((p: string) => p !== me), ...(held.otherKeys ? held.otherKeys.split(',') : [])];
+        out.set(c.id, dmPeerKeys(keys, dmPinFor(pins, c.id)));
+    }
+    return out;
+}
+
+/**
+ * Let in once (slice S3b, utils/let-in.ts): each of `requests` (direct requests for `me`, listed by `community`'s own server)
+ * whose opener the member let in, and whom no key they are known by (`people`) was ever blocked on this phone, is accepted by
+ * exactly the signed POST /api/messages/request {accept} a tap on its card sends (decideMessageRequest), while `asked` is
+ * still the account on the phone. The ids accepted; none when anything on the way fails (each is then an ordinary card).
+ */
+async function quietlyLetIn(me: string, requests: readonly any[], people: ReadonlyMap<string, string[]>, community: ChatCommunity, asked: OwnListRead): Promise<Set<string>> {
+    if (requests.length === 0) return new Set();
+    try {
+        const { acceptLetIn } = await import('./let-in');
+        return await acceptLetIn(me, requests.map((c) => ({ id: String(c.id), from: String(c.request?.from ?? ''), keys: people.get(c.id) ?? [] })),
+            (id) => decideMessageRequest(id, 'accept', community ?? undefined), asked.still);
+    } catch (e) {
+        console.warn('[LetIn] No request was accepted quietly', e);
+        return new Set();
+    }
 }
 
 /** The list read in place's deadline, on its answer and the answer's body (requestsInPlace): as the chat's poll, 12 s. */

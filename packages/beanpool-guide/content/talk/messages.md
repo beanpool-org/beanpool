@@ -123,3 +123,5 @@ If your community turns message requests off, every message arrives straight awa
 - **Cancel request**: beside the waiting line on both the phone and the web, you can tap **Cancel request**. This withdraws your request and removes your first message for both of you. You can then write a fresh message if you wish.
 - **Links**: a link in a message request can't be tapped until you accept it.
 - **If people report your requests**: where your community's owners have turned this on, enough reports from people you wrote to clear your waiting requests, and you can't send new ones for 7 days, longer if it happens again. You are told when it happens. You can still answer people who wrote to you, and post. A moderator can undo it.
+
+Someone you have accepted in one community can message you in any other. To stop them, block them: a block holds everywhere.

@@ -4744,7 +4744,9 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
 
         const marketCardNarrow = screen.getByTestId('home-card-market');
         expect(marketCardNarrow).toHaveAttribute('data-card-wide', 'false');
-        expect(within(marketCardNarrow).getByTestId('home-market-items')).toHaveAttribute('data-layout', 'rows');
+        // The Market card is picture tiles at every width since slice S8 (DESIGN-onboarding-home-landing-fable.md §4.1 item 5);
+        // the other cards keep rows under 480 px.
+        expect(within(marketCardNarrow).getByTestId('home-market-items')).toHaveAttribute('data-layout', 'tiles');
 
         const pulseCardNarrow = screen.getByTestId('home-card-pulse');
         expect(pulseCardNarrow).toHaveAttribute('data-card-wide', 'false');
@@ -5678,5 +5680,104 @@ describe('What could you offer? (cold start O2): the dialog First steps opens, t
         expect(screen.getByTestId('home-starter-labour.1')).toHaveTextContent(xx('An hour of help'));
         expect(bypassing(dialog)).toEqual([]);
         backToEnglish();
+    });
+});
+
+describe("Home's Market card as picture tiles (slice S8, DESIGN-onboarding-home-landing-fable.md §4.1 item 5, §4.4)", () => {
+    const EGGS = { id: 't1', type: 'offer' as const, title: 'Fresh eggs, a dozen', category: 'food', price_c: 1200, photoUrl: '/api/marketplace/posts/t1/photos/0?v=1&k=Ab' };
+    const SEED = { id: 't2', type: 'offer' as const, title: 'Tomato seedlings', category: 'garden', price_c: 800, photoUrl: '/api/marketplace/posts/t2/photos/0?v=1&k=Cd' };
+    const LADDER = { id: 't3', type: 'need' as const, title: 'Borrow a long ladder', category: 'tools', price_c: 500, photoUrl: null };
+    const GUITAR = { id: 't4', type: 'offer' as const, title: 'Guitar lessons', category: 'arts', price_c: 4000, photoUrl: '/api/marketplace/posts/t4/photos/0?v=1&k=Ef' };
+    const LONG = { id: 't5', type: 'offer' as const, category: 'goods', price_c: 2500, photoUrl: null, title: 'Hand-built cedar garden bench with a curved back, oiled twice, seats three comfortably, can deliver within town' };
+    const tiles = () => within(screen.getByTestId('home-card-market')).queryAllByTestId('home-market-item');
+    async function show(items: Array<typeof EGGS | typeof LADDER | typeof LONG>, beans = true, onNavigate = vi.fn()) {
+        const base = answer({}, items.length ? { market: { items, total14d: items.length, more: false } } : { market: { items: [], total14d: 0, more: false, examples: true } });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(beans ? base : { ...base, features: { ...base.features, beans: false } }));
+        render(<HomePage identity={ME} onNavigate={onNavigate} />);
+        await screen.findByTestId('home-card-market');
+        return onNavigate;
+    }
+
+    it.each([[1, [EGGS]], [3, [EGGS, SEED, LADDER]], [4, [EGGS, SEED, LADDER, GUITAR]]] as const)('%i listing(s): one picture tile each, two a row, the same at every width', async (n, items) => {
+        await show([...items]);
+        const grid = screen.getByTestId('home-market-items');
+        expect(grid).toHaveAttribute('data-layout', 'tiles');
+        expect(grid.className).toMatch(/\bgrid\b/);
+        expect(grid.className).toMatch(/\bgrid-cols-2\b/);
+        expect(tiles()).toHaveLength(n);
+        for (const tile of tiles()) {
+            expect(tile).toHaveAttribute('data-tile', 'picture');
+            // Each tile may shrink to its half: a long word never pushes the grid past the card at 320 px.
+            expect(tile.className).toMatch(/\bmin-w-0\b/);
+            expect(within(tile).getByTestId('home-photo-slot').className).toMatch(/aspect-\[4\/3\]/);
+        }
+    });
+
+    it('no listings: no tiles; the category tiles and See all, as before', async () => {
+        await show([]);
+        expect(tiles()).toHaveLength(0);
+        expect(screen.getByTestId('home-market-empty-tiles')).toBeInTheDocument();
+    });
+
+    it("the photo's small copy with OFFER or NEED on its corner; the title, then the price in the brand's ink", async () => {
+        await show([EGGS, LADDER]);
+        const [eggs, ladder] = tiles();
+        const img = within(eggs).getByTestId('home-photo-slot').querySelector('img');
+        expect(img?.getAttribute('src') ?? '').toContain('size=thumb2');
+        expect(within(eggs).getByTestId('home-photo-slot')).toHaveTextContent('OFFER');
+        expect(within(ladder).getByTestId('home-photo-slot')).toHaveTextContent('NEED');
+        expect(eggs).toHaveTextContent('Fresh eggs, a dozen');
+        expect(eggs).toHaveTextContent('12 Beans');
+        expect(eggs.textContent).not.toMatch(/Ʀ/);
+        expect(eggs.getAttribute('aria-label')).toBe('Offer, Fresh eggs, a dozen, 12 Beans');
+    });
+
+    it('no photo: the category tile holds the slot, never a broken picture', async () => {
+        await show([LADDER]);
+        const slot = within(tiles()[0]).getByTestId('home-photo-slot');
+        expect(slot.querySelector('img')).toBeNull();
+        expect(within(slot).getByTestId('category-tile')).toBeInTheDocument();
+    });
+
+    it('a long title is cut to two lines on the tile and heard whole', async () => {
+        await show([LONG]);
+        const title = Array.from(tiles()[0].querySelectorAll('span[dir="auto"]'))[0] as HTMLElement;
+        expect(title.className).toMatch(/\bline-clamp-2\b/);
+        expect(title.className).toMatch(/\bbreak-words\b/);
+        expect(tiles()[0].getAttribute('aria-label')).toBe(`Offer, ${LONG.title}, 25 Beans`);
+    });
+
+    it('Beans off: no price and no Beans on any tile', async () => {
+        await show([EGGS, SEED, LADDER], false);
+        for (const tile of tiles()) {
+            expect(tile.textContent).not.toMatch(/Beans/);
+            expect(tile.getAttribute('aria-label')).not.toMatch(/Beans/);
+        }
+    });
+
+    it('a tap anywhere on a tile (photo, title, price) opens that listing; a tile is one button', async () => {
+        const onNavigate = await show([EGGS, SEED, LADDER]);
+        const [eggs, seed, ladder] = tiles();
+        for (const tile of tiles()) expect(tile.querySelectorAll('button, a, [role="button"]')).toHaveLength(0);
+        fireEvent.click(within(eggs).getByTestId('home-photo-slot'));
+        fireEvent.click(within(seed).getByText('Tomato seedlings'));
+        fireEvent.click(within(ladder).getByText('5 Beans'));
+        expect(onNavigate.mock.calls).toEqual([['marketplace', 't1'], ['marketplace', 't2'], ['marketplace', 't3']]);
+    });
+
+    it('light and dark: every colour is a token that changes with the look; no fixed palette colour on a tile', async () => {
+        await show([EGGS, LADDER]);
+        const [eggs, ladder] = tiles();
+        const chipOf = (tile: HTMLElement) => within(tile).getByTestId('home-photo-slot').querySelector(':scope > span[aria-hidden="true"]') as HTMLElement;
+        expect(chipOf(eggs).className).toMatch(/\bbg-bp-chip-ok-tint\b.*\btext-bp-chip-ok-ink\b/);
+        expect(chipOf(ladder).className).toMatch(/\bbg-bp-chip-need-tint\b.*\btext-bp-chip-need-ink\b/);
+        expect(within(eggs).getByText('12 Beans').className).toMatch(/\btext-bp-ink-brand\b/);
+        for (const tile of [eggs, ladder]) {
+            // The tile's own markup (the category tile inside is the shared CategoryTile, checked where it is made).
+            const own = [tile, ...Array.from(tile.querySelectorAll('*'))].filter(e => !e.closest('[data-testid="category-tile"]'));
+            const classes = own.map(e => e.getAttribute('class') ?? '').join(' ');
+            expect(classes).not.toMatch(/\b(?:text|bg|border)-(?:orange|blue|red|green|emerald|amber|gray|slate|zinc|neutral|stone|white|black)(?:-\d+)?\b/);
+            expect(classes).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+        }
     });
 });

@@ -789,6 +789,52 @@ describe('5. how an invite is found on a new phone: one row per arrival', () => 
         expect(greeted()).toBe(true);
         expect(clip.reads).toBe(0);
     });
+
+    // Review of #3317 at c41a6d34: an invite found earlier stayed in hand after ← Back to Home, so "Scan or type it instead ›"
+    // (FrontDoor.tsx: "the Your invite screen") drew the name screen again. It is set aside in Your invite's box, as the pencil
+    // does: never dropped, Next uses it, and the copy held on the phone stays until it is redeemed.
+    const HELD_INVITE = 'beanpool_held_invite';
+    const arrivals = [
+        ['an invite link', () => { params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' }; }],
+        ['an invite held on the phone', () => { store.map.set(HELD_INVITE, JSON.stringify({ invite: 'INV-ABCD-EFGH', server: RIVERSIDE, at: Date.now() })); }],
+    ] as const;
+    it.each(arrivals)('iOS 16+, %s, ← Back to Home, then "Scan or type it instead ›": Your invite, the invite set aside in its box; Next uses it', async (_arrival, arrive) => {
+        newPhone('ios', true);
+        clip.has = true; clip.text = NOT_AN_INVITE;
+        arrive();
+        const heldBefore = store.map.get(HELD_INVITE) ?? null;
+        await mount();
+        expect(greeted()).toBe(true);
+        await press('Back to Home');
+        expect(byId('front-door-invite-tile')).toBeTruthy();
+        await press('Scan or type it instead ›');
+        expect(byId('your-invite')).toBeTruthy();
+        expect(onNameScreen()).toBe(false);
+        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(byId('your-invite-note')).toBeNull();
+        // Not lost: the phone's held copy is as it was, and nothing was redeemed or read on the way.
+        expect(store.map.get(HELD_INVITE) ?? null).toBe(heldBefore);
+        expect(phone.redeems).toEqual([]);
+        expect(clip.reads).toBe(0);
+        await press('Next');
+        expect(greeted()).toBe(true);
+    });
+
+    it('iOS 16+, an invite link, ← Back to Home, then Apple\'s tap brings something that isn\'t one: Your invite, its line seen, the invite kept in the box', async () => {
+        newPhone('ios', true);
+        clip.has = true; clip.text = NOT_AN_INVITE;
+        params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+        await mount();
+        expect(greeted()).toBe(true);
+        await press('Back to Home');
+        await act(async () => { byId('apple-paste')!.click(); });
+        await settle();
+        expect(byId('your-invite')).toBeTruthy();
+        expect(byId('your-invite-note')?.textContent).toBe("That isn't an invite. Type or scan it.");
+        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(clip.reads).toBe(0);
+        neverShownOrSent();
+    });
 });
 
 describe('6. "I\'ve used BeanPool before": every way back opens from the front door (review of #3317)', () => {

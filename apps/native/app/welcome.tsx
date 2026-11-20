@@ -864,6 +864,21 @@ export default function WelcomeScreen() {
     }, [mode]);
 
     /**
+     * Your invite, asked for ("Scan or type it instead ›", or a tap that brought no invite). An invite found earlier (a
+     * link, then ← Back to Home) would draw the name screen in its place: it is set aside in Your invite's box, as the pencil
+     * does, never dropped. Next uses it again, and the copy held on the phone (utils/held-invite.ts) stays until it is
+     * redeemed, so "I have an invite" still finds it (review of #3317).
+     */
+    function openYourInvite() {
+        const found = inviteCodeRef.current;
+        if (found.trim()) {
+            setInviteDraft(found);
+            setInviteCode('');
+        }
+        setMode('create');
+    }
+
+    /**
      * What a tap brought back (Apple's button, a scan): kept only if it is an invite, which opens the name screen. Anything
      * else is dropped here, never shown in a box and never sent: Your invite opens with its one line.
      */
@@ -875,7 +890,7 @@ export default function WelcomeScreen() {
             return;
         }
         setInviteNote(t("That isn't an invite. Type or scan it."));
-        setMode('create');
+        openYourInvite();
     }
 
     /**
@@ -4376,7 +4391,7 @@ export default function WelcomeScreen() {
                         appleTile={inviteDoor({ os: Platform.OS, pasteButton: Clipboard.isPasteButtonAvailable, copiedText: clipboardMayHaveInvite }) === 'apple-tile'}
                         onInvite={() => { void handleInviteTap(); }}
                         onApplePaste={(text) => { setError(null); void takeInvite(text); }}
-                        onScanOrType={() => { setError(null); setInviteNote(null); setMode('create'); }}
+                        onScanOrType={() => { setError(null); setInviteNote(null); openYourInvite(); }}
                         onLookAround={() => { void exploreWorldwide(); }}
                         onUsedBefore={() => { setError(null); setMode('member'); }}
                         onAskToJoin={() => router.push('/find-community')}

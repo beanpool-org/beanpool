@@ -322,8 +322,14 @@ describe('the welcome screen\'s wiring (app/welcome.tsx)', () => {
         expect(welcome).toMatch(/onApplePaste=\{\(text\) => \{ setError\(null\); void takeInvite\(text\); \}\}/);
         const take = slice('async function takeInvite', 'async function handleInviteTap');
         expect(take).toMatch(/const invite = inviteOnly\(raw\);/);
-        // A non-invite is never put in a box or state: only the line is set.
+        // A non-invite is never put in a box or state: only the line is set, then Your invite opens.
         expect(take).not.toMatch(/setInviteDraft|setInviteCode|setCallsign/);
+        expect(take).toMatch(/setInviteNote\(t\("That isn't an invite\. Type or scan it\."\)\);\s*openYourInvite\(\);/);
+        // Opening Your invite sets aside only the invite already in hand (as the pencil does), never what a tap brought.
+        const open = code(slice('function openYourInvite', 'async function takeInvite'));
+        expect(open).toMatch(/const found = inviteCodeRef\.current;\s*if \(found\.trim\(\)\) \{\s*setInviteDraft\(found\);\s*setInviteCode\(''\);\s*\}\s*setMode\('create'\);/);
+        expect(open).not.toMatch(/raw|Clipboard/);
+        expect(slice('<FrontDoor', '/>')).toContain('onScanOrType={() => { setError(null); setInviteNote(null); openYourInvite(); }}');
         // Only presence is asked before a tap, and only where Apple's button exists.
         expect(slice('// The invite page copies the invite link', 'async function takeInvite')).toMatch(/if \(!Clipboard\.isPasteButtonAvailable \|\| \(mode !== 'home' && mode !== 'create'\)\) return;/);
     });

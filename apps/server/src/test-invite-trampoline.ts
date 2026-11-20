@@ -447,6 +447,12 @@ async function main() {
         const pageSites = (lang: Lang | null) => guard.sitesIn('apps/server/src/routes/invite-trampoline.ts', renderInviteTrampoline({ webJoin: true, lang }));
         assert(pageSites(null).length === 0 && pageSites('fr').length === 0, 'the page names none of our communities or servers (the node-names guard\'s own list)');
         assert(/var W = \{[^\n]*\};/.test(html) && !/var W = [^\n]*<\//.test(html), 'iPhone: the words reach the script as JSON with no way out of the script block');
+        // Even a catalog sentence written to break out stays a string inside the script (words are files anyone can edit).
+        useCatalogsForTests('tr', { server: { Copy: '</script><img src=x onerror=alert(1)>\u2028&' } });
+        const hostile = renderInviteTrampoline({ webJoin: true, lang: 'tr' });
+        useCatalogsForTests('tr', null);
+        assert(hostile.split('</script>').length === 2 && !hostile.includes('<img src=x') && hostile.includes('\\u003c/script\\u003e\\u003cimg src=x onerror=alert(1)\\u003e\\u2028\\u0026'),
+            'iPhone: a catalog sentence holding </script>, a tag, U+2028 or & is escaped inside the script block');
 
         // Before any tap: the two lines and the button, the code card under them with its address, and nothing written.
         const before = runTrampoline('?invite=INV-AB12-CD34', IPHONE, RIVER, { exec: 'yes' });

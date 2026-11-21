@@ -28,7 +28,7 @@ export function NotifyAskCard({ words, colors, busy, onTurnOn, onLater, quiet }:
     onLater: () => void;
     /**
      * In Arrange: the card stays where it is, the same height, its inside quiet like every card's (no tap, nothing for TalkBack)
-     * until Done, so the cards under it keep their places on the screen (review of #3343).
+     * until Done, so the cards under it keep their places on the screen (N1h's deciding review, fix round 2).
      */
     quiet?: boolean;
 }) {

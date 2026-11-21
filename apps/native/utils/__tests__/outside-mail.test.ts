@@ -328,18 +328,25 @@ describe('3  the request gate, every case', () => {
         null, { state: 'request', theirLines: 0 }, { state: 'request', theirLines: 1 }, { state: 'open', theirLines: 0 }, { state: 'open', theirLines: 5 },
         { state: 'declined', theirLines: 1 },
     ];
-    /** The rule in words: blocked never; an open chat takes lines and changes to lines (X6); a stranger, one line, words only, through an open door. */
-    const expected = (kind: string, chat: typeof chats[number], doorOpen: boolean, isBlocked: boolean) => {
+    /**
+     * The rule in words: blocked never; an open chat takes lines and changes to lines (X6); someone let in (slice S3b) opens a
+     * chat with their first line, door or not, but never past a decline or a request already waiting; a stranger, one line,
+     * words only, through an open door.
+     */
+    const expected = (kind: string, chat: typeof chats[number], doorOpen: boolean, isBlocked: boolean, letIn: boolean) => {
         if (isBlocked) return 'drop';
         if (chat?.state === 'open') return kind === 'dm-line' ? 'line' : ['dm-delete', 'dm-edit', 'dm-reaction'].includes(kind) ? 'change' : 'drop';
         if (kind !== 'dm-line' || chat?.state === 'declined') return 'drop';
         if (chat?.state === 'request') return chat.theirLines === 0 ? 'request' : 'drop';
+        if (letIn) return 'line';
         return doorOpen ? 'request' : 'drop';
     };
-    for (const kind of kinds) for (const chat of chats) for (const doorOpen of [false, true]) for (const isBlocked of [false, true]) {
-        const want = expected(kind, chat, doorOpen, isBlocked);
-        it(`${kind}, chat ${chat ? `${chat.state}/${chat.theirLines}` : 'none'}, door ${doorOpen ? 'open' : 'closed'}${isBlocked ? ', blocked' : ''}: ${want}`, () => {
-            expect(gateIncoming({ kind, chat, doorOpen, blocked: isBlocked })).toBe(want);
+    for (const kind of kinds) for (const chat of chats) for (const doorOpen of [false, true]) for (const isBlocked of [false, true]) for (const letIn of [false, true]) {
+        const want = expected(kind, chat, doorOpen, isBlocked, letIn);
+        it(`${kind}, chat ${chat ? `${chat.state}/${chat.theirLines}` : 'none'}, door ${doorOpen ? 'open' : 'closed'}${isBlocked ? ', blocked' : ''}${letIn ? ', let in' : ''}: ${want}`, () => {
+            expect(gateIncoming({ kind, chat, doorOpen, blocked: isBlocked, letIn })).toBe(want);
+            // Left out, nobody is let in: the gate as before S3b.
+            if (!letIn) expect(gateIncoming({ kind, chat, doorOpen, blocked: isBlocked })).toBe(want);
         });
     }
     it('no voice, no photo, no delete, edit or reaction, ever, from someone not accepted (design §3.5)', () => {
@@ -378,6 +385,35 @@ describe('4  the gate through a round', () => {
         await heldLine(SOL, 'Thanks for accepting');
         expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1 });
         expect(lineRows().map((r) => r.text)).toEqual(['May I ask about the bikes?', 'Thanks for accepting']);
+    });
+
+    it('let in once (S3b): door closed, the first line from someone let in opens a chat; asked only for a first line, never for the blocked', async () => {
+        const asked: string[] = [];
+        ctx.letIn = async (k) => { asked.push(k); return k === SOL.key || k === CY.key; };
+        await heldLine(SOL, 'Hi, we traded at the market');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1, requests: 0, dropped: 0 });
+        expect(chatOf(SOL.key)).toMatchObject({ state: 'open' });
+        await heldLine(SOL, 'And again');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1 });
+        // The chat is open now: not asked again. Someone blocked: never asked, dropped.
+        blocked.add(CY.key);
+        await heldLine(CY, 'Blocked, though let in');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0 });
+        expect(asked).toEqual([SOL.key]);
+        expect(chatOf(CY.key)).toBeUndefined();
+    });
+
+    it('let in once (S3b): someone not let in, door closed, is dropped as before; a declined chat stays declined', async () => {
+        ctx.letIn = async (k) => k === CY.key;
+        await heldLine(SOL, 'Hi, stranger here');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0, requests: 0 });
+        await setDoor(ctx.store, true);
+        await heldLine(CY, 'First');
+        await syncOutsideMail(ctx);
+        expect(chatOf(CY.key)).toMatchObject({ state: 'open' });
+        await ctx.store.decide(BEN.key, relayConversationId(BEN.key, CY.key), 'declined');
+        await heldLine(CY, 'After decline');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0 });
     });
 
     it('declined, then blocked: nothing more from them is kept', async () => {

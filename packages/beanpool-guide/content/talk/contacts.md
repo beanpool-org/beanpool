@@ -41,9 +41,9 @@ Your list has two parts: **On BeanPool** and **Not on BeanPool yet**. BeanPool n
 
 - **In the web app,** on a member's profile, tap **＋ Add to my contacts**. The name you give is for you only, and they aren't told. If the name is already in your list, you are asked whether it is the same person. The profile then says **In your contacts as** and the name.
 - **When someone joins with an invite you sent a contact** (below), and you say it was them.
-- **On the phone,** **⋯**, then **Add people I've chatted with and my friends** adds everyone you have chatted with or added as a friend in the community you are on.
+- **On the phone,** **⋯**, then **Add people I've chatted with and my friends** adds everyone you have chatted with or added as a friend in the community you are on. A chat counts only if you wrote in it or accepted it yourself: someone who only wrote to you, or took up your Offer, isn't added.
 
-Under **On BeanPool**, **Message** opens a chat. If the person is in another of your communities, the button names it. On the phone, tap it and the phone switches you there and opens the chat with them; for a community you haven't joined on this phone, it asks first. The web app opens that community's web app. A member you blocked shows **Blocked** and **Unblock**. Blocking someone doesn't take them out of your contacts, and taking them out doesn't unblock them. Being in your contacts doesn't let anyone past message requests.
+Under **On BeanPool**, **Message** opens a chat. If the person is in another of your communities, the button names it. On the phone, tap it and the phone switches you there and opens the chat with them; for a community you haven't joined on this phone, it asks first. The web app opens that community's web app. A member you blocked shows **Blocked** and **Unblock**. Blocking someone doesn't take them out of your contacts, and taking them out doesn't unblock them. In the web app, being in your contacts doesn't let anyone past message requests. On your phone, someone you added to your contacts is let in: see "Message requests" in "Messages".
 
 ## Inviting someone
 

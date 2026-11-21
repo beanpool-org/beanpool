@@ -151,7 +151,10 @@ vi.mock('../../app/ThemeContext', async () => {
     const ctx = { theme: 'light', colors: lightColors, themePreference: 'light', setThemePreference() {}, patternEnabled: false, setPatternEnabled() {} };
     return { useTheme: () => ctx, useStyles: (make: (t: unknown) => unknown) => make(ctx), useOnboardingColors: () => onboardingColors('light') };
 });
-vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: null, setIdentity() {} }) }));
+// The join's end (handleConfirmSeed): the account the app is handed, and which way Home's "Your way back in" card starts
+// (slice S4: put away only when a way back is kept). `keptBefore`: what the phone already knew (utils/way-back-kept.ts).
+const landing = vi.hoisted(() => ({ identity: null as unknown, reminder: null as null | 'putAway' | 'shown', keptBefore: false }));
+vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: null, setIdentity(i: unknown) { landing.identity = i; } }) }));
 vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => {} }) }));
 
 // ── The phone's key store, the node, the key vault and the door, as each case sets them ─────────────────────────────
@@ -225,7 +228,12 @@ vi.mock('../callsign-suggest', () => ({ checkCallsignAvailable: async () => 'fre
 vi.mock('../community-switch', () => ({ communitySwitched: () => {} }));
 vi.mock('../rekey-slot-store', () => ({ rekeySlotStore: { get: async () => null, set: async () => {}, clear: async () => {} } }));
 vi.mock('../install-referrer', () => ({ takeInstallReferrer: async () => null }));
-vi.mock('../one-way-back', () => ({ startOneWayBack: async () => {} }));
+vi.mock('../one-way-back', () => ({
+    startOneWayBack: async () => {},
+    startOneWayBackPutAway: async () => { landing.reminder = 'putAway'; },
+    startOneWayBackShown: async () => { landing.reminder = 'shown'; },
+}));
+vi.mock('../way-back-kept', () => ({ wayBackKeptBefore: async () => landing.keptBefore }));
 vi.mock('../nodes', async (importOriginal) => {
     const real = await importOriginal<typeof import('../nodes')>();
     return { ...real, getSavedNodes: async () => [], addSavedNode: async () => {}, clearGuestNode: async () => {} };
@@ -387,6 +395,7 @@ beforeEach(() => {
     lock.none = true;
     phone.stored = null; phone.pending = null; phone.enrolment = null; phone.outgoing = null; phone.redeemFails = null;
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' };
+    landing.identity = null; landing.reminder = null; landing.keptBefore = false;
     door.check = { ok: true, profile: { features: {} } }; door.answer = null; door.signIn = null; door.cachedFeatures = null; door.cachedRule = null;
     door.rulesAt = {}; door.profilesAsked.length = 0;
     linkSheet.props = null;
@@ -577,9 +586,10 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         check('Join BeanPool, the redeem with no answer');
     });
 
-    // How it Works left the path (slice S5, DESIGN-onboarding-home-landing-fable.md §3.1): Safety Backup is the last step, its
-    // main button "Let's Begin! 🚀" into Home, where the WELCOME TO BEANPOOL! tile says what How it Works said.
-    it('Your photo, then Safety Backup (words shown, and the Go back? alert from ‹) as the last step', async () => {
+    // How it Works left the path (slice S5, DESIGN-onboarding-home-landing-fable.md §3.1): the way back is the last step, its
+    // main button into Home, where the WELCOME TO BEANPOOL! tile says what How it Works said. The way back (slice S4, §3.1 E):
+    // one sentence and two tiles; the 12 words open at their tile; "Later" until one is kept, then "Let's go".
+    it('Your photo, then the way back (two tiles, the words at their tile, and the Go back? alert from ‹) as the last step', async () => {
         await mount('xx');
         await enterInvite('BP-ABCD-1234', 'xx');
         await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
@@ -592,34 +602,88 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         check('Your Photo');
 
         await press('Skip for now', 'xx');
+        // The way back: its title, its one sentence, the third of three dots, two tiles, and no word of the 12 until asked.
+        expect(host!.textContent).toContain(pseudoLocalise('Keep a way back in'));
+        expect(host!.textContent).toContain(pseudoLocalise('If this phone is lost, this is how you get back in.'));
+        expect(all('[aria-label]').map((e) => e.getAttribute('aria-label'))).toContain(pseudoLocalise('Step {n} of {total}').replace('{n}', '3').replace('{total}', '3'));
+        expect(button('Link a sign-in', 'xx').textContent).toContain(pseudoLocalise('Google or Facebook'));
+        expect(button('Write down 12 words', 'xx').textContent).toContain(pseudoLocalise('On paper, kept safe'));
+        for (const w of WORDS) expect(host!.textContent).not.toContain(w);
+        expect(button('Later', 'xx')).toBeTruthy();
+        check('A way back, two tiles');
+
+        await press('Write down 12 words', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.'));
         // The 12 words as written: never looked up. Each cell's spoken name places the word in the sentence.
         for (const [i, w] of WORDS.entries()) expect(all('[aria-label]').map((e) => e.getAttribute('aria-label'))).toContain(pseudoLocalise('Word {n}: {word}').replace('{n}', String(i + 1)).replace('{word}', w));
         for (const w of WORDS) expect(host!.textContent).toContain(w);
-        check('Safety Backup, words shown');
+        // Paper only (Marty's walk, 21 Nov): no Copy on the join's words.
+        expect(all('button, [role="button"]').some((b) => (b.textContent ?? '').includes(pseudoLocalise('📋 Copy All Words')))).toBe(false);
+        check('A way back, words shown');
         await press('Back', 'xx');
         expect(alerts.said).toEqual(expect.arrayContaining([pseudoLocalise('Have you saved your words?'), pseudoLocalise("If you go back now, you'll need to start over."), pseudoLocalise('Stay'), pseudoLocalise('Go Back')]));
-        check('Safety Backup, the Go back? alert');
+        check('A way back, the Go back? alert');
 
-        // The last step: its main button goes Home, and no How it Works words are anywhere on it.
-        expect(button("Let's Begin! 🚀", 'xx')).toBeTruthy();
+        // The last step: "Later" until a way back is kept; the tick makes it "Let's go" into Home. No How it Works words.
+        expect(button('Later', 'xx')).toBeTruthy();
+        await press("I've saved these words", 'xx');
+        expect(button("Let's go", 'xx')).toBeTruthy();
+        expect(all('button, [role="button"]').map((b) => b.textContent)).not.toContain(pseudoLocalise('Later'));
         expect(all('button, [role="button"]').map((b) => b.textContent)).not.toContain(pseudoLocalise('Next →'));
         expect(host!.textContent).not.toContain(pseudoLocalise('The best place to be is zero (0 Beans).'));
         expect(host!.textContent).not.toContain(pseudoLocalise('How it Works'));
     });
 
-    it('Safety Backup with a sign-in covering the account, one that used to protect another: the last step, with no Beans words', async () => {
+    // Go Back on the way back (welcome.tsx handleSeedBackPress, review of #3330 round 2, finding 4): the tick, the opened
+    // sign-in panel and the opened words are put away with the rest, so the next pass starts as new. Each goes red without
+    // its reset: the tick as "Let's go" for "Later", the panel as no "Link a sign-in" tile, the words as words on screen.
+    it('Go Back from the way back, then Join again: the tick off, both tiles back, no word on screen', async () => {
+        await mount('en');
+        await enterInvite('BP-ABCD-1234', 'en');
+        await type('Community name or address (e.g. riverside)', 'riverside', 'en');
+        await type('Your name or nickname', 'Sally', 'en');
+        await press('Join', 'en');
+        await press('Skip for now', 'en');
+        // Everything opened: the sign-in tile's panel, the words, and the tick.
+        await press('Link a sign-in', 'en');
+        expect(all('button').some((b) => (b.textContent ?? '').includes('Google or Facebook')), 'the sign-in tile opened in place').toBe(false);
+        await press('Write down 12 words', 'en');
+        for (const w of WORDS) expect(host!.textContent).toContain(w);
+        await press("I've saved these words", 'en');
+        expect(button("Let's go", 'en')).toBeTruthy();
+
+        await press('Back', 'en');
+        const goBack = alerts.buttons.find((b) => b.text === 'Go Back');
+        expect(goBack, 'the Go back? question offers Go Back').toBeTruthy();
+        await act(async () => { await goBack!.onPress!(); });
+        await settle();
+        expect(host!.textContent, 'back at Your name').not.toContain('Keep a way back in');
+        button('Join', 'en');
+
+        await press('Join', 'en');
+        await press('Skip for now', 'en');
+        expect(host!.textContent).toContain('Keep a way back in');
+        expect(button('Later', 'en')).toBeTruthy();
+        expect(all('button, [role="button"]').map((b) => b.textContent), 'the tick is off').not.toContain("Let's go");
+        expect(button('Link a sign-in', 'en').textContent, 'the sign-in tile is back').toContain('Google or Facebook');
+        expect(button('Write down 12 words', 'en').textContent, 'the words tile is back').toContain('On paper, kept safe');
+        for (const w of WORDS) expect(host!.textContent, 'no word of the 12 on screen').not.toContain(w);
+    });
+
+    it('the way back with a sign-in covering the account, one that used to protect another: the last step, with no Beans words', async () => {
         phone.stored = SALLY;
         phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey,
             joinEnrolment: { enrolled: ['sso'], generation: 1, skipped: [], available: 1, enrolledSso: ['google'], threshold: 1, isSingleBlob: true, replaced: true } };
         door.cachedFeatures = { beans: false };
         await mount('xx');
         expect(host!.textContent).toContain(pseudoLocalise('This {provider} account used to protect a different BeanPool account. It protects this one now, and that one has only its 12 words.').replace('{provider}', 'Google'));
-        check('Safety Backup, covered');
-        await press('Rather write down 12 words?', 'xx');
-        check('Safety Backup, covered, words shown');
-        // The global door's last step too (S5): Let's Begin into Home, no How it Works card.
-        expect(button("Let's Begin! 🚀", 'xx')).toBeTruthy();
+        // A join resumed on the way back with a sign-in's copy kept: the covered panel in the sign-in tile's place, and Let's go.
+        expect(button("Let's go", 'xx')).toBeTruthy();
+        check('A way back, covered');
+        await press('Write down 12 words', 'xx');
+        check('A way back, covered, words shown');
+        // The global door's last step too (S5): Let's go into Home, no How it Works card.
+        expect(button("Let's go", 'xx')).toBeTruthy();
         expect(host!.textContent).not.toContain(pseudoLocalise('🌍 A place to meet'));
         expect(host!.textContent).not.toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
     });
@@ -661,6 +725,9 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
             return { enrolled: [], generation: null, skipped: [], available: 0, error: CONNECT_RULE_MESSAGES.none };
         };
         await mount('xx');
+        // The sentences and the Protect buttons open at the tile's tap (S4, design §3.1 E), still before any Protect button.
+        expect(all('[data-sso]'), 'nothing offered before the tap').toEqual([]);
+        await press('Link a sign-in', 'xx');
         expect(all('[data-sso]').length, 'a sign-in is offered where the key vault keeps the copy').toBeGreaterThan(0);
         await press('Protect with Google', 'xx');
         expect(shownAt).toBe('vault');
@@ -674,22 +741,31 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         check('Safety Backup, the community keeps none now');
     });
 
-    // In by 12 words at the global community's door, Safety Backup's one button is a sign-in: a second way back only where
-    // the community keeps a copy for it. Under `none` it says only what it adds, as the web's button does and as the sheet
-    // it opens (LinkSignInSheet) then says; in the member's language whatever the rule.
+    // In by 12 words at the global community's door, the way back offers a sign-in as a way back (the tile "Link a sign-in")
+    // only where the community keeps a copy for it. Under `none` the tile's place says why no sign-in is a way back here, and a
+    // quiet "Add a sign-in" says only what it adds, as the web's button does and as the sheet it opens (LinkSignInSheet) then
+    // says; in the member's language whatever the rule.
     for (const rule of ['vault', 'server', 'none'] as const) {
-        it(`Safety Backup for a member in by 12 words, the global community's rule ${rule}: the button calls a sign-in a way back only where a copy is kept`, async () => {
+        it(`the way back for a member in by 12 words, the global community's rule ${rule}: a sign-in is a way back only where a copy is kept`, async () => {
             useVault();
             store.map.set('beanpool_anchor_url', 'https://global.beanpool.org');
             door.cachedRule = rule;
             phone.stored = SALLY;
             phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, joinDoor: 'words' };
             await mount('xx');
-            const [said, notSaid] = rule === 'none' ? ['Add a sign-in', WORDS_BACKUP_TEXT.addSignIn] : [WORDS_BACKUP_TEXT.addSignIn, 'Add a sign-in'];
-            const buttons = all('button').map((b) => b.textContent);
-            expect(buttons).toContain(pseudoLocalise(said));
-            expect(buttons).not.toContain(pseudoLocalise(notSaid));
-            check(`Safety Backup, in by 12 words, ${rule}`);
+            const buttons = all('button').map((b) => b.textContent ?? '');
+            const has = (english: string) => buttons.some((b) => b === pseudoLocalise(english) || b.startsWith(pseudoLocalise(english)));
+            if (rule === 'none') {
+                expect(has('Add a sign-in'), 'what it adds, said plainly').toBe(true);
+                expect(has('Link a sign-in'), 'never called a way back').toBe(false);
+                // No row saying "no sign-in can be linked here" beside a button that adds one (it lifts the limits only).
+                expect(host!.querySelector('[data-testid="no-copies-row"]')).toBeNull();
+            } else {
+                expect(has('Link a sign-in'), 'a way back where a copy is kept').toBe(true);
+                expect(has('Add a sign-in'), 'one button for it').toBe(false);
+            }
+            expect(buttons.some((b) => b.includes(pseudoLocalise(WORDS_BACKUP_TEXT.addSignIn))), 'the old button is gone').toBe(false);
+            check(`A way back, in by 12 words, ${rule}`);
         });
     }
 
@@ -703,8 +779,10 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         phone.stored = SALLY;
         phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, joinDoor: 'words' };
         await mount('xx');
-        await press(WORDS_BACKUP_TEXT.addSignIn, 'xx');
+        // In by 12 words, the tile opens the door's own sheet (utils/join-link.ts), never the vault's panel.
+        await press('Link a sign-in', 'xx');
         expect(linkSheet.props?.visible, 'the sheet is open').toBe(true);
+        expect(all('[data-sso]'), 'no Protect buttons of the panel').toEqual([]);
         door.cachedRule = 'none';
         await act(async () => { linkSheet.props!.onLinked({ kind: 'linked', provider: 'google', enrolment: null, noCopies: true }); });
         await settle();
@@ -728,10 +806,104 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
             expect(host!.querySelector('[data-testid="step-footer-words"]'), 'Safety Backup is open').toBeTruthy();
             expect(host!.textContent).not.toContain(pseudoLocalise('🔑 Getting Back In'));
             if (rule === 'none') expect(host!.querySelector('[data-testid="no-copies-row"]'), 'the step says the community keeps none').toBeTruthy();
-            expect(button("Let's Begin! 🚀", 'xx')).toBeTruthy();
-            check(`Safety Backup, resumed from How it Works, ${rule}`);
+            // Nothing kept on this phone yet: the honest "Later" (S4), which brings Home's card from day one.
+            expect(button('Later', 'xx')).toBeTruthy();
+            check(`A way back, resumed from How it Works, ${rule}`);
         });
     }
+});
+
+/**
+ * The way back is skipped only where one is already kept (slice S4, design §3.1 E), and "Later" is true to its word. Tier A:
+ * the step bar counts the screens the member will see, nothing says a way back is kept that isn't, and a claim's step stays.
+ */
+describe('the way back: skipped where one is kept, and an honest Later (S4), in the pseudo-locale', () => {
+    const COVERED = { enrolled: ['sso'], generation: 1, skipped: [], available: 1, enrolledSso: ['google'], threshold: 1, isSingleBlob: true };
+    const spoken = () => all('[aria-label]').map((e) => e.getAttribute('aria-label'));
+    const stepOf = (n: number, total: number) => pseudoLocalise('Step {n} of {total}').replace('{n}', String(n)).replace('{total}', String(total));
+
+    it("an open door joined by a sign-in whose copy was kept: the photo is the last of two dots, and Skip for now lands past the way back", async () => {
+        store.map.set('beanpool_anchor_url', 'https://open.riverbend.example');
+        phone.stored = SALLY;
+        phone.pending = { step: 'profileSetup', flow: 'global', inviteCode: '', anchorUrl: 'https://open.riverbend.example', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, joinEnrolment: COVERED };
+        await mount('xx');
+        expect(host!.textContent).toContain(pseudoLocalise('Choose your look'));
+        expect(spoken()).toContain(stepOf(2, 2));
+        expect(spoken()).not.toContain(stepOf(2, 3));
+        check('Your photo, the way back already kept');
+        await press('Skip for now', 'xx');
+        expect(host!.textContent, 'never the way-back screen').not.toContain(pseudoLocalise('Keep a way back in'));
+        expect(landing.identity, 'in the app').toBe(SALLY);
+        expect(landing.reminder, "Home's card starts put away: a way back is kept").toBe('putAway');
+    });
+
+    // Your name counts the same screens as Your photo: before the join holds the account, the one already on the phone (which
+    // the invite joins with) is read. Nothing kept there: three dots.
+    for (const kept of [true, false]) {
+        it(`an invite link, the phone's account ${kept ? 'with' : 'without'} a way back already: Your name shows ${kept ? 'two' : 'three'} dots`, async () => {
+            landing.keptBefore = kept;
+            phone.stored = SALLY;
+            params.now = { invite: 'https://riverside.example/?invite=BP-ABCD-1234' };
+            await mount('xx');
+            expect(host!.textContent).toContain(pseudoLocalise('What should we call you?'));
+            expect(spoken()).toContain(kept ? stepOf(1, 2) : stepOf(1, 3));
+        });
+    }
+
+    it("an invite join with the phone's own account, its words already noted as kept: two dots, and past the way back", async () => {
+        landing.keptBefore = true;
+        store.map.set('beanpool_anchor_url', 'https://riverside.example');
+        phone.stored = SALLY;
+        phone.pending = { step: 'profileSetup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://riverside.example', callsign: 'Sally', redeemed: true };
+        await mount('xx');
+        expect(spoken()).toContain(stepOf(2, 2));
+        await press('Skip for now', 'xx');
+        expect(host!.textContent).not.toContain(pseudoLocalise('Keep a way back in'));
+        expect(landing.identity).toBe(SALLY);
+        expect(landing.reminder).toBe('putAway');
+    });
+
+    it('nothing kept: the way back shows, and Later lands with Home\'s card from the first landing', async () => {
+        store.map.set('beanpool_anchor_url', 'https://riverside.example');
+        phone.stored = SALLY;
+        phone.pending = { step: 'profileSetup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://riverside.example', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        await mount('xx');
+        expect(spoken()).toContain(stepOf(2, 3));
+        await press('Skip for now', 'xx');
+        expect(host!.textContent).toContain(pseudoLocalise('Keep a way back in'));
+        expect(landing.identity, 'the way back is a step, not a gate: not in yet, and not stopped either').toBeNull();
+        await press('Later', 'xx');
+        expect(landing.identity).toBe(SALLY);
+        expect(landing.reminder, "Later is true to its word: Home's card from day one").toBe('shown');
+    });
+
+    it('the tick on the way back: Let\'s go, and the card starts put away', async () => {
+        store.map.set('beanpool_anchor_url', 'https://riverside.example');
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://riverside.example', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        await mount('xx');
+        await press('Write down 12 words', 'xx');
+        await press("I've saved these words", 'xx');
+        await press("Let's go", 'xx');
+        expect(landing.identity).toBe(SALLY);
+        expect(landing.reminder).toBe('putAway');
+    });
+
+    it("a claim is never skipped, even with a way back kept: the owner's way back is the community's; Later goes on to the owner's card", async () => {
+        landing.keptBefore = true;
+        store.map.set('beanpool_anchor_url', 'https://beans.example.org');
+        phone.stored = SALLY;
+        phone.pending = { step: 'profileSetup', flow: 'claim', inviteCode: '', anchorUrl: 'https://beans.example.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        await mount('xx');
+        expect(spoken()).toContain(stepOf(1, 2));
+        await press('Skip for now', 'xx');
+        expect(host!.textContent).toContain(pseudoLocalise('Keep a way back in'));
+        expect(spoken()).toContain(stepOf(2, 2));
+        // Kept before (the phone's own record), so the button already says Next, to the owner's card.
+        expect(button('Next', 'xx')).toBeTruthy();
+        check("A way back after a claim, kept before");
+        expect(landing.identity).toBeNull();
+    });
 });
 
 /**
@@ -810,6 +982,7 @@ describe("Safety Backup after another community's open door (S2), in the pseudo-
                 expect(all('[data-sso]'), 'so no sign-in is offered').toEqual([]);
             } else {
                 expect(host!.querySelector('[data-testid="no-copies-row"]'), "never the global community's none").toBeNull();
+                await press('Link a sign-in', 'xx');
                 expect(all('[data-sso]').length, 'a sign-in is offered where the key vault keeps the copy').toBeGreaterThan(0);
             }
             check(`Safety Backup after another community's door, its rule ${doorRule}`);
@@ -918,6 +1091,24 @@ describe("the global community's door in the pseudo-locale", () => {
             check(`the door, two ways, ${rule}`);
         });
     }
+
+    // The door's name screen counts the screens the way chosen leads to (review of #3330): on the sign-in, a door whose rule
+    // keeps a copy goes past the way back, as Your photo then does (two dots); the 12 words, or a door that keeps no copies,
+    // show it (three). The join holds no copy yet here: the photo's skip waits for the copy that landed.
+    const stepOf = (n: number, total: number) => pseudoLocalise('Step {n} of {total}').replace('{n}', String(n)).replace('{total}', String(total));
+    const spoken = () => all('[aria-label]').map((e) => e.getAttribute('aria-label'));
+    for (const rule of ['vault', 'server', 'none'] as const) {
+        it(`the door's dots, rule ${rule}: the sign-in ${rule === 'none' ? 'three' : 'two'}, the 12 words three`, async () => {
+            useVault();
+            door.check = { ok: true, profile: { features: { wordsDoor: true }, recoveryCopies: rule } };
+            await mount('xx');
+            await explore('xx');
+            expect(spoken()).toContain(stepOf(1, rule === 'none' ? 3 : 2));
+            await press(DOOR_CHOICE_TEXT.words, 'xx');
+            expect(spoken()).toContain(stepOf(1, 3));
+            expect(spoken()).not.toContain(stepOf(1, 2));
+        });
+    }
 });
 
 describe('restoring an account in the pseudo-locale', () => {
@@ -992,23 +1183,27 @@ describe('restoring an account in the pseudo-locale', () => {
 });
 
 describe('a language picked on an open step redraws it, live', () => {
-    it('Safety Backup in English, then French from the real catalog; a sentence the drafting pass has not reached yet shows its English', async () => {
+    it('the way back in English, then French from the real catalog; a sentence the drafting pass has not reached yet shows its English', async () => {
         phone.stored = SALLY;
         phone.pending = { step: 'seedBackup', inviteCode: 'BP-1', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
         const page = await mount('en', [createElement(LanguageSwitch, { key: 'switch' })]);
-        expect(page.textContent).toContain("Let's Begin! 🚀");
+        expect(page.textContent).toContain('Later');
+        expect(page.textContent).toContain('If this phone is lost, this is how you get back in.');
         const fr = catalog('fr');
         await act(async () => { (page.querySelector('[data-testid="language-switch"]') as HTMLElement).click(); });
         await settle();
         await act(async () => { (page.querySelector('[data-testid="language-fr"]') as HTMLElement).click(); });
         await settle();
-        // The step's main button (Let's Begin, the last step since S5) and the step bar's spoken words are in the catalog:
-        // French now, on the same open step.
-        expect(page.textContent).toContain(fr["Let's Begin! 🚀"] as string);
-        expect(page.textContent).not.toContain("Let's Begin! 🚀");
+        // The step's main button ("Later", the last step since S5), its sentence and the step bar's spoken words are in the
+        // catalog: French now, on the same open step.
+        expect(page.textContent).toContain(fr['Later'] as string);
+        expect(page.textContent).toContain(fr['If this phone is lost, this is how you get back in.'] as string);
+        expect(page.textContent).not.toContain('If this phone is lost, this is how you get back in.');
         const spoken = Array.from(page.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label'));
         expect(spoken).toContain((fr['Step {n} of {total}'] as string).replace('{n}', '3').replace('{total}', '3'));
-        // A sentence of this sweep's the catalog doesn't have yet: its English, never a gap.
+        // A sentence of this sweep's the catalog doesn't have yet: its English, never a gap (the words open at their tile).
+        await act(async () => { (page.querySelector('[data-testid="way-back-words"]') as HTMLElement).click(); });
+        await settle();
         const pen = 'No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.';
         expect(page.textContent).toContain(typeof fr[pen] === 'string' ? fr[pen] as string : pen);
     });

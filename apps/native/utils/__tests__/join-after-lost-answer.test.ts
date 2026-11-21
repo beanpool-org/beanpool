@@ -626,7 +626,7 @@ describe('welcome.tsx: "Your Name" is not left while Next is out', () => {
         const s = createStep();
         // ‹ on the step bar (slice S3, components/welcome/StepDots.tsx) in place of the card's "← Back to Home": through the gate,
         // disabled and faded while Join is out (the bar's backDisabled is the screen's `loading`).
-        expect(s).toContain("<StepBar step=\"name\" flow={joinFlow} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />");
+        expect(s).toContain("<StepBar step=\"name\" flow={joinFlow} wayBack={!skipWayBack} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />");
         const dots = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/StepDots.tsx'), 'utf8');
         expect(dots).toContain('return <StepDots dot={dot} onBack={onBack} backLabel={backLabel} backDisabled={busy} />;');
         expect(dots).toMatch(/style=\{\[styles\.back, backDisabled && styles\.backDisabled\]\}\s*onPress=\{onBack\}\s*disabled=\{backDisabled\}/);

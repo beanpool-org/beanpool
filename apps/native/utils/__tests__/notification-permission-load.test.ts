@@ -19,7 +19,7 @@ describe('notification-permission loads without the push service, identity or ex
     it('imports with only react-native and storage mocked', async () => {
         const mod = await import('../notification-permission');
         expect(typeof mod.turnOnNotifications).toBe('function');
-        expect(typeof mod.askNotificationPermissionOnAction).toBe('function');
+        expect(typeof mod.offerNamedLine).toBe('function');
     });
 
     it('has no top-level import of services/push-notifications, ./identity or expo-notifications (only its types)', () => {
@@ -35,11 +35,11 @@ describe('notification-permission loads without the push service, identity or ex
         await expect(checkOsNotificationPermission()).resolves.toBe(false);
     });
 
-    it('asks nothing at a first message or knock where expo-notifications cannot load: there is nothing to turn on', async () => {
-        const { askNotificationPermissionOnAction } = await import('../notification-permission');
+    it('offers no named line where expo-notifications cannot load: there is nothing to turn on', async () => {
+        const { offerNamedLine } = await import('../notification-permission');
         const { Alert } = await import('react-native');
-        await expect(askNotificationPermissionOnAction('message', 'k')).resolves.toBe('unanswered');
-        await expect(askNotificationPermissionOnAction('knock', 'k')).resolves.toBe('unanswered');
+        await expect(offerNamedLine('answer')).resolves.toBe(false);
+        await expect(offerNamedLine('join')).resolves.toBe(false);
         expect(Alert.alert).not.toHaveBeenCalled();
     });
 });

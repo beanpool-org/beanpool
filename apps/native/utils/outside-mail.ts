@@ -82,6 +82,8 @@ export interface OutsideMailContext {
     store: OutsideChatStore;
     /** Whether the account blocked this key (utils/blocklist.ts). */
     isBlocked: (key: string) => Promise<boolean>;
+    /** Whether the member let this key in and never blocked it (utils/let-in.ts letInFor, slice S3b). Left out: nobody is. */
+    letIn?: (key: string) => Promise<boolean>;
     /** The caller's deadline: every request made with this context is aborted with it. */
     signal?: AbortSignal;
 }
@@ -569,11 +571,14 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     continue;
                 }
                 const chat = await ctx.store.chat(me, chatId);
+                const blocked = await ctx.isBlocked(env.senderKey);
                 const verdict = gateIncoming({
                     kind: env.kind,
                     chat: chat ? { state: chat.state, theirLines: await ctx.store.theirLines(chatId, env.senderKey) } : null,
                     doorOpen: open,
-                    blocked: await ctx.isBlocked(env.senderKey),
+                    blocked,
+                    // Let in once (slice S3b): asked only for a first line with no chat here, from someone not blocked.
+                    letIn: !chat && !blocked && env.kind === 'dm-line' && !!ctx.letIn && await ctx.letIn(env.senderKey),
                 });
                 if (verdict === 'drop') { done.push(env.itemId); out.dropped++; continue; }
                 if (verdict === 'change') {

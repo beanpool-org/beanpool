@@ -40,6 +40,7 @@ import {
 } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getReachablePeers } from '../utils/db';
+import { noteNotifyMoment, LISTING_MOMENT } from '../components/NotifyLine';
 import { hasUsableAvatar as sharedHasUsableAvatar } from '../utils/profile-status';
 import { askForPostPhoto } from '../utils/post-photo';
 import { useIdentity } from './IdentityContext';
@@ -738,6 +739,8 @@ export default function NewListingScreen() {
                 leave();
                 return;
             }
+            // Its named line, "Hear when someone answers." (slice N2a), is on Your deals, where the post lands.
+            noteNotifyMoment(LISTING_MOMENT, { kind: 'listing' });
             setTimeout(() => {
                 resetNewPost();
                 setShowNewPost(false);

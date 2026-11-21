@@ -418,7 +418,8 @@ export async function depositCommunityCopy(input: {
     if (receipt.provider !== VAULT_COMMUNITY_PROVIDER || receipt.copy !== vaultCopyDigest(clientCopy) || receipt.signIn !== vaultTicketNonce(ticket)) {
         throw unverified('/v1/copies', 'a receipt for another copy');
     }
-    await noteVaultCopy(input.identity.publicKey, true);
+    // Half of a pair, and the vault goes first (community-recovery.ts): kept, for the hold checks, but never a sign-in's copy.
+    await noteCommunityCopyDeposited(input.identity.publicKey);
     if (pushToken) await AsyncStorage.setItem(vaultPushTokenStoreKey(input.identity.publicKey), pushToken).catch(() => {});
 }
 
@@ -516,7 +517,7 @@ export async function vaultStatus(identity: VaultSigner, timeoutMs = VAULT_TIMEO
     const answer = await vaultPost('/v1/copies/status', {}, identity, ['status'], timeoutMs);
     if (!Array.isArray(answer.copies) || !Array.isArray(answer.holds)) throw unverified('/v1/copies/status', 'a status without its lists');
     const status = readVaultStatus(answer);
-    await noteVaultCopy(identity.publicKey, status.providers.length > 0 || !!status.communityCopies);
+    await noteVaultCopy(identity.publicKey, status.providers.length > 0 ? true : status.communityCopies ? 'community' : false);
     return status;
 }
 
@@ -543,10 +544,14 @@ export const VAULT_NONE_KEPT_MS = 7 * 24 * 60 * 60 * 1000;
  */
 export type VaultCopyKnowledge = 'kept' | 'none' | 'unknown';
 
+/** What {@link noteVaultCopy} stores: a sign-in's copy known (`1`), community copies only (`c`), or none, dated (`0:<when>`). */
+const SIGN_IN_COPY = '1';
+const COMMUNITY_COPIES_ONLY = 'c';
+
 export async function vaultCopyKnowledge(publicKey: string, now: number = Date.now()): Promise<VaultCopyKnowledge> {
     try {
         const v = await AsyncStorage.getItem(vaultCopyKnownStoreKey(publicKey));
-        if (v === '1') return 'kept';
+        if (v === SIGN_IN_COPY || v === COMMUNITY_COPIES_ONLY) return 'kept';
         // "0:<when>". Anything else has no date, so it is asked again.
         const at = v?.startsWith('0:') ? Number(v.slice(2)) : NaN;
         return Number.isSafeInteger(at) && at <= now && now - at < VAULT_NONE_KEPT_MS ? 'none' : 'unknown';
@@ -555,18 +560,45 @@ export async function vaultCopyKnowledge(publicKey: string, now: number = Date.n
     }
 }
 
-/** Whether this phone knows the vault keeps a copy for `publicKey` ({@link vaultCopyKnowledge} is `'kept'`). */
+/**
+ * Whether this phone knows the vault keeps a copy for `publicKey` ({@link vaultCopyKnowledge} is `'kept'`): any copy, a
+ * community's half too. What is still there to remove or to ask about; never whether the account has a way back.
+ */
 export async function vaultCopyKnown(publicKey: string): Promise<boolean> {
     return (await vaultCopyKnowledge(publicKey)) === 'kept';
 }
 
 /**
- * Remember what the phone has just learnt: a deposit here, a restore from the vault, or a status read (the app-open
- * check, Account Protection), which is how a phone learns of a copy another of the member's devices made. "None" is
- * dated, and believed for {@link VAULT_NONE_KEPT_MS}.
+ * Whether this phone knows the vault keeps a SIGN-IN's copy for `publicKey` (a deposit for a sign-in, a restore by one, or
+ * a status read listing one): a sign-in brings the account back in every community, so it is a way back (utils/way-back-
+ * kept.ts, the "one way back" card, an open door's 12-words reminder). A community copy is not counted (review of #3330,
+ * finding 1): the vault keeps its half first and the community may never keep the other (refused, unreachable, its half
+ * lost or the community closed), and half a pair opens nothing. Counting none of them shows the step and the card, the
+ * safe way. A read that fails is "not known".
  */
-export async function noteVaultCopy(publicKey: string, kept: boolean, now: number = Date.now()): Promise<void> {
-    await AsyncStorage.setItem(vaultCopyKnownStoreKey(publicKey), kept ? '1' : `0:${now}`).catch(() => {});
+export async function vaultSignInCopyKnown(publicKey: string): Promise<boolean> {
+    try {
+        return (await AsyncStorage.getItem(vaultCopyKnownStoreKey(publicKey))) === SIGN_IN_COPY;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Remember what the phone has just learnt: a deposit here, a restore from the vault, or a status read (the app-open
+ * check, Account Protection), which is how a phone learns of a copy another of the member's devices made. `true` is a
+ * sign-in's copy, `'community'` community copies only (a status read lists every copy, so it may say a sign-in's copy is
+ * gone). "None" is dated, and believed for {@link VAULT_NONE_KEPT_MS}.
+ */
+export async function noteVaultCopy(publicKey: string, kept: boolean | 'community', now: number = Date.now()): Promise<void> {
+    const value = kept === true ? SIGN_IN_COPY : kept === 'community' ? COMMUNITY_COPIES_ONLY : `0:${now}`;
+    await AsyncStorage.setItem(vaultCopyKnownStoreKey(publicKey), value).catch(() => {});
+}
+
+/** A community copy deposited here: kept, unless a sign-in's copy is already known, which this never takes the place of. */
+async function noteCommunityCopyDeposited(publicKey: string): Promise<void> {
+    if (await vaultSignInCopyKnown(publicKey)) return;
+    await noteVaultCopy(publicKey, 'community');
 }
 
 /** Forget what the phone knew (a restore with the 12 words): the next app open asks the vault again. */

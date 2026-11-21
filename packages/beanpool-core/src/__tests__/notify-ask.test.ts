@@ -6,13 +6,15 @@
  * phone's "no" but the fact and bell lines; one soft ask a day; "Later" is never final; an older app's "Not now" reads
  * as a "Later").
  */
-import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { afterEach, describe, it, expect } from 'vitest';
 import {
-    markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyLaterAt, notifyPhoneSaidNo, notifyTurnOn,
-    NOTIFY_FACT_DAYS, NOTIFY_HOME_AFTER_LATER_DAYS, NOTIFY_HOME_AWAY_DAYS, NOTIFY_HOME_AWAYS, NOTIFY_ONCE_CARD_DAYS,
-    type NotifyAskInput, type NotifyAskRecord, type NotifyAsks, type NotifyAskSurface, type NotifyPhone,
+    markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyLaterAt, notifyLineWords, notifyPhoneSaidNo, notifyTurnOn,
+    NOTIFY_FACT_DAYS, NOTIFY_HOME_AFTER_LATER_DAYS, NOTIFY_HOME_AWAY_DAYS, NOTIFY_HOME_AWAYS, NOTIFY_LINE_KINDS, NOTIFY_ONCE_CARD_DAYS,
+    type NotifyAskInput, type NotifyAskRecord, type NotifyAsks, type NotifyAskSurface, type NotifyLineKind, type NotifyPhone,
 } from '../notify-ask.js';
 import { localDay } from '../home-tips.js';
+import { LANGS, PSEUDO_LANG, pseudoLocalise, setLanguage, type Catalog } from '../words.js';
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -289,6 +291,90 @@ describe('the sweep: every phone, record and day against the invariants', () => 
                     }
                 }
             }
+        }
+    });
+});
+
+// Slice N2a (amend2 §12.3): the named lines at the member's own acts. Which kind may show is the rule above (`line`); here,
+// one row per (moment, phone and record) as the slice's brief names them, and the words each kind says.
+describe('the named lines (slice N2a)', () => {
+    afterEach(() => setLanguage('en'));
+    const MOMENTS: Record<NotifyLineKind, string> = {
+        answer: 'a first message sent', again: 'a first message read, or a request accepted', listing: 'a first listing',
+        offer: 'a first offer or request on a listing', join: 'an ask to join',
+    };
+    const YESTERDAY = localDay(new Date(ago(1)));
+    const STATES: Array<[string, NotifyPhone, NotifyAskRecord, boolean]> = [
+        ['never asked', ASK, {}, true],
+        ["Later today on the join's screen (its day still allows one line)", ASK, { ...today('join'), joinAt: NOW - 2 * HOUR, laterAt: NOW - HOUR }, true],
+        ['Later today on the once card (the day is taken)', ASK, { ...today('once'), onceAt: NOW - 2 * HOUR, onceClosedAt: NOW - HOUR, laterAt: NOW - HOUR }, false],
+        ['Later yesterday', ASK, { askDay: YESTERDAY, askKind: 'join', joinAt: ago(1), laterAt: ago(1) }, true],
+        ["an older app's Not now (a Later)", ASK, { state: 'declined', updatedAt: ago(20) }, true],
+        ["the phone said no (Android's first, recorded)", ASK, { phoneNoAt: ago(1) }, false],
+        ["the phone said no (an iPhone's Don't Allow)", SETTINGS, {}, false],
+        ['allowed through one of our asks', ON, { state: 'granted' }, false],
+        ['Android 8 to 12 (allowed without asking)', ON, {}, false],
+        ['notifications cannot load here', NONE, {}, false],
+        ['this kind shown before', ASK, { askDay: localDay(new Date(ago(9))), askKind: 'line', lines: [...NOTIFY_LINE_KINDS] }, false],
+        ['another named line shown today', ASK, { ...today('line'), lines: ['some-other-kind'] }, false],
+    ];
+
+    it('the kinds are the five moments the design names', () => {
+        expect([...NOTIFY_LINE_KINDS]).toEqual(Object.keys(MOMENTS));
+    });
+
+    for (const kind of NOTIFY_LINE_KINDS) {
+        for (const [state, phone, record, shown] of STATES) {
+            it(`${MOMENTS[kind]} × ${state}: ${shown ? 'shown' : 'not shown'}`, () => {
+                const got = notifyAsks({ record, phone, now: NOW, line: kind });
+                expect(got.line).toBe(shown);
+                // A named line is the only ask a moment brings: never the join's screen, the once card or the Home card for it.
+                if (shown) {
+                    const after = notifyAsks({ record: markNotifyAsk(record, { type: 'shown', surface: 'line', line: kind }, NOW), phone, now: NOW + HOUR, line: kind });
+                    expect(after.line).toBe(false);
+                }
+            });
+        }
+    }
+
+    const WORDS: Array<[NotifyLineKind, string | null | undefined, string, string]> = [
+        ['answer', 'Asha', 'Hear when Asha answers.', "You'll hear when Asha answers."],
+        ['again', 'Asha', 'Hear when Asha writes again.', "You'll hear when Asha writes again."],
+        ['offer', 'Asha', 'Hear when Asha says yes.', "You'll hear when Asha says yes."],
+        ['join', 'Riverside', 'Hear when Riverside answers.', "You'll hear when Riverside answers."],
+        ['listing', 'Asha', 'Hear when someone answers.', "You'll hear when someone answers."],
+        ['listing', null, 'Hear when someone answers.', "You'll hear when someone answers."],
+        ['answer', null, 'Hear when someone answers.', "You'll hear when someone answers."],
+        ['again', undefined, 'Hear when someone answers.', "You'll hear when someone answers."],
+        ['offer', '   ', 'Hear when someone answers.', "You'll hear when someone answers."],
+        ['join', ' Riverside ', 'Hear when Riverside answers.', "You'll hear when Riverside answers."],
+    ];
+    it.each(WORDS)('%s, named %j: "%s"', (kind, name, line, done) => {
+        expect(notifyLineWords(kind, name)).toEqual({ line, done, button: 'Tell me' });
+    });
+
+    it('every word comes through t(): nothing outside the pseudo-locale\'s brackets', () => {
+        setLanguage(PSEUDO_LANG);
+        for (const kind of NOTIFY_LINE_KINDS) {
+            for (const name of ['Asha', null]) {
+                const w = notifyLineWords(kind, name);
+                for (const text of [w.line, w.done, w.button]) expect(text.replace(/\[[^\]]*\]/g, '').replace(/Asha/g, ''), text).not.toMatch(/[A-Za-z]/);
+            }
+        }
+        expect(notifyLineWords('answer', 'Asha').line).toBe(pseudoLocalise('Hear when {name} answers.').replace('{name}', 'Asha'));
+    });
+
+    const catalog = (lang: string): Catalog => JSON.parse(readFileSync(new URL(`../../words/${lang}.json`, import.meta.url), 'utf8')) as Catalog;
+    const SENTENCES = [
+        'Tell me', 'Hear when someone answers.', "You'll hear when someone answers.",
+        'Hear when {name} answers.', "You'll hear when {name} answers.", 'Hear when {name} writes again.', "You'll hear when {name} writes again.",
+        'Hear when {name} says yes.', "You'll hear when {name} says yes.",
+    ];
+    it.each(LANGS.filter((l) => l !== 'en'))('%s: a machine draft for every sentence, its name kept', (lang) => {
+        const c = catalog(lang) as Record<string, unknown>;
+        for (const key of SENTENCES) {
+            expect(typeof c[key], `${lang} ${key}`).toBe('string');
+            if (key.includes('{name}')) expect(c[key], `${lang} ${key}`).toContain('{name}');
         }
     });
 });

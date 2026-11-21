@@ -109,7 +109,8 @@ vi.mock('../typed-place', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => 'bundled://fox') }));
 vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => ({ kind: 'claimed' })) }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => 'unanswered') }));
+// No named line on these screens here (slice N2a draws it in its own suites): the rule answers no.
+vi.mock('../notification-permission', () => ({ offerNamedLine: vi.fn(async () => false) }));
 vi.mock('../../components/AddressSearch', () => ({ AddressSearch: () => null }));
 // The camera's screen, stood in for: it draws, and what it reads is given to the screen's onRead.
 const camera = vi.hoisted(() => ({ onRead: null as null | ((data: string) => boolean) }));

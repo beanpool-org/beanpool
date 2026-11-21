@@ -20,7 +20,7 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 - Keep the paper somewhere safe, away from your phone.
 - A photo or screenshot of the words is easy for someone else to find. Paper is safer.
 - While the phone app shows your 12 words, or while you type them, it blocks screenshots and screen recordings of that screen: the phone refuses the screenshot, or the picture comes out blank. Nothing stops a photo of the screen taken with another phone.
-- **Copy Words** (**Copy All Words** while you join, and in the web app) puts the words on your phone's clipboard for one minute. Then the app clears them, if the clipboard still holds them. If you leave the app first, it clears them when you come back. Something you copied since is left alone. A keyboard's clipboard history, or a clipboard shared with your other devices, may keep a copy the app can't clear.
+- **Copy Words** (in **Settings**, and in the web app; joining in the phone app offers paper only) puts the words on your phone's clipboard for one minute. Then the app clears them, if the clipboard still holds them. If you leave the app first, it clears them when you come back. Something you copied since is left alone. A keyboard's clipboard history, or a clipboard shared with your other devices, may keep a copy the app can't clear.
 - In the web app, the copy clears after a minute if you stay on that screen. On an iPhone or iPad, in Safari or in Firefox, the browser lets the app clear it only when you tap or press a key, so it clears at your first tap or key press after the minute. If you leave that screen or switch to another app or tab first, the app can't tell whether you copied something else, so it leaves your clipboard alone: copy something else over the words.
 - If your phone has no screen lock, anyone holding it can open your 12 words, and the app says so under them. A PIN, pattern, password, fingerprint or face lock, set in your phone's settings, keeps them safer.
 
@@ -28,7 +28,7 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 
 The recovery kit is one printable page: your 12 words in order, your community's name and address, the date you made it, and the steps to get back in on a phone and in a web browser. It does not say whose account it is. It is optional: you can carry on without it.
 
-- **On the phone**: next to your 12 words (on Safety Backup when you join, and in Settings), tap **Print your recovery kit** to print it, or **Save as PDF** to make a PDF and choose where it goes. Before saving, the app warns: "Keep this file off cloud backups and chats. Anyone who has it can sign in as you." The phone deletes its own copy of the PDF afterwards.
+- **On the phone**: next to your 12 words (on **Keep a way back in** when you join, once you tap **Write down 12 words**, and in Settings), tap **Print your recovery kit** to print it, or **Save as PDF** to make a PDF and choose where it goes. Before saving, the app warns: "Keep this file off cloud backups and chats. Anyone who has it can sign in as you." The phone deletes its own copy of the PDF afterwards.
 - **In the web app**: next to your 12 words (when you join, and in Settings under **View Recovery Phrase**), click **Print or save your recovery kit**. The app warns: "Keep this page or file off cloud backups and chats. Anyone who has it can sign in as you." Click **Continue** for your browser's print dialog. To keep a PDF instead of paper, choose **Save as PDF** there.
 - Keep the page as you would the words: anyone who has it can sign in as you.
 
@@ -59,7 +59,7 @@ Your phone checks that the words belong to your account, the same check as **Che
 
 You can join the global community with 12 secret words alone, without a Google, Apple or Facebook account (see "Joining BeanPool"). If that made you a new account, your 12 words are your only way back in. No copy of your account is kept anywhere but on your phone, and nobody can reset them: not BeanPool, and not the community. If you lose them and your phone, the account is gone for good. (If you joined with the account you already had, a sign-in you linked in another community still brings it back there.)
 
-The app says so at **Safety Backup**. After you join, a card on **Home** says it again, on the phone and in the web app: **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything. On the phone:
+The app says so when you join, beside your words (**Keep a way back in**; in a web browser, **Safety Backup**). After you join, a card on **Home** says it again, on the phone and in the web app: **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything. On the phone:
 
 - **✕** puts the card away. It comes back once after your first post and once after a week, then stays only in **Settings**, under **Account Protection**.
 - **Show my 12 words** opens **Account Protection**, where you can see them again.
@@ -73,9 +73,9 @@ An account made with 12 words also starts slower than one made with a sign-in, f
 
 You can add a sign-in later, from any phone or browser where you are in your account, not only the one you joined on. On a phone you restored your account onto with your 12 words, open the global community in the app: the community says your account has only its 12 words, and the card and **Add a sign-in** appear (it can take a moment). You can't add one while your account is suspended, or if the community has closed your account (the app says so, and nothing changes). It becomes a second way back, and it lifts the 12-words limits at once.
 
-If BeanPool's key vault already keeps a copy of your account, that copy is a way back too. The app then doesn't show the one-way-back card. **Add a sign-in** is still offered, quietly, in **Account Protection** in **Settings**, because it lifts the 12-words limits.
+If BeanPool's key vault already keeps a copy of your account for a sign-in, that copy is a way back too. The app then doesn't show the one-way-back card. **Add a sign-in** is still offered, quietly, in **Account Protection** in **Settings**, because it lifts the 12-words limits.
 
-- Tap **Add a sign-in**: on the card, or in **Settings** under **Account Protection**. At **Safety Backup** the button says **Add a sign-in as a second way back**.
+- Tap **Add a sign-in**: on the card, or in **Settings** under **Account Protection**. When you join, **Keep a way back in** offers it as **Link a sign-in** (in a web browser, **Safety Backup**'s button says **Add a sign-in as a second way back**).
 - Tap **Continue with Google**, **Continue with Facebook** or, on an iPhone, **Continue with Apple**, and sign in once. The app may ask for your phone's lock first.
 - **Sign-in added** says it worked. Your account now has the usual new-account limits, and that sign-in brings it back if you lose your phone, as for someone who joined with it. See "Getting your account back" for who can open the copy kept for it.
 

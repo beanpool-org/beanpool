@@ -84,7 +84,11 @@ vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
-    return { useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }) };
+    return {
+        useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }),
+        // The named line (components/NotifyLine.tsx) reads the theme's colours.
+        useTheme: () => ({ theme: 'light', colors: lightColors }),
+    };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -130,7 +134,20 @@ vi.mock('../crypto', () => ({
     buildSignedHeaders: async (_m: string, _u: string, _b: string, _priv: string, publicKey: string) => ({ 'X-Test-Signed': '1', 'X-Test-Key': publicKey }),
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => 'bundled://phone-wide' }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: async () => {} }));
+// The named line after an ask to join (slice N2a): what core's rule answers (no, unless a row says yes), and Tell me.
+const notifyAsk = vi.hoisted(() => ({ offer: false, offered: [] as string[], turnOns: 0 }));
+vi.mock('../notification-permission', () => ({
+    offerNamedLine: vi.fn(async (kind: string) => { notifyAsk.offered.push(kind); return notifyAsk.offer; }),
+    turnOnNotifications: vi.fn(async () => { notifyAsk.turnOns++; return 'granted'; }),
+}));
+// The card in front, or a screen opened over it: useFocusEffect never runs here (above), so the card's focus as the named
+// line reads it (components/NotifyLine.tsx useScreenShowing; its own wiring is notify-line-hidden-again.test.ts's).
+const cardFocus = vi.hoisted(() => ({ inFront: true, listeners: new Set<() => void>() }));
+vi.mock('../../components/NotifyLine', async (importOriginal) => {
+    const { useSyncExternalStore } = await import('react');
+    const subscribe = (l: () => void) => { cardFocus.listeners.add(l); return () => { cardFocus.listeners.delete(l); }; };
+    return { ...(await importOriginal<Record<string, unknown>>()), useScreenShowing: () => useSyncExternalStore(subscribe, () => cardFocus.inFront) };
+});
 // The registrations a remembered knock runs (web push W4: a waiting phone's token goes to the community it asked).
 const pushRuns = vi.hoisted(() => ({ count: 0, asked: [] as string[] }));
 vi.mock('../../services/push-notifications', () => ({ registerAfterKnock: async (community: string) => { pushRuns.count++; pushRuns.asked.push(community); } }));
@@ -173,6 +190,8 @@ function remember(knock: { sentAt?: string; cancelledAt?: string } = {}): void {
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+    notifyAsk.offer = false; notifyAsk.offered = []; notifyAsk.turnOns = 0;
+    cardFocus.inFront = true;
     pushRuns.count = 0;
     pushRuns.asked = [];
     host = document.createElement('div');
@@ -342,6 +361,65 @@ describe("a member's request to join, on the community's card", () => {
         // Profile S2-W: sends this community's photo (or none), never the phone-wide canonical copy.
         expect('avatar' in scene.sent[0]).toBe(false);
         expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks.map((k: { url: string }) => k.url)).toEqual([ORIGIN]);
+    });
+
+    // Slice N2a: the old pop-up before the request went is gone; the named line comes under the waiting line, at the moment.
+    it('asked from the card: "Hear when Riverside answers." under the waiting line, nothing before Send; Tell me turns them on', async () => {
+        notifyAsk.offer = true;
+        await open();
+        await tap(byTestId('community-card-ask'));
+        expect(notifyAsk.offered).toEqual([]);
+        const message = host.querySelectorAll('input')[1] as HTMLInputElement;
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(message, 'I live by the river and grow tomatoes.');
+            message.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
+        expect(scene.knocks).toBe(1);
+        expect(notifyAsk.offered).toEqual(['join']);
+        expect(byTestId('notify-line')?.textContent).toContain('Hear when Riverside answers.');
+        expect(byTestId('notify-line')?.previousElementSibling?.textContent).toBe(asked());
+        expect(alerts).toEqual([]);
+        await tap(byTestId('notify-line-tell-me'));
+        expect(notifyAsk.turnOns).toBe(1);
+        expect(byTestId('notify-line')).toBeNull();
+        expect(byTestId('notify-line-done')?.textContent).toContain("You'll hear when Riverside answers.");
+    });
+
+    // Fix round of #3332's deciding review: the card stays mounted under a screen opened over it, so the line is for one
+    // visit (the class: notify-line-hidden-again.test.ts).
+    it('asked from the card, then a screen opened over it and back: the named line is gone', async () => {
+        notifyAsk.offer = true;
+        await open();
+        await tap(byTestId('community-card-ask'));
+        const message = host.querySelectorAll('input')[1] as HTMLInputElement;
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(message, 'I live by the river and grow tomatoes.');
+            message.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
+        expect(byTestId('notify-line')?.textContent).toContain('Hear when Riverside answers.');
+        await act(async () => { cardFocus.inFront = false; cardFocus.listeners.forEach((l) => l()); });
+        await settle();
+        expect(byTestId('notify-line')).toBeNull();
+        await act(async () => { cardFocus.inFront = true; cardFocus.listeners.forEach((l) => l()); });
+        await settle();
+        expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
+        expect(byTestId('notify-line')).toBeNull();
+        expect(byTestId('notify-line-done')).toBeNull();
+        expect(notifyAsk.offered).toEqual(['join']);
+    });
+
+    it('a request remembered from before: no named line (it belongs to the moment of asking)', async () => {
+        notifyAsk.offer = true;
+        remember();
+        scene.answer = { status: 'pending' };
+        await open();
+        expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
+        expect(notifyAsk.offered).toEqual([]);
+        expect(byTestId('notify-line')).toBeNull();
     });
 
     it("does not send this community's photo with the knock even when this community's row holds one", async () => {

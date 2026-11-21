@@ -9,6 +9,7 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, notSeenOfDeal, notSeenWords, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { LISTING_MOMENT, takeNotifyMoment, useNotifyLine } from './NotifyLine';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
 
@@ -391,6 +392,16 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
     useEffect(() => {
         if (initialTab) setDealsTab(initialTab);
     }, [initialTab]);
+
+    // Just posted (app/new-listing.tsx lands here on My Posts): the named line "Hear when someone answers." over the list
+    // (slice N2a; core's rule says whether). Never in the preview. Market keeps this sheet mounted and only flips `visible`,
+    // so the line belongs to one visit of My Posts: the sheet closed, or another tab of it, and the line is gone for good.
+    const notify = useNotifyLine(ownIdentity?.publicKey, visible && !preview && dealsTab === 'active');
+    useEffect(() => {
+        if (!visible || preview || dealsTab !== 'active') return;
+        const moment = takeNotifyMoment(LISTING_MOMENT);
+        if (moment) void notify.offer(moment);
+    }, [visible, preview, dealsTab]);
 
     // Each load's answers land only while it is the latest: a load begun before a switch to preview never draws the
     // member's own deals over Example Valley's.
@@ -834,7 +845,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                 <LocalCommunityMark variant="strip" feature="escrow" onLeave={onClose} />
                                 <ExampleHeader />
                             </View>
-                        ) : null}
+                        ) : dealsTab === 'active' && notify.view ? <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>{notify.view}</View> : null}
                         ListEmptyComponent={
                             <View style={styles.emptyState}>
                                 <Text style={styles.emptyEmoji}>

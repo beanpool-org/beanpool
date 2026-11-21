@@ -692,16 +692,24 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
         expect(join).toMatch(/submitWordsJoin\(doorUrl, joining, typed, run, /);
     });
 
-    it('Safety Backup for a 12-words member: the words note first, the tickbox, then "Add a sign-in as a second way back"', () => {
+    it('the way back for a 12-words member: Link a sign-in opens the door\'s sheet; the words note with the words, before the tickbox', () => {
         const backup = between(src('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'ownerCard' && pendingIdentity)");
-        // The note takes the screen's light/dark tokens (utils/onboarding-colors.ts).
-        expect(backup).toMatch(/\{wordsMember \? \(\s*<WordsBackupNote colors=\{colors\} \/>/);
+        // Two tiles (onboarding S4, design §3.1 E): Link a sign-in first. In by 12 words it opens the door's own sheet
+        // (utils/join-link.ts), a claim's the sign-in sheet at its community, never the vault's panel.
+        expect(backup).toMatch(/const openSignIn = \(\) => \{\s*if \(!wordsMember\) return setSignInOpen\(true\);\s*if \(joinFlow !== 'claim'\) return setShowLinkSheet\(true\);/);
+        const tile = backup.indexOf("title={t('Link a sign-in')}");
+        // The note takes the screen's light/dark tokens (utils/onboarding-colors.ts), and comes with the words it is about.
+        expect(backup).toContain('{wordsMember && <WordsBackupNote colors={colors} />}');
         const note = backup.indexOf('<WordsBackupNote colors={colors} />');
+        const grid = backup.indexOf('pendingWords.map(');
         const tick = backup.indexOf("I've saved these words");
-        const add = backup.indexOf('WORDS_BACKUP_TEXT.addSignIn');
-        expect(note).toBeGreaterThan(-1);
-        expect(tick).toBeGreaterThan(note);
-        expect(add).toBeGreaterThan(tick);
+        expect(tile).toBeGreaterThan(-1);
+        expect(note).toBeGreaterThan(tile);
+        expect(grid).toBeGreaterThan(note);
+        expect(tick).toBeGreaterThan(grid);
+        // "Add a sign-in" only where the community keeps no copies: there a sign-in is no way back, so it is no tile.
+        expect(backup).toMatch(/\{wordsMember && Platform\.OS !== 'web' && backupCopiesAt === 'none' && \(/);
+        expect(backup).not.toContain('WORDS_BACKUP_TEXT.addSignIn');
         // The phone's lock for a key the join didn't make, as the protection sheet asks it.
         expect(backup).toMatch(/<LinkSignInSheet[\s\S]*askPhoneLock=\{!pendingWordsAreNew\}/);
     });

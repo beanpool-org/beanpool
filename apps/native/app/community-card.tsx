@@ -30,7 +30,7 @@ import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
-import { askNotificationPermissionOnAction } from '../utils/notification-permission';
+import { useNotifyLine, useScreenShowing } from '../components/NotifyLine';
 import { DoorRuleLine } from '../components/DoorRuleLine';
 import { communityRecordNaming, linkLanding, recordAddresses } from '../utils/community-index';
 import { askMemberHere } from '../utils/member-here';
@@ -200,6 +200,16 @@ export default function CommunityCardScreen() {
         : cancelledHere && !asked
             ? { kind: 'cancelled', note: KNOCK_MESSAGES.cancelled }
             : knockCardState(true, asked, asked ? status : undefined, memberNote);
+    // Asked from this card: once the request reads as waiting, the named line "Hear when Riverside answers." under it (slice
+    // N2a; core's rule says whether), in place of the old pop-up before the request went.
+    const [justAsked, setJustAsked] = useState<string | null>(null);
+    // One visit: a screen opened over the card and back, and the line is gone.
+    const inFront = useScreenShowing();
+    const notify = useNotifyLine(identity?.publicKey, inFront);
+    const justAskedWaits = !!justAsked && knock.kind === 'waiting';
+    useEffect(() => {
+        if (justAskedWaits && justAsked) void notify.offer({ kind: 'join', name: justAsked });
+    }, [justAskedWaits]);
 
     // The request to join: as on Find a community, to the community itself, with the phone's own key; on a phone with no
     // account, with the key this form drafted (utils/knock-key.ts).
@@ -243,7 +253,6 @@ export default function CommunityCardScreen() {
             return;
         }
         if (!identity) setIdentity(signer);
-        await askNotificationPermissionOnAction('knock', signer.publicKey);
         setSending(true);
         setFormError(null);
         // Profile S2-W: knocks do not leak another community's photo
@@ -274,6 +283,7 @@ export default function CommunityCardScreen() {
             }
             // Read what it says now: waiting, or a yes with its invite. The old answer goes first (as Check again does), so the
             // card shows "checking", never the earlier request's "no longer open" and a second Ask, while the read is out.
+            setJustAsked(communityCardName(c, { t }));
             setAsked(true);
             setStatus(null);
             watch.restart();
@@ -393,6 +403,7 @@ export default function CommunityCardScreen() {
                                 {findLineWords(knock.note)}
                             </Text>
                         )}
+                        {knock.kind === 'waiting' && notify.view}
                         {knock.kind === 'unreachable' && (
                             <View style={styles.actions}>
                                 <Pressable style={styles.secondary} onPress={() => { setStatus(null); void watch.readNow(); }} accessibilityRole="button" testID="community-card-check-again">

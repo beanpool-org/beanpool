@@ -126,6 +126,7 @@ export function KeeperProtectionPanel({
     onDisconnectSso,
     hasWords,
     waysBack = false,
+    rowAlone = false,
     colors = lightColors,
     listCommunitiesFor,
     listShown = false,
@@ -139,6 +140,13 @@ export function KeeperProtectionPanel({
      * second time; the panel is the sign-in row alone. Safety Backup leaves it off.
      */
     waysBack?: boolean;
+    /**
+     * The join's way back (welcome.tsx, onboarding slice S4): once "Link a sign-in" is tapped, the sign-in row alone, in any
+     * build, with or without a key vault. The step's own title and sentence already say what a way back is, so the panel does
+     * not open again with "your 12 words are your primary recovery". Only where no sign-in covers the account yet and the
+     * phone holds the words, as `waysBack`'s row alone; everything else draws as before.
+     */
+    rowAlone?: boolean;
     /** The drawn theme's colours. Settings passes them; welcome, which is light throughout, keeps the default. */
     colors?: AppColors;
     /**
@@ -206,7 +214,7 @@ export function KeeperProtectionPanel({
     // Account Protection's sign-in row on its own: the words row above it already says what the words are. Only in a build
     // with a key vault, whose Account Protection puts the words first, at the vault or at a community that keeps copies
     // itself (its rule): a build without one draws the panel as it always did.
-    const rowOnly = waysBack && hasVault() && !covered && hasWords;
+    const rowOnly = ((waysBack && hasVault()) || rowAlone) && !covered && hasWords;
 
     // This community keeps no copies: the words are the way back here, and nothing is offered (NO_COPIES_ROW).
     if (mode === 'none') {

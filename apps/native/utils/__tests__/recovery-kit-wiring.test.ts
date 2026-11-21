@@ -28,12 +28,15 @@ describe('joining: the Safety Backup step', () => {
         expect(s.indexOf('<RecoveryKitButtons')).toBeGreaterThan(s.indexOf('</NoScreenCapture>'));
     });
 
-    it('still lets the member go on with neither button pressed: Next waits only on its own request', () => {
+    it('still lets the member go on with neither button pressed: Later waits only on its own request', () => {
         const s = step();
-        const next = slice(s, '<Pressable', 'Next →');
-        const nextBlock = s.slice(s.lastIndexOf('<Pressable', s.indexOf('Next →')), s.indexOf('Next →'));
+        // The step's one button: "Later" until a way back is kept, then Next or Let's go (S4, utils/join-steps.ts wayBackButton).
+        const label = "button === 'later' ? t('Later')";
+        const next = slice(s, '<Pressable', label);
+        const nextBlock = s.slice(s.lastIndexOf('<Pressable', s.indexOf(label)), s.indexOf(label));
         expect(nextBlock).toContain('disabled={loading}');
-        // How it Works left the path (S5): a claim goes on to the owner's card, every other join to Home.
+        // How it Works left the path (S5): a claim goes on to the owner's card, every other join to Home (afterWayBack).
+        expect(nextBlock).toContain("if (next === 'ownerCard') {");
         expect(nextBlock).toContain("setMode('ownerCard')");
         expect(nextBlock).toContain('void handleConfirmSeed();');
         expect(nextBlock).not.toMatch(/kit|Kit/);
@@ -86,7 +89,7 @@ describe('every entry to the kit records a Yes the same way', () => {
     // phone was still "not kept" on the account, and the reminder ran on every device.
     it('the tick "I\'ve saved these words", carried past Next, records it on the account the same way, and only when ticked', () => {
         const welcome = slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'ownerCard' && pendingIdentity)");
-        const next = slice(welcome, "recordOnboardingEvent('protection_choice'", "if (joinFlow === 'claim') {");
+        const next = slice(welcome, "recordOnboardingEvent('protection_choice'", "if (next === 'ownerCard') {");
         const ticked = slice(next, 'if (seedConfirmed) {', '}');
         expect(ticked).toContain("AsyncStorage.getItem('beanpool_anchor_url')");
         expect(ticked).toContain('keepWords(u, who)');

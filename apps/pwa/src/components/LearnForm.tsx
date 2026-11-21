@@ -6,7 +6,9 @@
  * Five uses, one form: a member's suggestion ("Send to the admins": it waits for an owner or admin), an owner's or admin's own
  * page ("Publish": it goes into Learn at once), an owner's or admin's "Edit first" on a member's suggestion ("Approve"), and
  * (slice K5, §3.5) a member's fix to a page showing ("What changed?" first, then the page's words: it waits too) and an
- * owner's or admin's "Edit" of one (at once). A fix and an edit change words, never photos: neither has the picker.
+ * owner's or admin's "Edit" of one (at once). A fix and an edit add no photo: neither has the picker. An owner's or admin's Edit
+ * lists the page's pictures, each with Remove photo (DESIGN-learn-web-pictures-fable.md §9 slice 3): Save sends the ones kept,
+ * each as the page gave it, and only when one was taken off; leaving without saving changes nothing.
  * The node checks everything again; this only says the first thing missing before it sends (lib/learn.ts learnFormRefusal).
  * Photos are optional and the member's own (at most three, the browser's own picker, asked for nothing until 📷 is tapped).
  * Tags (Learn's tags, 16 Nov 2026): the Market's own Tags field, the member's own tags alone (TagPicker `freeOnly`), in every use;
@@ -15,6 +17,7 @@
 import { useEffect, useState } from 'react';
 import { KNOWLEDGE_LIMITS, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_TOPICS, formatCount, t, type KnowledgeSource } from '@beanpool/core';
 import { learnFormRefusal, learnRefusalText, topicLabel, type LearnInput } from '../lib/learn';
+import { resolveImageUrl } from '../lib/avatar';
 import { PostPhotoPicker } from './PostPhotoPicker';
 import { TagPicker } from './TagPicker';
 
@@ -28,9 +31,12 @@ const FIELD = 'w-full min-h-[44px] py-2 px-3 rounded-xl border border-nature-200
 const MUTED = 'text-nature-600 dark:text-nature-300';
 /** A link's box shows how an address starts: the same in every language. */
 const URL_HINT = 'https://';
+const SMALL = 'self-start min-h-[44px] px-3 rounded-lg text-sm font-bold border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white cursor-pointer';
 
-export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdited, approvesFix = false }: {
+export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdited, approvesFix = false, pagePhotos = [] }: {
     use: LearnFormUse;
+    /** An owner's or admin's "Edit": the page's pictures as the page gave them (LearnPost.photos), each one it may take off. */
+    pagePhotos?: readonly string[];
     /** "Edit first" on a fix (slice K5): approving changes a page that shows, and announces nothing. */
     approvesFix?: boolean;
     /** "Edit first": the suggestion as it was sent. */
@@ -49,6 +55,9 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
     const [sources, setSources] = useState<KnowledgeSource[]>(initial?.sources?.length ? initial.sources : []);
     const [freeTags, setFreeTags] = useState<string[]>(initial?.freeTags ?? []);
     const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
+    // An Edit's pictures taken off, by their place on the page as it opened; Save sends the others back as the page gave them.
+    const pictures = use === 'edit' ? pagePhotos : [];
+    const [takenOff, setTakenOff] = useState<number[]>([]);
     const [note, setNote] = useState('');
     const fix = use === 'fix';
     // A fix, an edit and "Edit first" on a fix change words, never photos: no picker, and none sent.
@@ -59,13 +68,17 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
     const [opened] = useState(() => ({ title, body, topic, place, sources: JSON.stringify(sources), photos, freeTags: JSON.stringify(freeTags) }));
     const edited = note !== '' || title !== opened.title || body !== opened.body || topic !== opened.topic || place !== opened.place
         || JSON.stringify(sources) !== opened.sources || JSON.stringify(freeTags) !== opened.freeTags
-        || photos.length !== opened.photos.length || photos.some((p, i) => p !== opened.photos[i]);
+        || photos.length !== opened.photos.length || photos.some((p, i) => p !== opened.photos[i]) || takenOff.length > 0;
     useEffect(() => { onEdited?.(edited); }, [edited, onEdited]);
 
     const setSource = (i: number, part: Partial<KnowledgeSource>) => setSources((list) => list.map((s, j) => (j === i ? { ...s, ...part } : s)));
+    const toggleTakenOff = (i: number) => setTakenOff((list) => (list.includes(i) ? list.filter((j) => j !== i) : [...list, i]));
     const send = async () => {
         if (sending) return;
-        const input: LearnInput = { title, body, topic, place, sources, freeTags, ...(wordsOnly ? {} : { photos }), ...(fix ? { note } : {}) };
+        const keepPhotos = takenOff.length > 0 ? pictures.filter((_, i) => !takenOff.includes(i)) : null;
+        const input: LearnInput = {
+            title, body, topic, place, sources, freeTags, ...(wordsOnly ? {} : { photos }), ...(fix ? { note } : {}), ...(keepPhotos ? { keepPhotos } : {}),
+        };
         const said = fix && !note.trim() ? t('Say what changed.') : learnFormRefusal(input);
         setRefusal(said);
         if (said) return;
@@ -154,6 +167,24 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
                     <PostPhotoPicker photos={photos} onChange={setPhotos} max={keepPhotosOnly ? photos.length : KNOWLEDGE_LIMITS.photos} label={t('Photo (optional)')} />
                     <p className={`m-0 mt-1 text-xs ${MUTED}`}>{t('Your own photo. Without one, a picture for the topic is shown.')}</p>
                 </div>
+            )}
+            {pictures.length > 0 && (
+                <section data-testid="learn-form-page-photos" className="flex flex-col gap-2">
+                    <p className={`m-0 text-xs ${MUTED}`}>{t('A photo you remove is taken off this page for everyone when you save.')}</p>
+                    {pictures.map((src, i) => {
+                        const out = takenOff.includes(i);
+                        // Only an address the web's image allow-list lets through is drawn (lib/avatar.ts), as on the page itself.
+                        const shown = resolveImageUrl(src);
+                        return (
+                            <figure key={`${i}-${src}`} data-testid="learn-form-page-photo" data-kept={out ? 'false' : 'true'} className="m-0 flex flex-col gap-1">
+                                {shown && <img src={shown} alt={t('Photo {n}', { n: i + 1 })} className={`w-full aspect-[4/3] object-cover rounded-xl ${out ? 'opacity-40' : ''}`} />}
+                                <button type="button" data-testid="learn-form-photo-toggle" disabled={sending} onClick={() => toggleTakenOff(i)} className={SMALL}>
+                                    {out ? t('Keep this photo') : t('Remove photo')}
+                                </button>
+                            </figure>
+                        );
+                    })}
+                </section>
             )}
             {refusal && <p role="alert" data-testid="learn-form-refusal" className="m-0 text-sm font-bold text-red-700 dark:text-red-300">{refusal}</p>}
             <button type="submit" data-testid="learn-form-send" disabled={sending} aria-busy={sending}

@@ -27,10 +27,11 @@ import {
     type KnowledgeTopicPage,
     type PulseKnowledgeCard, type PulseKnowledgePost,
 } from '@beanpool/core';
-import { getPosts, type MarketplacePost } from '@beanpool/engine';
+import { getPosts, photoVersionOf, type MarketplacePost } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
 import { cleanMemberText } from '../agent/fence.js';
-import { createPost, knowledgeDoorbell } from './posts.js';
+import { prepareStorablePhoto, type PhotoColumns } from '../storage/image-columns.js';
+import { createPost, knowledgeDoorbell, writePostPhotoRows } from './posts.js';
 import { nodeRoleOf } from './node-roles.js';
 import { bumpPostsVersion } from './versions.js';
 import { assertNotMuted } from './auto-moderation.js';
@@ -64,6 +65,8 @@ export const KNOWLEDGE_WORDS = {
     linkWithLogin: word('A link must not hold a user name or password.'),
     photos: word('A photo must be one you took, as an image.'),
     ownPage: word('This is your own page: “This helped” is for other members.'),
+    photosOnlyOff: word('An edit can take a photo off this page, never add one.'),
+    photosChanged: word('This page’s photos changed. Open it again.'),
 } as const;
 
 /**
@@ -185,15 +188,137 @@ export function storedSourcesJson(own: readonly KnowledgeSource[], credits: read
 }
 
 /**
- * The standing rule (Question 5): a row sent in that carries the picture mark, or that points at one of the page's credited
- * pictures and starts with the camera mark (a 1.4.7 phone's form sends every row it draws back as label and link), is the
- * node's to write, never a person's. It is dropped before the limit is counted and before any other check of the row.
+ * Credits by the bytes of the picture each is for, from a draft's or a page's pictures in their order (`own`, each as its bytes'
+ * key) and its credits by picture number (1 first). Two pictures with the same bytes are the same picture (an assistant's upload
+ * of the very copy it named on Commons, say), so whichever copy is kept carries the credit: the first credited one in order
+ * (review of #3351, B2: matching the first copy by position dropped it). Approve (engine/knowledge-drafts.ts) and an Edit that
+ * takes a picture off (keptPagePhotos) both move credits by it, never by a bare number.
+ */
+export function creditsByBytes<K>(own: readonly K[], credits: ReadonlyMap<number, KnowledgePhotoCredit>): Map<K, KnowledgePhotoCredit> {
+    const out = new Map<K, KnowledgePhotoCredit>();
+    own.forEach((p, i) => {
+        const credit = credits.get(i + 1);
+        if (credit && !out.has(p)) out.set(p, credit);
+    });
+    return out;
+}
+
+// ── Taking a picture off a page (DESIGN-learn-web-pictures-fable.md §9 slice 3; Marty, 22 Nov 2026, Question 1 (d)) ──────────
+
+/** One of a page's photos as stored, in the page's order: what an Edit's kept list is matched against and written back as. */
+interface PagePhoto extends PhotoColumns {
+    order_num: number;
+    updated_at: string | null;
+}
+
+/** A page's photos as stored, in its order. */
+function pagePhotos(postId: string): PagePhoto[] {
+    return db.prepare('SELECT order_num, updated_at, photo_data, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id = ? ORDER BY order_num')
+        .all(postId) as PagePhoto[];
+}
+
+/**
+ * A photo's bytes as one key: its stored object's sha256, or the same of the bytes its row keeps (storage/image-columns.ts). A row
+ * that names neither (an object stored before its row kept a sha256) is its own picture, by its object's key, else by its slot:
+ * never one key shared by every such row, which would hand one picture's credit to another.
+ */
+function bytesKeyOf(p: PagePhoto): string {
+    if (p.sha256) return p.sha256;
+    if (p.photo_data) return prepareStorablePhoto(p.photo_data)?.sha256 ?? `row:${p.photo_data}`;
+    return p.storage_key ? `key:${p.storage_key}` : `slot:${p.order_num}`;
+}
+
+const PAGE_PHOTO_PATH = /^\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d{1,3})$/;
+
+/**
+ * Which of this page's photos an address names, as the page gave it to the form (@beanpool/engine postPhotoUrl:
+ * `/api/marketplace/posts/<id>/photos/<n>?v=<version>`, with or without the node's address in front and its key after): its place
+ * and its version. Null when it names none of this page's (a picture as a data URL, another page's photo, anything else).
+ */
+function photoAddressOf(postId: string, sent: string): { order: number; version: number } | null {
+    let url: URL;
+    try { url = new URL(sent.trim(), 'https://page.invalid'); } catch { return null; }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    const m = PAGE_PHOTO_PATH.exec(url.pathname);
+    const v = url.searchParams.get('v');
+    if (!m || m[1] !== postId || v === null || !/^\d{1,16}$/.test(v)) return null;
+    return { order: Number(m[2]), version: Number(v) };
+}
+
+/**
+ * The pictures an owner's or admin's Edit keeps: null when it sends no list (every app before this one, a 1.4.7 phone's
+ * included): the pictures stay as they are. Each kept one is named as the page gave it to the form, its address with its
+ * version, never a bare number: a list made before another owner or admin took a picture off names photos that are no longer
+ * there (every kept row is written again, so every version moves) and is refused, 409 `photos_changed`, nothing removed. A count
+ * alone would take the wrong one off. Anything that is not one of this page's photos now is refused: an Edit takes pictures off,
+ * never adds one. The kept ones keep the page's order.
+ */
+function keptPagePhotos(postId: string, sent: unknown, photos: readonly PagePhoto[]): PagePhoto[] | null {
+    if (sent === undefined || sent === null) return null;
+    if (!Array.isArray(sent) || sent.some((p) => typeof p !== 'string')) throw new KnowledgeRefusal(400, 'bad_photos', KNOWLEDGE_WORDS.photosOnlyOff);
+    const kept = new Set<number>();
+    for (const s of sent as string[]) {
+        const at = photoAddressOf(postId, s);
+        if (!at) throw new KnowledgeRefusal(400, 'new_photo', KNOWLEDGE_WORDS.photosOnlyOff);
+        const p = photos.find((x) => x.order_num === at.order && photoVersionOf(x.updated_at) === at.version);
+        if (!p) throw new KnowledgeRefusal(409, 'photos_changed', KNOWLEDGE_WORDS.photosChanged);
+        kept.add(p.order_num);
+    }
+    return photos.filter((p) => kept.has(p.order_num));
+}
+
+/**
+ * The page's credit rows once its pictures are `kept`: each follows its picture's bytes to the picture's new place
+ * (creditsByBytes), renumbered; a picture taken off takes its row with it.
+ */
+function creditsAfter(photos: readonly PagePhoto[], credits: readonly CreditRow[], kept: readonly PagePhoto[]): CreditRow[] {
+    const byBytes = creditsByBytes(photos.map(bytesKeyOf), new Map(credits.map((c) => [c.photo, c.credit])));
+    return kept.flatMap((p, j) => {
+        const credit = byBytes.get(bytesKeyOf(p));
+        return credit ? [creditRowOf(j + 1, credit)] : [];
+    });
+}
+
+/** Commons' own host, where every credit's link is (agent/commons-pictures.ts COMMONS_HOST and commonsFilePage write it). */
+const COMMONS_HOST = 'commons.wikimedia.org';
+/** A credit row's label from its head, as core knowledgeCreditLabel writes it: the camera, the picture's number, a dot. */
+const CREDIT_LABEL_HEAD = new RegExp(`^${KNOWLEDGE_CREDIT_MARK}\\s*(\\d{1,3})\\s*·`, 'u');
+
+/**
+ * A row in the node's own credit shape, whatever page it came from (review of #3353): a label that opens "📷 {n} ·" as
+ * knowledgeCreditLabel writes it, n a picture's number a page can have, on a link to a file's page on Wikimedia Commons, as
+ * commonsFilePage writes it. creditRowOf writes exactly that pair and no form does. The line is the pair: a person's own
+ * source to a Commons file page in their own words ("Map of the headland", even "📷 The lookout at dawn" or "📷 2019 · the
+ * old jetty", with no picture's number) is theirs and stays, and so does a "📷 2 · …" label on any other address, which no
+ * picture's credit has ever pointed at.
+ */
+function creditShaped(label: string, url: string): boolean {
+    const head = CREDIT_LABEL_HEAD.exec(label);
+    if (!head || Number(head[1]) < 1 || Number(head[1]) > KNOWLEDGE_LIMITS.photos) return false;
+    let u: URL;
+    try { u = new URL(url.trim()); } catch { return false; }
+    return /^https?:$/.test(u.protocol) && u.hostname === COMMONS_HOST && /^\/wiki\/File(?::|%3A)/i.test(u.pathname);
+}
+
+/**
+ * The standing rule (Question 5): a row sent in that carries the picture mark, that is in the node's own credit shape
+ * (creditShaped), or that points at one of the page's credited pictures and starts with the camera mark (a 1.4.7 phone's form
+ * sends every row it draws back as label and link), is the node's to write, never a person's. It is dropped before the limit
+ * is counted and before any other check of the row. Its label is read as it would be stored (oneLine: hidden characters out),
+ * so a character no one sees can't carry a credit's shape past it. The shape is what holds when a picture is taken off
+ * (editKnowledge): a 1.4.7 phone's form opened before then sends that picture's credit back, its link no longer one of the
+ * page's credits, under a number that now names another picture; it never comes back as a source. Every write of a page's or
+ * a draft's sources reads the rows sent through here (cleanKnowledgeInput): Edit, Suggest a fix and a new suggestion, Approve
+ * with or without changes, an owner's or admin's own page, one made from a forum answer, and an assistant's draft.
  */
 function sentCredit(s: unknown, credited: ReadonlySet<string>): boolean {
     if (!s || typeof s !== 'object') return false;
     const item = s as { url?: unknown; label?: unknown; photo?: unknown };
     if (isKnowledgeCreditRow(item)) return true;
-    if (typeof item.label !== 'string' || !item.label.trim().startsWith(KNOWLEDGE_CREDIT_MARK) || typeof item.url !== 'string') return false;
+    if (typeof item.label !== 'string' || typeof item.url !== 'string') return false;
+    const label = oneLine(item.label, KNOWLEDGE_LIMITS.sourceLabel);
+    if (!label.startsWith(KNOWLEDGE_CREDIT_MARK)) return false;
+    if (creditShaped(label, item.url)) return true;
     const url = item.url.trim();
     let href = url;
     try { href = new URL(url).href; } catch { /* compared as sent */ }
@@ -343,34 +468,52 @@ export function publishKnowledge(
 
 /**
  * An owner's or admin's own edit of a page showing (§2.4: "at once"): the whole page as the form sends it, words, topic,
- * place, sources and language; its photos stay. Its tags: the list sent is the whole new list ([] or null takes them all
- * off); left out, they stay, as a listing's edit keeps them (an app from before Learn's tags sends none). Stamps Checked and
- * clears a "may be out of date" mark, as approving does.
+ * place, sources and language. Its tags: the list sent is the whole new list ([] or null takes them all off); left out, they
+ * stay, as a listing's edit keeps them (an app from before Learn's tags sends none). Stamps Checked and clears a "may be out of
+ * date" mark, as approving does.
+ *
+ * Its photos (DESIGN-learn-web-pictures-fable.md §9 slice 3): `photos` is the list of the page's pictures to keep, each as the
+ * page gave it (keptPagePhotos). The ones left out are taken off for everyone, as a listing's photo change takes one off
+ * (writePostPhotoRows: the row inside the change, the stored copy after it, a standby told), and their credit rows go, the rest
+ * renumbered after their pictures (creditsAfter). No list, or one that keeps every picture: the photos stay as they are. Read
+ * and written with nothing awaited between, so two owners or admins at once can't both pass the check on one set of photos.
  */
-export function editKnowledge(broadcast: BroadcastFn, checker: string, postId: unknown, raw: KnowledgeInput, now = Date.now()): MarketplacePost {
+export function editKnowledge(broadcast: BroadcastFn, checker: string, postId: unknown, raw: KnowledgeInput & { photos?: unknown }, now = Date.now()): MarketplacePost {
     assertChecker(checker);
     assertNotMuted(checker);
     const row = showingRow(postId);
     const own = freeTagsOf(row.free_tags);
     const k = cleanKnowledgeInput({ ...raw, freeTags: raw.freeTags === undefined ? own : raw.freeTags }, own, storedSources(row.knowledge_sources).credits);
-    return rewriteKnowledge(broadcast, checker, row.id, k, now);
+    const photos = pagePhotos(row.id);
+    const kept = keptPagePhotos(row.id, raw.photos, photos);
+    return rewriteKnowledge(broadcast, checker, row.id, k, now, kept && kept.length < photos.length ? { photos, kept } : undefined);
 }
 
 /**
  * Writes a page's words as an owner or admin confirmed them: their own edit, or a fix they approved (engine/knowledge-drafts.ts,
- * slice K5). Its writer and photos stay; Checked is stamped and a "may be out of date" mark cleared. `postId` is showing.
+ * slice K5). Its writer stays; Checked is stamped and a "may be out of date" mark cleared. `postId` is showing. Its photos stay,
+ * unless `pictures` says which of them (`photos`, as stored now) the page keeps (`kept`): an owner's or admin's Edit that takes
+ * one off (editKnowledge).
  */
-export function rewriteKnowledge(broadcast: BroadcastFn, checker: string, postId: string, k: CleanKnowledge, now = Date.now()): MarketplacePost {
+export function rewriteKnowledge(
+    broadcast: BroadcastFn, checker: string, postId: string, k: CleanKnowledge, now = Date.now(),
+    pictures?: { photos: readonly PagePhoto[]; kept: readonly PagePhoto[] },
+): MarketplacePost {
     const at = new Date(now).toISOString();
-    // The page's credit rows stay as the node wrote them, after the own rows: an edit or a fix never loses or changes one.
-    const stored = db.prepare('SELECT knowledge_sources FROM posts WHERE id = ?').get(postId) as { knowledge_sources: string | null } | undefined;
-    const { credits } = storedSources(stored?.knowledge_sources);
-    db.prepare(`UPDATE posts SET title = ?, description = ?, category = ?, search_keywords = ?, free_tags = ?,
-                    knowledge_sources = ?, knowledge_place = ?, knowledge_lang = ?, knowledge_checked_at = ?,
-                    knowledge_outdated_at = NULL, knowledge_outdated_note = NULL, updated_at = ?
-                 WHERE id = ?`)
-        .run(k.title, k.body, k.topic, knowledgeSearchKeywords(k), storedFreeTags(k.freeTags), storedSourcesJson(k.sources.filter((x) => !isKnowledgeCreditRow(x)), credits),
-            k.place, k.lang, at, at, postId);
+    db.transaction(() => {
+        // The page's credit rows stay as the node wrote them, after the own rows: an edit or a fix never loses or changes one. A
+        // picture taken off takes its own with it, and the rest follow their pictures to their new places.
+        const stored = db.prepare('SELECT knowledge_sources FROM posts WHERE id = ?').get(postId) as { knowledge_sources: string | null } | undefined;
+        const { credits } = storedSources(stored?.knowledge_sources);
+        const creditRows = pictures ? creditsAfter(pictures.photos, credits, pictures.kept) : credits;
+        db.prepare(`UPDATE posts SET title = ?, description = ?, category = ?, search_keywords = ?, free_tags = ?,
+                        knowledge_sources = ?, knowledge_place = ?, knowledge_lang = ?, knowledge_checked_at = ?,
+                        knowledge_outdated_at = NULL, knowledge_outdated_note = NULL, updated_at = ?
+                     WHERE id = ?`)
+            .run(k.title, k.body, k.topic, knowledgeSearchKeywords(k), storedFreeTags(k.freeTags), storedSourcesJson(k.sources.filter((x) => !isKnowledgeCreditRow(x)), creditRows),
+                k.place, k.lang, at, at, postId);
+        if (pictures) writePostPhotoRows(postId, pictures.kept, at);
+    })();
     bumpPostsVersion();
     ring(broadcast, postId, at);
     return readKnowledgePost(postId, checker)!;

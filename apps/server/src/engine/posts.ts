@@ -132,6 +132,36 @@ function storedPhotoColumns(postId: string, photos: string[], authorPublicKey?: 
     return columns;
 }
 
+/**
+ * A post's photos become `next`, in that order, stamped `now`: the one way a post's photos change after it is made, for a
+ * listing's edit (updatePost) and for a page of Local knowledge whose owner or admin takes a picture off (engine/knowledge.ts
+ * editKnowledge, DESIGN-learn-web-pictures-fable.md §9 slice 3). Inside the caller's transaction; the columns are stored
+ * already (storedPhotoColumns, or the rows the post holds now).
+ *
+ * Tombstones before caches (storage design §7): the row goes inside the transaction and the object only after it commits, so
+ * the serving route, which reads the row first, can never answer from an object whose row has gone. The keys `next` holds
+ * are excluded: an unchanged photo re-stores to the same content-addressed key (or is the very row kept), and deleting it here
+ * would delete the object the row about to be written points at. deleteStoredObjects also keeps an object any other row names.
+ */
+export function writePostPhotoRows(id: string, next: readonly PhotoColumns[], now: string): void {
+    const keeping = new Set(next.map(c => c.storage_key).filter(Boolean) as string[]);
+    const doomed = (db.prepare(`SELECT storage_key FROM post_photos WHERE post_id = ? AND storage_key IS NOT NULL`).all(id) as any[])
+        .map(r => r.storage_key as string)
+        .filter(k => !keeping.has(k));
+    // A slot the new set doesn't fill is deleted for good, so a standby is told (its import writes only the slots a copy
+    // names): without the tombstone a photo taken off a listing stayed there on the standby, and on the listing after a
+    // take-over. The slots refilled below are written again, stamped after it.
+    const dropped = db.prepare(`SELECT order_num FROM post_photos WHERE post_id = ? AND order_num >= ?`).all(id, next.length) as { order_num: number }[];
+    db.prepare(`DELETE FROM post_photos WHERE post_id = ?`).run(id);
+    for (const d of dropped) writeTombstone('post_photos', `${id}|${d.order_num}`);
+    const insertPhoto = db.prepare(
+        `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    next.forEach((c, idx) => insertPhoto.run(id, c.photo_data, idx, now, c.storage_key, c.sha256, c.bytes, c.mime));
+    if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
+}
+
 export const POST_PHOTO_FORMAT_ERROR = word('Each photo must be a JPEG, PNG or WebP image');
 export const POST_ID_TAKEN_ERROR = 'A new post needs an id nothing else has. Send it without one and this community makes one.';
 export const POST_ID_SHAPE_ERROR = 'A post id is up to 128 lowercase letters, digits, dots, dashes and underscores. Send it without one and this community makes one.';
@@ -1740,29 +1770,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         // (Marty, 15 Oct, board card privacy-global-calls; the #1953 review's N1).
         if (hostOpenedChat) openedLine = writeEventOpenedLine(id);
 
-        if (nextPhotoColumns) {
-            // Tombstones before caches (storage design §7): the row goes inside the transaction and the
-            // object only after it commits, so the serving route — which reads the row first — can never
-            // answer from an object whose row has gone. The keys the NEW photos just took are excluded:
-            // an unchanged photo re-stores to the same content-addressed key, and deleting it here would
-            // delete the object the row about to be written points at.
-            const keeping = new Set(nextPhotoColumns.map(c => c.storage_key).filter(Boolean) as string[]);
-            const doomed = (db.prepare(`SELECT storage_key FROM post_photos WHERE post_id = ? AND storage_key IS NOT NULL`).all(id) as any[])
-                .map(r => r.storage_key as string)
-                .filter(k => !keeping.has(k));
-            // A slot the new set doesn't fill is deleted for good, so a standby is told (its import writes only the slots
-            // a copy names): without the tombstone a photo taken off a listing stayed there on the standby, and on the
-            // listing after a take-over. The slots refilled below are written again, stamped after it.
-            const dropped = db.prepare(`SELECT order_num FROM post_photos WHERE post_id = ? AND order_num >= ?`).all(id, nextPhotoColumns.length) as { order_num: number }[];
-            db.prepare(`DELETE FROM post_photos WHERE post_id = ?`).run(id);
-            for (const d of dropped) writeTombstone('post_photos', `${id}|${d.order_num}`);
-            const insertPhoto = db.prepare(
-                `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-            );
-            nextPhotoColumns.forEach((c, idx) => insertPhoto.run(id, c.photo_data, idx, now, c.storage_key, c.sha256, c.bytes, c.mime));
-            if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
-        }
+        if (nextPhotoColumns) writePostPhotoRows(id, nextPhotoColumns, now);
     })();
     if (freeTagsEdited) noteFreeTagsSeen();
     if (openedLine) broadcastEventThreadMessage({ broadcast }, id, openedLine);

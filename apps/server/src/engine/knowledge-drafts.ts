@@ -82,7 +82,7 @@ import { photoRefusalError, photosRefusal } from './avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { keepNotice } from './kept-notices.js';
 import {
-    KNOWLEDGE_WORDS, KnowledgeRefusal, checksKnowledge, cleanKnowledgeInput, creditRowOf, pageShowingTo, publishKnowledge, recountKnowledgeHelped, rewriteKnowledge,
+    KNOWLEDGE_WORDS, KnowledgeRefusal, checksKnowledge, cleanKnowledgeInput, creditRowOf, creditsByBytes, pageShowingTo, publishKnowledge, recountKnowledgeHelped, rewriteKnowledge,
     showingKnowledgeRow, storedSources, storedSourcesJson, type CleanKnowledge, type KnowledgeInput, type ShowingKnowledgeRow,
 } from './knowledge.js';
 import { logger } from '../logger.js';
@@ -676,20 +676,6 @@ function assistantDraftPhotos(draftId: string, sent: unknown): string[] {
     if (added.length === 0) return kept;
     const checked = draftPhotos(added);
     return kept.map((p) => (own.includes(p) ? p : checked[added.indexOf(p)]));
-}
-
-/**
- * A draft's credits by the bytes of the picture each is for. Two of a draft's pictures with the same bytes are the same picture
- * (an assistant's upload of the very copy it named on Commons, say), so whichever copy is kept carries the credit: the first
- * credited one in the draft's order (review of #3351, B2: matching the first copy by position dropped it).
- */
-function creditsByBytes(own: readonly string[], credits: ReadonlyMap<number, KnowledgePhotoCredit>): Map<string, KnowledgePhotoCredit> {
-    const out = new Map<string, KnowledgePhotoCredit>();
-    own.forEach((p, i) => {
-        const credit = credits.get(i + 1);
-        if (credit && !out.has(p)) out.set(p, credit);
-    });
-    return out;
 }
 
 /**

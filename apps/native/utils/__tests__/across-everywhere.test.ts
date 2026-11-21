@@ -733,7 +733,9 @@ describe("S5: a fellow member's first line across, through the phone's own round
             const out = await syncOutsideMailNow(30_000, setTo === A ? undefined : A);
             const want = row.want === 'a request' ? { requests: 1, written: 0, dropped: 1 } : row.want === 'straight in' ? { requests: 0, written: 1, dropped: 1 } : { requests: 0, written: 0, dropped: 2 };
             expect(out).toMatchObject({ ...want, confirmed: 2 });
-            expect(mail.asked.filter((q) => q.path === '/api/mail').every((q) => q.origin === A), "only A's mailbox asked").toBe(true);
+            const fetched = mail.asked.filter((q) => q.path === '/api/mail').map((q) => q.origin);
+            expect(fetched.length, 'a mailbox was fetched').toBeGreaterThan(0);
+            expect(fetched.filter((o) => o !== A), "only A's mailbox asked").toEqual([]);
             const chat = chatIn(A_FILE, fellow.publicKey);
             if (row.want === 'dropped (the closed door)') expect(chat).toBeUndefined();
             else {

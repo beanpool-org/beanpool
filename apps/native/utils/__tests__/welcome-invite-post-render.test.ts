@@ -470,12 +470,12 @@ const held = () => { const raw = store.map.get(HELD_KEY); return raw ? JSON.pars
 const onNameScreen = () => !!byId('invite-greeting') && !field('Invite link or code');
 
 describe('1. the app opened by the link: the root layout hands welcome the listing as a param', () => {
-    it('Next joins, lands on Your Photo, and the listing is held for the landing, for this community', async () => {
+    it('Join joins, lands on Your photo, and the listing is held for the landing, for this community', async () => {
         params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, post: POST, t: '1' };
         await mount();
         expect(onNameScreen()).toBe(true);
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(held()).toMatchObject({ community: RIVERSIDE, id: POST });
         expect(typeof held().at).toBe('number');
         // Held as an id and a community, nothing else.
@@ -485,8 +485,8 @@ describe('1. the app opened by the link: the root layout hands welcome the listi
     it('an invite with no listing holds nothing: the join is as it was', async () => {
         params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
         await mount();
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(store.map.has(HELD_KEY)).toBe(false);
     });
 
@@ -495,8 +495,8 @@ describe('1. the app opened by the link: the root layout hands welcome the listi
             store.map.clear();
             params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, post: bad, t: String(Math.random()) };
             await mount();
-            await press('Next');
-            expect(host!.textContent, bad).toContain('Your Photo');
+            await press('Join');
+            expect(host!.textContent, bad).toContain('Choose your look');
             expect(store.map.has(HELD_KEY), bad).toBe(false);
             act(() => root?.unmount()); host?.remove(); root = null; host = null;
         }
@@ -506,7 +506,7 @@ describe('1. the app opened by the link: the root layout hands welcome the listi
         params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, post: POST, t: '1' };
         phone.redeemFails = 'This invite has expired.';
         await mount();
-        await press('Next');
+        await press('Join');
         expect(host!.textContent).toContain('This invite has expired.');
         expect(store.map.has(HELD_KEY)).toBe(false);
     });
@@ -520,8 +520,8 @@ describe('1. the app opened by the link: the root layout hands welcome the listi
         await type('Invite link or code', 'INV-ZZZZ-YYYY');
         await press('Next');
         expect(onNameScreen()).toBe(true);
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(store.map.has(HELD_KEY)).toBe(false);
     });
 
@@ -560,8 +560,8 @@ describe('2. the whole address pasted into the invite box', () => {
         await type('Invite link or code', `${RIVERSIDE}/?invite=INV-ABCD-EFGH&post=${POST}`);
         await press('Next');
         expect(onNameScreen()).toBe(true);
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(held()).toMatchObject({ community: RIVERSIDE, id: POST });
     });
 
@@ -570,27 +570,27 @@ describe('2. the whole address pasted into the invite box', () => {
         await press('🎟️ Join with an invite');
         await type('Invite link or code', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`);
         await press('Next');
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(store.map.has(HELD_KEY)).toBe(false);
     });
 });
 
 describe('3. a phone that installed from the store: the install referrer', () => {
-    it('invite, server and listing arrive together; Next joins and the listing is held', async () => {
+    it('invite, server and listing arrive together; Join joins and the listing is held', async () => {
         referrer.value = `invite=INV-ABCD-EFGH&server=${encodeURIComponent(RIVERSIDE)}&post=${POST}`;
         await mount();
         expect(onNameScreen()).toBe(true);
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(held()).toMatchObject({ community: RIVERSIDE, id: POST });
     });
 
     it('a referrer with no listing holds nothing', async () => {
         referrer.value = `invite=INV-ABCD-EFGH&server=${encodeURIComponent(RIVERSIDE)}`;
         await mount();
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(store.map.has(HELD_KEY)).toBe(false);
     });
 
@@ -598,8 +598,8 @@ describe('3. a phone that installed from the store: the install referrer', () =>
         referrer.value = `invite=INV-ABCD-EFGH&server=${encodeURIComponent(RIVERSIDE)}&post=${encodeURIComponent('../x')}`;
         await mount();
         expect(onNameScreen()).toBe(true);
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(store.map.has(HELD_KEY)).toBe(false);
     });
 });
@@ -621,19 +621,19 @@ describe('4. the name box takes a name, never an invite or a link', () => {
         expect(host!.textContent).not.toContain(NAME_BOX_WORDS.inviteCode);
         expect(field('Invite link or code')).toBeUndefined();
         expect(phone.redeems).toEqual([]);
-        // A name, and Next joins with the invite under it.
+        // A name, and Join joins with the invite under it.
         await type('Your name or nickname', 'Rowan');
-        await press('Next');
+        await press('Join');
         expect(phone.redeems).toEqual([{ code: 'INV-ABCD-EFGH', callsign: 'Rowan' }]);
     });
 
-    it('a web address as the name is refused on Next with its line, and nothing joins', async () => {
+    it('a web address as the name is refused on Join with its line, and nothing joins', async () => {
         await mount();
         await press('🎟️ Join with an invite');
         await type('Invite link or code', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`);
         await press('Next');
         await type('Your name or nickname', 'www.rowan.com');
-        await press('Next');
+        await press('Join');
         expect(host!.textContent).toContain(NAME_BOX_WORDS.webLink);
         expect(phone.redeems).toEqual([]);
         expect(field('Your name or nickname')?.value).toBe('www.rowan.com');

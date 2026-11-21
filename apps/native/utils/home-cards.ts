@@ -1039,7 +1039,7 @@ export interface StepLine {
  * The two lines First steps ends with on both nodes (DESIGN-home-default-fable.md §2.4, §2.9), each only where it applies:
  * "Keep your 12 words safe" while the node says the words are the only way back (`steps.words` false, or true once kept),
  * and "Hear when someone answers you" on a phone that has to ask (`notify`, utils/notification-permission.ts
- * `notifyStep`: null on Android 8 to 12, after a Not now, or where notifications can't load).
+ * `notifyStep`: null on Android 8 to 12, after the phone's no, or where notifications can't load; it stays through a Later).
  */
 function lastLines(steps: NonNullable<HomeCards['steps']>, notify: boolean | null | undefined): StepLine[] {
     const lines: StepLine[] = [];

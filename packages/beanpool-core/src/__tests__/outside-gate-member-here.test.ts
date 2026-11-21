@@ -64,7 +64,8 @@ function heldItemOf(r: Row): { raw: Record<string, unknown>; held: Record<string
     const env = ENV;
     const forged = r.trap === 'forged member-here flag';
     const raw = { envelope: forged ? { ...env, memberHere: true } : env, payload, ...(forged ? { memberHere: true } : {}) };
-    // The server's own mark: true only for a sender on its own member list now (engine/relay-mail.ts fromMemberHere).
+    // The server's own mark: true only for a member there who may write to the recipient there now, by its own rules
+    // (engine/relay-mail.ts fromMemberHere; test-mail-member-here §1, §5).
     const held = { kind: 'dm-line', envelope: readRelayEnvelope(raw.envelope), payload, bytes: payload.length, receivedAt: 1, memberHere: r.sender === 'member here' };
     return { raw, held };
 }

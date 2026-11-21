@@ -591,9 +591,9 @@ export interface HeldItem {
  * - waiting on a request to the recipient here already, whose one line is written (dm-requests.ts nextLineWaitsOnRequest:
  *   lineThroughRequest refuses their next line, one the recipient ignored included);
  * - on probation (probation.ts probationState). Inside, probation lets them reach 10 new people a day (3 by 12 words:
- *   assertMayMessage), counted from the conversations they open here. A line across is none of those and enters no count,
- *   so asking assertMayMessage alone would mark every line of one under their allowance, as many as the relay's stranger
- *   caps let through (PR #3347 review): until probation ends, their line meets the door;
+ *   assertMayMessage), counted from the conversations they open and the lines they write here. A line across is none of
+ *   those and enters no count, so asking assertMayMessage alone would mark every line of one under their allowance, as
+ *   many as the relay's stranger caps let through (PR #3347 review): until probation ends, their line meets the door;
  * - blocked by the recipient here (member-blocks.ts hasBlocked: what they write never reaches the one who blocked them; a
  *   held line is refused for it already, mayHoldFor, and a block made since the line was held is read here).
  *

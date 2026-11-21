@@ -476,8 +476,8 @@ export type OutsideGateVerdict = 'line' | 'request' | 'change' | 'drop';
  * not. A chat the member declined, or one already waiting as a request, is as it was: the member's own answer stands.
  *
  * `memberHere` (slice S5, same design §3 "A fellow member writing across"): the member's own server, the one whose mailbox
- * held the line, says its sender is a member there now ({@link heldFromMemberHere}: from that server's own member list,
- * never the sending server's word). Their first line, with no chat here yet, then meets that community's own rule, not the
+ * held the line, says its sender is a member there who may write to the member there now ({@link heldFromMemberHere}: by
+ * that server's own rules, never the sending server's word). Their first line, with no chat here yet, then meets that community's own rule, not the
  * door: straight in where a first message arrives straight away, a request where `requestsHere` (the community's
  * `dmRequests` switch, {@link requestsHereOf}) holds first messages as requests. They could write to the member inside the
  * community anyway. A block still wins, and let in still opens the chat first. A total stranger is exactly as before.
@@ -505,7 +505,9 @@ export function gateOutsideItem(input: {
 
 /**
  * Whether a held item, as the member's OWN server answered it (GET /api/mail: engine/relay-mail.ts heldMailFor), says its
- * sender is a member of that community now (slice S5). Only the server's own mark beside the item counts, and only `true`:
+ * sender is a member of that community who may write to the member there now, by that community's own rules (slice S5:
+ * not paused, muted, held from requests, waiting on a request to them, on probation, or blocked by them; relay-mail.ts
+ * fromMemberHere). Only the server's own mark beside the item counts, and only `true`:
  * the envelope and the sealed payload come from the sending server and the sender, and neither carries it (core
  * readRelayEnvelope keeps only an envelope's own fields), so no other server can claim it for anyone.
  */

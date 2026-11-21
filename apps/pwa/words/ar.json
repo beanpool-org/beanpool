@@ -5298,8 +5298,6 @@
   "Held in trust and system notifications": "إشعارات الأمانة والنظام",
   "When someone asks to join your community": "عندما يطلب أحدهم الانضمام إلى مجتمعك",
   "Control which push notifications wake up your device. Changes are saved automatically.": "تحكّم في الإشعارات الفورية التي تنبه جهازك. يتم حفظ التغييرات تلقائيًا.",
-  "Turn on notifications?": "هل تريد تشغيل الإشعارات؟",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر.",
   "{name} has no owner yet": "{name} ليس له مالك بعد",
   "If you installed it, claim it with the one-time code on the server.": "إذا قمت بتثبيته، فقم بالمطالبة به باستخدام الرمز الذي يُستخدم لمرة واحدة على الخادم.",
   "Claim {name}": "المطالبة بـ {name}",

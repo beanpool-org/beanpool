@@ -4610,8 +4610,6 @@
   "Held in trust and system notifications": "ട്രസ്റ്റിൽ സൂക്ഷിച്ചതും സിസ്റ്റം അറിയിപ്പുകളും",
   "When someone asks to join your community": "ആരെങ്കിലും നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയിൽ ചേരാൻ ആവശ്യപ്പെടുമ്പോൾ",
   "Control which push notifications wake up your device. Changes are saved automatically.": "ഏതൊക്കെ പുഷ് അറിയിപ്പുകൾ ലഭിക്കണമെന്ന് നിയന്ത്രിക്കുക. മാറ്റങ്ങൾ സ്വയമേവ സംരക്ഷിക്കും.",
-  "Turn on notifications?": "അറിയിപ്പുകൾ ഓൺ ചെയ്യണോ?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ആരെങ്കിലും മറുപടി നൽകുമ്പോഴോ സന്ദേശമയയ്ക്കുമ്പോഴോ ചേരാൻ അഭ്യർത്ഥിക്കുമ്പോഴോ അറിയാൻ. മറ്റൊന്നിനുമല്ല.",
   "{name} has no owner yet": "{name}-ന് ഇതുവരെ ഉടമസ്ഥനില്ല",
   "If you installed it, claim it with the one-time code on the server.": "നിങ്ങളാണ് ഇത് ഇൻസ്റ്റാൾ ചെയ്തതെങ്കിൽ, സെർവറിലെ ഒറ്റത്തവണ കോഡ് ഉപയോഗിച്ച് ഉടമസ്ഥാവകാശം നേടുക.",
   "Claim {name}": "{name} ക്ലെയിം ചെയ്യുക",

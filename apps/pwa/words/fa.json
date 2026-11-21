@@ -4618,8 +4618,6 @@
   "Held in trust and system notifications": "اعلان‌های امانی و سیستم",
   "When someone asks to join your community": "وقتی کسی درخواست پیوستن به جامعه شما را می‌دهد",
   "Control which push notifications wake up your device. Changes are saved automatically.": "کنترل کنید کدام اعلان‌ها دستگاه شما را بیدار کنند. تغییرات خودکار ذخیره می‌شوند.",
-  "Turn on notifications?": "روشن کردن اعلان‌ها؟",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر.",
   "{name} has no owner yet": "{name} هنوز مالکی ندارد",
   "If you installed it, claim it with the one-time code on the server.": "اگر شما آن را نصب کرده‌اید، با کد یک‌بارمصرف روی سرور مالکیت آن را تحویل بگیرید.",
   "Claim {name}": "درخواست مالکیت {name}",

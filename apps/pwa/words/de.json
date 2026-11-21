@@ -4610,8 +4610,6 @@
   "Held in trust and system notifications": "Benachrichtigungen zu Treuhand und System",
   "When someone asks to join your community": "Wenn jemand den Beitritt zu deiner Community anfragt",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Steuere, welche Push-Benachrichtigungen dein Gerät aktivieren. Änderungen werden automatisch gespeichert.",
-  "Turn on notifications?": "Mitteilungen einschalten?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Damit du mitbekommst, wenn dir jemand antwortet, dir eine Nachricht schickt oder beitreten möchte. Sonst nichts.",
   "{name} has no owner yet": "{name} hat noch keinen Eigentümer",
   "If you installed it, claim it with the one-time code on the server.": "Wenn du ihn eingerichtet hast, übernimm ihn mit dem Einmal-Code auf dem Server.",
   "Claim {name}": "{name} beanspruchen",

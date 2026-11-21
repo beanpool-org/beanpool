@@ -4611,8 +4611,6 @@
   "Held in trust and system notifications": "Notifications de fiducie et système",
   "When someone asks to join your community": "Quand quelqu'un demande à rejoindre votre communauté",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Contrôlez quelles notifications push réveillent votre appareil. Les modifications sont enregistrées automatiquement.",
-  "Turn on notifications?": "Activer les notifications ?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Pour savoir quand quelqu'un vous répond, vous envoie un message ou demande à rejoindre. Rien d'autre.",
   "{name} has no owner yet": "{name} n'a pas encore de propriétaire",
   "If you installed it, claim it with the one-time code on the server.": "Si vous l'avez installée, revendiquez-la avec le code à usage unique sur le serveur.",
   "Claim {name}": "Revendiquer {name}",

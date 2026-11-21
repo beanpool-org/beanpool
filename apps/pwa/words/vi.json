@@ -4440,8 +4440,6 @@
   "Held in trust and system notifications": "Thông báo ký quỹ và hệ thống",
   "When someone asks to join your community": "Khi có người xin tham gia cộng đồng của bạn",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Kiểm soát những thông báo đẩy nào đánh thức thiết bị của bạn. Các thay đổi được lưu tự động.",
-  "Turn on notifications?": "Bật thông báo?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Để bạn biết khi ai đó trả lời bạn, nhắn tin cho bạn hoặc yêu cầu tham gia. Không có gì khác.",
   "{name} has no owner yet": "{name} chưa có chủ sở hữu",
   "If you installed it, claim it with the one-time code on the server.": "Nếu bạn đã cài đặt, hãy xác nhận quyền sở hữu bằng mã dùng một lần trên máy chủ.",
   "Claim {name}": "Nhận quyền sở hữu {name}",

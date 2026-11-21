@@ -4618,8 +4618,6 @@
   "Held in trust and system notifications": "ट्रस्ट और सिस्टम सूचनाएं",
   "When someone asks to join your community": "जब कोई आपके समुदाय से जुड़ने का अनुरोध करे",
   "Control which push notifications wake up your device. Changes are saved automatically.": "नियंत्रित करें कि कौन सी पुश सूचनाएं आपके डिवाइस को सक्रिय करें। परिवर्तन स्वचालित रूप से सहेजे जाते हैं।",
-  "Turn on notifications?": "सूचनाएं चालू करें?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ताकि जब कोई आपको उत्तर दे, संदेश भेजे, या जुड़ने का अनुरोध करे तो आपको पता चले। और कुछ नहीं।",
   "{name} has no owner yet": "{name} का अभी कोई स्वामी नहीं है",
   "If you installed it, claim it with the one-time code on the server.": "यदि आपने इसे स्थापित किया है, तो सर्वर पर दिए गए एकमुश्त कोड से इस पर दावा करें।",
   "Claim {name}": "{name} पर दावा करें",

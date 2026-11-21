@@ -50,7 +50,7 @@ If the sign-in account was linked from a phone that had your 12 words, on an up-
 - Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.
 
-**Safety Backup**, when you join a community, says the same, under the same heading: where a sign-in you link there, or the one you joined with, keeps its copy.
+**Keep a way back in**, when you join a community, says the same, under the same heading, once you tap **Link a sign-in**: where a sign-in you link there keeps its copy. A sign-in you joined with whose copy was kept skips that step; **Account Protection** shows it.
 
 Where the copy goes is your community's choice (see "Where your community keeps copies"). Most keep them at BeanPool's key vault. A community that keeps them on its own server says so under the sign-in buttons, and the copy goes there. A community that keeps none offers no sign-in to link: **Your 12 words are your way back here**.
 

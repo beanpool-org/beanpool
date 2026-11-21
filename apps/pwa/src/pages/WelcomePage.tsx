@@ -1521,8 +1521,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         : globalFromCard ? { href: globalFromCard }
         : localCommunity && communityCard === null ? { href: GLOBAL_COMMUNITY_URL }
         : null;
-    // More ways in ›: this community's Ask to join, where it takes requests and the page can wait on one (App's `onAsked`).
-    const askName = card && card.joining === 'requests' && onAsked ? communityCardName(card, { t }) : null;
+    // More ways in ›: this community's Ask to join, where it takes requests and the page can wait on one (App's `onAsked`);
+    // never at a server nobody has claimed, where nobody could answer it (its no-owner card stands there instead).
+    const askName = card && card.joining === 'requests' && onAsked && !noOwner ? communityCardName(card, { t }) : null;
     const moreWays: MoreWay[] = askName ? [{ label: t('Ask a community to join'), testId: 'welcome-ask-to-join', onClick: () => { setError(null); setAsking(true); } }] : [];
     // Your name's band names the community only for the code its check was asked about.
     const greet = greeting && greeting.community && greeting.code === normaliseInviteCode(inviteCode) ? greeting : null;

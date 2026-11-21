@@ -226,6 +226,12 @@ export interface LearnInput {
     note?: string;
     /** Its own tags (free tags only, as the picker stores them). Sent as held: [] takes a page's off (an edit, "Edit first"). */
     freeTags?: string[];
+    /**
+     * An owner's or admin's "Edit" that took a picture off (DESIGN-learn-web-pictures-fable.md §9 slice 3): the page's pictures it
+     * keeps, each as the page gave it (LearnPost.photos, never a number). Left out when none was taken off: the node then leaves the
+     * pictures as they are, so an Edit of the words alone never meets another owner's or admin's photo change.
+     */
+    keepPhotos?: string[];
 }
 
 /** The first thing the form must say before it sends (§3.3's refusals), or null when it may go. */
@@ -399,12 +405,20 @@ export function clearLearnOutdated(id: string): Promise<{ post: LearnPost }> {
     return request('POST', `/api/knowledge/posts/${encodeURIComponent(id)}/outdated/clear`);
 }
 
-/** An owner's or admin's "Edit": the whole form, in the page's own language (the writer's, §2.8), never its photos. */
+/**
+ * An owner's or admin's "Edit": the whole form, in the page's own language (the writer's, §2.8), never a new photo. When a picture
+ * was taken off, `photos` is the list it keeps (LearnInput.keepPhotos): the node takes the rest off for everyone, or refuses with
+ * "This page's photos changed. Open it again." when another owner or admin changed them after the form opened.
+ */
 export function editLearnPage(page: LearnPost, input: LearnInput): Promise<{ post: LearnPost }> {
     const words: Partial<LearnInput> = learnInputToSend(input);
     delete words.photos;
     delete words.lang;
-    return request('POST', `/api/knowledge/posts/${encodeURIComponent(page.id)}/edit`, { ...words, ...(page.knowledge.lang ? { lang: page.knowledge.lang } : {}) });
+    return request('POST', `/api/knowledge/posts/${encodeURIComponent(page.id)}/edit`, {
+        ...words,
+        ...(page.knowledge.lang ? { lang: page.knowledge.lang } : {}),
+        ...(input.keepPhotos ? { photos: [...input.keepPhotos] } : {}),
+    });
 }
 
 const sameSources = (a: readonly KnowledgeSource[], b: readonly KnowledgeSource[]) =>

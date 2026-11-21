@@ -2,7 +2,7 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
-import { audienceOf, isHundredths, type AddressReach } from '@beanpool/core';
+import { audienceOf, isHundredths, type AddressReach, type NotifyReach } from '@beanpool/core';
 import { downloadNotice, type DownloadNotice } from './backup-shortfall';
 import { freshProofRefusal, proofField, proofHeader, statusSentence, t, throwIfFreshProof, type FreshProofRefusal } from './fresh-proof';
 
@@ -346,6 +346,8 @@ export interface NodeDataCounts {
     doorMembers: number;
     owners: number;
     platforms: { ios: number; android: number; web: number; unknown: number };
+    /** The owner's count (notifications N6): members a phone can notify, of how many. None from a node before it. */
+    notify?: NotifyReach;
 }
 
 export function normalizeNodeUrl(rawUrl: string): string {

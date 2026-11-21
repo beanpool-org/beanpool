@@ -1205,6 +1205,11 @@ function memberCounts() {
         doorMembers: live.filter((mm) => String(mm.invitedBy ?? '').startsWith('open:')).length,
         owners: live.filter((mm) => mm.nodeRole === 'owner').length,
         platforms,
+        // The owner's count (notifications N6): members (not the community's own accounts) with a phone, of members.
+        notify: {
+            phones: live.filter((mm) => !mm.isTreasury && ['ios', 'android'].includes(String(mm.platform || '').toLowerCase())).length,
+            members: live.filter((mm) => !mm.isTreasury).length,
+        },
     };
 }
 

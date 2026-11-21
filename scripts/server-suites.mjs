@@ -401,6 +401,7 @@ export const SUITES = [
     'test-trust-value-curve',
     'test-trust-tiers-one-source',
     'test-admin-data-pages',
+    'test-notify-reach-count',
     'test-offer-covenant',
     'test-enterprise-not-a-member-profile',
     'test-wash-sybil-defense',

@@ -3,8 +3,6 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { t, WAY_BACK_WORDS } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
-import { oneWayBackSchedule, readOneWayBack, wordsSaidWrittenDown } from '../utils/one-way-back';
-import { vaultSignInCopyKnown } from '../utils/vault';
 
 /**
  * The bell sheet's quiet last line about the way back (DESIGN-notify-and-backup-asks-fable.md §5.2 "After ×", amend2 slice
@@ -12,19 +10,29 @@ import { vaultSignInCopyKnown } from '../utils/vault';
  * (core way-back-schedule.ts `bell`). A standing line, never an ask: Keep one opens Settings' Account Protection, where the
  * card's own section lives. Nothing where the account has no reminder, or keeps a way back (a sign-in added, the words
  * said written down, a sign-in's copy at the key vault). Read each time the sheet opens.
+ *
+ * The record and the key vault are loaded when the sheet opens, not with the header: the bell is on every screen, and
+ * the vault's module reads the phone's secure store as it loads.
  */
+async function bellLineUp(publicKey: string): Promise<boolean> {
+    const [{ oneWayBackSchedule, readOneWayBack, wordsSaidWrittenDown }, { vaultSignInCopyKnown }] = await Promise.all([
+        import('../utils/one-way-back'),
+        import('../utils/vault'),
+    ]);
+    const [record, vault, paper] = await Promise.all([
+        readOneWayBack(publicKey),
+        vaultSignInCopyKnown(publicKey).catch(() => false),
+        wordsSaidWrittenDown(publicKey).catch(() => false),
+    ]);
+    return !!oneWayBackSchedule(record, Date.now(), { kept: vault || paper })?.bell;
+}
+
 export function WayBackBellLine({ publicKey, colors, onOpen }: { publicKey: string | null | undefined; colors: AppColors; onOpen?: () => void }) {
     const [up, setUp] = useState(false);
     useEffect(() => {
         let live = true;
         if (!publicKey) { setUp(false); return; }
-        void Promise.all([
-            readOneWayBack(publicKey),
-            vaultSignInCopyKnown(publicKey).catch(() => false),
-            wordsSaidWrittenDown(publicKey).catch(() => false),
-        ]).then(([record, vault, paper]) => {
-            if (live) setUp(!!oneWayBackSchedule(record, Date.now(), { kept: vault || paper })?.bell);
-        }).catch(() => { if (live) setUp(false); });
+        void bellLineUp(publicKey).then((yes) => { if (live) setUp(yes); }, () => { if (live) setUp(false); });
         return () => { live = false; };
     }, [publicKey]);
     if (!up) return null;

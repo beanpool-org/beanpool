@@ -162,6 +162,8 @@ export * from './tour.js';
 export * from './first-steps.js';
 // When notifications may be raised, and what a phone keeps of the answers (DESIGN-notify-and-backup-asks-fable-amend2.md, slice N1).
 export * from './notify-ask.js';
+// When Home's "Your way back in" card comes back (DESIGN-notify-and-backup-asks-fable.md §5.2, amend2 slice B1).
+export * from './way-back-schedule.js';
 export * from './home-welcome.js';
 export * from './join-steps.js';
 export * from './community-welcome.js';

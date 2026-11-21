@@ -1343,6 +1343,31 @@ describe("Home's card while something is live (slice N3): the slot's rules, row 
             watch.stop();
         });
 
+        it('the same account switches to another community while the read is out: the first community\'s card never shows on its Home', async () => {
+            // Round 3's review (index.tsx homeCardLive, at 9fbee4a5): the kept card was matched by account only, so the first
+            // community's "You're going to …" stayed on the second community's Home until its read ended.
+            const s = await drawnOnLanding();
+            const release = holdRead();
+            const watch = watchCard();
+            const OTHER = 'https://riverside.example.org';
+            const items = node.answer.cards.events!.items.map(e => ({ ...e, rsvp: null }));
+            const otherAnswer = { ...node.answer, cards: { ...node.answer.cards, events: { ...node.answer.cards.events!, items } } };
+            mem.store.set(homeLayoutStoreKey(who.identity.publicKey, OTHER), JSON.stringify(node.answer.layout));
+            mem.store.set(homeAnswerStoreKey(who.identity.publicKey, OTHER), JSON.stringify({
+                url: OTHER, publicKey: who.identity.publicKey, asked: 'needs,safety,steps,deals,enterprise,events,market,decide,groups,joined,pulse,beans,notices,community',
+                etag: 'W/"home-o"', answer: otherAnswer, at: Date.now() - 60_000,
+            }));
+            mem.store.set('beanpool_anchor_url', OTHER);
+            await landAgain();
+            // The second community's Home drawn from the phone's copy, its read held: the first one's card is gone already.
+            expect(cards()).toContain('community');
+            expect(homeCard()).toBeNull();
+            expect(watch.seen()).toEqual(['out']);
+            await release();
+            expect(homeCard()).not.toBe(s.card);
+            watch.stop();
+        });
+
         // The first finding's rule through a re-read: a card not drawn yet is decided only on the fresh, settled landing.
         for (const beans of [false, true]) {
             it(`a card not drawn yet, then the app back with the phone now able to ask and the read held${beans ? ', the read bringing the first Beans' : ''}: not drawn while it is out; then ${beans ? 'the way-back card, never this one' : 'drawn'}`, async () => {

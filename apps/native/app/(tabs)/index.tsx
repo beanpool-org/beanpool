@@ -323,7 +323,7 @@ export default function HomeScreen() {
      * with the account it was decided for and the phone's answer then (`phone`), else null. Never with the once card or the
      * way-back card: it is decided only once both have said they are not up.
      */
-    const [homeLive, setHomeLive] = useState<{ key: string; live: NotifyLive; phone: OsNotificationPermission | null } | null>(null);
+    const [homeLive, setHomeLive] = useState<{ key: string; at: string | null; live: NotifyLive; phone: OsNotificationPermission | null } | null>(null);
     const [homeBusy, setHomeBusy] = useState(false);
     /**
      * The landing the way-back card last said it settled on (OneWayBackCard `settleFor`, `onSettled`): its newest read finished
@@ -1672,18 +1672,23 @@ export default function HomeScreen() {
     // on again: review of #3348 at 4b9716b3), so the cards under it never jump up and back. It goes only on a definite answer:
     // the no above, another account, the phone's answer changed (back from its settings with notifications on), or the fresh
     // read's own decision (nothing live any more). A card not drawn yet still waits for `homeMay`.
-    const homeCardLive = homeLive && !homeBlocked && homeLive.key === identity?.publicKey && (homeMay || samePhoneAnswer(homeLive.phone, phone)) ? homeLive.live : null;
+    const homeCardLive = homeLive && !homeBlocked && homeLive.key === identity?.publicKey && homeLive.at === url && (homeMay || samePhoneAnswer(homeLive.phone, phone)) ? homeLive.live : null;
     const homeLiveAnswer = homeNotifyLive(answer);
     const homeLiveRef = useRef(homeLiveAnswer);
     homeLiveRef.current = homeLiveAnswer;
     const phoneRef = useRef(phone);
     phoneRef.current = phone;
+    // The community the card was decided for: kept only on that community's Home, never carried to another the same
+    // account switches to (review of #3348 at 9fbee4a5: "You're going to Repair café." on a Home without that event).
+    const urlRef = useRef(url);
+    urlRef.current = url;
     const homeLiveKey = `${homeLiveAnswer.deals ?? ''}|${(homeLiveAnswer.events ?? []).map(e => `${e.id}:${e.rsvp ?? ''}:${e.endsAt ?? e.startsAt}`).join(',')}`;
     useEffect(() => {
         const key = identityRef.current?.publicKey;
         if (!homeMay) return;
         if (!key) { setHomeLive(null); return; }
         let current = true;
+        const decidedAt = urlRef.current;
         void (async () => {
             const at = Date.now();
             const [listings, waitingAt] = await Promise.all([getMyPosts(key).catch(() => []), getMyLinesWaiting(key, at)]);
@@ -1691,7 +1696,7 @@ export default function HomeScreen() {
             // `still`: withdrawn before it is drawn (the way-back card came up, a new landing, a newer decision), it takes no day.
             const shows = live !== null && current && await offerHomeCard({ live: true, wayBack: false, still: () => current });
             // The phone's answer it was decided on: any change to it moves `notifyLanding`, so a decision still current had this one.
-            if (current) setHomeLive(shows && live ? { key, live, phone: phoneRef.current } : null);
+            if (current) setHomeLive(shows && live ? { key, at: decidedAt, live, phone: phoneRef.current } : null);
         })().catch(() => { if (current) setHomeLive(null); });
         return () => { current = false; };
     }, [homeMay, notifyLanding, homeLiveKey]);

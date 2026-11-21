@@ -321,6 +321,14 @@ async function main(): Promise<void> {
     const fete = createPost('event', 'general', 'Street fete', 'Bring a plate', 0, 'fixed', kit.pk, -28.6, 153.6, [TINY_PNG], false, undefined, false, {
         eventStartAt: iso(Date.now() + 3 * DAY), eventEndAt: iso(Date.now() + 3 * DAY + 3_600_000),
     } as any)!;
+    // Posted for the whole community by Kit: on a local community Mae, a member with a phone and not its host, is told of it
+    // once (`event.new`, engine/event-new-push.ts, notifications NEa), on the global one not at all. That push is the
+    // event's posting, not a line in its chat: held here, so the next step's count is the chat line's alone.
+    await flush();
+    const toldOfFete = pushes.filter(p => p.to === tokenOf(mae)).map(p => (p as { data?: { k?: string } }).data?.k);
+    pushes.length = 0;
+    assert(JSON.stringify(toldOfFete) === JSON.stringify(LOCAL_RUN ? ['event.new'] : []),
+        `a new event for everyone: ${LOCAL_RUN ? 'she is told of it once, as a new event' : 'the global community tells nobody'} (${JSON.stringify(toldOfFete)})`);
     ensureEventThread(fete.id);
     db.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(fete.id, mae.pk);
     db.prepare("INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, let_in_at, let_in_by) VALUES (?, ?, 'going', '', ?, ?)").run(fete.id, mae.pk, iso(Date.now()), kit.pk);

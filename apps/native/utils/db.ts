@@ -2399,6 +2399,33 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
 }
 
 /**
+ * Each of `peers`' read cursor in the one DM this phone holds with them, for a deal request that sits unseen (core
+ * notSeenOfDeal, slice N4): a peer with a DM here maps to their cursor (null: never read); one with no DM is left out, as
+ * there is no tick to go by. So is a chat that is still a message request, either way: the node withholds the other's
+ * cursor until it is accepted (engine/dm-requests.ts), so a cursor there says nothing. The node keeps one DM per pair, so
+ * the newest cursor is theirs. Only the cursor, the tick's own source: nothing else of theirs is read.
+ */
+export async function peerReadCursors(myPubkey: string, peers: readonly string[]): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    const wanted = [...new Set(peers.filter((p) => !!p && p !== myPubkey))];
+    if (!myPubkey || wanted.length === 0) return out;
+    const database = await getDb();
+    const rows = await database.getAllAsync<{ public_key: string; read_at: string | null }>(`
+        SELECT cp.public_key AS public_key, MAX(cp.last_read_at) AS read_at
+        FROM conversation_participants cp
+        JOIN conversations c ON c.id = cp.conversation_id
+        WHERE (c.type IS NULL OR c.type = 'dm')
+        AND (CASE WHEN json_valid(c.request) THEN (CASE WHEN json_type(c.request, '$.state') = 'text'
+            AND json_extract(c.request, '$.state') != 'accepted' THEN 0 ELSE 1 END) ELSE 1 END) = 1
+        AND cp.public_key IN (${wanted.map(() => '?').join(', ')})
+        AND EXISTS (SELECT 1 FROM conversation_participants mine WHERE mine.conversation_id = c.id AND mine.public_key = ?)
+        GROUP BY cp.public_key
+    `, [...wanted, myPubkey]);
+    for (const r of rows) out.set(r.public_key, r.read_at ?? null);
+    return out;
+}
+
+/**
  * Unread lines per conversation, for the header's "needs you" icons: only conversations with something
  * unread, counted the way getGlobalUnreadCount counts them. Nothing is decrypted and no preview is built;
  * `peer` is the stored conversation name or the other participant's callsign, as the inbox shows it.
@@ -3153,7 +3180,7 @@ export async function createPost(post: any) {
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
     // The one notifications ask, at the first post (DESIGN-home-default-fable.md §2.5: someone may answer it now). Once in
-    // all with the first message and the first ask to join, never after a Not now (utils/notification-permission.ts).
+    // all with the first message and the first ask to join, never after the phone's no (utils/notification-permission.ts).
     // Loaded lazily and not waited on: the post is up, and an ask that fails never touches it.
     void import('./notification-permission')
         .then(({ askNotificationPermissionOnAction }) => askNotificationPermissionOnAction('post', identity.publicKey))
@@ -8818,7 +8845,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
     // Front doors S3 (#2524): every way a DM starts (New message, Message on a listing, a profile, People, a shop, a
     // project's keeper, a deal's approve or decline) comes through here, so the first message's notification ask is made
     // here, not in each screen. It asks only while unanswered, once in all with the first post and the first ask to join,
-    // never after a Not now and never when the phone already allows notifications (utils/notification-permission.ts,
+    // never after the phone's no and never when the phone already allows notifications (utils/notification-permission.ts,
     // DESIGN-home-default-fable.md §2.5). Loaded lazily, and an ask that fails never stops the chat.
     try {
         const { askNotificationPermissionOnAction } = await import('./notification-permission');

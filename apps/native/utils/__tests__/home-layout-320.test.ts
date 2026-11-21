@@ -26,11 +26,12 @@ import { POST_CATEGORIES } from '../../constants/categories';
 import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_GUTTER_DP, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
 import { welcomeTileStyles } from '../../components/home/WelcomeTile';
+import { communityWelcomeStyles } from '../../components/home/community-welcome-styles';
 import { sheetStyles } from '../../components/home/sheet-parts';
 import { STRIP_NAME_BASIS_DP, st as arrangeStyles } from '../../components/home/ArrangeParts';
 import { ADD_CARD_DOT_DP, ADD_CARD_DOT_GAP_DP, ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
 import { cardRowName, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
-import { WELCOME_TILE_WORDS, welcomeTileLines, ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest, PRICING_CATEGORIES, STARTER_OFFERS, starterSheet, t } from '@beanpool/core';
+import { COMMUNITY_WELCOME_CARD_WORDS, COMMUNITY_WELCOME_MAX_CHARS, WELCOME_TILE_WORDS, welcomeTileLines, ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest, PRICING_CATEGORIES, STARTER_OFFERS, starterSheet, t } from '@beanpool/core';
 import { starter } from '../../components/home/StarterOffersSheet';
 import { FAB_BAND_DP } from '../fab-band';
 import { chatCardStyles } from '../../components/home/chat-parts';
@@ -725,6 +726,68 @@ describe('the welcome tile at 320dp × 1.3 (S5)', () => {
         // The fills are one value in every set (§4.4): the same tile in light and dark.
         expect(lightColors.brand.fill).toBe(darkColors.brand.fill);
         expect(lightColors.feedback.warning.solid).toBe(darkColors.feedback.warning.solid);
+    });
+});
+
+// The community's own welcome (DESIGN-onboarding-home-landing-fable.md §4.1 item 2, §4.5; slice S7): a Home card with a clay
+// band, "FROM {COMMUNITY}" beside its 48 dp ×, the owners' words (280 characters at most, no line limit, any script), the
+// inviter's line beside "Say hello ›", the owner's prompt and the count. The pixels are the emulator walk's and
+// e2e/community-welcome-320.mjs's.
+describe("the community's welcome at 320dp × 1.3 (S7)", () => {
+    const cw = communityWelcomeStyles as unknown as Record<string, Record<string, unknown>>;
+    const words = (s: string) => t(s as never);
+
+    it('the caption\'s longest word fits beside the 48 dp ×, at the caption\'s own cap; a long community name wraps under it', () => {
+        expect(num(cw.x.width)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(num(cw.x.height)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        const room = CARD_INNER - num(cw.x.width) - num(cw.x.marginRight);
+        for (const caption of [t('From {community}', { community: 'Riverside' }), words(COMMUNITY_WELCOME_CARD_WORDS.captionUnnamed), t('From {community}', { community: 'Upper Riverside Valley Neighbours' })]) {
+            const w = longestWord(caption.toUpperCase(), num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) });
+            expect(w, caption).toBeLessThan(room);
+        }
+        expect(s.caption.flex).toBe(1);
+    });
+
+    it("the owners' words: no line limit, wrapping at word breaks; 280 characters of one unbroken word break inside the card (never sideways)", () => {
+        const src = read('components/home/CommunityWelcomeCard.tsx');
+        const block = src.slice(src.indexOf('testID="home-welcome-community-words"') - 200, src.indexOf('testID="home-welcome-community-words"'));
+        expect(block).not.toContain('numberOfLines');
+        // A word longer than the card has no break: Android and iOS break it inside the line (no ellipsis, no clipping), so
+        // the text's box is never set to a fixed width or "nowrap" here.
+        for (const k of ['width', 'flexShrink', 'flexWrap', 'whiteSpace']) expect(cw.words[k], k).toBeUndefined();
+        const longest = 'x'.repeat(COMMUNITY_WELCOME_MAX_CHARS);
+        const perLine = Math.floor(CARD_INNER / (0.62 * num(cw.words.fontSize) * FONT_SCALE));
+        expect(perLine).toBeGreaterThan(10);
+        // 280 characters at about 20 a line: about 14 lines, each one card wide. Long, but whole, and the card grows to hold it.
+        expect(Math.ceil(longest.length / perLine)).toBeLessThanOrEqual(30);
+    });
+
+    it("right-to-left words align by their own script, not the app's: textAlign auto and writingDirection auto", () => {
+        expect(cw.words.textAlign).toBe('auto');
+        expect(cw.words.writingDirection).toBe('auto');
+    });
+
+    it('the inviter\'s line and "Say hello ›" wrap to their own rows where they don\'t fit side by side; each link a 48 dp target', () => {
+        expect(cw.row.flexWrap).toBe('wrap');
+        expect(num(cw.link.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        for (const line of [t('{name} invited you.', { name: 'Asha' }), t("You're the first one here."), t('Say hello ›'), t('Invite someone ›')]) {
+            expect(longestWord(line, num(cw.small.fontSize)), line).toBeLessThanOrEqual(CARD_INNER);
+        }
+        // The owner's prompt is a whole row of its own (HomeRow, 48 dp), wrapping to three lines.
+        expect(longestWord(words(COMMUNITY_WELCOME_CARD_WORDS.write), num(s.rowLine.fontSize))).toBeLessThanOrEqual(CARD_INNER);
+        expect(longestWord(t("{community}'s welcome ›", { community: 'Riverside' }), num(s.rowLine.fontSize))).toBeLessThanOrEqual(CARD_INNER);
+    });
+
+    it('its words read at 4.5:1 or more on the card and its × on the clay band, in light and dark (central tokens only)', () => {
+        for (const c of [lightColors, darkColors]) {
+            expect(contrastRatio(c.text.heading, c.surface.card)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(c.text.body, c.surface.card)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(c.text.link, c.surface.card)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(c.text.secondary, c.surface.card)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(c.card.clay.ink, c.card.clay.tint)).toBeGreaterThanOrEqual(4.5);
+        }
+        const src = read('components/home/CommunityWelcomeCard.tsx');
+        expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     });
 });
 

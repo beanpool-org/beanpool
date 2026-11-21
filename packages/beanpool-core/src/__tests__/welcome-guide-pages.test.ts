@@ -10,7 +10,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HOME_DEFAULT_LIST } from '../home-frame.js';
-import { WELCOME_TILE_WORDS } from '../home-welcome.js';
+import { COMMUNITY_WELCOME_CARD_WORDS, WELCOME_TILE_WORDS } from '../home-welcome.js';
+import { t } from '../words.js';
 
 const GUIDE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'beanpool-guide', 'content');
 const page = (rel: string) => readFileSync(join(GUIDE, rel), 'utf8');
@@ -67,5 +68,22 @@ describe("the guide's notifications page", () => {
         const notifications = flat('settings/notifications.md');
         expect(notifications).not.toContain('the card at the end of How it Works');
         expect(notifications).toContain('**Hear when someone answers you** in **First steps** on **Home**, or when you send your first message or request to join.');
+    });
+});
+
+// Slice S7: the community's own welcome under the phone's tile, in the words the app draws (core's COMMUNITY_WELCOME_CARD_WORDS).
+describe("the guide's Home page: the community's own welcome on the phone (S7)", () => {
+    const home = flat('getting-started/home.md');
+
+    it('under the tile: the owners\' words never translated, the inviter\'s line, its ×, 30 days, and the line to read it again', () => {
+        expect(home).toContain('On the phone, under the tile, is your community\'s own welcome, headed "From" and the community\'s name, such as "From Riverside".');
+        expect(t(COMMUNITY_WELCOME_CARD_WORDS.caption, { community: 'Riverside' })).toBe('From Riverside');
+        expect(home).toContain('as they wrote them: they are never translated.');
+        expect(home).toContain('**Got it** on the tile leaves it there: tap its **×** to put it away.');
+        expect(home).toContain(`such as "${t(COMMUNITY_WELCOME_CARD_WORDS.again, { community: 'Riverside' })}"`);
+        expect(home).toContain(`sees **${t(COMMUNITY_WELCOME_CARD_WORDS.write)}** there.`);
+        // Whose invite brought you moved from the phone's tile to it; the web app's card keeps the line until its own slice.
+        expect(home).toContain('In the web app it also says who invited you, with **Say hello ›** to open a chat with them;');
+        expect(home).toContain('On the phone those lines are in your community\'s own welcome, under the tile (below).');
     });
 });

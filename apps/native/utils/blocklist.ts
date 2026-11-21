@@ -474,6 +474,104 @@ export async function getKeysOnceBlocked(): Promise<string[] | null> {
 }
 
 /**
+ * Block first, everywhere (slice S7b, scratch/fable-design/DESIGN-s7-blocks-verified-everywhere-fable.md §2.4; Marty, 21 Nov
+ * 2026, "all four of Fable's picks"): what the account's blocks say, for the checks that come before a request card, a quiet
+ * Accept, a first line across or "Add people I've chatted with". `onPhone`: every key of each person blocked on this phone
+ * now. `once`: every key of each person the member blocked here, now or before an unblock the phone still remembers
+ * ({@link getKeysOnceBlocked}). `seenThere`: what each community's own list held as the phone last read it that this phone
+ * did not put there, with the keys it named as replaced by them (a block made in the web app, on another device, or before
+ * a restore): used for these checks alone, never shown, spread or sent (question 2: it stops the quiet Accept and hides the
+ * request card, nothing more).
+ */
+export interface BlockLists {
+    onPhone: ReadonlySet<string>;
+    once: ReadonlySet<string>;
+    seenThere: ReadonlySet<string>;
+}
+
+/**
+ * Whether the person known by any of `keys` is blocked anywhere (slice S7b): on this phone's list now, or on any community's
+ * own list as the phone last read it. Their request card never shows, here or in place, and they are never let in
+ * quietly. Someone blocked and later unblocked here is not blocked anywhere: their card shows, as an ordinary request
+ * (let-in.ts adds `once` for the quiet Accept, Marty's question 4). Pure.
+ */
+export function blockedAnywhere(lists: BlockLists, keys: readonly string[]): boolean {
+    return keys.some((k) => lists.onPhone.has(k) || lists.seenThere.has(k));
+}
+
+/**
+ * Whether the person known by any of `keys` is never let in quietly (slice S7b; let-in.ts): blocked anywhere
+ * ({@link blockedAnywhere}), or blocked here once and unblocked since (Marty's question 4: their request is a card they
+ * answer). Pure.
+ */
+export function neverLetInQuietly(lists: BlockLists, keys: readonly string[]): boolean {
+    return blockedAnywhere(lists, keys) || keys.some((k) => lists.once.has(k));
+}
+
+/**
+ * "Add people I've chatted with and my friends" (app/contacts.tsx addPeople): `people` less anyone let in once never lets
+ * in quietly for a block ({@link neverLetInQuietly}), by every key the phone knows them by (`keys`, and `key`): a bulk add
+ * is no step towards that one person, and a contact it links is let in everywhere (let-in.ts). For the account `me` only.
+ * Throws when the block lists can't be read, so nobody is linked on a guess.
+ */
+export async function withoutBlockedPeople<P extends { key: string; keys?: readonly string[] }>(me: string, people: readonly P[]): Promise<P[]> {
+    const lists = await readBlockLists(me);
+    if (!lists) throw new Error('The block lists could not be read');
+    return people.filter((p) => !neverLetInQuietly(lists, [p.key, ...(p.keys ?? [])]));
+}
+
+/**
+ * {@link BlockLists} for the account on this phone, read whole after any change under way; `account`: only for that account
+ * (null when another is on the phone). Empty with no account on the phone. Null when the stores can't be read, so nobody
+ * is let in on a guess. `seenThere` is every community's record for this account, one taken off the phone included: what
+ * it held was the member's own block, made there.
+ */
+export async function readBlockLists(account?: string): Promise<BlockLists | null> {
+    try {
+        const owner = await accountOnPhone();
+        if (account !== undefined && owner !== account) return null;
+        if (!owner) return { onPhone: new Set(), once: new Set(), seenThere: new Set() };
+        return await serially(async () => {
+            const { list, chains, changes } = await readBlocks(owner);
+            const record = parseCommunityBlocks(await AsyncStorage.getItem(communityBlocksStoreKey(owner)));
+            const once = new Set<string>();
+            for (const key of [...list, ...Object.keys(changes.of)]) personKeys(key, chains).forEach(k => once.add(k));
+            return { onPhone: new Set(list), once, seenThere: new Set(Object.values(record).flatMap((at) => at.seen ?? [])) };
+        });
+    } catch (e) {
+        console.error('[blocklist] Failed to read the block lists', e);
+        return null;
+    }
+}
+
+/**
+ * Whether `community`'s own list for `account` has been read in this run (S7 design §2.4 rule 3: no quiet Accept in a
+ * community until it has): when it hasn't, it is read now, one GET on that community's queue, as the round's read is
+ * ({@link followRekeyedBlocks}). False when that read fails, is waited for (a node with no block list, the hour after "no
+ * member"), is a guest's look, or `account` is not the one on the phone: the request is then an ordinary card.
+ */
+export async function blockListReadThisRun(account: string, community: string): Promise<boolean> {
+    try {
+        const at = await communityToSyncAt(community);
+        if (!account || !at) return false;
+        const key = `${account}\u0001${queueKey(at)}`;
+        if (readThisRun.has(key)) return true;
+        await queueAt(at, () => followOnce(at, false));
+        return readThisRun.has(key) && (await accountOnPhone()) === account;
+    } catch {
+        return false;
+    }
+}
+
+/** For tests: a new run of the app, which has read no community's list yet and sent no block request this minute. */
+export function _newBlockRunForTests(): void {
+    readThisRun.clear();
+    requestsSentAt.clear();
+    for (const timer of syncWhenRoom.values()) clearTimeout(timer);
+    syncWhenRoom.clear();
+}
+
+/**
  * Blocks a user for the account on this phone, notifies server moderation (per Apple Guideline 1.2) in that account's
  * name, queues a report the node didn't take for retry, and dispatches a global event for immediate UI updates.
  * With no account on the phone, nothing is blocked. The block stands on the phone at once, as a change the community
@@ -663,7 +761,10 @@ const DEADLINE_MIN_MS = 1000;
  * has no block list, or refused a removal); `addsWaitUntil`, when it may be sent blocks again (it refused one), while
  * unblocks still go; `noMemberUntil`, when it may be asked anything again after it said the account is no member there
  * ({@link NO_MEMBER_WAIT_MS}; a join there lifts it, {@link blocksAtJoin}, and so does the phone's check saying it is a member,
- * {@link blocksAtMember}; never kept for the community in use at a round, {@link askedEachRound}).
+ * {@link blocksAtMember}; never kept for the community in use at a round, {@link askedEachRound}). `seen`, the keys on the
+ * community's last answer that this phone did not put there, with the keys it names as replaced by them: a block made in the
+ * web app, on another device, or before a restore (slice S7b, S7 design §2.4, Marty's question 2 of 21 Nov). Kept for
+ * the block-first check alone ({@link readBlockLists}): never shown, spread to another community or sent again.
  */
 interface BlocksAt {
     on: string[];
@@ -672,6 +773,7 @@ interface BlocksAt {
     waitUntil?: number;
     addsWaitUntil?: number;
     noMemberUntil?: number;
+    seen?: string[];
 }
 
 /**
@@ -1048,10 +1150,28 @@ async function takeAnswer(owner: string, community: string, change: PlannedChang
     }
     const blocks = await readBlocks(owner);
     const was = asRead(blocks);
+    const seenBefore = JSON.stringify(at.seen ?? []);
     reconcile(owner, blocks, at, answer, change.adds ? change.keys : []);
     await saveBlocks(owner, blocks, was);
     await saveRecord(owner, record, community, at);
+    listTaken(owner, community, seenBefore, at);
     return true;
+}
+
+/** Each account's communities whose own list was read in this run, as `${account}\u0001${queueKey}` (S7 design §2.4 rule 3). */
+const readThisRun = new Set<string>();
+
+/**
+ * A community's whole list taken for `owner` (every answer is the list as it stands: a read's, or a change's): it has been
+ * read in this run. When what it holds that this phone did not put there changed, the screens hear
+ * {@link BLOCKLIST_UPDATED_EVENT} with the phone's own list, unchanged, so Chat draws its request cards again (slice S7b).
+ * Only inside {@link serially}: the list is read after it.
+ */
+function listTaken(owner: string, community: string, seenBefore: string, at: BlocksAt): void {
+    readThisRun.add(`${owner}\u0001${queueKey(community)}`);
+    if (JSON.stringify(at.seen ?? []) === seenBefore) return;
+    // The list of the account on the phone when it is read, as every announcement of it is.
+    void getBlockedUsers().then((list) => DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, list));
 }
 
 /**
@@ -1082,6 +1202,14 @@ function reconcile(owner: string, blocks: Blocks, at: BlocksAt, answer: ListAnsw
     const ours = new Set([...at.on, ...at.sent, ...sentNow, ...shown]);
     at.on = answer.keys.filter(k => [...personKeys(k, blocks.chains)].some(p => ours.has(p)));
     at.sent = [];
+    // The rest of its list is not this phone's (slice S7b, S7 design §2.4): kept for the block-first check alone, with the keys
+    // it names as replaced by each (a person blocked in the web app before a re-key holds at a community that never heard it),
+    // at most a person's PERSON_KEYS_MAX keys. Never in `on`, `sent`, `asked` or the chains, so never shown, spread or sent.
+    // At most a list's worth (the server keeps COMMUNITY_BLOCKS_MAX), so no answer can fill the phone's storage.
+    const seen = answer.keys.filter(k => MEMBER_KEY.test(k) && k !== owner && !at.on.includes(k)).slice(0, COMMUNITY_BLOCKS_MAX);
+    const seenAll = [...new Set([...seen, ...seen.flatMap(k => (answer.formerKeys[k] ?? []).slice(0, PERSON_KEYS_MAX - 1))])].filter(k => k !== owner);
+    if (seenAll.length > 0) at.seen = seenAll;
+    else delete at.seen;
     // What it has answered about: this answer's keys just sent (taken or not), those on its list, the keys it names as
     // replaced by one there, and the person a block was of; and what it answered before about a person still on its list.
     // A person it no longer lists starts again: what it said of a key they were known by before an unblock says nothing
@@ -1102,10 +1230,11 @@ function reconcile(owner: string, blocks: Blocks, at: BlocksAt, answer: ListAnsw
  * it again. Nothing is reported, and nothing is sent but the one read.
  *
  * At every community this phone holds, side by side (S7 design §2.5: a re-key at one community is learned there, and
- * reaches the others in the same round, {@link syncBlocks}). At each, only while the account has a block here or on that
- * community's list from this phone, only for the account on the phone, never on a guest's look, never while it is waited
- * for, and one at a time with that community's syncs. It runs at start, on each return and every 5 minutes
- * (app/_layout.tsx), just before the sync.
+ * reaches the others in the same round, {@link syncBlocks}). At each, whether or not the account has blocks of its own
+ * (slice S7b, S7 design §2.4: the list may hold a block made in the web app, on another device, or before a restore, which
+ * the block-first check reads, {@link readBlockLists}), only for the account on the phone, never on a guest's look, never
+ * while it is waited for, and one at a time with that community's syncs. It runs at start, on each return and every 5
+ * minutes (app/_layout.tsx), just before the sync, and at the first quiet Accept of a run there ({@link blockListReadThisRun}).
  */
 export function followRekeyedBlocks(): Promise<void> {
     return eachHeld(followOnce);
@@ -1119,22 +1248,33 @@ async function followOnce(at: string, inUse: boolean): Promise<void> {
         if (!community) return;
         if (inUse) await askedEachRound(owner, community);
         const ask = await serially(async () => {
-            const { list } = await readBlocks(owner);
             const { at: record } = await recordOf(owner, community);
-            if (list.length + record.on.length + record.sent.length === 0) return false;
             const now = Date.now();
             return (record.waitUntil === undefined || now >= record.waitUntil) && !waiting(record.noMemberUntil, now, NO_MEMBER_WAIT_MS);
         });
         if (!ask) return;
         const answer = await readList(owner, community);
         if (!answer) return;
+        if (answer === 'no member') {
+            // As a change's "no member" (takeAnswer): it keeps no list for the account, and is asked again in an hour or at a
+            // join, not every round (S7 design §2.2), now that every held community is read whether or not it has blocks.
+            await serially(async () => {
+                const { record, at } = await recordOf(owner, community);
+                keepsNone(at);
+                at.noMemberUntil = Date.now() + NO_MEMBER_WAIT_MS;
+                await saveRecord(owner, record, community, at);
+            });
+            return;
+        }
         await serially(async () => {
             const blocks = await readBlocks(owner);
             const was = asRead(blocks);
             const { record, at } = await recordOf(owner, community);
+            const seenBefore = JSON.stringify(at.seen ?? []);
             reconcile(owner, blocks, at, answer, []);
             await saveBlocks(owner, blocks, was);
             await saveRecord(owner, record, community, at);
+            listTaken(owner, community, seenBefore, at);
         });
     } catch (e) {
         console.warn('[blocklist] Could not read the community\'s block list; tried again at the next sync', e);
@@ -1142,10 +1282,11 @@ async function followOnce(at: string, inUse: boolean): Promise<void> {
 }
 
 /**
- * The community's read of `owner`'s list, or null when it couldn't be read, or isn't the node's answer. Counted with the
- * block requests to that community ({@link roomForARequest}).
+ * The community's read of `owner`'s list; `no member` when it answers that the account is no member there
+ * ({@link NO_MEMBER_CODES}); null when it couldn't be read, or isn't the node's answer. Counted with the block requests to
+ * that community ({@link roomForARequest}).
  */
-async function readList(owner: string, community: string): Promise<ListAnswer | null> {
+async function readList(owner: string, community: string): Promise<ListAnswer | 'no member' | null> {
     const signer = await loadIdentity();
     if (!signer?.privateKey || signer.publicKey !== owner) return null;
     if (!roomForARequest(community)) return null;
@@ -1155,6 +1296,7 @@ async function readList(owner: string, community: string): Promise<ListAnswer | 
             const answer = await signedGet(community, BLOCKS_PATH, signer, controller.signal);
             return { res: answer, text: await answer.text() };
         })(), REPORT_TIMEOUT_MS);
+        if (res.status === 403 && NO_MEMBER_CODES.has(changeErrorCode(text) ?? '')) return 'no member';
         if (!res.ok) return null;
         return listAnswerOf(JSON.parse(text));
     } catch {
@@ -1261,6 +1403,7 @@ function keepsNone(at: BlocksAt): void {
     at.sent = [...new Set([...at.on, ...at.sent])];
     at.on = [];
     at.asked = [];
+    delete at.seen;
 }
 
 /**
@@ -1324,7 +1467,7 @@ async function tellRecord(publicKey: string, community: string, heard: { keepsNo
         await serially(async () => {
             const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
             const entries = Object.entries(record).filter(([url, at]) => here(url)
-                && ((heard.keepsNoList && at.on.length > 0) || (heard.joined && at.noMemberUntil !== undefined)));
+                && ((heard.keepsNoList && (at.on.length > 0 || !!at.seen)) || (heard.joined && at.noMemberUntil !== undefined)));
             if (entries.length === 0) return;
             for (const [, at] of entries) {
                 if (heard.keepsNoList) keepsNone(at);
@@ -1388,6 +1531,8 @@ function parseCommunityBlocks(raw: string | null): Record<string, BlocksAt> {
             if (typeof value.waitUntil === 'number') out[community].waitUntil = value.waitUntil;
             if (typeof value.addsWaitUntil === 'number') out[community].addsWaitUntil = value.addsWaitUntil;
             if (typeof value.noMemberUntil === 'number') out[community].noMemberUntil = value.noMemberUntil;
+            const seen = keysIn(value.seen).filter(k => MEMBER_KEY.test(k));
+            if (seen.length > 0) out[community].seen = seen;
         }
         return out;
     } catch {

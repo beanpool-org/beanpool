@@ -378,6 +378,8 @@ describe('a topic the member\'s own action takes away', () => {
         fireEvent.click(within(screen.getByTestId('forum-menu')).getByRole('button', { name: 'Block Asha' }));
         fireEvent.click(within(screen.getByTestId('forum-menu')).getByRole('button', { name: 'Block Asha' }));
         expect(await screen.findByTestId('forum-gone')).toHaveTextContent('You blocked Asha, so their topic no longer shows for you.');
+        // A web block holds here only (S7b, design section 3.4): the same sentence as a profile's and an enterprise page's block.
+        expect(screen.getByTestId('forum-gone')).toHaveTextContent('To block them in all your communities, block them in the phone app.');
         expect(screen.queryByTestId('forum-topic')).toBeNull();
         // Opening another topic takes the line away.
         fireEvent.click(await screen.findByText('Welcome: start here'));

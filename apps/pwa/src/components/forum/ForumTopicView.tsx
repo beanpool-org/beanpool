@@ -32,6 +32,7 @@ import { ReportModal } from '../ReportModal';
 import { ForumPhotoAttach, ForumPhotos, ForumToldSheet, ForumWords } from './ForumBits';
 import { ForumLinkChips, ForumLinkSheet, LINK_WORDS, linkDoor, linksTaken, needDraftOf, type LinkPick } from './ForumLinks';
 import type { ComposerDraft } from '../../tools/builder';
+import { afterBlockWords } from '../../lib/blocked-here';
 
 export const TOPIC_WORDS = {
     back: word('Back to the forum'),
@@ -196,7 +197,7 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
     }
 
     /** One of the member's own ⋯ actions, then every post they had drawn read again. `goneWords`: if it takes the topic away. */
-    async function act(fn: () => Promise<unknown>, goneWords?: string) {
+    async function act(fn: () => Promise<unknown>, goneWords?: string | (() => string)) {
         setMenu(null);
         setError(null);
         try {
@@ -205,7 +206,7 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
             setError((e as Error)?.message || t('Couldn’t save this in the forum.'));
             return;
         }
-        await readThrough(0, lastOf(page), goneWords);
+        await readThrough(0, lastOf(page), typeof goneWords === 'function' ? goneWords() : goneWords);
     }
 
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
@@ -377,7 +378,12 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
             return [
                 [t(TOPIC_WORDS.blockSure, { name: name(post) }), null],
                 // Blocking the topic's own writer takes their topic away for this member: the list says why.
-                [t(TOPIC_WORDS.block, { name: name(post) }), () => void act(() => blockUser(post.writer.publicKey), t(TOPIC_WORDS.goneBlocked, { name: name(post) })), true],
+                // A web block holds in this community only: the confirmation says so (design S7 section 3.4, slice S7b).
+                [t(TOPIC_WORDS.block, { name: name(post) }), () => {
+                    // The block first, as on a profile: the sentence (which reads the community's card) only after it.
+                    let words = t(TOPIC_WORDS.goneBlocked, { name: name(post) });
+                    void act(async () => { await blockUser(post.writer.publicKey); words = await afterBlockWords(words); }, () => words);
+                }, true],
                 [t(TOPIC_WORDS.cancel), () => setMenu(null)],
             ];
         }

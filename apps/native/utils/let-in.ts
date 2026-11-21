@@ -15,16 +15,18 @@
  *   person in). Someone who took up the member's Offer, paid them or wrote to them alone is not let in. Only under a key that
  *   is the person's now, from every source alike (#3319 review F1): never one any copy's DM pins say a re-key replaced (a
  *   lost phone's, perhaps), nor one in question while a chat waits for the member over another key on offer.
- * - **The block first** (DESIGN-s7-blocks-verified-everywhere-fable.md §2.4; Marty 21 Nov: someone unblocked is not let in
- *   quietly): never anyone known by a key on the phone's block list (getBlockedUsers), nor by one the member blocked and
- *   unblocked since, while the phone remembers that (blocklist.ts getKeysOnceBlocked). An unreadable block list lets nobody
- *   in quietly. Their request is then an ordinary card the member answers.
+ * - **The block first, everywhere** (DESIGN-s7-blocks-verified-everywhere-fable.md §2.4, slice S7b; Marty 21 Nov: someone
+ *   unblocked is not let in quietly): never anyone known by a key blocked anywhere (blocklist.ts blockedAnywhere: on the
+ *   phone's list, or on any community's own list as the phone last read it, a block made in the web app or on another
+ *   device included), nor by one the member blocked and unblocked since, while the phone remembers that. And never in a
+ *   community whose own list has not been read in this run (blockListReadThisRun: read then, once). An unreadable block
+ *   list, or a read that fails, lets nobody in quietly. Their request is then an ordinary card the member answers.
  * - **Once per request**: an id this run accepted quietly is never pressed again, whatever a later list says.
  * - **The member's own answer stands** (#3319 review F2): a request they Accepted, Ignored, Declined (or Declined all) on this
  *   phone since its list was read, or with that answer still on its way, is never accepted quietly, nor one whose opener they
  *   blocked since; each is checked at the accept itself.
  */
-import { getBlockedUsers, getKeysOnceBlocked } from './blocklist';
+import { blockListReadThisRun, neverLetInQuietly, readBlockLists, type BlockLists } from './blocklist';
 import { getLetInHere, isAnsweredByMember } from './db';
 import { heldLetIn } from './held-chats';
 import { loadIdentity } from './identity';
@@ -35,13 +37,6 @@ export interface LetInCandidate {
     id: string;
     from: string;
     keys: readonly string[];
-}
-
-/** The keys never let in quietly: blocked now, or blocked once and unblocked since. Null when the block list can't be read. */
-export async function keysNeverLetInQuietly(): Promise<Set<string> | null> {
-    const once = await getKeysOnceBlocked();
-    if (!once) return null;
-    return new Set([...once, ...(await getBlockedUsers())]);
 }
 
 /** Linked contacts' keys, per account, read again after any change to the list (contacts-store.ts onContactsChanged). */
@@ -98,25 +93,28 @@ function letInReader(me: string): (keys: readonly string[]) => Promise<Set<strin
 const pressed = new Set<string>();
 
 /**
- * The quiet accept: each candidate whose opener the member let in, and none of whose keys is never let in quietly, goes to
- * `accept` (db.ts: the same decideMessageRequest a tap on Accept calls), one after another. At each accept, the block list is
- * read again (a Block tapped since the list was read holds: #3319 review F2) and `still()` says the account that asked is the
- * phone's; `accept` itself leaves a request the member answered since (db.ts memberAnsweredSince), which is then never pressed
- * this run. The ids accepted. Nothing is read when there is no candidate.
+ * The quiet accept, in `community` (the address the requests' list came from, where each accept goes): each candidate whose
+ * opener the member let in, and whom no block bars under any of their keys ({@link neverLetInQuietly}), goes to
+ * `accept` (db.ts: the same decideMessageRequest a tap on Accept calls), one after another, once that community's own block
+ * list has been read in this run (blocklist.ts blockListReadThisRun; S7 design §2.4 rule 3). At each accept, the block lists
+ * are read again (a Block tapped since the list was read holds: #3319 review F2) and `still()` says the account that asked is
+ * the phone's; `accept` itself leaves a request the member answered since (db.ts memberAnsweredSince), which is then never
+ * pressed this run. The ids accepted. Nothing is read when there is no candidate.
  */
-export async function acceptLetIn(me: string, candidates: readonly LetInCandidate[], accept: (id: string) => Promise<unknown>, still: () => Promise<unknown>): Promise<Set<string>> {
+export async function acceptLetIn(me: string, community: string, candidates: readonly LetInCandidate[], accept: (id: string) => Promise<unknown>, still: () => Promise<unknown>): Promise<Set<string>> {
     const accepted = new Set<string>();
     const fresh = candidates.filter((c) => c.from && c.from !== me && !pressed.has(`${me}\u0001${c.id}`));
     if (!me || fresh.length === 0) return accepted;
-    const never = await keysNeverLetInQuietly();
-    if (!never) return accepted;
-    const open = fresh.filter((c) => !never.has(c.from) && !c.keys.some((k) => never.has(k)));
+    const lists = await readBlockLists(me);
+    if (!lists) return accepted;
+    const open = fresh.filter((c) => !neverLetInQuietly(lists, [c.from, ...c.keys]));
     if (open.length === 0) return accepted;
+    if (!(await blockListReadThisRun(me, community))) return accepted;
     const letIn = await letInReader(me)(open.map((c) => c.from));
     for (const c of open) {
         if (!letIn.has(c.from)) continue;
-        const now = await keysNeverLetInQuietly();
-        if (!now || now.has(c.from) || c.keys.some((k) => now.has(k))) continue;
+        const now = await readBlockLists(me);
+        if (!now || neverLetInQuietly(now, [c.from, ...c.keys])) continue;
         if (!(await still())) break;
         try {
             await accept(c.id);
@@ -132,16 +130,18 @@ export async function acceptLetIn(me: string, candidates: readonly LetInCandidat
 }
 
 /**
- * For one round of mail across (outside-mail.ts `letIn`): whether a sender is let in and was never blocked, read once at the
- * round's first ask. False when the block list can't be read.
+ * For one round of mail across (outside-mail.ts `letIn`) at `community`, whose mailbox the round reads: whether a sender is
+ * let in and no block bars them ({@link neverLetInQuietly}), with that community's own block list read in
+ * this run (S7 design §2.4 rule 6: the same check guards the across gate). Read once at the round's first ask. False when
+ * the block lists can't be read, or that community's can't be.
  */
-export function letInFor(me: string): (key: string) => Promise<boolean> {
+export function letInFor(me: string, community: string): (key: string) => Promise<boolean> {
     const reader = letInReader(me);
-    let never: Promise<Set<string> | null> | null = null;
+    let lists: Promise<BlockLists | null> | null = null;
     return async (key) => {
-        never ??= keysNeverLetInQuietly();
-        const blocked = await never;
-        return !!blocked && !blocked.has(key) && (await reader([key])).has(key);
+        lists ??= blockListReadThisRun(me, community).then((read) => (read ? readBlockLists(me) : null));
+        const read = await lists;
+        return !!read && !neverLetInQuietly(read, [key]) && (await reader([key])).has(key);
     };
 }
 

@@ -228,7 +228,7 @@ export function ForumPage({ me, onOpenProfile, topicId = null, door = null, onDo
                 </button>
             )}
 
-            {gone && <p role="status" data-testid="forum-gone" className="m-0 text-sm" style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{gone}</p>}
+            {gone && <p role="status" data-testid="forum-gone" className="m-0 text-sm" style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>{gone}</p>}
             {sent && !waiting && <p className="m-0 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(FORUM_WORDS.sentForLook)}</p>}
             {waiting && (
                 <div data-testid="forum-mine-waiting" className="flex flex-col gap-2 p-3 rounded-lg" style={{ background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)' }}>

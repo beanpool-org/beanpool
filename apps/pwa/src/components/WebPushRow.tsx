@@ -1,7 +1,7 @@
 /**
  * Settings → Notifications' first row on the web (scratch/fable-design/DESIGN-web-notifications-fable.md §2.3, slice W2):
  * "On this device", and what this browser is: On, Off, or Blocked by your browser. Turn on asks the browser there and then,
- * at the tap, with the phone's card's reason above it (memory permissions-only-when-asked: never on load, no worker
+ * at the tap, with the join's reason above it (memory permissions-only-when-asked: never on load, no worker
  * installed before it); Turn off lets the
  * community go of this browser and ends the browser's subscription, and once on it says how long this browser can be told
  * (design §2.4: while Chrome runs, even with Safari closed, on this phone). Where push can't reach this browser (an iPhone
@@ -10,9 +10,9 @@
  * page's Tell me does. The switches under it now reach this browser too: the same ones as the phone.
  */
 import { useState } from 'react';
-import { PEEK_WORDS, t, word } from '@beanpool/core';
+import { PEEK_WORDS, notifyJoinWords, t, word } from '@beanpool/core';
 import {
-    NOTIFICATION_CARD_WORDS, TELL_ME_WORDS, cannotLines, grantedLine, pushEnv, pushPlace, turnOffWebPush, turnOnWebPush, webPushOrigin, webPushState,
+    TELL_ME_WORDS, cannotLines, grantedLine, pushEnv, pushPlace, turnOffFromSettings, turnOnWebPush, webPushOrigin, webPushState,
     type PushEnv, type WebPushState,
 } from '../lib/web-push';
 import { getNodeApiUrl } from '../lib/api';
@@ -24,6 +24,7 @@ export const WEB_PUSH_ROW_WORDS = {
     on: word('On', 'notifications on this device'),
     off: word('Off', 'notifications on this device'),
     blocked: word('Blocked by your browser'),
+    turnOn: word('Turn on'),
     turnOff: word('Turn off'),
     cannot: word("Notifications can't reach this browser. The bell still lists what happened."),
     /** An iPhone or iPad in Safari (iOS 16.4+): only BeanPool opened from the Home Screen gets notifications. */
@@ -40,6 +41,7 @@ export function WebPushRow({ identity, env }: { identity: BeanPoolIdentity; env?
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState(false);
 
+    const reason = notifyJoinWords({ kind: 'community' });
     const status = state === 'on' ? t(WEB_PUSH_ROW_WORDS.on) : state === 'blocked' ? t(WEB_PUSH_ROW_WORDS.blocked) : state === 'off' ? t(WEB_PUSH_ROW_WORDS.off) : null;
     // Where this browser stands, by feature tests (lib/web-push.ts pushPlace): how long it is told once on, and, where it
     // can't be, the words for it, after the app's store link on a phone.
@@ -61,7 +63,8 @@ export function WebPushRow({ identity, env }: { identity: BeanPoolIdentity; env?
     const turnOff = async () => {
         if (!origin) return;
         setBusy(true);
-        await turnOffWebPush(origin, identity);
+        // The member's choice, kept: Home's once card never asks again here (lib/web-push.ts turnOffFromSettings).
+        await turnOffFromSettings(origin, identity);
         setBusy(false);
         setState(webPushState(origin, identity.publicKey, envNow()));
     };
@@ -73,13 +76,14 @@ export function WebPushRow({ identity, env }: { identity: BeanPoolIdentity; env?
                     <div className="text-sm font-bold text-nature-900 dark:text-white">{t(WEB_PUSH_ROW_WORDS.name)}</div>
                     {status && <div className="text-xs text-nature-500 dark:text-nature-400" data-testid="web-push-status">{status}</div>}
                     {told && <div dir="auto" className="text-xs text-nature-600 dark:text-nature-300 mt-1 break-words" data-testid="web-push-told">{told}</div>}
-                    {/* The reason first, before the tap that asks (the phone's card's words). */}
-                    {state === 'off' && <div className="text-xs text-nature-600 dark:text-nature-300 mt-1">{t(NOTIFICATION_CARD_WORDS.body)}</div>}
+                    {/* The reason first, before the tap that asks: the join's own (core notifyJoinWords, slice N5a), never the
+                        old "Nothing else.", which was not true. */}
+                    {state === 'off' && <div dir="auto" className="text-xs text-nature-600 dark:text-nature-300 mt-1 break-words" data-testid="web-push-reason">{reason.never} {reason.only}</div>}
                 </div>
                 {state === 'off' && (
                     <button type="button" onClick={turnOn} disabled={busy}
                         className="min-h-[48px] px-4 rounded-xl font-bold text-sm bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer disabled:opacity-60 disabled:cursor-wait">
-                        {t(NOTIFICATION_CARD_WORDS.turnOn)}
+                        {t(WEB_PUSH_ROW_WORDS.turnOn)}
                     </button>
                 )}
                 {state === 'on' && (

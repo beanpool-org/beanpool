@@ -4436,8 +4436,6 @@
   "Held in trust and system notifications": "托管与系统通知",
   "When someone asks to join your community": "有人申请加入你的社区时",
   "Control which push notifications wake up your device. Changes are saved automatically.": "控制哪些推送通知可以唤醒你的设备。更改将自动保存。",
-  "Turn on notifications?": "开启通知？",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回复、发消息或申请加入时收到提醒。不会用于其他任何用途。",
   "{name} has no owner yet": "{name} 尚无所有者",
   "If you installed it, claim it with the one-time code on the server.": "如果是你安装的，请使用服务器上的一次性验证码认领它。",
   "Claim {name}": "认领 {name}",

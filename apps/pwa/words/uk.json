@@ -4946,8 +4946,6 @@
   "Held in trust and system notifications": "Сповіщення про траст та системні події",
   "When someone asks to join your community": "Коли хтось запитує вступ до вашої спільноти",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Виберіть, які push-сповіщення ви хочете отримувати. Зміни зберігаються автоматично.",
-  "Turn on notifications?": "Увімкнути сповіщення?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Щоб дізнаватися, коли хтось відповідає вам, пише повідомлення або просить приєднатися. Більше нічого.",
   "{name} has no owner yet": "{name} ще не має власника",
   "If you installed it, claim it with the one-time code on the server.": "Якщо ви його встановили, підтвердьте право власності одноразовим кодом на сервері.",
   "Claim {name}": "Заявити права на {name}",

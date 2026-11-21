@@ -17,7 +17,7 @@ import { Sentence } from '../components/Sentence';
 import { isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { useLanguage } from '../lib/useLanguage';
-import React, { useState, useRef, useEffect, useId } from 'react';
+import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
 import {
     checkIdentitySave, clearUnsentPendingJoin, completeInviteSent, createIdentityFromMnemonic, generateIdentity, identityFromMnemonic,
     importIdentity, loadInviteSent, markInviteSent, releaseInviteSent, settleRefusedInviteSend, updateCallsign, getMnemonic, hasMnemonic,
@@ -47,6 +47,8 @@ import { WebRekey } from '../components/WebRekey';
 import { rekeyCodeFromSearch } from '../lib/web-rekey';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { AddSignIn, startWayBackShown } from '../components/OneWayBack';
+import { NotifyAsk } from '../components/NotifyAsk';
+import { laterFromAsk, notifyJoinDueHere, notifyPrompterHere, turnOnFromAsk } from '../lib/web-push';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, PRIVATE_PREVIEW_MESSAGE, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { privatePreviewOn } from '../lib/visitor-lobby';
 import { nodeNameFor, withNodeName } from '../lib/member-name';
@@ -54,7 +56,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { AVATAR_PICTURE, COMMUNITY_CARD_WORDS, communityCardName, createPairingSession, currentLanguage, decryptPairingPayload, inviteForInviteBox, joinRuleLines, joinStepList, lowercaseRecoveryWords, nodeOrigin, notANameLine, postRulesFor, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
+import { AVATAR_PICTURE, COMMUNITY_CARD_WORDS, NOTIFY_CHOICE, NOTIFY_SHOWN, communityCardName, createPairingSession, currentLanguage, notifyBrowserOutcome, notifyJoinChoice, notifyJoinWords, type NotifyJoinPath, decryptPairingPayload, inviteForInviteBox, joinRuleLines, joinStepList, lowercaseRecoveryWords, nodeOrigin, notANameLine, postRulesFor, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
@@ -249,6 +251,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     // Joined through the open door: the member exists on the node, so the steps after it have nothing to redeem, and
     // there is no going back to a name screen.
     const [joinedByDoor, setJoinedByDoor] = useState(false);
+    // The join's last screen, notifications (slice N5a): up once the join's own work is done, where this browser can be asked.
+    const [notifyUp, setNotifyUp] = useState(false);
+    const [notifyBusy, setNotifyBusy] = useState(false);
+    const [notifyFailed, setNotifyFailed] = useState(false);
+    // Which way this join came in by, for core's rule and the screen's words: an open door (the global community's, or a
+    // local community's own), else an invite.
+    const notifyPath: NotifyJoinPath = joinedByDoor ? (localCommunity ? 'door' : 'global') : 'invite';
     const [joinedAsNote, setJoinedAsNote] = useState<string | null>(null);
     // The sign-in the door join also enrolled as this account's way back (G11-c), when the node stored the copy.
     const [signInRecovery, setSignInRecovery] = useState<JoinProvider | null>(null);
@@ -1217,18 +1226,65 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         keepWordsOnAccount(pendingIdentity.publicKey, 'Welcome');
     }
 
-    async function handleSeedConfirmed() {
-        if (!pendingIdentity) return;
-        if (await finishOnboarding()) onComplete(pendingIdentity);
+    /**
+     * The join's end, from its last step's button: the way back's Next, or for an account that came back with its 12 words
+     * (no way back to keep) the photo's or Your area's. How it Works left the join (design §3.1). The join's own work is
+     * finished first (finishOnboarding: the registration, the photo, the guide counted), so the notifications screen is the
+     * last thing answered and its Turn on reaches a community that holds the member. Then that screen where this browser can
+     * be asked (slice N5a; core's notifyJoinStep: web push reaches it, it can still ask, this account's notifications are
+     * not on here), else Home.
+     */
+    async function finishJoin() {
+        if (!pendingIdentity || !(await finishOnboarding())) return;
+        if (notifyJoinDueHere(notifyPath, pendingIdentity.publicKey)) {
+            // Counted once (N1c), never waited on. Kept on this browser's record as met (the day's ask, `joinAt`) only with
+            // its answer (lib/web-push.ts turnOnFromAsk, laterFromAsk): this join can't come back to the screen after a
+            // reload or a closed tab, so one left unanswered leaves Home's once card to ask, as the phone's join resumes on it.
+            void recordOnboardingEvent(NOTIFY_SHOWN);
+            setNotifyFailed(false);
+            setNotifyUp(true);
+            return;
+        }
+        onComplete(pendingIdentity);
     }
 
     /**
-     * The join's end, from its last step's button: the way back's Next, or for an account that came back with its 12 words
-     * (no way back to keep) the photo's or Your area's. How it Works left the join (design §3.1); a step after the way back
-     * (the web's notifications step, N5a) hangs off this one place.
+     * Off the notifications screen to Home, whatever the answer, with the answer counted once (N1c: on, later, no), unawaited.
+     * Once only: Later while Turn on's subscription is still out leaves at once, and that subscription's answer, when it
+     * comes, leaves nothing a second time.
      */
-    async function finishJoin() {
-        await handleSeedConfirmed();
+    const notifyLeft = useRef(false);
+    function leaveNotify(choice: 'on' | 'later' | 'no') {
+        if (notifyLeft.current) return;
+        notifyLeft.current = true;
+        void recordOnboardingEvent(NOTIFY_CHOICE, choice);
+        if (pendingIdentity) onComplete(pendingIdentity);
+    }
+
+    /**
+     * Turn on notifications: the browser's own prompt, only inside this tap (lib/web-push.ts turnOnFromAsk), then Home with
+     * whatever it answered. A prompt closed with no answer is a Later, never a no. Only a subscription the community did not
+     * take keeps the screen, saying so, with both buttons still there: Later is still the way on, and never waits on a slow
+     * community (the subscription's post has no time limit of its own).
+     */
+    function notifyTurnOn() {
+        if (!pendingIdentity || notifyBusy) return;
+        setNotifyBusy(true);
+        setNotifyFailed(false);
+        void turnOnFromAsk(pendingIdentity, currentLanguage(), 'join').then((r) => {
+            if (notifyLeft.current) return;
+            setNotifyBusy(false);
+            const outcome = notifyBrowserOutcome(r);
+            if (outcome) leaveNotify(notifyJoinChoice(outcome));
+            else setNotifyFailed(true);
+        });
+    }
+
+    /** Later: dated, never a no, and not final; then Home. */
+    function notifyLater() {
+        if (!pendingIdentity) return;
+        laterFromAsk(pendingIdentity.publicKey, 'join');
+        leaveNotify('later');
     }
 
     /** Your area saved or skipped: the way back, or the join's end where there is none. */
@@ -1546,7 +1602,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     const waitMinutes = Math.round(INVITE_SEND_CAN_LAND_MS / 60_000);
     // The dots this join shows (core join-steps.ts, the phone's rule): Your area only where the community syncs by area, the
     // way back not for an account that came back with its 12 words. The front door and Your invite have none.
-    const joinSteps = joinStepList({ area: byArea, wayBack: !wordsKnown });
+    // The notifications screen last, only where this browser will be asked (slice N5a: read, never asking, for its dot).
+    const notifyDot = useMemo(() => notifyUp || notifyJoinDueHere(notifyPath, pendingIdentity?.publicKey ?? null), [notifyUp, notifyPath, pendingIdentity]);
+    const joinSteps = joinStepList({ area: byArea, wayBack: !wordsKnown, notify: notifyDot });
     // The front door's "No invite? Look around": the lobby's listings where the page opened over them, else the global
     // community this community names on its card (none where it names none), else, at a node too old to send a card, the
     // global community as its old "No invite?" box linked it. Nothing while the card is on its way.
@@ -1573,6 +1631,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         : [{ label: t('Ask a community to join'), testId: 'welcome-ask-to-join', onClick: askHere }];
     // Your name's band names the community only for the code its check was asked about.
     const greet = greeting && greeting.community && greeting.code === normaliseInviteCode(inviteCode) ? greeting : null;
+    // The notifications screen's words (core's, the phone's): the community and inviter an invite's check named, the open
+    // door's own community, or the global community's line; the line under the button is the browser's, or none where it
+    // already allows this site.
+    const notifyWords = notifyUp ? notifyJoinWords({
+        kind: notifyPath === 'global' ? 'global' : 'community',
+        community: notifyPath === 'invite' ? greet?.community : notifyPath === 'door' && card ? communityCardName(card, { t }) : null,
+        inviter: notifyPath === 'invite' ? greet?.inviter : null,
+        prompter: notifyPrompterHere(pendingIdentity?.publicKey ?? null),
+    }) : null;
     const backToRequest = onBackToRequest ? (
         <button type="button" data-testid="welcome-back-to-request" onClick={onBackToRequest}
             className="block w-full min-h-[48px] px-4 py-3 mb-4 rounded-xl text-base font-bold bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer">
@@ -1722,6 +1789,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     ? t('← Back to my request')
                                     : heldIdentity.callsign.trim() ? t('Open {name}', { name: heldIdentity.callsign.trim() }) : t('Open it')}
                             </button>
+                        </>
+                    ) : hasMnemonic(pendingIdentity) && notifyUp && notifyWords ? (
+                        /* ===== THE JOIN'S LAST SCREEN: HEAR FROM YOUR COMMUNITY (slice N5a, the phone's N1j) =====
+                           ‹ goes back to the step before, whose button brings this screen again. */
+                        <>
+                            <StepDots steps={joinSteps} step="notify" busy={notifyBusy} onBack={() => { setNotifyUp(false); setNotifyFailed(false); }} />
+                            <NotifyAsk form="step" words={notifyWords} busy={notifyBusy} failed={notifyFailed} onTurnOn={notifyTurnOn} onLater={notifyLater} />
                         </>
                     ) : hasMnemonic(pendingIdentity) && renaming ? (
                         /* ===== STEP 1 AGAIN: THE NAME, ON THE ACCOUNT THE INVITE MADE (card invite-back-step) =====

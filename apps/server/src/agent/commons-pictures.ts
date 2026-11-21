@@ -62,7 +62,8 @@ export function commonsFileName(raw: unknown): string | null {
     const m = /^\/wiki\/File:(.+)$/.exec(u.pathname);
     if (!m) return null;
     let name: string;
-    try { name = decodeURIComponent(m[1]); } catch { return null; }
+    // NFC as MediaWiki normalises a request: a decomposed spelling of a real file's name is the same file (review of #3351).
+    try { name = decodeURIComponent(m[1]).normalize('NFC'); } catch { return null; }
     name = name.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
     if (!name || NOT_IN_A_NAME.test(name) || Buffer.byteLength(name) > NAME_MAX_BYTES) return null;
     const [first, ...rest] = Array.from(name);

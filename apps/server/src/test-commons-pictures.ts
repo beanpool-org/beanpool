@@ -230,6 +230,8 @@ async function main(): Promise<void> {
         'https://commons.wikimedia.org/wiki/File:Przełęcz Karkonoska - panorama.jpg',
         'https://commons.wikimedia.org/wiki/File:przełęcz_Karkonoska_-_panorama.jpg?uselang=pl#top',
         '  https://COMMONS.wikimedia.org/wiki/File:Przełęcz%20Karkonoska%20-%20panorama.jpg  ',
+        // Decomposed: e + U+0328 (combining ogonek) for ę, as some keyboards and copy-pastes send it; MediaWiki reads it as NFC.
+        'https://commons.wikimedia.org/wiki/File:Prze\u0142e\u0328cz_Karkonoska_-_panorama.jpg',
     ];
     assert(spellings.every((s) => `File:${commonsFileName(s)}` === panorama.title),
         `B. spaces, underscores, percent signs, non-Latin letters, a capital: one name (${spellings.map(commonsFileName).join(' | ')})`);

@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HOME_DEFAULT_LIST } from '../home-frame.js';
+import { COMMUNITY_CARD_WORDS } from '../community-card.js';
 import { COMMUNITY_WELCOME_CARD_WORDS, WELCOME_TILE_WORDS } from '../home-welcome.js';
 import { NOTIFY_TRUE_WORDS } from '../notify-ask.js';
 import { t } from '../words.js';
@@ -87,10 +88,26 @@ describe("the guide's pages on joining in a browser: the web's front door and do
             '**Used BeanPool before?**', "**I'm New Here**", "**I'm Already a Member →**", '**Restore Existing Identity**',
             '**Create Identity & Join →**', '**How it Works**', 'a short tour', '(in a web browser, **← Back**)', '(in the web app, **Next**)',
         ];
-        // The community's card (routes/community-card.ts), at a community's bare address, keeps its own doors: the guide names them.
-        for (const door of ['**Ask to join**', '**I have an invite**', '**Already a member**']) expect(communities).toContain(door);
         for (const [name, text] of Object.entries({ joining, webApp, communities, recovery })) {
             for (const label of gone) expect(`${name}: ${text.includes(label) ? label : ''}`).toBe(`${name}: `);
+        }
+    });
+
+    it("the community's card keeps its own doors, named as bullets in the card's own section, and only there", () => {
+        // The card (apps/server routes/community-card.ts renderCommunityCard), at a community's bare address: Ask to join where
+        // it takes requests, Join where anyone can join (in place of I have an invite), Already a member, and Look around the
+        // global community where it names one. Read from the bullets of "Visiting a community's address" alone, so the same
+        // labels in the app's paragraph below them (or anywhere else on the page) can't stand in for a missing bullet.
+        const W = COMMUNITY_CARD_WORDS;
+        const section = page('getting-started/communities.md').split(/^## /m).find((part) => part.startsWith("Visiting a community's address"));
+        expect(section).toBeDefined();
+        const bullets = section!.split('\n').filter((line) => line.startsWith('- ')).map((line) => /^- \*\*(.+?)\*\*/.exec(line)?.[1]);
+        expect(bullets).toEqual([t(W.ask), t(W.haveInvite), t(W.join), t(W.member), t(W.lookAround).replace(/^\p{Extended_Pictographic}\s*/u, '')]);
+        for (const fact of [W.requests, W.invite, W.open]) expect(section!.replace(/\s+/g, ' ')).toContain(`**${t(fact)}**`);
+        // **Already a member** is the card's door alone: the front door's way back is **I've used BeanPool before** (FrontDoor,
+        // W1), so a page on joining, the web app or getting an account back never names it as a button.
+        for (const [name, text] of Object.entries({ joining, webApp, recovery })) {
+            expect(`${name}: ${text.includes(`**${t(W.member)}**`) ? 'names it' : ''}`).toBe(`${name}: `);
         }
     });
 

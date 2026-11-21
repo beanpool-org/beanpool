@@ -17,11 +17,14 @@ import { buildSignedHeaders } from './crypto';
 import type { NodeFeatures } from './node-profile';
 import { noteAreaSent } from './nearby-area';
 
-export type ProfileStep = 'name' | 'avatar' | 'area' | 'guide';
+export type ProfileStep = 'name' | 'avatar' | 'area';
 
-/** The wizard's steps: the area step only on a community that syncs by area, so a local community's is unchanged. */
+/**
+ * The wizard's steps: the area step only on a community that syncs by area, so a local community's ends at the photo. No
+ * How it Works at the end: it left the join on the phone (DESIGN-onboarding-home-landing-fable.md §3.1, slice S5b).
+ */
 export function profileSteps(features: NodeFeatures | null | undefined): ProfileStep[] {
-    return nearbyListingsOn(features) ? ['name', 'avatar', 'area', 'guide'] : ['name', 'avatar', 'guide'];
+    return nearbyListingsOn(features) ? ['name', 'avatar', 'area'] : ['name', 'avatar'];
 }
 
 /** Whether this community gives each member the listings near their area (the worldwide one). Not said = no. */

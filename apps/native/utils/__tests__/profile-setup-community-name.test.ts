@@ -68,7 +68,6 @@ const PICK = 'bundled://bean-green';
 vi.mock('../../components/AvatarPickerSheet', () => ({
     AvatarPickerSheet: ({ onSelectImage }: { onSelectImage: (uri: string) => void }) => createElement('button', { 'data-testid': 'pick-photo', onClick: () => onSelectImage('bundled://bean-green') }, 'pick'),
 }));
-vi.mock('../../components/OnboardingGuide', () => ({ OnboardingGuide: () => createElement('div', { 'data-testid': 'guide' }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span') }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => ({ profile: 'local', features: { beans: true, invites: true }, checkedAt: new Date().toISOString() }) }));
 const calls = vi.hoisted(() => ({ updateCallsign: [] as string[], updateMemberProfile: [] as Array<{ pubkey: string; data: Record<string, unknown> }> }));
@@ -175,7 +174,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         expect(text()).not.toMatch(/Rosa(?! 2)/);
 
         await pickPhoto();
-        await click('Next →');
         await click('Done');
 
         // The photo goes; the name the wizard only showed does not (it would have 409'd as "Rosa", or renamed them).
@@ -195,7 +193,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         await typeName('Rosa Bean');
         await click('Next →');
         await pickPhoto();
-        await click('Next →');
         await click('Done');
 
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK, callsign: 'Rosa Bean' }]);
@@ -209,7 +206,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         expect(text()).toContain('Choose your look');
         expect(text()).toContain('Rosa');
         await pickPhoto();
-        await click('Next →');
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK }]);
         expect(calls.updateCallsign).toEqual([]);
@@ -224,7 +220,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         await render();
         expect(text()).toContain('Rosa');
         await pickPhoto();
-        await click('Next →');
         // The first sync lands while the member is on the other steps: the node registered them as "Rosa 2" (a join clash).
         community.row = { public_key: KEY, callsign: 'Rosa 2', avatar_url: null };
         await click('Done');
@@ -242,7 +237,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         expect(text()).toContain('Choose your look');
         expect(text()).toContain('Rosa Door');
         await pickPhoto();
-        await click('Next →');
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK }]);
         expect(calls.updateCallsign).toEqual(['Rosa Door']);
@@ -253,7 +247,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         await keepPendingProfileChange(NODE, KEY, { callsign: 'Rosa Parked' });
         await render();
         await pickPhoto();
-        await click('Next →');
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK, callsign: 'Rosa Parked' }]);
         expect(await pendingProfileChange(NODE, KEY)).toBeNull();
@@ -266,7 +259,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         responseBody = { error: 'callsign_taken', message: 'That name was just taken — please pick another.' };
         await render();
         await pickPhoto();
-        await click('Next →');
         await click('Done');
         const pending = await pendingProfileChange(NODE, KEY);
         expect(pending?.refusedCallsign).toBe('Rosa Parked');
@@ -283,7 +275,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         responseBody = { error: 'callsign_link', message: NAME_BOX_WORDS.webLink, code: 'callsign_link' };
         await render();
         await pickPhoto();
-        await click('Next →');
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK, callsign: LINK }]);
         expect((await pendingProfileChange(NODE, KEY))?.refusedCallsign).toBe(LINK);
@@ -299,7 +290,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         responseBody = { error: 'concurrent_mutation', message: 'Conflict, please retry.' };
         await render();
         await pickPhoto();
-        await click('Next →');
         await click('Done');
         const pending = await pendingProfileChange(NODE, KEY);
         expect(pending?.refusedCallsign).toBeUndefined();
@@ -310,7 +300,6 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         status = 0;
         await render();
         await pickPhoto();
-        await click('Next →');
         await click('Done');
         expect(await pendingProfileChange(NODE, KEY)).toEqual({ publicKey: KEY, avatar: PICK });
     });

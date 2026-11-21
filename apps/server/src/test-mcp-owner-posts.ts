@@ -6,6 +6,8 @@
  *   1. An owner's assistant makes each kind: the row (its author, `created_via = 'assistant:<grant id>'`), its photo stored at
  *      most 800 px whatever size it was sent, the search index finds it, the listings' version moves (the phones' sync mark),
  *      the standby copy's payload carries created_via, the AGENT log names the post, and the answer carries no key.
+ *      Every tool that takes photos (each create, update_post, the group and enterprise ones) says in each photo field "Only
+ *      pictures the member took, owns or may use." (DESIGN-learn-web-pictures-fable.md Question 4, slice 1; Marty, 22 Nov 2026).
  *   1b. Its photos go through the node's own image store (storage/image-store.ts) exactly as an upload's do, never a file
  *      written beside it or a link: on disk (the default), and on the S3-compatible store a node like global keeps in R2
  *      (IMAGE_S3_*; here the in-process stand-in, fake-s3-test-harness.ts): each photo an object at posts/<post id>/…, the
@@ -217,6 +219,23 @@ async function main(): Promise<void> {
         const names = (await client.listTools()).tools.map(t => t.name);
         assert(['create_offer', 'create_need', 'create_event', 'create_enterprise_listing', 'my_enterprises'].every(n => names.includes(n)),
             `an owner's assistant lists the four creates and my_enterprises (${names.join(', ')})`);
+        // The Market's photo rule (DESIGN-learn-web-pictures-fable.md Question 4 and §9 slice 1; Marty, 22 Nov 2026: "All six of
+        // Fable's picks"): every tool that takes photos says whose they must be, in each of its photo fields, one row a tool. The
+        // photos themselves are taken exactly as before (the posts below send `photos`; test-mcp-owner-photos sends photo_urls and
+        // photo_ids). knowledge_draft is not one of these: Learn has its own, stricter rule (test-mcp-knowledge pins it).
+        const OWN_PHOTOS = 'Only pictures the member took, owns or may use.';
+        const PHOTO_FIELDS = ['photo_urls', 'photo_ids', 'photos'];
+        const PHOTO_TOOLS = ['create_offer', 'create_need', 'create_event', 'create_enterprise_listing', 'update_post', 'create_group', 'create_group_post', 'create_enterprise'];
+        const listed1 = (await client.listTools()).tools;
+        const propsOf = (n: string) => ((listed1.find(t => t.name === n)?.inputSchema as any)?.properties ?? {}) as Record<string, { description?: string }>;
+        for (const n of PHOTO_TOOLS) {
+            const props = propsOf(n);
+            const lacking = PHOTO_FIELDS.filter(f => !(props[f]?.description ?? '').includes(OWN_PHOTOS));
+            assert(lacking.length === 0, `${n}: each photo field says "${OWN_PHOTOS}" (lacking: ${lacking.join(', ') || 'none'})`);
+        }
+        const takesPhotos = listed1.filter(t => t.name !== 'knowledge_draft' && PHOTO_FIELDS.some(f => f in propsOf(t.name))).map(t => t.name).sort();
+        assert(JSON.stringify(takesPhotos) === JSON.stringify([...PHOTO_TOOLS].sort()),
+            `every tool that takes photos is one of the rows above, so none goes without the rule (${takesPhotos.join(', ')})`);
         const big = await jpeg(1600, 1200);
         const small = await jpeg(640, 480);
         const versionBefore = getPostsVersion();

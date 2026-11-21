@@ -11,6 +11,8 @@
  *     acts for; no push goes to the owners and admins (they asked for it).
  *  3. Refused in words, nothing written: no source, an empty list of sources, no `about`, an `about` outside place, service and
  *     how_to, a photo field (photos, photo_urls), and a fix (`fix_of`: answered by a later version of this server); a standby.
+ *     A picture is refused in words that say why and what to do instead (DESIGN-learn-web-pictures-fable.md §6.6 "Now", §9
+ *     slice 1; Marty, 22 Nov 2026: "All six of Fable's picks").
  *  4. Limits: 10 waiting and 20 in 24 hours per connection, 30 waiting from all assistants together; a member's suggestion still
  *     goes in while 30 wait. knowledge_draft_withdraw takes back its own (it still counts for the day), never another's.
  *  5. Approved: the page is the approver's, marked `assistant-draft:<grant>`, read as gathered; my_posts, remove_post,
@@ -28,10 +30,17 @@
  *     taken back or disconnected: its pictures are gone. A table: Approve keeping all (sent back, or not sent), removing one,
  *     removing all, Edit first, Edit first with the checker's own added -> the pictures the page shows; an address or another
  *     page's photo sent at approval is refused and nothing is published.
+ *     Its words (slice 1 of DESIGN-learn-web-pictures-fable.md): the tool's description and photo_ids' each carry the rule word
+ *     for word (whose a picture must be, why a web picture is refused, what to tell the member, that the checker can add their
+ *     own), never the Market's "may use"; every picture refusal says why and what to do instead; the draft prompt says the rule
+ *     and the two ways that work; and nothing is fetched for a draft (ssrfSafeFetch's test hook counts every host it is asked).
  *
  * Run: SERVER_SUITES_ONLY=test-mcp-knowledge TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+// ssrfSafeFetch's test hook (engine/pulse-resolver.ts): section 9 counts every host a photo fetch would look up, so a draft is
+// shown to fetch nothing. Double-locked: nothing in production sets it.
+process.env.BEANPOOL_SSRF_TEST_HOOK = '1';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
@@ -58,7 +67,7 @@ import { publishKnowledge, markKnowledgeOutdated } from './engine/knowledge.js';
 import { suggestKnowledge } from './engine/knowledge-drafts.js';
 import { REMOVE_ALL_CONFIRM } from './agent/owner-posts.js';
 import { resetAgentLimits } from './agent/limits.js';
-import { uploadedPhotosWaiting } from './agent/owner-photos.js';
+import { __usePhotoFetchResolverForTests, fetchPhoto, uploadedPhotosWaiting } from './agent/owner-photos.js';
 import { consentWords } from './agent/oauth-route.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -122,6 +131,22 @@ const DRAFT = {
     place: 'The post office stop',
     language: 'en',
 };
+/**
+ * Learn's picture rule, word for word (DESIGN-learn-web-pictures-fable.md §6.6 "Now", §9 slice 1; Marty, 22 Nov 2026): whose a
+ * picture must be, why one from the web is refused, what to tell the member, and that whoever checks can add their own.
+ */
+const PICTURE_RULE_WORDS = 'Only pictures the member took or owns. A picture found on the web belongs to someone else, and this community would be '
+    + 'the one publishing it, so the server takes none: no stock sites, no search results. Say so to the member. A page without a picture '
+    + "shows its topic's picture, and whoever checks it can add their own in Edit first.";
+/** Why, and what to do instead: the words every refusal of a web picture ends with. */
+const WEB_PICTURE_WHY = 'A picture found on the web belongs to someone else, and this community would be the one publishing it, so the server '
+    + 'takes none: no stock sites, no search results. Say so to the member.';
+const PICTURE_INSTEAD = "Instead, upload the member's own photo with photo_upload_link (or POST /mcp/photos) and give the photoId it answers in "
+    + "photo_ids. Or file the draft without one: a page without a picture shows its topic's picture, and whoever checks it can add their own in Edit first.";
+/** A picture by its address, written into the call, or under another name than photo_ids: refused in these words, whole. */
+const NO_WEB_PICTURE_WORDS = `A draft takes no picture from the web and none written into the call. ${WEB_PICTURE_WHY} ${PICTURE_INSTEAD}`;
+/** An address given in photo_ids: refused naming the upload door. */
+const ADDRESS_IN_IDS_WORDS = `photo_ids #1 is an address: this server never fetches a picture for a draft. ${WEB_PICTURE_WHY} ${PICTURE_INSTEAD}`;
 const knowledgePosts = () => (db.prepare("SELECT COUNT(*) AS n FROM posts WHERE type = 'knowledge'").get() as { n: number }).n;
 const draftCount = () => (db.prepare('SELECT COUNT(*) AS n FROM knowledge_drafts').get() as { n: number }).n;
 const draftRow = (id: string) => db.prepare('SELECT * FROM knowledge_drafts WHERE id = ?').get(id) as any;
@@ -194,6 +219,14 @@ async function main(): Promise<void> {
         assert(/draft Local knowledge for an owner or admin to check; a draft shows to nobody until a person approves it/.test(welcome)
             && /say you drafted it, never that it is published/i.test(welcome),
             `1. the welcome says what a draft is (${welcome.slice(welcome.indexOf('Local knowledge') - 40, welcome.indexOf('Local knowledge') + 200)})`);
+        // Its pictures (slice 1): an assistant that may post (so may upload) is told whose, and why one from the web is refused; one
+        // that can't upload brings none.
+        const ticked = a.getInstructions() ?? '';
+        assert(ticked.includes('write in your own words with 1 to 5 sources, bring only pictures Owen took or owns (never one found on the web: it belongs '
+            + 'to someone else, and this community would be the one publishing it), and write nothing about private people.')
+            && welcome.includes('write in your own words with 1 to 5 sources, bring no pictures, and write nothing about private people.')
+            && (c.getInstructions() ?? '').includes('bring no pictures,'),
+            `1. the welcome: the ticked owner's brings only Owen's own pictures, and why; the unticked and the admin's bring none (${ticked.slice(ticked.indexOf('1 to 5 sources'), ticked.indexOf('1 to 5 sources') + 200)})`);
         const prompts = (await b.listPrompts()).prompts.map((p) => p.name);
         assert(prompts.includes('draft-local-knowledge') && prompts.includes('check-old-knowledge'), `1. the two prompts are in the menu (${prompts.join(', ')})`);
         const dp = await b.getPrompt({ name: 'draft-local-knowledge', arguments: { subject: 'the bus timetable' } });
@@ -201,6 +234,13 @@ async function main(): Promise<void> {
         assert(/Find out about the bus timetable for .+ from public pages, with your own web search: this server reaches no other server\./.test(dpText)
             && /Check knowledge_list first/.test(dpText) && /Give 1 to 5 sources\. Nothing about private people\. File it with knowledge_draft and tell me it is waiting for me in the app\./.test(dpText),
             `1. draft-local-knowledge asks for the assistant's own search, sources, no private people (${dpText.slice(0, 160)}…)`);
+        // Its pictures (slice 1): the rule with its why, and the two ways that work (one I took or own, uploaded; or none, and the
+        // checker adds their own).
+        assert(dpText.includes('A picture only if I give you one I took or own: upload it with photo_upload_link and add its photoId. '
+            + 'Never a picture found on the web, from stock sites or search results: it belongs to someone else, and this community would be the one '
+            + "publishing it, so the server takes none. Without one, the page shows its topic's picture, and whoever checks it sees each picture "
+            + 'first and can add their own in Edit first.'),
+            `1. draft-local-knowledge says the picture rule, why, and the two ways that work (${dpText.slice(dpText.indexOf('A picture'), dpText.indexOf('A picture') + 160)}…)`);
         // Who else: a member with no role, or a moderator, has no assistant at all (agent/mcp-route.ts: 401), so none of the five.
         const melToken = issueAutomationToken({ name: "Mel's Claude", scope: 'agent', expiresAt: Date.now() + 86_400_000, createdBy: mel.pk });
         const melList = melToken.ok ? await fetch(`${BASE}/mcp`, {
@@ -269,7 +309,8 @@ async function main(): Promise<void> {
         // ── 3. Refused in words, nothing written ────────────────────────────────────────────────────
         console.log('── 3. refusals ──');
         const before3 = draftCount();
-        const refusals: Array<[string, Record<string, unknown>, RegExp]> = [
+        // A RegExp, or a string the refusal must be word for word.
+        const refusals: Array<[string, Record<string, unknown>, RegExp | string]> = [
             ['no source', { ...DRAFT, sources: undefined }, /^Local knowledge from the web needs at least one source link\.$/],
             ['an empty list of sources', { ...DRAFT, sources: [] }, /^Local knowledge from the web needs at least one source link\.$/],
             ['six sources', { ...DRAFT, sources: Array.from({ length: 6 }, (_, i) => ({ url: `https://s${i}.example/`, title: 'x' })) }, /At most 5 links/],
@@ -278,8 +319,8 @@ async function main(): Promise<void> {
             ['about a person', { ...DRAFT, about: 'person' }, /^Local knowledge is about places, services and how to do things, never about a private person\.$/],
             // Pictures (16 Nov, Damo's ask, Marty: "through the upload link only"): a picture in the call or by its address is still
             // refused, now pointing to the one door (section 9 has the rest).
-            ['photos', { ...DRAFT, photos: ['data:image/png;base64,iVBORw0KGgo='] }, /^A draft takes no picture from the web and none written into the call: .*photo_upload_link.*photo_ids/],
-            ['photo_urls', { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, /^A draft takes no picture from the web and none written into the call: .*photo_upload_link.*photo_ids/],
+            ['photos', { ...DRAFT, photos: ['data:image/png;base64,iVBORw0KGgo='] }, NO_WEB_PICTURE_WORDS],
+            ['photo_urls', { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, NO_WEB_PICTURE_WORDS],
             ['a topic not on the list', { ...DRAFT, topic: 'gossip' }, /Pick a topic/],
             ['a fix', { ...DRAFT, fix_of: 'some-page', note: 'The bus moved' }, /later version of this server/],
             // Learn's tags (16 Nov): free tags only, under the Market's rule, as a member's; library ids refused as the node refuses
@@ -294,7 +335,8 @@ async function main(): Promise<void> {
         ];
         for (const [what, args, words] of refusals) {
             const r = await c.callTool({ name: 'knowledge_draft', arguments: args });
-            assert(r.isError === true && words.test(errorText(r)) && draftCount() === before3, `3. ${what}: refused in words, nothing written (${errorText(r)})`);
+            const said = errorText(r);
+            assert(r.isError === true && (typeof words === 'string' ? said === words : words.test(said)) && draftCount() === before3, `3. ${what}: refused in words, nothing written (${said})`);
         }
         setNodeRole('backup');
         const onStandby = await c.callTool({ name: 'knowledge_draft', arguments: DRAFT });
@@ -520,19 +562,30 @@ async function main(): Promise<void> {
         const schema9 = (await a.listTools()).tools.find((x) => x.name === 'knowledge_draft');
         const props9 = (schema9?.inputSchema as { properties?: Record<string, { description?: string }> } | undefined)?.properties ?? {};
         const said9 = `${schema9?.description ?? ''} ${props9.photo_ids?.description ?? ''}`;
-        assert(!!props9.photo_ids && !props9.photo_urls && !props9.photos && /photo_upload_link/.test(said9) && /the member took or owns/.test(said9)
-            && /never one found on the web/.test(said9) && /checker sees each/.test(said9),
-            `9. the tool says it plainly: the upload door, only the member's own, never the web, the checker sees each (${(props9.photo_ids?.description ?? '').slice(0, 160)})`);
+        assert(!!props9.photo_ids && !props9.photo_urls && !props9.photos && /photo_upload_link/.test(said9) && /checker sees each/.test(said9),
+            `9. the tool says it plainly: the upload door, the checker sees each (${(props9.photo_ids?.description ?? '').slice(0, 160)})`);
+        // Slice 1 (DESIGN-learn-web-pictures-fable.md §6.6 "Now"): each of the two says the whole rule, word for word, and never the
+        // Market's "may use": a Learn page takes no picture by permission (Question 3, "no for now").
+        for (const [where, text] of [['the description', schema9?.description ?? ''], ["photo_ids' description", props9.photo_ids?.description ?? '']] as const) {
+            const at = Math.max(0, text.indexOf('Only pictures'));
+            assert(text.includes(PICTURE_RULE_WORDS) && !/may use/.test(text),
+                `9. ${where} carries the rule: whose, why a web picture is refused, what to tell the member, the checker adds their own (${text.slice(at, at + 140)}…)`);
+        }
 
         // Refused in words, nothing written, the upload still usable.
         resetAgentLimits();
         const keep1 = await uploadAs(A.token, WIDE);
         const before9 = draftCount();
-        const picRefusals: Array<[string, Client, Record<string, unknown>, RegExp]> = [
-            ['photo_urls', a, { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, /^A draft takes no picture from the web and none written into the call: /],
-            ['a picture written into the call', a, { ...DRAFT, photos: [await jpeg(640, 480)] }, /^A draft takes no picture from the web and none written into the call: /],
-            ['a picture by another name', a, { ...DRAFT, image: 'https://pics.example/a.jpg' }, /^A draft takes no picture from the web and none written into the call: /],
-            ['an address in photo_ids', a, { ...DRAFT, photo_ids: ['https://pics.example/a.jpg'] }, /^photo_ids #1 is an address: this server never fetches a picture for a draft\./],
+        // Every host a photo fetch is asked to look up, through ssrfSafeFetch's test hook: none may be, for a draft.
+        const looked: string[] = [];
+        __usePhotoFetchResolverForTests(async (host) => { looked.push(host); throw new Error('this suite fetches nothing'); });
+        // A RegExp, or a string the refusal must be word for word.
+        const picRefusals: Array<[string, Client, Record<string, unknown>, RegExp | string]> = [
+            ['photo_urls', a, { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, NO_WEB_PICTURE_WORDS],
+            ['a picture written into the call', a, { ...DRAFT, photos: [await jpeg(640, 480)] }, NO_WEB_PICTURE_WORDS],
+            ['a picture by another name', a, { ...DRAFT, image: 'https://pics.example/a.jpg' }, NO_WEB_PICTURE_WORDS],
+            ['a thumbnail', a, { ...DRAFT, thumbnail: 'https://pics.example/a.jpg' }, NO_WEB_PICTURE_WORDS],
+            ['an address in photo_ids', a, { ...DRAFT, photo_ids: ['https://pics.example/a.jpg'] }, ADDRESS_IN_IDS_WORDS],
             ['a picture written into photo_ids', a, { ...DRAFT, photo_ids: [await jpeg(640, 480)] }, /^photo_ids #1 is a picture written into the call: /],
             ['photo_ids not a list', a, { ...DRAFT, photo_ids: keep1 }, /^photo_ids is a list/],
             ['four pictures', a, { ...DRAFT, photo_ids: [keep1, keep1, keep1, keep1] }, /^At most 3 pictures a draft/],
@@ -543,9 +596,16 @@ async function main(): Promise<void> {
         ];
         for (const [what, client, args, words] of picRefusals) {
             const r = await client.callTool({ name: 'knowledge_draft', arguments: args });
-            assert(r.isError === true && words.test(errorText(r)) && draftCount() === before9 && uploadedPhotosWaiting(A.id) === 1,
-                `9. ${what}: refused in words, nothing written, the upload still there (${errorText(r)})`);
+            const said = errorText(r);
+            assert(r.isError === true && (typeof words === 'string' ? said === words : words.test(said)) && draftCount() === before9
+                && uploadedPhotosWaiting(A.id) === 1 && looked.length === 0,
+                `9. ${what}: refused in words, nothing written, nothing fetched, the upload still there (${said})`);
         }
+        // The counter does see a fetch: the same grant's Market photo goes through the same hook (agent/owner-photos.ts fetchPhoto).
+        const market9 = await fetchPhoto(A.id, 'https://pics.example/a.jpg', 1);
+        assert(!market9.ok && JSON.stringify(looked) === JSON.stringify(['pics.example']),
+            `9. the hook counts a Market photo's fetch, so the drafts' none is real (${JSON.stringify(looked)})`);
+        __usePhotoFetchResolverForTests(null);
 
         // Declined, taken back, disconnected: the pictures go with the draft.
         const declined9 = await call(otto, 'POST', `/api/knowledge/drafts/${wp?.draftId}/no`, { reason: 'other' });

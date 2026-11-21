@@ -75,10 +75,15 @@ export function welcomeInstructions(f: WelcomeFacts): string {
             + ' Tag a post from the library first (tags, ids from tags_search); free_tags are only for what the library lacks; never write tags into a description.'
         : '';
     // Local knowledge K6: its own sentence, so the list of what it can do (and every welcome pinned word for word) stays as it was.
+    // Its pictures (DESIGN-learn-web-pictures-fable.md §6.6 "Now", slice 1; Marty, 22 Nov 2026): only an assistant that posts can
+    // upload one (agent/knowledge.ts, the door's rule), and only the member's own, with the reason a web picture is refused.
+    const draftPictures = f.canPost
+        ? `bring only pictures ${f.callsign} took or owns (never one found on the web: it belongs to someone else, and this community would be the one publishing it)`
+        : 'bring no pictures';
     const knowledge = f.canDraftKnowledge
         ? ' You can also draft Local knowledge for an owner or admin to check; a draft shows to nobody until a person approves it in the app '
             + '(Learn, To check), with its sources beside it: say you drafted it, never that it is published. Find things out with your own web '
-            + 'search (this server reaches no other server), write in your own words with 1 to 5 sources, bring no pictures, and write nothing about private people.'
+            + `search (this server reaches no other server), write in your own words with 1 to 5 sources, ${draftPictures}, and write nothing about private people.`
         : '';
     return [
         `You are connected to "${f.community}", a BeanPool community server at ${f.url}, acting for ${f.callsign}, who is an ${f.role} there. `
@@ -209,8 +214,11 @@ export const PROMPTS: PromptDef[] = [
         body: (a, f) => `Find out about ${arg(a, 'subject', 'what I tell you', 120)} for ${f.community} from public pages, with your own web search: `
             + "this server reaches no other server. Check knowledge_list first so you don't repeat what is there. Write it short, in your own "
             + 'words, the answer first; quote at most one sentence, in quotation marks. Give 1 to 5 sources. Nothing about private people. '
+            // Its pictures (DESIGN-learn-web-pictures-fable.md §6.6 "Now", slice 1): the rule, why, and the two ways that work.
             + 'File it with knowledge_draft and tell me it is waiting for me in the app. A picture only if I give you one I took or own: '
-            + 'upload it with photo_upload_link and add its photoId, never a picture found on the web. Whoever checks it sees each picture first.',
+            + 'upload it with photo_upload_link and add its photoId. Never a picture found on the web, from stock sites or search results: it '
+            + 'belongs to someone else, and this community would be the one publishing it, so the server takes none. Without one, the page shows '
+            + "its topic's picture, and whoever checks it sees each picture first and can add their own in Edit first.",
     },
     {
         name: 'check-old-knowledge',

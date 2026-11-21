@@ -686,7 +686,7 @@ describe('the way back hands over: no notifications screen where it is not due',
 describe("back to the notifications screen from the owner's card: its answers work again", () => {
     /** What is drawn, for a wait's message if it fails: the testIDs on screen, the last lines said, the phone's calls. */
     const drawn = () => JSON.stringify({
-        ids: [...host!.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')).slice(0, 16),
+        ids: Array.from(host!.querySelectorAll('[data-testid]'), (e) => e.getAttribute('data-testid')).slice(0, 16),
         said: alerts.said.slice(-4), os: os.order, pushed: nav.pushed, home: atHome(),
     });
 

@@ -106,9 +106,15 @@ export function useNotifyLine(publicKey: string | null | undefined, showing = tr
         taken.current = true;
         const askedIn = visit.current;
         if (!who.current) who.current = await loadIdentity().catch(() => null);
-        // The account that can turn notifications on is this one, or no line: Tell me would have nothing to sign with.
-        const ok = who.current?.publicKey === publicKey && mounted.current && showingNow.current && visit.current === askedIn
-            && offerNamedLineHere(publicKey, next.kind);
+        // The account that can turn notifications on is this one, or no line: Tell me would have nothing to sign with. A
+        // failure reading the browser or the record only means no line, as on the phone.
+        let ok = false;
+        try {
+            ok = who.current?.publicKey === publicKey && mounted.current && showingNow.current && visit.current === askedIn
+                && offerNamedLineHere(publicKey, next.kind);
+        } catch {
+            ok = false;
+        }
         if (!ok) taken.current = false;
         else setShown({ ...next, state: 'offer' });
         return ok;

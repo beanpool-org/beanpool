@@ -78,7 +78,7 @@ const dm = (id: string, over: Partial<Conversation> = {}): Conversation => ({
 } as Conversation);
 const line = (id: string, conv: string, author: string, text: string): ApiMessage => ({
     id, conversationId: conv, authorPubkey: author, ciphertext: text, nonce: '00000', type: 'text', timestamp: ago(60_000), metadata: null,
-} as ApiMessage);
+} as unknown as ApiMessage);
 
 const ANSWER = 'Hear when Bob answers.';
 const AGAIN = 'Hear when Bob writes again.';

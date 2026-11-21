@@ -47,7 +47,10 @@ describe("the guide's joining page: the phone's three steps", () => {
         expect(joining).not.toContain('The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.');
         // Slice W1 (#3333): the web's join has the same dots (apps/pwa/src/components/StepDots.tsx, core join-steps.ts) and
         // How it Works left it, so the step the page kept "in a web browser only" until then is gone.
-        expect(joining).toContain('A web browser shows the same dots and **‹**, with **Safety Backup** last there, as it has no notifications step');
+        expect(joining).toContain('A web browser shows the same dots and **‹**');
+        // Slice N5a: the web's join ends on Hear from your community where the browser can be told (WelcomePage.tsx, NotifyAsk.tsx).
+        expect(joining).toContain('Its last step is **Hear from** your community where the browser can be told, else **Safety Backup**.');
+        expect(joining).not.toContain('as it has no notifications step');
         expect(joining).not.toContain('**How it Works**');
     });
 
@@ -102,10 +105,11 @@ describe("the guide's pages on joining in a browser: the web's front door and do
     });
 
     it("the web's steps: dots and ‹, Next → on Safety Backup goes in, a sign-in chosen right there", () => {
-        expect(webApp).toContain('The dots at the top show the steps and where you are: one dot each for your name, your photo, your area and **Safety Backup**.');
-        expect(webApp).toContain('On **Safety Backup**, **Next →** takes you in.');
+        expect(webApp).toContain('The dots at the top show the steps and where you are: one dot each for your name, your photo, your area, **Safety Backup** and, where your browser can be told, **Hear from** your community.');
+        expect(webApp).toContain('On **Safety Backup**, **Next →** takes you in, or first to **Hear from** your community');
         expect(webApp).toContain('tap it and choose the sign-in right there.');
-        expect(joining).toContain('in a web browser, **Next →** here takes you to **Home**');
+        expect(joining).toContain('in a web browser, **Next →** here takes you to **Hear from** your community where your browser can be told, else to **Home**');
+        expect(joining).toContain('**Later**, or closing your browser\'s question without answering, carries on to **Home** and is not final.');
     });
 
     it("the way back with a sign-in on a local community's web address is the front door's button", () => {

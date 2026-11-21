@@ -22,7 +22,7 @@ const day = (n: number) => JOINED + n * DAY;
 afterEach(() => setLanguage('en'));
 
 describe('the schedule, one row per guard', () => {
-    type Row = [name: string, input: Omit<WayBackScheduleInput, 'joinedAt'>, show: boolean, why: string | null, next: number | null, bell: boolean];
+    type Row = [name: string, input: Omit<WayBackScheduleInput, 'joinedAt' | 'kept'> & { kept?: boolean }, show: boolean, why: string | null, next: number | null, bell: boolean];
     const ROWS: Row[] = [
         // first: not put away since it started (the join's Later, S4)
         ['the first landing after Later', { now: day(0) }, true, 'first', null, false],

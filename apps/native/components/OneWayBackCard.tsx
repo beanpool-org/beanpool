@@ -11,17 +11,18 @@ import {
     dismissOneWayBack,
     isGlobalInUse,
     noteOneWayBackAsked,
+    noteOneWayBackBeans,
     oneWayBackAskNow,
     oneWayBackCommunity,
     oneWayBackFromNode,
-    oneWayBackPlace,
+    oneWayBackSchedule,
     readOneWayBack,
     readOneWayBackAsked,
     standingFromAsked,
     withAccountDismissal,
+    wordsSaidWrittenDown,
     type OneWayBack,
     type OneWayBackAsked,
-    type OneWayBackPlace,
     type OneWayBackStanding,
 } from '../utils/one-way-back';
 import { anchorUrl } from '../utils/node-post';
@@ -30,29 +31,23 @@ import { GLOBAL_NODE_URL } from '../utils/global-node-url';
 import { getSavedNodes } from '../utils/nodes';
 import { communityName } from '../utils/community-name';
 import { keepWords } from '../utils/words-kept';
-import { t, word } from '@beanpool/core';
+import { formatHundredths, t, tn, word, wayBackLine, WAY_BACK_WORDS } from '@beanpool/core';
+
+/** "40 Beans", "1 Bean" from whole hundredths, as utils/home-cards.ts `beansAmount` writes them (that file is Home's, and heavy to load here). */
+const beansWords = (c: number) => tn(c / 100, '{n} Bean', '{n} Beans', { n: formatHundredths(c) });
 
 /**
  * utils/one-way-back.ts ONE_WAY_BACK_TEXT, as word() keys shown through t() (that file signs its reads, so it never reaches
- * the words layer). The same English: utils/__tests__/rest-words-render.test.ts holds the two equal.
+ * the words layer). The same English: utils/__tests__/rest-words-render.test.ts holds the two equal. `body` is core's one
+ * sentence (way-back-schedule.ts `WAY_BACK_WORDS.line`, slice B1), true on every card, the worldwide community's door
+ * included, where it once said "one way back" (DESIGN-notify-and-backup-asks-fable.md §5.1).
  */
 export const ONE_WAY_BACK_LINES = {
-    title: word('Your account has one way back'),
-    body: word('Your account has one way back: your 12 words. Check you still have them, or add a sign-in.'),
+    body: WAY_BACK_WORDS.line,
     addSignIn: word('Add a sign-in'),
     checkWords: word('Show my 12 words'),
     checked: word('I still have my 12 words'),
     notNow: word('Not now'),
-} as const;
-
-/**
- * The card's words for every other member whose 12 words are the only way back (DESIGN-home-default-fable.md §2.5): "one
- * way back" isn't true where an admin can set a member up again with a new key. The long form where a sign-in can be
- * added, the short one where it can't (the node takes none from them). The 12-words door's card keeps its own words.
- */
-export const WORDS_HOW_BACK_LINES = {
-    withSignIn: word('Your 12 words are how you get back in. Check you still have them, or add a sign-in.'),
-    noSignIn: word('Your 12 words are how you get back in. Check you still have them.'),
 } as const;
 
 const sameCommunity = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
@@ -64,13 +59,15 @@ export interface OneWayBackActionsAt {
 }
 
 /**
- * "Your account has one way back: your 12 words" (two-doors design §2.5, utils/one-way-back.ts), for a member who joined
+ * "Your way back in" (two-doors design §2.5, utils/one-way-back.ts; its one sentence since slice B1), for a member who joined
  * the global community with 12 words. A plain card, never a dot and never a gate.
  *
- * - `landing`: the card on the landing screen while utils/one-way-back.ts says `card`: Add a sign-in (where the node takes
- *   one), I still have my 12 words, Show my 12 words (Settings' Account Protection, behind the phone's lock), and Not now
- *   (it comes back once after the first post and once after a week). "One way back" is said only on the global
- *   community's door; everywhere else an admin can set a member up again, so the card says "how you get back in" (§2.5).
+ * - `landing`: the card on the landing screen while core's schedule says so (@beanpool/core way-back-schedule.ts, slice
+ *   B1): Add a sign-in (where the node takes one), I still have my 12 words, Show my 12 words (Settings' Account
+ *   Protection, behind the phone's lock), and ✕. It comes back once at the first Beans, once 30 days after joining, then
+ *   every 90 days while there is something to lose (`toLose`). One sentence on every card, "If this phone is lost, this
+ *   is how you get back in.", and at the first Beans the fact: "You have 40 Beans here now. …". Never while a way back is
+ *   kept: a sign-in's copy at the key vault, or the words said written down (in Ways back, or I still have my 12 words).
  * - `settings`: Account Protection's block until a sign-in is added or the member says they still have their words;
  *   after "I still have my 12 words", adding a sign-in is still offered there, without the warning.
  *
@@ -92,8 +89,11 @@ export interface OneWayBackActionsAt {
  * - `accountDismissedAt`: the account's dismissal (`home.layout` `dismissed.safety`), from another phone or the web app.
  * - `onDismiss(at)`: the card was put away at `at` (the same moment the phone's record keeps), for Home to keep on the
  *   account. `onUp`: whether the card is drawn now, so Home's "…" moves count only the cards on screen.
+ * - `toLose`: what the member has here, from Home's answer: the balance (whole hundredths; null where Beans are off or no
+ *   Your Beans card was asked) and something else to lose (an open deal, a role). A live listing is read here, from the
+ *   phone's own posts.
  */
-export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp, band }: {
+export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp, band, toLose }: {
     place: 'landing' | 'settings';
     colors?: AppColors;
     onActionsAt?: (at: OneWayBackActionsAt | null) => void;
@@ -101,6 +101,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     accountDismissedAt?: string | null;
     onDismiss?: (at: number) => void;
     onUp?: (up: boolean) => void;
+    toLose?: { balance_c: number | null; holds: boolean } | null;
     /**
      * Home in Arrange: the band this card has only there (its caption and ↑ ↓, across the top of its frame). With a band the
      * rest of the card goes quiet, dimmed and untouchable, until Done (DESIGN-home-arrange-in-place-fable.md §2.1).
@@ -109,8 +110,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
 }): React.JSX.Element | null {
     const { identity } = useIdentity();
     const [record, setRecord] = useState<OneWayBack | null>(null);
-    const [shown, setShown] = useState<OneWayBackPlace>('none');
-    const [hasPosted, setHasPosted] = useState(false);
+    const [listingLive, setListingLive] = useState(false);
+    const [writtenDown, setWrittenDown] = useState(false);
     const [linking, setLinking] = useState(false);
     const [vaultCopy, setVaultCopy] = useState(false);
     const s = styles(colors);
@@ -123,6 +124,9 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     homeWordRef.current = homeWord;
     const accountDismissedRef = useRef(accountDismissedAt);
     accountDismissedRef.current = accountDismissedAt;
+    const balance = toLose?.balance_c ?? null;
+    const balanceRef = useRef(balance);
+    balanceRef.current = balance;
     // Where the landing card's actions rest on screen, for the floating button. Measured again shortly after layout,
     // as the feed's top inset settles.
     const measureActions = useCallback(() => {
@@ -139,32 +143,36 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     const refresh = useCallback(async (askNode: 'kept' | 'now' = 'kept') => {
         const call = ++latest.current;
         const key = identity?.publicKey;
-        const [stored, vault] = await Promise.all([
+        const [stored, vault, paper] = await Promise.all([
             readOneWayBack(key),
             // A sign-in's copy at the key vault, never a community's half there (review of #3330, round 2: half a pair opens nothing).
             key ? vaultSignInCopyKnown(key).catch(() => false) : Promise.resolve(false),
+            // The words said written down in Ways back: kept, as S4's way-back step counts it (utils/way-back-kept.ts).
+            key ? wordsSaidWrittenDown(key).catch(() => false) : Promise.resolve(false),
         ]);
         if (call !== latest.current) return;
         // The phone's own record at once; then the node's word, which decides when it comes.
         const show = async (found: OneWayBack | null) => {
             if (call !== latest.current) return;
-            let posted = false;
+            let live = false;
+            let withBeans = found;
             if (found && !found.done && key) {
                 try {
-                    // The member's own posts on this phone: the card comes back once after the first.
+                    // A live listing of the member's own on this phone is something to lose (core's schedule).
                     const { getMyPosts } = await import('../utils/db');
-                    posted = (await getMyPosts(key)).length > 0;
+                    live = (await getMyPosts(key)).some((p: { status?: unknown }) => p.status === 'active' || p.status === 'pending');
                 } catch {
-                    posted = false;
+                    live = false;
                 }
+                // The first Beans seen here: kept once on the record, so the card comes back for them.
+                withBeans = (await noteOneWayBackBeans(key, balanceRef.current).catch(() => found)) ?? found;
             }
             if (call !== latest.current) return;
             // A dismissal on the account (another phone, the web app) counts as this phone's own.
-            const kept = withAccountDismissal(found, accountDismissedRef.current, posted);
-            setRecord(kept);
+            setRecord(withAccountDismissal(withBeans, accountDismissedRef.current));
             setVaultCopy(vault);
-            setHasPosted(posted);
-            setShown(oneWayBackPlace(kept, Date.now(), posted));
+            setWrittenDown(paper);
+            setListingLive(live);
         };
         await show(stored);
         if (!identity || !key) return;
@@ -223,23 +231,22 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     // Home's answer arrived with the community's word, or the account's dismissal changed: read again. `kept` too: a
     // say-so made on another device lands while `words` stays true, and ends the card on this visit (review of #3113).
     const wordKey = homeWord ? `${homeWord.url}|${homeWord.standing.words}|${!!homeWord.standing.kept}` : '';
+    // Beans above zero in Home's answer: read again, so the first Beans seen are noted on the record.
+    const beansKey = balance !== null && balance > 0;
     const mounted = useRef(false);
     useEffect(() => {
         if (!mounted.current) { mounted.current = true; return; }
         void refresh();
-    }, [wordKey, accountDismissedAt, refresh]);
+    }, [wordKey, accountDismissedAt, beansKey, refresh]);
 
     const quiet = record?.done === 'checked' || vaultCopy;
+    // Core's schedule: whether the card is up now, and why (the first Beans bring their own sentence).
+    const schedule = oneWayBackSchedule(record, Date.now(), { balance_c: balance, holds: !!toLose?.holds || listingLive, kept: vaultCopy || writtenDown });
+    const shown = schedule?.show ? 'card' : 'settings';
     // "Add a sign-in" only where the node takes one from this member (the 12-words door's rule; review of #3110, round 2):
     // Home's word says so where it is about this record's community, else the record's own kind.
     const homeHere = !!homeWord && !!record && sameCommunity(homeWord.url, record.url);
     const canLink = homeHere ? homeWord!.standing.door !== false : record?.by !== 'wayBack';
-    // The door's own words, or every other member's (§2.5).
-    const everyMember = record?.by === 'wayBack' || (homeHere && homeWord!.standing.door === false);
-    // "One way back" only where it is true: the worldwide community's door. On any other community an admin can set a member
-    // up again with a new key (recovery model point 3), so its door's members get "how you get back in", as on the web
-    // (components/OneWayBack.tsx: global and a sign-in the node takes).
-    const oneWayBack = !everyMember && !!record && isGlobalInUse(record.url);
     const up = !!identity && !!record && record.done !== 'linked' && (place === 'settings' || (shown === 'card' && !quiet));
     // The floating button learns when the landing card goes (put away, done, or a vault copy found).
     useEffect(() => {
@@ -251,7 +258,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
 
     if (!identity || !record || !up) return null;
-    const bodyLine = oneWayBack ? t(ONE_WAY_BACK_LINES.body) : canLink ? t(WORDS_HOW_BACK_LINES.withSignIn) : t(WORDS_HOW_BACK_LINES.noSignIn);
+    // One sentence, true on every card (core way-back-schedule.ts); at the first Beans, the fact with the amount.
+    const bodyLine = wayBackLine(place === 'landing' ? schedule?.why ?? null : null, balance !== null && balance > 0 ? beansWords(balance) : null);
     const checkedLine = t(ONE_WAY_BACK_LINES.checked);
     // Said here, kept on the account so every device and the web agree (utils/words-kept.ts), then the card reads again.
     const stillHave = async () => { await keepWords(record.url, identity); void refresh(); };
@@ -293,7 +301,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
                         onPress={async () => {
                             // One moment for the phone's record and the account's (Home keeps it in `home.layout`).
                             const at = Date.now();
-                            await dismissOneWayBack(identity.publicKey, hasPosted, at);
+                            await dismissOneWayBack(identity.publicKey, at);
                             onDismiss?.(at);
                             void refresh();
                         }}
@@ -344,8 +352,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     );
 
     return (
-        // Its name for TalkBack says what its sentence says: "one way back" isn't true for every member (§2.5).
-        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={oneWayBack ? t(ONE_WAY_BACK_LINES.title) : bodyLine}>
+        // Its name for TalkBack says what its sentence says.
+        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={bodyLine}>
             {band}
             {/* One wrapper whether or not Home's band is up (home/quiet.ts): the card's inside is never rebuilt when Arrange opens. */}
             <View {...quietWrapperProps(!!band)} style={band ? quietInside : undefined}>{content}</View>

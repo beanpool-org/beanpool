@@ -117,7 +117,7 @@ vi.mock('../vault', () => ({ vaultSignInCopyKnown: vi.fn(async () => oneWay.vaul
 vi.mock('../../components/LinkSignInSheet', () => ({ LinkSignInSheet: () => null }));
 vi.mock('../../services/pillar-sync', () => ({ getLastSyncTime: async () => Date.now() - 90_000 }));
 
-import { DEFAULT_PRICING_CATALOG, PRICING_CATEGORIES, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
+import { DEFAULT_PRICING_CATALOG, PRICING_CATEGORIES, WAY_BACK_WORDS, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider, DrawnInLanguage } from '../../components/LanguageProvider';
 import { LanguagePickerSheet } from '../../components/LanguagePicker';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
@@ -127,7 +127,7 @@ import { PayCommonsRow } from '../../components/PayCommonsRow';
 import PayCommonsScreen from '../../app/pay-commons';
 import GroupInviteLanding from '../../app/group/[id]';
 import { HelpSheet } from '../../components/HelpSheet';
-import { OneWayBackCard, ONE_WAY_BACK_LINES, WORDS_HOW_BACK_LINES } from '../../components/OneWayBackCard';
+import { OneWayBackCard, ONE_WAY_BACK_LINES } from '../../components/OneWayBackCard';
 import { GLOBAL_NODE_URL } from '../global-node-url';
 import { SavedNodePicker } from '../../components/SavedNodePicker';
 import { SyncStatus } from '../../components/SyncStatus';
@@ -514,7 +514,7 @@ describe('the small ones in the pseudo-locale', () => {
     it('"one way back", in Settings: the card and, after "I still have my 12 words", the quiet line', async () => {
         await renderIn('xx', createElement(OneWayBackCard, { place: 'settings', colors: lightColors }));
         expect(host.textContent).toContain(xx(ONE_WAY_BACK_LINES.body));
-        expect(byLabel(xx(ONE_WAY_BACK_LINES.title))).not.toBeNull();
+        expect(byLabel(xx(ONE_WAY_BACK_LINES.body))).not.toBeNull();
         expect(host.textContent).toContain(xx(ONE_WAY_BACK_LINES.addSignIn));
         expect(host.querySelector(`[data-hint="${xx('Says you checked you still have your 12 words written down')}"]`)).not.toBeNull();
         expect(bypassing(host)).toEqual([]);
@@ -526,15 +526,23 @@ describe('the small ones in the pseudo-locale', () => {
         expect(bypassing(host)).toEqual([]);
     });
 
-    it('a local community\'s 12-words door: "how you get back in", never "one way back", its name for TalkBack the same, on Home with I still have my 12 words', async () => {
+    it('a local community\'s 12-words door: the one sentence, its name for TalkBack the same, on Home with I still have my 12 words', async () => {
         oneWay.record = { url: 'https://mullum.example', joinedAt: Date.now() - 86_400_000, done: null };
         await renderIn('xx', createElement(OneWayBackCard, { place: 'landing', colors: lightColors }));
-        expect(host.textContent).toContain(xx(WORDS_HOW_BACK_LINES.withSignIn));
-        expect(host.textContent).not.toContain(xx(ONE_WAY_BACK_LINES.body));
-        expect(byLabel(xx(WORDS_HOW_BACK_LINES.withSignIn))).not.toBeNull();
-        expect(byLabel(xx(ONE_WAY_BACK_LINES.title))).toBeNull();
+        expect(host.textContent).toContain(xx(ONE_WAY_BACK_LINES.body));
+        expect(byLabel(xx(ONE_WAY_BACK_LINES.body))).not.toBeNull();
         expect(host.textContent).toContain(xx(ONE_WAY_BACK_LINES.addSignIn));
         expect(host.textContent).toContain(xx(ONE_WAY_BACK_LINES.checked));
+        expect(bypassing(host)).toEqual([]);
+    });
+
+    it('back at the first Beans (B1): the fact through t(), its amount in the Beans\' own words', async () => {
+        oneWay.record = { url: 'https://riverside.example', joinedAt: Date.now() - 5 * 86_400_000, dismissedAt: Date.now() - 4 * 86_400_000, beansAt: Date.now() - 60_000 };
+        await renderIn('xx', createElement(OneWayBackCard, { place: 'landing', colors: lightColors, toLose: { balance_c: 4000, holds: false } }));
+        const fact = xx(WAY_BACK_WORDS.beans).replace('{amount}', xx('{n} Beans').replace('{n}', '40'));
+        expect(host.textContent).toContain(fact);
+        expect(byLabel(fact)).not.toBeNull();
+        expect(host.textContent).not.toContain(xx(ONE_WAY_BACK_LINES.body));
         expect(bypassing(host)).toEqual([]);
     });
 

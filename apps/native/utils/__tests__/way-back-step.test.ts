@@ -120,13 +120,13 @@ describe('"Later" brings Home\'s card from day one; a way back kept starts it pu
         await startOneWayBackShown(KEY, URL, JOINED);
         const record = await readOneWayBack(KEY);
         expect(record).toEqual({ url: URL, joinedAt: JOINED, by: 'wayBack' });
-        expect(oneWayBackPlace(record, JOINED + 60_000, false), 'the first landing').toBe('card');
-        expect(oneWayBackPlace(record, JOINED + 3 * DAY, false), 'day three, not put away').toBe('card');
+        expect(oneWayBackPlace(record, JOINED + 60_000), 'the first landing').toBe('card');
+        expect(oneWayBackPlace(record, JOINED + 3 * DAY), 'day three, not put away').toBe('card');
     });
 
     it('kept: put away from the start, as before S4', async () => {
         await startOneWayBackPutAway(KEY, URL, JOINED);
-        expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000, false)).toBe('settings');
+        expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000)).toBe('settings');
     });
 
     it('a record already running stands: the 12-words door\'s own', async () => {
@@ -139,14 +139,14 @@ describe('"Later" brings Home\'s card from day one; a way back kept starts it pu
         store.map.set(oneWayBackStoreKey(KEY), JSON.stringify({ url: URL, joinedAt: JOINED, dismissedAt: JOINED, by: 'wayBack', done: 'checked' }));
         await startOneWayBackPutAway(KEY, URL, JOINED + 1);
         expect((await readOneWayBack(KEY))?.done).toBe('checked');
-        expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000, false)).toBe('none');
+        expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000)).toBe('none');
     });
 
     it('Later over a record marked done (a sign-in added with no copy): the card about the community just joined, from the first landing', async () => {
         store.map.set(oneWayBackStoreKey(KEY), JSON.stringify({ url: 'https://open.riverbend.example', joinedAt: JOINED - 30 * DAY, done: 'linked' }));
         await startOneWayBackShown(KEY, URL, JOINED);
         expect(await readOneWayBack(KEY)).toEqual({ url: URL, joinedAt: JOINED, by: 'wayBack' });
-        expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000, false)).toBe('card');
+        expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000)).toBe('card');
     });
 });
 

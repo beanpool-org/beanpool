@@ -526,3 +526,59 @@ export function heldFromMemberHere(held: unknown): boolean {
 export function requestsHereOfMail(answer: unknown): boolean {
     return !(!!answer && typeof answer === 'object' && (answer as { dmRequests?: unknown }).dmRequests === false);
 }
+
+// ─── Delivered, held for a line the mark let in (both apps) ─────────────────────────────────────
+
+/**
+ * When a line of theirs written on this device is receipted to its sender (their Delivered): `now`, at this round, as every
+ * line always was; `held`, not until the member accepts, answers or opens that chat ({@link outsideHeldReceipts}); `none`,
+ * for an item that is no line written here (a change to a line, a drop).
+ *
+ * Held (Marty, 22 Nov 2026, from the PR #3347 max review finding 1: "HOLD DELIVERED"; DESIGN-no-switch-messaging-fable.md
+ * DECIDED 22 Nov): a first line the member's own server's mark let in ({@link gateOutsideItem} `memberHere`: no chat here,
+ * not let in, marked), straight in or as a request, and every later line in that chat until its receipts are let go
+ * (`held`: the chat's own mark, kept by each app). Until then the sender sees Sent, exactly as when the member blocked
+ * them (the line dropped, never receipted), so Delivered never tells a fellow member a block from a line still waiting:
+ * a block stays hidden as it does inside ("They won't be told"). A total stranger's line through an open door, a line let
+ * in, and a chat already open (made here before, by the member or by an earlier line) are receipted now, as before.
+ * `verdict` is the gate's for this same input, `chat` the chat as the gate was given it.
+ */
+export type OutsideReceiptWhen = 'now' | 'held' | 'none';
+
+export function outsideReceiptWhen(input: {
+    verdict: OutsideGateVerdict;
+    chat: { state: OutsideChatState } | null;
+    letIn?: boolean;
+    memberHere?: boolean;
+    held: boolean;
+}): OutsideReceiptWhen {
+    if (input.verdict !== 'line' && input.verdict !== 'request') return 'none';
+    if (input.held) return 'held';
+    // The gate's own order: a chat here, then let in, then the mark. Only a line the mark decided waits.
+    return input.chat === null && input.letIn !== true && input.memberHere === true ? 'held' : 'now';
+}
+
+/** What the member did with a chat whose receipts are held: nothing yet (a round looking, or a request left), or a step. */
+export type OutsideReceiptAction = 'none' | 'open' | 'accept' | 'answer' | 'decline' | 'block';
+
+/**
+ * What becomes of the receipts a chat holds ({@link outsideReceiptWhen} `held`) when the member does `action` in it, one
+ * rule for both apps: `send` (let go: owed as any other, sent at the next round, once), `hold` (still held), or `forget`
+ * (never sent: the line's sender sees Sent for good).
+ *
+ * - A block, or the sender `blocked` now (a block made anywhere, seen by a round or at the step): forget. A line later
+ *   blocked is never receipted, whatever the member does after (an unblock included: its receipt is gone).
+ * - Not sure no block bars them (`barred`: the phone's block lists, a block once made and since undone among them, or a
+ *   list that can't be read): hold, and ask again at the next step.
+ * - Accept, or an answer (a line of mine in that chat): send.
+ * - Open: send for a chat that is open (the line came straight in). A request opened is still held: its screen says "They
+ *   will not know you saw this unless you accept", in both apps, and a Delivered would tell them.
+ * - Decline, or nothing yet: hold. A decline reads as a request left unanswered, as inside.
+ */
+export function outsideHeldReceipts(input: { action: OutsideReceiptAction; state: OutsideChatState; blocked: boolean; barred: boolean }): 'send' | 'hold' | 'forget' {
+    if (input.action === 'block' || input.blocked) return 'forget';
+    if (input.barred) return 'hold';
+    if (input.action === 'accept' || input.action === 'answer') return 'send';
+    if (input.action === 'open') return input.state === 'open' ? 'send' : 'hold';
+    return 'hold';
+}

@@ -264,9 +264,9 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
         const outcome = await deleteAccountHere(kim, await planDelete(kim.publicKey));
 
         expect(outcome).toMatchObject({ kind: 'vault-copy-stays', copyKnown: true, communityOnly: true });
-        const line = vaultCopyStaysLine('Mullum', outcome as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>);
+        const line = vaultCopyStaysLine('Riverside', outcome as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>);
         expect(line).toBe(
-            "Your account at Mullum was deleted, but BeanPool's key vault still keeps half of a locked copy of your key, the " +
+            "Your account at Riverside was deleted, but BeanPool's key vault still keeps half of a locked copy of your key, the " +
             "half for your community's admins: it couldn't be removed (it didn't answer: check your connection). Only your " +
             'key can remove it, and your key is still on this phone, so you can try again.\n\n' +
             'Delete Anyway takes your key off this phone and leaves that half at the vault. To remove it later, you would ' +
@@ -276,7 +276,7 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
         mem.async.set(vaultCopyKnownStoreKey(kim.publicKey), '1');
         const signIn = await finishLastDelete(kim, 'try-again');
         expect(signIn).toMatchObject({ kind: 'vault-copy-stays', copyKnown: true, communityOnly: false });
-        expect(vaultCopyStaysLine('Mullum', signIn as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>)).toMatch(/from a sign-in you linked/);
+        expect(vaultCopyStaysLine('Riverside', signIn as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>)).toMatch(/from a sign-in you linked/);
     });
 
     it('the confirmation says the vault copy goes first', () => {

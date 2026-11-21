@@ -51,6 +51,9 @@ describe("the guide's joining page: the phone's three steps", () => {
     it("the join asks nothing about notifications: no How it Works card, First steps' line instead", () => {
         expect(joining).not.toMatch(/How it Works:\*\* a short tour\. At the end, a card asks \*\*Turn on notifications\?\*\*/);
         expect(joining).toContain('**First steps** on **Home** has **Hear when someone answers you**');
+        // Slice N2a (#3332): no pop-up at the first message or request to join; a named line's Tell me, as notifications.md says.
+        expect(joining).not.toContain('or once when you send your first message or request to join');
+        expect(joining).toContain('or **Tell me** on a one-line offer such as **Hear when Asha answers.** under your first message.');
     });
 });
 

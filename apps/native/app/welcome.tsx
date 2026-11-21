@@ -2514,6 +2514,7 @@ export default function WelcomeScreen() {
         if (!due) return afterTheAsk();
         await updatePendingOnboarding({ step: 'notify', wayBackKept: wayBackIsKept }).catch(() => {});
         setError(null);
+        setEndTried(false);
         setMode('notify');
     }
 
@@ -2525,6 +2526,7 @@ export default function WelcomeScreen() {
             setError(null);
             return;
         }
+        setEndTried(true);
         void handleConfirmSeed();
     }
 
@@ -2536,6 +2538,12 @@ export default function WelcomeScreen() {
      * waited on, so neither the pop-up nor the way on stands behind a community's answer (amend2 §4.2).
      */
     const notifyShowing = useRef<Promise<void>>(Promise.resolve());
+
+    /**
+     * The join's end has been tried from here ({@link afterTheAsk}): only then is an error on this screen the end's own, drawn
+     * with Try again in place of the two answers. Anything else the welcome screen once said never takes the ask's place.
+     */
+    const [endTried, setEndTried] = useState(false);
 
     /** "Turn on notifications": the phone's own pop-up, only from this tap; whatever it answers, or if it fails, on. */
     async function handleNotifyTurnOn() {
@@ -2560,6 +2568,7 @@ export default function WelcomeScreen() {
         const to = skipWayBack ? 'profileSetup' : 'seedBackup';
         updatePendingOnboarding({ step: to }).catch(() => {});
         setError(null);
+        setEndTried(false);
         setMode(to);
     }
 
@@ -3066,7 +3075,7 @@ export default function WelcomeScreen() {
                 onLater={() => void handleNotifyLater()}
                 // The join's end failed from here (handleConfirmSeed's message, as the way back and the owner's card show it):
                 // the answer is kept, so the one button tries the end again.
-                failed={error ? { message: error, retry: t('Try again'), onRetry: afterTheAsk } : null}
+                failed={endTried && error ? { message: error, retry: t('Try again'), onRetry: afterTheAsk } : null}
             />
         );
     }

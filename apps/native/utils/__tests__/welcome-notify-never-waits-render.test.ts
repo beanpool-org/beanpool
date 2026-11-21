@@ -578,6 +578,19 @@ describe("the join's end, run from the notifications screen", () => {
         expect(notifyCounts()).toEqual([NOTIFY_SHOWN, `${NOTIFY_CHOICE}:later`]);
     });
 
+    it('resumed on the screen after the phone answered, the end it goes on to fails: the message there too, and Try again ends the join', async () => {
+        os.read = async () => ({ status: 'granted', canAskAgain: true });
+        net.endFails = 1;
+        await mount();
+        expect(await until(() => q('notify-step-error') !== null), 'the message').toBe(true);
+        expect(q('notify-step-error')!.textContent).toBe('Failed to complete registration.');
+        expect(q('notify-step-turn-on'), 'nothing left to ask').toBeNull();
+        await tap('notify-step-retry');
+        expect(await until(atHome), 'Home').toBe(true);
+        expect(os.order).toEqual([]);
+        expect(notifyCounts()).toEqual([]);
+    });
+
     it("the community never answers the photo's publish: the photo kept for later, and Home", async () => {
         phone.pending = { ...phone.pending, avatar: 'file:///photo.jpg' };
         globalThis.fetch = ((url: string, init?: { signal?: AbortSignal }) => {

@@ -436,7 +436,7 @@ describe('the phone\'s door against a real global-profile node', () => {
         expect(standing?.words).toBe(true);
         expect(Math.abs((standing?.joinedAt ?? 0) - Date.now())).toBeLessThan(STEP_MS * 10);
         const record = await oneWayBackFromNode(ben.publicKey, URL_BASE, standing);
-        expect(oneWayBackPlace(record, Date.now(), false)).toBe('card');
+        expect(oneWayBackPlace(record, Date.now())).toBe('card');
 
         // Suspended: the card still says so (the node still says 12 words), and adding a sign-in is refused in a sentence.
         await control('status', { key: ben.publicKey, status: 'suspended' });
@@ -456,7 +456,7 @@ describe('the phone\'s door against a real global-profile node', () => {
         expect(await linkSignIn({ url: URL_BASE, identity: ben, provider: 'google', phoneLock: null })).toMatchObject({ kind: 'linked' });
         const after = await word();
         expect(after).toEqual({ words: false, joinedAt: null });
-        expect(oneWayBackPlace(await oneWayBackFromNode(ben.publicKey, URL_BASE, after), Date.now(), false)).toBe('none');
+        expect(oneWayBackPlace(await oneWayBackFromNode(ben.publicKey, URL_BASE, after), Date.now())).toBe('none');
     }, STEP_MS);
 
     it('a key that never joined can\'t add a sign-in: said in words', async () => {

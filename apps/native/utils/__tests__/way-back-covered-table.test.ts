@@ -128,7 +128,7 @@ const STATES: Record<string, Before> = {
     // return due yet, so only Later can bring the card.
     "an earlier join's reminder, put away": { record: putAwayRecord(OPEN_URL, NOW - 2 * DAY) },
     // The same long ago, its week's return already seen and put away again.
-    "an earlier join's reminder, put away long ago, its week's return used": { record: { ...putAwayRecord(OPEN_URL, BEFORE), dismissedAt: BEFORE + 10 * DAY, weekReturnUsed: true } },
+    "an earlier join's reminder, put away long ago, its week's return used": { record: { ...putAwayRecord(OPEN_URL, BEFORE), dismissedAt: BEFORE + 10 * DAY, weekReturnUsed: true } as OneWayBack },
     // The 12-words door's own record (global or an open door), joined three days ago and put away with its ✕ yesterday.
     "the 12-words door's own record, put away": { record: { url: OPEN_URL, joinedAt: NOW - 3 * DAY, dismissedAt: NOW - DAY } },
 };
@@ -187,7 +187,7 @@ async function walk(flow: Flow, opts: { door?: Door; wordsTicked?: boolean } = {
     await (kept ? startOneWayBackPutAway : startOneWayBackShown)(KEY, joinedAt, NOW);
     // Home's card: where the record says, and not quiet (components/OneWayBackCard.tsx: quiet on a sign-in's copy at the vault).
     const quiet = await vaultSignInCopyKnown(KEY);
-    const homeCard = oneWayBackPlace(await readOneWayBack(KEY), NOW + 60_000, false) === 'card' && !quiet;
+    const homeCard = oneWayBackPlace(await readOneWayBack(KEY), NOW + 60_000) === 'card' && !quiet;
     return { name, photo, step, homeCard };
 }
 
@@ -315,7 +315,7 @@ describe('"Later" over a record marked done or put away: the card on the first l
         store.map.set(oneWayBackStoreKey(KEY), JSON.stringify({ url: OPEN_URL, joinedAt: BEFORE, dismissedAt: BEFORE + 1, postReturnUsed: true }));
         await startOneWayBackShown(KEY, JOINED_URL, NOW);
         expect(await readOneWayBack(KEY)).toEqual({ url: OPEN_URL, joinedAt: BEFORE, postReturnUsed: true });
-        expect(oneWayBackPlace(await readOneWayBack(KEY), NOW + 60_000, true)).toBe('card');
+        expect(oneWayBackPlace(await readOneWayBack(KEY), NOW + 60_000, { holds: true })).toBe('card');
     });
     it('a member\'s reminder put away (an earlier join\'s): started again about the community just joined, shown', async () => {
         store.map.set(oneWayBackStoreKey(KEY), JSON.stringify(putAwayRecord(OPEN_URL, NOW - 2 * DAY)));

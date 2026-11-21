@@ -107,7 +107,7 @@ import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
 import { StepBar } from '../components/welcome/StepDots';
 import { WayBackTile } from '../components/welcome/WayBackTile';
-import { afterNotify, afterWayBack, doorKeepsSignInCopy, keptBeforeFor, wayBackButton, wayBackKept, wayBackSkipped } from '../utils/join-steps';
+import { JOIN_END_WAIT_MS, afterNotify, afterWayBack, doorKeepsSignInCopy, keptBeforeFor, wayBackButton, wayBackKept, wayBackSkipped } from '../utils/join-steps';
 import { NotifyStep } from '../components/welcome/NotifyStep';
 import { laterFromJoin, notifyJoinDue, notifyJoinPathOf, showNotifyJoin, turnOnFromJoin } from '../utils/notify-join-step';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
@@ -1636,11 +1636,16 @@ export default function WelcomeScreen() {
                         };
                         const bodyString = JSON.stringify(payloadObj);
                         const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
+                        // Bounded (utils/join-steps.ts JOIN_END_WAIT_MS): a community that never answers is a photo kept for
+                        // the next sync, never a member held on the join's last screen.
+                        const photoWait = new AbortController();
+                        const photoTimer = setTimeout(() => photoWait.abort(), JOIN_END_WAIT_MS.photo);
                         const res = await fetch(`${url}/api/profile/update`, {
                             method: 'POST',
                             headers,
                             body: bodyString,
-                        });
+                            signal: photoWait.signal,
+                        }).finally(() => clearTimeout(photoTimer));
                         if (res.ok) {
                             // A working style waiting here stays: this publish said nothing of it.
                             await clearPendingProfileChange(url, undefined, undefined, true);
@@ -2526,7 +2531,9 @@ export default function WelcomeScreen() {
     /**
      * The screen's showing as it is written (the effect below). Each answer waits for it first: "Later" sits where the way
      * back's "Later" sat, so a double tap there can answer before the showing is kept, and the showing's write would then
-     * land over the answer's (both read the record, then write it).
+     * land over the answer's (both read the record, then write it). It holds only this phone's work: the phone's state read
+     * (bounded, utils/notify-join-step.ts NOTIFY_JOIN_WAIT_MS) and the record's write. The owner's counts are sent and never
+     * waited on, so neither the pop-up nor the way on stands behind a community's answer (amend2 §4.2).
      */
     const notifyShowing = useRef<Promise<void>>(Promise.resolve());
 
@@ -3057,6 +3064,9 @@ export default function WelcomeScreen() {
                 onBack={backFromNotify}
                 onTurnOn={() => void handleNotifyTurnOn()}
                 onLater={() => void handleNotifyLater()}
+                // The join's end failed from here (handleConfirmSeed's message, as the way back and the owner's card show it):
+                // the answer is kept, so the one button tries the end again.
+                failed={error ? { message: error, retry: t('Try again'), onRetry: afterTheAsk } : null}
             />
         );
     }

@@ -92,6 +92,13 @@ export function afterNotify(flow: OnboardingFlow): 'ownerCard' | 'home' {
 }
 
 /**
+ * How long the join's end (welcome.tsx `handleConfirmSeed`) waits on the community for the photo before it goes on (ms),
+ * as utils/db.ts's signed requests do: the photo is kept and sent at the next sync, and the member never waits on a
+ * community that doesn't answer. An object, so a test can shorten it.
+ */
+export const JOIN_END_WAIT_MS = { photo: 12_000 };
+
+/**
  * The way back's one button: "Later" until a way back is kept (true to its word: Home's card shows from the first landing),
  * then "Next" where a screen follows, or "Let's go" into Home.
  */

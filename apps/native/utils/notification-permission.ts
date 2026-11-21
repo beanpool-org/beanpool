@@ -170,6 +170,19 @@ export interface TurnOnOptions {
     confirmSettings?: () => Promise<'turn_on' | 'not_now'>;
     /** Opens BeanPool's page in the phone's settings (tests inject it; the app uses Linking.openSettings). */
     openSettings?: () => Promise<void>;
+    /** Reads the phone's state first (the join's screen bounds it, utils/notify-join-step.ts); a throw is the caller's. */
+    readOs?: () => Promise<OsNotificationPermission>;
+    /** How long Android's channels may take before the pop-up is asked without them (ms); unbounded when not given. */
+    channelWaitMs?: number;
+}
+
+/** Waits for `work`, or for `ms` (when given), whichever is first; never rejects. */
+async function atMost(work: Promise<unknown>, ms: number | undefined): Promise<void> {
+    const settled = work.then(() => undefined, () => undefined);
+    if (ms === undefined) return settled;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([settled, new Promise<void>((resolve) => { timer = setTimeout(resolve, ms); })]);
+    clearTimeout(timer);
 }
 
 async function defaultOpenSettings(): Promise<void> {
@@ -189,7 +202,7 @@ export async function turnOnNotifications(
     storage: StorageLike = AsyncStorage,
     options: TurnOnOptions = {},
 ): Promise<TurnOnResult> {
-    const os = await readOsNotificationPermission();
+    const os = await (options.readOs ?? readOsNotificationPermission)();
     const way = notifyTurnOn(os);
     let status = os.granted ? 'granted' : 'unanswered';
     if (way === 'settings') {
@@ -202,8 +215,9 @@ export async function turnOnNotifications(
         try {
             const notif = await getNotificationsModule();
             // Android's channels first (slice N1j, amend2 §4.2): Android 13's pop-up shows only once the app has a channel,
-            // and a new phone has none before its first token. A channel that can't be made never stops the ask.
-            if (notif) await setNotificationChannels(notif as unknown as ChannelMaker, Platform?.OS === 'android').catch(() => undefined);
+            // and a new phone has none before its first token. A channel that can't be made, or (where the caller bounds
+            // it) one the phone doesn't make in time, never stops the ask.
+            if (notif) await atMost(setNotificationChannels(notif as unknown as ChannelMaker, Platform?.OS === 'android'), options.channelWaitMs);
             if (notif?.requestPermissionsAsync) status = (await notif.requestPermissionsAsync()).status;
         } catch {
             // No answer

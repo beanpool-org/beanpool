@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Home's card while something of the member's is live drawn (components/home/NotifyAskCard.tsx NotifyHomeCard; the first
+ * Home's card while something of the member's is live drawn (components/home/NotifyHomeCard.tsx; the first
  * design §4.3, amend1 §4.3, amend2 §12.3 slice N3), through Home's real card frame (components/home/HomeParts.tsx HomeCard),
  * in each of the phone's colour sets (light and dark among them), at the floor's window (320 dp, text at 1.3x).
  *
@@ -41,7 +41,7 @@ vi.mock('react-native', () => {
 });
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 
-const { NotifyHomeCard, notifyAskCardStyles } = await import('../../components/home/NotifyAskCard');
+const { NotifyHomeCard, notifyHomeCardStyles } = await import('../../components/home/NotifyHomeCard');
 const { HOME_CARD_PADDING_DP, HOME_GUTTER_DP, HOME_TARGET_DP } = await import('../../components/home/HomeParts');
 const { COLOUR_SETS } = await import('../../constants/colors');
 const { LANGS, PSEUDO_LANG, contrastRatio, notifyHomeWords, setLanguage } = await import('@beanpool/core');
@@ -120,7 +120,7 @@ describe("Home's card while something is live, at 320 dp with 1.3x text", () => 
         expect(styleOf(q('notify-home-turn-on')).minHeight).toBeGreaterThanOrEqual(HOME_TARGET_DP);
         expect(styleOf(q('notify-home-away')).minHeight).toBeGreaterThanOrEqual(HOME_TARGET_DP);
         expect(styleOf(q('notify-home-away')).minWidth).toBeGreaterThanOrEqual(HOME_TARGET_DP);
-        for (const s of Object.values(notifyAskCardStyles) as Record<string, unknown>[]) {
+        for (const s of Object.values(notifyHomeCardStyles) as Record<string, unknown>[]) {
             for (const k of ['width', 'height', 'maxWidth']) expect(s[k], k).toBeUndefined();
         }
         expect(styleOf(q('home-notify-live')).marginHorizontal).toBe(HOME_GUTTER_DP);
@@ -149,6 +149,11 @@ describe("Home's card while something is live, at 320 dp with 1.3x text", () => 
         });
     }
 
+    it('not one colour written in the card itself: every one is a token', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../components/home/NotifyHomeCard.tsx'), 'utf8');
+        expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+    });
+
     const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
     const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
     const widthOf = (text: string, size: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * size * 1.3, 0);
@@ -162,12 +167,12 @@ describe("Home's card while something is live, at 320 dp with 1.3x text", () => 
     for (const lang of [...LANGS, PSEUDO_LANG]) {
         it(`${lang}: no word of the card is wider than its line at 320 dp with 1.3x text`, () => {
             setLanguage(lang as never, lang === 'en' || lang === PSEUDO_LANG ? [] : [catalog(lang)]);
-            const s = notifyAskCardStyles as unknown as Record<string, { fontSize: number; paddingHorizontal?: number }>;
+            const s = notifyHomeCardStyles as unknown as Record<string, { fontSize: number; paddingHorizontal?: number }>;
             for (const live of LIVES) {
                 const w = notifyHomeWords(live);
                 const sized: Array<[string, number, number]> = [
                     // The band's caption shares its line with the ×.
-                    [w.band.toUpperCase(), 11, LINE - HOME_TARGET_DP], [w.fact, s.body.fontSize, LINE], [w.wont, s.arrives.fontSize, LINE],
+                    [w.band.toUpperCase(), 11, LINE - HOME_TARGET_DP], [w.fact, s.fact.fontSize, LINE], [w.wont, s.wont.fontSize, LINE],
                     [w.turnOn, s.turnOnText.fontSize, LINE - 2 * (s.turnOn.paddingHorizontal ?? 0)],
                 ];
                 for (const [text, size, line] of sized) {

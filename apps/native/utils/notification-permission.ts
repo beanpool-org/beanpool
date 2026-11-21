@@ -33,7 +33,7 @@ import { Alert, AppState, Linking, Platform, TurboModuleRegistry, type TurboModu
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type * as ExpoNotifications from 'expo-notifications';
 import {
-    t, word, markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyOutcomeEvent, notifyPopUpAnswer, notifyTurnOn,
+    t, word, markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFactWords, notifyFirstStepsLine, notifyOutcomeEvent, notifyPopUpAnswer, notifyTurnOn,
     type NotifyAskEvent, type NotifyAskRecord, type NotifyAskSurface, type NotifyLineKind, type NotifyPopUpRead,
 } from '@beanpool/core';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
@@ -386,6 +386,29 @@ export function offerNamedLine(kind: NotifyLineKind, storage: StorageLike = Asyn
         await writeNotificationPermissionRecord(markNotifyAsk(record, { type: 'shown', surface: 'line', line: kind }, at), storage);
         return true;
     }).catch(() => false);
+    offering = decided;
+    return decided;
+}
+
+/**
+ * The fact line over something that waited `days` (a day or more) for the member (slice N3; the first design §4.4, amend1
+ * §4.3): whether it may show now, by core's rule (`notifyAsks` `fact`: at most once in 30 days, one soft ask a day, also
+ * after a "Later" and after the phone's no), and if it may, marked shown now and its words: "This waited 2 days for you."
+ * with "Tell me next time ›", or "Turn on ›" where a tap opens the one line before the phone's settings. Null: no line.
+ * Never asks, never throws; one decision at a time with the other soft asks.
+ */
+export function offerFactLine(days: number, storage: StorageLike = AsyncStorage, now: () => number = Date.now): Promise<{ line: string; link: string } | null> {
+    const decided = offering.then(async () => {
+        if (!(days >= 1)) return null;
+        const record = await readNotificationPermissionRecord(storage);
+        const phone = await readOsNotificationPermission();
+        const at = now();
+        if (!notifyAsks({ record, phone, now: at, waited: true }).fact) return null;
+        const words = notifyFactWords(days, phone, record);
+        if (!words) return null;
+        await writeNotificationPermissionRecord(markNotifyAsk(record, { type: 'shown', surface: 'fact' }, at), storage);
+        return words;
+    }).catch(() => null);
     offering = decided;
     return decided;
 }

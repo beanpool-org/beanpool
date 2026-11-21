@@ -2495,6 +2495,30 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
 // every poll tick; one POST per conversation per 10s is plenty for read receipts.
 const _lastReadPushAt: Record<string, number> = {};
 
+/**
+ * When the oldest line still unread here arrived (someone else's, counted as the badge counts: core countsAsUnreadSql), read
+ * before the chat marks itself read, for the fact line "This waited 2 days for you." (slice N3, core notifyWaitedDays). Null:
+ * nothing unread. The same copy the read marker uses (in place: that community's). Never throws.
+ */
+export async function oldestUnreadAt(conversationId: string, myPubkey: string, community?: ChatCommunity): Promise<string | null> {
+    try {
+        const copy = await chatReadFor(community);
+        if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return null;
+        const row = await copy.database.getFirstAsync<{ at: string | null }>(
+            `SELECT MIN(m.timestamp) AS at FROM messages m
+             JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
+             WHERE m.conversation_id = ?
+               AND m.author_pubkey != ?
+               AND m.timestamp > IFNULL(cp.last_read_at, '2000-01-01')
+               AND ${countsAsUnreadSql('m')}`,
+            [myPubkey, conversationId, myPubkey, myPubkey],
+        );
+        return typeof row?.at === 'string' ? row.at : null;
+    } catch {
+        return null;
+    }
+}
+
 /** The phone's own read marker (the Talk tab's badge counts from it); no request. */
 export async function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity) {
     const copy = await chatReadFor(community);

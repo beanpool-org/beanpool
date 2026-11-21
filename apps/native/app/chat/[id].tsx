@@ -19,7 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, oldestUnreadAt, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
 import { ChatScrollPage } from '../../components/chat/ChatScrollPage';
@@ -69,7 +69,7 @@ import { listingHeaderStatusWords } from '../../utils/listing-status-words';
 import { NotDeliveredMark } from '../../components/chat/NotDeliveredMark';
 import { NotSeenLine } from '../../components/chat/NotSeenLine';
 import { chatMoment, takeNotifyMoment, useNotifyLine, useScreenShowing, type NotifyLineOffer } from '../../components/NotifyLine';
-import { notSeenInThread, notSeenWords } from '@beanpool/core';
+import { notSeenInThread, notSeenWords, notifyWaitedDays } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
@@ -852,6 +852,16 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         const change = await getDmKeyChange(id as string, at).catch(() => undefined);
         // Read after the check, so it sees the pin as the resting rule left it. Reads only; unreadable pins keep what showed.
         const codeInfo = await getDmKeyCodeInfo(id as string, at).catch(() => undefined);
+        // The fact line (slice N3): how long the oldest line unread here waited, read once on this screen, before the thread
+        // is read and marked read below, so the named line's effect (after the first read) already knows.
+        // Nothing read: no fact line, and the thread reads as always.
+        if (waitedRef.current === undefined && identity?.publicKey) {
+            try {
+                waitedRef.current = notifyWaitedDays(await oldestUnreadAt(id as string, identity.publicKey, at), Date.now());
+            } catch {
+                waitedRef.current = null;
+            }
+        }
         let data: any[];
         try {
             data = await getMessages(id as string, { limit: msgLimitRef.current, notices: true, community: at });
@@ -968,6 +978,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     const notify = useNotifyLine(identity?.publicKey, inFront);
     const namedFor = convRow && peerPubkey ? peerName : null;
     const momentRef = useRef<NotifyLineOffer | null>(null);
+    /** Whole days the oldest unread line waited when this screen first read the thread (core notifyWaitedDays); undefined: not read yet. */
+    const waitedRef = useRef<number | null | undefined>(undefined);
     useEffect(() => {
         const m = takeNotifyMoment(chatMoment(String(id)));
         if (m) momentRef.current = m;
@@ -1429,7 +1441,12 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
             momentRef.current = null;
             void notify.offer({ ...moment, name: moment.name || namedFor, anchor: newestLine.id, align: newestLine.mine ? 'end' : 'start' });
         } else if (!newestLine.mine && requestMode === 'none') {
-            void notify.offer({ kind: 'again', name: namedFor, anchor: newestLine.id });
+            const again: NotifyLineOffer = { kind: 'again', name: namedFor, anchor: newestLine.id };
+            // It waited a day or more: "This waited 2 days for you. Tell me next time ›" in the named line's place, never both
+            // (amend1 §4.3). Where core's rule won't have the fact line (shown in the last 30 days), the named line as before.
+            const days = waitedRef.current;
+            if (days) void notify.offer({ ...again, fact: days }).then((ok) => { if (!ok) void notify.offer(again); });
+            else void notify.offer(again);
         }
     }, [firstLoadDone, namedFor, newestLine?.id, requestMode, isPeerBlocked, keyChangePending]);
     // The listings the messages name (Message on a listing; core chat-about.ts), as this member can read them.

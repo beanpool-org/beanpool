@@ -186,7 +186,7 @@ const KOFI_REQUEST = { state: 'pending', from: 'kofi-key', at: iso(now - 120_000
 type Answers = Record<string, unknown>;
 function standIn(over: Answers): void {
     const answers: Answers = {
-        getConversation: null, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null,
+        getConversation: null, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null, oldestUnreadAt: null,
         markConversationRead: undefined,
         getDb: { getAllAsync: async () => [], getFirstAsync: async () => null, runAsync: async () => ({}) },
         // The route's check before a chat opens in place (#3305 review F1): that community's copy holds it as a DM. A row

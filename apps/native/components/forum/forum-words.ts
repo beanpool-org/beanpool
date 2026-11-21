@@ -33,6 +33,8 @@ export const TOPIC_WORDS = {
     hidden: word('Hidden while moderators look'),
     edited: word('edited'),
     closed: word('This topic is closed, so it takes no new replies.'),
+    /** A group's section this member reads but doesn't write in (an observer, an owner, a moderator): the node's own words. */
+    readsOnly: word('Only this group’s convenors and members write here. You can read it.'),
     writeReply: word('Write a reply…'),
     send: word('Send'),
     replyingTo: word('Replying to {name}: {words}'),

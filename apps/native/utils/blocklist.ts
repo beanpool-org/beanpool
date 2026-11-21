@@ -726,7 +726,8 @@ const MEMBER_KEY = /^[0-9a-f]{64}$/;
 const NO_MEMBER_CODES: ReadonlySet<string> = new Set(['not_a_member', 'account_closed']);
 /**
  * How long a community that answered that the account is no member there ({@link NO_MEMBER_CODES}) is left alone, unless
- * the phone hears first that the account is a member there ({@link blocksAtJoin}, {@link blocksAtMember}): a saved
+ * the phone hears first that the account is a member there ({@link blocksAtJoin}; {@link blocksAtMember} for the community
+ * in use only, the one its membership check asks): a saved
  * community is not always one the account belongs to, and asking each of them every 5 minutes was a rule for the one
  * community in use (S7 design §2.2), which keeps it ({@link askedEachRound}).
  */
@@ -760,8 +761,8 @@ const DEADLINE_MIN_MS = 1000;
  * ({@link heldAt}). After a refusal asking again won't soon change: `waitUntil`, when it may be asked anything again (it
  * has no block list, or refused a removal); `addsWaitUntil`, when it may be sent blocks again (it refused one), while
  * unblocks still go; `noMemberUntil`, when it may be asked anything again after it said the account is no member there
- * ({@link NO_MEMBER_WAIT_MS}; a join there lifts it, {@link blocksAtJoin}, and so does the phone's check saying it is a member,
- * {@link blocksAtMember}; never kept for the community in use at a round, {@link askedEachRound}). `seen`, the keys on the
+ * ({@link NO_MEMBER_WAIT_MS}; a join there lifts it, {@link blocksAtJoin}, and at the community in use so does the phone's check
+ * saying it is a member, {@link blocksAtMember}, which asks no other; never kept for the community in use at a round, {@link askedEachRound}). `seen`, the keys on the
  * community's last answer that this phone did not put there, with the keys it names as replaced by them: a block made in the
  * web app, on another device, or before a restore (slice S7b, S7 design §2.4, Marty's question 2 of 21 Nov). Kept for
  * the block-first check alone ({@link readBlockLists}): never shown, spread to another community or sent again.
@@ -893,10 +894,13 @@ function eachHeld(work: (community: string, inUse: boolean) => Promise<void>): P
  *   its owner), keeps no list for it: nothing this phone sent counts as on its list any more
  *   ({@link communityKeepsNoBlocks}). The community in use is asked again at every round, as it always was: one community
  *   fits that rule (S7 design §2.2), and a member let in there, or brought back by a vote, may tell the phone nothing. Each
- *   other community it holds is asked again in an hour ({@link NO_MEMBER_WAIT_MS}), or at once when the phone hears the
- *   account is a member there: it joins there with an invite, an answered request to join included ({@link blocksAtJoin}),
- *   or the phone's own check of it says so ({@link blocksAtMember}). So a member who joins, or whom a vote brings back, has
- *   the whole list sent at the next round there at the latest, not an hour, a day later or never.
+ *   other community it holds is asked again in an hour ({@link NO_MEMBER_WAIT_MS}), or at once when the account joins there
+ *   with an invite, an answered request to join included ({@link blocksAtJoin}). The phone's own membership check
+ *   ({@link blocksAtMember}, app/NodeStatusContext.tsx) asks only the community in use, so it lifts the hour there alone
+ *   (for the background sync and {@link syncBlocksAt}, which keep it), once the phone is set to that community again; it
+ *   never reaches the other held communities. So a member who joins has the whole list sent at the join; one whom a vote
+ *   brings back, or the admins let in, at another held community has it sent within the hour, or at the first round once
+ *   the phone is set there, not a day later or never.
  * - A node with no block list (404, 405): that community is not asked again for a day. Any other refusal (a 403, the
  *   community's limit) of a block: it is sent no blocks for a day, but unblocks still go, so the blocked member's lines
  *   are withheld no longer than the member wants (the limit's own answer is "Unblock someone to block another"); of an
@@ -1436,7 +1440,8 @@ export function blocksAtJoin(publicKey: string, community: string, newMember: bo
 
 /**
  * The phone's own check of `community` answered that the account `publicKey` IS a member there (app/NodeStatusContext.tsx:
- * at start, on each return to the app, and for each account that comes on the phone, one switched back included): the
+ * at start, on each return to the app, and for each account that comes on the phone, one switched back included). That
+ * check asks only the community the phone is set to, so `community` is always the one in use, never another held one: the
  * hour's wait after a "no member" answer there goes, and that community's sync runs now, as the account on the phone's.
  * Whatever the phone counts as on its list stays: a member's list is still there. Nothing is sent when nothing is owed.
  * Never throws, and never waited for by the check: it goes on at once.

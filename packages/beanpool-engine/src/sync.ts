@@ -1714,7 +1714,9 @@ export function exportSyncState(
             : db.prepare(`SELECT * FROM ${table}`).all() as any[];
 
     // Each member's preferences (holiday, notification settings, reminder defaults) travel with their row, in one query:
-    // every writer moves the member's updated_at, so a delta that carries a change carries the member (design G2b).
+    // every writer moves the member's updated_at, so a delta that carries a change carries the member (design G2b). All
+    // but one: the server's engine/asked-push.ts writes its daily stamp alone, so a standby takes that stamp only with the
+    // row's next change or a whole copy (a standby promoted that day may send one more of that push).
     const preferencesOf = new Map<string, Record<string, string>>();
     try {
         const prefRows = (delta

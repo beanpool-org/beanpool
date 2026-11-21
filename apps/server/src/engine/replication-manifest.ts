@@ -188,8 +188,10 @@ export const TABLES: Record<string, TableEntry> = {
         },
     },
     // Holiday, notification settings and reminder defaults, in each member's row (`preferences`, G2b): every writer stamps
-    // the member's row (state-engine.ts setMemberPreferences, setHolidayMode; engine/event-reminders.ts), and the import
-    // replaces the member's rows with the ones the copy names.
+    // the member's row (state-engine.ts setMemberPreferences, setHolidayMode; engine/event-reminders.ts; the new-event
+    // push's daily stamp, engine/event-new-push.ts), and the import replaces the member's rows with the ones the copy
+    // names. All but one: engine/asked-push.ts writes its daily stamp alone, so a delta carries it only with the row's
+    // next change (a whole copy always does).
     member_preferences: {
         kind: 'replicated', payload: 'members', watermark: 'updated_at', inRowOf: { table: 'members', field: 'preferences' },
         columns: cols('public_key pref_key pref_value'),

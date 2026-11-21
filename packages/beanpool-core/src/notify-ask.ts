@@ -317,7 +317,8 @@ export function notifyEventLineWords(coming: NotifyEventComing): { line: string;
  *   community sends that push and this phone allows notifications. Off, the note says the rest and promises nothing.
  */
 export function notifyRemindersOff(p: NotifyPhone | null | undefined): boolean {
-    return !!p && notifyTurnOn(p) !== 'none';
+    // Whether there is anything to turn on is the phone's alone; the record only chooses the pop-up or the settings line.
+    return !!p && notifyTurnOn(p, {}) !== 'none';
 }
 
 /** Whether What are you into?'s note may say "we'll tell you when a neighbour asks for it" (see {@link notifyRemindersOff}). */

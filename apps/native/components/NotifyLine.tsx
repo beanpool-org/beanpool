@@ -122,19 +122,31 @@ export function useNotifyLine(publicKey: string | null | undefined, showing: boo
 
     // Hidden: nothing drawn even for the one render before the effect above lets the line go.
     const line = showing ? shown : null;
-    const view = line ? <NotifyLine kind={line.kind} name={line.name} state={line.state} onTellMe={tellMe} align={line.align} /> : null;
-    return { line, offer, view };
+    /**
+     * The line in words the screen says are true now, in place of its kind's own (an event's line follows the answer as it
+     * is, not the one that brought it: core's notifyEventLineWords); null: nothing true to say now, so nothing drawn.
+     */
+    const draw = (words?: NotifyLineText | null) => (line && words !== null
+        ? <NotifyLine kind={line.kind} name={line.name} state={line.state} onTellMe={tellMe} align={line.align} words={words} />
+        : null);
+    const view = draw();
+    return { line, offer, view, draw };
 }
 
-export function NotifyLine({ kind, name, state, onTellMe, align = 'start' }: {
+/** A named line's words: the offer, what it says once notifications are on, and its button. */
+export type NotifyLineText = { line: string; done: string; button: string };
+
+export function NotifyLine({ kind, name, state, onTellMe, align = 'start', words: given }: {
     kind: NotifyLineKind;
     name?: string | null;
     state: Shown['state'];
     onTellMe: () => void;
     align?: 'start' | 'end';
+    /** In place of the kind's own words (useNotifyLine's `draw`). */
+    words?: NotifyLineText;
 }) {
     const { colors } = useTheme();
-    const words = notifyLineWords(kind, name);
+    const words = given ?? notifyLineWords(kind, name);
     const side = { alignSelf: align === 'end' ? 'flex-end' as const : 'flex-start' as const };
     if (state === 'done') {
         return (

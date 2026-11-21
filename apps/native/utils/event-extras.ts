@@ -92,6 +92,63 @@ export function formatReminderChoice(offsets: number[] | null, fallback: number[
     return formatReminderOffsets(offsets);
 }
 
+// ===================== WHAT THE NODE WILL STILL SEND (slice N2b) =====================
+// Phone-only (the web app draws no named line or true line yet): the event page's named line and the reminder box's true
+// line say only what this reads as coming, so the page never promises what the node won't do.
+
+/**
+ * The reminders the node will still send a member for this event, by its own rule (apps/server/src/engine/event-reminders.ts
+ * dueEventReminders): each offset of the choice that applies (this event's own, else the member's default) whose moment, the
+ * start less the offset, is not yet behind us. The node never sends one whose moment had passed when the member answered or
+ * chose it ("armedAt <= due": the RSVP's updated_at, which every answer, every switch and every reminder change moves to
+ * now), so a moment behind us now is never coming. No start that reads as a date: none.
+ */
+export function remindersToCome(startAt: string | null | undefined, offsets: number[] | null, defaults: number[], nowMs: number): number[] {
+    const startMs = typeof startAt === 'string' ? Date.parse(startAt) : NaN;
+    if (!Number.isFinite(startMs)) return [];
+    return normaliseReminderOffsets(offsets ?? defaults).filter((minutes) => startMs - minutes * 60_000 >= nowMs);
+}
+
+/** What the page knows of the member's reminder choice and their Marketplace switch (components/EventExtras.tsx useEventReminderChoice). */
+export interface EventReminderChoiceRead {
+    /** This event's own choice; null: the member's default applies. */
+    offsets: number[] | null;
+    /** The member's default (Settings → Notifications). */
+    defaults: number[];
+    /** Their Marketplace notifications switch: reminders and change notices ride that category, and the node drops both while it is off. */
+    marketplaceOn: boolean;
+    /** Both reads answered: until then nothing is known, so nothing is promised. */
+    known: boolean;
+}
+
+/** What the node will still tell this member of the event: the reminders still to come, the day before among them, and changes. */
+export interface EventNoticesComing {
+    reminders: number[];
+    dayBefore: boolean;
+    changes: boolean;
+}
+
+const NOTHING_COMING: EventNoticesComing = { reminders: [], dayBefore: false, changes: false };
+
+/**
+ * What the node will still send a member for an event they answered, from now on: the reminders still to come
+ * ({@link remindersToCome}); and a change of time or place or a cancellation, told to Going alone and never to Interested
+ * (apps/server/src/engine/posts.ts notifyEventChange), until the event ends (no edit after). Nothing at all with no answer,
+ * before the choice is read, or with the member's Marketplace switch off (the push dispatcher drops `notify_marketplace`
+ * 'false'). The named line (@beanpool/core notifyEventLineWords) and the reminder's true line both read this.
+ */
+export function eventNoticesComing(i: {
+    answer: 'going' | 'interested' | null | undefined;
+    startAt: string | null | undefined;
+    ended: boolean;
+    choice: EventReminderChoiceRead;
+    nowMs: number;
+}): EventNoticesComing {
+    if ((i.answer !== 'going' && i.answer !== 'interested') || i.ended || !i.choice.known || !i.choice.marketplaceOn) return NOTHING_COMING;
+    const reminders = remindersToCome(i.startAt, i.choice.offsets, i.choice.defaults, i.nowMs);
+    return { reminders, dayBefore: reminders.includes(1440), changes: i.answer === 'going' };
+}
+
 // ===================== THE EVENT'S LINK, AND SHARING IT =====================
 
 /**

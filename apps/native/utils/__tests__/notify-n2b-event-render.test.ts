@@ -116,6 +116,8 @@ const ME = '9'.repeat(64);
 const HOST = '7'.repeat(64);
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { publicKey: '9'.repeat(64), privateKey: '8'.repeat(64), callsign: 'Wren' } }) }));
 const node = vi.hoisted(() => ({ view: null as any }));
+/** The member's preferences (their default reminder, their Marketplace switch) and their events' own reminder choices. */
+const reads = vi.hoisted(() => ({ prefs: {} as Record<string, unknown>, mine: [] as Array<{ postId: string; reminderOffsets: unknown }> }));
 vi.mock('../db', () => ({
     fetchEventDetail: async () => node.view,
     rsvpEvent: async (_id: string, status: string | null) => {
@@ -126,8 +128,8 @@ vi.mock('../db', () => ({
     reportAbuse: async () => ({ ok: true }),
     letInToEvent: async () => ({ success: true, post: node.view }),
     unpinPostOnNode: async () => {},
-    fetchMemberPreferences: async () => ({}),
-    fetchMyEvents: async () => [],
+    fetchMemberPreferences: async () => reads.prefs,
+    fetchMyEvents: async () => reads.mine,
     setEventReminder: async () => {},
     isRouteMissing: () => false,
     getMemberRatings: async () => ({ ratings: [], average: 0, count: 0 }),
@@ -203,15 +205,21 @@ beforeEach(() => {
     rn.openSettings.mockClear();
     notif.requestPermissionsAsync.mockClear();
     node.view = null;
+    reads.prefs = {};
+    reads.mine = [];
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
-async function draw(myRsvp: string | null = null, showing = true) {
-    node.view = { ...EVENT, myRsvp };
-    await act(async () => { root.render(createElement(EventDetail, { post: EVENT, showing }) as any); });
+async function draw(myRsvp: string | null = null, showing = true, event: typeof EVENT = EVENT) {
+    node.view = { ...event, myRsvp };
+    await act(async () => { root.render(createElement(EventDetail, { post: event, showing }) as any); });
     await settle();
 }
+/** The working bee, starting `fromNow` ms from now and running three hours. */
+const startingIn = (fromNow: number): typeof EVENT => ({
+    ...EVENT, eventStartAt: new Date(Date.now() + fromNow).toISOString(), eventEndAt: new Date(Date.now() + fromNow + 3 * HOUR).toISOString(),
+});
 const byId = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 const buttonNamed = (name: string) => Array.from(host.querySelectorAll('[role="button"]'))
     .find((b) => b.getAttribute('aria-label') === name || b.textContent?.trim() === name) as HTMLElement | undefined;
@@ -311,6 +319,133 @@ describe('the named line under the answer: (Going, Interested) x the phone and i
         const spy = vi.spyOn(db, 'rsvpEvent').mockRejectedValueOnce(new Error('Could not reach the node.'));
         await tap(buttonNamed('Going'), 'Going');
         expect(byId('notify-line')).toBeNull();
+        spy.mockRestore();
+    });
+});
+
+/**
+ * The class the deciding review on #3339 found twice (Going then Interested kept "hear if it changes"; an event today
+ * offered "a reminder the day before"): the page never promises what the node won't send. One table, drawn for real:
+ * {answer} x {when the event is, the member's own reminder choice, their Marketplace switch} -> exactly the true line under
+ * the answer and, after Tell me, exactly the true "You'll ..." line; and the reminder box's true line by the same rule.
+ * Each row with a line is red without it; each row with none is red if any line is drawn.
+ */
+describe('the class: the line says only what the node will send (answer x the event and the choice)', () => {
+    const CHANGE = { line: 'Hear if it changes.', done: "You'll hear if it changes." };
+    const FULL = WORDS.going;
+    const REMIND = WORDS.interested;
+    type Words = { line: string; done: string } | null;
+    const FLOWS: Record<string, string[]> = {
+        'Going': ['Going'],
+        'Interested': ['Interested'],
+        'Going, then Interested': ['Going', 'Interested'],
+        'Interested, then Going': ['Interested', 'Going'],
+        'Going, then cleared': ['Going', 'Going, selected. Tap to clear'],
+        'Interested, then cleared': ['Interested', 'Interested, selected. Tap to clear'],
+    };
+    /** [the event and the choice, start from now, the member's preferences, this event's own choice, a reminder still to come] */
+    const EVENTS: Array<[string, number, Record<string, unknown>, unknown, boolean]> = [
+        ['a week away', 7 * DAY, {}, undefined, true],
+        ['25 h away', 25 * HOUR, {}, undefined, true],
+        ['23 h away', 23 * HOUR, {}, undefined, false],
+        ['1 h away', HOUR, {}, undefined, false],
+        ['started an hour ago', -HOUR, {}, undefined, false],
+        ['a week away, their default reminder 2 hours before', 7 * DAY, { eventReminderOffsets: '[120]' }, undefined, true],
+        ["a week away, this event's reminder changed to none", 7 * DAY, {}, [], false],
+        ["23 h away, this event's reminder a day and an hour before", 23 * HOUR, {}, [1440, 60], true],
+        ['a week away, their Marketplace notifications off', 7 * DAY, { notify_marketplace: 'false' }, undefined, false],
+    ];
+    /** What the line says for an answer, by whether the day-before reminder is still to come and whether anything reaches them. */
+    function wordsFor(answer: string, dayBefore: boolean, reaches: boolean): Words {
+        if (!reaches) return null;
+        if (answer === 'Going') return dayBefore ? FULL : CHANGE;
+        if (answer === 'Interested') return dayBefore ? REMIND : null;
+        return null; // cleared
+    }
+    /** The line after the whole flow (it follows the answer as it is now), and the one kind spent: the first answer that had a line. */
+    function expected(flow: string, dayBefore: boolean, reaches: boolean): { words: Words; spent: string[] } {
+        const steps = FLOWS[flow];
+        const first = steps.find((s) => !s.includes('Tap to clear') && wordsFor(s, dayBefore, reaches));
+        return { words: wordsFor(steps[steps.length - 1], dayBefore, reaches), spent: first ? [first.toLowerCase()] : [] };
+    }
+
+    for (const [event, fromNow, prefs, own, reminderComing] of EVENTS) {
+        for (const flow of Object.keys(FLOWS)) {
+            const reaches = !event.includes('Marketplace notifications off');
+            const dayBefore = reaches && fromNow >= DAY && (own === undefined ? !prefs.eventReminderOffsets : (own as number[]).includes(1440));
+            const { words, spent } = expected(flow, dayBefore, reaches);
+            it(`${flow} × ${event}: ${words ? `"${words.line}", then "${words.done}"` : 'no line'}`, async () => {
+                reads.prefs = prefs;
+                if (own !== undefined) reads.mine = [{ postId: EVENT.id, reminderOffsets: own }];
+                const shown = startingIn(fromNow);
+                await draw(null, true, shown);
+                for (const tapped of FLOWS[flow]) await tap(buttonNamed(tapped), tapped);
+
+                const line = byId('notify-line');
+                if (!words) {
+                    expect(line, 'no line: nothing true to say').toBeNull();
+                    expect(byId('notify-line-done')).toBeNull();
+                } else {
+                    expect(line?.textContent).toBe(`${words.line}Tell me`);
+                }
+                // The reminder box's true line, by the same rule: only while a reminder is still to come (the phone can ask).
+                const answered = !flow.endsWith('cleared');
+                if (!answered) {
+                    expect(byId('event-reminder-box')).toBeNull();
+                } else if (reminderComing) {
+                    expect(byId('event-reminders-off')?.textContent).toBe('⏰ Reminders need notifications on.Turn on');
+                } else {
+                    expect(byId('event-reminders-off'), 'no reminder coming: turning on brings nothing').toBeNull();
+                    expect(byId('event-reminder-box')?.textContent).toContain('⏰ Remind me:');
+                }
+                // Only an answer with something true to say spends its kind: an Interested offered nothing leaves it for a later event.
+                expect(stored()?.lines ?? []).toEqual(spent);
+                if (!words) return;
+                await tap(byId('notify-line-tell-me'), 'Tell me');
+                expect(byId('notify-line-done')?.textContent).toBe(words.done);
+            });
+        }
+    }
+
+    it("the reminder changed to none after Tell me: Going's line drops the reminder, Interested's goes", async () => {
+        await draw(null, true, startingIn(7 * DAY));
+        await tap(buttonNamed('Going'), 'Going');
+        await tap(byId('notify-line-tell-me'), 'Tell me');
+        expect(byId('notify-line-done')?.textContent).toBe(FULL.done);
+        // Notifications on: the box is Remind me with its Change; untick the day before and save none for this event.
+        await tap(buttonNamed('Change the reminder for this event'), 'Change');
+        const dayBefore = Array.from(host.querySelectorAll('[role="checkbox"]')).find((b) => b.getAttribute('aria-label') === '1 day before') as HTMLElement;
+        await tap(dayBefore, '1 day before');
+        await tap(buttonNamed('Save for this event'), 'Save for this event');
+        expect(byId('event-reminder-box')?.textContent).toContain('⏰ Remind me: Off');
+        expect(byId('notify-line-done')?.textContent).toBe(CHANGE.done);
+        await tap(buttonNamed('Interested'), 'Interested');
+        expect(byId('notify-line-done'), 'Interested with no reminder: nothing is coming, so nothing is said').toBeNull();
+        expect(byId('notify-line')).toBeNull();
+        // Back to the default: the day before is coming again, and the line says so.
+        await tap(buttonNamed('Change the reminder for this event'), 'Change');
+        await tap(buttonNamed('Use my default reminder for this event'), 'Use my default');
+        expect(byId('notify-line-done')?.textContent).toBe(REMIND.done);
+    });
+
+    it('an event today: Interested is offered nothing, so a later Going still gets its line (the kind unspent)', async () => {
+        await draw(null, true, startingIn(3 * HOUR));
+        await tap(buttonNamed('Interested'), 'Interested');
+        expect(byId('notify-line')).toBeNull();
+        expect(stored()?.lines ?? []).toEqual([]);
+        await tap(buttonNamed('Going'), 'Going');
+        expect(byId('notify-line')?.textContent).toBe(`${CHANGE.line}Tell me`);
+        expect(stored()).toMatchObject({ askKind: 'line', lines: ['going'] });
+    });
+
+    it('the choice not read (the node did not answer): nothing is offered, nothing promised', async () => {
+        const db = await import('../db');
+        const spy = vi.spyOn(db, 'fetchMemberPreferences').mockRejectedValue(new Error('Could not reach the node.'));
+        await draw(null, true, startingIn(7 * DAY));
+        await tap(buttonNamed('Going'), 'Going');
+        expect(byId('notify-line')).toBeNull();
+        expect(byId('event-reminders-off')).toBeNull();
+        expect(stored()?.lines ?? []).toEqual([]);
         spy.mockRestore();
     });
 });

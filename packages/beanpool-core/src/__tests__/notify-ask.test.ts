@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, it, expect } from 'vitest';
 import {
-    markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyInterestsPromise, notifyLaterAt, notifyLineWords, notifyPhoneSaidNo,
+    markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyEventLineWords, notifyFirstStepsLine, notifyInterestsPromise, notifyLaterAt, notifyLineWords, notifyPhoneSaidNo,
     notifyRemindersOff, notifyTurnOn, NOTIFY_TRUE_WORDS, NOTIFY_FACT_DAYS, NOTIFY_HOME_AFTER_LATER_DAYS, NOTIFY_HOME_AWAY_DAYS, NOTIFY_HOME_AWAYS, NOTIFY_LINE_KINDS, NOTIFY_ONCE_CARD_DAYS,
     type NotifyAskInput, type NotifyAskRecord, type NotifyAsks, type NotifyAskSurface, type NotifyLineKind, type NotifyPhone,
 } from '../notify-ask.js';
@@ -457,8 +457,29 @@ describe('the named lines at events, interests and the forum, and the two true l
         expect(NOTIFY_TRUE_WORDS.reminders).toBe('⏰ Reminders need notifications on.');
     });
 
+    // The line at an answer to an event names only what will come (the phone reads that by the node's rule:
+    // apps/native/utils/event-extras.ts eventNoticesComing). Each row red if its words go or a false part comes back.
+    const CHANGE_ONLY = { line: 'Hear if it changes.', done: "You'll hear if it changes.", button: 'Tell me' };
+    const EVENT_LINES: Array<[string, { dayBefore: boolean; changes: boolean }, { line: string; done: string; button: string } | null]> = [
+        ['the day before still to come, and Going (a change is told)', { dayBefore: true, changes: true }, { ...notifyLineWords('going') }],
+        ['the day before still to come, no change told (Interested)', { dayBefore: true, changes: false }, { ...notifyLineWords('interested') }],
+        ['no reminder the day before, Going (an event today, a choice of none)', { dayBefore: false, changes: true }, CHANGE_ONLY],
+        ['nothing coming (Interested today, the Marketplace switch off)', { dayBefore: false, changes: false }, null],
+    ];
+    it.each(EVENT_LINES)('an event: %s', (_name, coming, words) => {
+        expect(notifyEventLineWords(coming)).toEqual(words);
+        const said = notifyEventLineWords(coming);
+        // Never the reminder without the day-before reminder coming; never a change without one told.
+        if (!coming.dayBefore) expect(`${said?.line} ${said?.done}`).not.toMatch(/reminder/);
+        if (!coming.changes) expect(`${said?.line} ${said?.done}`).not.toMatch(/changes/);
+    });
+    it('the event lines with the reminder are the kinds\' own words, so the catalogs carry each once', () => {
+        expect(notifyEventLineWords({ dayBefore: true, changes: true })?.line).toBe(WORDS[0][1]);
+        expect(notifyEventLineWords({ dayBefore: true, changes: false })?.done).toBe(WORDS[1][2]);
+    });
+
     const catalog = (lang: string): Catalog => JSON.parse(readFileSync(new URL(`../../words/${lang}.json`, import.meta.url), 'utf8')) as Catalog;
-    const SENTENCES = [...WORDS.flatMap(([, line, done]) => [line, done]), NOTIFY_TRUE_WORDS.reminders as string];
+    const SENTENCES = [...WORDS.flatMap(([, line, done]) => [line, done]), CHANGE_ONLY.line, CHANGE_ONLY.done, NOTIFY_TRUE_WORDS.reminders as string];
     it.each(LANGS.filter((l) => l !== 'en'))('%s: a machine draft for every sentence, the clock kept on the reminder line', (lang) => {
         const c = catalog(lang) as Record<string, unknown>;
         for (const key of SENTENCES) expect(typeof c[key], `${lang} ${key}`).toBe('string');

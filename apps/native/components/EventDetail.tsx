@@ -10,8 +10,11 @@
  * dates", DESIGN-web-dates-stop-fable.md §4, as the web's page has it). That the answer is on the first screen is measured
  * (event-page-shell-render.test.ts: at 320 × 569 and 1.3×, its top ≤ 500 dp and its bottom ≤ 569, with a photo, without,
  * and with the dates opened). The counts show only once someone has answered. A Going or an Interested saved may bring one
- * named line under the answer, "Get a reminder the day before, and hear if it changes." [Tell me] (Interested: the reminder
- * only), by core's rule (DESIGN-notify-and-backup-asks-fable-amend2.md §12.3 slice N2b; components/NotifyLine.tsx).
+ * named line under the answer, "Get a reminder the day before, and hear if it changes." [Tell me], by core's rule
+ * (DESIGN-notify-and-backup-asks-fable-amend2.md §12.3 slice N2b; components/NotifyLine.tsx). It says only what the node will
+ * send for the answer as it is now (utils/event-extras.ts eventNoticesComing): the reminder only while its moment is still
+ * ahead by the member's own choice, the change only to Going ("Hear if it changes."), nothing with their Marketplace switch
+ * off; nothing true, no line, and none offered.
  *
  * What the viewer may see is the node's decision, not this screen's: the local row gives a first paint, then
  * a signed by-id fetch returns my RSVP, the note (host and Going only) and the RSVP list (hosts only). The note
@@ -32,7 +35,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { copyFromLine, eventCopyOf, t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine, upperCase, MARKET_CARD_SHELL as SHELL } from '@beanpool/core';
+import { copyFromLine, eventCopyOf, notifyEventLineWords, t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine, upperCase, MARKET_CARD_SHELL as SHELL } from '@beanpool/core';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent, unpinPostOnNode } from '../utils/db';
 import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../utils/pins';
 import { usePinRole } from '../utils/use-pin-role';
@@ -45,7 +48,8 @@ import { CategoryTile } from './CategoryTile';
 import { CardChip, useCardShell } from './market-card-shell';
 import { NewEventModal } from './NewEventModal';
 import { useYourGroups } from './useYourGroups';
-import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { EventReminder, EventShareAndCalendar, useEventReminderChoice } from './EventExtras';
+import { eventNoticesComing } from '../utils/event-extras';
 import { useNotifyLine } from './NotifyLine';
 import { EventNextDates } from './EventNextDates';
 import { EventCopyDoor } from './EventCopyDoor';
@@ -103,6 +107,11 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     // The node's reader view for this member; null until it arrives (or when offline).
     const [view, setView] = useState<any | null>(null);
     const [counts, setCounts] = useState<RsvpCounts>(() => countsOf(post));
+    // The member's reminder choice and Marketplace switch, read once they have an answer: the reminder box shows it, and the
+    // named line says only what the node will send by it (utils/event-extras.ts eventNoticesComing).
+    const reminderChoice = useEventReminderChoice(post.id, identity?.publicKey, !!counts.mine);
+    // A Going or an Interested saved, waiting for that choice to be read before the named line may be offered (slice N2b).
+    const [offerFor, setOfferFor] = useState<'going' | 'interested' | null>(null);
     const [pending, setPending] = useState<EventRsvpStatus | null>(null);
     const [showRsvps, setShowRsvps] = useState(false);
     // The member (or 'everyone') a let-in is being saved for.
@@ -195,6 +204,24 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     const letInLine = eventLetInLine(letInState);
     const hostLetsIn = !!p.eventHostLetsIn;
     const waiting = hostLetsIn ? eventWaitingCount(rsvps) : 0;
+    // The named line's words (slice N2b): what the node will still send for the answer as it is NOW, by its own rule (the day
+    // before only while that moment is ahead, a change only to Going, nothing with the Marketplace switch off). Going then
+    // Interested drops "hear if it changes"; a reminder of none drops the reminder; nothing true to say draws no line.
+    const lineWords = !isHost && !copy
+        ? notifyEventLineWords(eventNoticesComing({
+            answer: counts.mine, startAt: p.event_start_at ?? p.eventStartAt, ended, choice: reminderChoice, nowMs: Date.now(),
+        }))
+        : null;
+    const hasLineWords = !!lineWords;
+    // A Going or an Interested saved is offered the line once the choice is read, and only if it has something true to
+    // say then: an event today past its day-before moment brings Interested nothing, and the kind stays unspent.
+    useEffect(() => {
+        if (!offerFor) return;
+        if (counts.mine !== offerFor) { setOfferFor(null); return; }
+        if (!reminderChoice.known) return;
+        setOfferFor(null);
+        if (hasLineWords) void notify.offer({ kind: offerFor });
+    }, [offerFor, counts.mine, reminderChoice.known, hasLineWords, notify.offer]);
 
     const saveLetIn = async (key: string, who: { memberPublicKey: string } | { everyone: true }, on: boolean) => {
         if (letting) return;
@@ -265,8 +292,8 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 });
                 setCounts(c => applyRsvp(c, null));
             }
-            // Saved: the member's own act, the moment for "Get a reminder the day before" (Interested: the reminder only).
-            if (next === 'going' || next === 'interested') void notify.offer({ kind: next });
+            // Saved: the member's own act, the moment for the named line, offered once their reminder choice is read (above).
+            setOfferFor(next === 'going' || next === 'interested' ? next : null);
         } catch (err: any) {
             setCounts(before);
             // The phone's own refusals (utils/db.ts throws them as written) in the member's language; the node's words as it sent them (slice S4).
@@ -535,8 +562,8 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                             {rsvpButton('interested', t('Interested'))}
                         </View>
                     )}
-                    {/* The named line under the answer, while the member is still Going or Interested. */}
-                    {!isHost && !copy && !!counts.mine && notify.view}
+                    {/* The named line under the answer, in the words true for the answer now; none while nothing is. */}
+                    {!isHost && !copy && !!counts.mine && notify.draw(lineWords)}
                     {/* Nothing while nobody has answered (the card's rule): "0 going · 0 interested" reads as a dead community. */}
                     {!copy && counts.going + counts.interested > 0 && (
                         <Text style={styles.counts} numberOfLines={2} testID="event-counts">👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
@@ -572,7 +599,7 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
 
                 {/* 9. Remind me and the note for people who are going: boxes. The host is running it and has no RSVP, so no reminder (decision 2). */}
                 {!isHost && !copy && (
-                    <EventReminder post={p} myRsvp={counts.mine} viewerPublicKey={identity?.publicKey} />
+                    <EventReminder post={p} myRsvp={counts.mine} viewerPublicKey={identity?.publicKey} choice={reminderChoice} />
                 )}
                 {note ? (
                     <View style={[shell.pageBox, styles.box]} testID="event-note-box">

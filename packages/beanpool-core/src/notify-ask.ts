@@ -224,6 +224,29 @@ export function notifyLineWords(kind: NotifyLineKind, name?: string | null): { l
 }
 
 /**
+ * What the node will still tell a member of an event they answered, read by its own rule (the phone's
+ * apps/native/utils/event-extras.ts eventNoticesComing): `dayBefore`, the reminder the day before is still to come for them;
+ * `changes`, a change of time or place or a cancellation will be told to them (Going only, apps/server/src/engine/posts.ts).
+ */
+export interface NotifyEventComing {
+    dayBefore: boolean;
+    changes: boolean;
+}
+
+/**
+ * The named line under an answer to an event (slice N2b), saying only what will come: the reminder the day before only while
+ * it is still to come, a change only where one is told (Going). Neither: null, and no line is offered or drawn. The words
+ * follow what is true now, not the answer that brought the line: Going then Interested drops the change, and a reminder
+ * choice changed to none drops the reminder.
+ */
+export function notifyEventLineWords(coming: NotifyEventComing): { line: string; done: string; button: string } | null {
+    if (coming.dayBefore && coming.changes) return notifyLineWords('going');
+    if (coming.dayBefore) return notifyLineWords('interested');
+    if (coming.changes) return { line: t('Hear if it changes.'), done: t("You'll hear if it changes."), button: t('Tell me') };
+    return null;
+}
+
+/**
  * The two true lines (amend1 §4.3, amend2 §6, slice N2b). Neither is a soft ask: each is the true state of something the
  * member asked for, so it shows in every state of the record, after a "Later" and after the phone's "no" alike, and never
  * takes the day. `phone` null: not read yet; neither says anything new then, and nothing is promised.

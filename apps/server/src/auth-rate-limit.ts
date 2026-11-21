@@ -29,7 +29,7 @@ export type AuthLimitBucket =
     | 'pairing'           // QR pairing: /api/pair/init and /api/pair/transfer, one pairing's two calls
     | 'names'             // /api/members/callsign-available/:callsign (unless a key joining at the open door signs it),
                           // which says whether a name is taken
-    | 'funnel-event'      // the wizard's three counted steps, every newcomer's
+    | 'funnel-event'      // the join's five counted steps (core CLIENT_FUNNEL_EVENTS), every newcomer's
     | 'knock'             // /api/join/knock (and its own daily caps, engine/knocks.ts)
     | 'pricing-guide'     // the pricing guide's read and its anonymous report
     | 'sign-in-recovery'; // a restore by sign-in: /api/recovery/find-nonce, /find and /collect; and a member's own sign-in:

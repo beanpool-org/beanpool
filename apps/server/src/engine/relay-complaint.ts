@@ -12,6 +12,8 @@
  * `line_not_verified`, nothing filed. Then it files one report (abuse_reports: the sender's key, `target_home` their home,
  * the line's id, what was handed over), blocks the sender for the reporter at this server's door (engine/member-blocks.ts),
  * and tells the sender's home. The line crosses; the authority does not: only the sender's home may act on its member.
+ * When its sender is a member HERE too, the line was a request by this community's own rule, and the report counts towards
+ * clearing their requests here as a request's report inside does (engine/request-limits.ts; {@link countsAsRequestReport}).
  *
  * **The complaint** goes to `https://<sender home>/api/relay/complaint` in a request this server signs (engine/node-key.ts,
  * checked at the other end by engine/node-signature.ts). It is {@link ComplaintBody}: the member there, the line's id and
@@ -60,13 +62,15 @@ import {
     OUTSIDE_LINE_TEXT_MAX, type RelayEnvelope, type ReportKind,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { getNodeRole, isNodeMember, readsAsMember } from '../state-engine.js';
+import { getNodeRole, isNodeMember, readsAsMember, weighRequestReports } from '../state-engine.js';
 import { addBlocks, BlockRefusal, hasBlocked } from './member-blocks.js';
 import { isOwnNodeHome } from './node-key.js';
 import { isServerBlocked } from '../connector-manager.js';
 import { NODE_BUSY_RETRY_AFTER_SEC, keptNodeKeyDocument, originKeyStanding, type NodeOrigin } from './node-signature.js';
 import { GroupLineReportError, guestLineComplaint, type GroupLineReport } from './group-chat-report.js';
-import { outsideMessagesOn, RELAY_LINE_MAX_CHARS } from './relay-mail.js';
+import { heldAsFirstLine, outsideMessagesOn, RELAY_LINE_MAX_CHARS } from './relay-mail.js';
+import { requestNeeded, requestsOn } from './dm-requests.js';
+import { wordingOf } from './request-limits.js';
 import { RETRY_BACKOFF_MS, OUTBOX_QUEUE_MS, forwardSigned } from './relay-outbox.js';
 import { logger } from '../logger.js';
 
@@ -153,8 +157,29 @@ export type ToldState = 'queued' | 'sent' | 'failed';
 interface Told { state: ToldState; tries: number; next: number | null; id: string }
 
 /**
+ * Whether a report of this line counts towards clearing its sender's requests here (engine/request-limits.ts, R1), as the
+ * report of a request received inside does (PR #3347 review: a member who wrote only across kept "from a member here" for
+ * good, as nothing across fed the limit the mark reads). It counts when its sender is a member here, so the line was a
+ * request by this community's own rule (relay-mail.ts fromMemberHere); it came to the reporter here as a first line, and
+ * they have written nothing back (relay-mail.ts heldAsFirstLine: inside, a request received and not accepted); and a line
+ * from that member to the reporter would be a request inside now (dm-requests.ts requestsOn and requestNeeded: requests on,
+ * not someone the reporter added, wrote to or opened a chat with here, no trade, no node role). The rule that weighs it is
+ * request-limits.ts's own, unchanged: the same circles, wording and limit, so the same reports filed across or inside reach
+ * the same limit. Any other report of an outside line, a stranger's above all, reaches the moderators and the sender's home
+ * as before, and counts for nothing here.
+ */
+function countsAsRequestReport(reporter: string, env: RelayEnvelope): boolean {
+    return isNodeMember(env.senderKey) && requestsOn() && requestNeeded(env.senderKey, reporter)
+        && heldAsFirstLine(reporter, env.senderKey, env.itemId);
+}
+
+/**
  * File a checked report: one row (the sender's key, their home, the line's id, what was handed over, and the complaint's
- * state), the sender blocked for the reporter. Null for a reporter who is no member here.
+ * state), the sender blocked for the reporter. Null for a reporter who is no member here. A report that counts as a
+ * request's ({@link countsAsRequestReport}) carries what request-limits.ts reads of one: `request_conversation_id` (the
+ * pair's own conversation id, from the sender's key and the reporter's: the column says the report counts, and nothing joins
+ * it to a request row) and `request_wording` (the reporter's words, folded and hashed: wordingOf, as a line's report inside
+ * keeps; never the line), and then the reports are weighed (weighRequestReports), as after a report inside.
  */
 export function submitOutsideLineReport(reporter: string, checked: CheckedOutsideLineReport, now = Date.now()): GroupLineReport | null {
     if (!isNodeMember(reporter) || !readsAsMember(reporter)) return null;
@@ -163,10 +188,14 @@ export function submitOutsideLineReport(reporter: string, checked: CheckedOutsid
     const createdAt = new Date(now).toISOString();
     const reason = checked.reason.slice(0, 500);
     const told: Told = { state: 'queued', tries: 0, next: now, id: crypto.randomUUID() };
+    // Asked before the block below, which changes none of it.
+    const request = countsAsRequestReport(reporter, env) ? relayConversationId(env.senderKey, reporter) : null;
     db.transaction(() => {
-        db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_home, target_message_id, disclosure, reason, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporter, env.senderKey, env.senderHome, env.itemId,
-            JSON.stringify({ kind: OUTSIDE_LINE_DISCLOSURE_KIND, v: 1, envelope: env, payload: checked.payload, words: checked.words, told }), reason, createdAt);
+        db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_home, target_message_id, disclosure, reason, created_at,
+                                               request_conversation_id, request_wording)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporter, env.senderKey, env.senderHome, env.itemId,
+            JSON.stringify({ kind: OUTSIDE_LINE_DISCLOSURE_KIND, v: 1, envelope: env, payload: checked.payload, words: checked.words, told }), reason, createdAt,
+            request, request ? wordingOf(checked.words) : null);
         try {
             addBlocks(reporter, [env.senderKey], now);
         } catch (e) {
@@ -174,6 +203,7 @@ export function submitOutsideLineReport(reporter: string, checked: CheckedOutsid
             if (!(e instanceof BlockRefusal)) throw e;
         }
     })();
+    if (request) weighRequestReports(env.senderKey);
     return { id, reporterPubkey: reporter, targetPubkey: env.senderKey, targetMessageId: env.itemId, reason, createdAt, status: 'pending' };
 }
 

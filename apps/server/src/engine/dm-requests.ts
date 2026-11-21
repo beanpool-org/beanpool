@@ -642,6 +642,23 @@ export function newRequestRefusal(from: string, to: string, now: number = Date.n
 }
 
 /**
+ * Whether `from`'s next line to `to` waits on a request of theirs here: their request in the pair's direct conversation, not
+ * accepted, whose one line is written and whose 30 days are not over, so lineThroughRequest refuses any more ("any other line
+ * of the opener's is refused"; one `to` ignored reads so too). Read as the opener's own view says it (viewOf
+ * `nextLineIsRequest`, what their app reads), and writes nothing, unlike lineThroughRequest. Never where requests are off.
+ * For relay-mail.ts fromMemberHere (slice S5): a member who may not write to `to` here is no "member here" to them across.
+ */
+export function nextLineWaitsOnRequest(from: string, to: string, now: number = Date.now()): boolean {
+    if (!requestsOn()) return false;
+    const rows = db.prepare('SELECT * FROM dm_requests WHERE (from_pubkey = ? AND to_pubkey = ?) OR (from_pubkey = ? AND to_pubkey = ?)')
+        .all(from, to, to, from) as RequestRow[];
+    return rows.some((row) => {
+        const view = viewOf(row, from, now);
+        return view.state !== 'accepted' && view.nextLineIsRequest === false;
+    });
+}
+
+/**
  * A line in a request of their own that the person a withdrawn request was for made while its opener blocks them
  * (reachedOutRow), answered as a line in the row turned round is (lineThroughRequest, the opener's): the first, or the first
  * after its 30 days, is its line and makes it from then, one they cancelled again too (cancelReachOut); any other is

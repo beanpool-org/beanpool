@@ -71,6 +71,12 @@ export interface OutsideLine {
 }
 
 interface Receipt { id: string; key: string; home: string; owedAt: number; triedAt: number }
+/**
+ * The mark of a chat whose receipts are held (core outsideReceiptWhen), in the meta document: `receipts-held:<their key>`,
+ * its value the chat's id, as the phone keeps it in outside_meta (utils/outside-chat-store.ts RECEIPTS_HELD_META).
+ */
+export const RECEIPTS_HELD_META = 'receipts-held:';
+const heldKey = (peerKey: string) => `${RECEIPTS_HELD_META}${peerKey}`;
 type Chats = Record<string, OutsideChat>;
 /**
  * A chat's changes to its lines (X6), by their item ids, as core outsideChangesKept keeps them (the phone's outside_changes):
@@ -407,11 +413,49 @@ export function outsideChatStore(community: string, holds: () => boolean = () =>
             await change([receiptsKey(me)], ([owed]: [Record<string, Receipt> | undefined]) => (owed?.[r.id] ? [undefined]
                 : [{ ...owed, [r.id]: { ...r, owedAt: now, triedAt: 0 } }]));
         },
-        /** The receipts still owed, `limit` at most: never tried first, then those tried longest ago. */
+        /**
+         * The receipts still owed, `limit` at most: never tried first, then those tried longest ago. None of a chat whose
+         * receipts are held ({@link RECEIPTS_HELD_META}): they wait for the member.
+         */
         async owedReceipts(me: string, limit: number): Promise<Array<{ id: string; key: string; home: string }>> {
-            const [owed] = await read([receiptsKey(me)]) as [Record<string, Receipt> | undefined];
-            return Object.values(owed ?? {}).sort((a, b) => a.triedAt - b.triedAt || a.owedAt - b.owedAt || (a.id < b.id ? -1 : 1))
+            const [owed, meta] = await read([receiptsKey(me), metaKey(me)]) as [Record<string, Receipt> | undefined, Record<string, string> | undefined];
+            return Object.values(owed ?? {}).filter((r) => meta?.[heldKey(r.key)] === undefined)
+                .sort((a, b) => a.triedAt - b.triedAt || a.owedAt - b.owedAt || (a.id < b.id ? -1 : 1))
                 .slice(0, limit).map(({ id, key, home }) => ({ id, key, home }));
+        },
+        /**
+         * Held receipts (core outsideReceiptWhen, Marty 22 Nov 2026: a line the mark let in is Delivered only once the member
+         * accepts, answers or opens its chat): the chat with `peerKey` marked held, before its line is written. Its receipts
+         * are owed as any other's and never sent while it is. The phone's holdReceipts.
+         */
+        async holdReceipts(me: string, peerKey: string, chatId: string): Promise<void> {
+            await change([metaKey(me)], ([meta]: [Record<string, string> | undefined]) => (meta?.[heldKey(peerKey)] !== undefined ? [undefined]
+                : [{ ...meta, [heldKey(peerKey)]: chatId }]));
+        },
+        /** Whether the chat with `peerKey` holds its receipts. */
+        async receiptsHeld(me: string, peerKey: string): Promise<boolean> {
+            const [meta] = await read([metaKey(me)]) as [Record<string, string> | undefined];
+            return meta?.[heldKey(peerKey)] !== undefined;
+        },
+        /** Every peer whose chat holds its receipts, for a round's look at their blocks. */
+        async heldReceiptPeers(me: string): Promise<string[]> {
+            const [meta] = await read([metaKey(me)]) as [Record<string, string> | undefined];
+            return Object.keys(meta ?? {}).filter((k) => k.startsWith(RECEIPTS_HELD_META)).map((k) => k.slice(RECEIPTS_HELD_META.length));
+        },
+        /** The chat with `peerKey` lets its receipts go: those owed are sent at the next round, and its lines are receipted from now. */
+        async releaseReceipts(me: string, peerKey: string): Promise<void> {
+            await change([metaKey(me)], ([meta]: [Record<string, string> | undefined]) => {
+                if (meta?.[heldKey(peerKey)] === undefined) return [undefined];
+                const left = { ...meta };
+                delete left[heldKey(peerKey)];
+                return [left];
+            });
+        },
+        /** The receipts a held chat with `peerKey` owes, never to be sent (a block); the chat stays held. In one transaction. */
+        async forgetHeldReceipts(me: string, peerKey: string): Promise<void> {
+            await change([metaKey(me), receiptsKey(me)], ([meta, owed]: [Record<string, string> | undefined, Record<string, Receipt> | undefined]) => (
+                meta?.[heldKey(peerKey)] === undefined ? [undefined, undefined]
+                    : [undefined, Object.fromEntries(Object.entries(owed ?? {}).filter(([, r]) => r.key !== peerKey))]));
         },
         /** Receipts my server took: owed no more. */
         async receiptsSent(me: string, ids: string[]): Promise<void> {

@@ -80,6 +80,14 @@ export const OUTSIDE_CHAT_TABLES_SQL = `
         CREATE INDEX IF NOT EXISTS idx_outside_changes_line ON outside_changes(chat_id, line_id);
 `;
 
+/**
+ * The mark of a chat whose receipts are held (core outsideReceiptWhen), in `outside_meta`, one row per chat:
+ * `receipts-held:<my key>:<their key>`, its value the chat's id. Kept in the meta table every copy already has, so a
+ * community's file the phone holds in place needs nothing new.
+ */
+export const RECEIPTS_HELD_META = 'receipts-held:';
+const heldKey = (me: string, peerKey: string) => `${RECEIPTS_HELD_META}${me}:${peerKey}`;
+
 /** What clearDB drops when the account leaves the phone. */
 export const OUTSIDE_CHAT_DROP_SQL = ' DROP TABLE IF EXISTS outside_chats; DROP TABLE IF EXISTS outside_lines; DROP TABLE IF EXISTS outside_meta; DROP TABLE IF EXISTS outside_receipts; DROP TABLE IF EXISTS outside_changes;';
 
@@ -375,11 +383,44 @@ export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
                 [r.id, me, r.key, r.home, now],
             );
         },
-        /** The receipts still owed, `limit` at most: never tried first, then those tried longest ago, so one refused never holds the rest. */
+        /**
+         * The receipts still owed, `limit` at most: never tried first, then those tried longest ago, so one refused never holds
+         * the rest. None of a chat whose receipts are held ({@link RECEIPTS_HELD_META}): they wait for the member.
+         */
         async owedReceipts(me: string, limit: number): Promise<Array<{ id: string; key: string; home: string }>> {
             return (await (await db()).getAllAsync<{ id: string; peer_key: string; peer_home: string }>(
-                'SELECT id, peer_key, peer_home FROM outside_receipts WHERE me = ? ORDER BY tried_at ASC, owed_at ASC, id ASC LIMIT ?', [me, limit],
+                `SELECT id, peer_key, peer_home FROM outside_receipts r WHERE me = ?
+                     AND NOT EXISTS (SELECT 1 FROM outside_meta m WHERE m.k = ? || r.me || ':' || r.peer_key)
+                 ORDER BY tried_at ASC, owed_at ASC, id ASC LIMIT ?`, [me, RECEIPTS_HELD_META, limit],
             )).map((r) => ({ id: r.id, key: r.peer_key, home: r.peer_home }));
+        },
+        /**
+         * Held receipts (core outsideReceiptWhen, Marty 22 Nov 2026: a line the mark let in is Delivered only once the member
+         * accepts, answers or opens its chat): the chat with `peerKey` marked held, before its line is written, so no stop
+         * between leaves a line of that chat receipted. Its receipts are owed as any other's and never sent while it is.
+         */
+        async holdReceipts(me: string, peerKey: string, chatId: string): Promise<void> {
+            await (await db()).runAsync('INSERT INTO outside_meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO NOTHING', [heldKey(me, peerKey), chatId]);
+        },
+        /** Whether the chat with `peerKey` holds its receipts. */
+        async receiptsHeld(me: string, peerKey: string): Promise<boolean> {
+            return !!(await (await db()).getFirstAsync<any>('SELECT 1 AS x FROM outside_meta WHERE k = ?', [heldKey(me, peerKey)]));
+        },
+        /** Every peer whose chat holds its receipts, for a round's look at their blocks. */
+        async heldReceiptPeers(me: string): Promise<string[]> {
+            const at = heldKey(me, '');
+            return (await (await db()).getAllAsync<{ k: string }>('SELECT k FROM outside_meta WHERE substr(k, 1, ?) = ?', [at.length, at]))
+                .map((r) => r.k.slice(at.length));
+        },
+        /** The chat with `peerKey` lets its receipts go: those owed are sent at the next round, and its lines are receipted from now. */
+        async releaseReceipts(me: string, peerKey: string): Promise<void> {
+            await (await db()).runAsync('DELETE FROM outside_meta WHERE k = ?', [heldKey(me, peerKey)]);
+        },
+        /** The receipts a held chat with `peerKey` owes, never to be sent (a block); the chat stays held. */
+        async forgetHeldReceipts(me: string, peerKey: string): Promise<void> {
+            const d = await db();
+            if (!(await d.getFirstAsync<any>('SELECT 1 AS x FROM outside_meta WHERE k = ?', [heldKey(me, peerKey)]))) return;
+            await d.runAsync('DELETE FROM outside_receipts WHERE me = ? AND peer_key = ?', [me, peerKey]);
         },
         /** Receipts my server took: owed no more. */
         async receiptsSent(ids: string[]): Promise<void> {

@@ -60,6 +60,9 @@ import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { dispatchPushNotification, isNodeMember, readsAsMember } from '../state-engine.js';
 import { clearChatMute, getChatMute, setChatMute } from './chat-mutes.js';
 import { hasBlocked } from './member-blocks.js';
+import { muteOf } from './auto-moderation.js';
+import { newRequestRefusal, nextLineWaitsOnRequest, requestsOn } from './dm-requests.js';
+import { probationState } from './probation.js';
 import { isOwnNodeHome } from './node-key.js';
 import { GUEST_ITEM_KINDS, guestItemMaxChars, takeGuestItem, type GuestItemRefusal, type GuestItemTaken } from './group-guests.js';
 import { assertFolderFloorSpace, StorageNearlyFullError } from './photo-upload-budget.js';
@@ -384,6 +387,18 @@ function hasWrittenTo(member: string, key: string): boolean {
     return !!db.prepare("SELECT 1 FROM relay_outbox WHERE sender_key = ? AND recipient = ? AND kind != 'receipt' LIMIT 1").get(member, key);
 }
 
+/**
+ * Whether `senderKey`'s item `itemId` came here as a first line to `member`: held for them while they had never written to
+ * that key (relay_mail_seen.stranger_to, this server's own record, never the sending server's word), and they have written
+ * nothing back since (the outbox, as {@link hasWrittenTo}: a reply across is the chat accepted). What a report of it needs
+ * to count as a request's report (engine/relay-complaint.ts submitOutsideLineReport). Read from the ids seen, kept
+ * MAIL_SEEN_MS: a line reported after that is no longer known here as a first line.
+ */
+export function heldAsFirstLine(member: string, senderKey: string, itemId: string): boolean {
+    return !!db.prepare('SELECT 1 FROM relay_mail_seen WHERE sender_key = ? AND item_id = ? AND stranger_to = ?').get(senderKey, itemId, member)
+        && !hasWrittenTo(member, senderKey);
+}
+
 // ── The ring: a held line from someone the member wrote to (slice S4) ──────────────────────────
 
 /**
@@ -562,6 +577,50 @@ export interface HeldItem {
     payload: string | null;
     bytes: number;
     receivedAt: number;
+    /**
+     * "From a member here" (slice S5, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "A fellow member writing
+     * across"): its sender is a member of this community who may write to its recipient here now, by this server's own rules
+     * ({@link fromMemberHere}), never by anything the sending server said. The recipient's device then applies this
+     * community's own rule to a first line (@beanpool/core gateOutsideItem `memberHere`). Said as each item is handed over,
+     * never stored.
+     */
+    memberHere: boolean;
+}
+
+/**
+ * Whether `senderKey` is "a member here" to `recipient` (slice S5): a member of this community who may write to them here
+ * right now, by this node's own rules. The design's reason for the mark is "they could write to you inside the community
+ * anyway", so every rule here that stops a member writing to another member makes it false, each asked where it lives (no
+ * copy of any), and the line then meets the recipient's door exactly as a stranger's does:
+ *
+ * - not a member, or not one now (engine/members.ts isNodeMember + readsAsMember): no row, a visitor's row, a closed
+ *   account, the old key of a member being re-keyed or one a re-key replaced, and a member suspended or paused ('suspended',
+ *   'disabled'), who opens no new conversation here (messaging.ts assertMayOpenConversation; readsAsMember is the stricter,
+ *   and keeps no exception for a chat they already have);
+ * - muted by a moderator or auto-mute (auto-moderation.ts muteOf, what assertNotMuted refuses an open and a line with);
+ * - held by reports from making a new request (request-limits.ts, asked as createConversation asks it: dm-requests.ts
+ *   newRequestRefusal, so only where requests are on and only to someone it would be a request to). Reports of their lines
+ *   across earn it as reports of their requests inside do (relay-complaint.ts submitOutsideLineReport, one rule), so a
+ *   member who writes only across meets it too;
+ * - waiting on a request to the recipient here already, whose one line is written (dm-requests.ts nextLineWaitsOnRequest:
+ *   lineThroughRequest refuses their next line, one the recipient ignored included);
+ * - on probation (probation.ts probationState). Inside, probation lets them reach 10 new people a day (3 by 12 words:
+ *   assertMayMessage), counted from the conversations they open and the lines they write here. A line across is none of
+ *   those and enters no count, so asking assertMayMessage alone would mark every line of one under their allowance, as
+ *   many as the relay's stranger caps let through (PR #3347 review): until probation ends, their line meets the door;
+ * - blocked by the recipient here (member-blocks.ts hasBlocked: what they write never reaches the one who blocked them; a
+ *   held line is refused for it already, mayHoldFor, and a block made since the line was held is read here).
+ *
+ * Asked at the moment a device fetches, so a change since the line was held (a join, a suspension, a mute or limit made or
+ * over, a re-key, a block) counts as it is then.
+ */
+export function fromMemberHere(senderKey: string, recipient: string, now: number = Date.now()): boolean {
+    if (!/^[0-9a-f]{64}$/.test(senderKey) || !isNodeMember(senderKey) || !readsAsMember(senderKey)) return false;
+    if (muteOf(senderKey, now).muted) return false;
+    if (newRequestRefusal(senderKey, recipient, now) !== null) return false;
+    if (nextLineWaitsOnRequest(senderKey, recipient, now)) return false;
+    if (probationState(senderKey, now).onProbation) return false;
+    return !hasBlocked(recipient, senderKey);
 }
 
 type HeldRow = { sender_key: string; item_id: string; kind: string; recipient: string };
@@ -640,18 +699,35 @@ export function forgetMailDevice(member: string, device: string, now = Date.now(
     return listed;
 }
 
-/** What waits for `member` that `device` has not confirmed, oldest first, MAIL_FETCH_PAGE at a time, and whether there is more. */
-export function heldMailFor(member: string, device: string): { items: HeldItem[]; more: boolean } {
+/**
+ * What waits for `member` that `device` has not confirmed, oldest first, MAIL_FETCH_PAGE at a time, and whether there is more.
+ * `dmRequests` (slice S5, PR #3347 review finding 2): this community's own switch, whether it holds a first message as a
+ * request (dm-requests.ts requestsOn), read here with each item's `memberHere` mark, in the same answer, so the rule a
+ * device applies to a marked line (core gateOutsideItem `requestsHere`, read by core requestsHereOfMail) is the one this
+ * server judged the mark under, never a profile the device kept from an earlier read.
+ */
+export function heldMailFor(member: string, device: string): { items: HeldItem[]; more: boolean; dmRequests: boolean } {
     const rows = db.prepare(`SELECT kind, envelope, payload, bytes, received_at FROM relay_mail m WHERE recipient = ?
                                AND NOT EXISTS (SELECT 1 FROM relay_mail_got g WHERE g.recipient = m.recipient AND g.item_id = m.item_id AND g.device = ?)
                              ORDER BY received_at, item_id LIMIT ?`).all(member, device, MAIL_FETCH_PAGE + 1) as Array<{
         kind: string; envelope: string; payload: string | null; bytes: number; received_at: number;
     }>;
+    // Each sender asked once a page (slice S5): whether they are a member here who may write to this member now, by this
+    // server's own rules (fromMemberHere), all at one moment, and the switch their first line then meets with them.
+    const now = Date.now();
+    const dmRequests = requestsOn();
+    const members = new Map<string, boolean>();
+    const memberHere = (key: string): boolean => {
+        if (!members.has(key)) members.set(key, fromMemberHere(key, member, now));
+        return members.get(key)!;
+    };
     return {
-        items: rows.slice(0, MAIL_FETCH_PAGE).map((r) => ({
-            kind: r.kind, envelope: JSON.parse(r.envelope) as RelayEnvelope, payload: r.payload, bytes: r.bytes, receivedAt: r.received_at,
-        })),
+        items: rows.slice(0, MAIL_FETCH_PAGE).map((r) => {
+            const envelope = JSON.parse(r.envelope) as RelayEnvelope;
+            return { kind: r.kind, envelope, payload: r.payload, bytes: r.bytes, receivedAt: r.received_at, memberHere: memberHere(envelope.senderKey) };
+        }),
         more: rows.length > MAIL_FETCH_PAGE,
+        dmRequests,
     };
 }
 

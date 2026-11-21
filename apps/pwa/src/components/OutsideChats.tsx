@@ -18,8 +18,8 @@ import { ChatConfirmDialog } from './ChatConfirmDialog';
 import { ReportModal } from './ReportModal';
 import { draftKey, draftSent, keepEdit, keptDraft, takeEdit, useKeptDraft } from '../lib/chat-drafts';
 import {
-    OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, OutsideMailError, outsideContext, outsideErrorWords, outsideQuiet, reportOutsideLine, ring, sendFromBox, sendOutsideChange, setOutsideQuiet,
-    syncOutsideMailNow,
+    OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, OutsideMailError, heldReceiptsOn, outsideContext, outsideErrorWords, outsideQuiet, reportOutsideLine, ring, sendFromBox, sendOutsideChange,
+    setOutsideQuiet, syncOutsideMailNow,
 } from '../lib/outside-mail';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../lib/outside-chat-store';
 
@@ -167,6 +167,9 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
         setLines(l);
         setChanges(x);
         setQuiet(q);
+        // Opened: a chat whose first line the member-here mark let in straight away lets its held receipts go (core
+        // outsideHeldReceipts); a request opened still holds them ("They will not know you saw this unless you accept").
+        if (c) await heldReceiptsOn(ctx, c.id, 'open').catch(() => null);
     }, [chatId]);
 
     useEffect(() => {
@@ -241,6 +244,7 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
         const ctx = await outsideContext();
         if (!ctx || !chat) return;
         await ctx.store.decide(ctx.identity.publicKey, chat.id, state);
+        await heldReceiptsOn(ctx, chat.id, state === 'open' ? 'accept' : 'decline').catch(() => null);
         ring();
         if (state === 'declined') { onBack(); return; }
         onAccepted?.();
@@ -271,6 +275,8 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
             setNote((e as Error).message);
             return;
         }
+        const ctx = await outsideContext().catch(() => null);
+        if (ctx) await heldReceiptsOn(ctx, chat.id, 'block').catch(() => null);
         await decide('declined');
     };
 
@@ -286,6 +292,7 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
             throw new Error(e instanceof OutsideMailError && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('That did not go through. Please try again.'));
         }
         await blockUser(chat.peerKey).catch(() => false);
+        await heldReceiptsOn(ctx, chat.id, 'block').catch(() => null);
         await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined').catch(() => undefined);
         ring();
     };

@@ -734,6 +734,7 @@ export const SUITES = [
     'test-node-signature',
     'test-relay-mail',
     'test-mail-ring',
+    'test-mail-member-here',
     'test-relay-complaint',
     'test-find-by-name',
     'test-group-guests',

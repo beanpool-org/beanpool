@@ -137,12 +137,32 @@ export async function acceptLetIn(me: string, community: string, candidates: rea
  */
 export function letInFor(me: string, community: string): (key: string) => Promise<boolean> {
     const reader = letInReader(me);
-    let lists: Promise<BlockLists | null> | null = null;
+    const lists = blockListsFor(me, community);
     return async (key) => {
-        lists ??= blockListReadThisRun(me, community).then((read) => (read ? readBlockLists(me) : null));
-        const read = await lists;
+        const read = await lists();
         return !!read && !neverLetInQuietly(read, [key]) && (await reader([key])).has(key);
     };
+}
+
+/**
+ * For one round of mail across at `community` (outside-mail.ts `unbarred`, slice S5): whether no block bars a sender
+ * ({@link neverLetInQuietly}: blocked anywhere, or blocked and unblocked since), with that community's own block list read in
+ * this run, as {@link letInFor} asks. A first line from a member there passes the door only then (core gateOutsideItem
+ * `memberHere`): a block anywhere beats "a member here" as it beats let in. False when the block lists can't be read, or
+ * that community's can't be: their line then meets the door, as a stranger's.
+ */
+export function unbarredFor(me: string, community: string): (key: string) => Promise<boolean> {
+    const lists = blockListsFor(me, community);
+    return async (key) => {
+        const read = await lists();
+        return !!read && !neverLetInQuietly(read, [key]);
+    };
+}
+
+/** The block lists for one round at `community`, read once at its first ask, after that community's own list (null: unread). */
+function blockListsFor(me: string, community: string): () => Promise<BlockLists | null> {
+    let lists: Promise<BlockLists | null> | null = null;
+    return () => (lists ??= blockListReadThisRun(me, community).then((read) => (read ? readBlockLists(me) : null)));
 }
 
 /** For tests: forget what this run pressed and the contacts read. */

@@ -173,7 +173,7 @@ import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { messageRequestsStoreKey, dmPeerPinsStoreKey, communityBlocksStoreKey } from '../storage-keys';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { blockUser, unblockUser, blockSyncsEndedForTests, blockListReadThisRun, followRekeyedBlocks, withoutBlockedPeople, _newBlockRunForTests } from '../blocklist';
-import { acceptLetIn, letInFor, _resetLetInForTests } from '../let-in';
+import { acceptLetIn, letInFor, unbarredFor, _resetLetInForTests } from '../let-in';
 import { withPeopleAdded } from '../contacts-former';
 import { gateOutsideItem, emptyContactsList, DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
 
@@ -1258,6 +1258,16 @@ const JUDGED: Judged[] = [
             const letIn = await letInFor(me.publicKey, B)(them.publicKey);
             expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe(letIn ? 'line' : 'drop');
             return letIn;
+        },
+    },
+    {
+        // Slice S5: my server marks the line "from a member here"; on a local community it goes straight in, unless a block
+        // anywhere bars them (blocked, or blocked and unblocked since: the same rule as let in).
+        name: 'the first line across from a member here (B\'s mailbox, the door closed, a local community)', at: B, yes: 'straight in', no: 'goes nowhere',
+        judge: async () => {
+            const unbarred = await unbarredFor(me.publicKey, B)(them.publicKey);
+            expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, memberHere: unbarred, requestsHere: false })).toBe(unbarred ? 'line' : 'drop');
+            return unbarred;
         },
     },
     {

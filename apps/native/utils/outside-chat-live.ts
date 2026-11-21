@@ -50,6 +50,22 @@ function letInOf(me: string, community: string): (key: string) => Promise<boolea
 }
 
 /**
+ * Whether no block bars a sender anywhere, for one round at `community` (slice S5): utils/let-in.ts unbarredFor, loaded at its
+ * first ask as {@link letInOf} loads letInFor. A read that fails bars everyone: a member here then meets the door.
+ */
+function unbarredOf(me: string, community: string): (key: string) => Promise<boolean> {
+    let ask: Promise<(key: string) => Promise<boolean>> | null = null;
+    return async (key) => {
+        try {
+            ask ??= import('./let-in').then((m) => m.unbarredFor(me, community));
+            return await (await ask)(key);
+        } catch {
+            return false;
+        }
+    };
+}
+
+/**
  * The context for `community`'s across chats (slice S4), and the address it holds in place when that is not the community
  * in use. No community, or the one in use however spelled: the community in use, as before (its store throws once the
  * phone has switched). Another community this phone saved, as a member (not a guest's look), at a plain address: that one,
@@ -63,11 +79,11 @@ async function contextFor(community?: string | null): Promise<{ ctx: OutsideMail
     const db = await import('./db');
     const file = community ? getDatabaseFilenameForNode(community) : null;
     if (!file || file === getDatabaseFilenameForNode(anchor)) {
-        return { ctx: { nodeUrl: anchor.replace(/\/+$/, ''), identity, store: db.outsideStore(anchor), isBlocked: isUserBlocked, letIn: letInOf(identity.publicKey, anchor) }, inPlace: null };
+        return { ctx: { nodeUrl: anchor.replace(/\/+$/, ''), identity, store: db.outsideStore(anchor), isBlocked: isUserBlocked, letIn: letInOf(identity.publicKey, anchor), unbarred: unbarredOf(identity.publicKey, anchor) }, inPlace: null };
     }
     const saved = (await getSavedNodes().catch(() => [])).find((n) => getDatabaseFilenameForNode(n.url) === file);
     if (!saved || !isPlainNodeAddress(saved.url) || await isGuestCopy(saved.url).catch(() => true)) return null;
-    return { ctx: { nodeUrl: saved.url.replace(/\/+$/, ''), identity, store: db.outsideStoreOf(saved.url), isBlocked: isUserBlocked, letIn: letInOf(identity.publicKey, saved.url) }, inPlace: saved.url };
+    return { ctx: { nodeUrl: saved.url.replace(/\/+$/, ''), identity, store: db.outsideStoreOf(saved.url), isBlocked: isUserBlocked, letIn: letInOf(identity.publicKey, saved.url), unbarred: unbarredOf(identity.publicKey, saved.url) }, inPlace: saved.url };
 }
 
 /**
@@ -256,6 +272,8 @@ function roundWithDeadline(deadlineMs: number, community?: string | null): Promi
                 }
                 return null;
             }
+            // This community's own rule for a first line across from a member here (slice S5) comes in each page of mail, with
+            // the marks (outside-mail.ts): never from this profile, which may be from before the switch moved.
             const out = await syncOutsideMail({ ...ctx, signal: controller.signal });
             if (out.written || out.requests || out.ticks) DeviceEventEmitter.emit(OUTSIDE_CHATS_UPDATED);
             return out;

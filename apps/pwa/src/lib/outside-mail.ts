@@ -14,7 +14,10 @@
  * - **Write, then confirm; receipts owed before the confirm** (syncOutsideMail): each item fetched is checked here again,
  *   gated (core gateOutsideItem), written, and only then confirmed (which deletes it at the server); a write that fails
  *   is never confirmed. The receipt for a line written is owed in this browser before the confirm, and posted by this round
- *   or the next until my server takes it (flushReceipts), so no stop between the confirm and the receipt loses it.
+ *   or the next until my server takes it (flushReceipts), so no stop between the confirm and the receipt loses it. A line
+ *   the member-here mark let in (slice S5), and every later line of its chat, is owed but HELD (core outsideReceiptWhen;
+ *   Marty, 22 Nov 2026): sent only once the member accepts, answers or opens that chat ({@link heldReceiptsOn}), never for a
+ *   sender blocked meanwhile, so its sender sees Sent, as a blocked sender does, until then. The phone's rule.
  * - **Typed words never lost** ({@link sendFromBox}): the box empties only once the line is kept here.
  *
  * **Each device for itself** (X2b: scratch/fable-design/decisions/DECISION-outside-door.md; the phone's X2b, the same
@@ -43,9 +46,9 @@
  */
 import {
     ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, audienceOf, gateOutsideItem, heldFromMemberHere, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId,
-    nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId,
-    relayEnvelopeVerifies, relayPayloadHash, requestsHereOfMail, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
-    type RelayEnvelopeFields, type RelayItem,
+    nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideHeldReceipts, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, outsideReceiptWhen,
+    readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, requestsHereOfMail, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange,
+    type OutsideChangeKind, type OutsideReceiptAction, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { nodeAddress, signAddressCardFor, signedMailFetch, signRelayEnvelopeFor } from './api';
 import { accountEpoch, accountEpochHolds, onAccountEpochEnd } from './account-epoch';
@@ -393,6 +396,8 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
     const at = Date.now();
     const envelope = await envelopeFor(ctx, { kind: 'dm-line', itemId: messageId, recipient: chat.peerKey, recipientHome: chat.peerHome, at }, payload);
     await ctx.store.addMine(me, { id: messageId, chatId, author: me, text, replyTo: null, at, item: JSON.stringify({ envelope, payload }) });
+    // An answer lets go the receipts this chat holds (core outsideHeldReceipts): sent at the next round.
+    await heldReceiptsOn(ctx, chatId, 'answer').catch((e) => console.warn('[OutsideMail] Held receipts wait for the next step:', e?.message ?? e));
     onKept?.();
     let answered: Array<{ itemId: string; state: string }>;
     try {
@@ -523,6 +528,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
     const out: SyncOutcome = { written: 0, changes: 0, requests: 0, dropped: 0, confirmed: 0, ticks: 0 };
     const me = ctx.identity.publicKey;
     await resendUnsent(ctx, now).catch((e) => console.warn('[OutsideMail] Unsent lines wait for the next round:', e?.message ?? e));
+    await forgetBlockedHeld(ctx).catch((e) => console.warn('[OutsideMail] Held receipts are looked at again next round:', e?.message ?? e));
     const open = await doorOpen(ctx);
     const device = await mailDevice(ctx);
     const tried = new Set<string>();
@@ -561,14 +567,15 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     continue;
                 }
                 const chat = await ctx.store.chat(me, chatId);
+                // From a member here (slice S5): my own server's mark beside the item, never the envelope's; this community's
+                // own rule then decides, as on the phone (core gateOutsideItem).
+                const memberHere = heldFromMemberHere(h);
                 const verdict = gateOutsideItem({
                     kind: env.kind,
                     chat: chat ? { state: chat.state, theirLines: await ctx.store.theirLines(me, chatId, env.senderKey) } : null,
                     doorOpen: open,
                     blocked: await ctx.isBlocked(env.senderKey),
-                    // From a member here (slice S5): my own server's mark beside the item, never the envelope's; this
-                    // community's own rule then decides, as on the phone (core gateOutsideItem).
-                    memberHere: heldFromMemberHere(h),
+                    memberHere,
                     requestsHere,
                 });
                 if (verdict === 'drop') { done.push(env.itemId); out.dropped++; continue; }
@@ -592,11 +599,17 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 } catch {
                     done.push(env.itemId); out.dropped++; continue;
                 }
+                // Its Delivered (core outsideReceiptWhen, Marty 22 Nov 2026): a line the mark let in, and every later line of that
+                // chat, held until the member accepts, answers or opens it; the chat marked held before its line is written.
+                const receipt = outsideReceiptWhen({ verdict, chat, memberHere, held: await ctx.store.receiptsHeld(me, env.senderKey) });
+                if (receipt === 'held') await ctx.store.holdReceipts(me, env.senderKey, chatId);
                 await ctx.store.writeTheirs(me, {
                     id: env.itemId, chatId, author: env.senderKey, text: opened.text, replyTo: opened.replyToId, at: env.at,
                     sealed: JSON.stringify({ envelope: env, payload: h.payload }),
                 }, { home: env.senderHome, name: opened.name }, verdict, now);
-                await owe(env);   // past the gate only a line is written: its receipt owed before it is confirmed
+                // Past the gate only a line is written: its receipt owed before it is confirmed (and sent only once its chat no
+                // longer holds it: lib/outside-chat-store.ts owedReceipts).
+                await owe(env);
                 done.push(env.itemId);
                 if (verdict === 'request') out.requests++; else out.written++;
             } catch (e) {
@@ -612,6 +625,38 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         if (writeFailed || !answer?.more) break;
     }
     return out;
+}
+
+/**
+ * What the member just did in chat `chatId` (open it, accept it, answer it, decline it, block them), for the receipts it
+ * holds (core outsideHeldReceipts, Marty 22 Nov 2026): let go, to be sent at the next round, once (the chat's mark goes with
+ * them, so later lines are receipted as any other); kept held; or forgotten, never to be sent. A block that can't be read
+ * (`isBlocked` throws) holds them, to be asked again at the next step. Nothing when the chat holds none. The phone's rule.
+ */
+export async function heldReceiptsOn(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, chatId: string, action: OutsideReceiptAction): Promise<'send' | 'hold' | 'forget' | null> {
+    const me = ctx.identity.publicKey;
+    const chat = await ctx.store.chat(me, chatId);
+    if (!chat || !(await ctx.store.receiptsHeld(me, chat.peerKey))) return null;
+    let blocked = action === 'block';
+    let barred = false;
+    if (!blocked) {
+        try { blocked = await ctx.isBlocked(chat.peerKey); } catch { barred = true; }
+    }
+    const what = outsideHeldReceipts({ action, state: chat.state, blocked, barred });
+    if (what === 'send') await ctx.store.releaseReceipts(me, chat.peerKey);
+    else if (what === 'forget') await ctx.store.forgetHeldReceipts(me, chat.peerKey);
+    return what;
+}
+
+/** A round's look at the chats holding receipts: those whose sender is blocked now (on any device, anywhere) forget them. */
+async function forgetBlockedHeld(ctx: OutsideMailContext): Promise<void> {
+    const me = ctx.identity.publicKey;
+    for (const peer of await ctx.store.heldReceiptPeers(me)) {
+        const chat = await ctx.store.chat(me, relayConversationId(me, peer));
+        // A block that can't be read now: held, looked at again next round.
+        const what = outsideHeldReceipts({ action: 'none', state: chat?.state ?? 'request', blocked: await ctx.isBlocked(peer).catch(() => false), barred: false });
+        if (what === 'forget') await ctx.store.forgetHeldReceipts(me, peer);
+    }
 }
 
 /** The receipts owed, each sender's to their home, 50 ids a receipt; one my server doesn't take stays owed, behind the rest. */

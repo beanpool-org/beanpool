@@ -180,7 +180,7 @@ import ChatRoute from '../../app/chat/[id]';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from '../storage-keys';
 import { chatMoment, noteNotifyMoment } from '../../components/NotifyLine';
 
-const NODE = 'https://mullum.example';
+const NODE = 'https://riverside.example';
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
 const KOFI_REQUEST = { state: 'pending', from: 'kofi-key', at: iso(now - 120_000) };

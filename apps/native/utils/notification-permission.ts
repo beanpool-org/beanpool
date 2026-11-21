@@ -467,6 +467,48 @@ export async function turnOnFromOnceCard(
     return result;
 }
 
+/**
+ * Home's card while something of the member's is live (slice N3; the first design §4.3): whether it shows on this landing, by
+ * core's rule (`notifyAsks` `home`: a phone that has to ask and still can, not within 7 days of a "Later", not 30 days after
+ * its ×, never after the third, never with the once card or the way-back card, one soft ask a day), and if it does, marked
+ * shown now, so it takes the day. `live`: core's `notifyLive` found something; `wayBack`: Home's way-back card is up. One
+ * decision at a time with the named lines and the once card. Never asks, never shows anything itself, never throws; a phone
+ * that doesn't say what it allows within {@link ONCE_CARD_WAIT_MS} gets no card that landing.
+ *
+ * Written only where the showing changes the record, as the once card's: a later landing on the day it was marked writes
+ * nothing, so it can never put back a record read before an answer was kept.
+ */
+export function offerHomeCard(
+    o: { live: boolean; wayBack: boolean },
+    storage: StorageLike = AsyncStorage,
+    now: () => number = Date.now,
+    readOs: () => Promise<OsNotificationPermission> = readOsNotificationPermission,
+): Promise<boolean> {
+    let gaveUp = false;
+    const decided = offering.then(async () => {
+        if (gaveUp || !o.live) return false;
+        const phone = await readWithin(readOs);
+        if (!phone || gaveUp) return false;
+        const record = await readNotificationPermissionRecord(storage);
+        const at = now();
+        if (!notifyAsks({ record, phone, now: at, live: o.live, wayBack: o.wayBack }).home) return false;
+        const shown = markNotifyAsk(record, { type: 'shown', surface: 'home' }, at);
+        const marked = record.askDay === shown.askDay && record.askKind === 'home';
+        if (!marked && !gaveUp) await writeNotificationPermissionRecord(shown, storage);
+        return !gaveUp;
+    }).catch(() => false);
+    offering = decided;
+    return new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => { gaveUp = true; resolve(false); }, 2 * ONCE_CARD_WAIT_MS.phone);
+        void decided.then((v) => { clearTimeout(timer); resolve(v); });
+    });
+}
+
+/** × on Home's card: away for 30 days, and for good at the third (core's rule). Not a no: the named lines go on. Never throws. */
+export function homeCardAway(storage: StorageLike = AsyncStorage): Promise<void> {
+    return markNotificationAsk({ type: 'away' }, storage).catch(() => undefined);
+}
+
 /** "Later" on Home's once card: put away for good, recorded with its date, never a no (First steps' line is back). */
 export function onceCardLater(storage: StorageLike = AsyncStorage): Promise<void> {
     return notificationsLater(storage, 'once');

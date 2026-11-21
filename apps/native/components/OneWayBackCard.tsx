@@ -88,12 +88,14 @@ export interface OneWayBackActionsAt {
  *   `GET /api/community/me` when it is about the community the card is about, so a landing costs Home's one request.
  * - `accountDismissedAt`: the account's dismissal (`home.layout` `dismissed.safety`), from another phone or the web app.
  * - `onDismiss(at)`: the card was put away at `at` (the same moment the phone's record keeps), for Home to keep on the
- *   account. `onUp`: whether the card is drawn now, so Home's "…" moves count only the cards on screen.
+ *   account. `onUp`: whether the card is drawn now, so Home's "…" moves count only the cards on screen. `onSettled`: its read
+ *   on this visit has finished and `onUp` has said what it found, so Home's notifications card (slice N3), which waits
+ *   while this one is up, is never drawn for a moment and then gives way.
  * - `toLose`: what the member has here, from Home's answer: the balance (whole hundredths; null where Beans are off or no
  *   Your Beans card was asked) and something else to lose (an open deal, a role). A live listing is read here, from the
  *   phone's own posts.
  */
-export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp, band, toLose }: {
+export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp, onSettled, band, toLose }: {
     place: 'landing' | 'settings';
     colors?: AppColors;
     onActionsAt?: (at: OneWayBackActionsAt | null) => void;
@@ -101,6 +103,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     accountDismissedAt?: string | null;
     onDismiss?: (at: number) => void;
     onUp?: (up: boolean) => void;
+    onSettled?: () => void;
     toLose?: { balance_c: number | null; holds: boolean } | null;
     /**
      * Home in Arrange: the band this card has only there (its caption and ↑ ↓, across the top of its frame). With a band the
@@ -114,6 +117,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     const [writtenDown, setWrittenDown] = useState(false);
     const [linking, setLinking] = useState(false);
     const [vaultCopy, setVaultCopy] = useState(false);
+    const [settled, setSettled] = useState(false);
     const s = styles(colors);
 
     const latest = useRef(0);
@@ -227,7 +231,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         return () => { live = false; };
     }, [recordUrl]);
 
-    useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
+    useFocusEffect(useCallback(() => { void refresh().catch(() => undefined).finally(() => setSettled(true)); }, [refresh]));
     // Home's answer arrived with the community's word, or the account's dismissal changed: read again. `kept` too: a
     // say-so made on another device lands while `words` stays true, and ends the card on this visit (review of #3113).
     const wordKey = homeWord ? `${homeWord.url}|${homeWord.standing.words}|${!!homeWord.standing.kept}` : '';
@@ -255,6 +259,10 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     const reportUp = useRef(onUp);
     reportUp.current = onUp;
     useEffect(() => { reportUp.current?.(up && !(quiet && place !== 'settings')); }, [up, quiet, place]);
+    // After `onUp` in the same commit (effects run in order), so Home hears whether this card is up no later than that it settled.
+    const reportSettled = useRef(onSettled);
+    reportSettled.current = onSettled;
+    useEffect(() => { if (settled) reportSettled.current?.(); }, [settled]);
     useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
 
     if (!identity || !record || !up) return null;

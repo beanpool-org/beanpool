@@ -15,7 +15,7 @@
  */
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
-import type { NotifyJoinWords } from '@beanpool/core';
+import type { NotifyHomeWords, NotifyJoinWords } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { FabAware, HOME_TARGET_DP, HomeCard } from './HomeParts';
 
@@ -58,6 +58,53 @@ export function NotifyAskCard({ words, colors, busy, onTurnOn, onLater, quiet }:
     );
 }
 
+/**
+ * Home's card while something of the member's is live (slice N3; the first design §4.3, amend1 §4.3): "You have 1 offer up.
+ * This phone won't tell you when someone answers." [Turn on], with × on its band. It sits in the once card's slot, at the
+ * top of Home above the cards, and is never drawn with the once card or the way-back card (Home and core's rule decide).
+ * Turn on is the phone's own pop-up through the one door; × puts it away for 30 days (for good at the third). In Arrange it
+ * stays where it is, quiet, as the once card does, so the cards under it keep their places.
+ */
+export function NotifyHomeCard({ words, colors, busy, onTurnOn, onAway, quiet }: {
+    words: NotifyHomeWords;
+    colors: AppColors;
+    busy: boolean;
+    onTurnOn: () => void;
+    onAway: () => void;
+    quiet?: boolean;
+}) {
+    const away = (
+        <Pressable
+            onPress={onAway}
+            disabled={busy || quiet}
+            style={styles.away}
+            accessibilityRole="button"
+            accessibilityLabel={words.away}
+            hitSlop={8}
+            testID="notify-home-away"
+        >
+            <Text style={[styles.awayText, { color: colors.text.secondary }]}>✕</Text>
+        </Pressable>
+    );
+    return (
+        <HomeCard id="notify-home" caption={words.band} colors={colors} hue="sky" testID="home-notify-live" quiet={quiet} right={away}>
+            <Text style={[styles.body, { color: colors.text.heading }]} testID="notify-home-fact">{words.fact}</Text>
+            <Text style={[styles.arrives, { color: colors.text.body }]} testID="notify-home-wont">{words.wont}</Text>
+            <FabAware id="notify-home:buttons">
+                <Pressable
+                    style={[styles.turnOn, { backgroundColor: colors.action.cta }, busy && styles.waiting]}
+                    onPress={onTurnOn}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    testID="notify-home-turn-on"
+                >
+                    {busy ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={[styles.turnOnText, { color: colors.text.onBrand }]}>{words.turnOn}</Text>}
+                </Pressable>
+            </FabAware>
+        </HomeCard>
+    );
+}
+
 // The card's own styles, without colour (each colour is a token, set where it is drawn). Named `styles`, so the contrast
 // scanner (utils/button-contrast.ts) follows it and measures Turn on's words on its fill.
 const styles = StyleSheet.create({
@@ -73,6 +120,9 @@ const styles = StyleSheet.create({
     later: { minHeight: HOME_TARGET_DP, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
     laterText: { fontSize: 15, fontWeight: '700', textAlign: 'center' },
     waiting: { opacity: 0.4 },
+    // The Home card's ×: a full 48 dp target on the band.
+    away: { minWidth: HOME_TARGET_DP, minHeight: HOME_TARGET_DP, alignItems: 'center', justifyContent: 'center' },
+    awayText: { fontSize: 18, fontWeight: '700' },
 });
 
 /** The same table, read by home-layout-320.test.ts and the card's render test. */

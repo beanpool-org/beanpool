@@ -3332,12 +3332,8 @@ export async function createPost(post: any) {
          ...eventCacheColumns(post)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
-    // The one notifications ask, at the first post (DESIGN-home-default-fable.md §2.5: someone may answer it now). Once in
-    // all with the first message and the first ask to join, never after the phone's no (utils/notification-permission.ts).
-    // Loaded lazily and not waited on: the post is up, and an ask that fails never touches it.
-    void import('./notification-permission')
-        .then(({ askNotificationPermissionOnAction }) => askNotificationPermissionOnAction('post', identity.publicKey))
-        .catch((e) => console.warn('[Push] The first-post notification ask failed; the post is up:', e));
+    // No notifications ask here (slice N2a): a first listing's named line is on Your deals, where the post lands
+    // (app/new-listing.tsx, components/NotifyLine.tsx).
     return { eventTimeAdjusted: answer?.eventTimeAdjusted ?? null, post: answer?.post ?? null };
 }
 
@@ -9052,20 +9048,11 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
-    // Front doors S3 (#2524): every way a DM starts (New message, Message on a listing, a profile, People, a shop, a
-    // project's keeper, a deal's approve or decline) comes through here, so the first message's notification ask is made
-    // here, not in each screen. It asks only while unanswered, once in all with the first post and the first ask to join,
-    // never after the phone's no and never when the phone already allows notifications (utils/notification-permission.ts,
-    // DESIGN-home-default-fable.md §2.5). Loaded lazily, and an ask that fails never stops the chat.
-    try {
-        const { askNotificationPermissionOnAction } = await import('./notification-permission');
-        await askNotificationPermissionOnAction('message', identity.publicKey);
-    } catch (e) {
-        console.warn('[Push] The first-message notification ask failed; the chat goes on:', e);
-    }
+    // Starting a DM asks nothing about notifications (slice N2a): the named line comes under the member's first message
+    // sent, in the chat (app/chat/[id].tsx, components/NotifyLine.tsx).
     // The pins before the node's answer is written, through the handle it is written with (see refreshConversationFromNode):
     // its rows are never the update's seed. With the pins unread, nothing is asked or written (§3.4 amendment 5's gate).
-    // Asked after the notification ask, which can wait on the member: never once the phone has switched meanwhile.
+    // Never once the phone has switched meanwhile (the handle is then null).
     const database = await here.handle();
     if (!database) throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
     await dmPins.read(identity.publicKey, database);

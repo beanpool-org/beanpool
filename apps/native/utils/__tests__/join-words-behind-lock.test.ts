@@ -131,14 +131,19 @@ describe("welcome.tsx: Safety Backup's words", () => {
 
     it("the step draws the phone's own account's words only once the lock let them through, from a button that asks it", () => {
         const s = backup();
-        expect(s).toContain('!(pendingWordsAreNew ? protection.showWords || revealWords : !!pendingWords) ? (');
+        // The grid is not on the path (onboarding S4, design §3.1 E): the member's own new words open at the "Write down 12 words"
+        // tile's tap, never by themselves; the phone's own account's only once that tap's lock has let them through.
+        expect(s).toContain('!(pendingWordsAreNew ? revealWords : !!pendingWords) ? (');
+        expect(s).not.toContain('protection.showWords');
         expect(s).toContain('onPress={pendingWordsAreNew ? () => setRevealWords(true) : handleShowPendingWords}');
     });
 
-    it('Copy copies the words the step shows, never a fresh read', () => {
-        const copy = slice(welcome(), 'async function handleCopySeed() {', '\n    }\n');
-        expect(copy).toContain('const words = pendingWords;');
-        expect(copy).not.toContain('getMnemonic');
+    it("no Copy on the join's words: paper only (Marty's walk, 21 Nov 2026; the clipboard hands them to other apps)", () => {
+        const s = backup();
+        expect(welcome()).not.toContain('async function handleCopySeed()');
+        expect(s).not.toContain('copyWordsForAMinute');
+        expect(s).not.toContain('Copy All Words');
+        expect(s).not.toContain('<CopyClearsNote');
     });
 });
 

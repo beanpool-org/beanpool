@@ -54,7 +54,7 @@ vi.mock('expo-secure-store', () => ({
 const who = vi.hoisted(() => ({ identity: null as any }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: who.identity }) }));
 vi.mock('../db', () => ({ getMyPosts: vi.fn(async () => []) }));
-vi.mock('../vault', () => ({ vaultCopyKnown: vi.fn(async (publicKey: string) => mem.vault.has(publicKey)) }));
+vi.mock('../vault', () => ({ vaultSignInCopyKnown: vi.fn(async (publicKey: string) => mem.vault.has(publicKey)) }));
 vi.mock('../node-post', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../node-post')>()),
     anchorUrl: vi.fn(async () => mem.anchor || null),

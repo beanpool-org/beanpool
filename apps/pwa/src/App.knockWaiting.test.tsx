@@ -115,6 +115,15 @@ describe('/app?door=ask', () => {
 });
 
 describe('a browser waiting to be let in', () => {
+    // The request is remembered as sent on 9 Nov 2026, and the web forgets a request after KNOCK_ANSWERABLE_DAYS (61): on
+    // the real clock the page lost its date line (and its name) from 9 Jan 2027 (a date bomb). The clock reads 21 Nov 2026
+    // here (Date only; timers stay real).
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.parse('2026-11-21T00:00:00.000Z'));
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
     it('shows the waiting page, makes no member read (401 sweep), and a reload keeps waiting', async () => {
         for (let load = 0; load < 2; load++) {
             cleanup();

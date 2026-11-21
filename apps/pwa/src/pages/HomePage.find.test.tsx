@@ -569,7 +569,19 @@ describe('Ask to join from the web find card (front doors S2)', () => {
     });
 });
 
+// The next two blocks remember requests sent on 25-27 Oct 2026, and the web forgets a request after KNOCK_ANSWERABLE_DAYS
+// (61): on the real clock their rows went red from 25 Dec 2026 (a date bomb). Their clock reads 21 Nov 2026 (Date only;
+// timers stay real).
+function pinClockAfterTheOctoberRequests() {
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.parse('2026-11-21T00:00:00.000Z'));
+    });
+    afterEach(() => { vi.useRealTimers(); });
+}
+
 describe("I'd help on the waiting card (PR #2687 review: its answer was drawn only with no community near, so here, nowhere)", () => {
+    pinClockAfterTheOctoberRequests();
     const COMM = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
     const DEMAND = { waiting: 4, helping: null };
 
@@ -617,6 +629,7 @@ describe("I'd help on the waiting card (PR #2687 review: its answer was drawn on
 });
 
 describe('the honest waiting card on the web find card (Lounge L1)', () => {
+    pinClockAfterTheOctoberRequests();
     it('shows sent date, arrived status, and measured line for a waiting knock', async () => {
         const comm = {
             key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org',

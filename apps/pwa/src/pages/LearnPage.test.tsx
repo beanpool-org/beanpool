@@ -2,7 +2,7 @@
  * Learn on the web (slice K2), the real page with the node stubbed at lib/api: the front, a topic, a search and one page; what
  * it asks the node and what it never does; the preview on a community that shows samples; the doors that open it.
  */
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi, type MockInstance } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import * as api from '../lib/api';
 import { learnFrontOf, learnSearchOf, learnTopicOf, type LearnPost } from '../lib/learn';
@@ -192,6 +192,11 @@ describe('the front', () => {
     });
 
     it('draws a row: topic chip, title, first line only, "Checked Oct 2026 · Helped 14", the topic tile for no photo, MAY BE OUT OF DATE in amber', async () => {
+        // Checked 20 Oct 2026, read on 21 Nov 2026 (Date only; timers stay real). On the real clock the row turns to
+        // "Checked over a year ago" from 20 Oct 2027, as it should: a date bomb in the test, not in the page.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.parse('2026-11-21T00:00:00.000Z'));
+        onTestFinished(() => { vi.useRealTimers(); });
         await openLearn();
         const row = within(screen.getByTestId('learn-topic-emergencies')).getByTestId('learn-row');
         expect(within(row).getByTestId('learn-row-topic').textContent).toBe('EMERGENCIES');

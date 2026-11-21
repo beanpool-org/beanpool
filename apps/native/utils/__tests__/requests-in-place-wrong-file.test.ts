@@ -94,7 +94,6 @@ vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => {}) }));
 // The block's own routing is blocks-reach-community.test.ts's: here it records the community the report handed it.
 vi.mock('../blocklist', () => ({
     getBlockedUsers: vi.fn(async () => []),

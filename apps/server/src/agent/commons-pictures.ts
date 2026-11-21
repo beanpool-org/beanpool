@@ -45,7 +45,7 @@ const MAKER_MAX = 200;
 /** A file's name, written into the call at most this many bytes (MediaWiki's own limit is 255 for the whole title). */
 const NAME_MAX_BYTES = 240;
 /** Characters no MediaWiki title holds, and the slash no file name holds. */
-const NOT_IN_A_NAME = /[#<>[\]|{}/\u0000-\u001f\u007f]/;
+const NOT_IN_A_NAME = /[#<>[\]|{}/\p{Cc}]/u;
 
 /**
  * A file's name on Commons from the address of its page, or null for anything else: https only, Commons' own host with no

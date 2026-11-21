@@ -507,10 +507,10 @@ async function main(): Promise<void> {
             'F. a fix sending every row as shown changes no part: the credit rows are no change');
 
         // A maker's hostile text: plain, capped, the label at most 80.
-        const hostile = `<b>Jane</b> <a href="https://x.example">Doe</a>&amp;​‮Co ${'é'.repeat(2000)}`;
+        const hostile = `<b>Jane</b> <a href="https://x.example">Doe</a>&amp;\u200b\u202eCo ${'é'.repeat(2000)}`;
         const plain = commonsPlainText(hostile);
         const label = knowledgeCreditLabel(3, plain, 'CC BY-SA 4.0');
-        assert(plain.startsWith('Jane Doe &Co') && !/[<>​‮]/.test(plain) && Array.from(plain).length <= 200
+        assert(plain.startsWith('Jane Doe &Co') && !/[<>\u200b\u202e]/.test(plain) && Array.from(plain).length <= 200
             && Array.from(label).length <= KNOWLEDGE_LIMITS.sourceLabel && label.endsWith('… · CC BY-SA 4.0') && label.startsWith('📷 3 · Jane Doe &Co'),
             `F. a maker with markup, a link, hidden characters and 2,000 letters: plain, capped, the label ${Array.from(label).length} characters (${label})`);
         fresh();

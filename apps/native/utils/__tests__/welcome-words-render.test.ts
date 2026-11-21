@@ -634,6 +634,42 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         expect(host!.textContent).not.toContain(pseudoLocalise('How it Works'));
     });
 
+    // Go Back on the way back (welcome.tsx handleSeedBackPress, review of #3330 round 2, finding 4): the tick, the opened
+    // sign-in panel and the opened words are put away with the rest, so the next pass starts as new. Each goes red without
+    // its reset: the tick as "Let's go" for "Later", the panel as no "Link a sign-in" tile, the words as words on screen.
+    it('Go Back from the way back, then Join again: the tick off, both tiles back, no word on screen', async () => {
+        await mount('en');
+        await enterInvite('BP-ABCD-1234', 'en');
+        await type('Community name or address (e.g. riverside)', 'mullum', 'en');
+        await type('Your name or nickname', 'Sally', 'en');
+        await press('Join', 'en');
+        await press('Skip for now', 'en');
+        // Everything opened: the sign-in tile's panel, the words, and the tick.
+        await press('Link a sign-in', 'en');
+        expect(all('button').some((b) => (b.textContent ?? '').includes('Google or Facebook')), 'the sign-in tile opened in place').toBe(false);
+        await press('Write down 12 words', 'en');
+        for (const w of WORDS) expect(host!.textContent).toContain(w);
+        await press("I've saved these words", 'en');
+        expect(button("Let's go", 'en')).toBeTruthy();
+
+        await press('Back', 'en');
+        const goBack = alerts.buttons.find((b) => b.text === 'Go Back');
+        expect(goBack, 'the Go back? question offers Go Back').toBeTruthy();
+        await act(async () => { await goBack!.onPress!(); });
+        await settle();
+        expect(host!.textContent, 'back at Your name').not.toContain('Keep a way back in');
+        button('Join', 'en');
+
+        await press('Join', 'en');
+        await press('Skip for now', 'en');
+        expect(host!.textContent).toContain('Keep a way back in');
+        expect(button('Later', 'en')).toBeTruthy();
+        expect(all('button, [role="button"]').map((b) => b.textContent), 'the tick is off').not.toContain("Let's go");
+        expect(button('Link a sign-in', 'en').textContent, 'the sign-in tile is back').toContain('Google or Facebook');
+        expect(button('Write down 12 words', 'en').textContent, 'the words tile is back').toContain('On paper, kept safe');
+        for (const w of WORDS) expect(host!.textContent, 'no word of the 12 on screen').not.toContain(w);
+    });
+
     it('the way back with a sign-in covering the account, one that used to protect another: the last step, with no Beans words', async () => {
         phone.stored = SALLY;
         phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey,

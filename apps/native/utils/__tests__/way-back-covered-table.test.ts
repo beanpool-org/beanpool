@@ -17,15 +17,20 @@
  * key it is read for (another account's record), `flow !== 'claim'` in wayBackSkipped (every claim row), the covered copy
  * (the door's sign-in rows), the door's way (the door's dots), "Later" over a record marked done (a sign-in with no copy, a
  * failed copy, the words taken back), and no `linked` term in wayBackKeptBefore (the same rows: put it back and they skip).
+ *
+ * Round 2 of the review: the key vault's knowledge is read for real (utils/vault.ts `vaultSignInCopyKnown`, from what the
+ * phone stored), so counting any copy at the vault turns every admins' half row red; and "Later" brings the card over a
+ * record put away (the put-away rows go red when Later keeps it). The stored values are what the real deposits and status
+ * reads leave, walked against the fake vault in way-back-vault-copies.test.ts.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { KeeperEnrolmentResult } from '../keeper-enrolment';
 import type { DoorWay } from '../global-join';
 import type { SignInCopies } from '../vault-config';
 
-const store = vi.hoisted(() => ({ map: new Map<string, string>(), vault: new Set<string>() }));
+const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
-vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined), deleteItemAsync: vi.fn(async () => undefined) }));
+vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined), deleteItemAsync: vi.fn(async () => undefined) }));
 // one-way-back.ts signs its asks of the node; nothing here asks one.
 vi.mock('../node-post', () => ({ signedGet: vi.fn(async () => { throw new Error('no node in this test'); }) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -35,8 +40,12 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         removeItem: vi.fn(async (k: string) => { store.map.delete(k); }),
     },
 }));
-// What the phone knows of a vault copy, per key (vault.ts keeps it per key too).
-vi.mock('../vault', () => ({ vaultCopyKnown: vi.fn(async (key: string) => store.vault.has(key)) }));
+// What the phone knows of a copy at the key vault is read by vault.ts itself, from the value stored per key (seed below).
+// Its keys come from crypto.ts, which asks expo-crypto for randomness: node's own here.
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
+});
 vi.mock('../ways-back', async () => {
     const { readOneWayBack } = await import('../one-way-back');
     const { wordsWrittenDownStoreKey } = await import('../storage-keys');
@@ -53,10 +62,11 @@ vi.mock('../ways-back', async () => {
 });
 
 import { afterWayBack, doorKeepsSignInCopy, joinSteps, keptBeforeFor, stepDot, wayBackButton, wayBackKept, wayBackSkipped } from '../join-steps';
-import { oneWayBackPlace, readOneWayBack, startOneWayBack, startOneWayBackPutAway, startOneWayBackShown, type OneWayBack } from '../one-way-back';
+import { oneWayBackPlace, putAwayRecord, readOneWayBack, startOneWayBack, startOneWayBackPutAway, startOneWayBackShown, type OneWayBack } from '../one-way-back';
 import { wayBackKeptBefore } from '../way-back-kept';
 import { protectionFrom } from '../protection-state';
-import { oneWayBackStoreKey, wordsWrittenDownStoreKey } from '../storage-keys';
+import { oneWayBackStoreKey, vaultCopyKnownStoreKey, wordsWrittenDownStoreKey } from '../storage-keys';
+import { vaultSignInCopyKnown } from '../vault';
 import { GLOBAL_NODE_URL } from '../node-profile';
 
 const KEY = 'cd'.repeat(32);
@@ -64,17 +74,21 @@ const OTHER = 'ef'.repeat(32);
 const JOINED_URL = 'https://riverside.example';
 const OPEN_URL = 'https://open.riverbend.example';
 const BEFORE = Date.UTC(2026, 9, 1, 9, 0, 0);
+const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 10, 21, 9, 0, 0);
 
 beforeEach(() => {
     store.map.clear();
-    store.vault.clear();
 });
 
 // ── What the phone already knew, as each earlier step left it ─────────────────────────────────────────────────────────
 
-/** What an account's earlier steps left on the phone: a vault copy known, the "one way back" record, the words noted. */
-interface Before { vault?: boolean; record?: OneWayBack; words?: '1' | '0' }
+/**
+ * What an account's earlier steps left on the phone: what it knows of the key vault (vault.ts `noteVaultCopy`: `signIn` a
+ * sign-in's copy, `community` community copies only, `none` a status read listing none), the "one way back" record, the
+ * words noted.
+ */
+interface Before { vault?: 'signIn' | 'community' | 'none'; record?: OneWayBack; words?: '1' | '0' }
 
 const STATES: Record<string, Before> = {
     neither: {},
@@ -85,17 +99,41 @@ const STATES: Record<string, Before> = {
     // Noted, then taken back ("0"), over an old "I still have them": not kept.
     'words taken back': { record: { url: OPEN_URL, joinedAt: BEFORE, done: 'checked' }, words: '0' },
     // A sign-in added at another community with its copy at the key vault: the record linked, the vault copy known.
-    'sign-in linked with a vault copy': { vault: true, record: { url: OPEN_URL, joinedAt: BEFORE, done: 'linked' } },
+    'sign-in linked with a vault copy': { vault: 'signIn', record: { url: OPEN_URL, joinedAt: BEFORE, done: 'linked' } },
     // In by 12 words where the community keeps no copies, a sign-in added only to lift the limits (LinkSignInSheet writes
     // `linked` for it: noCopies), or a community's `ordinary` that says only a sign-in was added.
     'sign-in linked with no copy (noCopies)': { record: { url: OPEN_URL, joinedAt: BEFORE, done: 'linked' } },
     // A sign-in added whose copy failed (enrolment null): `linked` all the same, and no vault copy known.
     'sign-in linked with a failed copy': { record: { url: OPEN_URL, joinedAt: BEFORE, dismissedAt: BEFORE, done: 'linked' } },
-    both: { vault: true, record: { url: OPEN_URL, joinedAt: BEFORE, done: 'linked' }, words: '1' },
+    both: { vault: 'signIn', record: { url: OPEN_URL, joinedAt: BEFORE, done: 'linked' }, words: '1' },
+
+    // ── The key vault's copies (round 2, finding 1), as the real deposits and status reads leave them ──
+    // A sign-in's copy there, learnt by a status read (made on another phone): a way back in every community.
+    "a sign-in's copy at the vault": { vault: 'signIn' },
+    // The sign-in's copy failed (no signed receipt: nothing noted), then a status read listed none.
+    "a sign-in's copy that failed": { vault: 'none' },
+    // "Your community's admins" turned on, the vault's half kept, the community's never: Not finished (it was unreachable).
+    "admins' half alone: the turn-on not finished": { vault: 'community' },
+    // The same, the community refusing its half (409 not_offered).
+    "admins' half alone: the community refused its half": { vault: 'community' },
+    // Both halves once, then the community's lost (it closed, was rebuilt, or can't open it): the vault still lists its half.
+    "admins' half alone: the community closed": { vault: 'community' },
+    // Both halves kept: a way back through those admins, but the phone can't tell it from a lone half, so not counted: the safe way.
+    "admins' copy, both halves, no sign-in's copy": { vault: 'community' },
+    // A sign-in's copy and an admins' half: the sign-in's copy counts, and a half deposited after it never takes its place.
+    "a sign-in's copy and an admins' half": { vault: 'signIn' },
+
+    // ── A reminder the account already has, not done (round 2, finding 2): "Later" brings the card all the same ──
+    // An earlier invite join's, which started put away (startOneWayBackPutAway, and D2's word from Home).
+    "an earlier join's reminder, put away": { record: putAwayRecord(OPEN_URL, BEFORE) },
+    // The same long ago, its week's return already seen and put away again.
+    "an earlier join's reminder, put away long ago, its week's return used": { record: { ...putAwayRecord(OPEN_URL, BEFORE), dismissedAt: BEFORE + 10 * DAY, weekReturnUsed: true } },
+    // The 12-words door's own record (global or an open door), put away with its ✕.
+    "the 12-words door's own record, put away": { record: { url: OPEN_URL, joinedAt: BEFORE, dismissedAt: BEFORE + DAY } },
 };
 
 async function seed(key: string, b: Before): Promise<void> {
-    if (b.vault) store.vault.add(key);
+    if (b.vault) store.map.set(vaultCopyKnownStoreKey(key), b.vault === 'signIn' ? '1' : b.vault === 'community' ? 'c' : `0:${NOW - DAY}`);
     if (b.record) store.map.set(oneWayBackStoreKey(key), JSON.stringify(b.record));
     if (b.words) store.map.set(wordsWrittenDownStoreKey(key), b.words);
 }
@@ -146,7 +184,9 @@ async function walk(flow: Flow, opts: { door?: Door; wordsTicked?: boolean } = {
     const kept = wayBackKept({ signIn: signInKept, wordsTicked: !skip && !!opts.wordsTicked, before });
     const step = skip ? 'skipped' : wayBackButton(kept, afterWayBack(flow));
     await (kept ? startOneWayBackPutAway : startOneWayBackShown)(KEY, joinedAt, NOW);
-    const homeCard = oneWayBackPlace(await readOneWayBack(KEY), NOW + 60_000, false) === 'card';
+    // Home's card: where the record says, and not quiet (components/OneWayBackCard.tsx: quiet on a sign-in's copy at the vault).
+    const quiet = await vaultSignInCopyKnown(KEY);
+    const homeCard = oneWayBackPlace(await readOneWayBack(KEY), NOW + 60_000, false) === 'card' && !quiet;
     return { name, photo, step, homeCard };
 }
 
@@ -171,6 +211,17 @@ const TABLE: Array<{ state: keyof typeof STATES; invite: Outcome; globalByWords:
     { state: 'sign-in linked with no copy (noCopies)', invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
     { state: 'sign-in linked with a failed copy', invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
     { state: 'both', invite: SKIPPED_INVITE, globalByWords: SKIPPED_INVITE, claim: KEPT_CLAIM },
+    // The global door by 12 words starts its own card as it lands, and a sign-in's copy at the vault keeps it quiet.
+    { state: "a sign-in's copy at the vault", invite: SKIPPED_INVITE, globalByWords: SKIPPED_INVITE, claim: KEPT_CLAIM },
+    { state: "a sign-in's copy that failed", invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
+    { state: "admins' half alone: the turn-on not finished", invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
+    { state: "admins' half alone: the community refused its half", invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
+    { state: "admins' half alone: the community closed", invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
+    { state: "admins' copy, both halves, no sign-in's copy", invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
+    { state: "a sign-in's copy and an admins' half", invite: SKIPPED_INVITE, globalByWords: SKIPPED_INVITE, claim: KEPT_CLAIM },
+    { state: "an earlier join's reminder, put away", invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
+    { state: "an earlier join's reminder, put away long ago, its week's return used", invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
+    { state: "the 12-words door's own record, put away", invite: SHOWN_INVITE, globalByWords: SHOWN_INVITE, claim: SHOWN_CLAIM },
 ];
 
 describe('what the phone already knew of the account x invite, the global door by 12 words, a claim', () => {
@@ -257,9 +308,29 @@ describe('"Later" over a record marked done: the card about the community just j
         await walk('invite');
         expect(await readOneWayBack(KEY)).toEqual({ url: JOINED_URL, joinedAt: NOW, by: 'wayBack' });
     });
-    it('a reminder already running stands (the 12-words door\'s own, or one already on its schedule)', async () => {
-        store.map.set(oneWayBackStoreKey(KEY), JSON.stringify({ url: OPEN_URL, joinedAt: BEFORE, dismissedAt: BEFORE + 1 }));
+    // Until round 2 this row said a put-away record "stands" (kept as it was, dismissedAt and all): that pinned the bug the
+    // review found (finding 2: Later brought no card on the first landing). Later now brings it up, as the rows below say.
+    it('the 12-words door\'s own record, put away with its ✕: brought back up, still the door\'s', async () => {
+        store.map.set(oneWayBackStoreKey(KEY), JSON.stringify({ url: OPEN_URL, joinedAt: BEFORE, dismissedAt: BEFORE + 1, postReturnUsed: true }));
         await startOneWayBackShown(KEY, JOINED_URL, NOW);
-        expect(await readOneWayBack(KEY)).toEqual({ url: OPEN_URL, joinedAt: BEFORE, dismissedAt: BEFORE + 1 });
+        expect(await readOneWayBack(KEY)).toEqual({ url: OPEN_URL, joinedAt: BEFORE, postReturnUsed: true });
+        expect(oneWayBackPlace(await readOneWayBack(KEY), NOW + 60_000, true)).toBe('card');
+    });
+    it('a member\'s reminder put away (an earlier join\'s): started again about the community just joined, shown', async () => {
+        store.map.set(oneWayBackStoreKey(KEY), JSON.stringify(putAwayRecord(OPEN_URL, NOW - 2 * DAY)));
+        await startOneWayBackShown(KEY, JOINED_URL, NOW);
+        expect(await readOneWayBack(KEY)).toEqual({ url: JOINED_URL, joinedAt: NOW, by: 'wayBack' });
+    });
+    it('a reminder showing now stands as it is (the 12-words door\'s own, written as that join landed, or one already up)', async () => {
+        for (const up of [{ url: OPEN_URL, joinedAt: BEFORE }, { url: OPEN_URL, joinedAt: BEFORE, by: 'wayBack' as const, weekReturnUsed: true }]) {
+            store.map.set(oneWayBackStoreKey(KEY), JSON.stringify(up));
+            await startOneWayBackShown(KEY, JOINED_URL, NOW);
+            expect(await readOneWayBack(KEY)).toEqual(up);
+        }
+    });
+    it('kept: the end brings nothing up, and a put-away record stays put away (startOneWayBackPutAway keeps every record)', async () => {
+        store.map.set(oneWayBackStoreKey(KEY), JSON.stringify(putAwayRecord(OPEN_URL, NOW - 2 * DAY)));
+        await startOneWayBackPutAway(KEY, JOINED_URL, NOW);
+        expect(await readOneWayBack(KEY)).toEqual(putAwayRecord(OPEN_URL, NOW - 2 * DAY));
     });
 });

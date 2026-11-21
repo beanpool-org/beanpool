@@ -29,7 +29,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 const vault = vi.hoisted(() => ({ kept: false }));
-vi.mock('../vault', () => ({ vaultCopyKnown: vi.fn(async () => vault.kept) }));
+vi.mock('../vault', () => ({ vaultSignInCopyKnown: vi.fn(async () => vault.kept) }));
 vi.mock('../ways-back', async () => {
     const { readOneWayBack } = await import('../one-way-back');
     const { wordsWrittenDownStoreKey } = await import('../storage-keys');

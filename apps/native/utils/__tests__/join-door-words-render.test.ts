@@ -131,7 +131,7 @@ const work = vi.hoisted(() => {
 vi.mock('../use-door-work', () => ({ useDoorWork: () => work.hook }));
 const lock = vi.hoisted(() => ({ prompts: [] as string[] }));
 vi.mock('../LocalAuth', () => ({ authenticateUser: async (prompt: string) => { lock.prompts.push(prompt); return true; } }));
-vi.mock('../vault', () => ({ vaultCopyKnown: async () => false }));
+vi.mock('../vault', () => ({ vaultSignInCopyKnown: async () => false }));
 vi.mock('../one-way-back', () => ({ startOneWayBack: async () => {} }));
 vi.mock('../global-door-offer', () => ({ rememberGlobalDoor: vi.fn() }));
 vi.mock('expo-linking', () => ({ addEventListener: vi.fn(() => ({ remove: vi.fn() })), openURL: vi.fn(async () => undefined) }));

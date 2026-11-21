@@ -125,7 +125,7 @@ vi.mock('../use-door-work', () => ({ useDoorWork: () => work.hook }));
 // The phone's lock, asked before a sign-in links to a key on the phone: refused unless a case passes it.
 const lock = vi.hoisted(() => ({ passes: false }));
 vi.mock('../LocalAuth', () => ({ authenticateUser: async () => lock.passes }));
-vi.mock('../vault', () => ({ vaultCopyKnown: async () => false }));
+vi.mock('../vault', () => ({ vaultSignInCopyKnown: async () => false }));
 vi.mock('../one-way-back', () => ({ startOneWayBack: async () => {} }));
 vi.mock('../global-door-offer', () => ({ rememberGlobalDoor: vi.fn() }));
 vi.mock('expo-linking', () => ({ addEventListener: vi.fn(() => ({ remove: vi.fn() })), openURL: vi.fn(async () => undefined) }));

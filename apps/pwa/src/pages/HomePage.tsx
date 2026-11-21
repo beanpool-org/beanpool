@@ -99,8 +99,9 @@ import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
-import { defaultHomeLayout, firstStepsCount, firstStepsLeft, readerMayInvite, welcomeDrawn, welcomeFacts, welcomeShape, welcomeTileLines, communityWelcomeSays, communityWelcomeView, WELCOME_TILE_WORDS } from '@beanpool/core';
-import { HomeWelcomeRow, type CommunityWelcomeProps } from '../components/HomeWelcome';
+import { defaultHomeLayout, firstStepsCount, firstStepsLeft, readerMayInvite, welcomeDrawn, welcomeFacts, welcomeShape, welcomeTileLines, WELCOME_TILE_WORDS } from '@beanpool/core';
+import { COMMUNITY_WELCOME_DISMISSED_KEY, communityWelcomeAgainLine, communityWelcomeCard, communityWelcomeWords } from '@beanpool/core';
+import { CommunityWelcomeAgain, HomeWelcomeRow, type CommunityWelcomeProps } from '../components/HomeWelcome';
 import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, tourRecordRefused, useTour,
 } from '../lib/tour-store';
@@ -1110,6 +1111,7 @@ function CommunityBody({
     onAddCard,
     onArrange,
     onLearn,
+    welcomeAgain,
 }: {
     cm: NonNullable<HomeCards['community']>;
     profile: string;
@@ -1120,6 +1122,11 @@ function CommunityBody({
     onArrange: () => void;
     /** Opens Learn, from the "{n} things worth knowing" figure (slice K7). */
     onLearn?: () => void;
+    /**
+     * "Riverside's welcome ›" (DESIGN-onboarding-home-landing-fable.md §4.2 "Day 30", the phone's since slice S7): the owners'
+     * words again once the community's welcome has gone (components/HomeWelcome.tsx CommunityWelcomeAgain); absent where there are none.
+     */
+    welcomeAgain?: ReactNode;
 }) {
     const { wide } = useCardContainer();
     // The members' card (design §4.1): a visitor, who reads the lobby's Home, is told none of it.
@@ -1210,6 +1217,7 @@ function CommunityBody({
                     </p>
                 </div>
             )}
+            {welcomeAgain}
             {learnFigure && (
                 <button
                     type="button"
@@ -1969,27 +1977,33 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
     /** The reader's role, when Welcome's links need it (roleForWelcome, below). */
     const [inviteRole, setInviteRole] = useState<string | null | undefined>(undefined);
-    // The community's welcome (core communityWelcomeView, slice W2): a newcomer's until its own ×, drawn only with something to
-    // say (core communityWelcomeSays): the owners' words, who brought them, the first one here, or an owner's way to write one.
-    const welcomeView = answer && answer.me && !answer.welcome && !visitor ? communityWelcomeView(answer, layout, now) : null;
-    const welcomeSaid = answer ? welcomeFacts(answer) : null;
-    const communityWelcome: CommunityWelcomeProps | null = answer && welcomeView && welcomeSaid && communityWelcomeSays(welcomeView, welcomeSaid, inviteRole === 'owner') ? {
-        view: welcomeView,
-        inviter: welcomeSaid.inviter,
-        firstHere: welcomeSaid.firstHere,
+    // The community's welcome (core communityWelcomeCard, the phone's one rule from slice S7; here slice W2): a member's, a
+    // newcomer's until its own × (the layout's COMMUNITY_WELCOME_DISMISSED_KEY, on the account), drawn only with something to
+    // say: the owners' words, who brought them, the first one here, or an owner's way to write one. The web's lobby (a visitor)
+    // and a suspended member get none, as the web's other member cards.
+    const welcomeMember = !!answer?.me && !answer.welcome && !visitor && answer.me.standing === 'member';
+    const welcomeDismissedAt = layout?.dismissed?.[COMMUNITY_WELCOME_DISMISSED_KEY] ?? null;
+    const welcomeCard = answer && welcomeMember ? communityWelcomeCard(answer, { role: inviteRole, dismissedAt: welcomeDismissedAt, now }) : null;
+    const communityWelcome: CommunityWelcomeProps | null = answer && welcomeCard ? {
+        card: welcomeCard,
         onSayHello: (key) => onNavigate('messages', key),
         // Only where the reader can invite (core readerMayInvite, the phone's rule): where only admins invite, once the node
         // has said they are an owner or admin.
         onInvite: readerMayInvite(answer.features, inviteRole) ? () => onNavigate('people-invites') : undefined,
         // Written in the community's Settings (slice S6), which only its owners open.
-        writeHref: welcomeView.unwritten && inviteRole === 'owner' ? `${getNodeApiUrl()}/settings#from=pwa` : undefined,
-        // Its × is kept on the account (core dismissCommunityWelcome); focus goes to the first heading left, never to <body>.
+        writeHref: `${getNodeApiUrl()}/settings#from=pwa`,
+        // Its × is kept on the account (dismissWelcomeFrom); focus goes to the first heading left, never to <body>.
         onAway: () => {
             if (changeLayout(current => dismissWelcomeFrom(current, Date.now()))) {
                 setTimeout(() => gridRef.current?.querySelector<HTMLElement>('h2[tabindex="-1"]')?.focus(), 0);
             }
         },
     } : null;
+    // "Riverside's welcome ›" on the community card: the owners' words again whenever the welcome itself is not drawn (put away,
+    // or past the newcomer's days), so they are never on Home twice (core communityWelcomeAgainLine, the phone's rule, §4.2).
+    const welcomeAgainWords = answer && welcomeMember && !welcomeCard ? communityWelcomeWords(answer) : null;
+    const welcomeAgainLine = welcomeAgainWords && answer ? communityWelcomeAgainLine(answer) : null;
+    const welcomeAgain = welcomeAgainWords && welcomeAgainLine ? <CommunityWelcomeAgain line={welcomeAgainLine} words={welcomeAgainWords} /> : null;
     const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver, hasOpenKnock, knocks, wordsKeptHere, communityWelcome: !!communityWelcome }) : [];
     /** The layout edits start from: the one drawn, or the starter set for a Home never saved once the tour has ended. */
     const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
@@ -2330,7 +2344,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     // Welcome's "Invite someone ›" for an owner alone where only admins invite, and "Write your community's welcome ›" for an
     // owner where none is written: the reader's role, asked once a page load (lib/api.ts myNodeRoleOnce) and only then, as the
     // phone holds it (core readerMayInvite). Not heard: no link.
-    const roleForWelcome = !!answer && member && ((answer.features.invites === true && answer.features.door === 'admins' && welcomeFacts(answer).firstHere) || !!welcomeView?.unwritten);
+    // The prompt is asked about only where an owner would see it (as the phone's usePromptRole does).
+    const roleForWelcome = !!answer && member && ((answer.features.invites === true && answer.features.door === 'admins' && welcomeFacts(answer).firstHere)
+        || (welcomeMember && !!communityWelcomeCard(answer, { role: 'owner', dismissedAt: welcomeDismissedAt, now })?.ownerPrompt));
     useEffect(() => {
         if (!roleForWelcome) return;
         let live = true;
@@ -3368,6 +3384,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             onAddCard={() => setPickerOpen(true)}
                             onArrange={() => startArrange()}
                             onLearn={() => onNavigate('learn')}
+                            welcomeAgain={welcomeAgain}
                         />
                     </HomeCard>
                 );

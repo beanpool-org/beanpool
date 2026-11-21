@@ -6,9 +6,12 @@
  * - **BeanPool's tile**: three things to know, "Show me around" (the one-minute tour) and "Got it" (the tour record
  *   `skipped`, the one 1.4.7's Not now writes). From day 8 it folds to one band, "Welcome to BeanPool ›", with its ×; the
  *   band opens the tile again for the visit, writing nothing.
- * - **The community's welcome**: its caption on a clay band with its own ×, the owners' words as they wrote them (never
- *   translated), who brought the member ("Ana invited you. Say hello ›") or an owner alone's "You're the first one here",
- *   to an owner where none is written "Write your community's welcome ›", and the count.
+ * - **The community's welcome**: the phone's card (components/home/CommunityWelcomeCard.tsx, slice S7) from the same core
+ *   rule and words (`communityWelcomeCard`, `COMMUNITY_WELCOME_CARD_WORDS`): its caption on a clay band with its own ×, the
+ *   owners' words as they wrote them (never translated), who brought the member ("Ana invited you. Say hello ›") or an
+ *   owner alone's "You're the first one here", to an owner where none is written "Write your community's welcome ›", and
+ *   the count. Once it has gone, the community card's "Riverside's welcome ›" ({@link CommunityWelcomeAgain}) shows the
+ *   owners' words again.
  *
  * One full row of Home's grid: side by side on a wide Home (BeanPool's part on the left), stacked in one column, as on the
  * phone. Not a card: no "…", no hold, no arrows; in Arrange it goes quiet, as a card's body does. The look is shapes, never
@@ -19,8 +22,8 @@
  */
 import { useId, useState, type CSSProperties, type ReactNode } from 'react';
 import {
-    COMMUNITY_WELCOME_HOME_WORDS, WELCOME_TILE_WORDS, brandColours, t,
-    type CommunityWelcomeView, type WelcomeTileIcon, type WelcomeTileLine,
+    COMMUNITY_CARD_WORDS, COMMUNITY_WELCOME_CARD_WORDS, WELCOME_TILE_WORDS, brandColours, formatCount, t, tn,
+    type CommunityWelcomeCard, type WelcomeTileIcon, type WelcomeTileLine,
 } from '@beanpool/core';
 import { WELCOME_WORDS } from '../lib/home-cards';
 import { CardBody, PackedBlock } from './HomeCard';
@@ -50,15 +53,13 @@ export interface WelcomeTileProps {
 }
 
 export interface CommunityWelcomeProps {
-    view: CommunityWelcomeView;
-    /** Whose invite brought them, with a name to say (core welcomeFacts). */
-    inviter: { key: string; name: string } | null;
-    firstHere: boolean;
+    /** What it holds, when it is drawn: core `communityWelcomeCard`, the phone's one rule (slice S7). */
+    card: CommunityWelcomeCard;
     onSayHello: (key: string) => void;
     /** Absent: the reader can't invite here (core readerMayInvite), so "You're the first one here." stands alone. */
     onInvite?: () => void;
-    /** An owner where none is written yet: the community's Settings, where it is written (slice S6). */
-    writeHref?: string;
+    /** Where "Write your community's welcome ›" goes (the card's `ownerPrompt`): the community's Settings, where it is written (slice S6). */
+    writeHref: string;
     onAway: () => void;
 }
 
@@ -123,41 +124,65 @@ export function WelcomeTile({ shape, place, lines, tourLabel, onTour, onGotIt }:
     );
 }
 
-export function CommunityWelcome({ view, inviter, firstHere, onSayHello, onInvite, writeHref, onAway }: CommunityWelcomeProps) {
+export function CommunityWelcome({ card, onSayHello, onInvite, writeHref, onAway }: CommunityWelcomeProps) {
     const titleId = useId();
     const ink = 'var(--bp-card-clay-ink)';
+    // In the phone's order (CommunityWelcomeCard.tsx): the owners' words, whose invite, the owner's prompt, the count.
     return (
         <section data-testid="home-welcome-community" aria-labelledby={titleId}
             className="min-w-0 bg-bg-card rounded-2xl shadow-sm border border-border-primary p-4">
             <div className="-mx-4 -mt-4 px-4 mb-3 py-1 rounded-t-2xl flex items-center justify-between min-h-[48px] gap-2 min-w-0"
                 style={{ backgroundColor: 'var(--bp-card-clay-tint)', color: ink }}>
                 <h2 id={titleId} tabIndex={-1} className="m-0 min-w-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider" style={{ color: ink }}>
-                    {view.caption}
+                    {card.caption}
                 </h2>
-                <button type="button" data-testid="home-welcome-community-x" aria-label={view.away} onClick={onAway}
-                    className="shrink-0 min-w-[44px] min-h-[44px] -my-1 -mr-2 flex items-center justify-center rounded-full bg-transparent border-0 text-base font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                <button type="button" data-testid="home-welcome-community-x" aria-label={t(COMMUNITY_WELCOME_CARD_WORDS.away)} onClick={onAway}
+                    className="shrink-0 min-w-[44px] min-h-[44px] -my-1 -mr-2 flex items-center justify-center rounded-full bg-transparent border-0 text-xl font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     style={{ color: ink }}>
-                    <span aria-hidden="true">✕</span>
+                    <span aria-hidden="true">×</span>
                 </button>
             </div>
             {/* The owners' own words, as written: their line breaks kept, their language's direction, no link made tappable. */}
-            {view.text && <p data-testid="home-welcome-community-words" dir="auto" className={`${SAID} mb-2 whitespace-pre-line`}>{view.text}</p>}
-            {writeHref && (
-                <a data-testid="home-welcome-community-write" href={writeHref} className={LINK}>{t(COMMUNITY_WELCOME_HOME_WORDS.write)}</a>
-            )}
-            {firstHere ? (
-                <Line testId="home-welcome-first" text={t(WELCOME_WORDS.firstHere)}>
-                    {onInvite && <button type="button" data-testid="home-welcome-invite" onClick={onInvite} className={LINK}>{t(WELCOME_WORDS.inviteSomeone)}</button>}
-                </Line>
-            ) : inviter ? (
-                <Line testId="home-welcome-invited" text={t(WELCOME_WORDS.invitedYou, { name: inviter.name })}>
-                    <button type="button" data-testid="home-welcome-hello" onClick={() => onSayHello(inviter.key)} className={LINK}>
+            {card.words !== null && <p data-testid="home-welcome-community-words" dir="auto" className={`${SAID} mb-2 whitespace-pre-line`}>{card.words}</p>}
+            {card.inviter ? (
+                <Line testId="home-welcome-invited" text={t(WELCOME_WORDS.invitedYou, { name: card.inviter.name })}>
+                    <button type="button" data-testid="home-welcome-hello" onClick={() => onSayHello(card.inviter!.key)} className={LINK}>
                         {t(WELCOME_WORDS.sayHello)}
                     </button>
                 </Line>
+            ) : card.firstHere ? (
+                <Line testId="home-welcome-first" text={t(WELCOME_WORDS.firstHere)}>
+                    {onInvite && <button type="button" data-testid="home-welcome-invite" onClick={onInvite} className={LINK}>{t(WELCOME_WORDS.inviteSomeone)}</button>}
+                </Line>
             ) : null}
-            {view.members && <p data-testid="home-welcome-community-members" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words">{view.members}</p>}
+            {card.ownerPrompt && (
+                <a data-testid="home-welcome-community-write" href={writeHref} className={LINK}>{t(COMMUNITY_WELCOME_CARD_WORDS.write)}</a>
+            )}
+            {card.members !== null && (
+                <p data-testid="home-welcome-community-members" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words">
+                    {tn(card.members, COMMUNITY_CARD_WORDS.members.one, COMMUNITY_CARD_WORDS.members.other, { n: formatCount(card.members) })}
+                </p>
+            )}
         </section>
+    );
+}
+
+/**
+ * The community card's line (DESIGN-onboarding-home-landing-fable.md §4.2 "Day 30"; the phone's CommunityWelcomeAgain, slice
+ * S7): "Riverside's welcome ›" (core `communityWelcomeAgainLine`) opens the owners' words in place, under it; again folds them.
+ * For whenever the welcome itself is not drawn (put away, or past the newcomer's days). Nothing is written.
+ */
+export function CommunityWelcomeAgain({ line, words }: { line: string; words: string }) {
+    const [open, setOpen] = useState(false);
+    const wordsId = useId();
+    return (
+        <>
+            <button type="button" data-testid="home-community-welcome-again" aria-expanded={open} aria-controls={wordsId} onClick={() => setOpen(o => !o)}
+                className="w-full min-h-[44px] text-left p-0 mb-2 bg-transparent border-none cursor-pointer text-sm text-text-primary hover:text-text-secondary transition-colors break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg">
+                {line}
+            </button>
+            {open && <p id={wordsId} data-testid="home-community-welcome-words" dir="auto" className={`${SAID} mb-2 whitespace-pre-line`}>{words}</p>}
+        </>
     );
 }
 

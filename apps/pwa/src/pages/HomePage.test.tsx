@@ -54,7 +54,7 @@ import * as api from '../lib/api';
 import { readPricingGuide } from '../lib/starter-offers';
 import { HomePage, HOME_FAILED, HOME_HINT, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
 import { NodeTooOldError } from '../lib/node-version-gate';
-import { ARRANGE_WORDS, DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, FIND_TOWN_SEARCH_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { ARRANGE_WORDS, COMMUNITY_WELCOME_DISMISSED_KEY, DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, FIND_TOWN_SEARCH_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
 import { HOLD_MS } from '../components/HomeCard';
@@ -3035,7 +3035,7 @@ describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on 
         // Home…" sentence is gone (§2.3, §5.1). The community's welcome beside it has its own caption.
         expect(within(screen.getByTestId('home-welcome-tile')).getByRole('heading')).toHaveTextContent('Welcome to BeanPool!');
         // With nothing to say (no owners' words, nobody named who invited them) the community's welcome takes no room: the
-        // count alone is the community card's (core communityWelcomeSays).
+        // count alone is the community card's (core communityWelcomeCard, the phone's rule since S7).
         expect(screen.queryByTestId('home-welcome-community')).toBeNull();
         expect(screen.queryByTestId('home-start-words')).toBeNull();
         expect(screen.getByTestId('home-start-look')).toHaveTextContent('Show me around');
@@ -3449,6 +3449,21 @@ describe("W2: the WELCOME TO BEANPOOL! tile and the community's welcome on the w
             expect(cardIds()).not.toContain('start');
             expect(cardIds()).not.toContain('welcome-from');
             expect(document.body.textContent).not.toContain("G'day and welcome.");
+            // The community card's "Riverside's welcome ›" (core communityWelcomeAgainLine, the phone's since S7) opens the owners'
+            // words in place and folds them again; it writes nothing.
+            const again = within(screen.getByTestId('home-card-community')).getByTestId('home-community-welcome-again');
+            expect(again).toHaveTextContent("Riverside's welcome ›");
+            expect(again).toHaveAttribute('aria-expanded', 'false');
+            expect(again.className).toMatch(/break-words/);
+            expect(again.className).toMatch(/min-h-\[44px\]/);
+            fireEvent.click(again);
+            expect(again).toHaveAttribute('aria-expanded', 'true');
+            const words = screen.getByTestId('home-community-welcome-words');
+            expect(words.textContent).toBe(WORDS);
+            expect(words).toHaveAttribute('dir', 'auto');
+            fireEvent.click(again);
+            expect(screen.queryByTestId('home-community-welcome-words')).toBeNull();
+            expect(api.saveHomePreferences).not.toHaveBeenCalled();
         });
 
         it(`${mode}: Beans off: the first line alone where a local community has no Beans; on the global community its own two lines`, async () => {
@@ -3520,19 +3535,22 @@ describe("W2: the WELCOME TO BEANPOOL! tile and the community's welcome on the w
             vi.mocked(api.getHome).mockResolvedValue(fresh(joinedAgo(0, { welcome: WORDS })));
             render(<HomePage identity={ME} onNavigate={vi.fn()} />);
             const x = await screen.findByTestId('home-welcome-community-x');
-            expect(x).toHaveAccessibleName("Put Riverside's welcome away");
+            // Named as the phone names it (core COMMUNITY_WELCOME_CARD_WORDS.away), and kept under the phone's key (slice S7).
+            expect(x).toHaveAccessibleName('Put this welcome away');
             fireEvent.click(x);
-            await waitFor(() => expect(layoutWrites().at(-1)?.dismissed).toEqual({ 'welcome-community': expect.any(String) }));
+            await waitFor(() => expect(layoutWrites().at(-1)?.dismissed).toEqual({ [COMMUNITY_WELCOME_DISMISSED_KEY]: expect.any(String) }));
             // The cards are the newcomer's default list, untouched (Welcome still on it).
             expect(layoutWrites().at(-1)!.cards.map(c => c.id)).toEqual(HOME_DEFAULT_LIST);
             expect(screen.queryByTestId('home-welcome-community')).toBeNull();
             expect(screen.getByTestId('home-welcome-tile')).toBeInTheDocument();
             expect(tourWrites()).toEqual([]);
+            // Its words are not lost: the community card's line opens them again (the phone's rule, §4.2).
+            expect(within(screen.getByTestId('home-card-community')).getByTestId('home-community-welcome-again')).toHaveTextContent("Riverside's welcome ›");
             // Focus goes to the first heading left, never to the page's <body>.
             await waitFor(() => expect(document.activeElement?.tagName).toBe('H2'));
             cleanup();
             // Another device, the next open: the account's layout carries the ×.
-            const saved = joinedAgo(0, { welcome: WORDS }, { layout: { v: 2, cards: HOME_DEFAULT_LIST.map(id => ({ id, type: id })), dismissed: { 'welcome-community': NOW }, updatedAt: NOW } as never });
+            const saved = joinedAgo(0, { welcome: WORDS }, { layout: { v: 2, cards: HOME_DEFAULT_LIST.map(id => ({ id, type: id })), dismissed: { [COMMUNITY_WELCOME_DISMISSED_KEY]: NOW }, updatedAt: NOW } as never });
             vi.mocked(api.getHome).mockResolvedValue(fresh(saved));
             render(<HomePage identity={ME} onNavigate={vi.fn()} />);
             await screen.findByTestId('home-welcome-tile');

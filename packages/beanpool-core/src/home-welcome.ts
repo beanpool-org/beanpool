@@ -15,10 +15,9 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
 import { PROTOCOL_CONSTANTS } from './protocol.js';
-import { formatCount, t, tn, word } from './words.js';
-import { WELCOME_BAND_DAYS, defaultHomeLayout, type HomeLayoutV2 } from './home-frame.js';
-import { COMMUNITY_CARD_WORDS } from './community-card.js';
+import { t, word } from './words.js';
 import { isKeptCommunityWelcome } from './community-welcome.js';
+import { WELCOME_BAND_DAYS } from './home-frame.js';
 
 /**
  * The WELCOME TO BEANPOOL! tile's words (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.1 item 1, Marty's
@@ -113,113 +112,106 @@ export function readerMayInvite(features: { invites?: unknown; door?: unknown },
     return role === 'owner' || role === 'admin';
 }
 
-// ── The community's welcome on Home ─────────────────────────────────────────────────────────────────────────────────────
+// ── The community's own welcome on Home (DESIGN-onboarding-home-landing-fable.md §4.1 item 2, §4.2, §4.3, §4.5; slice S7) ──
 
 /**
- * The key a member's × on the community's welcome leaves in the Home layout's `dismissed` map (`{ card id: date }`,
- * home-frame.ts `HomeLayoutV2`), on the account, so the phone and the web agree (DESIGN-onboarding-home-landing-fable.md
- * §4.3: "one more entry in the Home layout's dismissed map … A new key, no new shape"). Both apps' slices use this one key
- * (web W2, phone S7). It is no card's id, so no card is hidden by it.
+ * Where the community's welcome is put away: one more key in the Home layout's `dismissed` map (`{ card id: date }`, the
+ * map that keeps when "Your way back in" was put away), so it holds on every device of the account. A new key, no new
+ * shape; never a card id (no card type has a `-welcome` instance).
  */
-export const COMMUNITY_WELCOME_DISMISSED = 'welcome-community';
+export const COMMUNITY_WELCOME_DISMISSED_KEY = 'community-welcome';
 
-/** The community's welcome's own words (§4.1 item 2), shown through t(); the owners' words themselves never are. */
-export const COMMUNITY_WELCOME_HOME_WORDS = {
-    /** Its caption: "FROM RIVERSIDE", capitals by style. */
-    from: word('From {community}'),
-    /** Its caption where the answer carries no name for the community. */
-    fromYours: word('From your community'),
-    /** Its ×, as a screen reader names it. */
-    away: word("Put {community}'s welcome away"),
-    awayYours: word("Put your community's welcome away"),
-    /** To an owner, where none is written yet: opens the community's Settings, where it is written (slice S6). */
+/** The community's welcome card's own words, shown through t(). The owners' words themselves never are. */
+export const COMMUNITY_WELCOME_CARD_WORDS = {
+    /** The card's caption, drawn in capitals: "FROM RIVERSIDE". */
+    caption: word('From {community}'),
+    /** A community whose name the answer doesn't carry (the notices card's name, the same English). */
+    captionUnnamed: word('From your community'),
+    /** An owner of a community whose server keeps a welcome, with none written yet. */
     write: word("Write your community's welcome ›"),
+    /** The community card's line that shows the owners' words again once the welcome card has gone (§4.2 "Day 30"). */
+    again: word("{community}'s welcome ›"),
+    againUnnamed: word("Your community's welcome ›"),
+    /** The card's ×, as a screen reader says it (the caption names the community). */
+    away: word('Put this welcome away'),
 } as const;
 
-/** The parts of a Home answer the community's welcome reads (both apps' answers have this shape). */
-export interface CommunityWelcomeAnswer {
-    /** A visitor's answer (the web's lobby): no welcome. */
-    welcome?: unknown;
-    me?: { joinedAt?: string | null; standing?: string } | null;
-    cards?: { community?: { name?: string | null; members?: number | null; welcome?: string | null } | null } | null;
+/** What the community's welcome card holds, when it is drawn. */
+export interface CommunityWelcomeCard {
+    /** "From Riverside", in the member's language. */
+    caption: string;
+    /** The owners' words exactly as they wrote them (never translated), or null where they wrote none. */
+    words: string | null;
+    /** Whose invite brought the reader, with a name to say ({@link welcomeFacts}). */
+    inviter: { key: string; name: string } | null;
+    /** An owner alone on a new local community ({@link welcomeFacts}). */
+    firstHere: boolean;
+    /** The community's members, for "84 members"; null where the answer has no count, and for the first one here. */
+    members: number | null;
+    /** "Write your community's welcome ›": an owner, on a server that keeps a welcome, with none written. */
+    ownerPrompt: boolean;
 }
 
-/** What the community's welcome on Home says (§4.1 item 2), in the member's language where the words are ours. */
-export interface CommunityWelcomeView {
-    /** "From Riverside" / "From your community". */
-    caption: string;
-    /** The ×'s name. */
-    away: string;
-    /** The owners' words, exactly as written (never translated, §4.5); null where none are written or the server is older. */
-    text: string | null;
-    /**
-     * The server said none is written (`welcome: null`), as opposed to a server from before the setting, which sends no field:
-     * only then is an owner asked to write one ({@link COMMUNITY_WELCOME_HOME_WORDS} `write`), since only then can they.
-     */
-    unwritten: boolean;
-    /** "84 members"; null where the answer carries no count. */
-    members: string | null;
+/** The parts of a Home answer the community's welcome reads (both apps' answers have this shape). */
+export interface CommunityWelcomeAnswer extends WelcomeAnswer {
+    me?: { joinedAt?: unknown; invitedBy?: { key?: unknown; name?: unknown } | null } | null;
+    cards?: { community?: { name?: string | null; members?: number | null; welcome?: unknown } | null } | null;
+}
+
+const DAY_MS = 86_400_000;
+
+/** The owners' welcome as an app may draw it: a kept text (core `isKeptCommunityWelcome`), else none. */
+export function communityWelcomeWords(answer: Pick<CommunityWelcomeAnswer, 'cards'>): string | null {
+    const raw = answer.cards?.community?.welcome;
+    return isKeptCommunityWelcome(raw) ? raw : null;
 }
 
 /**
- * The community's welcome on Home, or null where it is not drawn (DESIGN-onboarding-home-landing-fable.md §4.1 item 2,
- * §4.2; Marty's picks of 21 Nov 2026). A newcomer's, like the tile: a member (never a visitor or a suspended member) in
- * their first {@link WELCOME_BAND_DAYS} days, until their own × (the {@link COMMUNITY_WELCOME_DISMISSED} entry in the
- * layout's `dismissed`), whatever became of BeanPool's tile, since it is the community's and not ours ("The community's
- * welcome stays until its own ×"). A join date the node didn't send or can't be read keeps it, never hides it, as
- * home-frame.ts `welcomeShape` does. With no owners' words it still says who brought them and the count (§4.1: "No
- * owner's words yet: the inviter line and the count alone"); the inviter's line is the app's, from {@link welcomeFacts}.
- * Whether it says enough to be drawn is {@link communityWelcomeSays}.
+ * The community's welcome card under BeanPool's tile (§4.1 item 2), or null where it is not drawn. One rule for both apps.
  *
- * Only a welcome as one is kept is shown ({@link isKeptCommunityWelcome}): anything else is no words, never a stand-in.
+ * - **Whose:** a member's, never a visitor's. A newcomer's, in the same window as BeanPool's welcome: from joining to day
+ *   30 ({@link WELCOME_BAND_DAYS}), then never (§4.2 "Day 30": Home is the member's own). A join date not heard keeps it,
+ *   as it keeps BeanPool's tile: never hidden for a missing fact.
+ * - **Its own life:** it stays until its own × (`dismissedAt`, the layout's {@link COMMUNITY_WELCOME_DISMISSED_KEY}), not
+ *   BeanPool's Got it or the tour's end, and it is drawn in a second community on the same phone, where BeanPool's part
+ *   is not (§3.3).
+ * - **What it holds:** the owners' words as written; under them the inviter's line, or "You're the first one here."; the
+ *   member count. No owners' words yet: the inviter's line and the count alone. An owner of a community whose server
+ *   keeps a welcome and has none (`welcome: null`) is asked to write one; a server from before it (no field) asks nothing.
+ * - **Nothing to say:** no words, no inviter, not the first one here and no prompt: not drawn ("cards with nothing to show
+ *   stay undrawn"). The community card at the foot already gives the count.
  */
-export function communityWelcomeView(
+export function communityWelcomeCard(
     answer: CommunityWelcomeAnswer,
-    layout: Pick<HomeLayoutV2, 'dismissed'> | null | undefined,
-    now: number = Date.now(),
-): CommunityWelcomeView | null {
+    ctx: { role?: string | null; dismissedAt?: string | null; now?: number } = {},
+): CommunityWelcomeCard | null {
     const me = answer.me;
-    if (answer.welcome || !me || (me.standing !== undefined && me.standing !== 'member')) return null;
-    if (layout?.dismissed && Object.prototype.hasOwnProperty.call(layout.dismissed, COMMUNITY_WELCOME_DISMISSED)) return null;
+    const community = answer.cards?.community;
+    if (!me || !community || ctx.dismissedAt) return null;
     const joined = typeof me.joinedAt === 'string' ? Date.parse(me.joinedAt) : NaN;
-    if (Number.isFinite(joined) && now - joined >= WELCOME_BAND_DAYS * 86_400_000) return null;
-    const card = answer.cards?.community;
-    const name = typeof card?.name === 'string' ? card.name.trim() : '';
-    const said = card?.welcome;
-    const count = card?.members;
+    if (Number.isFinite(joined) && (ctx.now ?? Date.now()) - joined >= WELCOME_BAND_DAYS * DAY_MS) return null;
+    const words = communityWelcomeWords(answer);
+    const facts = welcomeFacts(answer);
+    const ownerPrompt = !words && community.welcome === null && ctx.role === 'owner';
+    if (!words && !facts.inviter && !facts.firstHere && !ownerPrompt) return null;
+    const name = typeof community.name === 'string' ? community.name.trim() : '';
     return {
-        caption: name ? t(COMMUNITY_WELCOME_HOME_WORDS.from, { community: name }) : t(COMMUNITY_WELCOME_HOME_WORDS.fromYours),
-        away: name ? t(COMMUNITY_WELCOME_HOME_WORDS.away, { community: name }) : t(COMMUNITY_WELCOME_HOME_WORDS.awayYours),
-        text: isKeptCommunityWelcome(said) ? said : null,
-        unwritten: said === null,
-        members: typeof count === 'number' && Number.isFinite(count) && count > 0
-            ? tn(count, COMMUNITY_CARD_WORDS.members.one, COMMUNITY_CARD_WORDS.members.other, { n: formatCount(count) })
-            : null,
+        caption: name ? t(COMMUNITY_WELCOME_CARD_WORDS.caption, { community: name }) : t(COMMUNITY_WELCOME_CARD_WORDS.captionUnnamed),
+        words,
+        inviter: facts.inviter,
+        firstHere: facts.firstHere,
+        members: !facts.firstHere && typeof community.members === 'number' && community.members > 0 ? community.members : null,
+        ownerPrompt,
     };
 }
 
 /**
- * Whether the community's welcome has anything to say, so is drawn at all (Home's rule: a card with nothing to show takes no
- * room): the owners' words, who brought the member or "You're the first one here." ({@link welcomeFacts}), or, to an owner
- * where the node says none is written, the way to write one. The count alone is not enough: the community card at the foot
- * of Home already says it.
+ * The community card's line that opens the owners' words again (§4.2 "Day 30"): "Riverside's welcome ›", where the owners
+ * wrote words, for whenever the welcome card itself is not drawn (put away, or past the newcomer's days). Null where they
+ * wrote none. The app draws it only while {@link communityWelcomeCard} is null, so the words are never on Home twice.
  */
-export function communityWelcomeSays(
-    view: CommunityWelcomeView | null,
-    facts: Pick<WelcomeFacts, 'inviter' | 'firstHere'>,
-    readerIsOwner: boolean,
-): boolean {
-    if (!view) return false;
-    return view.text !== null || !!facts.inviter || facts.firstHere || (readerIsOwner && view.unwritten);
-}
-
-/**
- * The member's × on the community's welcome: the layout with its {@link COMMUNITY_WELCOME_DISMISSED} entry, dated `now`,
- * the cards untouched. A Home never saved is the default list with it (as each app's `dismissSafety` does for "Your way
- * back in"), so the newcomer's Home is not changed by it.
- */
-export function dismissCommunityWelcome(layout: HomeLayoutV2 | null | undefined, now: number): HomeLayoutV2 {
-    const base = layout ?? defaultHomeLayout();
-    const at = new Date(now).toISOString();
-    return { ...base, dismissed: { ...base.dismissed, [COMMUNITY_WELCOME_DISMISSED]: at }, updatedAt: at };
+export function communityWelcomeAgainLine(answer: Pick<CommunityWelcomeAnswer, 'cards'>): string | null {
+    if (!communityWelcomeWords(answer)) return null;
+    const name = typeof answer.cards?.community?.name === 'string' ? answer.cards.community.name.trim() : '';
+    return name ? t(COMMUNITY_WELCOME_CARD_WORDS.again, { community: name }) : t(COMMUNITY_WELCOME_CARD_WORDS.againUnnamed);
 }

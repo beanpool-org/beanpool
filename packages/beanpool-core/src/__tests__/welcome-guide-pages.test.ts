@@ -10,7 +10,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HOME_DEFAULT_LIST } from '../home-frame.js';
-import { COMMUNITY_WELCOME_HOME_WORDS, WELCOME_TILE_WORDS } from '../home-welcome.js';
+import { COMMUNITY_WELCOME_CARD_WORDS, WELCOME_TILE_WORDS } from '../home-welcome.js';
+import { t } from '../words.js';
 
 const GUIDE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'beanpool-guide', 'content');
 const page = (rel: string) => readFileSync(join(GUIDE, rel), 'utf8');
@@ -20,8 +21,11 @@ const flat = (rel: string) => page(rel).replace(/\s+/g, ' ');
 describe("the guide's joining page: the phone's three steps", () => {
     const joining = flat('getting-started/joining.md');
 
-    it('the phone has Your Name, Your Photo and Safety Backup, Safety Backup last; How it Works only in a web browser', () => {
-        expect(joining).toContain('In the phone app the bar at the top shows **Your Name**, **Your Photo** and **Safety Backup**, and **Safety Backup** is the last step.');
+    it('the phone has dots for the name, Your Photo and Safety Backup, Safety Backup last; How it Works only in a web browser', () => {
+        // Slice S3: the labelled bar became dots and ‹ (components/welcome/StepDots.tsx); the steps and their order are the same.
+        expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo and **Safety Backup**, and **Safety Backup** is the last step.');
+        expect(joining).not.toContain('the bar at the top shows **Your Name**');
+        expect(joining).not.toContain('**Restore Existing Identity**');
         expect(joining).not.toContain('The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.');
         expect(joining).toContain('- **How it Works** (in a web browser only):');
     });
@@ -48,13 +52,6 @@ describe("the guide's Home page: the tile, its band, its end, the order", () => 
         expect(home).not.toContain('**Welcome** has **Not now** instead.');
     });
 
-    it("the web app's community welcome: its caption, the owners' words as written, Write your community's welcome for an owner, until its ✕ (W2)", () => {
-        expect(home).toContain('In the web app, your community\'s own welcome stands beside the tile, headed with its name, such as "From Riverside", with **✕**.');
-        expect(home).toContain("It shows what your community's owners wrote for new members, exactly as they wrote it, if they wrote anything;");
-        expect(home).toContain(`An owner of a community with no welcome yet sees **${COMMUNITY_WELCOME_HOME_WORDS.write}**, which opens the community's settings, where it is written.`);
-        expect(home).toContain('It stays for your first 30 days, after **Got it** too, until you tap **✕**, and **✕** is kept on your account.');
-    });
-
     it("the newcomer's order is core's default list: First steps above New in the Market", () => {
         expect(HOME_DEFAULT_LIST.indexOf('steps')).toBeLessThan(HOME_DEFAULT_LIST.indexOf('market'));
         expect(home).toContain('**Welcome**, **Your way back in**, **First steps**, **New in the Market** (**Near you** on the global community), **What are you into?**');
@@ -66,5 +63,25 @@ describe("the guide's notifications page", () => {
         const notifications = flat('settings/notifications.md');
         expect(notifications).not.toContain('the card at the end of How it Works');
         expect(notifications).toContain('**Hear when someone answers you** in **First steps** on **Home**, or when you send your first message or request to join.');
+    });
+});
+
+// Slice S7: the community's own welcome under the phone's tile, in the words the app draws (core's COMMUNITY_WELCOME_CARD_WORDS);
+// since slice W2 the web app's too, beside the tile on a wide screen.
+describe("the guide's Home page: the community's own welcome on both apps (S7, W2)", () => {
+    const home = flat('getting-started/home.md');
+
+    it('under the tile: the owners\' words never translated, the inviter\'s line, its ×, 30 days, and the line to read it again', () => {
+        expect(home).toContain('Under the tile is your community\'s own welcome, headed "From" and the community\'s name, such as "From Riverside".');
+        expect(home).toContain('In the web app, on a wide screen, it stands beside the tile instead, and the two run across the whole width.');
+        expect(t(COMMUNITY_WELCOME_CARD_WORDS.caption, { community: 'Riverside' })).toBe('From Riverside');
+        expect(home).toContain('as they wrote them: they are never translated.');
+        expect(home).toContain('**Got it** on the tile leaves it there: tap its **×** to put it away.');
+        expect(home).toContain(`such as "${t(COMMUNITY_WELCOME_CARD_WORDS.again, { community: 'Riverside' })}"`);
+        expect(home).toContain(`sees **${t(COMMUNITY_WELCOME_CARD_WORDS.write)}** there.`);
+        // Whose invite brought you moved from the tile to it, the phone's at S7 and the web app's at W2.
+        expect(home).not.toContain('In the web app it also says who invited you, with **Say hello ›** to open a chat with them;');
+        expect(home).toContain('Who invited you is in your community\'s own welcome, under the tile (below).');
+        expect(home).toContain('with **Say hello ›** to open a chat with them, or, for an owner alone on a new community whom nobody invited, "You\'re the first one here." with **Invite someone ›** where they can invite');
     });
 });

@@ -304,7 +304,7 @@ export interface HomeCards {
         knowledge?: number;
         /**
          * The owners' welcome for new members (onboarding S6), as they wrote it, to a member; null where none is written;
-         * absent from a server from before it (core communityWelcomeView).
+         * absent from a server from before it (core communityWelcomeCard).
          */
         welcome?: string | null;
     };
@@ -352,7 +352,7 @@ export interface ShownOptions {
     /** The member said here that they still have their 12 words, before the node's answer says so (wayBackOf). */
     wordsKeptHere?: boolean;
     /**
-     * The community's welcome is up and has something to say (core communityWelcomeView and communityWelcomeSays, slice W2):
+     * The community's welcome is up and has something to say (core communityWelcomeCard, the phone's rule; slice W2):
      * the page works it out, since it knows the reader's role. Absent: not drawn.
      */
     communityWelcome?: boolean;
@@ -453,7 +453,7 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
         shown.splice(market >= 0 ? market + 1 : shown.length - 1, 0, { id: 'interests', type: 'interests' });
     }
     // The community's welcome once BeanPool's tile is not drawn (after Got it): it stays until its own × (core
-    // communityWelcomeView, DESIGN-onboarding-home-landing-fable.md §4.2), in the tile's place under Needs you and a pinned
+    // communityWelcomeCard, DESIGN-onboarding-home-landing-fable.md §4.2), in the tile's place under Needs you and a pinned
     // Find. While the tile is drawn it stands beside it, in the tile's row.
     if (!shown.some(c => c.type === 'start') && opts.communityWelcome) {
         const at = shown.findIndex(c => c.type !== 'needs' && !pins.includes(c.type));

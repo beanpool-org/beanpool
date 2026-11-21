@@ -479,7 +479,8 @@ describe('S3: notification permission at the tap, never at account creation', ()
             // No card and no card rule; the phone's own question only at First steps' tap (turnOnNotifications in onStep).
             expect(home).not.toMatch(/NotificationPermissionCard|shouldShowNotificationCard|notificationsLater|markNotificationAsk/);
             expect(home.match(/turnOnNotifications\(/g)).toHaveLength(1);
-            expect(home).toMatch(/else if \(step === 'notify'\) \{\s*void turnOnNotifications\(/);
+            // Through the one-tap guard (utils/one-ask.ts, max re-check of #3340): a double tap is one ask.
+            expect(home).toMatch(/else if \(step === 'notify'\) \{\s*void notifyAsk\(\(\) => turnOnNotifications\(/);
             expect(fs.existsSync(path.join(root, 'components/NotificationPermissionCard.tsx'))).toBe(false);
         });
 

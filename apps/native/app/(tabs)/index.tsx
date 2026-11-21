@@ -17,6 +17,7 @@ import { readSaveSearchParam } from '../../utils/market-filters';
 import { twoParagraphs } from '../../utils/alert-words';
 import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications, type OsNotificationPermission } from '../../utils/notification-permission';
 import { useScreenShowing } from '../../components/NotifyLine';
+import { oneAskAtATime } from '../../utils/one-ask';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
 import { resendWordsKept } from '../../utils/words-kept';
 import { useTheme } from '../ThemeContext';
@@ -278,6 +279,8 @@ export default function HomeScreen() {
     const tipsRef = useRef<TipsRecord | null>(null);
     /** First steps' "Hear when someone answers you" from this phone (utils/notification-permission.ts `notifyStep`); null: no such line. */
     const [notify, setNotify] = useState<boolean | null>(null);
+    /** One tap on that line, one ask: a second while the phone's pop-up is out does nothing (utils/one-ask.ts). */
+    const notifyAsk = useRef(oneAskAtATime()).current;
     /** The phone's own answer at the same reads, for What are you into?'s true note (slice N2b); null: not read yet. */
     const [phone, setPhone] = useState<OsNotificationPermission | null>(null);
     const readNotify = useCallback(async () => {
@@ -1003,10 +1006,10 @@ export default function HomeScreen() {
         else if (step === 'words') router.push({ pathname: '/(tabs)/settings', params: { section: 'protection' } });
         // Hear when someone answers you: the line is the reason, the tap brings the phone's own question (§2.4, §2.5).
         else if (step === 'notify') {
-            void turnOnNotifications(identityRef.current?.publicKey).catch(() => 'declined' as const).then(() => readNotify());
+            void notifyAsk(() => turnOnNotifications(identityRef.current?.publicKey).catch(() => 'declined' as const).then(() => readNotify()));
         }
         else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
-    }, [openTune, readNotify]);
+    }, [openTune, readNotify, notifyAsk]);
 
     // Welcome's "Say hello ›" (DESIGN-home-default-fable.md §2.3): the chat with whoever's invite brought them, as a
     // profile's Message opens it (the first message's notifications ask is made there, once in all).

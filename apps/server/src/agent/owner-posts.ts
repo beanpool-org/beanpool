@@ -930,9 +930,14 @@ function createPoll(grant: AgentGrant, args: Record<string, unknown>): ToolResul
     }
 }
 
-/** The photo rule every create states, since its schema cannot require "one of three" (schemaRequired). */
+/**
+ * The photo rule every create states, since its schema cannot require "one of three" (schemaRequired). Whose a photo must be:
+ * "Only pictures the member took, owns or may use." (DESIGN-learn-web-pictures-fable.md Question 4, slice 1; Marty, 22 Nov 2026,
+ * "All six of Fable's picks"): the Market keeps taking photo_urls as it does, with this one sentence. It stays after the first
+ * sentence, which owner-seeds.ts ONE_PICTURE cuts for a group's or an enterprise's one picture.
+ */
 const PHOTOS_RULE = `1 to ${AGENT_POST_PHOTOS_MAX} photos are required, from photo_urls, photo_ids and photos together; the server makes each `
-    + `${PHOTO_MAX_SIDE} px with no metadata, as the apps do. Never a photo of people you were not given to post`;
+    + `${PHOTO_MAX_SIDE} px with no metadata, as the apps do. Only pictures the member took, owns or may use. Never a photo of people you were not given to post`;
 const PHOTOS_SCHEMA = {
     type: 'array', maxItems: AGENT_POST_PHOTOS_MAX,
     items: { type: 'string', description: 'a JPEG or WebP image as base64 (data:image/jpeg;base64,… or the bare base64)' },

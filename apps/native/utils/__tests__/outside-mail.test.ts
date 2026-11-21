@@ -105,6 +105,8 @@ const server = vi.hoisted(() => ({
     /** Each forget asked (test 19): with what id, and its signal; and how my server answers it. */
     forgets: [] as Array<{ device: string; signal: AbortSignal | undefined }>,
     forgetAnswer: 'ok' as 'ok' | 'refused' | 'never' | 'deaf',
+    /** Slice S5 (#3347 review F2): my server's own `dmRequests` in its mailbox answer, when set; undefined, not said (an older server). */
+    dmRequests: undefined as undefined | boolean,
 }));
 
 /** What waits for `device` at the server: every held item it has not confirmed. */
@@ -136,7 +138,10 @@ vi.mock('../node-post', () => ({
         if (!device || !/^[0-9a-f]{32}$/.test(device)) return new Response(JSON.stringify({ error: 'No device.', code: 'bad_device' }), { status: 400 });
         server.devices.add(device);
         const outbox = server.outboxPages.length ? server.outboxPages.shift()! : { ticks: server.outbox, more: false };
-        return new Response(JSON.stringify({ items: servedTo(device).slice(0, 50), more: false, outbox: outbox.ticks, outboxMore: outbox.more }), { status: 200 });
+        return new Response(JSON.stringify({
+            items: servedTo(device).slice(0, 50), more: false, outbox: outbox.ticks, outboxMore: outbox.more,
+            ...(server.dmRequests === undefined ? {} : { dmRequests: server.dmRequests }),
+        }), { status: 200 });
     }),
     signedPost: vi.fn(async (_url: string, path: string, body: any, _identity: unknown, signal?: AbortSignal) => {
         server.calls.push(`POST ${path}`);
@@ -245,6 +250,7 @@ beforeEach(async () => {
     server.batches = []; server.refuse = null; server.signals = []; server.stallGet = false; server.stallSend = false;
     server.stop = null; server.seen = { confirm: 0, receipt: 0 }; server.stopped = false; server.deadline = null; server.receiptTries = [];
     server.devices = new Set(); server.got = new Map(); server.named = []; server.outboxPages = []; server.forgets = []; server.forgetAnswer = 'ok';
+    server.dmRequests = undefined;
     const s = sqlStore();
     sql = s.sql;
     blocked = new Set();
@@ -417,21 +423,22 @@ describe('4  the gate through a round', () => {
     });
 
     // Slice S5: a first line across from a member here (my own server's mark beside the item) meets this community's own
-    // rule, not the door: straight in where first messages arrive straight away, a request where requests are on.
+    // rule, not the door: straight in where first messages arrive straight away, a request where requests are on, as my
+    // server says it in the same answer (`dmRequests`; not said, an older server: requests on, the strict side).
     const fromMember = async (from: { seed: string; key: string }, text: string, mark: 'server' | 'envelope' = 'server') => {
         const item: any = await heldLine(from, text);
         if (mark === 'server') item.memberHere = true;
         else item.envelope = { ...item.envelope, memberHere: true };   // the sending server's own claim: never counted
         return item;
     };
-    for (const [community, requestsHere, want] of [['a local community', false, 'written'], ['requests on', true, 'requests']] as const) {
+    for (const [community, dmRequests, want] of [['a local community', false, 'written'], ['requests on', true, 'requests'], ['not said (an older server)', undefined, 'requests']] as const) {
         it(`member here (S5), ${community}, door closed: their first line is ${want === 'written' ? 'straight in' : 'a request'}`, async () => {
-            ctx.requestsHere = requestsHere;
+            server.dmRequests = dmRequests;
             const asked: string[] = [];
             ctx.unbarred = async (k) => { asked.push(k); return true; };
             await fromMember(SOL, 'Hello from the garden group');
             expect(await syncOutsideMail(ctx)).toMatchObject({ [want]: 1, dropped: 0 });
-            expect(chatOf(SOL.key)).toMatchObject({ state: requestsHere ? 'request' : 'open' });
+            expect(chatOf(SOL.key)).toMatchObject({ state: want === 'requests' ? 'request' : 'open' });
             expect(asked).toEqual([SOL.key]);
         });
     }

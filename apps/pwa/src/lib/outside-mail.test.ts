@@ -25,6 +25,10 @@
  *  11  each device for itself, the whole gate table (kind x chat x door x block) through a round with a second device listed
  *      (the phone's 15; X4b): this browser judges and confirms under its own id, and the phone is still served every item
  *  12  a blocked person's chat is never listed nor opened from their card (the phone's chatsShown, openChatFromCard; X4b)
+ *  S5  a fellow member's first line across, through the whole round (syncOutsideMailNow; PR #3347 review F2, F3): the
+ *      community's own rule is the `dmRequests` my server says in the same mailbox answer as the mark {on, off, not said
+ *      (a server from before it), switched on or off since the page read the community's info} -> a request, or straight in;
+ *      never the info read at page load
  *  X6  changes to lines (the phone's X6): one table over kind x sender (the writer, the other person, a third key, a forged
  *      seal, a blocked sender) x state (fetched, already deleted, a request here) through a round, and how the line reads
  *      after; sending one: kept at once, sent, sent again when unreached, taken back when refused for good, never for a line
@@ -82,6 +86,8 @@ const server = vi.hoisted(() => ({
     reportAnswer: null as null | { status: number; body: unknown },
     /** Section 9 (#3310 review F2): the keys my server says I made quiet, in its mailbox answer (`quiet`), when set. */
     quiet: null as null | string[],
+    /** Slice S5 (#3347 review F2): my server's own `dmRequests` in its mailbox answer, when set; undefined, not said (an older server). */
+    dmRequests: undefined as undefined | boolean,
 }));
 const MAIL_DEVICE = /^[0-9a-f]{32}$/;
 const badDevice = () => new Response(JSON.stringify({ error: "device is this device's mail id: 32 lowercase hex characters, made by the app.", code: 'bad_device' }), { status: 400 });
@@ -134,7 +140,10 @@ vi.mock('./api', async (importOriginal) => {
                 if (server.stallGet) await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
                 const page = server.outboxPages ? (server.outboxPages.shift() ?? { ticks: [], more: false }) : { ticks: server.outbox, more: false };
                 const items = server.held.filter((h) => !server.got.get(h.envelope.itemId)?.has(device)).slice(0, 50);
-                return new Response(JSON.stringify({ items, more: false, outbox: page.ticks, outboxMore: page.more, ...(server.quiet ? { quiet: server.quiet } : {}) }), { status: 200 });
+                return new Response(JSON.stringify({
+                    items, more: false, outbox: page.ticks, outboxMore: page.more, ...(server.quiet ? { quiet: server.quiet } : {}),
+                    ...(server.dmRequests === undefined ? {} : { dmRequests: server.dmRequests }),
+                }), { status: 200 });
             }
             if (path === '/api/mail/device/forget') {
                 server.named.push({ call: 'forget', device: body?.device });
@@ -234,6 +243,7 @@ beforeEach(async () => {
         held: [], outbox: [], calls: [], sent: [], confirmed: [], batches: [], sendState: 'sent', sendFails: false, refuse: null, signals: [],
         stallGet: false, stop: null, seen: { confirm: 0, receipt: 0 }, stopped: false, deadline: null, receiptTries: [], point: null,
         named: [], listed: new Set(), got: new Map(), forgot: [], outboxPages: null, forgetAnswer: null, served: [], reports: [], reportAnswer: null,
+        dmRequests: undefined,
     });
     blocks.loaded = true;
     idb = memoryIndexedDB();
@@ -383,13 +393,15 @@ describe('3  the request gate', () => {
 
     // Slice S5: a first line across from a member here (my own server's mark beside the item) meets this community's own
     // rule, as on the phone (core gateOutsideItem): straight in where first messages arrive straight away, a request where
-    // requests are on. A mark inside the envelope (the sending server's claim) is none; a block still wins.
-    for (const [community, requestsHere, want] of [['a local community', false, 'written'], ['requests on', true, 'requests']] as const) {
+    // requests are on, as my server says it in the same answer (`dmRequests`; not said: requests on). A mark inside the
+    // envelope (the sending server's claim) is none; a block still wins.
+    for (const [community, dmRequests, want] of [['a local community', false, 'written'], ['requests on', true, 'requests'], ['not said (an older server)', undefined, 'requests']] as const) {
         it(`member here (S5), ${community}, door closed: their first line is ${want === 'written' ? 'straight in' : 'a request'}`, async () => {
+            server.dmRequests = dmRequests;
             const item: any = await heldLine(SOL, 'Hello from the garden group');
             item.memberHere = true;
-            expect(await syncOutsideMail({ ...ctx, requestsHere })).toMatchObject({ [want]: 1, dropped: 0 });
-            expect(await ctx.store.chat(BEN.key, chatWith(SOL.key))).toMatchObject({ state: requestsHere ? 'request' : 'open' });
+            expect(await syncOutsideMail(ctx)).toMatchObject({ [want]: 1, dropped: 0 });
+            expect(await ctx.store.chat(BEN.key, chatWith(SOL.key))).toMatchObject({ state: want === 'requests' ? 'request' : 'open' });
         });
     }
 
@@ -1569,4 +1581,42 @@ describe('9  the across mute as my server holds it (#3310 review F2)', () => {
             server.quiet = null;
         }
     });
+});
+
+describe("S5  a fellow member's first line across, through the whole round (PR #3347 review F2, F3)", () => {
+    /**
+     * What the page read of the community's info at load (communityInfoOnce, read once a page) x what my server says in
+     * this round's mailbox answer: the answer decides, whatever the page read. The door is closed throughout, so a line that
+     * met the door would be dropped.
+     */
+    const ROWS: Array<{ name: string; info: Record<string, unknown>; dmRequests: boolean | undefined; want: 'requests' | 'written' }> = [
+        { name: 'requests on, and the page read it so', info: { outsideMessages: true, dmRequests: true }, dmRequests: true, want: 'requests' },
+        { name: 'requests switched on since the page read the info (it said off)', info: { outsideMessages: true, dmRequests: false }, dmRequests: true, want: 'requests' },
+        { name: 'requests switched on since the page read the info (it said nothing)', info: { outsideMessages: true }, dmRequests: true, want: 'requests' },
+        { name: 'not said (an older server)', info: { outsideMessages: true }, dmRequests: undefined, want: 'requests' },
+        { name: 'requests off (a local community)', info: { outsideMessages: true }, dmRequests: false, want: 'written' },
+        { name: 'requests switched off since the page read the info (it said on)', info: { outsideMessages: true, dmRequests: true }, dmRequests: false, want: 'written' },
+    ];
+    for (const row of ROWS) {
+        it(`${row.name}: their first line is ${row.want === 'requests' ? 'a request, not an open chat' : 'straight in'}; a stranger's still meets the closed door`, async () => {
+            const identity = await import('./identity');
+            const gate = await import('./visitor-lobby-gate');
+            vi.mocked(identity.loadIdentity).mockResolvedValue({ publicKey: BEN.key, privateKey: BEN.seed, callsign: 'Ben', createdAt: '' });
+            vi.mocked(gate.communityInfoOnce).mockResolvedValue({ features: row.info } as any);
+            try {
+                const { syncOutsideMailNow } = await import('./outside-mail');
+                server.dmRequests = row.dmRequests;
+                const fromMember: any = await heldLine(SOL, 'Hello from the garden group');
+                fromMember.memberHere = true;
+                await heldLine(CY, 'A stranger, unmarked');
+                expect(await syncOutsideMailNow(5_000)).toMatchObject({ [row.want]: 1, dropped: 1, confirmed: 2 });
+                expect(await ctx.store.chat(BEN.key, chatWith(SOL.key))).toMatchObject({ state: row.want === 'requests' ? 'request' : 'open' });
+                expect(await textsWith(SOL.key)).toEqual(['Hello from the garden group']);
+                expect(await ctx.store.chat(BEN.key, chatWith(CY.key))).toBeNull();
+            } finally {
+                vi.mocked(identity.loadIdentity).mockResolvedValue(null);
+                vi.mocked(gate.communityInfoOnce).mockImplementation(async () => ({ features: { outsideMessages: true } }) as any);
+            }
+        });
+    }
 });

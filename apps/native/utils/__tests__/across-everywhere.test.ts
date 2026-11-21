@@ -19,6 +19,13 @@
  * heard from A, then a line held there that rings, x {a ring while the app is open, Chat as it opens, the background task}:
  * each fetches A's mailbox, and the line is in A's file.
  *
+ * Then slice S5 through the phone's own round (PR #3347 review F2, F3): a fellow member's first line across, marked "from a
+ * member here" by A's server, x what A's profile on this phone says (kept from before the switch moved, or nothing) x the
+ * `dmRequests` A's server says in the same mailbox answer {on, off, not said (an older server)} x where the phone is set
+ * {A, B: A held}: a request where the answer says requests are on or says nothing, straight in where it says off, never by
+ * the kept profile. Blocked on the phone, blocked and unblocked since, or the block lists not read this run: the closed
+ * door, so dropped.
+ *
  * Real SQLite files on disk (node:sqlite, in a directory of this test's own), the real database module, real sealing and
  * signing between real keys; the mailbox is a stand-in that answers as routes/relay.ts does.
  */
@@ -39,6 +46,14 @@ const h = vi.hoisted(() => ({
     me: { publicKey: '', privateKey: '' },
     /** The keys this account blocked, as the block list answers (#3310 r3 review F5, M10). */
     blocked: new Set<string>(),
+    /**
+     * Slice S5: the keys blocked here once and unblocked since (blocklist.ts BlockLists `once`), whether the block lists were
+     * read this run (blockListReadThisRun: let-in.ts unbarredFor reads them only then), and the profile this phone keeps of
+     * every community (node-profile.ts), which may be from before a switch moved.
+     */
+    once: new Set<string>(),
+    listsRead: false,
+    profile: { features: { outsideMessages: true } } as { features: Record<string, unknown> },
 }));
 
 vi.mock('react-native', () => ({
@@ -108,12 +123,18 @@ vi.mock('../blocklist', () => ({
     blocksOwedAt: vi.fn(async () => false),
     syncBlocksAt: vi.fn(async () => {}),
     blockUser: vi.fn(async () => true),
+    // What let-in.ts reads for a round's `unbarred` (slice S5): the lists, after that community's own was read this run; the
+    // rule as blocklist.ts has it (blocked anywhere, or blocked once and unblocked since).
+    blockListReadThisRun: vi.fn(async () => h.listsRead),
+    readBlockLists: vi.fn(async () => ({ onPhone: new Set(h.blocked), once: new Set(h.once), seenThere: new Set<string>() })),
+    neverLetInQuietly: (lists: { onPhone: Set<string>; once: Set<string>; seenThere: Set<string> }, keys: readonly string[]) =>
+        keys.some((k) => lists.onPhone.has(k) || lists.seenThere.has(k) || lists.once.has(k)),
 }));
-// Every community here takes messages from other communities.
+// Every community here takes messages from other communities (the profile this phone keeps; slice S5 changes what else it says).
 vi.mock('../node-profile', async (orig) => ({
     ...(await orig<any>()),
-    getCachedNodeProfile: vi.fn(async () => ({ features: { outsideMessages: true } })),
-    fetchNodeProfile: vi.fn(async () => ({ features: { outsideMessages: true } })),
+    getCachedNodeProfile: vi.fn(async () => h.profile),
+    fetchNodeProfile: vi.fn(async () => h.profile),
 }));
 // The member's statements as core signs them, without the phone's native modules.
 vi.mock('../member-statements', async () => {
@@ -136,6 +157,8 @@ const mail = vi.hoisted(() => ({
     refuseQuiet: false,
     /** What each server holds of it, by `origin member`: the keys its mailbox answer lists as `quiet`. */
     held_quiet: new Map<string, Set<string>>(),
+    /** Slice S5: each server's own `dmRequests` in its mailbox answer, by origin; none set, not said (an older server). */
+    dmRequests: new Map<string, boolean>(),
 }));
 vi.mock('../node-post', async (orig) => {
     const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
@@ -155,7 +178,8 @@ vi.mock('../node-post', async (orig) => {
             await waitIfHeld('GET', p.split('?')[0], origin);
             if (p.startsWith('/api/mail?')) {
                 const quiet = [...(mail.held_quiet.get(`${origin} ${who?.publicKey}`) ?? [])];
-                return answer(200, { items: mail.held.get(origin) ?? [], more: false, outbox: [], outboxMore: false, quiet });
+                const dmRequests = mail.dmRequests.has(origin) ? { dmRequests: mail.dmRequests.get(origin) } : {};
+                return answer(200, { items: mail.held.get(origin) ?? [], more: false, outbox: [], outboxMore: false, quiet, ...dmRequests });
             }
             return answer(404, { error: 'not here' });
         }),
@@ -279,7 +303,11 @@ async function phone(setTo: string): Promise<void> {
     mail.held_quiet = new Map();
     mail.asked = [];
     mail.hold = null;
+    mail.dmRequests = new Map();
     h.blocked.clear();
+    h.once.clear();
+    h.listsRead = false;
+    h.profile = { features: { outsideMessages: true } };
     chatId = relayConversationId(me.publicKey, peer.publicKey);
 
     // Made while set to A, as today: the chat lives in A's file, A's mailbox is its home.
@@ -662,3 +690,59 @@ describe('the across mute goes with the account (#3310 review F2): a re-key, a r
 });
 
 beforeEach(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); vi.spyOn(console, 'log').mockImplementation(() => {}); });
+
+describe("S5: a fellow member's first line across, through the phone's own round (PR #3347 review F2, F3)", () => {
+    /** A first line `from` writes me, held at `at`'s mailbox; `marked`: that server's own "from a member here" beside it. */
+    async function heldFrom(from: Person, text: string, at: string, marked: boolean): Promise<string> {
+        const itemId = uuid();
+        const payload = sealOutsideLine({ text, name: 'Fen', myEdPrivHex: from.privateKey, myKey: from.publicKey, peerKey: me.publicKey, messageId: itemId });
+        const envelope = await signRelayEnvelope({
+            kind: 'dm-line', itemId, senderKey: from.publicKey, senderHome: PEER_HOME, recipient: me.publicKey, recipientHome: new URL(at).host,
+            at: Date.now(), payloadHash: relayPayloadHash(payload),
+        }, ed25519Signer(Buffer.from(from.privateKey, 'hex')));
+        mail.held.set(at, [...(mail.held.get(at) ?? []), { kind: 'dm-line', envelope, payload, bytes: payload.length, receivedAt: Date.now(), ...(marked ? { memberHere: true } : {}) }]);
+        return itemId;
+    }
+    const chatIn = (file: string, key: string) => (acrossRowsOf(file)?.outside_chats ?? []).find((c: any) => c.id === relayConversationId(me.publicKey, key)) as any;
+    const linesIn = (file: string, key: string) => (acrossRowsOf(file)?.outside_lines ?? []).filter((l: any) => l.chat_id === relayConversationId(me.publicKey, key)).map((l: any) => l.text);
+
+    type Want = 'a request' | 'straight in' | 'dropped (the closed door)';
+    const ROWS: Array<{ name: string; kept: Record<string, unknown>; says: boolean | undefined; want: Want; before?: (fellow: Person) => void }> = [
+        { name: 'requests on, and the kept profile says so', kept: { outsideMessages: true, dmRequests: true }, says: true, want: 'a request' },
+        { name: 'requests switched on since the profile was kept (it says off)', kept: { outsideMessages: true, dmRequests: false }, says: true, want: 'a request' },
+        { name: 'requests switched on since the profile was kept (it says nothing)', kept: { outsideMessages: true }, says: true, want: 'a request' },
+        { name: 'not said (an older server)', kept: { outsideMessages: true }, says: undefined, want: 'a request' },
+        { name: 'requests off (a local community)', kept: { outsideMessages: true }, says: false, want: 'straight in' },
+        { name: 'requests switched off since the profile was kept (it says on)', kept: { outsideMessages: true, dmRequests: true }, says: false, want: 'straight in' },
+        { name: 'requests off, but blocked on this phone', kept: { outsideMessages: true }, says: false, want: 'dropped (the closed door)', before: (f) => { h.blocked.add(f.publicKey); } },
+        { name: 'requests off, but blocked and unblocked since', kept: { outsideMessages: true }, says: false, want: 'dropped (the closed door)', before: (f) => { h.once.add(f.publicKey); } },
+        { name: 'requests off, but the block lists not read this run', kept: { outsideMessages: true }, says: false, want: 'dropped (the closed door)', before: () => { h.listsRead = false; } },
+        { name: 'requests on, but blocked on this phone', kept: { outsideMessages: true }, says: true, want: 'dropped (the closed door)', before: (f) => { h.blocked.add(f.publicKey); } },
+    ];
+    for (const setTo of [A, B]) for (const row of ROWS) {
+        it(`set to ${setTo === A ? 'A' : 'B (A held)'}, ${row.name}: ${row.want}; a stranger's first line still meets the closed door`, async () => {
+            await phone(setTo);
+            const fellow = person();
+            const stranger = person();
+            h.profile = { features: row.kept };
+            h.listsRead = true;
+            if (row.says !== undefined) mail.dmRequests.set(A, row.says);
+            row.before?.(fellow);
+            await heldFrom(fellow, 'Hello from the garden group', A, true);
+            await heldFrom(stranger, 'A stranger, unmarked', A, false);
+            const out = await syncOutsideMailNow(30_000, setTo === A ? undefined : A);
+            const want = row.want === 'a request' ? { requests: 1, written: 0, dropped: 1 } : row.want === 'straight in' ? { requests: 0, written: 1, dropped: 1 } : { requests: 0, written: 0, dropped: 2 };
+            expect(out).toMatchObject({ ...want, confirmed: 2 });
+            expect(mail.asked.filter((q) => q.path === '/api/mail').every((q) => q.origin === A), "only A's mailbox asked").toBe(true);
+            const chat = chatIn(A_FILE, fellow.publicKey);
+            if (row.want === 'dropped (the closed door)') expect(chat).toBeUndefined();
+            else {
+                expect(chat?.state).toBe(row.want === 'a request' ? 'request' : 'open');
+                expect(linesIn(A_FILE, fellow.publicKey)).toEqual(['Hello from the garden group']);
+            }
+            expect(chatIn(A_FILE, stranger.publicKey)).toBeUndefined();
+            // Nothing landed in B's file (its across tables start as a copy of A's, so a write there would show).
+            if (setTo === B) expect(chatIn(B_FILE, fellow.publicKey)).toBeUndefined();
+        });
+    }
+});

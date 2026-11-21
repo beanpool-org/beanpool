@@ -141,6 +141,17 @@ export async function startOneWayBackPutAway(publicKey: string, url: string, now
     await write(publicKey, putAwayRecord(url, now));
 }
 
+/**
+ * A join ended on the way-back step's "Later" (app/welcome.tsx, slice S4 of DESIGN-onboarding-home-landing-fable.md §3.1 E):
+ * "Later" is true to its word, so Home's card shows from the first landing until a way back is kept or the card is put
+ * away. A member's own reminder (`by: 'wayBack'`, moved by Home's word), not put away. One that is done or already running is
+ * kept, as {@link startOneWayBackPutAway} keeps it: the 12-words door's own record, or a Yes after the kit, stands.
+ */
+export async function startOneWayBackShown(publicKey: string, url: string, now: number = Date.now()): Promise<void> {
+    if (await readOneWayBack(publicKey)) return;
+    await write(publicKey, { url, joinedAt: now, by: 'wayBack' });
+}
+
 /** The card was put away (it comes back as {@link oneWayBackPlace} says). */
 export async function dismissOneWayBack(publicKey: string, hasPosted: boolean, now: number = Date.now()): Promise<void> {
     const record = await readOneWayBack(publicKey);

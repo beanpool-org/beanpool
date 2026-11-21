@@ -21,15 +21,17 @@ import type { OnboardingFlow } from '../../utils/onboarding-state';
  * Declared here, not inside the welcome screen's render: a component made anew on every render is a new type each time, so
  * React would remount ‹ on every keystroke or answer that lands, and a screen reader's focus on it would be lost.
  */
-export function StepBar({ step, flow, busy, onBack, backLabel }: {
+export function StepBar({ step, flow, wayBack = true, busy, onBack, backLabel }: {
     step: JoinStep;
     flow: OnboardingFlow;
+    /** False where the join skips the way back (utils/join-steps.ts `wayBackSkipped`): one dot fewer. */
+    wayBack?: boolean;
     /** The step's request is out: ‹ waits, faded (welcome.tsx's `loading`). */
     busy: boolean;
     onBack?: () => void;
     backLabel?: string;
 }) {
-    const dot = stepDot(joinSteps(flow), step);
+    const dot = stepDot(joinSteps(flow, { wayBack }), step);
     if (!dot && !onBack) return null;
     return <StepDots dot={dot} onBack={onBack} backLabel={backLabel} backDisabled={busy} />;
 }

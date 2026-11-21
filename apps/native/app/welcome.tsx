@@ -45,10 +45,11 @@ import {
 import { useDoorWork } from '../utils/use-door-work';
 import { DOOR_WORK_MESSAGES, passDoorCheck, workPastCheck } from '../utils/door-work';
 import { useDoorCheck } from '../components/DoorCheckSheet';
-import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } from '../components/WordsDoor';
+import { DoorChoices, DoorWorkProgress, WordsBackupNote } from '../components/WordsDoor';
 import { LinkSignInSheet } from '../components/LinkSignInSheet';
 import { type LinkAnswer } from '../utils/join-link';
-import { startOneWayBack, startOneWayBackPutAway } from '../utils/one-way-back';
+import { startOneWayBack, startOneWayBackPutAway, startOneWayBackShown } from '../utils/one-way-back';
+import { wayBackKeptBefore } from '../utils/way-back-kept';
 import { keepWords } from '../utils/words-kept';
 import { signInCopiesAt, type SignInCopies } from '../utils/vault-config';
 import { copiesRuleForScreen } from '../utils/copies-rule';
@@ -65,7 +66,7 @@ import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
-import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
+import { KeeperProtectionPanel, NO_COPIES_ROW } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { RecoveryKitButtons } from '../components/RecoveryKitButtons';
@@ -105,6 +106,8 @@ import { joinedForListing } from '../utils/listing-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
 import { StepBar } from '../components/welcome/StepDots';
+import { WayBackTile } from '../components/welcome/WayBackTile';
+import { afterWayBack, wayBackButton, wayBackKept, wayBackSkipped } from '../utils/join-steps';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
 
 /** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. Not
@@ -398,7 +401,6 @@ export default function WelcomeScreen() {
     const [inviteDraft, setInviteDraft] = useState('');
     /** Your invite's one line, after a tap or a Next that brought something that isn't an invite. */
     const [inviteNote, setInviteNote] = useState<string | null>(null);
-    const [seedCopied, setSeedCopied] = useState(false);
 
     // --- The global community's open door (utils/global-join.ts; design §2.3). Sign in once, choose a
     // name, join; then the same steps as an invite. `joinFlow` says which door this wizard came in by. ---
@@ -770,6 +772,28 @@ export default function WelcomeScreen() {
      * 12-words door, or a claim, which makes the account with its 12 words alone.
      */
     const wordsMember = (joinFlow === 'global' || joinFlow === 'claim') && joinDoor === 'words' && !linked;
+
+    /**
+     * The way back (DESIGN-onboarding-home-landing-fable.md §3.1 E, slice S4). `signInOpen`: "Link a sign-in" was tapped, so
+     * the vault's sentences and the Protect buttons are drawn in its place. `keptBefore`: what the phone already knew of this
+     * account (utils/way-back-kept.ts), read from storage only; false until read, and for a new account, so the step shows.
+     */
+    const [signInOpen, setSignInOpen] = useState(false);
+    const [keptBefore, setKeptBefore] = useState(false);
+    const pendingKey = pendingIdentity?.publicKey ?? null;
+    useEffect(() => {
+        setKeptBefore(false);
+        if (!pendingKey) return;
+        let live = true;
+        wayBackKeptBefore(pendingKey).then((k) => { if (live) setKeptBefore(k); }).catch(() => {});
+        return () => { live = false; };
+    }, [pendingKey]);
+    /** Only a sign-in whose copy is kept counts: one added with no copy is no way back (utils/join-steps.ts `wayBackKept`). */
+    const signInKept = protection.state === 'covered';
+    /** Kept before the step opens: the join goes past it, with one dot fewer. */
+    const skipWayBack = wayBackSkipped(joinFlow, wayBackKept({ signIn: signInKept, wordsTicked: false, before: keptBefore }));
+    /** Kept by now: the step's button reads Let's go (or Next), and Home's card starts put away. */
+    const wayBackIsKept = wayBackKept({ signIn: signInKept, wordsTicked: seedConfirmed, before: keptBefore });
 
     /**
      * Split the words and hand out the pieces, on the way into step 3.
@@ -1600,11 +1624,13 @@ export default function WelcomeScreen() {
 
             await clearPendingOnboarding();
             await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
-            // The 12-words reminder (DESIGN-home-default-fable.md §2.5): carrying on past the backup step counts as its first
-            // showing, so it starts put away (First steps' line on day one, the card after the first post and after a week).
-            // A record already there (a Yes after the kit just now, or a 12-words join) is kept; a sign-in added ends it at Home.
+            // The 12-words reminder (DESIGN-home-default-fable.md §2.5). "Later" on the way back is true to its word (onboarding
+            // S4, design §3.1 E): Home's "Your way back in" card shows from the first landing. Only a way back kept (a sign-in's
+            // copy, the tick, a Yes after the kit, or one the phone already knew) starts it put away. A record already there (a
+            // Yes after the kit just now, or a 12-words join) is kept; a sign-in added ends it at Home.
             const joinedHere = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-            if (joinedHere) await startOneWayBackPutAway(pendingIdentity.publicKey, joinedHere.replace(/\/+$/, '')).catch(() => undefined);
+            const startReminder = wayBackIsKept ? startOneWayBackPutAway : startOneWayBackShown;
+            if (joinedHere) await startReminder(pendingIdentity.publicKey, joinedHere.replace(/\/+$/, '')).catch(() => undefined);
 
             // Refresh node recognition
             await recheckNodeStatus().catch(() => {});
@@ -2372,16 +2398,8 @@ export default function WelcomeScreen() {
         setInviteNote(null);
     }
 
-    // --- Copy seed phrase to clipboard ---
-    async function handleCopySeed() {
-        // What the step shows: the member's new words, or the phone's own account's once its lock has passed.
-        const words = pendingWords;
-        if (!words) return;
-        await copyWordsForAMinute(words.join(' '));
-        hapticTick();
-        setSeedCopied(true);
-        setTimeout(() => setSeedCopied(false), 2000);
-    }
+    // No Copy on the way back (Marty's walk, 21 Nov 2026: "Copy All Words" dropped from the 12-word grid): paper only, since
+    // the clipboard hands the words to other apps. Settings and the replace screen keep theirs.
 
     // --- Back-button guard for seed phrase screen ---
     function handleSeedBackPress() {
@@ -2401,7 +2419,7 @@ export default function WelcomeScreen() {
                     setPendingIdentity(null);
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
-                    setSeedCopied(false);
+                    setSignInOpen(false);
                     // Keeper state belongs to the identity being discarded (CR). Left behind, a
                     // member who backs out and starts again is shown the PREVIOUS identity's
                     // keepers — and the effect's `|| enrolment` guard means the new identity
@@ -2435,14 +2453,24 @@ export default function WelcomeScreen() {
     // --- Profile image picker helpers for "Who Are You?" gate ---
     // Moved to AvatarPickerSheet component
 
+    /**
+     * On from the photo: the way back, or past it to Home where a way back is already kept (S4: a sign-in's copy from the
+     * global door, or what the phone knew of this account). The record says seedBackup first, so a join killed on the way in
+     * resumes on the way back, which then reads Let's go.
+     */
+    async function toWayBack() {
+        if (skipWayBack) return handleConfirmSeed();
+        setMode('seedBackup');
+    }
+
     async function handleCompleteProfile() {
         if (!pendingIdentity) return;
-        // No picture picked: on to the 12 words all the same (rehearsal 14 Oct S9, never a gate); the step said whether
+        // No picture picked: on to the way back all the same (rehearsal 14 Oct S9, never a gate); the step said whether
         // the node asks for one before a first post.
         if (!pendingAvatar) {
             setError(null);
             await updatePendingOnboarding({ step: 'seedBackup', avatar: null }).catch(() => {});
-            setMode('seedBackup');
+            await toWayBack();
             return;
         }
         setLoading(true);
@@ -2486,8 +2514,8 @@ export default function WelcomeScreen() {
 
             await updatePendingOnboarding({ step: 'seedBackup', avatar: pendingAvatar });
 
-            // 3. Profile done — go to seed phrase (Step 3)
-            setMode('seedBackup');
+            // 3. Profile done: the way back (Step 3), or past it where one is kept
+            await toWayBack();
         } catch (err: any) {
             setError(err.message ? welcomeLineWords(err.message) : t('Failed to save profile.'));
         } finally {
@@ -2506,6 +2534,7 @@ export default function WelcomeScreen() {
                     <StepBar
                         step="photo"
                         flow={joinFlow}
+                        wayBack={!skipWayBack}
                         busy={loading}
                         onBack={joinFlow === 'invite' ? () => {
                             updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
@@ -2548,7 +2577,8 @@ export default function WelcomeScreen() {
                             <Text style={styles.secondaryBtnText}>{t('Choose a picture')}</Text>
                         </Pressable>
 
-                        {loading && (
+                        {/* Only while a picture is saved: past a kept way back with none, the join finishes from here. */}
+                        {loading && pendingAvatar && (
                             <View style={{ alignItems: 'center', marginVertical: 12 }}>
                                 <ActivityIndicator color={accentInk} />
                                 <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 4 }}>{t('Processing image...')}</Text>
@@ -2590,55 +2620,57 @@ export default function WelcomeScreen() {
         );
     }
 
-    // --- STEP 3: SAFETY BACKUP (seed phrase — reframed) ---
+    // --- STEP 3: A WAY BACK (DESIGN-onboarding-home-landing-fable.md §3.1 E, slice S4): one sentence, two tiles, an honest
+    // "Later". Each tile opens its way back in place: the vault's sentences before any Protect button, or the 12 words. ---
     if (mode === 'seedBackup' && pendingIdentity) {
         // The member's Yes after the kit (components/RecoveryKitButtons.tsx asks it; the kit alone never counts) is "I still
-        // have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5). So is the tick, carried past Next (below).
+        // have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5). The tick says so too: the words are kept.
         const keptFromKit = () => {
             const who = pendingIdentity;
+            setSeedConfirmed(true);
             void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
         };
+        const hasWords = hasMnemonic(pendingIdentity);
+        // A sign-in is a way back here unless the community keeps no copies (VR2) or this is the web, which can't hold one.
+        const signInWayBack = Platform.OS !== 'web' && backupCopiesAt !== 'none';
+        // In by 12 words, the sign-in is linked through the door's own sheet (utils/join-link.ts), or a claim's at its
+        // community; everyone else reads the vault's sentences in place first.
+        const openSignIn = () => {
+            if (!wordsMember) return setSignInOpen(true);
+            if (joinFlow !== 'claim') return setShowLinkSheet(true);
+            // No tick here, so no list of communities in this copy (vault rethink VR5).
+            setSsoListCommunities(false);
+            setShowSsoSheet(true);
+        };
+        const next = afterWayBack(joinFlow);
+        const button = wayBackButton(wayBackIsKept, next);
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <StepBar step="wayBack" flow={joinFlow} busy={loading} onBack={handleSeedBackPress} />
                     <View style={styles.card}>
-                        {/* In by 12 words (two-doors design §2.5): what the words are, first; a sign-in is offered below the
-                            tickbox, as a second way back. Once one is added, the panel every sign-in member sees. */}
-                        {wordsMember ? (
-                            <WordsBackupNote colors={colors} />
-                        ) : (
-                        <KeeperProtectionPanel
-                            protection={protection}
-                            hasWords={hasMnemonic(pendingIdentity)}
-                            copyAt={joinFlow === 'claim' ? 'community' : undefined}
-                            copiesAt={backupCopiesAt}
-                            communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
-                            onProtectSso={Platform.OS !== 'web' ? (prov, listCommunities) => {
-                                if (prov) setSsoProvider(prov);
-                                setSsoListCommunities(listCommunities);
-                                setShowSsoSheet(true);
-                            } : undefined}
-                            listCommunitiesFor={pendingIdentity?.publicKey}
-                            listShown={listTickShown}
-                            onListShown={setListTickShown}
-                        />
-                        )}
+                        {/* Where the community keeps no copies, the 12 words are the way back here, under that row's title. */}
+                        <Text style={styles.title} accessibilityRole="header" testID="way-back-title">
+                            {backupCopiesAt === 'none' ? t(NO_COPIES_ROW.title) : t('Keep a way back in')}
+                        </Text>
+                        {/* True everywhere, and not a threat (DESIGN-notify-and-backup-asks-fable.md §5.1; Marty, 21 Nov): where an
+                            admin can set a member up again, "your account goes" would not be. */}
+                        <Text style={styles.subtitle}>{t('If this phone is lost, this is how you get back in.')}</Text>
                         {linked && (
-                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked, otherDoorName)}</Text>
+                            <Text style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked, otherDoorName)}</Text>
                         )}
                         {/* The owner's own way back is also their community's (vault rethink VR8, design §6 door 7): the key a
                             claim makes unlocks the community's sealed backups, and only an owner can bring an owner back. */}
                         {joinFlow === 'claim' && (
-                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} testID="owner-backup-line">
+                            <Text style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} testID="owner-backup-line">
                                 {t("Your key also unlocks this community's backups. Keep your words, and make a second owner, so one can bring the other back.")}
                             </Text>
                         )}
                         {/* The sign-in the member joined with used to protect another account: said here too, as the
                             protection sheet says it (PR #1336 review finding 9). */}
                         {enrolment?.replaced && enrolment.enrolledSso?.[0] && (
-                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">
+                            <Text style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} accessibilityLiveRegion="polite">
                                 {signInReplacedWords(SSO_PROVIDER_NAMES[enrolment.enrolledSso[0] as SsoProvider] ?? enrolment.enrolledSso[0])}
                             </Text>
                         )}
@@ -2653,6 +2685,36 @@ export default function WelcomeScreen() {
                                 </Text>
                             </View>
                         )}
+
+                        {/* Tile one: Link a sign-in. Opened (or a sign-in's copy already kept), the panel every sign-in member
+                            sees: the vault's sentences as signed off on 27 Oct (SIGN_IN_ROW), "Who can open it ›", then Protect
+                            with. `waysBack` draws that row alone, never "your 12 words are your primary recovery" again. */}
+                        {signInWayBack && (signInKept || signInOpen ? (
+                            <KeeperProtectionPanel
+                                protection={protection}
+                                hasWords={hasWords}
+                                waysBack={!signInKept}
+                                colors={colors}
+                                copyAt={joinFlow === 'claim' ? 'community' : undefined}
+                                copiesAt={backupCopiesAt}
+                                communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
+                                onProtectSso={(prov, listCommunities) => {
+                                    if (prov) setSsoProvider(prov);
+                                    setSsoListCommunities(listCommunities);
+                                    setShowSsoSheet(true);
+                                }}
+                                listCommunitiesFor={pendingIdentity?.publicKey}
+                                listShown={listTickShown}
+                                onListShown={setListTickShown}
+                            />
+                        ) : (
+                            <WayBackTile
+                                title={t('Link a sign-in')}
+                                line={Platform.OS === 'ios' ? t('Google, Apple or Facebook') : t('Google or Facebook')}
+                                onPress={openSignIn}
+                                testID="way-back-sign-in"
+                            />
+                        ))}
 
                         <SsoEnrolSheet
                             visible={showSsoSheet}
@@ -2677,33 +2739,29 @@ export default function WelcomeScreen() {
                         />
 
                         {/*
-                          The words follow the panel rather than opening the screen.
-                          
-                          A covered member gets them offered, not pushed: keepers are convenience
-                          layered on top and the words remain the floor under all of it, but
-                          meeting somebody who is genuinely protected with a wall of twelve words
-                          to copy down teaches them the panel above was noise. Everyone else sees
-                          them expanded, because for them the words are the actual answer.
+                          Tile two: Write down 12 words. The grid is not on the path (design §3.1 E): it opens at this tap, for
+                          everyone, so nobody is made to read or write 12 words to get in.
 
-                          A phone restored with a sign-in, joining another community, has no words: the
-                          panel says so in one line, and there is no grid, copy or tickbox for words that
-                          don't exist (the grid would otherwise wait on them forever).
+                          A phone restored with a sign-in, joining another community, has no words: no tile, no grid, no
+                          tickbox for words that don't exist (the grid would otherwise wait on them forever).
 
-                          A phone joining another community with the account it already holds: those words are
-                          an established account's, so they are drawn only once Show has passed the phone's lock
-                          (handleShowPendingWords), whether or not a sign-in covers it.
+                          A phone joining another community with the account it already holds: those words are an established
+                          account's, so they are drawn only once the tile's tap has passed the phone's lock
+                          (handleShowPendingWords).
                         */}
-                        {!hasMnemonic(pendingIdentity) ? null : !(pendingWordsAreNew ? protection.showWords || revealWords : !!pendingWords) ? (
-                            <Pressable
-                                style={[styles.secondaryBtn, { marginBottom: 4 }]}
+                        {!hasWords ? (backupCopiesAt === 'none' && <Text style={styles.subtitle}>{t(NO_COPIES_ROW.noWords)}</Text>) : !(pendingWordsAreNew ? revealWords : !!pendingWords) ? (
+                            <WayBackTile
+                                title={t('Write down 12 words')}
+                                line={t('On paper, kept safe')}
+                                hint={t('Shows the twelve words that can restore your account')}
                                 onPress={pendingWordsAreNew ? () => setRevealWords(true) : handleShowPendingWords}
-                                accessibilityRole="button"
-                                accessibilityHint={t('Shows the twelve words that can restore your account')}
-                            >
-                                <Text style={styles.secondaryBtnText}>{protection.showWords ? t('🔑 Show my 12 words') : t('Rather write down 12 words?')}</Text>
-                            </Pressable>
+                                testID="way-back-words"
+                            />
                         ) : (
                         <>
+                        {/* In by 12 words with no sign-in yet: what the words are, first (two-doors design §2.5). It carries the
+                            recovery truth for them; everyone else reads it in the line under the paper line. */}
+                        {wordsMember && <WordsBackupNote colors={colors} />}
                         {/* One recovery truth (rehearsal 14 Oct S5, recoveryTruth.test.ts): How it Works' Getting Back In card
                             said it until slice S5 took that screen off the join; a 12-words member already reads it in the note
                             above (WordsBackupNote), so it is said here for everyone else whose words are shown. */}
@@ -2757,19 +2815,8 @@ export default function WelcomeScreen() {
 
                         <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
 
-                        {/* Copy to clipboard: cleared from it a minute later (utils/words-clipboard.ts) */}
-                        <Pressable
-                            style={[styles.secondaryBtn, { marginBottom: 8 }]}
-                            onPress={handleCopySeed}
-                            accessibilityRole="button"
-                        >
-                            <Text style={styles.secondaryBtnText}>
-                                {seedCopied ? t('✅ Copied!') : t('📋 Copy All Words')}
-                            </Text>
-                        </Pressable>
-                        <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
-
-                        {/* Optional, like the tickbox below: Next never waits on the kit (utils/recovery-kit.ts). */}
+                        {/* No Copy here (Marty's walk, 21 Nov): paper only, the clipboard hands the words to other apps. The kit
+                            is optional, like the tickbox below: the button never waits on it (utils/recovery-kit.ts). */}
                         <RecoveryKitButtons words={pendingWords} colors={colors} onKept={keptFromKit} />
 
                         {/*
@@ -2804,22 +2851,15 @@ export default function WelcomeScreen() {
                         </>
                         )}
 
-                        {/* The one secondary action for a 12-words member: skippable, like the tickbox above. In by a
-                            claim, the sign-in's copy is kept by the community claimed, never by us: no global community,
-                            no key vault (Marty, 24 Oct). Where the community keeps no copies (its rule `none`, VR2), a
-                            sign-in is no way back, so the button doesn't call it one, as the web's doesn't. */}
-                        {wordsMember && Platform.OS !== 'web' && (
+                        {/* In by 12 words where the community keeps no copies (its rule `none`, VR2): a sign-in is no way back
+                            there, so it is no tile; it still makes the new-account limits the usual ones (utils/join-link.ts). */}
+                        {wordsMember && Platform.OS !== 'web' && backupCopiesAt === 'none' && (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginTop: 8 }]}
-                                onPress={() => {
-                                    if (joinFlow !== 'claim') return setShowLinkSheet(true);
-                                    // No tick here, so no list of communities in this copy (vault rethink VR5).
-                                    setSsoListCommunities(false);
-                                    setShowSsoSheet(true);
-                                }}
+                                onPress={openSignIn}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.secondaryBtnText}>{backupCopiesAt === 'none' ? t('Add a sign-in') : t(WORDS_BACKUP_TEXT.addSignIn)}</Text>
+                                <Text style={styles.secondaryBtnText}>{t('Add a sign-in')}</Text>
                             </Pressable>
                         )}
                         <LinkSignInSheet
@@ -2852,19 +2892,19 @@ export default function WelcomeScreen() {
                         style={[styles.primaryBtn, styles.footerBtn, loading && styles.disabledBtn]}
                         disabled={loading}
                         onPress={() => {
-                            recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+                            recordOnboardingEvent('protection_choice', signInKept ? 'sso' : seedConfirmed ? 'words' : 'skip');
                             // The tick is the member's own "I've saved these words": kept on the account as the web's tick
                             // is (DESIGN-home-default-fable.md §2.5), so Home's card and First steps' words line end on every
-                            // device. Not ticked: nothing is said, and the reminder starts put away at the end of sign-up. Sent
-                            // and not waited on: a node that can't hear it yet gets it at the next Home landing (utils/words-kept.ts).
+                            // device. Not ticked and nothing kept: "Later", and Home's card shows from the first landing
+                            // (handleConfirmSeed). Sent and not waited on: a node that can't hear it yet gets it at the next
+                            // Home landing (utils/words-kept.ts).
                             if (seedConfirmed) {
                                 const who = pendingIdentity;
                                 void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
                             }
-                            // How it Works has left the path (DESIGN-onboarding-home-landing-fable.md §3.1, slice S5): its words
-                            // are Home's WELCOME TO BEANPOOL! tile. A claim's last step is still the owner's card; every other
-                            // join goes Home from here.
-                            if (joinFlow === 'claim') {
+                            // What follows the way back (utils/join-steps.ts afterWayBack): a claim's owner's card, else Home.
+                            // The notifications screen (N1j) hangs off this one place.
+                            if (next === 'ownerCard') {
                                 updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
                                 setMode('ownerCard');
                                 setError(null);
@@ -2873,11 +2913,12 @@ export default function WelcomeScreen() {
                             }
                         }}
                         accessibilityRole="button"
+                        testID="way-back-button"
                     >
                         {loading ? (
                             <ActivityIndicator color={colors.text.inverse} />
                         ) : (
-                            <Text style={styles.primaryBtnText}>{joinFlow === 'claim' ? t('Next →') : t("Let's Begin! 🚀")}</Text>
+                            <Text style={styles.primaryBtnText}>{button === 'later' ? t('Later') : button === 'next' ? t('Next') : t("Let's go")}</Text>
                         )}
                     </Pressable>
                 </StepFooter>
@@ -3036,7 +3077,7 @@ export default function WelcomeScreen() {
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
                     {/* ‹ is the front door. It waits while Join is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
-                    <StepBar step="name" flow={joinFlow} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
+                    <StepBar step="name" flow={joinFlow} wayBack={!skipWayBack} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
                     <View style={styles.card}>
                         <View style={styles.greetingBand} testID="invite-greeting">
                             <Text style={styles.greetingText} accessibilityRole="header">
@@ -3206,7 +3247,7 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                        <StepBar step="name" flow={joinFlow} busy={loading} />
+                        <StepBar step="name" flow={joinFlow} wayBack={!skipWayBack} busy={loading} />
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
 

@@ -1382,7 +1382,8 @@ describe('a pasted invite names its community only while the field holds what it
     const NOT_RECOGNISED = "That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one.";
 
     async function pasteThenSubmit(typedAfter: string[]) {
-        const node = stubNode(LOCAL, { '/api/invite/check': () => json(200, { valid: false, reason: 'invalid' }) });
+        // The real check carries this community's name for every code, a refused one too (routes/community.ts /api/invite/check).
+        const node = stubNode(LOCAL, { '/api/invite/check': () => json(200, { valid: false, reason: 'invalid', communityName: 'Riverside Commons' }) });
         render(<WelcomePage onComplete={vi.fn()} />);
         fireEvent.click(await screen.findByTestId('front-door-invite'));
         const field = screen.getByLabelText('Invite link or code');
@@ -1402,6 +1403,9 @@ describe('a pasted invite names its community only while the field holds what it
         const node = await pasteThenSubmit([]);
         expect(await screen.findByText(ELSEWHERE)).toBeInTheDocument();
         expect(node.redeems()).toHaveLength(0);
+        // Your name's band never greeted it with this community's name: a code the check refuses is "You're invited" alone
+        // (deciding review on #3333, 7c25e192: it said "You're invited to Riverside Commons" for Byron's invite).
+        expect(screen.getByTestId('invite-greeting').querySelector('h3')).toHaveTextContent(/^You're invited$/);
     });
 
     it('typed over after the paste, the code is the typed one, and a refusal is "not recognised", never the earlier paste\'s community', async () => {

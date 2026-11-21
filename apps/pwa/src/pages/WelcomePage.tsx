@@ -575,14 +575,20 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     // at the card's own `?door=ask`.
     const [asking, setAsking] = useState(() => welcomeDoor === 'ask');
     // Your name's greeting band, from the invite check the join makes (core's words, the phone's band): who invited, to
-    // which community, for the code it was asked about. Not heard yet, or no answer: "You're invited".
+    // which community, for the code it was asked about. Not heard yet, no answer, or a code this community does not take:
+    // "You're invited". The check always carries this community's name, whatever the code (routes/community.ts
+    // /api/invite/check), and on the web it goes to the page's own community, not the one the invite names (the phone asks
+    // that one), so only a valid answer names it: another community's invite pasted here is never greeted with this
+    // community's name (deciding review on #3333, 7c25e192).
     const [greeting, setGreeting] = useState<{ code: string; community: string | null; inviter: string | null } | null>(null);
     useEffect(() => {
         const code = normaliseInviteCode(inviteCode);
         if (joinScreen !== 'name' || !code) return;
         let cancelled = false;
         void checkInvite(code).then((check) => {
-            if (!cancelled && check) setGreeting({ code, community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
+            if (!cancelled && check) setGreeting(check.valid
+                ? { code, community: check.communityName || null, inviter: check.inviterCallsign || null }
+                : { code, community: null, inviter: null });
         });
         return () => { cancelled = true; };
     }, [joinScreen, inviteCode]);
@@ -1181,6 +1187,31 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             .then((cropped) => { if (cropped) setPendingAvatar(cropped); })
             .catch(() => setError(t('Failed to load image.')));
     };
+
+    // protection_choice went out from this step: counted once (lib/api.ts holds it to once per person per node only after
+    // its answer, so two leaves close together could both send it).
+    const wordsChoiceCounted = useRef(false);
+
+    /**
+     * The member's answer at Safety Backup, kept as they leave the step, with the tick as it stands then: by Next, or by a
+     * provider chosen under "Add a sign-in", which opens beside the tick box and leaves the page (deciding review on
+     * #3333, 7c25e192: a tick made after the providers opened was lost, and the choice was counted stale or twice).
+     * A member who ticked "I've written them down" has done the thing Settings' banner nags about: without this,
+     * finishing onboarding correctly still greets them with "you haven't saved your recovery phrase yet", a warning that
+     * is not true, which is how warnings stop being read. Only on the tick: skipping leaves it showing. And on the
+     * account (it exists by this step): the phone and the web agree that the words are kept, and Home reminds them of
+     * nothing (§2.5).
+     */
+    function keepWordsChoice() {
+        if (!pendingIdentity) return;
+        if (!wordsChoiceCounted.current) {
+            wordsChoiceCounted.current = true;
+            recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+        }
+        if (!seedConfirmed) return;
+        try { localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true'); } catch { /* storage off: Settings asks once */ }
+        keepWordsOnAccount(pendingIdentity.publicKey, 'Welcome');
+    }
 
     async function handleSeedConfirmed() {
         if (!pendingIdentity) return;
@@ -2002,18 +2033,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     data-testid="backup-next"
                                     onClick={() => {
                                         setAddingSignIn(false);
-                                        recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
-                                        // A member who ticked "I've written them down" has done the thing
-                                        // Settings' banner nags about. Without this, finishing onboarding
-                                        // correctly still greets them with "you haven't saved your recovery
-                                        // phrase yet" — a warning that is not true, which is how warnings
-                                        // stop being read. Only on confirm: skipping leaves it showing.
-                                        if (seedConfirmed && pendingIdentity) {
-                                            localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
-                                            // And on the account (the account exists by this step): the phone and the web
-                                            // agree that the words are kept, and Home reminds them of nothing (§2.5).
-                                            keepWordsOnAccount(pendingIdentity.publicKey, 'Welcome');
-                                        }
+                                        keepWordsChoice();
                                         setError(null);
                                         // The last step: How it Works left the join (design §3.1), so this goes in.
                                         void finishJoin();
@@ -2049,7 +2069,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                                 identity={pendingIdentity}
                                                 label={keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
                                                 autoStart
-                                                onLeaving={() => finishOnboarding({ leaving: true })}
+                                                // The tick box stays live beside the providers: the choice is the one
+                                                // the member leaves with (deciding review on #3333, 7c25e192).
+                                                onLeaving={() => { keepWordsChoice(); return finishOnboarding({ leaving: true }); }}
                                                 keepsNoCopies={keepsNoCopies}
                                             />
                                         </section>
@@ -2058,8 +2080,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                             type="button"
                                             disabled={loading}
                                             onClick={() => {
-                                                recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
-                                                if (seedConfirmed) localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
+                                                // Only opens the providers: the words choice is kept as the member leaves
+                                                // the step (keepWordsChoice), by Next or by a provider.
                                                 setAddingSignIn(true);
                                                 setError(null);
                                             }}

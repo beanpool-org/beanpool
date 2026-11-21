@@ -7,13 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
 import {
-    generateIdentity, identityFromMnemonic, importIdentity, loadIdentity, loadPendingJoin, savePendingJoin, PENDING_JOIN_TTL_MS,
+    generateIdentity, identityFromMnemonic, importIdentity, loadIdentity, loadPendingJoin, savePendingJoin, seedViewedKey, PENDING_JOIN_TTL_MS,
     type BeanPoolIdentity, type PendingJoin,
 } from '../lib/identity';
 import { generateMnemonic } from '../lib/mnemonic';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { loadPendingLink } from '../lib/link-signin';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { oncePerPersonVariant } from '@beanpool/core';
 
 type Handler = (body: any, path: string) => Response;
 
@@ -496,6 +497,36 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         expect(within(offered).getByRole('heading', { level: 4 })).toHaveTextContent(/^Add a sign-in$/);
         expect(offered).toHaveTextContent("A sign-in with Google, Apple or Facebook only lifts the limits on new 12-words accounts. We keep only a scrambled reference to it, never your email or name from there. This community keeps no copies of members' accounts, so your 12 words are your way back.");
         expect(offered).not.toHaveTextContent(/locks a copy|second way back/);
+    });
+
+    // Deciding review on #3333 (7c25e192): the providers open beside the tick box, which stays live, so the tick the
+    // member leaves with is their answer: kept as the page leaves for the provider, and counted once.
+    it('a tick made after the providers open is kept as the page leaves: the words on the account, counted once as words', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        const calls = stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+            '/api/profile/update': () => json(200, { success: true, profile: {} }),
+            '/api/join/link/sso-nonce': () => json(200, { nonce: 'link-n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null }),
+        });
+        Object.defineProperty(navigator, 'storage', { value: { persist: vi.fn(async () => true), persisted: vi.fn(async () => false) }, configurable: true });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
+        await screen.findByTestId('backup-words-only');
+        fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
+        await screen.findByTestId('add-sign-in-google');
+        // Opening the providers counted nothing: the member has not answered yet.
+        expect(calls.some((c) => c.path === '/api/funnel-event' && c.body?.event === 'protection_choice')).toBe(false);
+        fireEvent.click(screen.getByLabelText("I've written these words down somewhere safe"));
+        fireEvent.click(screen.getByTestId('add-sign-in-google'));
+
+        await waitFor(() => expect(loadPendingLink()).not.toBeNull());
+        await waitFor(() => expect(calls.filter((c) => c.path === '/api/members/preferences').map((c) => c.body.preferences)).toEqual([{ words_kept: true }]));
+        expect(calls.filter((c) => c.path === '/api/funnel-event' && c.body?.event === 'protection_choice').map((c) => c.body.variant))
+            .toEqual([oncePerPersonVariant('words')]);
+        expect(localStorage.getItem(seedViewedKey(identity.publicKey))).toBe('true');
     });
 
     it("the way back's Next still goes in without the sign-in: nothing is lost by changing their mind", async () => {

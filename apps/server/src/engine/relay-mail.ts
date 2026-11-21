@@ -60,6 +60,9 @@ import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { dispatchPushNotification, isNodeMember, readsAsMember } from '../state-engine.js';
 import { clearChatMute, getChatMute, setChatMute } from './chat-mutes.js';
 import { hasBlocked } from './member-blocks.js';
+import { muteOf } from './auto-moderation.js';
+import { newRequestRefusal, nextLineWaitsOnRequest } from './dm-requests.js';
+import { probationState } from './probation.js';
 import { isOwnNodeHome } from './node-key.js';
 import { GUEST_ITEM_KINDS, guestItemMaxChars, takeGuestItem, type GuestItemRefusal, type GuestItemTaken } from './group-guests.js';
 import { assertFolderFloorSpace, StorageNearlyFullError } from './photo-upload-budget.js';
@@ -564,21 +567,46 @@ export interface HeldItem {
     receivedAt: number;
     /**
      * "From a member here" (slice S5, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "A fellow member writing
-     * across"): its sender's key is a member of this community now, by this server's own member list ({@link fromMemberHere}),
-     * never by anything the sending server said. The recipient's device then applies this community's own rule to a first
-     * line (@beanpool/core gateOutsideItem `memberHere`). Said as each item is handed over, never stored.
+     * across"): its sender is a member of this community who may write to its recipient here now, by this server's own rules
+     * ({@link fromMemberHere}), never by anything the sending server said. The recipient's device then applies this
+     * community's own rule to a first line (@beanpool/core gateOutsideItem `memberHere`). Said as each item is handed over,
+     * never stored.
      */
     memberHere: boolean;
 }
 
 /**
- * Whether `senderKey` is a member here now who reads as one (engine/members.ts readsAsMember): not a visitor's row, not a
- * closed account, not suspended or paused, and not the old key of a member being re-keyed or one a re-key replaced. Asked
- * of this server's own member list at the moment a device fetches, so a member suspended, gone or re-keyed since their line
- * was held is no longer "a member here" (slice S5).
+ * Whether `senderKey` is "a member here" to `recipient` (slice S5): a member of this community who may write to them here
+ * right now, by this node's own rules. The design's reason for the mark is "they could write to you inside the community
+ * anyway", so every rule here that stops a member writing to another member makes it false, each asked where it lives (no
+ * copy of any), and the line then meets the recipient's door exactly as a stranger's does:
+ *
+ * - not a member, or not one now (engine/members.ts isNodeMember + readsAsMember): no row, a visitor's row, a closed
+ *   account, the old key of a member being re-keyed or one a re-key replaced, and a member suspended or paused ('suspended',
+ *   'disabled'), who opens no new conversation here (messaging.ts assertMayOpenConversation; readsAsMember is the stricter,
+ *   and keeps no exception for a chat they already have);
+ * - muted by a moderator or auto-mute (auto-moderation.ts muteOf, what assertNotMuted refuses an open and a line with);
+ * - held by reports from making a new request (request-limits.ts, asked as createConversation asks it: dm-requests.ts
+ *   newRequestRefusal, so only where requests are on and only to someone it would be a request to);
+ * - waiting on a request to the recipient here already, whose one line is written (dm-requests.ts nextLineWaitsOnRequest:
+ *   lineThroughRequest refuses their next line, one the recipient ignored included);
+ * - on probation (probation.ts probationState). Inside, probation lets them reach 10 new people a day (3 by 12 words:
+ *   assertMayMessage), counted from the conversations they open here. A line across is none of those and enters no count,
+ *   so asking assertMayMessage alone would mark every line of one under their allowance, as many as the relay's stranger
+ *   caps let through (PR #3347 review): until probation ends, their line meets the door;
+ * - blocked by the recipient here (member-blocks.ts hasBlocked: what they write never reaches the one who blocked them; a
+ *   held line is refused for it already, mayHoldFor, and a block made since the line was held is read here).
+ *
+ * Asked at the moment a device fetches, so a change since the line was held (a join, a suspension, a mute or limit made or
+ * over, a re-key, a block) counts as it is then.
  */
-export function fromMemberHere(senderKey: string): boolean {
-    return /^[0-9a-f]{64}$/.test(senderKey) && isNodeMember(senderKey) && readsAsMember(senderKey);
+export function fromMemberHere(senderKey: string, recipient: string, now: number = Date.now()): boolean {
+    if (!/^[0-9a-f]{64}$/.test(senderKey) || !isNodeMember(senderKey) || !readsAsMember(senderKey)) return false;
+    if (muteOf(senderKey, now).muted) return false;
+    if (newRequestRefusal(senderKey, recipient, now) !== null) return false;
+    if (nextLineWaitsOnRequest(senderKey, recipient, now)) return false;
+    if (probationState(senderKey, now).onProbation) return false;
+    return !hasBlocked(recipient, senderKey);
 }
 
 type HeldRow = { sender_key: string; item_id: string; kind: string; recipient: string };
@@ -664,10 +692,12 @@ export function heldMailFor(member: string, device: string): { items: HeldItem[]
                              ORDER BY received_at, item_id LIMIT ?`).all(member, device, MAIL_FETCH_PAGE + 1) as Array<{
         kind: string; envelope: string; payload: string | null; bytes: number; received_at: number;
     }>;
-    // Each sender asked once a page (slice S5): whether they are a member here now, by this server's own list.
+    // Each sender asked once a page (slice S5): whether they are a member here who may write to this member now, by this
+    // server's own rules (fromMemberHere), all at one moment.
+    const now = Date.now();
     const members = new Map<string, boolean>();
     const memberHere = (key: string): boolean => {
-        if (!members.has(key)) members.set(key, fromMemberHere(key));
+        if (!members.has(key)) members.set(key, fromMemberHere(key, member, now));
         return members.get(key)!;
     };
     return {

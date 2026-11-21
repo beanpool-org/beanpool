@@ -14,7 +14,8 @@
  *                                                          one the device has (its `at` and `itemId`), 200 a page. `device`
  *                                                          is required (400 bad_device without it), and lists the device.
  *                                                          Each item's `memberHere` (slice S5): its sender is a member
- *                                                          here now, by this server's own member list alone
+ *                                                          here who may write to them here now, by this server's own
+ *                                                          rules alone (engine/relay-mail.ts fromMemberHere)
  *   GET  /api/mail/blob/:itemId     a member here       → { itemId, payload } (a blob held for them)
  *   POST /api/mail/confirm          a member here       { ids: string[], device } → { confirmed }: this device has them;
  *                                                          an item goes once every device listed has it

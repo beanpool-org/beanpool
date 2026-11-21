@@ -1,8 +1,9 @@
 /**
  * The named line at the member's own act (DESIGN-notify-and-backup-asks-fable-amend2.md §6, §12.3 slice N2a; the first
  * design §4.2, amend1 §4.3): "Hear when Asha answers." [Tell me], under a first message sent, a first message read or a
- * request accepted, a first listing, a first offer or request on someone's listing, an ask to join. It replaces the old
- * pop-up of ours at the first post, message and ask to join.
+ * request accepted, a first listing, a first offer or request on someone's listing, an ask to join; and (slice N2b) Going or
+ * Interested on an event, a starred interest, a forum topic followed. It replaces the old pop-up of ours at the first post,
+ * message and ask to join. useNotifyPhone is the phone's own answer for N2b's true lines, which are states, not asks.
  *
  * One line with one button and no "Not now": leaving the screen is the no, once per visit (a screen covered by another, a
  * sheet closed, then shown again: no line; useNotifyLine's `showing`). Whether it shows is core's rule
@@ -12,11 +13,50 @@
  * with no answer: the line goes without a word. It wraps at 320 dp and 1.3x text; colours are the theme's.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, AppState } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { notifyLineWords, type NotifyLineKind } from '@beanpool/core';
+import { notifyLineWords, type NotifyLineKind, type NotifyPhone } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
+
+/** Every place drawing from the phone's own answer (useNotifyPhone), told to read it again after a Turn on or a Tell me. */
+const phoneReaders = new Set<() => void>();
+/** A Turn on or a Tell me has had its answer: every true line on screen reads the phone again (slice N2b). */
+export function notePhoneChanged(): void {
+    for (const read of [...phoneReaders]) read();
+}
+
+const NOTHING_HERE: NotifyPhone = { available: false, granted: false, canAskAgain: false };
+
+/**
+ * What the phone itself says about notifications (utils/notification-permission.ts readOsNotificationPermission), for a true
+ * line (slice N2b: an event's "Reminders need notifications on."): null until read, then read again on each return to the
+ * app (back from the phone's settings) and after any Turn on or Tell me on this phone (notePhoneChanged). Never asks; a read
+ * that fails is "nothing to turn on here". Loaded at the call, as useNotifyLine's rule is, so a screen never loads
+ * expo-notifications as it opens.
+ */
+export function useNotifyPhone(): NotifyPhone | null {
+    const [phone, setPhone] = useState<NotifyPhone | null>(null);
+    useEffect(() => {
+        let live = true;
+        const read = () => {
+            void import('../utils/notification-permission')
+                .then((m) => m.readOsNotificationPermission())
+                .catch(() => NOTHING_HERE)
+                .then((p) => { if (live) setPhone(p); });
+        };
+        read();
+        phoneReaders.add(read);
+        let sub: { remove?: () => void } | undefined;
+        try {
+            sub = AppState.addEventListener('change', (next) => { if (next === 'active') read(); });
+        } catch {
+            // No app state here (a runner without it): the reads at the taps still come.
+        }
+        return () => { live = false; phoneReaders.delete(read); sub?.remove?.(); };
+    }, []);
+    return phone;
+}
 
 export interface NotifyLineOffer {
     kind: NotifyLineKind;
@@ -114,6 +154,8 @@ export function useNotifyLine(publicKey: string | null | undefined, showing: boo
             granted = false;
         }
         if (mounted.current) setShown((s) => (s && granted ? { ...s, state: 'done' } : null));
+        // A true line elsewhere on screen (the event's reminder) says what is true now.
+        notePhoneChanged();
     }, [publicKey]);
 
     // Hidden: nothing drawn even for the one render before the effect above lets the line go.

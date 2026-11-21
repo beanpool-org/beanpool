@@ -9,7 +9,9 @@
  * a repeating event's rule is the door to its next dates, one 48 dp line under the when ("↻ Monthly, third Saturday · Next
  * dates", DESIGN-web-dates-stop-fable.md §4, as the web's page has it). That the answer is on the first screen is measured
  * (event-page-shell-render.test.ts: at 320 × 569 and 1.3×, its top ≤ 500 dp and its bottom ≤ 569, with a photo, without,
- * and with the dates opened). The counts show only once someone has answered.
+ * and with the dates opened). The counts show only once someone has answered. A Going or an Interested saved may bring one
+ * named line under the answer, "Get a reminder the day before, and hear if it changes." [Tell me] (Interested: the reminder
+ * only), by core's rule (DESIGN-notify-and-backup-asks-fable-amend2.md §12.3 slice N2b; components/NotifyLine.tsx).
  *
  * What the viewer may see is the node's decision, not this screen's: the local row gives a first paint, then
  * a signed by-id fetch returns my RSVP, the note (host and Going only) and the RSVP list (hosts only). The note
@@ -44,6 +46,7 @@ import { CardChip, useCardShell } from './market-card-shell';
 import { NewEventModal } from './NewEventModal';
 import { useYourGroups } from './useYourGroups';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { useNotifyLine } from './NotifyLine';
 import { EventNextDates } from './EventNextDates';
 import { EventCopyDoor } from './EventCopyDoor';
 import { AuthorCard, useMemberRating } from './AuthorCard';
@@ -68,6 +71,11 @@ interface EventDetailProps {
     onLocalCommunity?: boolean;
     /** The node's profile says pins are on (`features.pins`): the screen that opens this has it, so this asks nothing of the profile. */
     pinsOn?: boolean;
+    /**
+     * Whether the page is the screen in front (app/post/[id].tsx: components/NotifyLine.tsx useScreenShowing). Going or Interested
+     * brings a named line under the answer (slice N2b); leaving the page is its no, so it goes when the page is covered.
+     */
+    showing?: boolean;
 }
 
 function countsOf(p: any): RsvpCounts {
@@ -78,13 +86,15 @@ function countsOf(p: any): RsvpCounts {
     };
 }
 
-export function EventDetail({ post, openMembership = false, onLocalCommunity = false, pinsOn = false }: EventDetailProps) {
+export function EventDetail({ post, openMembership = false, onLocalCommunity = false, pinsOn = false, showing = true }: EventDetailProps) {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     // The style box (components/market-card-shell.ts): the card's chips, the page's boxes and buttons.
     const shell = useCardShell();
     const { identity } = useIdentity();
+    // The named line a Going or an Interested may bring under the answer (slice N2b; core's rule decides, once per kind).
+    const notify = useNotifyLine(identity?.publicKey, showing);
     // The photo frame's height, once laid out: 4:3 of the column's width (the carousel needs a number).
     const [photoHeight, setPhotoHeight] = useState(0);
     // The photo a tap opened whole (the frame crops to 4:3): its own URL, the same ~800 px photo, in the chat's full-screen viewer.
@@ -255,6 +265,8 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 });
                 setCounts(c => applyRsvp(c, null));
             }
+            // Saved: the member's own act, the moment for "Get a reminder the day before" (Interested: the reminder only).
+            if (next === 'going' || next === 'interested') void notify.offer({ kind: next });
         } catch (err: any) {
             setCounts(before);
             // The phone's own refusals (utils/db.ts throws them as written) in the member's language; the node's words as it sent them (slice S4).
@@ -523,6 +535,8 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                             {rsvpButton('interested', t('Interested'))}
                         </View>
                     )}
+                    {/* The named line under the answer, while the member is still Going or Interested. */}
+                    {!isHost && !copy && !!counts.mine && notify.view}
                     {/* Nothing while nobody has answered (the card's rule): "0 going · 0 interested" reads as a dead community. */}
                     {!copy && counts.going + counts.interested > 0 && (
                         <Text style={styles.counts} numberOfLines={2} testID="event-counts">👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>

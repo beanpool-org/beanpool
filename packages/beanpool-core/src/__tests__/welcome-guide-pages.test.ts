@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HOME_DEFAULT_LIST } from '../home-frame.js';
 import { COMMUNITY_WELCOME_CARD_WORDS, WELCOME_TILE_WORDS } from '../home-welcome.js';
+import { NOTIFY_TRUE_WORDS } from '../notify-ask.js';
 import { t } from '../words.js';
 
 const GUIDE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'beanpool-guide', 'content');
@@ -129,7 +130,15 @@ describe("the guide's notifications page", () => {
         expect(notifications).not.toContain('the card at the end of How it Works');
         expect(notifications).not.toContain('or when you send your first message or request to join');
         expect(notifications).toContain('**Hear when someone answers you** in **First steps** on **Home**, or **Tell me** on a one-line offer such as **Hear when Asha answers.** under your first message.');
-        expect(notifications).toContain("The same line shows once after your first listing, a request on someone's listing, a request to join, or a message you read, never more than one a day.");
+        // Slice N2b: the same kind of line at Going or Interested, a star and a followed topic.
+        expect(notifications).toContain("The same kind of line shows once after your first listing, a request on someone's listing, a request to join, a message you read, **Going** or **Interested** on an event, a star on **What are you into?**, or following a forum topic, never more than one a day.");
+    });
+
+    // Slice N2b: the reminder's true line, every time while the phone can't notify, and the interests note without its promise.
+    it('says an event reminds no one while the phone does not allow notifications, in the words the phone draws', () => {
+        const notifications = flat('settings/notifications.md');
+        expect(notifications).toContain(`says **${NOTIFY_TRUE_WORDS.reminders.replace(/^⏰ /, '')}** where its reminder would be, with **Turn on**. It says so every time, even after you said no`);
+        expect(notifications).toContain("**What are you into?** on **Home** says you'll be told when a neighbour asks only while your phone allows notifications.");
     });
 });
 

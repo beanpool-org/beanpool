@@ -41,7 +41,8 @@ import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink,
     googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets, type ShareableEvent,
 } from '../utils/event-extras';
-import { t, tn } from '@beanpool/core';
+import { NOTIFY_TRUE_WORDS, notifyRemindersOff, t, tn } from '@beanpool/core';
+import { notePhoneChanged, useNotifyPhone } from './NotifyLine';
 import { Sentence } from './Sentence';
 import { ShareButton } from './SharePost';
 import { reminderBeforeWords } from './settings/settings-lines';
@@ -246,6 +247,12 @@ interface ReminderProps {
  * it; the member's default comes from their preferences, so the line can say which it is. A 404 from
  * either takes the whole block away. A member who has just tapped Going may not be in the list yet; they
  * read as "my default", which is exactly what the node will do for them until they choose otherwise.
+ *
+ * While this phone can't notify (core's notifyRemindersOff: it could have notifications and doesn't allow them), the line is
+ * the true one instead (DESIGN-notify-and-backup-asks-fable-amend2.md §6, slice N2b): "⏰ Reminders need notifications on."
+ * [Turn on]. Not a soft ask but the state of something they asked for, so it shows every time, after a "Later" and after the
+ * phone's "no" alike. Its Turn on is the shared one (utils/notification-permission.ts turnOnNotifications): the phone's own
+ * pop-up where it can still show it, else the one line before the phone's settings. The line goes once the phone allows them.
  */
 export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) {
     const styles = useStyles(makeStyles);
@@ -258,6 +265,22 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState<number[]>([]);
     const [saving, setSaving] = useState(false);
+    // The phone's own answer, for the true line; null until read (the line reads as it always did until then).
+    const phone = useNotifyPhone();
+    const remindersOff = notifyRemindersOff(phone);
+    const [turningOn, setTurningOn] = useState(false);
+    const turnOn = async () => {
+        if (turningOn) return;
+        setTurningOn(true);
+        try {
+            await (await import('../utils/notification-permission')).turnOnNotifications(viewerPublicKey);
+        } catch {
+            // Nothing changed: the line stays true as it is.
+        } finally {
+            setTurningOn(false);
+            notePhoneChanged();
+        }
+    };
 
     const load = useCallback(async () => {
         try {
@@ -306,6 +329,27 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
             setSaving(false);
         }
     };
+
+    if (remindersOff) {
+        return (
+            <View style={[shell.pageBox, styles.reminderBox]} testID="event-reminder-box">
+                <View style={styles.reminderHeadRow} testID="event-reminders-off">
+                    <Text style={styles.reminderLine} numberOfLines={3}>{t(NOTIFY_TRUE_WORDS.reminders)}</Text>
+                    <Pressable
+                        onPress={turnOn}
+                        disabled={turningOn}
+                        style={styles.smallBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Turn on')}
+                        accessibilityState={{ busy: turningOn, disabled: turningOn }}
+                        testID="event-reminders-turn-on"
+                    >
+                        <Text style={styles.smallBtnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Turn on')}</Text>
+                    </Pressable>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={[shell.pageBox, styles.reminderBox]} testID="event-reminder-box">

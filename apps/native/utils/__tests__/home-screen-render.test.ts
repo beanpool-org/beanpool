@@ -125,6 +125,15 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('../pulse-token-store', () => ({ forgetAllPulseTokens: vi.fn(async () => undefined) }));
+/**
+ * The phone's own answer about notifications (utils/notification-permission.ts readOsNotificationPermission reads it). null:
+ * none to give, as on a runner without them (the read fails: nothing to turn on), which every case but the interests note's has.
+ */
+const phoneSays = vi.hoisted(() => ({ now: null as null | { status: string; canAskAgain: boolean } }));
+vi.mock('expo-notifications', () => {
+    const getPermissionsAsync = async () => { if (!phoneSays.now) throw new Error('no notifications here'); return phoneSays.now; };
+    return { default: { getPermissionsAsync }, getPermissionsAsync };
+});
 const who = vi.hoisted(() => ({ identity: null as any }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: who.identity }) }));
 const scheme = vi.hoisted(() => ({ dark: false }));
@@ -278,6 +287,7 @@ let host: HTMLElement | null = null;
 
 beforeEach(async () => {
     mem.store.clear();
+    phoneSays.now = null;
     resetHomeStoreForTests();
     nav.params = {};
     hooks.handlers.clear();
@@ -748,12 +758,29 @@ describe('tailoring: the "…" menu, Arrange, interests', () => {
         expect(JSON.parse(mem.store.get('bp_fav_categories')!)).toEqual(['food', 'labour']);
     });
 
-    it("What are you into? says we'll tell you when a neighbour asks only where the community says askedPush (cold start N3)", async () => {
+    it("What are you into? says we'll tell you when a neighbour asks only where the community says askedPush (cold start N3) and the phone allows notifications (N2b)", async () => {
         const note = () => document.querySelector('[data-testid="home-interests-note"]')?.textContent;
         node.answer = { ...localMember(), features: { ...localMember().features, askedPush: true } as HomeAnswer['features'] };
+        phoneSays.now = { status: 'granted', canAskAgain: true };
         await render();
         expect(note()).toBe("Tap a few. What you star comes first here and in the Market, and we'll tell you when a neighbour asks for it.");
     });
+
+    // Slice N2b's true line: the note never promises a push this phone can't show.
+    for (const [state, says] of [
+        ['never asked', { status: 'undetermined', canAskAgain: true }],
+        ["the phone said no (Android's first)", { status: 'denied', canAskAgain: true }],
+        ["the phone said no (an iPhone's Don't Allow)", { status: 'denied', canAskAgain: false }],
+        ['nothing to turn on here', null],
+    ] as const) {
+        it(`where the community says askedPush but this phone doesn't allow notifications (${state}): the note promises no push`, async () => {
+            const note = () => document.querySelector('[data-testid="home-interests-note"]')?.textContent;
+            node.answer = { ...localMember(), features: { ...localMember().features, askedPush: true } as HomeAnswer['features'] };
+            phoneSays.now = says;
+            await render();
+            expect(note()).toBe('Tap a few. What you star comes first here and in the Market.');
+        });
+    }
 
     it('a community that says nothing of it (global, Beans off, a node from before N3): the note promises no push', async () => {
         const note = () => document.querySelector('[data-testid="home-interests-note"]')?.textContent;

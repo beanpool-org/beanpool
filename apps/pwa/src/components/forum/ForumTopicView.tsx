@@ -19,7 +19,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FORUM_LIMITS, currentLanguage, forumSectionName, forumWriterLine, t, timeAgo, word } from '@beanpool/core';
+import { FORUM_LIMITS, currentLanguage, forumSectionName, forumWriterLine, t, timeAgo, word, type ForumFollow } from '@beanpool/core';
 import {
     closeForumTopic, followForumTopic, forgetForumTopic, getForumTopic, keptTopic, linkForumThing, markForumTold, readForumTopic, removeForumPost, replyInForum,
     reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage, type ForumWriter,
@@ -214,6 +214,16 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
         await readThrough(0, lastOf(page), typeof goneWords === 'function' ? goneWords() : goneWords);
     }
 
+    /**
+     * The member's follow saved (the bell, Mute), drawn from the save's own answer at once: the read again after it may
+     * fail, and the bell must never then show the topic as it was before the save (N2b notes, #3348).
+     */
+    async function saveFollow(id: string, to: ForumFollow | null): Promise<ForumFollow | null> {
+        const saved = await followForumTopic(id, to);
+        if (shown.current) setPage((p) => (p && p.topic.id === id ? { ...p, topic: { ...p.topic, follow: saved } } : p));
+        return saved;
+    }
+
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
     const name = (p: { writer: ForumWriter }) => forumWriterLine(p.writer, t('A member'));
 
@@ -254,7 +264,7 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
                         onClick={() => {
                             const next = topic.follow === 'following' ? null : 'following';
                             void act(async () => {
-                                await followForumTopic(topic.id, next);
+                                await saveFollow(topic.id, next);
                                 // Followed: the member's own act, the moment for "Hear when someone replies here." Never on a
                                 // closed topic: it takes no replies (the node refuses them, forum.ts), so none can be heard.
                                 // The forum's own canReply flag (sweep-8) is not on main yet: this reads the topic's closed state.
@@ -380,7 +390,7 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
             if (!topic) return [];
             const items: MenuItem[] = [[
                 topic.follow === 'muted' ? t(TOPIC_WORDS.unmute) : t(TOPIC_WORDS.mute),
-                () => void act(() => followForumTopic(topic.id, topic.follow === 'muted' ? null : 'muted')),
+                () => void act(() => saveFollow(topic.id, topic.follow === 'muted' ? null : 'muted')),
             ]];
             if (open && (topic.writer.publicKey === me || front?.moderator)) items.push([t(TOPIC_WORDS.close), () => void act(() => closeForumTopic(topic.id))]);
             // Links (slice F9): the writer adds them; the writer, an owner or an admin takes one off. Not on a removed topic.

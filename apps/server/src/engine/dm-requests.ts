@@ -169,7 +169,8 @@ export interface RequestView {
     nextLineIsRequest?: boolean;
     /**
      * True when the viewer reads it accepted and the acceptance was their own act (`accepted_by` is theirs: their Accept,
-     * line, own open of the chat, or friend add), never the other's, nor a trade's or a second acceptance's (`accepted_by`
+     * line, own open of the chat, or friend add), never the other's, nor a trade's, the node's own line's (a notice from the
+     * node's inbox, written in the first owner's name by any admin: review N1) or a second acceptance's (`accepted_by`
      * null). The phone's let in once counts only an acceptance of the member's own (#3319 review F1: a stranger taking up
      * the member's Offer must not let himself in). Absent otherwise.
      */
@@ -422,8 +423,13 @@ function acceptable(row: RequestRow | undefined, actor?: string): row is Request
  * then the person adding them, or a role letting them through) is no chat the person it was for has: only the opener
  * hears, even when the act was the other's. The event names it and its opener, so it would tell that person someone wrote
  * to them while blocked (PR #2392 review 4355143120). They hear of it when the opener's next line makes it real.
+ *
+ * `byNode`: the act is the node's own line written in `actor`'s name (nodeLineInRequest: a notice from the node's inbox,
+ * which any admin or an owner's token sends as the first owner), not one `actor` took: it is recorded as nobody's
+ * (accepted_by null), as a trade's is, so `actor` never reads it as their own act (`acceptedByYou`), which the phone's let in
+ * once would count (PR #3319 review N1). `actor` still hears it, as the person in whose name the line went.
  */
-function accept(row: RequestRow, now: number, actor?: string): void {
+function accept(row: RequestRow, now: number, actor?: string, byNode = false): void {
     const again = row.state === 'accepted';
     if (again && !acceptable(row, actor)) return;
     const shownTo = again && !actor ? [row.from_pubkey, row.to_pubkey].filter(who => acceptanceHiddenFrom(row, who)) : [];
@@ -432,7 +438,7 @@ function accept(row: RequestRow, now: number, actor?: string): void {
     const changed = db.prepare(`UPDATE dm_requests SET state = 'accepted', decided_at = ?, accepted_by = ?,
                                        state_before = CASE WHEN state = 'accepted' THEN state_before ELSE state END
                                  WHERE conversation_id = ? AND (state != 'accepted' OR ?)`)
-        .run(iso(now), again ? null : actor ?? null, row.conversation_id, again ? 1 : 0).changes;
+        .run(iso(now), again || byNode ? null : actor ?? null, row.conversation_id, again ? 1 : 0).changes;
     if (changed === 0) return;
     const hears = again ? (actor ? [actor] : shownTo) : [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
         .filter(([who, other]) => who === actor || !hasBlocked(who, other)).map(([who]) => who);
@@ -674,13 +680,15 @@ function lineInAnsweredReachOut(row: RequestRow, mine: RequestRow, author: strin
  * written as the node admin it is sent as). It is never held or refused, and is no request's line; but in the chat it is
  * that admin's line, which requestNeeded counts as their having written to the opener. So a request waiting for them is
  * accepted by it, as their own line accepts it (lineThroughRequest), and its opener reads it answered (PR #2392 review
- * 4355066390).
+ * 4355066390). Accepted as nobody's act (accept `byNode`, accepted_by null): any admin, or an owner's token, sends that
+ * line as the first owner (routes/admin.ts inbox/send), so it is never that owner's own act, and they never read
+ * `acceptedByYou` for it (PR #3319 review N1: the phone's let in once counts only a step the member took).
  */
 export function nodeLineInRequest(conversationId: string, author: string, now: number = Date.now()): void {
     const row = rowOf(conversationId);
     if (!acceptable(row, author) || row.to_pubkey !== author) return;
-    if (requestsOn()) accept(row, now, author);
-    else lineWhileOff(row, author, now);
+    if (requestsOn()) accept(row, now, author, true);
+    else lineWhileOff(row, author, now, true);
 }
 
 /**
@@ -692,10 +700,11 @@ export function nodeLineInRequest(conversationId: string, author: string, now: n
  * alone then (engine/withheld-lines.ts), stored nowhere the person looks, and the request stays as they left it (the
  * header's "A block the person it is for made"). The opener's line once the other reached out after a withdrawal, while the
  * opener blocked them, answers them, as when on (answerReachOut). A standby, which writes no request, leaves it.
+ * `byNode`: the node's own line in the person's name (nodeLineInRequest), which accepts it as nobody's act, as when on.
  */
-function lineWhileOff(row: RequestRow, author: string, now: number): void {
+function lineWhileOff(row: RequestRow, author: string, now: number, byNode = false): void {
     if (standbyWritesNothing()) return;
-    if (author === row.to_pubkey) accept(row, now, author);
+    if (author === row.to_pubkey) accept(row, now, author, byNode);
     else if (author === row.from_pubkey && row.state !== 'accepted' && reachedOutRow(row, row.to_pubkey)) answerReachOut(row, now);
     else if (author === row.from_pubkey && row.state === 'ignored' && !hasBlocked(row.to_pubkey, author)) {
         db.prepare("UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL, reached_out_at = NULL, reach_out_withdrawn_at = NULL WHERE conversation_id = ?")

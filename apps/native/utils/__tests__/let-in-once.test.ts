@@ -167,7 +167,7 @@ import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { blockUser, unblockUser, blockSyncsEndedForTests } from '../blocklist';
 import { acceptLetIn, letInFor, _resetLetInForTests } from '../let-in';
-import { gateOutsideItem } from '@beanpool/core';
+import { gateOutsideItem, DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
 
 const realLoad = (Module as any)._load;
 (Module as any)._load = function (request: string, ...rest: any[]) {
@@ -306,6 +306,11 @@ async function phoneHoldingThree(): Promise<void> {
     asked = [];
 }
 
+/**
+ * A member's line's nonce as the node stores it: every line a member writes in a direct chat is sealed (format 4), and the
+ * node refuses any other (engine/messaging.ts refuseUnencryptedDm). Only the node writes another kind in their name.
+ */
+const SEALED = `${DM_NONCE_PREFIX}bm9uY2Vub25jZW5vbmNlbm9uY2Vub25jZQ==`;
 /** Writes into `community`'s copy as its own sync would have (that copy is held: no handle of the phone's writes it). */
 function intoCopy(community: string, write: (sql: DatabaseSync) => void): void {
     const sql = new DatabaseSync(path.join(h.dir, FILE[community]));
@@ -315,7 +320,7 @@ function dmIn(sql: DatabaseSync, other: string, request: object | null, author: 
     const id = randomUUID();
     sql.prepare('INSERT INTO conversations (id, type, created_by, request, listed) VALUES (?, \'dm\', ?, ?, 1)').run(id, author ?? other, request ? JSON.stringify(request) : null);
     for (const k of [me.publicKey, other]) sql.prepare('INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(id, k);
-    if (author) sql.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, \'x\', \'n\', \'text\', ?)').run(randomUUID(), id, author, iso());
+    if (author) sql.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, \'x\', ?, \'text\', ?)').run(randomUUID(), id, author, SEALED, iso());
     return id;
 }
 
@@ -588,15 +593,39 @@ describe('let in once: what the member does between the list read and the accept
 /**
  * Who made the row (#3319 review at 3b80f0ee, F1; the director's call of 21 Nov 2026 on the PR's own rule "one person's word
  * doesn't count": only a step the member took lets anyone in) x every source the let-in reads x where the request waits, and
- * across. Each row is let in exactly when the member made it; each is red without the line of db.ts LET_IN_SQL (or the
- * contacts read) that judges it. Cells the node never makes (a friend, a contact) have no row of the node's.
+ * across. Each row is let in exactly when the member, on any of their own devices, took the step (or the server carries out
+ * one they signed: a standing deal's later period); each is red without the line of db.ts LET_IN_SQL (or the contacts read)
+ * that judges it. Who can make a row carrying the member's key without the member's own act, as the server is built
+ * (#3319 review N1, "close the class"):
+ * - an admin, for the owner: a notice from the node's inbox (routes/admin.ts inbox/send, any admin or an owner's token),
+ *   written under the first owner's key, readable and marked as the community admins' (state-engine.ts adminSendMessage), and
+ *   the acceptance of a request it answers, which the node records as nobody's act (engine/dm-requests.ts nodeLineInRequest
+ *   `byNode`: no `acceptedByYou`). Rows below. No admin route writes a friend, a deal or a payment in a member's name but
+ *   one: the offboarding gift (member-wizards.ts executeOffboard) pays a departing member's balance to someone, in the same
+ *   transaction that closes their account, after which their key can sign nothing here, reads included (https-server.ts
+ *   CLOSED_ACCOUNT_REFUSAL), so it never reaches their phone.
+ * - an assistant, for the owner: its tools list Offers and Needs, events, groups and enterprises in the owner's name
+ *   (agent/tools.ts); it sends no line, adds no friend, takes up, asks for or approves no deal and pays nobody. A deal on a
+ *   listing it made goes as one on the member's own listing does. Rows below.
+ * - the server on its own: system lines (author SYSTEM, type system), a trade's acceptance (acceptOnTrade, nobody's act),
+ *   an escrow's payouts and refunds (from escrow_*); and a standing deal's later period, which pays under the authorisation
+ *   the member signed when they took the deal up or approved it (a step towards that same person: it counts). Rows below.
+ * - another of the member's devices: the same key, so the same rows, as sync brings them. Rows below.
+ * - a standby's copy or the phone's sync: a copy of a row, judged as the row is (who made it never changes on the way).
+ * - a re-key (key-move.ts, the member-wizards re-key): moves the member's own rows to their new key.
+ * Cells nobody but the member can make have no other row: a friend (only the signer adds one, social.ts addFriend) and a
+ * linked contact (the phone's own list).
  */
-type Maker = 'the member' | 'the other person alone' | 'the node on its own';
+type Maker = 'the member' | 'the member, on another of their devices' | 'the server, on the member\'s signed word'
+    | 'an admin, for the owner' | 'an assistant, for the owner' | 'the other person alone' | 'the node on its own';
+const MEMBERS_ACT: readonly Maker[] = ['the member', 'the member, on another of their devices', 'the server, on the member\'s signed word'];
 interface Made { source: string; by: Maker; how: string; put: (community: string, key: string) => void }
-function lineIn(sql: DatabaseSync, conversationId: string, author: string, type: string): void {
-    sql.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, \'x\', \'n\', ?, ?)')
-        .run(randomUUID(), conversationId, author, type, iso());
+function lineIn(sql: DatabaseSync, conversationId: string, author: string, type: string, line: { nonce?: string; metadata?: object } = {}): void {
+    sql.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, \'x\', ?, ?, ?, ?)')
+        .run(randomUUID(), conversationId, author, line.nonce ?? SEALED, type, line.metadata ? JSON.stringify(line.metadata) : null, iso());
 }
+/** A notice from the node's inbox, as state-engine.ts adminSendMessage stores it: the first owner's key, readable, marked. */
+const ADMINS_NOTICE = { nonce: 'plaintext-v1', metadata: { [DM_FROM_ADMINS_KEY]: true } };
 const friendIn = (sql: DatabaseSync, owner: string, friend: string) => sql.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(owner, friend);
 const paymentIn = (sql: DatabaseSync, from: string, to: string) => sql.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c) VALUES (?, ?, ?, 100)').run(randomUUID(), from, to);
 const MADE: Made[] = [
@@ -605,12 +634,34 @@ const MADE: Made[] = [
     { source: 'a line in a direct chat', by: 'the node on its own', how: 'a system line (a trade\'s note)', put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, null, k), 'SYSTEM', 'system'); }) },
     { source: 'a line in a direct chat', by: 'the node on its own', how: 'a system line in the member\'s name', put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, null, k), me.publicKey, 'system'); }) },
     {
+        source: 'a line in a direct chat', by: 'the member, on another of their devices', how: 'a photo sent from their other phone, as sync keeps it',
+        put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, null, null), me.publicKey, 'image'); }),
+    },
+    // The review's own probe (#3319 at e9ed010b, N1): a copy holding only an admin's notice to them, in the owner's name.
+    {
+        source: 'a line in a direct chat', by: 'an admin, for the owner', how: 'a notice from the node\'s inbox, the copy\'s only line',
+        put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, null, null), me.publicKey, 'text', ADMINS_NOTICE); }),
+    },
+    {
+        source: 'a line in a direct chat', by: 'an admin, for the owner', how: 'a line marked as the admins\', though its nonce is a sealed line\'s',
+        put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, null, null), me.publicKey, 'text', { metadata: { [DM_FROM_ADMINS_KEY]: true } }); }),
+    },
+    {
+        source: 'a line in a direct chat', by: 'the node on its own', how: 'a readable line in the member\'s name, unmarked',
+        put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, null, null), me.publicKey, 'text', { nonce: 'plaintext-v1' }); }),
+    },
+    {
         source: 'a request\'s acceptance', by: 'the member', how: 'their own Accept (the node says acceptedByYou)',
         put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, { from: k, state: 'accepted', at: iso(), acceptedByYou: true }, k); }),
     },
     {
         source: 'a request\'s acceptance', by: 'the other person alone', how: 'it reads accepted, not by the member\'s act',
         put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, { from: k, state: 'accepted', at: iso() }, k); }),
+    },
+    {
+        // The node records it as nobody's act (nodeLineInRequest `byNode`), so its view has no acceptedByYou; the notice is beside it.
+        source: 'a request\'s acceptance', by: 'an admin, for the owner', how: 'a notice from the node\'s inbox answered their request',
+        put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, { from: k, state: 'accepted', at: iso() }, k), me.publicKey, 'text', ADMINS_NOTICE); }),
     },
     {
         source: 'a request\'s acceptance', by: 'the node on its own', how: 'a trade accepted one the member Ignored, the deal cancelled',
@@ -634,6 +685,17 @@ const MADE: Made[] = [
         put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: me.publicKey, seller: k, status: 'requested', post: listingIn(s, me.publicKey, 'need') }); }),
     },
     {
+        source: 'a deal, the member buying', by: 'an assistant, for the owner', how: 'it listed the Need; they offered, never approved',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: me.publicKey, seller: k, status: 'requested', post: listingIn(s, me.publicKey, 'need') }); }),
+    },
+    {
+        source: 'a deal, the member buying', by: 'the server, on the member\'s signed word', how: 'a standing deal\'s later period, paid at its start',
+        put: (c, k) => intoCopy(c, (s) => {
+            s.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status, standing_id, period_no) VALUES (?, ?, ?, ?, \'completed\', ?, 2)')
+                .run(randomUUID(), listingIn(s, k, 'offer'), me.publicKey, k, randomUUID());
+        }),
+    },
+    {
         source: 'a deal, the member buying', by: 'the node on its own', how: 'their offer rejected as another was approved',
         put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: me.publicKey, seller: k, status: 'rejected', post: listingIn(s, me.publicKey, 'need') }); }),
     },
@@ -654,18 +716,23 @@ const MADE: Made[] = [
         put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'completed', post: listingIn(s, me.publicKey, 'offer') }); }),
     },
     {
+        source: 'a deal, the member selling', by: 'an assistant, for the owner', how: 'it listed the Offer; they took it up (pending)',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'pending', post: listingIn(s, me.publicKey, 'offer') }); }),
+    },
+    {
         source: 'a deal, the member selling', by: 'the other person alone', how: 'they took up a listing this copy doesn\'t hold (pending)',
         put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'pending' }); }),
     },
     { source: 'a payment', by: 'the member', how: 'the member paid them', put: (c, k) => intoCopy(c, (s) => { paymentIn(s, me.publicKey, k); }) },
     { source: 'a payment', by: 'the other person alone', how: 'they paid the member', put: (c, k) => intoCopy(c, (s) => { paymentIn(s, k, me.publicKey); }) },
     { source: 'a payment', by: 'the node on its own', how: 'a deal\'s escrow paid them', put: (c, k) => intoCopy(c, (s) => { paymentIn(s, `escrow_${randomUUID()}`, k); }) },
+    { source: 'a payment', by: 'the server, on the member\'s signed word', how: 'a standing deal\'s period paid to them', put: (c, k) => intoCopy(c, (s) => { paymentIn(s, me.publicKey, k); }) },
     { source: 'a linked contact', by: 'the member', how: 'the member linked them', put: (_c, k) => { h.contacts = [{ links: [{ key: k }] }]; } },
 ];
 
 describe('let in once: who made the row x every source x where the request waits, and across (#3319 review at 3b80f0ee, F1)', () => {
     for (const made of MADE) {
-        const letsIn = made.by === 'the member';
+        const letsIn = MEMBERS_ACT.includes(made.by);
         for (const place of PLACES) {
             it(`${place.name} | ${made.source} | ${made.by}: ${made.how} -> ${letsIn ? 'accepted quietly' : 'a card'}`, async () => {
                 await phoneHoldingThree();
@@ -914,7 +981,7 @@ describe('let in once: the rest of the rule', () => {
                 const id = randomUUID();
                 s.prepare('INSERT INTO conversations (id, type, created_by, listed) VALUES (?, \'dm\', ?, 1)').run(id, other);
                 for (const k of [me.publicKey, other]) s.prepare('INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(id, k);
-                for (let j = 0; j < 20; j++) s.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, timestamp) VALUES (?, ?, ?, \'x\', \'n\', ?)').run(randomUUID(), id, j === 19 && i % 2 === 0 ? me.publicKey : other, new Date(Date.now() - j * 1000).toISOString());
+                for (let j = 0; j < 20; j++) s.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, timestamp) VALUES (?, ?, ?, \'x\', ?, ?)').run(randomUUID(), id, j === 19 && i % 2 === 0 ? me.publicKey : other, SEALED, new Date(Date.now() - j * 1000).toISOString());
                 if (i % 5 === 0) s.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(me.publicKey, other);
                 if (i % 3 === 0) s.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c) VALUES (?, ?, ?, 1)').run(randomUUID(), me.publicKey, other);
             }

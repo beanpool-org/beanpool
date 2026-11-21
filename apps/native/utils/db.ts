@@ -44,6 +44,7 @@ import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
+import { DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
 import type { StandingAsk, StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
 import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
 // Old chat's photos and cards: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the web opens them).
@@ -2014,14 +2015,29 @@ const HELD_PREVIEWS_SQL = `
 `;
 
 /**
+ * A line in a direct chat that the member wrote themselves (#3319 review N1), as `m`, a messages row: its one `?` is my key.
+ * Every line a member writes in a direct chat is sealed (format 4: the node refuses any other, engine/messaging.ts
+ * refuseUnencryptedDm), from whichever of their devices; so a row in their name that isn't sealed is the node's, written
+ * on their behalf (core dm-crypto dmLineKind: "in a DM only an encrypted line is ever a member's words"). That is a notice
+ * from the node's inbox, which any admin or an owner's token sends under the first owner's key (state-engine.ts
+ * adminSendMessage: readable, marked DM_FROM_ADMINS_KEY), or a system line. A line marked as the community admins' is
+ * never the member's either, whatever its nonce: the mark says someone else wrote it.
+ */
+const MEMBERS_OWN_LINE_SQL = (m: string) => `${m}.author_pubkey = ? AND IFNULL(${m}.type, 'text') != 'system'
+      AND substr(${m}.nonce, 1, ${DM_NONCE_PREFIX.length}) = '${DM_NONCE_PREFIX}'
+      AND (CASE WHEN json_valid(${m}.metadata) THEN json_extract(${m}.metadata, '$.${DM_FROM_ADMINS_KEY}') IS NOT 1 ELSE 1 END)`;
+
+/**
  * The people this member let in, as one copy holds them (slice S3b, DESIGN-no-switch-messaging-fable.md §3 "Let in once"):
  * derived at each read, never stored or sent. Only a step the member took lets anyone in (#3319 review F1, the director's
  * call of 21 Nov 2026 on the rule "one person's word doesn't count": a stranger must not skip the door by his own act), so
  * each row is one the member made:
- * - `dm`: a direct chat the member wrote a line in (a system line is the node's, authored 'SYSTEM'), or whose request they
- *   accepted themselves: the node's `acceptedByYou` (engine/dm-requests.ts RequestView), never a request that reads
- *   accepted by the other's act, a trade's (acceptOnTrade: someone taking up the member's Offer, even one they Ignored) or
- *   a node from before the field. letInOfRows takes the chat's pinned key.
+ * - `dm`: a direct chat the member wrote a line in ({@link MEMBERS_OWN_LINE_SQL}: a sealed line of theirs, from any of
+ *   their devices; never a line the node wrote in their name, as a notice from the node's inbox is, #3319 review N1), or
+ *   whose request they accepted themselves: the node's `acceptedByYou` (engine/dm-requests.ts RequestView), never a
+ *   request that reads accepted by the other's act, a trade's (acceptOnTrade: someone taking up the member's Offer, even
+ *   one they Ignored), the node's own line's (nodeLineInRequest) or a node from before the field. letInOfRows takes the
+ *   chat's pinned key.
  * - `key`: a friend the member added (owner_pubkey is the signer); a deal (pending or completed: one only asked, declined
  *   or cancelled before that is one person's word) where the member took a step: as its buyer (on an Offer they took it up
  *   or asked for it; on their own Need they approved the other's offer: only the buyer's act makes either), or as the
@@ -2036,7 +2052,7 @@ const LET_IN_SQL = `
     SELECT 'dm' AS kind, c.id AS id, ${otherKeysSql()} AS keys FROM conversations c
     WHERE (c.type IS NULL OR c.type = 'dm')
       AND c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
-      AND (EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.author_pubkey = ? AND IFNULL(m.type, 'text') != 'system')
+      AND (EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND ${MEMBERS_OWN_LINE_SQL('m')})
            OR (CASE WHEN json_valid(c.request)
                     THEN json_extract(c.request, '$.state') = 'accepted' AND json_extract(c.request, '$.acceptedByYou') IS 1 ELSE 0 END))
     UNION ALL SELECT 'key', NULL, friend_pubkey FROM friends WHERE owner_pubkey = ?

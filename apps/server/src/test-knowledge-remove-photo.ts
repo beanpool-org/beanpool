@@ -32,7 +32,7 @@
  *     file page stays.
  * 14. Where the line is (engine/knowledge.ts creditShaped): every label the node writes (each open licence, a maker, none, one
  *     cut short) on every Commons file page it writes is dropped, a hidden character in its head included; a Commons file page
- *     in a person's own words, a camera with no number, and a "📷 n ·" label on any other address stay.
+ *     in a person's own words, a camera with no number or with a year, and a "📷 n ·" label on any other address stay.
  *
  * Run: SERVER_SUITES_ONLY=test-knowledge-remove-photo TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -502,7 +502,7 @@ async function main(): Promise<void> {
         const sugOk = await call(owen, 'POST', `/api/knowledge/drafts/${sugId}/approve`, { sources: [WORDS.sources[0], { url: C3.url, label: label(1, C3) }, MEL_SOURCE] });
         const sugPage = sugOk.body?.post?.id;
         assert(sugOk.status === 200 && same(ownOf(sugPage), [PARKS, MEL_SOURCE.url]) && creditsOf(sugPage).length === 0,
-            `13c. Approve with changes on it: a page with no picture writes no credit (${show(sugOk)})`);
+            `13c. Approve with changes on it: a credit's shape sent with the changes is dropped, no credit written (${show(sugOk)})`);
 
         // An assistant's draft (the door asks this before it files one).
         const k = checkAssistantKnowledgeDraft('remove-photo-test-grant', { ...WORDS, about: KNOWLEDGE_ABOUT[0], sources: [WORDS.sources[0], STALE_C1, MEL_SOURCE] });
@@ -529,6 +529,7 @@ async function main(): Promise<void> {
             ['a Commons file page in a person\'s own words', MAP_SOURCE],
             ['the file page of a credit taken off, in a person\'s own words', { url: C1.url, label: 'Where the first photo came from' }],
             ['a camera with no number', { url: C1.url.replace('Lookout_one', 'Lookout_dawn'), label: '📷 The lookout at dawn' }],
+            ['a camera and a year, no picture\'s number', { url: C1.url.replace('Lookout_one', 'Old_jetty'), label: '📷 2019 · the old jetty' }],
             ['a "📷 n ·" label on any other address', { url: 'https://parks.example/photo-2', label: '📷 2 · Parks staff · CC BY 4.0' }],
         ];
         for (const [what, row] of kept) assert(keeps(row), `14. kept: ${what}`);

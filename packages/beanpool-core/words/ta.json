@@ -2866,7 +2866,7 @@
   "Hear when {name} says yes.": "{name} சம்மதிக்கும்போது அறிந்துகொள்ளுங்கள்.",
   "You'll hear when {name} says yes.": "{name} சம்மதிக்கும்போது உங்களுக்குத் தெரியும்.",
   "Tell me": "எனக்குத் தெரிவி",
-  "Hear from {community}": "{community}-இலிருந்து செய்திகளைப் பெறுங்கள்",
+  "Hear from {community}": "{community} இலிருந்து செய்திகளைப் பெறுங்கள்",
   "Hear from your community": "உங்கள் சமூகத்திலிருந்து செய்திகளைப் பெறுங்கள்",
   "BeanPool never emails or texts you.": "BeanPool உங்களுக்கு ஒருபோதும் மின்னஞ்சலோ SMS-ஓ அனுப்பாது.",
   "Notifications are the only way it can reach you.": "உங்களை அடைய அதற்கு உள்ள ஒரே வழி அறிவிப்புகள்தான்.",

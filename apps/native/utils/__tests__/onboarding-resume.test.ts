@@ -304,3 +304,45 @@ describe('the welcome screen', () => {
         expect(after).toMatch(/setGlobalPhase\(next === 'restore' \? 'restore' : answer\.kind === 'door_closed' \? 'unavailable' : 'closed'\);/);
     });
 });
+
+/**
+ * The join's last screen, the soft ask for notifications (slice N1j, DESIGN-notify-and-backup-asks-fable-amend2.md §4.2): a
+ * join stopped on it resumes on it, on every door, and keeps what the way back had kept as it handed over, so Home's card
+ * starts as the way back left it. A 1.4.7 record never holds the step (no conversion code: nothing stored is rewritten).
+ */
+describe('resuming on the notifications screen (N1j)', () => {
+    const records: PendingOnboarding[] = [
+        { step: 'notify', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://riverside.example', callsign: 'Sam', redeemed: true, newKey: KEY },
+        { step: 'notify', flow: 'global', inviteCode: '', anchorUrl: GLOBAL, callsign: 'Sam', redeemed: true, newKey: KEY },
+        { step: 'notify', flow: 'claim', inviteCode: '', anchorUrl: 'https://beans.example.org', callsign: 'Ada', redeemed: true, freshKey: KEY },
+    ];
+
+    for (const r of records) {
+        it(`${r.flow}: back on the notifications screen with the key it carries on with`, () => {
+            const plan = resumePlan(r, STORED);
+            expect(plan).toMatchObject({ action: 'resume', mode: 'notify', flow: r.flow, wayBackKept: false });
+            if (plan.action !== 'resume') throw new Error('expected resume');
+            expect(plan.identity).toBe(STORED);
+            expect(wizardHold(r)).toBe('wizard');
+        });
+    }
+
+    it('keeps what the way back had kept as it handed over, on the notifications screen and the owner\'s card only', () => {
+        expect(resumePlan({ ...records[0], wayBackKept: true }, STORED)).toMatchObject({ mode: 'notify', wayBackKept: true });
+        expect(resumePlan({ ...records[2], step: 'ownerCard', wayBackKept: true }, STORED)).toMatchObject({ mode: 'ownerCard', wayBackKept: true });
+        // On the way back itself the screen says again; a value that is not true is not kept.
+        expect(resumePlan({ ...records[0], step: 'seedBackup', wayBackKept: true }, STORED)).toMatchObject({ mode: 'seedBackup', wayBackKept: false });
+        expect(resumePlan({ ...records[0], wayBackKept: 'yes' as never }, STORED)).toMatchObject({ wayBackKept: false });
+    });
+
+    it('the welcome screen writes the step and the way back\'s answer as it hands over, and reads them back', () => {
+        const s = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+        const hand = s.slice(s.indexOf('async function handOverFromWayBack('), s.indexOf('/** "Turn on notifications"'));
+        expect(hand).toContain("await updatePendingOnboarding({ step: 'notify', wayBackKept: wayBackIsKept })");
+        expect(hand).toContain("updatePendingOnboarding({ step: 'ownerCard', wayBackKept: wayBackIsKept })");
+        expect(s).toContain('setKeptAtHandover(plan.wayBackKept);');
+        expect(s).toContain('const wayBackIsKept = keptAtHandover || wayBackKept(');
+        // A join resumed there whose phone answered since goes straight on (never stranded).
+        expect(s).toMatch(/const due = await notifyJoinDue\(notifyPath\);\s*if \(!live\) return;\s*if \(due\) await showNotifyJoin\(\);\s*else afterTheAsk\(\);/);
+    });
+});

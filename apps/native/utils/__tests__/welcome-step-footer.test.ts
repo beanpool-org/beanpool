@@ -53,6 +53,24 @@ describe('the join steps\' main button is in a footer that stays on screen', () 
         });
     }
 
+    // The notifications screen (slice N1j) is its own component: both its buttons in its StepFooter, after its scroll view, so
+    // neither scrolls away at 320 dp with 1.3x text (amend2 §4.2); "Later" a full 48 dp target.
+    it('the notifications screen: both buttons in its StepFooter, after the scroll view', () => {
+        expect(step('notify')).toContain('<NotifyStep');
+        const src = fs.readFileSync(path.join(root, 'components/welcome/NotifyStep.tsx'), 'utf8');
+        const scrollEnd = src.indexOf('</ScrollView>');
+        const open = src.indexOf('<StepFooter testID="step-footer-notify"');
+        const close = src.indexOf('</StepFooter>', open);
+        expect(scrollEnd).toBeGreaterThan(-1);
+        expect(open).toBeGreaterThan(scrollEnd);
+        const inFooter = src.slice(open, close);
+        expect(inFooter).toMatch(/onPress=\{onTurnOn\}/);
+        expect(inFooter).toMatch(/onPress=\{onLater\}/);
+        expect(inFooter.indexOf('onPress={onTurnOn}')).toBeLessThan(inFooter.indexOf('onPress={onLater}'));
+        expect(src.slice(0, scrollEnd)).not.toMatch(/onPress=\{on(TurnOn|Later)\}/);
+        expect(src).toMatch(/later: \{ minHeight: 48,/);
+    });
+
     it('the invite step keeps its fields clear of the footer while typing', () => {
         const src = step("create') {");
         expect(src).toMatch(/bottomOffset=\{24 \+ stepFooterHeight\}/);

@@ -139,9 +139,9 @@ describe('CalendarScreen route component', () => {
     });
 
     // Two rows below ("auto-selects first active date", "preserves active user date selection") put their events on
-    // today + 1 and today + 3, each capped at the 28th. On the real clock, from the
-    // 26th to the end of every month both days fell on the same date and the rows went red (a date bomb that went off
-    // monthly). A mid-month today keeps them apart. Date only: the timers stay real.
+    // today + 1 and today + 3, each capped at the 28th. On the real clock, from the 26th to the end of every month both
+    // days fell on the same date and the rows went red (a date bomb that went off monthly). A mid-month today keeps them
+    // apart. Date only: the timers stay real.
     function pinMidMonth() {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-11-10T10:00:00'));

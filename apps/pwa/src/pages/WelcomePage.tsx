@@ -48,7 +48,7 @@ import { rekeyCodeFromSearch } from '../lib/web-rekey';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { AddSignIn, startWayBackShown } from '../components/OneWayBack';
 import { NotifyAsk } from '../components/NotifyAsk';
-import { laterFromAsk, markNotifyAskHere, notifyJoinDueHere, notifyPrompterHere, turnOnFromAsk } from '../lib/web-push';
+import { laterFromAsk, notifyJoinDueHere, notifyPrompterHere, turnOnFromAsk } from '../lib/web-push';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, PRIVATE_PREVIEW_MESSAGE, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { privatePreviewOn } from '../lib/visitor-lobby';
 import { nodeNameFor, withNodeName } from '../lib/member-name';
@@ -1237,8 +1237,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     async function finishJoin() {
         if (!pendingIdentity || !(await finishOnboarding())) return;
         if (notifyJoinDueHere(notifyPath, pendingIdentity.publicKey)) {
-            // It takes the day's soft ask, and is counted once (N1c), never waited on.
-            markNotifyAskHere(pendingIdentity.publicKey, { type: 'shown', surface: 'join' });
+            // Counted once (N1c), never waited on. Kept on this browser's record as met (the day's ask, `joinAt`) only with
+            // its answer (lib/web-push.ts turnOnFromAsk, laterFromAsk): this join can't come back to the screen after a
+            // reload or a closed tab, so one left unanswered leaves Home's once card to ask, as the phone's join resumes on it.
             void recordOnboardingEvent(NOTIFY_SHOWN);
             setNotifyFailed(false);
             setNotifyUp(true);

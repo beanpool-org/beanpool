@@ -88,13 +88,45 @@ describe("the browser's answer at Turn on (N5a)", () => {
     it("the browser's no is recorded apart, with its date", () => {
         expect(markNotifyAsk({}, notifyOutcomeEvent('declined', 'join'), NOW)).toEqual({ phoneNoAt: NOW });
     });
-    it('a yes is the record’s granted', () => {
-        expect(markNotifyAsk({}, notifyOutcomeEvent('granted', 'once'), NOW)).toEqual({ state: 'granted', updatedAt: NOW });
+    it('a yes is the record’s granted; on the once card it also closes the card for good (review of d2a4734f)', () => {
+        expect(markNotifyAsk({}, notifyOutcomeEvent('granted', 'join'), NOW)).toEqual({ state: 'granted', updatedAt: NOW });
+        expect(markNotifyAsk({}, notifyOutcomeEvent('granted', 'once'), NOW)).toEqual({ state: 'granted', updatedAt: NOW, onceClosedAt: NOW });
+    });
+    it("the browser's no on the once card closes it too; an earlier close keeps its date", () => {
+        expect(markNotifyAsk({}, notifyOutcomeEvent('declined', 'once'), NOW)).toEqual({ phoneNoAt: NOW, onceClosedAt: NOW });
+        expect(markNotifyAsk({ onceClosedAt: NOW - DAY }, notifyOutcomeEvent('granted', 'once'), NOW).onceClosedAt).toBe(NOW - DAY);
     });
     it('Later on the once card puts it away', () => {
         const r = markNotifyAsk<NotifyAskRecord>({ onceAt: NOW - DAY }, notifyOutcomeEvent('unanswered', 'once'), NOW);
         expect(r.onceClosedAt).toBe(NOW);
         expect(notifyAsks({ record: r, phone: notifyBrowserPhone({ push: true, permission: 'default', on: false }), now: NOW + DAY }).once).toBe(false);
+    });
+});
+
+describe("the once card closed for good (review of d2a4734f: it came back after Settings' Turn off)", () => {
+    // The browser still allows the site, and this account is off here: it reads as able to ask.
+    const OFF_HERE = notifyBrowserPhone({ push: true, permission: 'granted', on: false });
+    const once = (record: NotifyAskRecord, at: number) => notifyAsks({ record, phone: OFF_HERE, now: at }).once;
+
+    it("a yes on the card, then Turn off in Settings: no card on any later landing [closesOnce on 'granted']", () => {
+        let r = markNotifyAsk<NotifyAskRecord>({}, { type: 'shown', surface: 'once' }, NOW);
+        r = markNotifyAsk(r, notifyOutcomeEvent('granted', 'once'), NOW + 60_000);
+        for (const at of [NOW + 3_600_000, NOW + DAY, NOW + 6 * DAY]) expect(once(r, at)).toBe(false);
+    });
+    it("Turn off in Settings ('off') closes it, drawn or not, and keeps the first close's date [closesOnce on 'off']", () => {
+        expect(markNotifyAsk<NotifyAskRecord>({}, { type: 'off' }, NOW)).toEqual({ onceClosedAt: NOW });
+        expect(markNotifyAsk<NotifyAskRecord>({ onceClosedAt: NOW - DAY }, { type: 'off' }, NOW)).toEqual({ onceClosedAt: NOW - DAY });
+        const drawn = markNotifyAsk(markNotifyAsk<NotifyAskRecord>({}, { type: 'shown', surface: 'once' }, NOW - DAY), { type: 'off' }, NOW);
+        expect(once(drawn, NOW + DAY)).toBe(false);
+    });
+    it("never drawn, then Turn off in Settings: never the card, though no onceAt is on record [once: onceClosedAt alone]", () => {
+        const r = markNotifyAsk<NotifyAskRecord>({}, { type: 'off' }, NOW);
+        for (const at of [NOW + 3_600_000, NOW + DAY, NOW + 8 * DAY]) expect(once(r, at)).toBe(false);
+    });
+    it("'off' is no no: the join's screen on a later join and the bell's line still read the browser", () => {
+        const r = markNotifyAsk<NotifyAskRecord>({}, { type: 'off' }, NOW - DAY);
+        expect(notifyAsks({ record: r, phone: OFF_HERE, now: NOW })).toMatchObject({ join: true, once: false, bell: true });
+        expect(r.phoneNoAt).toBeUndefined();
     });
 });
 

@@ -54,7 +54,10 @@ export interface NotifyAskRecord {
     askKind?: NotifyAskSurface;
     /** The join's last screen was shown on this phone (last time). */
     joinAt?: number;
-    /** The once card on Home was first shown, and when it was answered with "Later". */
+    /**
+     * The once card on Home was first shown, and when it was closed for good: any answer on it ("Later", a yes, the phone's
+     * or the browser's no), or this account's notifications turned off in the app's own Settings (the web's Turn off).
+     */
     onceAt?: number;
     onceClosedAt?: number;
     /** The kinds of named line already shown: each kind once. */
@@ -250,7 +253,9 @@ export function notifyFirstStepsLine(r: NotifyAskRecord, p: NotifyPhone): boolea
  * - **join**, the join's last screen: also on a later join after a "Later", never twice in a day; one shown today and not
  *   yet answered shows again (a join killed on it resumes on it).
  * - **once**, the card on Home for a member who never met the join's screen on this phone (after the update, after a
- *   restore; an older app's "Not now" included): first shown on a free day, then each landing until "Later" or for 7 days.
+ *   restore; an older app's "Not now" included): first shown on a free day, then each landing until it is answered or for
+ *   7 days. Never again once closed (`onceClosedAt`): any answer on it, a yes included, or a Turn off in the app's own
+ *   Settings, which is the member's choice even where the browser still allows the site.
  * - **line**, a named line at the member's own act: each kind once. The day of the join's screen still allows one.
  * - **home**, the card while something of theirs is live: not 7 days after a "Later", × puts it away 30 days and for good
  *   at the third, never with the once card.
@@ -268,8 +273,8 @@ export function notifyAsks(i: NotifyAskInput): NotifyAsks {
     const joinUnanswered = askedToday === 'join' && typeof r.joinAt === 'number' && !(laterAt !== null && laterAt >= r.joinAt);
     const join = canAsk && (free || joinUnanswered);
 
-    const onceOpen = typeof r.onceAt === 'number' && typeof r.onceClosedAt !== 'number' && since(r.onceAt) < NOTIFY_ONCE_CARD_DAYS * DAY_MS;
-    const once = canAsk && typeof r.joinAt !== 'number'
+    const onceOpen = typeof r.onceAt === 'number' && since(r.onceAt) < NOTIFY_ONCE_CARD_DAYS * DAY_MS;
+    const once = canAsk && typeof r.joinAt !== 'number' && typeof r.onceClosedAt !== 'number'
         && (typeof r.onceAt !== 'number' ? free : onceOpen && (free || askedToday === 'once'));
 
     const line = canAsk && !!i.line && !(r.lines ?? []).includes(i.line) && (free || askedToday === 'join');
@@ -373,9 +378,14 @@ export type NotifyAskEvent =
     | { type: 'later'; surface?: NotifyAskSurface }
     /** × on the Home card. */
     | { type: 'away' }
-    /** The phone's pop-up answered. */
-    | { type: 'granted' }
-    | { type: 'phone-no' };
+    /** The phone's (or browser's) pop-up answered, at a tap on `surface`: on the once card either answer also closes it. */
+    | { type: 'granted'; surface?: NotifyAskSurface }
+    | { type: 'phone-no'; surface?: NotifyAskSurface }
+    /**
+     * This account's notifications turned off in the app's own Settings (the web's Turn off, slice N5a). The member's
+     * choice: the once card never shows again. The browser may still allow the site, so nothing else reads it as a no.
+     */
+    | { type: 'off' };
 
 /** The record after an event. Pure: the caller stores what it returns. Fields it doesn't know are kept. */
 export function markNotifyAsk<R extends NotifyAskRecord>(r: R, e: NotifyAskEvent, now: number): R {
@@ -400,10 +410,17 @@ function notifyAskChange(r: NotifyAskRecord, e: NotifyAskEvent, now: number): No
         case 'away':
             return { homeAwayAt: now, homeAways: (r.homeAways ?? 0) + 1 };
         case 'granted':
-            return { state: 'granted', updatedAt: now };
+            return { state: 'granted', updatedAt: now, ...closesOnce(r, e.surface, now) };
         case 'phone-no':
-            return { phoneNoAt: now };
+            return { phoneNoAt: now, ...closesOnce(r, e.surface, now) };
+        case 'off':
+            return closesOnce(r, 'once', now);
     }
+}
+
+/** The once card closed for good, at its first close: an answer on it (`surface` 'once'), or a Turn off in Settings. */
+function closesOnce(r: NotifyAskRecord, surface: NotifyAskSurface | undefined, now: number): NotifyAskRecord {
+    return surface === 'once' && typeof r.onceClosedAt !== 'number' ? { onceClosedAt: now } : {};
 }
 
 /**
@@ -542,9 +559,12 @@ export function notifyBrowserOutcome(r: NotifyBrowserResult): Exclude<NotifyJoin
     return r === 'failed' ? null : 'unanswered';
 }
 
-/** The record's event for a way off a soft ask: the browser's or phone's yes, its no, or a "Later" (on `surface`). */
+/**
+ * The record's event for a way off a soft ask: the browser's or phone's yes, its no, or a "Later", each on `surface`, so
+ * any answer on the once card closes it for good (a yes too: switched off later in Settings, the card stays closed).
+ */
 export function notifyOutcomeEvent(o: NotifyJoinOutcome, surface: NotifyAskSurface): NotifyAskEvent {
-    if (o === 'granted') return { type: 'granted' };
-    if (o === 'declined' || o === 'settings') return { type: 'phone-no' };
+    if (o === 'granted') return { type: 'granted', surface };
+    if (o === 'declined' || o === 'settings') return { type: 'phone-no', surface };
     return { type: 'later', surface };
 }

@@ -12,7 +12,7 @@
 import { useState } from 'react';
 import { PEEK_WORDS, notifyJoinWords, t, word } from '@beanpool/core';
 import {
-    TELL_ME_WORDS, cannotLines, grantedLine, pushEnv, pushPlace, turnOffWebPush, turnOnWebPush, webPushOrigin, webPushState,
+    TELL_ME_WORDS, cannotLines, grantedLine, pushEnv, pushPlace, turnOffFromSettings, turnOnWebPush, webPushOrigin, webPushState,
     type PushEnv, type WebPushState,
 } from '../lib/web-push';
 import { getNodeApiUrl } from '../lib/api';
@@ -63,7 +63,8 @@ export function WebPushRow({ identity, env }: { identity: BeanPoolIdentity; env?
     const turnOff = async () => {
         if (!origin) return;
         setBusy(true);
-        await turnOffWebPush(origin, identity);
+        // The member's choice, kept: Home's once card never asks again here (lib/web-push.ts turnOffFromSettings).
+        await turnOffFromSettings(origin, identity);
         setBusy(false);
         setState(webPushState(origin, identity.publicKey, envNow()));
     };

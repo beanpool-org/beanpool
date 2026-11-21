@@ -487,22 +487,46 @@ export function notifyOnceDueHere(publicKey: string, env: PushEnv = pushEnv(), n
 }
 
 /**
+ * An answer on the join's last screen or Home's once card, kept as core says (notifyOutcomeEvent: on the once card any
+ * answer closes it for good, a yes included). The join's screen is kept as met (core's `shown`: its `joinAt` and the day's
+ * ask) only WITH its answer, never as it shows: the web's join can't come back to that screen after a reload or a closed tab,
+ * where the phone's resumes on it (core notifyAsks `join`: a join killed on it resumes on it). So a join left there
+ * unanswered is, on the web as on the phone, an ask still owed, and Home's once card, which core draws only while no join's
+ * screen is on record, asks it in the join's place.
+ */
+function answerAsk(publicKey: string, surface: NotifyAskSurface, e: NotifyAskEvent, now: number = Date.now()): void {
+    if (surface === 'join') markNotifyAskHere(publicKey, { type: 'shown', surface: 'join' }, now);
+    markNotifyAskHere(publicKey, e, now);
+}
+
+/**
  * "Turn on notifications" on the join's last screen or Home's once card: {@link turnOnWebPush} (the browser's own prompt,
- * only inside this tap: nothing is awaited before it), and its answer kept as core says (notifyBrowserOutcome): a yes; the
- * browser's no, apart and dated; a prompt closed with no answer (browsers say 'default' then) as a "Later", never a no. A
- * subscription the community didn't take keeps nothing: the caller says so and keeps its buttons. Never throws.
+ * only inside this tap: nothing is awaited before it), and its answer kept ({@link answerAsk}; core's notifyBrowserOutcome):
+ * a yes; the browser's no, apart and dated; a prompt closed with no answer (browsers say 'default' then) as a "Later", never
+ * a no. A subscription the community didn't take keeps nothing: the caller says so and keeps its buttons. Never throws.
  */
 export async function turnOnFromAsk(identity: BeanPoolIdentity, lang: string, surface: NotifyAskSurface, env: PushEnv = pushEnv()): Promise<NotifyBrowserResult> {
     const origin = webPushOrigin(getNodeApiUrl());
     const r: NotifyBrowserResult = origin ? await turnOnWebPush(origin, identity, lang, env).then((a): NotifyBrowserResult => (a.ok ? 'ok' : a.reason)) : 'cannot';
     const outcome = notifyBrowserOutcome(r);
-    if (outcome) markNotifyAskHere(identity.publicKey, notifyOutcomeEvent(outcome, surface));
+    if (outcome) answerAsk(identity.publicKey, surface, notifyOutcomeEvent(outcome, surface));
     return r;
 }
 
-/** "Later" on either: dated, never a no; on the once card it also puts the card away. */
+/** "Later" on either: dated, never a no ({@link answerAsk}); on the once card it also puts the card away. */
 export function laterFromAsk(publicKey: string, surface: NotifyAskSurface): void {
-    markNotifyAskHere(publicKey, { type: 'later', surface });
+    answerAsk(publicKey, surface, { type: 'later', surface });
+}
+
+/**
+ * Settings → Notifications' Turn off, the member's own (components/WebPushRow.tsx): the choice kept first (core's `off`:
+ * Home's once card never asks again for this account here, though the browser still allows the site and would read as
+ * able to ask), then {@link turnOffWebPush}. Only this tap: an open that finds the browser forgot the permission
+ * (keepWebPushAtOpen) or an account leaving this browser is no choice of the member's, and keeps nothing.
+ */
+export async function turnOffFromSettings(origin: string, identity: BeanPoolIdentity): Promise<void> {
+    markNotifyAskHere(identity.publicKey, { type: 'off' });
+    await turnOffWebPush(origin, identity);
 }
 
 /**

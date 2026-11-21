@@ -129,7 +129,7 @@ describe('the parts', () => {
         expect(notifyPhoneSaidNo({ phoneNoAt: 1 }, ASK)).toBe(true);
         expect(notifyPhoneSaidNo({}, ASK)).toBe(false);
         expect(notifyPhoneSaidNo({}, SETTINGS)).toBe(true);
-        expect([NONE, ON, ASK, SETTINGS].map(notifyTurnOn)).toEqual(['none', 'none', 'ask', 'settings']);
+        expect([NONE, ON, ASK, SETTINGS].map((p) => notifyTurnOn(p, {}))).toEqual(['none', 'none', 'ask', 'settings']);
     });
 
     it("notifyFirstStepsLine stays through a Later and leaves after the phone's no", () => {

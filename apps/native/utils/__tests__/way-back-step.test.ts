@@ -197,7 +197,8 @@ describe('welcome.tsx wires them in one place each', () => {
     it('kept and skipped from the same facts; the words ticked count only once the step is open', () => {
         expect(welcome).toContain("const signInKept = protection.state === 'covered';");
         expect(welcome).toContain('const skipWayBack = wayBackSkipped(joinFlow, wayBackKept({ signIn: signInKept, wordsTicked: false, before: keptBefore }));');
-        expect(welcome).toContain('const wayBackIsKept = wayBackKept({ signIn: signInKept, wordsTicked: seedConfirmed, before: keptBefore });');
+        // Slice N1j: or what the way back had kept as it handed over, on a join resumed after it (onboarding-state.ts `wayBackKept`).
+        expect(welcome).toContain('const wayBackIsKept = keptAtHandover || wayBackKept({ signIn: signInKept, wordsTicked: seedConfirmed, before: keptBefore });');
         // Read from storage for the account the join holds (or, on Your name, the account already on the phone), kept with the
         // key it was read for: false until read, for a new account, and for any other account. Never a guess that skips.
         const load = between('const [keptFor, setKeptFor] = useState<{ key: string; kept: boolean } | null>(null);', '}, [pendingKey]);');
@@ -209,14 +210,19 @@ describe('welcome.tsx wires them in one place each', () => {
     it('the global door\'s name screen counts the screens the way chosen leads to (review of #3330)', () => {
         const door = between("if (mode === 'globalJoin') {", '<View style={styles.card}>');
         expect(door).toContain("const doorSkipsWayBack = wayBackSkipped('global', wayBackKept({ signIn: doorKeepsSignInCopy(doorWay, globalDoorCopies), wordsTicked: false, before: keptBefore }));");
-        expect(door).toContain('<StepBar step="name" flow="global" wayBack={!doorSkipsWayBack} busy={loading} />');
+        // Slice N1j: and the notifications screen's dot where this phone will show it.
+        expect(door).toContain('<StepBar step="name" flow="global" wayBack={!doorSkipsWayBack} notify={notifyDue} busy={loading} />');
         // Not the photo's skip: the join holds no copy yet on the door (its enrolment comes as the join lands).
         expect(door).not.toContain('wayBack={!skipWayBack}');
     });
 
-    it('the photo goes on to the way back, or past it to Home only where one is kept', () => {
+    it('the photo goes on to the way back, or past it only where one is kept (to the notifications screen, or Home)', () => {
         const to = between('async function toWayBack() {', '\n    }\n');
-        expect(to).toContain('if (skipWayBack) return handleConfirmSeed();');
+        // Slice N1j: past the way back is what follows it, through the one hand-over the way back's button uses too.
+        expect(to).toContain('if (skipWayBack) return handOverFromWayBack();');
+        const hand = between('async function handOverFromWayBack() {', '\n    }\n');
+        expect(hand).toContain('if (!due) return afterTheAsk();');
+        expect(between('function afterTheAsk() {', '\n    }\n')).toContain('void handleConfirmSeed();');
         expect(to).toContain("setMode('seedBackup');");
         const profile = between('async function handleCompleteProfile() {', '\n    }\n');
         expect(profile.match(/await toWayBack\(\);/g)).toHaveLength(2);
@@ -231,10 +237,13 @@ describe('welcome.tsx wires them in one place each', () => {
 
     it('the button\'s words from the rule, and what follows from afterWayBack: N1j hangs off one place', () => {
         const s = step();
-        expect(s).toContain('const next = afterWayBack(joinFlow);');
+        // Slice N1j: the notifications screen follows where this phone shows it, so the button reads Next then.
+        expect(s).toContain('const next = afterWayBack(joinFlow, notifyDue);');
         expect(s).toContain('const button = wayBackButton(wayBackIsKept, next);');
         expect(s).toContain("{button === 'later' ? t('Later') : button === 'next' ? t('Next') : t(\"Let's go\")}");
-        expect(s).toContain("if (next === 'ownerCard') {");
+        // The one place it hangs off: the hand-over, then the owner's card on a claim, else Home.
+        expect(s).toContain('void handOverFromWayBack();');
+        expect(between('function afterTheAsk() {', '\n    }\n')).toContain("if (afterNotify(joinFlow) === 'ownerCard') {");
         // A choice is counted as what it was: a sign-in's copy, the words, or Later.
         expect(s).toContain("recordOnboardingEvent('protection_choice', signInKept ? 'sso' : seedConfirmed ? 'words' : 'skip');");
     });

@@ -21,7 +21,13 @@ import { GLOBAL_NODE_URL } from './global-node-url';
  * when redemption moved to Step 1, and the stale comment is most of why a redundant second
  * redeem survived at the end of the wizard for so long — see `redeemed` below.)
  */
-export type OnboardingStep = 'create' | 'globalJoin' | 'claim' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'ownerCard';
+export type OnboardingStep = 'create' | 'globalJoin' | 'claim' | 'profileSetup' | 'seedBackup' | 'notify' | 'onboardingGuide' | 'ownerCard';
+/*
+ * `notify`: the join's last screen, the soft ask for notifications (slice N1j of DESIGN-notify-and-backup-asks-fable-amend2.md
+ * §4), after the way back and before Home or a claim's owner's card, on a phone that has to ask. Every flow's: a join stopped
+ * there resumes there ({@link resumePlan}), and the screen goes straight on if the phone has answered since. A 1.4.7 record
+ * never holds it; nothing stored is rewritten.
+ */
 /**
  * The steps the wizard has now. `onboardingGuide` (How it Works) left the path in slice S5
  * (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §3.1, §4.3): this app never writes it, and a record a 1.4.7
@@ -122,6 +128,13 @@ export interface PendingOnboarding {
      * unregistered on the node with no second chance.
      */
     redeemed?: boolean;
+    /**
+     * Written as the way back hands over to the screens after it (the notifications screen, a claim's owner's card): whether a
+     * way back was kept on it (utils/join-steps.ts `wayBackKept`: a sign-in's copy, the words ticked, or one known before).
+     * The tick and the sign-in's answer live only on the screen, so a join stopped after it would otherwise reach Home reading
+     * "not kept", and Home's way-back card would start shown over a way back the member kept. Absent: not known, as before.
+     */
+    wayBackKept?: boolean;
 }
 
 const KEY = 'beanpool_pending_onboarding';
@@ -229,6 +242,8 @@ export type ResumePlan =
          * Cleaned again as it is read; null when none was kept.
          */
         communityName: string | null;
+        /** A step after the way back: the way back was kept on it (`wayBackKept`). False on every other step, and when absent. */
+        wayBackKept: boolean;
     };
 
 /**
@@ -309,6 +324,7 @@ export function resumePlan(
         claimCodeId: flow === 'claim' && pending.step === 'claim' && typeof pending.claimCodeId === 'string' && CLAIM_CODE_ID.test(pending.claimCodeId)
             ? pending.claimCodeId : null,
         communityName: flow === 'claim' || (flow === 'global' && anchorUrl !== GLOBAL_NODE_URL) ? cleanClaimName(pending.communityName) : null,
+        wayBackKept: (pending.step === 'notify' || pending.step === 'ownerCard') && pending.wayBackKept === true,
     };
 }
 

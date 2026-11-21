@@ -22,7 +22,7 @@ import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCac
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import {
     bundledAvatarForPubkey, combineKnockTicks, inviteForInviteBox, joinRuleLines, knockTickOf, landingPostId, listingAfterJoinHost, lowercaseRecoveryWords, NAME_BOX_WORDS, notANameIn,
-    postIdFromInviteLink, postRulesFor, splitBold,
+    notifyJoinWords, postIdFromInviteLink, postRulesFor, splitBold,
     type KnockWatchTick, type KnownRule,
     shareAddress,
 } from '@beanpool/core';
@@ -107,7 +107,9 @@ import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
 import { StepBar } from '../components/welcome/StepDots';
 import { WayBackTile } from '../components/welcome/WayBackTile';
-import { afterWayBack, doorKeepsSignInCopy, keptBeforeFor, wayBackButton, wayBackKept, wayBackSkipped } from '../utils/join-steps';
+import { JOIN_END_WAIT_MS, afterNotify, afterWayBack, doorKeepsSignInCopy, keptBeforeFor, wayBackButton, wayBackKept, wayBackSkipped } from '../utils/join-steps';
+import { NotifyStep } from '../components/welcome/NotifyStep';
+import { laterFromJoin, notifyJoinDue, notifyJoinPathOf, showNotifyJoin, turnOnFromJoin } from '../utils/notify-join-step';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
 
 /** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. Not
@@ -201,7 +203,7 @@ export default function WelcomeScreen() {
     const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'confirmReplace'].includes(params.mode as string))
         ? (params.mode as any)
         : 'home';
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'ownerCard' | 'confirmReplace'>(initialMode);
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'notify' | 'ownerCard' | 'confirmReplace'>(initialMode);
     useEffect(() => {
         if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'confirmReplace'].includes(params.mode as string)) {
             setMode(params.mode as any);
@@ -799,8 +801,30 @@ export default function WelcomeScreen() {
     const signInKept = protection.state === 'covered';
     /** Kept before the step opens: the join goes past it, with one dot fewer. */
     const skipWayBack = wayBackSkipped(joinFlow, wayBackKept({ signIn: signInKept, wordsTicked: false, before: keptBefore }));
+    /**
+     * A join resumed on a step after the way back (the notifications screen, the owner's card): what the way back had kept as
+     * it handed over (onboarding-state.ts `wayBackKept`). The tick and a sign-in's answer live only on that screen, so without
+     * it the end of the join would read "not kept" and start Home's card shown over a way back kept. Cleared on the way back
+     * itself, where the screen says again.
+     */
+    const [keptAtHandover, setKeptAtHandover] = useState(false);
+    useEffect(() => { if (mode === 'seedBackup') setKeptAtHandover(false); }, [mode]);
     /** Kept by now: the step's button reads Let's go (or Next), and Home's card starts put away. */
-    const wayBackIsKept = wayBackKept({ signIn: signInKept, wordsTicked: seedConfirmed, before: keptBefore });
+    const wayBackIsKept = keptAtHandover || wayBackKept({ signIn: signInKept, wordsTicked: seedConfirmed, before: keptBefore });
+
+    /**
+     * The join's last screen, the soft ask for notifications (slice N1j, DESIGN-notify-and-backup-asks-fable-amend2.md §4):
+     * whether this phone will show it (core's `notifyJoinStep`: an iPhone or Android 13+ that still can ask, never Android 8
+     * to 12), read as the join starts so every step's dots count it (the phone's state is read, never asked), and read again
+     * as the way back hands over (handOverFromWayBack). A restore passes no join and never reads it.
+     */
+    const notifyPath = notifyJoinPathOf(joinFlow, !createAnchorUrl || createAnchorUrl === GLOBAL_NODE_URL);
+    const [notifyDue, setNotifyDue] = useState(false);
+    useEffect(() => {
+        let live = true;
+        void notifyJoinDue(notifyPath).then((due) => { if (live) setNotifyDue(due); });
+        return () => { live = false; };
+    }, [notifyPath]);
 
     /**
      * Split the words and hand out the pieces, on the way into step 3.
@@ -1229,6 +1253,7 @@ export default function WelcomeScreen() {
             setJoinFlow(plan.flow);
             setJoinDoor(plan.joinDoor);
             setClaimedName(plan.communityName);
+            setKeptAtHandover(plan.wayBackKept);
             if (plan.flow === 'global' || plan.flow === 'claim') {
                 if (plan.joinEnrolment) setEnrolment(plan.joinEnrolment);
                 getCachedNodeProfile(plan.anchorUrl)
@@ -1611,11 +1636,16 @@ export default function WelcomeScreen() {
                         };
                         const bodyString = JSON.stringify(payloadObj);
                         const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
+                        // Bounded (utils/join-steps.ts JOIN_END_WAIT_MS): a community that never answers is a photo kept for
+                        // the next sync, never a member held on the join's last screen.
+                        const photoWait = new AbortController();
+                        const photoTimer = setTimeout(() => photoWait.abort(), JOIN_END_WAIT_MS.photo);
                         const res = await fetch(`${url}/api/profile/update`, {
                             method: 'POST',
                             headers,
                             body: bodyString,
-                        });
+                            signal: photoWait.signal,
+                        }).finally(() => clearTimeout(photoTimer));
                         if (res.ok) {
                             // A working style waiting here stays: this publish said nothing of it.
                             await clearPendingProfileChange(url, undefined, undefined, true);
@@ -2462,14 +2492,123 @@ export default function WelcomeScreen() {
     // Moved to AvatarPickerSheet component
 
     /**
-     * On from the photo: the way back, or past it to Home where a way back is already kept (S4: a sign-in's copy from the
-     * global door, or what the phone knew of this account). The record says seedBackup first, so a join killed on the way in
-     * resumes on the way back, which then reads Let's go.
+     * On from the photo: the way back, or past it where a way back is already kept (S4: a sign-in's copy from the global door,
+     * or what the phone knew of this account) to what follows it (the notifications screen, or Home). The record says
+     * seedBackup first, so a join killed on the way in resumes on the way back, which then reads Let's go.
      */
     async function toWayBack() {
-        if (skipWayBack) return handleConfirmSeed();
+        if (skipWayBack) return handOverFromWayBack();
         setMode('seedBackup');
     }
+
+    /**
+     * The way back hands over (its button, or the photo where it is skipped): the notifications screen where this phone shows
+     * it (read again now, so a phone that answered meanwhile goes straight on), else {@link afterTheAsk}. The record says the
+     * step and what the way back kept, so a join stopped there resumes there and ends as the way back left it.
+     */
+    async function handOverFromWayBack() {
+        setLoading(true);
+        const due = await notifyJoinDue(notifyPath);
+        setLoading(false);
+        setNotifyDue(due);
+        if (!due) return afterTheAsk();
+        await updatePendingOnboarding({ step: 'notify', wayBackKept: wayBackIsKept }).catch(() => {});
+        setError(null);
+        setEndTried(false);
+        setMode('notify');
+    }
+
+    /** After the notifications screen (or where it doesn't show): a claim's owner's card, which stays last, else Home. */
+    function afterTheAsk() {
+        if (afterNotify(joinFlow) === 'ownerCard') {
+            updatePendingOnboarding({ step: 'ownerCard', wayBackKept: wayBackIsKept }).catch(() => {});
+            setMode('ownerCard');
+            setError(null);
+            return;
+        }
+        setEndTried(true);
+        void handleConfirmSeed();
+    }
+
+    /**
+     * The screen's showing as it is written (the effect below). Each answer waits for it first: "Later" sits where the way
+     * back's "Later" sat, so a double tap there can answer before the showing is kept, and the showing's write would then
+     * land over the answer's (both read the record, then write it). It holds only this phone's work: the phone's state read
+     * (bounded, utils/notify-join-step.ts NOTIFY_JOIN_WAIT_MS) and the record's write. The owner's counts are sent and never
+     * waited on, so neither the pop-up nor the way on stands behind a community's answer (amend2 §4.2).
+     */
+    const notifyShowing = useRef<Promise<void>>(Promise.resolve());
+
+    /**
+     * The join's end has been tried from here ({@link afterTheAsk}): only then is an error on this screen the end's own, drawn
+     * with Try again in place of the two answers. Anything else the welcome screen once said never takes the ask's place.
+     */
+    const [endTried, setEndTried] = useState(false);
+
+    /**
+     * An answer on this screen has been tapped (review of #3335, finding 2): one tap is one end. Set before either answer
+     * waits, so a resumed screen whose phone read comes back "not due" after the tap doesn't end the join a second time,
+     * and a second tap while the first waits does nothing. Cleared as the screen is entered and on ‹.
+     */
+    const answering = useRef(false);
+    useEffect(() => { if (mode === 'notify') answering.current = false; }, [mode]);
+
+    /** "Turn on notifications": the phone's own pop-up, only from this tap; whatever it answers, or if it fails, on. */
+    async function handleNotifyTurnOn() {
+        if (answering.current) return;
+        answering.current = true;
+        setLoading(true);
+        await notifyShowing.current;
+        await turnOnFromJoin(pendingIdentity?.publicKey ?? null);
+        setLoading(false);
+        afterTheAsk();
+    }
+
+    /** "Later": no "no" recorded, the phone's question unspent; on. */
+    async function handleNotifyLater() {
+        if (answering.current) return;
+        answering.current = true;
+        setLoading(true);
+        await notifyShowing.current;
+        await laterFromJoin();
+        setLoading(false);
+        afterTheAsk();
+    }
+
+    /** ‹ on the notifications screen: the way back, or the photo where the way back was skipped. */
+    function backFromNotify() {
+        const to = skipWayBack ? 'profileSetup' : 'seedBackup';
+        answering.current = false;
+        updatePendingOnboarding({ step: to }).catch(() => {});
+        setError(null);
+        setEndTried(false);
+        setMode(to);
+    }
+
+    // The notifications screen drawn: it takes the day's soft ask and is counted (utils/notify-join-step.ts). A join resumed
+    // on it whose phone has answered since (or allows without asking) goes straight on, never stranded on a screen with
+    // nothing to ask.
+    useEffect(() => {
+        if (mode !== 'notify' || !pendingIdentity) return;
+        let live = true;
+        notifyShowing.current = (async () => {
+            const due = await notifyJoinDue(notifyPath);
+            if (!live) return;
+            if (due) await showNotifyJoin();
+            else if (!answering.current) afterTheAsk();
+        })();
+        return () => { live = false; };
+    }, [mode, pendingIdentity?.publicKey]);
+
+    // Android's back button on the notifications screen: as its ‹.
+    React.useEffect(() => {
+        if (mode !== 'notify') return;
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (!loading) backFromNotify();
+            return true;
+        });
+        return () => sub.remove();
+    }, [mode, loading, skipWayBack]);
 
     async function handleCompleteProfile() {
         if (!pendingIdentity) return;
@@ -2543,6 +2682,7 @@ export default function WelcomeScreen() {
                         step="photo"
                         flow={joinFlow}
                         wayBack={!skipWayBack}
+                        notify={notifyDue}
                         busy={loading}
                         onBack={joinFlow === 'invite' ? () => {
                             updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
@@ -2648,13 +2788,14 @@ export default function WelcomeScreen() {
             setSsoListCommunities(false);
             setShowSsoSheet(true);
         };
-        const next = afterWayBack(joinFlow);
+        // Next where a screen follows (the notifications screen, a claim's owner's card), Let's go into Home; Later until kept.
+        const next = afterWayBack(joinFlow, notifyDue);
         const button = wayBackButton(wayBackIsKept, next);
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
-                    <StepBar step="wayBack" flow={joinFlow} busy={loading} onBack={handleSeedBackPress} />
+                    <StepBar step="wayBack" flow={joinFlow} notify={notifyDue} busy={loading} onBack={handleSeedBackPress} />
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header" testID="way-back-title">{t('Keep a way back in')}</Text>
                         {/* True everywhere, and not a threat (DESIGN-notify-and-backup-asks-fable.md §5.1; Marty, 21 Nov): where an
@@ -2908,15 +3049,9 @@ export default function WelcomeScreen() {
                                 const who = pendingIdentity;
                                 void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
                             }
-                            // What follows the way back (utils/join-steps.ts afterWayBack): a claim's owner's card, else Home.
-                            // The notifications screen (N1j) hangs off this one place.
-                            if (next === 'ownerCard') {
-                                updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
-                                setMode('ownerCard');
-                                setError(null);
-                            } else {
-                                void handleConfirmSeed();
-                            }
+                            // What follows the way back (utils/join-steps.ts afterWayBack): the notifications screen where this
+                            // phone shows it (slice N1j), else a claim's owner's card, else Home.
+                            void handOverFromWayBack();
                         }}
                         accessibilityRole="button"
                         testID="way-back-button"
@@ -2929,6 +3064,32 @@ export default function WelcomeScreen() {
                     </Pressable>
                 </StepFooter>
             </SafeAreaView>
+        );
+    }
+
+    // --- THE NOTIFICATIONS SCREEN: the join's last step on a phone that has to ask (slice N1j, amend2 §4), after the way back,
+    // before Home or a claim's owner's card. Named by what the join knows, never asked of a network: the community from the
+    // invite check or the claim's or door's own name, the inviter from the invite check. ---
+    if (mode === 'notify' && pendingIdentity) {
+        const invited = joinFlow === 'invite' && greeting && pendingInviteCode && greeting.code === normaliseInviteCode(pendingInviteCode) ? greeting : null;
+        const words = notifyJoinWords({
+            kind: joinFlow === 'claim' ? 'owner' : notifyPath === 'global' ? 'global' : 'community',
+            community: joinFlow === 'invite' ? invited?.community : notifyPath === 'global' ? null : claimedName,
+            inviter: invited?.inviter,
+        });
+        return (
+            <NotifyStep
+                words={words}
+                flow={joinFlow}
+                wayBack={!skipWayBack}
+                busy={loading}
+                onBack={backFromNotify}
+                onTurnOn={() => void handleNotifyTurnOn()}
+                onLater={() => void handleNotifyLater()}
+                // The join's end failed from here (handleConfirmSeed's message, as the way back and the owner's card show it):
+                // the answer is kept, so the one button tries the end again.
+                failed={endTried && error ? { message: error, retry: t('Try again'), onRetry: afterTheAsk } : null}
+            />
         );
     }
 
@@ -3083,7 +3244,7 @@ export default function WelcomeScreen() {
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
                     {/* ‹ is the front door. It waits while Join is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
-                    <StepBar step="name" flow={joinFlow} wayBack={!skipWayBack} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
+                    <StepBar step="name" flow={joinFlow} wayBack={!skipWayBack} notify={notifyDue} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
                     <View style={styles.card}>
                         <View style={styles.greetingBand} testID="invite-greeting">
                             <Text style={styles.greetingText} accessibilityRole="header">
@@ -3257,7 +3418,7 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                        <StepBar step="name" flow="global" wayBack={!doorSkipsWayBack} busy={loading} />
+                        <StepBar step="name" flow="global" wayBack={!doorSkipsWayBack} notify={notifyDue} busy={loading} />
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
 

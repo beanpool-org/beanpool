@@ -113,7 +113,7 @@ export function globalLinkRoute(phone: PhoneAtLink, initial: boolean, nowMs: num
 
 /** The first screen's modes (app/welcome.tsx). */
 export type WelcomeMode =
-    | 'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'ownerCard'
+    | 'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'notify' | 'ownerCard'
     | 'confirmReplace';
 
 /**

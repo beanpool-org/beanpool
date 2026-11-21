@@ -9,18 +9,21 @@
  * - `photo`: Your photo, always.
  * - `area`: Your area, on the web only where the community syncs listings by area (the phone has no such step).
  * - `wayBack`: the way back. Off for an account that came back with its 12 words, which has nothing to keep.
+ * - `notify`: the notifications screen (slice N1j of DESIGN-notify-and-backup-asks-fable-amend2.md §4, §12.3), last, after
+ *   the way back, only where it shows (core's `notifyJoinStep`: a phone that must ask and still can). Off by default: the
+ *   web has no such step yet (N5a).
  *
- * Kept as a list, not a count, so a later step adds itself in one place: the notifications screen (slice N1j of
- * DESIGN-notify-and-backup-asks-fable-amend2.md §12, N5a on the web) goes after the way back, as one more dot.
+ * Kept as a list, not a count, so a later step adds itself in one place.
  */
-export type JoinStep = 'name' | 'photo' | 'area' | 'wayBack';
+export type JoinStep = 'name' | 'photo' | 'area' | 'wayBack' | 'notify';
 
-export function joinStepList({ name = true, area = false, wayBack = true }: { name?: boolean; area?: boolean; wayBack?: boolean } = {}): JoinStep[] {
+export function joinStepList({ name = true, area = false, wayBack = true, notify = false }: { name?: boolean; area?: boolean; wayBack?: boolean; notify?: boolean } = {}): JoinStep[] {
     const steps: JoinStep[] = [];
     if (name) steps.push('name');
     steps.push('photo');
     if (area) steps.push('area');
     if (wayBack) steps.push('wayBack');
+    if (notify) steps.push('notify');
     return steps;
 }
 

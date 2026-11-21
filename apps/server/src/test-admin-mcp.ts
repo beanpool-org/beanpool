@@ -278,7 +278,8 @@ async function main(): Promise<void> {
             'suggest_action', 'tags_search', 'take_backup', 'update_post']),
         `an owner's assistant has the ten S1 tools, S4's suggest_action, the owner's posts (MCP-OWNER-POSTS), S2's reads and undo, the upload link, the poll tools, S3's groups and enterprises and Local knowledge's five (K6) (${names.join(', ')})`);
         assert(tools.every(t => /^Reads .+\.\nNever returns .+\./.test(t.description ?? '') && !!t.outputSchema), 'each description says what it reads, then what it never returns; each has an outputSchema');
-        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,knowledge_get,knowledge_list,listings_search,my_enterprises,my_groups,my_knowledge_drafts,my_posts,poll_results,report_get,reports_list',
+        // knowledge_draft answers each Wikimedia Commons picture's maker as Commons gave it, fenced (learn web pictures slice 2).
+        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,knowledge_draft,knowledge_get,knowledge_list,listings_search,my_enterprises,my_groups,my_knowledge_drafts,my_posts,poll_results,report_get,reports_list',
             'the tools that can return member text say it is data');
         const tb = tools.find(t => t.name === 'take_backup');
         const sa = tools.find(t => t.name === 'suggest_action');

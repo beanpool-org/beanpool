@@ -55,7 +55,7 @@ const NOT_IN_A_NAME = /[#<>[\]|{}/\u0000-\u001f\u007f]/;
 export function commonsFileName(raw: unknown): string | null {
     if (typeof raw !== 'string') return null;
     const s = raw.trim();
-    if (!/^https:\/\//i.test(s) || s.length > 2048) return null;
+    if (s.length > 2048) return null;
     let u: URL;
     try { u = new URL(s); } catch { return null; }
     if (u.protocol !== 'https:' || u.hostname !== COMMONS_HOST || u.port !== '' || u.username || u.password) return null;

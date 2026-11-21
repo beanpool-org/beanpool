@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Text, Pressable, StyleSheet, type GestureResponderEvent, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ARRANGE_WORDS, t, type CardHue } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
@@ -147,7 +147,7 @@ export function ArrangeControls({ id, ink, colors, arrange }: { id: string; ink:
  * A band for a card that has none on Home (the "one way back" card draws its own frame): the caption and the arrows, across
  * the top of that frame, as every other card's band has them in Arrange.
  */
-export function ArrangeBandRow({ id, caption, hue, colors, arrange, style, onLift }: {
+export function ArrangeBandRow({ id, caption, hue, colors, arrange, style, onLift, onLayout }: {
     id: string;
     caption: string;
     hue: CardHue;
@@ -156,13 +156,15 @@ export function ArrangeBandRow({ id, caption, hue, colors, arrange, style, onLif
     style?: StyleProp<ViewStyle>;
     /** The card can be dragged: a hold on the band lifts it, and a hold on the quiet inside under it (HoldSurface, drawn first). */
     onLift?: OnHold;
+    /** The band's own measure: a card that has no band on Home grows by it in Arrange, and Home keeps the member's place. */
+    onLayout?: (e: LayoutChangeEvent) => void;
 }) {
     const s = homeStyles(colors);
     const { tint, ink } = colors.card[hue];
     return (
         <>
             {onLift ? <HoldSurface id={id} onLift={onLift} /> : null}
-            <Pressable onLongPress={onLift} delayLongPress={ARRANGE_HOLD_MS} accessible={false} focusable={false} style={[s.captionRow, { backgroundColor: tint }, style]} testID={`card-band-${id}`}>
+            <Pressable onLongPress={onLift} delayLongPress={ARRANGE_HOLD_MS} accessible={false} focusable={false} style={[s.captionRow, { backgroundColor: tint }, style]} onLayout={onLayout} testID={`card-band-${id}`}>
                 <Text style={[s.caption, { color: ink }]} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
                     {caption}
                 </Text>

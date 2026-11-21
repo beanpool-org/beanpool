@@ -125,6 +125,8 @@ export * from './claim-proof.js';
 export * from './jury-draw.js';
 export * from './jury-card.js';
 export * from './push-notice.js';
+// Which new events tell a local community, and whom (`event.new`; notifications amend2 slice NEa).
+export * from './new-event-push.js';
 export * from './vault-wire.js';
 export * from './door-work.js';
 export * from './blocked-beans-note.js';
@@ -175,6 +177,7 @@ export * from './start-something.js';
 export * from './starter-offers.js';
 export * from './starter-sheet.js';
 export * from './deal-step.js';
+export * from './not-seen.js';
 export * from './standing-deal.js';
 export * from './enterprise-pledge.js';
 export * from './needs-you.js';

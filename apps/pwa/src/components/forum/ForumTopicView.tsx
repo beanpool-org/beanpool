@@ -29,6 +29,7 @@ import { useCoversScreen } from '../../lib/screen-cover';
 import { useGrowingComposer } from '../../lib/use-growing-composer';
 import { draftKey, draftSent, useKeptDraft } from '../../lib/chat-drafts';
 import { ReportModal } from '../ReportModal';
+import { useNotifyLine } from '../NotifyLine';
 import { ForumPhotoAttach, ForumPhotos, ForumToldSheet, ForumWords } from './ForumBits';
 import { ForumLinkChips, ForumLinkSheet, LINK_WORDS, linkDoor, linksTaken, needDraftOf, type LinkPick } from './ForumLinks';
 import type { ComposerDraft } from '../../tools/builder';
@@ -110,6 +111,10 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
     // Whether this topic is still the one on screen: an answer that lands after the member left it changes nothing there
     // (a late "not here any more" for it never takes them out of the topic they opened next).
     const shown = useRef(true);
+    // A topic followed may bring one named line under the bell, "Hear when someone replies here." [Tell me] (slice N5b, the
+    // phone's N2b; core's rule decides, once in this browser). Leaving the topic, another opened in its place, is its no.
+    const [followedOn, setFollowedOn] = useState<string | null>(null);
+    const notify = useNotifyLine(me, followedOn === null || followedOn === topicId);
 
     /**
      * Reads the posts after number `from` afresh, on through post `upTo` (or the topic's end), 30 a read: posts drawn up to
@@ -246,13 +251,28 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
                 {topic && (
                     <button type="button" data-testid="forum-follow" aria-pressed={topic.follow === 'following'}
                         aria-label={topic.follow === 'following' ? t(TOPIC_WORDS.following) : t(TOPIC_WORDS.follow)} title={topic.follow === 'following' ? t(TOPIC_WORDS.following) : t(TOPIC_WORDS.follow)}
-                        onClick={() => void act(() => followForumTopic(topic.id, topic.follow === 'following' ? null : 'following'))}
+                        onClick={() => {
+                            const next = topic.follow === 'following' ? null : 'following';
+                            void act(async () => {
+                                await followForumTopic(topic.id, next);
+                                // Followed: the member's own act, the moment for "Hear when someone replies here." Never on a
+                                // closed topic: it takes no replies (the node refuses them, forum.ts), so none can be heard.
+                                // The forum's own canReply flag (sweep-8) is not on main yet: this reads the topic's closed state.
+                                // The topic is kept only once its line is drawn: a refused offer leaves none behind.
+                                if (next && open) {
+                                    const on = topic.id;
+                                    void notify.offer({ kind: 'follow', align: 'end' }).then((ok) => { if (ok) setFollowedOn(on); });
+                                }
+                            });
+                        }}
                         className="min-w-[44px] min-h-[44px] text-lg" style={{ opacity: topic.follow === 'following' ? 1 : 0.55 }}>
                         <span aria-hidden="true">{topic.follow === 'muted' ? '🔕' : '🔔'}</span>
                     </button>
                 )}
                 {topic && <button type="button" onClick={() => setMenu({ kind: 'topic' })} aria-label={t(TOPIC_WORDS.topicMenu)} data-testid="forum-topic-menu" className="min-w-[44px] min-h-[44px] text-lg" style={{ color: 'var(--text-muted)' }}>⋯</button>}
             </div>
+            {/* Under the bell, while the topic is still followed. */}
+            {topic?.follow === 'following' && notify.view && <div data-testid="forum-follow-line" className="flex flex-col -mt-2">{notify.view}</div>}
 
             {failed && !page && (
                 <div className="flex flex-col items-start gap-2">

@@ -89,7 +89,7 @@ import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide, loadBundledGuide } from '../lib/guide';
 import type { Guide } from '@beanpool/core';
-import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, freePriceWords, shapeFeaturesOf } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, freePriceWords, notifyInterestsPromise, shapeFeaturesOf } from '@beanpool/core';
 import { perItemCard, perItemLines } from '@beanpool/core';
 import { BeansText } from '../components/BeansText';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
@@ -114,6 +114,7 @@ import { ForumVisitorHome } from '../components/forum/ForumVisitorHome';
 import { LINK_WORDS } from '../components/forum/ForumLinks';
 import { FORUM_VISITOR_WORDS, notifyJoinWords } from '@beanpool/core';
 import { NotifyAsk } from '../components/NotifyAsk';
+import { useNotifyBrowser, useNotifyLine } from '../components/NotifyLine';
 import { useNotifyOnce } from '../lib/use-web-push-member';
 import { notifyPrompterHere } from '../lib/web-push';
 import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, liftedStyle, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
@@ -1330,6 +1331,18 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const [interests, setInterests] = useState<string[] | null>(null);
     // Once shown or opened from Tune, the interests card stays for this visit: a first tap must not take it away.
     const [interestsOpen, setInterestsOpen] = useState(false);
+    // What are you into? (slice N5b, the phone's N2b): where the community tells a member when a neighbour asks for something
+    // they starred (core askedPushOn), its note promises that only while this browser can tell them (core
+    // notifyInterestsPromise, the true line), and a star brings "Hear when a neighbour asks for one of these." [Tell me] by
+    // core's rule. The card's Done is leaving it: the line goes for good.
+    const askedPush = askedPushOn(answer?.features);
+    const interestsLine = useNotifyLine(publicKey, interestsOpen, identity ?? null);
+    const interestsPromise = notifyInterestsPromise(askedPush, useNotifyBrowser(publicKey, askedPush));
+    // A star counted here and offered once its render is in (the card is open by then, also on a first tap).
+    const [starred, setStarred] = useState(0);
+    useEffect(() => {
+        if (starred) void interestsLine.offer({ kind: 'star' });
+    }, [starred]);
     // "Your way back in" is drawn: only the card knows (its schedule is in this browser), and it says so before the paint.
     const [safetyDrawn, setSafetyDrawn] = useState(false);
     const [tipsGuide, setTipsGuide] = useState<Guide | null>(() => {
@@ -2499,10 +2512,13 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     // another community's Home, deleted in a tab this one never heard).
     function toggleChip(id: string) {
         if (!publicKey || landedEpoch() === null) return;
+        const starring = !myInterests.includes(id);
         const next = toggleInterest(myInterests, id);
         setInterests(next);
         setInterestsOpen(true);
         void shareInterests(publicKey, next);
+        // A star, the member's own act: the moment for "Hear when a neighbour asks for one of these." (core's rule decides).
+        if (starring && askedPush) setStarred(n => n + 1);
     }
 
     function openTune() {
@@ -3209,10 +3225,13 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     <HomeCard key={id} {...common}>
                         <div ref={interestsCardRef}>
                             {/* Where the community tells a member when a neighbour asks for something they starred (core askedPushOn, cold
-                                start N3), the note says so, as the phone's does; nowhere else. */}
-                            <p className="m-0 mb-2 text-sm text-nature-700 dark:text-nature-200" data-testid="home-interests-note">{askedPushOn(answer?.features)
+                                start N3), the note says so, as the phone's does, only while this browser can tell them (slice N5b); off,
+                                the same note without its promise. Nowhere else. */}
+                            <p className="m-0 mb-2 text-sm text-nature-700 dark:text-nature-200" data-testid="home-interests-note">{interestsPromise
                                 ? t(ASKED_PUSH_WORDS.interestsNote)
-                                : t('Tap what you like: those come first on Home and in the Market. Nothing is hidden.')}</p>
+                                : askedPush
+                                    ? t('Tap a few. What you star comes first here and in the Market.')
+                                    : t('Tap what you like: those come first on Home and in the Market. Nothing is hidden.')}</p>
                             <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Things you like')}>
                                 {MARKETPLACE_CATEGORIES.map(cat => {
                                     const on = myInterests.includes(cat.id);
@@ -3226,6 +3245,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                     );
                                 })}
                             </div>
+                            {interestsLine.view && <div className="flex flex-col mt-1">{interestsLine.view}</div>}
                             {myInterests.length > 0 && (
                                 <HomeMore onClick={() => setInterestsOpen(false)} testId="home-interests-done">{t('Done')}</HomeMore>
                             )}

@@ -170,7 +170,7 @@ import * as db from '../db';
 import { switchPhoneTo } from '../reconnect';
 import { getDatabaseFilenameForNode, markGuestNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
-import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
+import { messageRequestsStoreKey, dmPeerPinsStoreKey, communityBlocksStoreKey } from '../storage-keys';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { blockUser, unblockUser, blockSyncsEndedForTests, blockListReadThisRun, followRekeyedBlocks, withoutBlockedPeople, _newBlockRunForTests } from '../blocklist';
 import { acceptLetIn, letInFor, _resetLetInForTests } from '../let-in';
@@ -213,6 +213,8 @@ interface Conv { id: string; type: string; participants: string[]; request?: { f
 const node = { convs: [] as Conv[], blocks: new Map<string, string[]>(), formerKeys: new Map<string, Record<string, string[]>>() };
 /** A community whose read of the block list fails (503) for now (slice S7b): null, none. */
 let blocksDown: string | null = null;
+/** A community that answers the account's read of its block list 403 not_a_member (slice S7b): null, none. */
+let notMemberAt: string | null = null;
 const blockListAt = (origin: string): string[] => {
     const k = `${origin} ${h.me.publicKey}`;
     if (!node.blocks.has(k)) node.blocks.set(k, []);
@@ -278,6 +280,7 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     if (u.pathname === '/api/members') return answer(200, []);
     if (u.pathname === '/api/reports') return answer(200, { success: true });
     // The account's block list here (routes/blocks.ts), which the phone reads before a quiet accept (slice S7b).
+    if (u.pathname === '/api/blocks' && method === 'GET' && notMemberAt === u.origin) return answer(403, { error: 'Read access requires a member identity', code: 'not_a_member' });
     if (u.pathname === '/api/blocks' && method === 'GET') return blocksDown === u.origin ? answer(503, { error: 'Try again later' }) : answer(200, blocksAnswer(u.origin));
     if (u.pathname === '/api/blocks' && method === 'POST') {
         const keys: string[] = Array.isArray(body.targetPubkeys) ? body.targetPubkeys : [body.targetPubkey];
@@ -313,6 +316,7 @@ async function phoneHoldingThree(): Promise<void> {
     node.blocks.clear();
     node.formerKeys.clear();
     blocksDown = null;
+    notMemberAt = null;
     h.dir = path.join(root, `phone-${++phoneN}`);
     fs.mkdirSync(h.dir);
     h.store.clear();
@@ -1359,6 +1363,26 @@ describe('block first, everywhere (slice S7b): the design\'s table, through the 
 
 describe('block first, everywhere (slice S7b): the rest', () => {
     beforeEach(async () => { await phoneHoldingThree(); });
+
+    it('a held community that says the account is no member there is read again in an hour, not at every round (S7 design §2.2)', async () => {
+        notMemberAt = C;
+        const readsAtC = () => asked.filter((a) => a.method === 'GET' && a.url === `${C}/api/blocks`).length;
+        await roundReadsLists();
+        expect(readsAtC()).toBe(1);
+        await roundReadsLists();
+        await roundReadsLists();
+        expect(readsAtC()).toBe(1);
+        // Not read, so nothing there is accepted quietly this run.
+        expect(await blockListReadThisRun(me.publicKey, C)).toBe(false);
+    });
+
+    it('a community\'s list is kept to a list\'s worth: an answer of 600 keys keeps 500, so no answer fills the phone', async () => {
+        const hex = () => `${randomUUID()}${randomUUID()}`.replace(/-/g, '');
+        for (let i = 0; i < 600; i++) blockListAt(C).push(hex());
+        await roundReadsLists();
+        const record = JSON.parse(h.store.get(communityBlocksStoreKey(me.publicKey)) ?? '{}');
+        expect(record[C]?.seen).toHaveLength(500);
+    });
 
     it('a key seen on a community\'s own list is never shown, spread to another community, or sent again', async () => {
         const seen = person().publicKey;

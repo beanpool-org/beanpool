@@ -11063,8 +11063,8 @@ export async function fetchFriendsFromServer(publicKey: string): Promise<any[]> 
  * taking up the member's Offer, nor a request someone sent them that they haven't accepted. And only the key let in once
  * takes from such a chat ({@link letInOfRows}; #3319 final review, R3-F1): its pin's, else its one other person, nobody when
  * its rows name several, never a key pinned before nor one on offer. Each with a card in this copy, and with `keys`, every
- * key that chat knows them by (dm-blocked.ts dmPeerKeys), so a block under any of them holds (let-in.ts withoutBlockedPeople,
- * slice S7b). Throws when this copy or its DM pins can't be read: nobody is offered on a guess.
+ * key that chat knows them by (dm-blocked.ts dmPeerKeys), so a block under any of them holds (blocklist.ts
+ * withoutBlockedPeople, slice S7b). Throws when this copy or its DM pins can't be read: nobody is offered on a guess.
  */
 export async function getChattedWithMembers(myPubkey: string): Promise<{ publicKey: string; callsign: string; keys: string[] }[]> {
     const here = await chatCopyForRequest();

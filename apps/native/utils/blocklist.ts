@@ -1205,7 +1205,8 @@ function reconcile(owner: string, blocks: Blocks, at: BlocksAt, answer: ListAnsw
     // The rest of its list is not this phone's (slice S7b, S7 design §2.4): kept for the block-first check alone, with the keys
     // it names as replaced by each (a person blocked in the web app before a re-key holds at a community that never heard it),
     // at most a person's PERSON_KEYS_MAX keys. Never in `on`, `sent`, `asked` or the chains, so never shown, spread or sent.
-    const seen = answer.keys.filter(k => MEMBER_KEY.test(k) && k !== owner && !at.on.includes(k));
+    // At most a list's worth (the server keeps COMMUNITY_BLOCKS_MAX), so no answer can fill the phone's storage.
+    const seen = answer.keys.filter(k => MEMBER_KEY.test(k) && k !== owner && !at.on.includes(k)).slice(0, COMMUNITY_BLOCKS_MAX);
     const seenAll = [...new Set([...seen, ...seen.flatMap(k => (answer.formerKeys[k] ?? []).slice(0, PERSON_KEYS_MAX - 1))])].filter(k => k !== owner);
     if (seenAll.length > 0) at.seen = seenAll;
     else delete at.seen;
@@ -1254,6 +1255,17 @@ async function followOnce(at: string, inUse: boolean): Promise<void> {
         if (!ask) return;
         const answer = await readList(owner, community);
         if (!answer) return;
+        if (answer === 'no member') {
+            // As a change's "no member" (takeAnswer): it keeps no list for the account, and is asked again in an hour or at a
+            // join, not every round (S7 design §2.2), now that every held community is read whether or not it has blocks.
+            await serially(async () => {
+                const { record, at } = await recordOf(owner, community);
+                keepsNone(at);
+                at.noMemberUntil = Date.now() + NO_MEMBER_WAIT_MS;
+                await saveRecord(owner, record, community, at);
+            });
+            return;
+        }
         await serially(async () => {
             const blocks = await readBlocks(owner);
             const was = asRead(blocks);
@@ -1270,10 +1282,11 @@ async function followOnce(at: string, inUse: boolean): Promise<void> {
 }
 
 /**
- * The community's read of `owner`'s list, or null when it couldn't be read, or isn't the node's answer. Counted with the
- * block requests to that community ({@link roomForARequest}).
+ * The community's read of `owner`'s list; `no member` when it answers that the account is no member there
+ * ({@link NO_MEMBER_CODES}); null when it couldn't be read, or isn't the node's answer. Counted with the block requests to
+ * that community ({@link roomForARequest}).
  */
-async function readList(owner: string, community: string): Promise<ListAnswer | null> {
+async function readList(owner: string, community: string): Promise<ListAnswer | 'no member' | null> {
     const signer = await loadIdentity();
     if (!signer?.privateKey || signer.publicKey !== owner) return null;
     if (!roomForARequest(community)) return null;
@@ -1283,6 +1296,7 @@ async function readList(owner: string, community: string): Promise<ListAnswer | 
             const answer = await signedGet(community, BLOCKS_PATH, signer, controller.signal);
             return { res: answer, text: await answer.text() };
         })(), REPORT_TIMEOUT_MS);
+        if (res.status === 403 && NO_MEMBER_CODES.has(changeErrorCode(text) ?? '')) return 'no member';
         if (!res.ok) return null;
         return listAnswerOf(JSON.parse(text));
     } catch {

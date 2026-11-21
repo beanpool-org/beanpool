@@ -135,7 +135,17 @@ describe('CalendarScreen route component', () => {
     afterEach(() => {
         act(() => root.unmount());
         container.remove();
+        vi.useRealTimers();
     });
+
+    // Two rows below ("auto-selects first active date", "preserves active user date selection") put their events on
+    // today + 1 and today + 3, each capped at the 28th. On the real clock, from the 26th to the end of every month both
+    // days fell on the same date and the rows went red (a date bomb that went off monthly). A mid-month today keeps them
+    // apart. Date only: the timers stay real.
+    function pinMidMonth() {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-10T10:00:00'));
+    }
 
     it('navigates back to map on back button tap', async () => {
         await act(async () => {
@@ -152,6 +162,7 @@ describe('CalendarScreen route component', () => {
     });
 
     it('auto-selects first active date, opens MapStackList with heading, and swaps on date selection', async () => {
+        pinMidMonth();
         // Today is relative to local clock when running; let's use dates relative to now
         const now = new Date();
         const y = now.getFullYear();
@@ -251,6 +262,7 @@ describe('CalendarScreen route component', () => {
     });
 
     it('preserves active user date selection across background sync updates', async () => {
+        pinMidMonth();
         const now = new Date();
         const y = now.getFullYear();
         const m = now.getMonth() + 1;

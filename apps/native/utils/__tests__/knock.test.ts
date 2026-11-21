@@ -7,7 +7,7 @@
  * app's own signer and checked here with the member's public key, as the node's middleware checks them.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { randomBytes } from 'node:crypto';
 
 vi.mock('expo-crypto', () => ({
@@ -390,6 +390,14 @@ describe('what the phone remembers', () => {
 describe('"Cancel my request" (front doors S1)', () => {
     const AT = new Date('2026-10-27T08:00:00Z');
     const HOUR = 3_600_000;
+    // The phone's clock reads three hours after the cancel (Date only; timers stay real). These rows stamp requests on
+    // 26-27 Oct 2026 and read the remembered list with the phone's own clock, which forgets a request after
+    // KNOCK_ANSWERABLE_DAYS (61): on the real clock two rows went red from 26 Dec 2026 (a date bomb).
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(AT.getTime() + 3 * HOUR);
+    });
+    afterEach(() => { vi.useRealTimers(); });
 
     it('is a signed POST to the community’s /api/join/knock/cancel by the member’s own key', async () => {
         const me = await member();

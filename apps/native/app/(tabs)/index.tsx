@@ -16,7 +16,7 @@ import {
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { twoParagraphs } from '../../utils/alert-words';
 import {
-    homeCardAway, notifyStep, offerHomeCard, offerOnceCard, onceCardLater, readNotificationPermissionRecord, readOsNotificationPermission, turnOnFromOnceCard, turnOnNotifications,
+    homeCardAway, notifyStep, offerHomeCard, offerOnceCard, onceCardLater, readNotificationPermissionRecord, readOsNotificationPermission, turnOnFromHomeCard, turnOnFromOnceCard, turnOnNotifications,
     type OsNotificationPermission,
 } from '../../utils/notification-permission';
 import { useScreenShowing } from '../../components/NotifyLine';
@@ -330,7 +330,7 @@ export default function HomeScreen() {
     // with no answer is a "Later"); × puts it away for 30 days. Either way the next read decides it again.
     const homeTurnOn = useCallback(() => {
         setHomeBusy(true);
-        void turnOnNotifications(identityRef.current?.publicKey).catch(() => undefined).finally(() => { setHomeBusy(false); void readNotify(); });
+        void turnOnFromHomeCard(identityRef.current?.publicKey).finally(() => { setHomeBusy(false); void readNotify(); });
     }, [readNotify]);
     const homeAway = useCallback(() => {
         setHomeLive(null);

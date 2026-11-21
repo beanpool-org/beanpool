@@ -19,8 +19,9 @@ import {
 import { useManageNode } from './useManageNode';
 import { NotificationsOffLine } from './NotificationsOffLine';
 import { WayBackBellLine } from './WayBackBellLine';
+import { useNotifyLine } from './NotifyLine';
 import {
-    BELL_EVENTS, bellBadge, bellClearWords, bellLabel, bellReadWords, isOthersListingDoorbell, isPushNoticeKind, needsYouCounts, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
+    BELL_EVENTS, bellBadge, bellClearWords, bellLabel, bellReadWords, isOthersListingDoorbell, isPushNoticeKind, needsYouCounts, notifyWaitedDays, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
 } from '@beanpool/core';
 import { HOME_HEADER_WAIT_MS, forgetHomeForHeader, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
 import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
@@ -324,6 +325,18 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     const reading = readingId ? notices.find(n => n.id === readingId) ?? null : null;
     // Gone from the list (marked elsewhere): forget it, so a later read of the list that returns it shows the row, not its full view.
     useEffect(() => { if (readingId && !reading) setReadingId(null); }, [readingId, reading]);
+    // The fact line above a notice read here a day or more after it was sent (slice N3; amend1 §4.3: a notice or an event's
+    // change opened late from the bell): "This waited 2 days for you. Tell me next time ›", by core's rule (at most once in 30
+    // days, one soft ask a day, also after the phone's no, when its link is Turn on ›). Gone when the notice is left.
+    // `visible`: the notice read in full is on screen (the sheet up, not its list); Back or a close is the line's no.
+    const visible = sheet && !!reading;
+    const factLine = useNotifyLine(me, visible);
+    const readingSentAt = reading?.sentAt;
+    useEffect(() => {
+        if (!readingId || typeof readingSentAt !== 'number') return;
+        const days = notifyWaitedDays(readingSentAt * 1000, Date.now());
+        if (days) void factLine.offer({ kind: 'again', fact: days, anchor: readingId });
+    }, [readingId, readingSentAt]);
 
     // "Open" on a notice read in full: to its thing by the push tap's own fixed routes (utils/push-notice-check.ts
     // noticeRoute) first, and then off the bell (and on the node, which tells the member's other apps).
@@ -402,6 +415,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                                     <Text style={[s.readBackText, { color: colors.text.link }]}>{readWords.back}</Text>
                                 </Pressable>
                                 <ScrollView style={s.sheetScroll} contentContainerStyle={s.readContent}>
+                                    {factLine.line?.anchor === reading.id ? factLine.view : null}
                                     <Text style={[s.readTitle, { color: colors.text.heading }]} selectable accessibilityRole="header" testID="bell-read-title">
                                         {reading.title || reading.body}
                                     </Text>

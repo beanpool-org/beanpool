@@ -532,6 +532,20 @@ export function homeCardAway(storage: StorageLike = AsyncStorage): Promise<void>
     return markNotificationAsk({ type: 'away' }, storage).catch(() => undefined);
 }
 
+/**
+ * Turn on on Home's card while something is live (slice N3): the phone's own pop-up through the one door
+ * ({@link turnOnNotifications}), which keeps its answer as at every other tap (a yes, the phone's no, or a pop-up closed with no
+ * answer as a "Later", so no Home card for 7 days); where the phone can't ask again, the one line before its settings.
+ * Never throws: no answer to read is 'unanswered'.
+ */
+export async function turnOnFromHomeCard(publicKey?: string | null, storage: StorageLike = AsyncStorage, options: TurnOnOptions = {}): Promise<TurnOnResult> {
+    try {
+        return await turnOnNotifications(publicKey, storage, options);
+    } catch {
+        return 'unanswered';
+    }
+}
+
 /** "Later" on Home's once card: put away for good, recorded with its date, never a no (First steps' line is back). */
 export function onceCardLater(storage: StorageLike = AsyncStorage): Promise<void> {
     return notificationsLater(storage, 'once');

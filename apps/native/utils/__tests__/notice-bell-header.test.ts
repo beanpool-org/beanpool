@@ -56,6 +56,13 @@ vi.mock('react-native', async () => {
     };
 });
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
+// The fact line's offer (slice N3): core's rule is the phone's own module's, tested in packages/beanpool-core and the chat's
+// suite; here only what the bell asks it, and where the line goes.
+const fact = vi.hoisted(() => ({ asked: [] as number[] }));
+vi.mock('../notification-permission', async (orig) => ({
+    ...(await orig<Record<string, unknown>>()),
+    offerFactLine: async (days: number) => { fact.asked.push(days); return { line: `This waited ${days} days for you.`, link: 'Tell me next time ›' }; },
+}));
 vi.mock('expo-router', () => ({ router: { push: nav.push }, usePathname: () => '/market' }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -442,5 +449,51 @@ describe('the socket (services/ws-client.ts)', () => {
         expect(src.slice(at, at + 200)).toMatch(/DeviceEventEmitter\.emit\('bell_activity', data\);\s*return;/);
         // Before the doorbell and the live listing writes.
         expect(at).toBeLessThan(src.indexOf('const change = livePostChange(data);'));
+    });
+});
+
+describe('the fact line over a notice read late in the bell (slice N3)', () => {
+    const read = () => document.querySelector('[data-testid="bell-read"]') as HTMLElement | null;
+    beforeEach(() => { fact.asked.length = 0; });
+
+    it('read 3 days after it was sent: "This waited 3 days for you." above it, with its link; nothing marked', async () => {
+        node.notices = [notice('n1', { sentAt: Math.floor(Date.now() / 1000) - 3 * 86_400 - 60 })];
+        await renderHeader();
+        await openSheet();
+        await act(async () => { rows()[0].click(); });
+        await settle();
+        expect(fact.asked).toEqual([3]);
+        const text = read()!.textContent!;
+        expect(text).toContain('This waited 3 days for you.');
+        expect(text.indexOf('This waited')).toBeLessThan(text.indexOf('💬 New Message'));
+        expect(read()!.querySelector('[data-testid="notify-line-tell-me"]')?.getAttribute('aria-label')).toBe('Tell me next time ›');
+        expect(nodePost.signedPost).not.toHaveBeenCalled();
+    });
+
+    it('the notice left for the list and read again: the fact line is gone, and none is asked again', async () => {
+        node.notices = [notice('n1', { sentAt: Math.floor(Date.now() / 1000) - 2 * 86_400 - 60 })];
+        await renderHeader();
+        await openSheet();
+        await act(async () => { rows()[0].click(); });
+        await settle();
+        expect(read()!.textContent).toContain('This waited 2 days for you.');
+        const back = Array.from(read()!.querySelectorAll('button')).find((b) => b.getAttribute('aria-label') === 'Back') as HTMLElement;
+        await act(async () => { back.click(); });
+        await settle();
+        expect(read()).toBeNull();
+        await act(async () => { rows()[0].click(); });
+        await settle();
+        expect(read()!.textContent).not.toContain('This waited');
+        expect(fact.asked).toEqual([2]);
+    });
+
+    it('read 2 minutes after it was sent: no fact line, nothing asked', async () => {
+        node.notices = [notice('n1')];
+        await renderHeader();
+        await openSheet();
+        await act(async () => { rows()[0].click(); });
+        await settle();
+        expect(fact.asked).toEqual([]);
+        expect(read()!.textContent).not.toContain('This waited');
     });
 });

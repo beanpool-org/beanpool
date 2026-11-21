@@ -1190,10 +1190,11 @@ export default function RootLayout() {
         // An account that left this phone with no connection: its push alerts stop once each of its communities has
         // its leave statement (utils/push-leave.ts). Now, on each return, and with the 5-minute sync below.
         presentLeaveStatements();
-        // The member's blocks reach the community the phone is set to (utils/blocklist.ts syncBlocks): the first run of this
-        // build sends the blocks the phone held before it. Now, on each return, and with the 5-minute sync below; nothing is
-        // sent when nothing changed. Just before it, a block of someone since re-keyed follows them to their new key
-        // (followRekeyedBlocks: one read, only while the account has blocks).
+        // The member's blocks reach every community this phone holds, the one in use first, side by side (utils/blocklist.ts
+        // syncBlocks; slice S7a): the first run of this build sends the blocks the phone held before it. Now, on each return,
+        // and with the 5-minute sync below; nothing is sent when nothing changed. Just before it, a block of someone since
+        // re-keyed at any of them follows them to their new key (followRekeyedBlocks: one read at each, only while the
+        // account has blocks). The background sync sends what is still owed (services/background-task.ts).
         void followRekeyedBlocks();
         void syncBlocks();
         // A push registration that didn't land (no connection, no answer, an error), and any community on the phone that

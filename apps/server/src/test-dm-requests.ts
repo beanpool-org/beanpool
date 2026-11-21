@@ -15,8 +15,8 @@
  *   3. Accept: the sender hears it and their next line arrives, pushed; only the person it was sent to decides (R8, R17);
  *      she reads the acceptance as her own act (`acceptedByYou`), the sender never does (PR #3319 review F1);
  *      a decision's refusal comes in the member's language, its status and code as they were (member-words.ts, #2400)
- *   4. the person's own first line accepts it (an owner's answer from the node's inbox too), and so does adding the sender
- *      as a friend (R11)
+ *   4. the person's own first line accepts it (an owner's answer from the node's inbox too, as nobody's act: she never reads
+ *      `acceptedByYou` for it, PR #3319 review N1), and so does adding the sender as a friend (R11)
  *   5. Ignore: every answer the sender gets is the one a waiting request gets; the person's lists drop it (R9)
  *   6. Block, after the request or before it: the same answers again, and nothing listed (R10); once a block is lifted, the
  *      line kept during it doesn't count, the opener's own reads say their next line is the request, and it is the one Ann
@@ -489,7 +489,9 @@ async function globalRun(): Promise<void> {
         && rowOf(niaConv)?.state === 'accepted' && inChats(await listOf(ann), niaConv) && (await send(niaConv, nia)).status === 200,
         `Ann asking for the chat with Nia herself accepts Nia's request (${show(annAsks)})`);
     // The owner's answer from the node's inbox (POST /api/local/admin/inbox/send, the node's own line, written as her) is her
-    // line in the chat as much as one from her app: it accepts a request waiting for her (PR #2392 review 4355066390).
+    // line in the chat as much as one from her app: it accepts a request waiting for her (PR #2392 review 4355066390). But any
+    // admin, or an owner's token (as here), sends it in her name, so it is accepted as nobody's act (accepted_by null): she
+    // never reads `acceptedByYou` for it, which the phone's let in once would count as her own step (PR #3319 review N1).
     const tam = member('Tam');
     const tamSock = await socket(tam);
     await sleep(50);
@@ -502,9 +504,12 @@ async function globalRun(): Promise<void> {
     await sleep(150);
     // Read before Tam writes again, as above: his next line would be let through by the rule all the same.
     const oliveTam = await listOf(owner);
-    assert(inboxReply.status === 200 && linesBy(tamConv, owner) === 1 && rowOf(tamConv)?.state === 'accepted' && rowOf(tamConv)?.accepted_by === owner.pk
+    assert(inboxReply.status === 200 && linesBy(tamConv, owner) === 1 && rowOf(tamConv)?.state === 'accepted' && rowOf(tamConv)?.accepted_by === null
         && inChats(oliveTam, tamConv) && !inRequests(oliveTam, tamConv),
-        `Olive's answer from the node's inbox accepts it, and the chat is in her chats (${show(inboxReply)}; ${rowOf(tamConv)?.state})`);
+        `Olive's answer from the node's inbox accepts it, as nobody's act, and the chat is in her chats (${show(inboxReply)}; ${rowOf(tamConv)?.state}, by ${rowOf(tamConv)?.accepted_by})`);
+    const oliveReadsTam = entryOf(oliveTam, tamConv)?.request;
+    assert(oliveReadsTam?.state === 'accepted' && !('acceptedByYou' in oliveReadsTam),
+        `Olive never reads a notice sent in her name from the node's inbox as her own act (${JSON.stringify(oliveReadsTam)})`);
     assert(entryOf(await listOf(tam), tamConv)?.request?.state === 'accepted'
         && heardOf(tamSock, tamConv, tamHeard).some(e => e.type === 'dm_request_updated' && e.request?.state === 'accepted'),
         'Tam reads it accepted, and hears it: his app can write again');
@@ -1314,6 +1319,11 @@ async function localRun(): Promise<void> {
     const dovLate = [await send(dovConv, dov), await send(dovConv, dov)];
     const annReadsDov = (await call('GET', ann, `/api/messages/${dovConv}`)).body?.conversation?.request?.state;
     const unreadOn = (await listOf(ann))?.totalUnread;
+    // And Uma's, waiting for Olive, the owner, which a notice from the node's inbox answers once requests are off (below).
+    const uma = member('Uma');
+    const umaConv: string = (await open(uma, owner)).body?.conversation?.id;
+    await send(umaConv, uma);
+    const umaWaits = rowOf(umaConv)?.state;
     const off = await call('POST', null, SHAPE, { changes: { dmRequests: false } }, admin);
     const c3 = await send(cyConv, cy);
     const ro2 = await send(rosConv, ros);
@@ -1321,6 +1331,14 @@ async function localRun(): Promise<void> {
     const annOff = await listOf(ann);
     assert(off.status === 200 && off.body?.shape?.settings?.dmRequests?.configured === false && c3.status === 200 && inChats(annOff, cyConv) && !('requests' in (annOff ?? {})),
         `off again, Cy's waiting request is an ordinary chat (${show(c3)})`);
+    // Off, a notice from the node's inbox (an owner's token here; any admin may send one) answers a request waiting for Olive
+    // as her own line would, and as nobody's act (PR #3319 review N1): she never reads it as her own (no acceptedByYou).
+    const umaNotice = await call('POST', null, '/api/local/admin/inbox/send', { targetPubkey: uma.pk, message: 'Welcome, Uma' },
+        ownerTokenHeaders('admin', owner.pk));
+    const oliveReadsUma = entryOf(await listOf(owner), umaConv)?.request;
+    assert(umaWaits === 'pending' && umaNotice.status === 200 && rowOf(umaConv)?.state === 'accepted' && rowOf(umaConv)?.accepted_by === null
+        && !(oliveReadsUma && 'acceptedByYou' in oliveReadsUma),
+        `off, the node's inbox answers Uma's request to Olive as nobody's act (${umaWaits}; ${show(umaNotice)}; ${rowOf(umaConv)?.state}, by ${rowOf(umaConv)?.accepted_by}; ${JSON.stringify(oliveReadsUma)})`);
     // What Ann ignored, and what a removal ignored, stays out of her chats, her unread count and her badge (PR #2392 review
     // 4354581049): only Cy's chat, waiting until now, adds to her unread.
     const countsOff = attempt(() => getListedUnreadCounts(ann.pk)) ?? { [ikeConv]: 1 };

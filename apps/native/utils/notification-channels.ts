@@ -2,6 +2,10 @@
  * Android's notification channels: their names and descriptions are what the phone's own settings list under BeanPool,
  * so they are written in the member's language (services/push-notifications.ts sets them each time it gets the token,
  * which also renames them after a language change). The channel ids are the server's categoryId and never change.
+ *
+ * They are also made just before the phone's own pop-up (utils/notification-permission.ts `turnOnNotifications`, slice N1j
+ * of DESIGN-notify-and-backup-asks-fable-amend2.md §4.2): Android 13's pop-up does not appear until the app has at least
+ * one channel (Expo's notifications page), and a new phone has none before its first token.
  */
 import { t } from '@beanpool/core';
 
@@ -43,4 +47,21 @@ export function notificationChannels(): NotificationChannel[] {
             importance: 'DEFAULT', vibrationPattern: [0, 250, 250, 250], lightColor: '#8b5cf6',
         },
     ];
+}
+
+/** The part of expo-notifications that makes a channel (the module is passed in: this file loads no native module). */
+export interface ChannelMaker {
+    setNotificationChannelAsync(id: string, channel: Record<string, unknown>): Promise<unknown>;
+    AndroidImportance: Record<NotificationChannel['importance'], number>;
+}
+
+/**
+ * Makes (or renames) every channel, in the current language, on Android; nothing elsewhere. Throws what the phone throws:
+ * the caller decides whether that stops it (the token goes all the same; the pop-up is asked all the same).
+ */
+export async function setNotificationChannels(notifications: ChannelMaker, android: boolean): Promise<void> {
+    if (!android) return;
+    for (const { id, importance, ...channel } of notificationChannels()) {
+        await notifications.setNotificationChannelAsync(id, { ...channel, importance: notifications.AndroidImportance[importance] });
+    }
 }

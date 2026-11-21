@@ -157,8 +157,11 @@ describe('Android\'s notification channels, as the phone\'s settings list them',
     });
 
     it('set from that list each time the phone gets its token, so a language change renames them', () => {
+        // The loop over the list lives beside it (slice N1j: the phone's pop-up makes them too, before it asks); the service
+        // calls it with each token.
         const service = source('services/push-notifications.ts');
-        expect(service).toContain('of notificationChannels()');
+        expect(service).toContain('await setNotificationChannels(');
+        expect(source('utils/notification-channels.ts')).toContain('of notificationChannels()');
         expect(service).not.toMatch(/name: '[A-Z][a-z]+ [A-Za-z ]+'/);
     });
 });

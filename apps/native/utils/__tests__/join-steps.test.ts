@@ -14,7 +14,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },
 }));
 
-import { joinSteps, stepDot, type JoinStep } from '../join-steps';
+import { afterNotify, afterWayBack, joinSteps, stepDot, wayBackButton, type JoinStep } from '../join-steps';
 import { resumePlan, type OnboardingFlow, type PendingOnboarding } from '../onboarding-state';
 import { GLOBAL_NODE_URL } from '../global-node-url';
 
@@ -109,6 +109,59 @@ describe('the step bar: one dot per screen the join shows', () => {
         for (const mode of ["home'", "member'", "recover'", "ssoRecover'", "confirmReplace'", "ownerCard'", "create' && !inviteCode.trim()"]) {
             expect(screen(mode), mode).not.toContain('<StepBar');
         }
+    });
+
+    // Slice N1j (DESIGN-notify-and-backup-asks-fable-amend2.md §2, §4.2): on a phone that has to ask, the notifications screen
+    // is the join's last step, so every screen counts it: an invite or a door is five screens and four dots (the front door
+    // none), a claim three dots (the owner's card none). Android 8 to 12 never shows it: the rows above stand there.
+    it('on a phone that has to ask: four dots on an invite and a door, three on a claim, the notifications screen last', () => {
+        const NOTIFY_ROWS: Array<{ flow: OnboardingFlow; wayBack: boolean; dots: Partial<Record<JoinStep, string>> }> = [
+            { flow: 'invite', wayBack: true, dots: { name: '1/4', photo: '2/4', wayBack: '3/4', notify: '4/4' } },
+            { flow: 'global', wayBack: true, dots: { name: '1/4', photo: '2/4', wayBack: '3/4', notify: '4/4' } },
+            { flow: 'claim', wayBack: true, dots: { photo: '1/3', wayBack: '2/3', notify: '3/3' } },
+            // A way back already kept (S4): skipped, one dot fewer, the notifications screen still last.
+            { flow: 'global', wayBack: false, dots: { name: '1/3', photo: '2/3', notify: '3/3' } },
+        ];
+        for (const r of NOTIFY_ROWS) {
+            const steps = joinSteps(r.flow, { wayBack: r.wayBack, notify: true });
+            expect(steps[steps.length - 1], `${r.flow}: last`).toBe('notify');
+            for (const [step, dot] of Object.entries(r.dots) as Array<[JoinStep, string]>) {
+                const d = stepDot(steps, step);
+                expect(d ? `${d.at}/${d.of}` : null, `${r.flow} ${step}`).toBe(dot);
+            }
+            expect(steps.length).toBe(Object.keys(r.dots).length);
+            // Without the screen (Android 8 to 12, a phone that already allows or said no): no notify dot.
+            expect(joinSteps(r.flow, { wayBack: r.wayBack })).not.toContain('notify');
+        }
+        // Every join screen's bar counts it, from the same reading of the phone (welcome.tsx `notifyDue`).
+        for (const mode of ["create') {", "globalJoin'", "profileSetup'", "seedBackup'"]) {
+            expect(screen(mode), mode).toMatch(/<StepBar[^>]*\bnotify=\{notifyDue\}/);
+        }
+        // The notifications screen is its own component, whose bar is the last dot.
+        expect(screen("notify'")).toContain('<NotifyStep');
+        const notifyStep = fs.readFileSync(path.join(__dirname, '..', '..', 'components/welcome/NotifyStep.tsx'), 'utf8');
+        expect(notifyStep).toMatch(/<StepBar step="notify" flow=\{flow\} wayBack=\{wayBack\} notify busy=\{busy\}/);
+    });
+
+    it('after the way back: the notifications screen where it shows; after it, a claim\'s owner\'s card, else Home', () => {
+        expect(afterWayBack('invite', true)).toBe('notify');
+        expect(afterWayBack('claim', true)).toBe('notify');
+        expect(afterWayBack('invite', false)).toBe('home');
+        expect(afterWayBack('global', false)).toBe('home');
+        expect(afterWayBack('claim', false)).toBe('ownerCard');
+        expect(afterNotify('invite')).toBe('home');
+        expect(afterNotify('global')).toBe('home');
+        expect(afterNotify('claim')).toBe('ownerCard');
+        // The way back's button: Later until kept, then Next where the notifications screen follows (never Let's go then).
+        expect(wayBackButton(false, afterWayBack('invite', true))).toBe('later');
+        expect(wayBackButton(true, afterWayBack('invite', true))).toBe('next');
+        expect(wayBackButton(true, afterWayBack('invite', false))).toBe('letsGo');
+        expect(wayBackButton(true, afterWayBack('claim', false))).toBe('next');
+        // The way back's button hands over through one place that reads the phone again, never straight to Home.
+        const wayBack = screen("seedBackup'");
+        expect(wayBack).toContain('const next = afterWayBack(joinFlow, notifyDue);');
+        expect(wayBack).toContain('void handOverFromWayBack();');
+        expect(wayBack).not.toContain('void handleConfirmSeed()');
     });
 
     // §4.3: a join a 1.4.7 phone left part-way resumes on a screen of the new path, with its own dot; nothing stored is

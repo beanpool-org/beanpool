@@ -3,8 +3,8 @@
  * the phone is on changed where members' copies go since this account last saw it. From the community's answer the phone
  * keeps (Home asks nothing more of the community), looked at again when the tab strip's fresh answer at the app's start is
  * kept. Said once, at the next app open: what a sign-in linked here does now, and that a copy the member already has
- * stays where it is (nothing moves by itself). Where a move is possible and the phone knows there is a copy to move (one
- * at BeanPool's key vault, the community now keeping them itself), "Move mine" opens Account Protection, where the move
+ * stays where it is (nothing moves by itself). Where a move is possible and the phone knows there is a copy to move (a
+ * sign-in's at BeanPool's key vault, the community now keeping them itself), "Move mine" opens Account Protection, where the move
  * card makes it (components/VaultMoveCard.tsx). "See where my copies are" opens "Where your account can be brought back
  * from"; "OK" puts the card away. Drawn by components/CopiesRuleCardView.tsx.
  */
@@ -15,7 +15,7 @@ import { useIdentity } from '../app/IdentityContext';
 import { anchorUrl } from '../utils/node-post';
 import { getSavedNodes } from '../utils/nodes';
 import { copiesRuleChange, copiesRuleSeen, type CopiesRuleChange } from '../utils/copies-rule';
-import { vaultCopyKnowledge } from '../utils/vault';
+import { moveMineOffered } from '../utils/vault-move';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { onNodeProfileStored } from '../utils/node-profile';
 import { CopiesRuleCardView } from './CopiesRuleCardView';
@@ -46,8 +46,8 @@ export function CopiesRuleCard({ colors }: { colors: AppColors }) {
                 if (!pk || !url) { if (live) setChange(null); return; }
                 const found = await copiesRuleChange(pk, url);
                 if (!found) { if (live) setChange(null); return; }
-                // A move to the community needs a copy at the vault to move: only when this phone knows there is one.
-                const canMove = found.to === 'community' && found.from === 'vault' && (await vaultCopyKnowledge(pk)) === 'kept';
+                // A move to the community needs a sign-in's copy at the vault to move: only when this phone knows there is one.
+                const canMove = await moveMineOffered(pk, found);
                 const name = await communityName(url);
                 if (live) setChange({ ...found, name, canMove });
             };

@@ -20,6 +20,9 @@
  *      socket. Before: ECONNRESET on Node 22 and on Node 26.
  *   D. a connection that stays idle is still closed by the server, no sooner than its keep-alive and soon after it (DoS
  *      review F3: no idle socket is held longer than before).
+ *   E. the suites' own fetch (keepalive-test-fetch.ts localFetch), plain listener only: two kept sockets idle across a
+ *      3.5 s hold are closed from this end before the next call, which rides a socket of its own; a call 1 s after an
+ *      answer keeps its socket. Before: the call rode a kept socket, or fetch opened a new one beside the two it kept.
  *
  * The loop is held with Atomics.wait: it stops the loop and burns no CPU.
  */
@@ -36,6 +39,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { startHttpServer } from './http-server.js';
 import { DEFAULT_SERVER_LIMITS } from './server-limits.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -170,6 +174,37 @@ async function main(): Promise<void> {
         const d = await idleCloseAfter(l.mod, `${l.base}${PATH}`);
         assert(d.status === 200 && d.ms !== undefined && d.ms >= KA - 100 && d.ms <= KA + 4_000,
             `${l.name} D. a connection left idle is closed by the server between ${KA - 100} and ${KA + 4_000} ms after its answer (${d.err ?? `${d.ms} ms`})`);
+    }
+
+    // E. The suites' localFetch (keepalive-test-fetch.ts), on the plain listener in this process as the suites use it:
+    // fetch holds two sockets; the loop is held 3.5 s, past localFetch's 3 s, short of the server's close; the next call
+    // rides a socket of its own and both kept ones were closed from this end first. A call 1 s after an answer keeps its
+    // socket. Node 22's fetch reuses a held-over socket on its own; this is what keeps a suite's call off one the server is
+    // closing (test-dos-hardening line 614, CI run 44900976683).
+    console.log('\n── E. the suites\' localFetch ──');
+    {
+        const base = `http://127.0.0.1:${httpPort}`;
+        const sockets = new Set<Socket>();
+        let rode = null as Socket | null; // set by the channel's callback, so never narrowed to null here
+        const onSend = (m: unknown) => { const { socket } = m as { socket: Socket }; sockets.add(socket); rode = socket; };
+        dc.subscribe('undici:client:sendHeaders', onSend);
+        try {
+            await Promise.all([localFetch(`${base}${PATH}`).then((r) => r.text()), localFetch(`${base}${PATH}`).then((r) => r.text())]);
+            const kept = [...sockets];
+            hold(3_500);
+            const res = await localFetch(`${base}${PATH}`);
+            await res.text();
+            assert(res.status === 200 && kept.length === 2 && rode !== null && !kept.includes(rode) && kept.every((s) => s.destroyed),
+                `E. two kept sockets, the loop held 3,500 ms: the next call rides a socket of its own (${res.status}; kept ${kept.length}, rode a kept one: ${rode !== null && kept.includes(rode)}, kept ones closed: ${kept.map((s) => s.destroyed).join(',')})`);
+            const fresh = rode;
+            await sleep(1_000);
+            const again = await localFetch(`${base}${PATH}`);
+            await again.text();
+            assert(again.status === 200 && rode === fresh && !fresh?.destroyed,
+                `E. a call 1,000 ms after an answer keeps its socket (${again.status}; same socket: ${rode === fresh})`);
+        } finally {
+            dc.unsubscribe('undici:client:sendHeaders', onSend);
+        }
     }
 
     console.log(`\n${passed}/${run} passed`);

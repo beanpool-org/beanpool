@@ -4946,8 +4946,6 @@
   "Held in trust and system notifications": "Уведомления об удержаниях и системе",
   "When someone asks to join your community": "Когда кто-то запрашивает вступление в ваше сообщество",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Настройте, какие push-уведомления будут приходить на устройство. Изменения сохраняются автоматически.",
-  "Turn on notifications?": "Включить уведомления?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Чтобы вы знали, когда кто-то ответит вам, напишет сообщение или попросит присоединиться. Больше ни для чего.",
   "{name} has no owner yet": "У {name} пока нет владельца",
   "If you installed it, claim it with the one-time code on the server.": "Если вы установили его, заявите права с помощью одноразового кода на сервере.",
   "Claim {name}": "Привязать {name}",

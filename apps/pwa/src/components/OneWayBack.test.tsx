@@ -309,7 +309,7 @@ describe("Home's card on core's schedule, in a browser's words (slice B2): one t
 describe("on Home, the Home answer is the one word (`home`), and `/me` is never asked", () => {
     const NOW = Date.UTC(2026, 10, 21, 2, 0);
     const at = (day: number) => vi.spyOn(Date, 'now').mockReturnValue(NOW + day * DAY);
-    const home = (o: Omit<Parameters<typeof homeAnswer>[0], 'now'>, day: number) => wayBackWordOf(homeAnswer({ ...o, joinedDaysAgo: day, now: NOW + day * DAY }));
+    const home = (o: Omit<Parameters<typeof homeAnswer>[0], 'now' | 'joinedDaysAgo'>, day: number) => wayBackWordOf(homeAnswer({ ...o, joinedDaysAgo: day, now: NOW + day * DAY }));
     const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 
     it("the 12-words door's own member: drawn at the first paint, with a sign-in, and nothing asked", async () => {

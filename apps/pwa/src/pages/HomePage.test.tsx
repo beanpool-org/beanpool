@@ -3824,8 +3824,9 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(screen.queryByTestId('home-card-safety')).toBeNull();
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
         // Kept on the account too (slice B2), as the phone's ✕ is, so the phone and every browser count it.
-        await waitFor(() => expect(savedLayouts().at(-1)?.dismissed?.safety).toBeTruthy());
-        expect(Date.parse(savedLayouts().at(-1)!.dismissed.safety!)).toBeGreaterThanOrEqual(before);
+        const safetyAway = () => (savedLayouts().at(-1)?.dismissed as Record<string, string> | undefined)?.safety;
+        await waitFor(() => expect(safetyAway()).toBeTruthy());
+        expect(Date.parse(safetyAway()!)).toBeGreaterThanOrEqual(before);
     });
 
     // Slice B2: the phone's ✕ is kept on the account (`home.layout` `dismissed.safety`); the web reads it as its own, so a

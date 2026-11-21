@@ -256,10 +256,11 @@ export async function chatsShown(ctx: Pick<OutsideMailContext, 'identity' | 'sto
 }
 
 /**
- * A chat begun from someone's card (app/address-card.tsx): opened here, a declined one too, and its id. Null, with nothing
- * changed, when the account blocked them.
+ * A chat begun from someone's card (app/address-card.tsx), or from a contact's link in a community the phone shares none
+ * with (utils/message-anyone.ts, slice S5 part 2; no name: the line of theirs names them): opened here, a declined one too,
+ * and its id. Null, with nothing changed, when the account blocked them.
  */
-export async function openChatFromCard(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, card: Pick<AddressCard, 'key' | 'home' | 'name'>): Promise<string | null> {
+export async function openChatFromCard(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, card: Pick<AddressCard, 'key' | 'home'> & { name: string | null }): Promise<string | null> {
     if (await ctx.isBlocked(card.key)) return null;
     const chatId = relayConversationId(ctx.identity.publicKey, card.key);
     await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: card.key, home: card.home, name: card.name });
@@ -659,7 +660,8 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
  * holds (core outsideHeldReceipts, Marty 22 Nov 2026): let go, to be sent at the next round, once (the chat's mark goes with
  * them, so later lines are receipted as any other); kept held; or forgotten, never to be sent. `barred` is the phone's
  * strongest look (utils/let-in.ts unbarredFor: blocked anywhere, or blocked here and since unblocked, or lists that can't
- * be read), the one a first line from a member here met. Nothing when the chat holds none. A block read that fails holds;
+ * be read), the one a first line from a member here met: a doubt that holds an open, never the member's Accept or answer
+ * (S5 part 2: `once` lined up with the web). Nothing when the chat holds none. A block read that fails holds an open;
  * a store that can't be read throws, and the caller's step leaves them held.
  */
 export async function heldReceiptsOn(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked' | 'unbarred'>, chatId: string, action: OutsideReceiptAction): Promise<'send' | 'hold' | 'forget' | null> {

@@ -10,7 +10,7 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
+import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { communityAddress, sameCommunity } from './push-pins';
@@ -138,6 +138,39 @@ export async function heldLetIn(myPubkey: string): Promise<LetInRead | null> {
     } finally {
         await closeUnlessInView();
     }
+}
+
+/** The other communities this phone holds as a member, by address, in the order Chat lists them (Message's path rule: S5 part 2). */
+export async function heldCommunityUrls(): Promise<string[]> {
+    return (await heldCommunities()).map((c) => c.url);
+}
+
+/** A person in another community this phone holds, found by New message's search (slice S5 part 2). */
+export interface HeldPerson {
+    public_key: string;
+    callsign: string | null;
+    avatar_url: string | null;
+    joined_at: string | null;
+    community: string;
+    communityName: string;
+}
+
+/**
+ * New message's search of every other community this phone holds (slice S5 part 2, DESIGN-no-switch-messaging-fable.md §6
+ * row S5: "New message searches your contacts from every community"): each copy's people whose name holds `typed`, read
+ * through held, read-only handles (db.ts getHeldMembers), each with the community they were found in. The handles are
+ * Chat's: what this opened closes as it ends, unless Chat is in view.
+ */
+export async function heldPeopleMatching(myPubkey: string, typed: string): Promise<HeldPerson[]> {
+    const out: HeldPerson[] = [];
+    try {
+        for (const { url, name } of await heldCommunities()) {
+            for (const m of (await getHeldMembers(myPubkey, url, typed)) ?? []) out.push({ ...m, community: url, communityName: name });
+        }
+    } finally {
+        await closeUnlessInView();
+    }
+    return out;
 }
 
 async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promise<HeldChatRow[]> {

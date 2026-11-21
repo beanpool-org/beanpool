@@ -27,6 +27,7 @@ import { notSeenInThread, notSeenWords } from '@beanpool/core';
 import { useRequestsUnseen } from '../lib/requests-seen';
 import { AddressCardPanel } from '../components/AddressCardPanel';
 import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
+import { messagePathOnWeb, openAcrossOnWeb } from '../lib/message-anyone';
 import type { OutsideChat } from '../lib/outside-chat-store';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { ChatImageBubble, ChatPhotoShown } from '../components/ChatImageBubble';
@@ -2312,6 +2313,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         </div>
     ) : null;
 
+    // Message on a contact in another community (slice S5 part 2, lib/message-anyone.ts): a chat across already here opens;
+    // else one is made from their link and opens. A refusal says why, in the chat page's own refusal line.
+    const messageAcross = async (link: { key: string; community: string }, name: string) => {
+        const path = await messagePathOnWeb([{ community: link.community, key: link.key, name }]).catch(() => null);
+        if (path?.open === 'shared') { setShowContacts(null); void handleStartDm(path.key); return; }
+        if (path?.open === 'existing') { setShowContacts(null); setOpenOutside(path.chat.id); return; }
+        if (path?.open !== 'across') return;
+        const opened = await openAcrossOnWeb(path).catch(() => ({ refused: 'no-community' as const }));
+        setShowContacts(null);
+        if ('chatId' in opened) { setOpenOutside(opened.chatId); return; }
+        setChatRefusal(opened.refused === 'off' ? t("This community doesn't take messages from other communities.")
+            : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : t("Couldn't reach your community. Check your connection and try again."));
+    };
+
     if (showContacts) {
         return (
             <ContactsPage
@@ -2319,6 +2334,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 start={showContacts}
                 onBack={() => setShowContacts(null)}
                 onMessage={(pubkey) => { setShowContacts(null); void handleStartDm(pubkey); }}
+                onMessageAcross={(link, name) => void messageAcross(link, name)}
             />
         );
     }

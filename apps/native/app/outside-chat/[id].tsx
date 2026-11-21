@@ -21,7 +21,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineActions, outsideLineShown, outsideLineWords, t, type OutsideChange, type OutsideChangeKind,
+    ACROSS_FIRST_LINE_NOTE, OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, acrossFirstLineNoteUnder, outsideLineActions, outsideLineShown, outsideLineWords, t,
+    type OutsideChange, type OutsideChangeKind,
 } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -34,8 +35,8 @@ import type { OutsideChat, OutsideLine, OutsideLineState } from '../../utils/out
 import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 import { twoParagraphs } from '../../utils/alert-words';
 
-/** Core's sentence, the web's too (@beanpool/core outside-devices.ts). */
-const LINES = { writesStayThere: OUTSIDE_WRITES_STAY_THERE };
+/** Core's sentences, the web's too (@beanpool/core outside-devices.ts, message-path.ts). */
+const LINES = { writesStayThere: OUTSIDE_WRITES_STAY_THERE, firstLineNote: ACROSS_FIRST_LINE_NOTE };
 
 /** How often an open chat asks for what waits, while it is on screen. */
 const POLL_MS = 15_000;
@@ -240,6 +241,7 @@ export default function OutsideChatScreen() {
         mineText: { fontSize: 15, lineHeight: 21, color: colors.text.onAccent },
         theirsText: { fontSize: 15, lineHeight: 21, color: colors.text.body },
         tick: { fontSize: 12, marginTop: 2, alignSelf: 'flex-end', color: colors.text.onAccent, opacity: 0.85 },
+        firstLineNote: { fontSize: 13, lineHeight: 18, marginTop: 4, alignSelf: 'flex-end', maxWidth: '85%', textAlign: 'right', color: colors.text.secondary },
         request: { margin: 12, padding: 14, borderRadius: 14, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, gap: 10 },
         requestText: { fontSize: 14, lineHeight: 20, color: colors.text.body },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -268,6 +270,8 @@ export default function OutsideChatScreen() {
 
     if (chat === undefined) return <SafeAreaView style={styles.safeArea} />;
     const name = chat?.peerName ?? t('Someone in another community');
+    // The line the note goes under (core acrossFirstLineNoteUnder): my first, while no line of theirs is here.
+    const noteUnder = chat && me ? acrossFirstLineNoteUnder(lines, me, chat.restored) : null;
 
     return (
         <SafeAreaView style={styles.safeArea} testID="outside-chat" onLayout={screenKeyboard.onScreenLayout}>
@@ -400,6 +404,8 @@ export default function OutsideChatScreen() {
                                         {tick && <Text style={styles.tick} testID="outside-line-state">{tick}</Text>}
                                         {why && <Text style={styles.tick} testID="outside-line-why">{why}</Text>}
                                     </Pressable>
+                                    {/* Under my first line while they have written nothing here (slice S5 part 2: core acrossFirstLineNoteUnder). */}
+                                    {item.id === noteUnder && <Text style={styles.firstLineNote} testID="outside-first-line-note">{t(LINES.firstLineNote)}</Text>}
                                     {reactions}
                                     {actions}
                                 </View>

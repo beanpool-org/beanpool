@@ -70,11 +70,13 @@ function subLine(c: Pick<ContactCandidate, 'phones' | 'emails'>): string {
     return c.phones[0] ?? c.emails[0] ?? '';
 }
 
-export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
+export function ContactsPage({ identity, start = 'list', onBack, onMessage, onMessageAcross }: {
     identity: BeanPoolIdentity;
     start?: 'list' | 'import';
     onBack: () => void;
     onMessage: (pubkey: string) => void;
+    /** Message on a contact in another community (slice S5 part 2): MessagesPage opens a chat across from their link. */
+    onMessageAcross?: (link: { key: string; community: string }, name: string) => void;
 }): ReactNode {
     const snap = useContacts();
     const [view, setView] = useState<View>(start === 'import' ? { kind: 'import' } : { kind: 'list' });
@@ -188,7 +190,7 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
     return shell(<ListView list={list} where={snap.where} keptAt={snap.keptAt} header={header} onBack={onBack} busy={busy} alert={alert}
         former={former && <FormerCard onDelete={() => deleteFormerContacts(identity)} onGone={() => setFormer(false)} />}
         onOpen={(id) => back({ kind: 'contact', id })} onAdd={() => back({ kind: 'add' })} onImport={() => back({ kind: 'import' })} onInfo={() => setInfo(true)}
-        onMessage={onMessage} onRemoveAll={() => change((l) => removeEveryContact(l))}
+        onMessage={onMessage} onMessageAcross={onMessageAcross} onRemoveAll={() => change((l) => removeEveryContact(l))}
         onInvite={setInviting} ask={(c) => contactInviteAsk(c, mine, isHere)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />);
 }
 
@@ -232,11 +234,12 @@ function FormerCard({ onDelete, onGone }: { onDelete: () => Promise<boolean>; on
     );
 }
 
-function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport, onInfo, onMessage, onRemoveAll, busy, alert, former, onInvite, ask, onAnswer }: {
+function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport, onInfo, onMessage, onMessageAcross, onRemoveAll, busy, alert, former, onInvite, ask, onAnswer }: {
     list: ContactsList; where: ContactsWhere; keptAt: string | null; header: Header; onBack: () => void; busy: boolean; alert: ReactNode;
     /** This community keeps the list the member's old key locked (C6): said, with the way to it (the phone app), and Delete. */
     former: ReactNode;
     onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onMessage: (pubkey: string) => void; onRemoveAll: () => Promise<boolean>;
+    onMessageAcross?: (link: { key: string; community: string }, name: string) => void;
     onInvite: (c: Contact) => void; ask: (c: Contact) => ContactInviteUsed | null; onAnswer: (c: Contact, used: ContactInviteUsed, yes: boolean) => void;
 }) {
     const [q, setQ] = useState('');
@@ -278,8 +281,9 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
     );
     const memberAction = (c: Contact) => {
         const link = c.links.find((l) => l.community === here) ?? c.links[0];
+        // Another community (slice S5 part 2): the web holds only this one, so Message goes across, from their link (lib/message-anyone.ts).
         if (link.community !== here) {
-            return <a href={link.community} target="_blank" rel="noopener noreferrer" style={{ ...btn, display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>{t('Open {community} ›', { community: hostOf(link.community) })}</a>;
+            return <button type="button" className={go} style={goStyle} disabled={!onMessageAcross} onClick={() => onMessageAcross?.({ key: link.key, community: link.community }, c.name)}>{t('Message', undefined, 'button: write to')}</button>;
         }
         if (isUserBlocked(link.key)) {
             return (

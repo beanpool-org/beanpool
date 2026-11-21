@@ -15,17 +15,21 @@ import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { useContactsRecord } from '../utils/use-contacts';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
+import { heldCommunityUrls, heldPeopleMatching, type HeldPerson } from '../utils/held-chats';
+import { sameCommunity } from '../utils/push-pins';
+import { existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { membersByKey, outsideMessagesOn } from '../utils/node-profile';
 import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
 import { joinedWords, pickerEmpty, pickerHeading } from '../utils/community-list-note';
-import { t, tn } from '@beanpool/core';
+import { t, tn, type MessagePath } from '@beanpool/core';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { useTheme, useStyles } from './ThemeContext';
@@ -188,6 +192,8 @@ export default function NewMessageScreen() {
     // Someone in another community, by their address card (slice X3): only where this community takes such messages.
     const outsideOn = outsideMessagesOn(features);
     const [nodeResults, setNodeResults] = useState<any[]>([]);
+    // The people of every other community this phone holds whose name holds what was typed (slice S5 part 2), each with its community.
+    const [heldPeople, setHeldPeople] = useState<HeldPerson[]>([]);
     const [nodeSearch, setNodeSearch] = useState<'none' | 'answered' | 'unreachable'>('none');
     const searchRef = useRef<TextInput>(null);
 
@@ -256,6 +262,19 @@ export default function NewMessageScreen() {
         return () => { cancelled = true; clearTimeout(timeout); };
     }, [searchQuery, membersOnDemand]);
 
+    // Every other community this phone holds is searched too (slice S5 part 2: DESIGN-no-switch-messaging-fable.md §6 row
+    // S5), from its own copy through a read-only handle (utils/held-chats.ts heldPeopleMatching), 2 letters or more.
+    useEffect(() => {
+        const typed = searchQuery.trim();
+        if (!identity?.publicKey || typed.length < 2) { setHeldPeople([]); return; }
+        let cancelled = false;
+        const timeout = setTimeout(async () => {
+            const found = await heldPeopleMatching(identity.publicKey, typed).catch(() => [] as HeldPerson[]);
+            if (!cancelled) setHeldPeople(found);
+        }, 350);
+        return () => { cancelled = true; clearTimeout(timeout); };
+    }, [searchQuery, identity?.publicKey]);
+
     // ── Search / sort (memo) ────────────────────────────────────────────────
     const filteredMembers = useMemo(() => {
         let list = allMembers;
@@ -274,19 +293,45 @@ export default function NewMessageScreen() {
         }
 
         // Friends-first sort, then alphabetical
-        return [...list].sort((a, b) => {
+        const sorted = [...list].sort((a, b) => {
             const aF = friendPubkeys.has(a.public_key) ? 0 : 1;
             const bF = friendPubkeys.has(b.public_key) ? 0 : 1;
             if (aF !== bF) return aF - bF;
             return (a.callsign || '').localeCompare(b.callsign || '');
         });
-    }, [allMembers, searchQuery, friendPubkeys, nodeResults, identity?.publicKey]);
+        // Then the people found in other communities this phone holds, each once, under the name of where they were found.
+        const shown = new Set(sorted.map((m) => m.public_key));
+        const elsewhere = heldPeople.filter((m) => m.public_key !== identity?.publicKey && !shown.has(m.public_key) && (shown.add(m.public_key), true));
+        return [...sorted, ...elsewhere];
+    }, [allMembers, searchQuery, friendPubkeys, nodeResults, heldPeople, identity?.publicKey]);
 
     // ── Handlers ────────────────────────────────────────────────────────────
-    const handleSelectMember = useCallback(async (pubkey: string) => {
+    const handleSelectMember = useCallback(async (pubkey: string, held?: HeldPerson) => {
         if (!identity?.publicKey || creating) return;
         setCreating(pubkey);
         try {
+            // Message's one rule (slice S5 part 2, utils/message-anyone.ts): an existing chat with them wins (here, in place in
+            // a held community, or across), else the community shared with them: the one in use, else where they were found.
+            const heldUrls = await heldCommunityUrls().catch(() => [] as string[]);
+            const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+            const where = held?.community ?? anchor;
+            const path: MessagePath = where
+                ? await messagePathOnPhone(identity.publicKey, [{ community: where, key: pubkey, name: held?.callsign ?? null }], heldUrls).catch(() => ({ open: 'shared' as const, community: where, key: pubkey }))
+                : { open: 'nothing' };
+            if (path.open === 'existing') {
+                router.replace(existingChatRoute(path.chat, anchor, () => held?.communityName ?? '') as any);
+                return;
+            }
+            if (path.open === 'shared' && held && !(anchor && sameCommunity(path.community, anchor))) {
+                const conv = await startChatInPlace(identity.publicKey, pubkey, path.community);
+                router.replace({ pathname: '/chat/[id]', params: { id: conv.id, community: conv.community, communityName: held.communityName } });
+                return;
+            }
+            if (path.open === 'across') {
+                const opened = await openAcrossChat(path);
+                if ('chatId' in opened) { router.replace(`/outside-chat/${opened.chatId}`); return; }
+                throw new Error(opened.refused === 'off' ? t("This community doesn't take messages from other communities.") : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : '');
+            }
             const fromNode = nodeResults.find(m => m.public_key === pubkey);
             if (fromNode) await keepCards([fromNode]);
             const apiConv = await createConversationApi('dm', [identity.publicKey, pubkey], identity.publicKey);
@@ -320,7 +365,7 @@ export default function NewMessageScreen() {
             <Pressable
                 accessibilityRole="button"
                 style={[styles.memberCard, isCreating && styles.memberCardActive]}
-                onPress={() => handleSelectMember(item.public_key)}
+                onPress={() => handleSelectMember(item.public_key, item.community ? item : undefined)}
                 disabled={!!creating}
             >
                 <View style={styles.memberAvatarWrap}>
@@ -338,7 +383,7 @@ export default function NewMessageScreen() {
                         {isFriend && <Text style={styles.friendLabel} numberOfLines={1}>{t('Friend')}</Text>}
                     </View>
                     <Text style={styles.memberMeta} numberOfLines={1}>
-                        {joinedWords(item.joined_at)}
+                        {item.communityName ?? joinedWords(item.joined_at)}
                     </Text>
                 </View>
 

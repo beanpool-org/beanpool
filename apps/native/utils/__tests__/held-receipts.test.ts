@@ -222,13 +222,44 @@ describe('3  a held chat holds its later lines too, and lets them all go at once
         expect(receiptedTo(SOL.key).sort()).toEqual([first, second, third].sort());
     });
 
-    it('a hold that can\'t be sure no block bars them (blocked once, unblocked since) stays held at the step', async () => {
+    // S5 part 2 (the part-1 notes, round 5: "once" lined up with the web): a doubt about blocks holds only an open; the
+    // member's own Accept or answer lets the receipt go, a block once made and since undone among them.
+    it('blocked once, unblocked since: an open stays held; the member\'s answer lets it go, once', async () => {
+        server.dmRequests = false;
+        const one = await heldLine(SOL, 'One', true);
+        await syncOutsideMail(ctx);
+        once.add(SOL.key);
+        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'open')).toBe('hold');
+        await syncOutsideMail(ctx);
+        expect(receiptedTo(SOL.key)).toEqual([]);
+        await sendOutsideLine(ctx, chatWith(SOL.key), 'Hi');
+        await syncOutsideMail(ctx);
+        await syncOutsideMail(ctx);
+        expect(receiptedTo(SOL.key)).toEqual([one]);
+    });
+
+    it('blocked once, unblocked since: a request\'s Accept lets it go', async () => {
+        server.dmRequests = true;
+        const one = await heldLine(SOL, 'One', true);
+        await syncOutsideMail(ctx);
+        expect(chatState(SOL.key)).toBe('request');
+        once.add(SOL.key);
+        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'open')).toBe('hold');
+        await ctx.store.decide(BEN.key, chatWith(SOL.key), 'open');
+        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'accept')).toBe('send');
+        await syncOutsideMail(ctx);
+        expect(receiptedTo(SOL.key)).toEqual([one]);
+    });
+
+    it('blocked now: the answer still forgets, whatever once says', async () => {
         server.dmRequests = false;
         await heldLine(SOL, 'One', true);
         await syncOutsideMail(ctx);
         once.add(SOL.key);
-        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'open')).toBe('hold');
-        await sendOutsideLine(ctx, chatWith(SOL.key), 'Hi');
+        blocked.add(SOL.key);
+        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'answer')).toBe('forget');
+        blocked.delete(SOL.key);
+        await sendOutsideLine(ctx, chatWith(SOL.key), 'Hi').catch(() => null);
         await syncOutsideMail(ctx);
         expect(receiptedTo(SOL.key)).toEqual([]);
     });

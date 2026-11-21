@@ -216,6 +216,45 @@ describe('3  a held chat holds its later lines too, and lets them all go at once
         await syncOutsideMail(ctx);
         expect(receiptedTo(SOL.key)).toHaveLength(1);
     });
+
+    // S5 part 2 (the part-1 notes, round 5): `once` lined up with the phone. A block undone in this page is a doubt: an open
+    // stays held; the member's own answer or Accept lets it go. Blocked now still forgets.
+    it('unblocked in this page: an open stays held; the member\'s answer lets it go, once', async () => {
+        server.dmRequests = false;
+        const one = await heldLine(SOL, 'One', true);
+        await syncOutsideMail(ctx);
+        ctx.unblocked = (k) => k === SOL.key;
+        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'open')).toBe('hold');
+        await syncOutsideMail(ctx);
+        expect(receiptedTo(SOL.key)).toEqual([]);
+        await sendOutsideLine(ctx, chatWith(SOL.key), 'Hi');
+        await syncOutsideMail(ctx);
+        await syncOutsideMail(ctx);
+        expect(receiptedTo(SOL.key)).toEqual([one]);
+    });
+
+    it('unblocked in this page: a request\'s Accept lets it go', async () => {
+        server.dmRequests = true;
+        const one = await heldLine(SOL, 'One', true);
+        await syncOutsideMail(ctx);
+        ctx.unblocked = (k) => k === SOL.key;
+        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'open')).toBe('hold');
+        await ctx.store.decide(BEN.key, chatWith(SOL.key), 'open');
+        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'accept')).toBe('send');
+        await syncOutsideMail(ctx);
+        expect(receiptedTo(SOL.key)).toEqual([one]);
+    });
+
+    it('a block list that can\'t be read: the member\'s answer lets it go (the answer reaches them anyway)', async () => {
+        server.dmRequests = false;
+        const one = await heldLine(SOL, 'One', true);
+        await syncOutsideMail(ctx);
+        unknown.add(SOL.key);
+        expect(await heldReceiptsOn(ctx, chatWith(SOL.key), 'answer')).toBe('send');
+        unknown.delete(SOL.key);
+        await syncOutsideMail(ctx);
+        expect(receiptedTo(SOL.key)).toEqual([one]);
+    });
 });
 
 describe('4  a block made anywhere: the round forgets the held receipts', () => {

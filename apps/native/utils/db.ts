@@ -2165,8 +2165,43 @@ export async function getLetInHere(myPubkey: string): Promise<LetInRead | null> 
     }
 }
 
+/**
+ * The people of a held copy whose name holds what was typed (slice S5 part 2: New message searches every community the
+ * phone holds), as New message reads the copy in use's: not me, not pruned, not a system key; 20 at most. Binds my key,
+ * then what was typed (matched with instr, so a % or _ in it is a letter like any other).
+ */
+const HELD_MEMBERS_SQL = `
+    SELECT public_key, callsign, avatar_url, joined_at FROM members
+    WHERE public_key != ? AND (status IS NULL OR status != 'pruned')
+      AND public_key NOT LIKE 'escrow_%' AND public_key NOT LIKE 'project_%' AND public_key != 'SYSTEM'
+      AND instr(lower(IFNULL(callsign, '')), lower(?)) > 0
+    ORDER BY callsign COLLATE NOCASE ASC LIMIT 20
+`;
+
+/** A person in a held community, as New message lists them: their photo on THAT community's server. */
+export interface HeldMember {
+    public_key: string;
+    callsign: string | null;
+    avatar_url: string | null;
+    joined_at: string | null;
+}
+
+/**
+ * The people of `community`, another community this phone holds, whose name holds `typed` (slice S5 part 2), read through a
+ * held, read-only handle, never getDb() nor the address in use. Null when there is nothing to read (as getHeldOutsideChats).
+ */
+export async function getHeldMembers(myPubkey: string, community: string, typed: string): Promise<HeldMember[] | null> {
+    try {
+        const rows = await heldListRead<any>(community, 'members', [myPubkey, typed]);
+        return rows ? rows.map((r) => ({ public_key: r.public_key, callsign: r.callsign ?? null, avatar_url: onCommunity(community, r.avatar_url), joined_at: r.joined_at ?? null })) : null;
+    } catch (e) {
+        console.warn(`[Held] Could not search the people held for ${getDatabaseFilenameForNode(community)}`, e);
+        return null;
+    }
+}
+
 /** The names of the statements a held copy runs (utils/held-copies.ts takes no SQL from a caller, only one of these). */
-type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews' | 'outsideChats' | 'outsideLastChanges' | 'letIn';
+type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews' | 'outsideChats' | 'outsideLastChanges' | 'letIn' | 'members';
 /** Every statement a held copy runs: one plain SELECT each (held-copies.ts isOneRead), refused at its use otherwise. */
 const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
     conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL, latest: HELD_LATEST_SQL, previews: HELD_PREVIEWS_SQL,
@@ -2174,6 +2209,8 @@ const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
     outsideChats: OUTSIDE_CHATS_HELD_SQL, outsideLastChanges: OUTSIDE_LAST_CHANGES_HELD_SQL,
     // The people the member let in (slice S3b).
     letIn: LET_IN_SQL,
+    // New message's search of every held community's people (slice S5 part 2).
+    members: HELD_MEMBERS_SQL,
 });
 
 /**

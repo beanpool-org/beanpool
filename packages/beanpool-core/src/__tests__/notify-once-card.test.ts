@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-    markNotifyAsk, notifyAsks, notifyOnceWords, NOTIFY_ONCE_CARD_DAYS,
+    markNotifyAsk, notifyAsks, notifyBrowserPhone, notifyOnceWords, NOTIFY_ONCE_CARD_DAYS,
     type NotifyAskRecord, type NotifyPhone,
 } from '../notify-ask.js';
 import { localDay } from '../home-tips.js';
@@ -164,6 +164,60 @@ describe('the once card: one showing per phone, Later not final, one soft ask a 
     it("never where the join's screen was shown on this phone: that was its ask", () => {
         const joined: NotifyAskRecord = { joinAt: UPDATE - 3 * DAY, laterAt: UPDATE - 3 * DAY };
         for (const d of [0, 3, 8]) expect(notifyAsks({ record: joined, phone, now: UPDATE + d * DAY }).once, `day ${d}`).toBe(false);
+    });
+});
+
+/**
+ * The two rules of the once card that met at the sync with N5a, one table for both apps: (onceClosedAt set or not) × (a
+ * "Later" said today or not) × (the phone / the web) → the card. Main's rule (N5a): closed for good once `onceClosedAt` is
+ * set, whether it was closed after a showing (an answer on it) or before any (the web's Turn off in Settings). This PR's
+ * rule (N1h): not first shown on a day a "Later" was said (a pop-up closed at First steps' line or the bell's this
+ * morning). The card shows only where neither holds. Each "closed" row goes red without main's rule, each "Later today, open"
+ * row without this one.
+ */
+describe('the once card, merged rule: onceClosedAt × a Later said today × the phone / the web', () => {
+    const NOW = UPDATE + HOUR;
+    // Both apps where the card is due: a phone that has to ask and still can; a browser that can be told and still asks.
+    const APPS: { app: string; phone: NotifyPhone }[] = [
+        { app: 'the phone (an iPhone, never asked)', phone: IPHONE_ASK },
+        { app: 'the phone (Android 13+, never asked)', phone: a13({ flag: false, fresh: true }) },
+        { app: 'the web (a browser, never asked)', phone: notifyBrowserPhone({ push: true, permission: 'default', on: false }) },
+        { app: 'the web (the site allowed, this account off here)', phone: notifyBrowserPhone({ push: true, permission: 'granted', on: false }) },
+    ];
+    const CLOSED: { closed: string; at: NotifyAskRecord }[] = [
+        { closed: 'never shown, open', at: UNANSWERED },
+        // Shown two days ago, inside its 7 days, then closed by an answer on it (a Later, a yes switched off since, ...).
+        { closed: 'closed after its showing', at: { ...UNANSWERED, askDay: localDay(new Date(UPDATE - 2 * DAY)), askKind: 'once', onceAt: UPDATE - 2 * DAY, onceClosedAt: UPDATE - 2 * DAY + HOUR } },
+        // The web's Turn off in Settings before the card was ever shown (core's `off`): no `onceAt`, only the close.
+        { closed: 'closed before any showing (a Turn off)', at: { ...UNANSWERED, onceClosedAt: UPDATE - 2 * DAY } },
+    ];
+    const LATER_TODAY: { later: string; at: NotifyAskRecord }[] = [
+        { later: 'no Later today', at: {} },
+        // A pop-up closed at First steps' line this morning: a Later with no surface (no day taken, the card not closed).
+        { later: 'a Later said today', at: { laterAt: UPDATE } },
+    ];
+
+    for (const a of APPS) {
+        for (const c of CLOSED) {
+            for (const l of LATER_TODAY) {
+                const card = c.closed === 'never shown, open' && l.later === 'no Later today';
+                it(`${a.app}, ${c.closed}, ${l.later} → ${card ? 'the card' : 'no card'}`, () => {
+                    const record: NotifyAskRecord = { ...c.at, ...l.at };
+                    // The day is free in every row (no soft ask taken today), so only the two rules decide.
+                    expect(record.askDay === localDay(new Date(NOW))).toBe(false);
+                    expect(notifyAsks({ record, phone: a.phone, now: NOW }).once).toBe(card);
+                });
+            }
+        }
+    }
+
+    it('the next day, the Later of the day before no longer stops a first showing; a closed card stays closed', () => {
+        for (const a of APPS) {
+            expect(notifyAsks({ record: { ...UNANSWERED, laterAt: UPDATE }, phone: a.phone, now: UPDATE + DAY }).once, a.app).toBe(true);
+            for (const c of CLOSED.slice(1)) {
+                expect(notifyAsks({ record: c.at, phone: a.phone, now: UPDATE + DAY }).once, `${a.app}, ${c.closed}`).toBe(false);
+            }
+        }
     });
 });
 

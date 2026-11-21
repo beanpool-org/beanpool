@@ -4,8 +4,9 @@
  *
  * The landing: whether the card shows for each phone and the record the update finds, what a showing keeps (it takes the
  * day; its 7 days start at the first showing), and that deciding it never asks the phone. The taps: Turn on goes through the
- * one door to the phone's pop-up, the phone's yes or no ends the card by its own answer, and anything else is the card's
- * "Later", which puts it away and is never a no. Then the reviewer's three checks (amend2 §8), for the card.
+ * one door to the phone's pop-up, the phone's yes or no ends the card by its own answer and closes it as the web's does
+ * (core's notifyOutcomeEvent on 'once': both apps write the record the same), and anything else is the card's "Later",
+ * which puts it away and is never a no. Then the reviewer's three checks (amend2 §8), for the card.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -37,10 +38,10 @@ const notifications = vi.hoisted(() => ({
 vi.mock('expo-notifications', () => ({ default: notifications, ...notifications }));
 vi.mock('../../services/push-notifications', () => ({ registerForPushNotifications: vi.fn(async () => null) }));
 
-import { localDay, notifyAsks, type NotifyAskRecord } from '@beanpool/core';
+import { localDay, markNotifyAsk, notifyAsks, notifyBrowserOutcome, notifyOutcomeEvent, type NotifyAskRecord, type NotifyBrowserResult } from '@beanpool/core';
 import {
     ONCE_CARD_WAIT_MS, notifyStep, offerNamedLine, offerOnceCard, onceCardLater, readNotificationPermissionRecord, turnOnFromOnceCard,
-    type OsNotificationPermission,
+    type OsNotificationPermission, type TurnOnOptions, type TurnOnResult,
 } from '../notification-permission';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from '../storage-keys';
 
@@ -132,24 +133,27 @@ describe('the first landing after the update: the card, once, where the phone ha
 describe("the card's taps: Turn on through the one door; Later puts it away and is not a no", () => {
     const shownOn = (os: OsNotificationPermission) => offerOnceCard(undefined, at(Date.now()), reads(os));
 
-    it('iPhone, Turn on + Allow: the phone\'s yes is kept, and the card goes by it', async () => {
+    it('iPhone, Turn on + Allow: the phone\'s yes is kept, and the card goes by it, closed for good as on the web', async () => {
         store(DECLINED);
         expect(await shownOn(IPHONE_ASK)).toBe(true);
         notifications.requestPermissionsAsync.mockResolvedValueOnce({ status: 'granted', canAskAgain: true });
         expect(await turnOnFromOnceCard(null, undefined, { readOs: reads(IPHONE_ASK) })).toBe('granted');
         expect(notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
         expect(stored()).toMatchObject({ state: 'granted' });
-        expect(stored().onceClosedAt).toBeUndefined();
+        // Any answer on the card closes it (core's notifyOutcomeEvent on 'once', as the web keeps it), a yes included.
+        expect(typeof stored().onceClosedAt).toBe('number');
+        expect(stored().laterAt).toBeUndefined();
         expect(notifyAsks({ record: stored(), phone: { available: true, granted: true, canAskAgain: true }, now: Date.now() }).once).toBe(false);
     });
 
-    it("iPhone, Turn on + Don't Allow: the phone's no is kept as the phone's (never as a Later), and the card goes by it", async () => {
+    it("iPhone, Turn on + Don't Allow: the phone's no is kept as the phone's (never as a Later), and the card goes by it, closed for good", async () => {
         store(DECLINED);
         expect(await shownOn(IPHONE_ASK)).toBe(true);
         notifications.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
         expect(await turnOnFromOnceCard(null, undefined, { readOs: reads(IPHONE_ASK) })).toBe('declined');
         expect(typeof stored().phoneNoAt).toBe('number');
-        expect(stored().onceClosedAt).toBeUndefined();
+        expect(typeof stored().onceClosedAt).toBe('number');
+        expect(stored().laterAt).toBeUndefined();
         expect(notifyAsks({ record: stored(), phone: IPHONE_NO, now: Date.now() }).once).toBe(false);
     });
 
@@ -188,6 +192,67 @@ describe("the card's taps: Turn on through the one door; Later puts it away and 
         for (const d of [0, 1, 3, 8]) expect(await offerOnceCard(undefined, at(t0 + d * DAY + HOUR), reads(IPHONE_ASK)), `day ${d}`).toBe(false);
         expect(notifyStep(await readNotificationPermissionRecord(), IPHONE_ASK)).toBe(false);
     });
+});
+
+/**
+ * The card's answer on the phone, beside the web's for the same answer (apps/pwa lib/web-push.ts turnOnFromAsk: core's
+ * notifyBrowserOutcome, then notifyOutcomeEvent on 'once'). Each row: the tap on the phone, what it ends in, and the web's
+ * answer that matches it; the two records must say the same (the phone's yes or no, a Later, the card closed). The web has
+ * no Settings line: a Settings opened from the card is the card's Later on the phone, as the web's Later is. The yes and the
+ * no rows go red if the phone records its answer without saying it came from the card (only its Later would close it then).
+ */
+type Tap = {
+    tap: string;
+    os: OsNotificationPermission;
+    /** The phone's own read at the tap, when it differs from the landing's (switched off in its settings meanwhile). */
+    atTap?: OsNotificationPermission;
+    pop?: { status: string; canAskAgain: boolean };
+    options?: Partial<TurnOnOptions>;
+    result: TurnOnResult;
+    /** The web's answer that matches: what turnOnWebPush ends in, or its Later. */
+    web: NotifyBrowserResult | 'later';
+};
+const TAPS: Tap[] = [
+    { tap: 'iPhone, Allow', os: IPHONE_ASK, pop: { status: 'granted', canAskAgain: true }, result: 'granted', web: 'ok' },
+    { tap: "iPhone, Don't Allow", os: IPHONE_ASK, pop: { status: 'denied', canAskAgain: false }, result: 'declined', web: 'blocked' },
+    { tap: "Android 13+, Don't allow (the flag goes on)", os: A13(false, true), pop: { status: 'denied', canAskAgain: true }, result: 'declined', web: 'blocked' },
+    {
+        tap: 'Android 13+, the pop-up closed with no answer', os: A13(false, true), pop: { status: 'denied', canAskAgain: false },
+        options: { watchForeground: () => ({ left: () => true, stop: () => {} }) }, result: 'unanswered', web: 'dismissed',
+    },
+    {
+        tap: "iPhone switched off since the landing: the Settings line's Open Settings", os: IPHONE_ASK, atTap: IPHONE_NO,
+        options: { confirmSettings: async () => 'turn_on', openSettings: async () => {} }, result: 'settings', web: 'later',
+    },
+    {
+        tap: "iPhone switched off since the landing: the Settings line's Not now", os: IPHONE_ASK, atTap: IPHONE_NO,
+        options: { confirmSettings: async () => 'not_now', openSettings: async () => {} }, result: 'unanswered', web: 'later',
+    },
+];
+
+/** What a record says of the answers, without the times: the phone's (or browser's) yes or no, a Later, the card closed. */
+const says = (r: NotifyAskRecord) => ({
+    state: r.state, phoneNo: typeof r.phoneNoAt === 'number', later: typeof r.laterAt === 'number', closed: typeof r.onceClosedAt === 'number',
+});
+
+describe("the card's answer, phone beside web: both apps write the record the same (core's notifyOutcomeEvent on 'once')", () => {
+    for (const row of TAPS) {
+        it(`${row.tap} → ${row.result}, the same record as the web's ${row.web}`, async () => {
+            if (row.os.cantAskNeedsRecord) { platform.OS = 'android'; platform.Version = 34; }
+            store(DECLINED);
+            expect(await offerOnceCard(undefined, at(Date.now()), reads(row.os))).toBe(true);
+            const shown = stored();
+            if (row.pop) notifications.requestPermissionsAsync.mockResolvedValueOnce(row.pop);
+            expect(await turnOnFromOnceCard(null, undefined, { readOs: reads(row.atTap ?? row.os), ...row.options })).toBe(row.result);
+            const outcome = row.web === 'later' ? 'later' : notifyBrowserOutcome(row.web);
+            expect(outcome).not.toBeNull();
+            const web = markNotifyAsk(shown, notifyOutcomeEvent(outcome!, 'once'), Date.now());
+            expect(says(stored())).toEqual(says(web));
+            // Every answer on the card closes it, on both apps, and it is never back.
+            expect(says(stored()).closed).toBe(true);
+            expect(notifyAsks({ record: stored(), phone: IPHONE_ASK, now: Date.now() + DAY }).once).toBe(false);
+        });
+    }
 });
 
 describe('the record the pop-up keeps is never put back by a landing read before it', () => {

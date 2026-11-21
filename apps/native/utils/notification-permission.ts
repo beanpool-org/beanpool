@@ -33,7 +33,7 @@ import { Alert, AppState, Linking, Platform, TurboModuleRegistry, type TurboModu
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type * as ExpoNotifications from 'expo-notifications';
 import {
-    t, word, markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyPopUpAnswer, notifyTurnOn,
+    t, word, markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyOutcomeEvent, notifyPopUpAnswer, notifyTurnOn,
     type NotifyAskEvent, type NotifyAskRecord, type NotifyAskSurface, type NotifyLineKind, type NotifyPopUpRead,
 } from '@beanpool/core';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
@@ -443,9 +443,11 @@ export function offerOnceCard(
 
 /**
  * "Turn on notifications" on Home's once card: the phone's own pop-up through the one door ({@link turnOnNotifications}),
- * so its answer is heard and kept as at every other tap. A yes, or the phone's no, ends the card by the phone's own answer
- * (core's rule). Anything else (the pop-up closed with no answer, the one Settings line's "Not now", Settings opened) is
- * the card's "Later": put away, never a no. Never throws.
+ * so its answer is heard and kept as at every other tap. Then the card's answer is kept as the web keeps its own (core's
+ * notifyOutcomeEvent on 'once', apps/pwa lib/web-push.ts turnOnFromAsk), so both apps write the record the same: a yes, or
+ * the phone's no, closes the card for good by that answer (`onceClosedAt`, a yes too); anything else (the pop-up closed
+ * with no answer, the one Settings line's "Not now", Settings opened) is the card's "Later": put away, never a no.
+ * Never throws.
  */
 export async function turnOnFromOnceCard(
     publicKey?: string | null,
@@ -458,7 +460,10 @@ export async function turnOnFromOnceCard(
     } catch {
         // No answer to read: a "Later", never a no.
     }
-    if (result !== 'granted' && result !== 'declined') await onceCardLater(storage).catch(() => undefined);
+    // 'settings' is no answer of the card's: the phone's no already stands, or (Android 13+) its pop-up never came up and
+    // nothing is recorded from it (turnOnNotifications); so it is the card's Later here, never a no written from the card.
+    const answer = result === 'granted' || result === 'declined' ? result : 'later';
+    await markNotificationAsk(notifyOutcomeEvent(answer, 'once'), storage).catch(() => undefined);
     return result;
 }
 

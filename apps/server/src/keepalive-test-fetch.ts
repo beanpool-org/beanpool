@@ -18,8 +18,8 @@
  * CI run 44900976683 (main, d1619835) and PR #3333's run 44871673592: test-dos-hardening line 614, the read straight
  * after section 7's `deep` read, on the socket idle since section 6. Measured with a plain server in one process on
  * Node 22.23 (CI's), two sockets, a 3.8-3.9 s stretch, then four reads with 0.55-0.7 s of work each and the call after
- * them: 5 of 8 reset with the old rule here (a turn when the last call settled more than 4 s ago, blind to the second
- * socket), 0 of 8 with this one.
+ * them: 14 of 24 reset with the old rule here (a turn when the last call settled more than 4 s ago, blind to the second
+ * socket), 0 of 24 with this one. test-keepalive-idle-close row E holds it.
  *
  * Which socket a request went out on, and when its answer came back, are read from fetch's diagnostics channels
  * (undici:client:sendHeaders, undici:request:trailers, undici:request:error), in real time: the time a request went

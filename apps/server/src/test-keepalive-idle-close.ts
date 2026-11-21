@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     {
         const base = `http://127.0.0.1:${httpPort}`;
         const sockets = new Set<Socket>();
-        let rode: Socket | null = null;
+        let rode = null as Socket | null; // set by the channel's callback, so never narrowed to null here
         const onSend = (m: unknown) => { const { socket } = m as { socket: Socket }; sockets.add(socket); rode = socket; };
         dc.subscribe('undici:client:sendHeaders', onSend);
         try {
@@ -200,7 +200,7 @@ async function main(): Promise<void> {
             await sleep(1_000);
             const again = await localFetch(`${base}${PATH}`);
             await again.text();
-            assert(again.status === 200 && rode === fresh && !(fresh as Socket | null)?.destroyed,
+            assert(again.status === 200 && rode === fresh && !fresh?.destroyed,
                 `E. a call 1,000 ms after an answer keeps its socket (${again.status}; same socket: ${rode === fresh})`);
         } finally {
             dc.unsubscribe('undici:client:sendHeaders', onSend);

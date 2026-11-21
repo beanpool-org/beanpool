@@ -117,7 +117,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     const [writtenDown, setWrittenDown] = useState(false);
     const [linking, setLinking] = useState(false);
     const [vaultCopy, setVaultCopy] = useState(false);
-    const [settled, setSettled] = useState(false);
+    /** Counts the reads finished on this card (each visit's), for `onSettled`. */
+    const [settled, setSettled] = useState(0);
     const s = styles(colors);
 
     const latest = useRef(0);
@@ -231,7 +232,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         return () => { live = false; };
     }, [recordUrl]);
 
-    useFocusEffect(useCallback(() => { void refresh().catch(() => undefined).finally(() => setSettled(true)); }, [refresh]));
+    useFocusEffect(useCallback(() => { void refresh().catch(() => undefined).finally(() => setSettled(n => n + 1)); }, [refresh]));
     // Home's answer arrived with the community's word, or the account's dismissal changed: read again. `kept` too: a
     // say-so made on another device lands while `words` stays true, and ends the card on this visit (review of #3113).
     const wordKey = homeWord ? `${homeWord.url}|${homeWord.standing.words}|${!!homeWord.standing.kept}` : '';
@@ -262,7 +263,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     // After `onUp` in the same commit (effects run in order), so Home hears whether this card is up no later than that it settled.
     const reportSettled = useRef(onSettled);
     reportSettled.current = onSettled;
-    useEffect(() => { if (settled) reportSettled.current?.(); }, [settled]);
+    useEffect(() => { if (settled > 0) reportSettled.current?.(); }, [settled]);
     useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
 
     if (!identity || !record || !up) return null;

@@ -351,6 +351,8 @@ export default function HomeScreen() {
     // Read at each landing and on each return to the app (back from the phone's settings after Turn on).
     useFocusEffect(useCallback(() => {
         freshLanding.current = true;
+        // The way-back card reads again on this landing (its own focus, already started): the Home card waits for that read.
+        setWayBackSettled(false);
         void readNotify();
         const sub = AppState.addEventListener?.('change', next => { if (next === 'active') void readNotify(); });
         return () => sub?.remove?.();

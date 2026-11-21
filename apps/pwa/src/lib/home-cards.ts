@@ -563,15 +563,24 @@ export interface WayBackOnHome {
      * linkState). Anyone else is refused (404 invite_only, 409 not_words_member), so is never offered it.
      */
     canAddSignIn: boolean;
-    /** The schedule starts as put away: sign-up counted as the first showing (§2.5), for all but the 12-words door's own. */
+    /**
+     * With no showing or put-away this browser knows of, the schedule starts as put away at the join: sign-up counted as
+     * the first showing (§2.5), for all but the 12-words door's own (components/OneWayBack.tsx `wayBackScheduleHere`).
+     */
     startsAway: boolean;
-    /** Posts the member has up, as far as Home's answer tells: the schedule's return after a post. */
-    keptPosts: number;
-    /** When their first week is over (joined + 7 days): the schedule's second return. null when the join date is unknown. */
-    weekOverAt: number | null;
+    /** When the account joined this community (`me.joinedAt`): core's 30 days count from it. null when the answer doesn't say. */
+    joinedAt: number | null;
+    /**
+     * The balance now, whole hundredths, from Your Beans in this answer: core's first Beans, and something to lose. null where
+     * the answer has none (Beans off, the worldwide community, no Your Beans card).
+     */
+    balance_c: number | null;
+    /**
+     * Something else to lose that Home's answer shows: an open deal. (The phone also counts a live listing and a role; Home's
+     * answer carries neither, and the card asks for nothing later.)
+     */
+    holds: boolean;
 }
-
-const WEEK_MS = 7 * DAY_MS;
 
 /**
  * Who "Your way back in" is for on Home, from the Home answer alone (DESIGN-home-default-fable.md §2.5, slice D3): every
@@ -585,7 +594,7 @@ const WEEK_MS = 7 * DAY_MS;
  */
 export function wayBackOf(answer: HomeAnswer, wordsKeptHere = false): WayBackOnHome {
     const me = answer.me;
-    const none: WayBackOnHome = { forThem: false, canAddSignIn: false, startsAway: false, keptPosts: 0, weekOverAt: null };
+    const none: WayBackOnHome = { forThem: false, canAddSignIn: false, startsAway: false, joinedAt: null, balance_c: null, holds: false };
     if (!me || answer.welcome || me.standing !== 'member') return none;
     const door = !!answer.cards.safety;
     const s = answer.cards.steps;
@@ -595,12 +604,14 @@ export function wayBackOf(answer: HomeAnswer, wordsKeptHere = false): WayBackOnH
     const kept = wordsKeptHere || me.wordsKept === true || s?.words === true || keptByDoor;
     const forThem = door || (me.wayBack === 'words' && !kept);
     const joined = Date.parse(me.joinedAt ?? '');
+    const balance = answer.cards.beans?.balance_c;
     return {
         forThem,
         canAddSignIn: door,
         startsAway: !door,
-        keptPosts: Math.max(Number(me.probation?.keptPosts) || 0, me.firstOffer || s?.firstPost ? 1 : 0),
-        weekOverAt: Number.isFinite(joined) ? joined + WEEK_MS : null,
+        joinedAt: Number.isFinite(joined) ? joined : null,
+        balance_c: typeof balance === 'number' && Number.isFinite(balance) ? balance : null,
+        holds: (answer.cards.deals?.open ?? 0) > 0,
     };
 }
 
@@ -1061,8 +1072,7 @@ export function skyOf(answer: Pick<HomeAnswer, 'me' | 'cards'>, inst: Pick<HomeC
 
 /**
  * Whether the "Use the phone app" card is due on Home (front doors S4):
- * shown after the first post or a week (when the one-way-back card already comes back),
- * until dismissed by the member.
+ * shown after the first post or a week, until dismissed by the member.
  */
 export function usePhoneAppCardDue({
     dismissed,

@@ -2,6 +2,10 @@ User-agent: *
 Allow: /
 # The sign-in return pages only pass a sign-in back to the app.
 Disallow: /auth/
+# Pages of a business directory a former owner of this domain ran. Nothing here ever had them; crawlers still ask
+# (~49k a day of 404s, 22 Nov 2026). Asked not to.
+Disallow: /businesses/
+Disallow: /*.aspx
 
 Sitemap: https://beanpool.org/sitemap.xml
 Sitemap: https://beanpool.org/guide/sitemap.xml

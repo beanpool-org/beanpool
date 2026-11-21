@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The screens Settings opens, in the member's language (words slice S3, sweep B4): profile setup (app/profile-setup.tsx)
- * with what only it draws, drawn for real: its "How BeanPool works" cards (components/OnboardingGuide.tsx), the Profile
- * Photo sheet (components/AvatarPickerSheet.tsx, which the first screen's wizard draws too: taken whole here) and the
+ * with what only it draws, drawn for real (its "How BeanPool works" cards left it in slice S5b: the photo, or the area,
+ * is its last step, with Done): the Profile Photo sheet (components/AvatarPickerSheet.tsx, which the first screen's wizard draws too: taken whole here) and the
  * area step (components/AreaPicker.tsx); Settings → Your area (app/your-area.tsx); Suggest a change
  * (app/suggest-change.tsx, with core's feedback.ts lines). Each is rendered inside the real LanguageProvider, with React
  * Native's host components as plain tags carrying their accessibility props, placeholders and the layout props the
@@ -252,7 +252,7 @@ describe('profile setup in the pseudo-locale: every word came through t() (words
     it('the name step: the step count, the field, each answer of the name check, the names offered instead', async () => {
         await renderIn('xx', ProfileSetupScreen);
         await afterTheNameCheck();
-        expect(host.textContent).toContain(pseudoLocalise('Step {n} of {total}').replace('{n}', '1').replace('{total}', '3'));
+        expect(host.textContent).toContain(pseudoLocalise('Step {n} of {total}').replace('{n}', '1').replace('{total}', '2'));
         expect(host.textContent).toContain(pseudoLocalise('👋 Your name'));
         expect(host.textContent).toContain(pseudoLocalise('✓ Available on this community'));
         expect(byLabel('Your callsign')).not.toBeNull();
@@ -294,7 +294,7 @@ describe('profile setup in the pseudo-locale: every word came through t() (words
         expect(bypassing(), 'picked').toEqual([]);
     });
 
-    it('the area step on a community that syncs by area, its failure line, and the guide with no Beans', async () => {
+    it('the area step on a community that syncs by area, its failure line, and its Skip ends the wizard (no How it Works)', async () => {
         prof.value = { profile: 'global', features: GLOBAL_FEATURES, checkedAt: new Date().toISOString() };
         nav.params = { name: 'Sally' };
         answers = { '/api/community/me/area': { status: 500, body: {} } };
@@ -306,29 +306,19 @@ describe('profile setup in the pseudo-locale: every word came through t() (words
         expect(host.textContent).toContain(pseudoLocalise('The community said no ({status}). Try again later.').replace('{status}', '500'));
         expect(bypassing(), 'area').toEqual([]);
         await click(host.querySelector('[data-testid="area-skip"]'), 'Skip');
-        expect(host.textContent).toContain(pseudoLocalise('🫘 How BeanPool works'));
-        expect(host.textContent).toContain(pseudoLocalise('A quick look at this community.'));
-        expect(host.textContent).toContain(pseudoLocalise('🌍 A place to meet'));
-        expect(host.textContent).not.toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
-        expect(byLabel('Done')).not.toBeNull();
-        expect(bypassing(), 'guide, no Beans').toEqual([]);
+        expect(host.textContent).not.toContain(pseudoLocalise('🫘 How BeanPool works'));
+        expect(host.textContent).not.toContain(pseudoLocalise('🌍 A place to meet'));
+        expect(bypassing(), 'the wizard ended').toEqual([]);
     });
 
-    it('the guide with Beans: each card, the bold words inside their sentences; a name taken at the last moment', async () => {
+    it("the photo, the last step: its Done, and a name taken at the last moment", async () => {
         nav.params = { name: 'Sally' };
         answers = { '/api/profile/update': { status: 409, body: {} } };
         await renderIn('xx', ProfileSetupScreen);
-        await click(button('Next →'), 'Next');
-        expect(host.textContent).toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
-        expect(host.textContent).toContain(pseudoLocalise('A quick look at this community economy.'));
-        // The bold words sit inside the sentence they belong to, wherever its language puts them.
-        const map = pseudoLocalise('📍 Explore the {map} to find offers (green) and needs (orange) near you.').split('{map}');
-        expect(host.textContent).toContain(`${map[0]}${pseudoLocalise('Map')}${map[1]}`);
-        const zero = pseudoLocalise('🟢 {zero} This means you have given as much value to your community as you have received from it.').split('{zero}');
-        expect(host.textContent).toContain(`${zero[0]}${pseudoLocalise('The best place to be is zero (0 Beans).')}${zero[1]}`);
-        expect(host.textContent).toContain(pseudoLocalise('💳 Use the {ledger} tab to send credits to neighbors instantly.').split('{ledger}')[0]);
-        expect(bracketed()).toBeGreaterThan(20);
-        expect(bypassing(), 'guide').toEqual([]);
+        expect(button('Next →')).toBeNull();
+        expect(byLabel('Done')).not.toBeNull();
+        expect(host.textContent).not.toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
+        expect(bypassing(), 'the photo, last').toEqual([]);
         await click(button('Done ✓'), 'Done');
         expect(host.textContent).toContain(pseudoLocalise('That name was just taken — please pick another.'));
         expect(bypassing(), 'taken at the end').toEqual([]);
@@ -338,16 +328,10 @@ describe('profile setup in the pseudo-locale: every word came through t() (words
         nav.params = { name: 'Sally' };
         await renderIn('en', ProfileSetupScreen);
         expect(bracketed()).toBe(0);
-        for (const english of ['Step 2 of 3', '📸 Choose your look', 'Add a photo, or pick a fun avatar — whatever feels like you.', 'Change Photo or Avatar', 'Next →', '← Back']) {
+        for (const english of ['Step 2 of 2', '📸 Choose your look', 'Add a photo, or pick a fun avatar — whatever feels like you.', 'Change Photo or Avatar', 'Done ✓', '← Back']) {
             expect(host.textContent, english).toContain(english);
         }
-        await click(button('Next →', 'en'), 'Next');
-        for (const english of ['🫘 How BeanPool works', '⚡ Energy Exchange Marketplace',
-            '🟢 The best place to be is zero (0 Beans). This means you have given as much value to your community as you have received from it.',
-            '📍 Explore the Map to find offers (green) and needs (orange) near you.', '💬 Tap Message on any post to chat securely (E2E encrypted) with neighbors.',
-            '➕ Click Post to list what you need or what you can offer to the community.', '💳 Use the Ledger tab to send credits to neighbors instantly.', 'Done ✓']) {
-            expect(host.textContent, english).toContain(english);
-        }
+        for (const gone of ['Next →', '🫘 How BeanPool works', '⚡ Energy Exchange Marketplace']) expect(host.textContent, gone).not.toContain(gone);
     });
 });
 
@@ -462,12 +446,14 @@ describe('the screens at 320 dp with 1.3× text, in the pseudo-locale', () => {
         nav.params = { name: 'Sally' };
         await renderIn('xx', ProfileSetupScreen);
         await afterTheNameCheck();
+        // The photo, the last step on a local community, with its Done (How it Works and its cards left the wizard, S5b).
+        expect(byLabel('Done')).not.toBeNull();
         expect(tooWide(240)).toEqual([]);
         expect(stuckInRows()).toEqual([]);
-        await click(button('Next →'), 'Next');
-        expect(drawnWords().length).toBeGreaterThan(20);
-        // The guide's cards: 16 padding and a border inside the card, and the emoji beside a bullet's words.
-        expect(tooWide(240 - 2 * 17 - (18 * SCALE * 1.25 + 10))).toEqual([]);
+        await click(button('← Back'), 'Back');
+        await afterTheNameCheck();
+        expect(host.textContent).toContain(pseudoLocalise('👋 Your name'));
+        expect(tooWide(240)).toEqual([]);
         expect(stuckInRows()).toEqual([]);
     });
 

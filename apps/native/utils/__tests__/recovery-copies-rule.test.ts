@@ -70,7 +70,10 @@ import { SsoSignInError } from '../sso-signin';
 import { readNodeProfile } from '../node-profile';
 import { readRecoveryCopiesRule, signInCopiesAt, type SignInCopies } from '../vault-config';
 import { copiesAtFor, copiesRuleChange, copiesRuleNow, copiesRuleSeen, knownCopiesRule } from '../copies-rule';
-import { finishMove, vaultMoveOffer } from '../vault-move';
+import { finishMove, moveMineOffered, vaultMoveOffer } from '../vault-move';
+import { vaultCopyKnownStoreKey } from '../storage-keys';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { linkSignIn, linkedNotice, type LinkAnswer } from '../join-link';
 import type { KeeperEnrolmentResult } from '../keeper-enrolment';
 import { COMMUNITY, CommunityKeepingCopies, FakeGlobal, GLOBAL, installNetwork, noVault, TICKET_KEY, useVault, VAULT, type Network } from './fake-vault';
@@ -563,6 +566,27 @@ describe('Home\'s "rule changed" card', () => {
         expect(await change()).toBeNull();
         await appOpens('none');
         expect(await change()).toEqual({ url: COMMUNITY, rule: 'none', from: 'community', to: 'none' });
+    });
+
+    it("Move mine is offered only for a sign-in's copy at the vault, the only kind the move card moves", async () => {
+        // Review of #3330 r2: the admins' half ('c', no sign-in's copy) offered Move mine, and Account Protection had
+        // nothing to move.
+        const toCommunity = { from: 'vault', to: 'community' };
+        mem.set(vaultCopyKnownStoreKey(pk), 'c');
+        expect(await moveMineOffered(pk, toCommunity)).toBe(false);
+        mem.set(vaultCopyKnownStoreKey(pk), `0:${Date.now()}`);
+        expect(await moveMineOffered(pk, toCommunity)).toBe(false);
+        mem.delete(vaultCopyKnownStoreKey(pk));
+        expect(await moveMineOffered(pk, toCommunity)).toBe(false);
+        mem.set(vaultCopyKnownStoreKey(pk), '1');
+        expect(await moveMineOffered(pk, toCommunity)).toBe(true);
+        // Any other change moves nothing from the vault to the community.
+        expect(await moveMineOffered(pk, { from: 'community', to: 'vault' })).toBe(false);
+        expect(await moveMineOffered(pk, { from: 'community', to: 'none' })).toBe(false);
+        // Home's card asks this, and nothing that counts the admins' half as a copy to move.
+        const card = readFileSync(resolve(__dirname, '../../components/CopiesRuleCard.tsx'), 'utf8');
+        expect(card).toContain('const canMove = await moveMineOffered(pk, found);');
+        expect(card).not.toMatch(/vaultCopyKnowledge|vaultCopyKnown\(/);
     });
 
     it('a build without the vault is never told of vault ↔ server: copies stay at the community either way', async () => {

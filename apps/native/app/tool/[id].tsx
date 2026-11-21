@@ -46,6 +46,7 @@ import { ToolListSheet } from '../../tools/list-sheet';
 import { TOOL_SCREEN_PARAM, toolHref, toolParams, toolScreenOf } from '../../tools/route-params';
 import { shopToggleState, type ShopToggleState } from '../../components/shop/ShopToggle';
 import { SHOP_TOGGLE_READ_MS, readMyShop } from '../../utils/shop';
+import { oneAskAtATime } from '../../utils/one-ask';
 
 /** What every open screen of one tool, for one owner, shares. */
 interface SharedState { doc: unknown; stored: boolean; settings: ToolSettings; copyNote: ToolCopyNote }
@@ -328,14 +329,16 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     // The phone's pop-up through the app's one door (utils/notification-permission.ts turnOnNotifications), so its answer is
     // kept as every other ask's is: a "Don't allow" here is the phone's no everywhere, and a pop-up closed with no answer a
     // "Later" (amend3 §5, review of #3335 finding 5). Loaded at the tap, as expo-notifications was.
-    const allowNotifications = useCallback(async () => {
+    // One tap, one ask: Allow tapped again while the pop-up is out does nothing (utils/one-ask.ts).
+    const notifyAsk = useRef(oneAskAtATime()).current;
+    const allowNotifications = useCallback(() => notifyAsk(async () => {
         try {
             const { turnOnNotifications } = await import('../../utils/notification-permission');
             setNotificationsAllowed((await turnOnNotifications()) === 'granted');
         } catch {
             setNotificationsAllowed(null);
         }
-    }, []);
+    }), [notifyAsk]);
     useEffect(() => {
         if (!settingsOpen) return;
         (async () => {

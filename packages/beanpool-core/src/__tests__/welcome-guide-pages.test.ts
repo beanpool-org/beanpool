@@ -59,10 +59,13 @@ describe("the guide's Home page: the tile, its band, its end, the order", () => 
 });
 
 describe("the guide's notifications page", () => {
-    it('names no card at the end of How it Works: the phone asks from First steps, or at the first message or request to join', () => {
+    // Slice N2a: no pop-up at the first message or request to join; a named line's Tell me there instead.
+    it('names no card at the end of How it Works: the phone asks from First steps, or from Tell me on a named line', () => {
         const notifications = flat('settings/notifications.md');
         expect(notifications).not.toContain('the card at the end of How it Works');
-        expect(notifications).toContain('**Hear when someone answers you** in **First steps** on **Home**, or when you send your first message or request to join.');
+        expect(notifications).not.toContain('or when you send your first message or request to join');
+        expect(notifications).toContain('**Hear when someone answers you** in **First steps** on **Home**, or **Tell me** on a one-line offer such as **Hear when Asha answers.** under your first message.');
+        expect(notifications).toContain("The same line shows once after your first listing, a request on someone's listing, a request to join, or a message you read, never more than one a day.");
     });
 });
 

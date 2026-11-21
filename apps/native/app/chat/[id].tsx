@@ -68,6 +68,7 @@ import { chatLineWords } from '../../utils/chat-line-words';
 import { listingHeaderStatusWords } from '../../utils/listing-status-words';
 import { NotDeliveredMark } from '../../components/chat/NotDeliveredMark';
 import { NotSeenLine } from '../../components/chat/NotSeenLine';
+import { chatMoment, takeNotifyMoment, useNotifyLine, useScreenShowing, type NotifyLineOffer } from '../../components/NotifyLine';
 import { notSeenInThread, notSeenWords } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { signedRequestWords } from '../../components/signed-request-lines';
@@ -958,6 +959,20 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     // In place too (slice S3): its report and block go to the chat's own community (submitLineReport, `at`).
     const canReportRequest = !!requestLine || nodeAnswered;
     const requestHoldsSends = requestMode === 'to-me' || requestMode === 'mine-loading' || (requestMode === 'mine-waiting' && !editingMessage);
+    // The named line at the member's own moment (slice N2a; core's rule says whether: each kind once on a phone, one soft ask
+    // a day, never after the phone's no): "Hear when {name} answers." under my first message sent, "Hear when {name} writes
+    // again." under their line read here (a request accepted included), "Hear when {name} says yes." after a request on
+    // their listing (app/post/[id].tsx hands that moment over; it waits for a line to hang under). One per visit.
+    // A visit is while the chat is in front: a screen opened over it (a profile, a listing) and back, and the line is gone.
+    const inFront = useScreenShowing();
+    const notify = useNotifyLine(identity?.publicKey, inFront);
+    const namedFor = convRow && peerPubkey ? peerName : null;
+    const momentRef = useRef<NotifyLineOffer | null>(null);
+    useEffect(() => {
+        const m = takeNotifyMoment(chatMoment(String(id)));
+        if (m) momentRef.current = m;
+    }, [id]);
+
     // Asked before the composer empties the box, so a refused send keeps what was typed.
     const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && !requestLineId && !requestHoldsSends;
 
@@ -991,6 +1006,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 setReplyToMessage(null);
                 // Written here and on its way: the chat waits only once the node has taken it (the effect above).
                 if (requestMode === 'mine-unsent' && typeof sentId === 'string') setRequestLineId(sentId);
+                // A request's moment, if one waits, takes this line instead (the effect below).
+                if (typeof sentId === 'string' && namedFor && !momentRef.current) void notify.offer({ kind: 'answer', name: namedFor, anchor: sentId, align: 'end' });
                 loadMessages();
             }
             setLockNotice(null);
@@ -1396,6 +1413,25 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         })), Date.now());
         return found ? { id: messages[found.index]?.id as string, notSeen: found.notSeen } : null;
     }, [messages, identity?.publicKey, requestMode]);
+    // The newest line the named line can hang under: a person's, never a notice, a node's line or a deleted one.
+    const newestLine = React.useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m: any = messages[i];
+            if (m.keyChangedNotice || m.type === 'system' || m.senderId === 'SYSTEM' || m.unattributed || m.fromOfferedKey || isTombstone(m)) continue;
+            return { id: String(m.id), mine: !!identity?.publicKey && m.senderId === identity.publicKey };
+        }
+        return null;
+    }, [messages, identity?.publicKey]);
+    useEffect(() => {
+        if (!firstLoadDone || !namedFor || !newestLine || isPeerBlocked || keyChangePending) return;
+        const moment = momentRef.current;
+        if (moment) {
+            momentRef.current = null;
+            void notify.offer({ ...moment, name: moment.name || namedFor, anchor: newestLine.id, align: newestLine.mine ? 'end' : 'start' });
+        } else if (!newestLine.mine && requestMode === 'none') {
+            void notify.offer({ kind: 'again', name: namedFor, anchor: newestLine.id });
+        }
+    }, [firstLoadDone, namedFor, newestLine?.id, requestMode, isPeerBlocked, keyChangePending]);
     // The listings the messages name (Message on a listing; core chat-about.ts), as this member can read them.
     const aboutListings = useAboutListings(React.useMemo(() => (at ? [] : messages.filter((m) => m.about).map((m) => m.about.postId as string)), [messages, at]));
 
@@ -1751,10 +1787,13 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         );
         // The other person's name only once the chat has said it (never "Loading..."); before, "them".
         const notSeenText = notSeen && notSeen.id === item.id ? notSeenWords(notSeen.notSeen, convRow ? peerName : null) : null;
-        return notSeenText ? (
+        // Never in a chat blocked, or paused on a new key, since the line was offered (both are read after the thread).
+        const named = notify.line?.anchor === item.id && !isPeerBlocked && !keyChangePending ? notify.view : null;
+        return notSeenText || named ? (
             <View>
                 {row}
-                <NotSeenLine text={notSeenText} />
+                {notSeenText ? <NotSeenLine text={notSeenText} /> : null}
+                {named}
             </View>
         ) : row;
     };

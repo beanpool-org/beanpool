@@ -1055,6 +1055,24 @@ describe("the global community's door in the pseudo-locale", () => {
             check(`the door, two ways, ${rule}`);
         });
     }
+
+    // The door's name screen counts the screens the way chosen leads to (review of #3330): on the sign-in, a door whose rule
+    // keeps a copy goes past the way back, as Your photo then does (two dots); the 12 words, or a door that keeps no copies,
+    // show it (three). The join holds no copy yet here: the photo's skip waits for the copy that landed.
+    const stepOf = (n: number, total: number) => pseudoLocalise('Step {n} of {total}').replace('{n}', String(n)).replace('{total}', String(total));
+    const spoken = () => all('[aria-label]').map((e) => e.getAttribute('aria-label'));
+    for (const rule of ['vault', 'server', 'none'] as const) {
+        it(`the door's dots, rule ${rule}: the sign-in ${rule === 'none' ? 'three' : 'two'}, the 12 words three`, async () => {
+            useVault();
+            door.check = { ok: true, profile: { features: { wordsDoor: true }, recoveryCopies: rule } };
+            await mount('xx');
+            await explore('xx');
+            expect(spoken()).toContain(stepOf(1, rule === 'none' ? 3 : 2));
+            await press(DOOR_CHOICE_TEXT.words, 'xx');
+            expect(spoken()).toContain(stepOf(1, 3));
+            expect(spoken()).not.toContain(stepOf(1, 2));
+        });
+    }
 });
 
 describe('restoring an account in the pseudo-locale', () => {

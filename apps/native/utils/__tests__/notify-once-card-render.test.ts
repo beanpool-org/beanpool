@@ -154,8 +154,8 @@ describe("Home's once card, at 320 dp with 1.3x text", () => {
     // A word wider than its line would run off the side at 320 dp. The card's line is the screen less Home's two gutters, the
     // card's padding and its border; a button's, less its own padding too. The glyph model is the join screen's
     // (welcome-notify-step-render.test.ts): 0.62em a letter, 1em a CJK character (which breaks anywhere), at 1.3x.
-    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
-    const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
+    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
+    const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\ufe0f\u200c\u200d]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
     const widthOf = (text: string, size: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * size * 1.3, 0);
     const widest = (text: string) => text.split(/[\s~]+/).flatMap((w) => (CJK.test(w) ? Array.from(w) : [w])).reduce((a, w) => (widthOf(w, 1) > widthOf(a, 1) ? w : a), '');
     const LINE = 320 - 2 * HOME_GUTTER_DP - 2 * HOME_CARD_PADDING_DP - 2;

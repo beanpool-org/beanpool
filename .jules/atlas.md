@@ -323,3 +323,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `ShapeRow`, `RowControls`, and helper functions (`joinDisplay`, `joinRadioTitle`, `joinRadioDescription`, `visitorsDisplay`) in `apps/manager/src/components/modules/ShapeRows.tsx` lacked a direct unit test suite.
 **Learning:** `ShapeLock.code` expects union type `ShapeLockCode` (e.g. `'server_env'`, `'auth_hatch_open'`). Testing verified expand toggle interactions, `serverBadge` interaction overrides, `auth_hatch_open` danger tint styling, `allowExpandWithLock` core lock overrides, and `RowControls` typed word gating.
 **Action:** Continue identifying remaining untested module components and helpers across `apps/manager/src/components/modules/`.
+
+## 2026-11-09 - [manager tests] node-data-pages and LoadMoreRow unit tests
+**Gap:** `useNodeDataPages` hook and `LoadMoreRow` component in `apps/manager/src/lib/node-data-pages.tsx` lacked a dedicated unit test suite.
+**Learning:** `LoadMoreRow` handles `members` and `posts` paging representations differently (such as `MEMBERS_PAGE_SIZE` vs `POSTS_PAGE_SIZE`, oldest joined vs most recently changed phrasing, and total counts). Testing verified null context fallback, empty render when no more pages and no error, active busy state button disables, search scope indicators, and error display without more button.
+**Action:** Scan `apps/manager/src/lib/` for newly split utilities or contexts that lack matching `.test.tsx` coverage files.

@@ -1658,3 +1658,13 @@ export function createDoorbellDebounce(
 export function homeCrowdFor(me: () => string | null | undefined): { is: (data: unknown) => boolean; delayMs: () => number } {
     return { is: data => isCrowdDoorbell(data, me()), delayMs: () => crowdBellDelayMs() };
 }
+
+/**
+ * What Home's answer says is live for the notifications card (slice N3, core `notifyLive`): the open deals (Your deals'
+ * `open`, asked with "Your way back in" whether or not the card is on Home) and the events with the member's own answer
+ * (Coming up's rows, where that card is asked). The member's listings and waiting lines are read from the phone itself
+ * (utils/db.ts getMyPosts, getMyLinesWaiting). Nothing new is asked of the node.
+ */
+export function homeNotifyLive(answer: { cards?: Pick<HomeCards, 'deals' | 'events'> } | null | undefined): { deals: number | null; events: HomeEventItem[] | null } {
+    return { deals: answer?.cards?.deals?.open ?? null, events: answer?.cards?.events?.items ?? null };
+}

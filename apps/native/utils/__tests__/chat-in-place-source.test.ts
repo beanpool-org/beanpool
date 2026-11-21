@@ -44,6 +44,8 @@ const IN_PLACE = [
     'reportDmLine', 'requestsInPlace',
     // Slice S3b: a request there from someone the member let in, accepted there by the very call a tap makes.
     'quietlyLetIn',
+    // Slice N3: how long the oldest unread line waited (the fact line), read there before the chat marks itself read.
+    'oldestUnreadAt',
 ].sort();
 /** A function the DM screen may call with no `at`: it reads neither a copy nor a server (this run's memory, by the chat's id). */
 const NO_COPY = new Set(['getKnownChatMute']);

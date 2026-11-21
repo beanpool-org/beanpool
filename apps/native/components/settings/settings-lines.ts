@@ -192,13 +192,19 @@ export function keepsKeyWords(plan: Extract<DeletePlan, { kind: 'this-one' }>, h
     return unasked ? t('{sentence} {next}', { sentence: both, next: unasked }) : both;
 }
 
-/** delete-here.ts lastCommunityLine: the last community on the phone; `withVault` is the build's hasVault(). */
+/**
+ * delete-here.ts lastCommunityLine: the last community on the phone; `withVault` is the build's hasVault(). The vault's line
+ * is delete-here.ts vaultCopyGoesLine, by the plan's `vaultSignIn`: every copy goes, the admins' half too.
+ */
 export function lastCommunityWords(plan: Extract<DeletePlan, { kind: 'last' }>, hasWords: boolean, withVault: boolean): string {
     const line = hasWords
         ? t("{here} is the last community on this phone where you are a member, so this phone's key and 12 words go too. Only go ahead if you have written your 12 words down: they are the way back into any other community you belong to.", { here: plan.hereName })
         : t("{here} is the last community on this phone where you are a member, so this phone's key goes too.", { here: plan.hereName });
     if (!withVault) return line;
-    return t('{sentence} {next}', { sentence: line, next: t("If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first.") });
+    const vault = plan.vaultSignIn
+        ? t("If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first, and so is any half kept for your community's admins.")
+        : t("If BeanPool's key vault keeps half of a locked copy of your key for your community's admins, or a copy from a sign-in you linked, it is removed first.");
+    return t('{sentence} {next}', { sentence: line, next: vault });
 }
 
 /** delete-here.ts vaultCopyStaysLine: the account is deleted, the vault kept its copy, the key is still on the phone. */

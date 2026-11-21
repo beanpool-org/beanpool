@@ -11,12 +11,12 @@ import {
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, welcomeTileLines, WELCOME_TILE_WORDS, type TourProgress,
     COMMUNITY_WELCOME_DISMISSED_KEY, communityWelcomeAgainLine, communityWelcomeCard, communityWelcomeWords,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
-    starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout, notifyOnceWords,
+    starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout, notifyOnceWords, notifyHomeWords, notifyLive, type NotifyLive,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { twoParagraphs } from '../../utils/alert-words';
 import {
-    notifyStep, offerOnceCard, onceCardLater, readNotificationPermissionRecord, readOsNotificationPermission, turnOnFromOnceCard, turnOnNotifications,
+    homeCardAway, notifyStep, offerHomeCard, offerOnceCard, onceCardLater, readNotificationPermissionRecord, readOsNotificationPermission, samePhoneAnswer, turnOnFromHomeCard, turnOnFromOnceCard, turnOnNotifications,
     type OsNotificationPermission,
 } from '../../utils/notification-permission';
 import { useScreenShowing } from '../../components/NotifyLine';
@@ -28,6 +28,7 @@ import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { NotifyAskCard } from '../../components/home/NotifyAskCard';
+import { NotifyHomeCard } from '../../components/home/NotifyHomeCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { AddressLine } from '../../components/AddressLine';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
@@ -70,7 +71,7 @@ import {
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissCommunityWelcome, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
     effectiveInterests, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst,
-    welcomeFacts, welcomeShapeFor, welcomeUp, LEARN_OPENS, isArrivingCard, keepCard,
+    welcomeFacts, welcomeShapeFor, welcomeUp, LEARN_OPENS, isArrivingCard, keepCard, homeNotifyLive,
     type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -85,7 +86,7 @@ import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-ac
 import { fabClearanceDp, fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
-import { createConversationApi, fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, isKnownDmConversation, judgeHomeChatDmLines } from '../../utils/db';
+import { createConversationApi, fetchYourGroups, getConversations, getMarketplaceTransactions, getMyLinesWaiting, getMyPosts, getUnreadByConversation, groupKeyringFor, isKnownDmConversation, judgeHomeChatDmLines } from '../../utils/db';
 import { ChatBody } from '../../components/home/ChatBody';
 import { chatCardFor, chatPickList, chatsOnHome, type ChatChoice } from '../../utils/home-chat';
 import type { HomeChatOpenDeps } from '../../utils/home-chat-open';
@@ -315,7 +316,32 @@ export default function HomeScreen() {
         // First steps' line waits while the once card is up (amend1 §4.2), and is back once it is answered or folds.
         setNotify(up ? null : notifyStep(record, os));
         setPhone(os);
+        setNotifyLanding(n => n + 1);
     }, []);
+    /**
+     * Home's card while something of the member's is live (slice N3), in the once card's slot: what is live while it is drawn,
+     * with the account it was decided for and the phone's answer then (`phone`), else null. Never with the once card or the
+     * way-back card: it is decided only once both have said they are not up.
+     */
+    const [homeLive, setHomeLive] = useState<{ key: string; at: string | null; live: NotifyLive; phone: OsNotificationPermission | null } | null>(null);
+    const [homeBusy, setHomeBusy] = useState(false);
+    /**
+     * The landing the way-back card last said it settled on (OneWayBackCard `settleFor`, `onSettled`): its newest read finished
+     * on that landing's own answer of Home, so whether it is up is known. null: it is reading, or has not said so yet.
+     */
+    const [wayBackSettledFor, setWayBackSettledFor] = useState<number | null>(null);
+    /** Counts the reads above (each landing, each return to the app, each answer): each decides the Home card again. */
+    const [notifyLanding, setNotifyLanding] = useState(0);
+    // The Home card's two taps: Turn on is the phone's pop-up through the one door (its answer kept there: a pop-up closed
+    // with no answer is a "Later"); × puts it away for 30 days. Either way the next read decides it again.
+    const homeTurnOn = useCallback(() => {
+        setHomeBusy(true);
+        void turnOnFromHomeCard(identityRef.current?.publicKey).finally(() => { setHomeBusy(false); void readNotify(); });
+    }, [readNotify]);
+    const homeAway = useCallback(() => {
+        setHomeLive(null);
+        void homeCardAway().finally(() => { void readNotify(); });
+    }, [readNotify]);
     // The once card's two taps: Turn on is the phone's pop-up through the one door; Later puts it away at once (not a no).
     const onceTurnOn = useCallback(() => {
         setOnceBusy(true);
@@ -358,6 +384,8 @@ export default function HomeScreen() {
     const identityRef = useRef(identity);
     identityRef.current = identity;
     const storedRef = useRef<StoredHome | null>(null);
+    /** The role read the last answer sent for (`refresh`), so a landing ends with it (`readLanding`). */
+    const roleRead = useRef<Promise<unknown>>(Promise.resolve());
     const phoneLayout = useRef<HomeLayout | null>(null);
     // The account and community (`key|url`) whose node refused the phone's list as a shape it doesn't know yet (a node from
     // before the frame): the list is sent again once per landing, never at a poll, a bell, a pull or an add's own read.
@@ -777,7 +805,8 @@ export default function HomeScreen() {
             }
             if (member) void maybeReveal(whose);
             if (member && read.stored.answer.features.door === 'admins') {
-                void cachedNodeRole(u, id).then(r => { if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setRole(r.role); });
+                // Kept for the landing (`readLanding`): a role is something to lose, for the way-back card's schedule.
+                roleRead.current = cachedNodeRole(u, id).then(r => { if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setRole(r.role); }).catch(() => undefined);
             }
             // The knocks this phone sent, on the global node (where a member asks a local community to let them in).
             if (member && read.stored.answer.profile === 'global') {
@@ -813,6 +842,23 @@ export default function HomeScreen() {
     const refreshRef = useRef(refresh);
     refreshRef.current = refresh;
 
+    /**
+     * A landing: Home in front again, the app back while it is, another account. Each counts once (`landing`), and its own
+     * read of Home ends at `answeredLanding === landing`: the node's answer drawn (or none to be had) with the role it sends
+     * for. Home's notifications card is decided only then (slice N3, review of #3348): never on the answer kept from before,
+     * which the way-back card's schedule may read otherwise (first Beans, a new deal or role while away).
+     */
+    const landingRef = useRef(0);
+    const [landing, setLanding] = useState(0);
+    const [answeredLanding, setAnsweredLanding] = useState(-1);
+    const readLanding = useCallback(() => {
+        const seq = ++landingRef.current;
+        setLanding(seq);
+        void refreshRef.current('focus').then(() => roleRead.current).catch(() => undefined)
+            .finally(() => { if (seq === landingRef.current) setAnsweredLanding(seq); });
+    }, []);
+    const answerFresh = answeredLanding === landing;
+
     /** Home is the screen shown (not covered by another one): the Find card asks its communities nothing while it is not. */
     const [homeShown, setHomeShown] = useState(true);
 
@@ -820,7 +866,7 @@ export default function HomeScreen() {
     useFocusEffect(useCallback(() => {
         focused.current = true;
         setHomeShown(true);
-        void refreshRef.current('focus');
+        readLanding();
         const poll = setInterval(() => { if (AppState.currentState === 'active') void refreshRef.current('poll'); }, HOME_SAFETY_POLL_MS);
         return () => {
             focused.current = false;
@@ -835,7 +881,7 @@ export default function HomeScreen() {
             visitCancelled.current = [];
             dropKnocks(gone);
         };
-    }, [dropKnocks]));
+    }, [dropKnocks, readLanding]));
 
     // The app coming back while Home is in front, and the doorbells that matter to Home (one read after a burst): its
     // member's own group invitations among them, which Needs you lists. A bell that reached every phone near it at once
@@ -848,7 +894,7 @@ export default function HomeScreen() {
         }, HOME_DOORBELL_SETTLE_MS, undefined, data => isHomeDoorbellFor(data, meRef.current), homeCrowdFor(() => meRef.current));
         const ws = DeviceEventEmitter.addListener('ws_activity', (data: unknown) => { if (focused.current) bell.ring(data); });
         const app = AppState.addEventListener('change', st => {
-            if (st === 'active' && focused.current) void refreshRef.current('focus');
+            if (st === 'active' && focused.current) readLanding();
             // The app going to the background puts a carried card back, nothing saved (the drag).
             if (st !== 'active') dragCancel.current();
         });
@@ -876,8 +922,8 @@ export default function HomeScreen() {
         tipsRef.current = null;
         setTips(null);
         setStatus('loading');
-        if (focused.current) void refreshRef.current('focus');
-    }, [identity?.publicKey]);
+        if (focused.current) readLanding();
+    }, [identity?.publicKey, readLanding]);
 
     const onPull = useCallback(async () => {
         setRefreshing(true);
@@ -1204,7 +1250,7 @@ export default function HomeScreen() {
     // Arrange, where the once card stays drawn: opening Arrange never brings the way-back card into the list under a card the
     // member is looking at or carrying (review of #3343). It waits for the next landing, as on Home, and moves then.
     const wayBackHeld = !once || once.held;
-    useEffect(() => { if (wayBackHeld) setSafetyUp(false); }, [wayBackHeld]);
+    useEffect(() => { if (wayBackHeld) { setSafetyUp(false); setWayBackSettledFor(null); } }, [wayBackHeld]);
     const movable = arrangeOn ? drawn.filter(c => canMoveCard(c.type, pins)) : [];
     // What a drag places among (slice A4): the drawn cards that move and stand on the list, the places `moveCardTo` counts.
     // Worked out on Home too, so the hold that opens Arrange can carry its card on at once.
@@ -1421,6 +1467,8 @@ export default function HomeScreen() {
                         accountDismissedAt={layout?.dismissed.safety ?? null}
                         onDismiss={at => changeLayout(dismissSafety(layoutRef.current, at))}
                         onUp={setSafetyUp}
+                        settleFor={answerFresh ? landing : null}
+                        onSettled={setWayBackSettledFor}
                         // What there is to lose here, for the card's schedule (core way-back-schedule.ts, slice B1): the
                         // balance in Home's answer, an open deal, a role in the community. Your Beans and Your deals are
                         // asked with this card whether or not they are on Home (core WAY_BACK_ASKS; review of #3341).
@@ -1609,6 +1657,52 @@ export default function HomeScreen() {
     const list = ordered.filter(c => drawn.some(d => d.id === c.id) || (c.type === 'safety' && !!answer));
     const firstDrawn = list.find(c => c.type !== 'safety' || safetyUp);
     wayBackId.current = safetyUp && !wayBackHeld ? list.find(c => c.type === 'safety')?.id ?? null : null;
+    // Home's card while something is live (slice N3), in the once card's slot. Decided only once the once card is decided and
+    // neither up nor holding this landing, this landing's own answer of Home is in (`answerFresh`: never the one kept from
+    // before), and the way-back card (where Home lists it) has finished its newest read on that answer and is not up: one
+    // card at a time, and never one drawn for a moment and then gone (review of #3348). The way-back card wins the slot: it
+    // comes on its own few days, and this card may otherwise stay for weeks. What is live: Home's answer (open deals, events
+    // answered) and the phone's own posts and chats; nothing new is asked of the node.
+    const wayBackListed = list.some(c => c.type === 'safety');
+    // A definite no, which takes the slot at once, from a card already drawn too: the once card up or holding this landing,
+    // the way-back card up, no answer or account to decide on.
+    const homeBlocked = !onceMayNow || !once || once.up || once.held || safetyUp;
+    const homeMay = !homeBlocked && answerFresh && (!wayBackListed || wayBackSettledFor === landing);
+    // A card already drawn stays while a re-read of the same account is out (the app back while Home is in front, Home landed
+    // on again: review of #3348 at 4b9716b3), so the cards under it never jump up and back. It goes only on a definite answer:
+    // the no above, another account, the phone's answer changed (back from its settings with notifications on), or the fresh
+    // read's own decision (nothing live any more). A card not drawn yet still waits for `homeMay`.
+    const homeCardLive = homeLive && !homeBlocked && homeLive.key === identity?.publicKey && homeLive.at === url && (homeMay || samePhoneAnswer(homeLive.phone, phone)) ? homeLive.live : null;
+    const homeLiveAnswer = homeNotifyLive(answer);
+    const homeLiveRef = useRef(homeLiveAnswer);
+    homeLiveRef.current = homeLiveAnswer;
+    const phoneRef = useRef(phone);
+    phoneRef.current = phone;
+    // The community the card was decided for: kept only on that community's Home, never carried to another the same
+    // account switches to (review of #3348 at 9fbee4a5: "You're going to Repair café." on a Home without that event).
+    const urlRef = useRef(url);
+    urlRef.current = url;
+    const homeLiveKey = `${homeLiveAnswer.deals ?? ''}|${(homeLiveAnswer.events ?? []).map(e => `${e.id}:${e.rsvp ?? ''}:${e.endsAt ?? e.startsAt}`).join(',')}`;
+    useEffect(() => {
+        const key = identityRef.current?.publicKey;
+        if (!homeMay) return;
+        if (!key) { setHomeLive(null); return; }
+        let current = true;
+        const decidedAt = urlRef.current;
+        void (async () => {
+            const at = Date.now();
+            const [listings, waitingAt] = await Promise.all([getMyPosts(key).catch(() => []), getMyLinesWaiting(key, at)]);
+            const live = notifyLive({ ...homeLiveRef.current, listings, waitingAt, now: at });
+            // `still`: withdrawn before it is drawn (the way-back card came up, a new landing, a newer decision), it takes no day.
+            const shows = live !== null && current && await offerHomeCard({ live: true, wayBack: false, still: () => current });
+            // The phone's answer it was decided on: any change to it moves `notifyLanding`, so a decision still current had this one.
+            if (current) setHomeLive(shows && live ? { key, at: decidedAt, live, phone: phoneRef.current } : null);
+        })().catch(() => { if (current) setHomeLive(null); });
+        return () => { current = false; };
+    }, [homeMay, notifyLanding, homeLiveKey]);
+    // Gone for good once nothing keeps it: the same answer coming back later never draws it again undecided.
+    const homeKept = homeCardLive !== null;
+    useEffect(() => { if (!homeMay && !homeKept) setHomeLive(null); }, [homeMay, homeKept]);
     // Leaving Arrange (Done, Back, leaving Home, whatever ends it): the bar goes from above the cards, and the way-back card's
     // band from its top, so a view scrolled down goes up by each that stood above the top of the screen, and the card the
     // member was looking at stays where it was (review of #3343). At the top of the list nothing is kept, as on opening. Read
@@ -1813,6 +1907,19 @@ export default function HomeScreen() {
                             busy={onceBusy}
                             onTurnOn={onceTurnOn}
                             onLater={onceLater}
+                            quiet={arrangeOn}
+                        />
+                    )}
+                    {/* Home's card while something of the member's is live (slice N3), in the once card's slot: never with it or with
+                        the way-back card (`homeCardLive`, read again here so a card that comes up hides it in the same frame), and kept
+                        through a re-read. In Arrange it stays, quiet, as the once card does, so the cards under it keep their places. */}
+                    {homeCardLive && answer && (
+                        <NotifyHomeCard
+                            words={notifyHomeWords(homeCardLive)}
+                            colors={colors}
+                            busy={homeBusy}
+                            onTurnOn={homeTurnOn}
+                            onAway={homeAway}
                             quiet={arrangeOn}
                         />
                     )}

@@ -2550,7 +2550,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                     ) : !showMemberOptions && asking && askName && onAsked ? (
                         /* ===== MORE WAYS IN › ASK A COMMUNITY TO JOIN: this community's own request form ===== */
                         <>
-                            <AskHere name={askName} onAsked={onAsked} onClose={() => setAsking(false)} testId="welcome-ask-form" />
+                            <AskHere name={askName} onAsked={onAsked} onClose={() => setAsking(false)} testId="welcome-ask" />
                             {onBack && <BackToListings onBack={onBack} />}
                         </>
                     ) : !showMemberOptions && joinScreen === 'door' ? (

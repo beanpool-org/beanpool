@@ -33,7 +33,7 @@ import {
 } from '../lib/api';
 import { keepWordsOnAccount } from '../lib/words-kept';
 import { NoOwnerCard } from '../components/NoOwnerCard';
-import { lookAroundUrl, takeWelcomeDoor } from '../lib/community-card';
+import { askDoor, lookAroundUrl, onAndroid, takeWelcomeDoor } from '../lib/community-card';
 import { ownCommunityAddress } from '../lib/join-names';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
@@ -54,7 +54,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { AVATAR_PICTURE, communityCardName, createPairingSession, currentLanguage, decryptPairingPayload, inviteForInviteBox, joinRuleLines, joinStepList, lowercaseRecoveryWords, nodeOrigin, notANameLine, postRulesFor, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
+import { AVATAR_PICTURE, COMMUNITY_CARD_WORDS, communityCardName, createPairingSession, currentLanguage, decryptPairingPayload, inviteForInviteBox, joinRuleLines, joinStepList, lowercaseRecoveryWords, nodeOrigin, notANameLine, postRulesFor, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
@@ -1555,7 +1555,18 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     // More ways in ›: this community's Ask to join, where it takes requests and the page can wait on one (App's `onAsked`);
     // never at a server nobody has claimed, where nobody could answer it (its no-owner card stands there instead).
     const askName = card && card.joining === 'requests' && onAsked && !noOwner ? communityCardName(card, { t }) : null;
-    const moreWays: MoreWay[] = askName ? [{ label: t('Ask a community to join'), testId: 'welcome-ask-to-join', onClick: () => { setError(null); setAsking(true); } }] : [];
+    // On an Android phone's browser, Ask to join goes to the app first, where the member's account may already be: its
+    // card screen, falling back to this community's own ask door, which opens the form here (askDoor,
+    // DESIGN-shared-listing-door-fable.md §2.3, as the card this page drew before W1 did and PeekPage's still does). The
+    // form here is second, in the card's words: "or ask here in your browser" (deciding review on #3333, 7c25e192).
+    const askApp = askName && card ? askDoor(card, onAndroid())?.href ?? null : null;
+    const askHere = () => { setError(null); setAsking(true); };
+    const moreWays: MoreWay[] = !askName ? []
+        : askApp ? [
+            { label: t('Ask a community to join'), testId: 'welcome-ask-to-join-app', href: askApp },
+            { label: t(COMMUNITY_CARD_WORDS.askInBrowser), testId: 'welcome-ask-to-join', onClick: askHere },
+        ]
+        : [{ label: t('Ask a community to join'), testId: 'welcome-ask-to-join', onClick: askHere }];
     // Your name's band names the community only for the code its check was asked about.
     const greet = greeting && greeting.community && greeting.code === normaliseInviteCode(inviteCode) ? greeting : null;
     const backToRequest = onBackToRequest ? (

@@ -103,6 +103,37 @@ describe('the front door', () => {
         expect(await screen.findByTestId('welcome-ask-form')).toBeInTheDocument();
     });
 
+    // DESIGN-shared-listing-door-fable.md §2.3, as the card this page drew before W1 (deciding review on #3333, 7c25e192).
+    it("on an Android phone's browser, Ask a community to join opens the app first, falling back to this community's ask door; the form here second", async () => {
+        vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36');
+        try {
+            stubNode();
+            render(<WelcomePage onComplete={vi.fn()} onAsked={vi.fn()} />);
+            fireEvent.click(await screen.findByTestId('front-door-more'));
+            const sheet = screen.getByTestId('front-door-more-sheet');
+            const app = within(sheet).getByTestId('welcome-ask-to-join-app');
+            const here = within(sheet).getByTestId('welcome-ask-to-join');
+            expect(app.tagName).toBe('A');
+            expect(app).toHaveTextContent('Ask a community to join');
+            expect(app).toHaveAttribute('href', `intent://community-card?node=${encodeURIComponent('https://riverside.example')}#Intent;scheme=beanpool;package=org.beanpool.pillar;S.browser_fallback_url=${encodeURIComponent(CARD.askUrl)};end`);
+            expect(here).toHaveTextContent('or ask here in your browser');
+            expect(follows(app, here)).toBe(true);
+            fireEvent.click(here);
+            expect(await screen.findByTestId('welcome-ask-form')).toBeInTheDocument();
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('anywhere but an Android phone, Ask a community to join is the form here alone, never a link into the app', async () => {
+        stubNode();
+        render(<WelcomePage onComplete={vi.fn()} onAsked={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('front-door-more'));
+        expect(screen.queryByTestId('welcome-ask-to-join-app')).toBeNull();
+        expect(screen.getByTestId('front-door-more-sheet').querySelector('a[href^="intent:"]')).toBeNull();
+        expect(screen.getByTestId('welcome-ask-to-join')).toHaveTextContent('Ask a community to join');
+    });
+
     it("the card's ?door=ask opens on the request form; ?door=signin on the ways back; ?door=invite on Your invite; each leaves the address", async () => {
         stubNode();
         window.history.replaceState(null, '', '/app?door=ask');

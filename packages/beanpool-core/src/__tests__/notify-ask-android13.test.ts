@@ -93,7 +93,8 @@ describe('amend3 §3.2: between taps, what the phone reads beside what is on rec
     }
 
     it('the mark changes only the last row: "can\'t ask again" with no answer of the phone\'s on record', () => {
-        for (const record of [{}, LATER, NOT_NOW, NO_ONCE, YES_ONCE]) {
+        const records: NotifyAskRecord[] = [{}, LATER, NOT_NOW, NO_ONCE, YES_ONCE];
+        for (const record of records) {
             for (const canAskAgain of [true, false]) {
                 const plain = read('iPhone', false, canAskAgain);
                 const marked = read('Android 13+', false, canAskAgain);

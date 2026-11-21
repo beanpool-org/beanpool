@@ -676,12 +676,22 @@ describe('the way back hands over: no notifications screen where it is not due',
 /**
  * Entering the screen clears `answering` (review of #3335 at 319f8224, finding D; G4 survived): on a claim, a tap that
  * records nothing (the phone won't show its pop-up, and "Not now" on the one Settings line) goes on to the owner's card. Its
- * ← Back is the way back, whose Next hands over again, and the screen is due again (shown today, never answered). Without
+ * ← Back is the way back, whose button hands over again, and the screen is due again (shown today, never answered). Without
  * the reset both answers would do nothing there, and only ‹ would work.
+ *
+ * In by the way back's hand-over both times, as the join itself comes and as the hand-over rows above do. A claim resumed
+ * straight onto the screen drew it here and never on CI's runner (three draft checks at 87b85488, 2ae14bf9, 004a69f0); the
+ * reset is the same either way in.
  */
 describe("back to the notifications screen from the owner's card: its answers work again", () => {
-    it("Turn on → the Settings line's Not now → the owner's card → ← Back → the way back's Next → the screen → Later → the owner's card", async () => {
-        phone.pending = { step: 'notify', flow: 'claim', anchorUrl: HERE, callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, communityName: 'Riverside' };
+    /** What is drawn, for a wait's message if it fails: the testIDs on screen, the last lines said, the phone's calls. */
+    const drawn = () => JSON.stringify({
+        ids: [...host!.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')).slice(0, 16),
+        said: alerts.said.slice(-4), os: os.order, pushed: nav.pushed, home: atHome(),
+    });
+
+    it("the way back → the screen → Turn on → the Settings line's Not now → the owner's card → ← Back → the way back → the screen → Later → the owner's card", async () => {
+        phone.pending = { step: 'seedBackup', flow: 'claim', inviteCode: '', anchorUrl: HERE, callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, communityName: 'Riverside' };
         // Not the bound under test here: a slow runner must not read the phone as "never answered" (no screen, straight on).
         NOTIFY_JOIN_WAIT_MS.phone = 3000;
         let atTap = false;
@@ -689,27 +699,29 @@ describe("back to the notifications screen from the owner's card: its answers wo
         // read takes 100 ms, past the harness's usual 40 ms bound, as a loaded runner's can.
         os.read = async () => { await new Promise((r) => setTimeout(r, 100)); return atTap ? { status: 'denied', canAskAgain: false } : { status: 'undetermined', canAskAgain: true }; };
         await mount();
-        // A claim resumes through more of the phone's own reads than an invite: wait for the screen, don't race it.
-        expect(await until(() => q('notify-step-turn-on') !== null, 3000), 'the screen').toBe(true);
+        expect(await until(() => q('way-back-button') !== null, 3000), `the way back (drawn: ${drawn()})`).toBe(true);
+        await tap('way-back-button');
+        expect(await until(() => q('notify-step-turn-on') !== null, 3000), `the screen (drawn: ${drawn()})`).toBe(true);
         atTap = true;
         await tap('notify-step-turn-on');
-        expect(await until(() => alerts.buttons.some((b) => b.text === 'Not now'), 3000), 'the Settings line').toBe(true);
+        expect(await until(() => alerts.buttons.some((b) => b.text === 'Not now'), 3000), `the Settings line (drawn: ${drawn()})`).toBe(true);
         await act(async () => { alerts.buttons.find((b) => b.text === 'Not now')!.onPress!(); });
         await settle();
-        expect(await until(() => q('owner-card-title') !== null, 3000), "the owner's card").toBe(true);
+        expect(await until(() => q('owner-card-title') !== null, 3000), `the owner's card (drawn: ${drawn()})`).toBe(true);
         expect(os.order, 'no pop-up asked').not.toContain('ask');
         const rec = await readNotificationPermissionRecord();
         expect([rec.laterAt, rec.phoneNoAt], 'nothing recorded').toEqual([undefined, undefined]);
 
         atTap = false;
         const back = host!.querySelector('[aria-label="Back"]') as HTMLElement | null;
-        expect(back, "the owner's card ← Back").toBeTruthy();
+        expect(back, `the owner's card ← Back (drawn: ${drawn()})`).toBeTruthy();
         await act(async () => { back!.click(); });
         await settle();
+        expect(await until(() => q('way-back-button') !== null, 3000), `the way back again (drawn: ${drawn()})`).toBe(true);
         await tap('way-back-button');
-        expect(await until(() => q('notify-step-later') !== null, 3000), 'the screen again').toBe(true);
+        expect(await until(() => q('notify-step-later') !== null, 3000), `the screen again (drawn: ${drawn()})`).toBe(true);
         await tap('notify-step-later');
-        expect(await until(() => q('owner-card-title') !== null, 3000), "Later goes on to the owner's card").toBe(true);
+        expect(await until(() => q('owner-card-title') !== null, 3000), `Later goes on to the owner's card (drawn: ${drawn()})`).toBe(true);
         expect(typeof (await readNotificationPermissionRecord()).laterAt, 'the Later recorded').toBe('number');
     });
 });

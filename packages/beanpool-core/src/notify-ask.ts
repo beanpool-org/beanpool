@@ -21,7 +21,7 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
 import { localDay } from './home-tips.js';
-import { t, word } from './words.js';
+import { t, tn, word, wordn } from './words.js';
 
 const DAY_MS = 86_400_000;
 
@@ -101,8 +101,14 @@ export interface NotifyAskInput {
     line?: string;
     /** Something of the member's is live: a listing, a deal, an unanswered line of theirs, an event they marked. */
     live?: boolean;
-    /** What is being opened waited a day or more for them. */
+    /** What is being opened waited a day or more for them ({@link notifyWaitedDays}). */
     waited?: boolean;
+    /**
+     * Home's "Your way back in" card is up on this landing (way-back-schedule.ts). Home has one slot for these cards: the
+     * Home card waits while that one is up, so a member with nothing kept to get back in is never kept from it by a card
+     * that may stay for weeks (slice N3). The once card is decided before either (slice N1h: it goes first).
+     */
+    wayBack?: boolean;
 }
 
 /** What may be drawn. A soft ask that is drawn is marked with {@link markNotifyAsk} `shown`. */
@@ -258,8 +264,8 @@ export function notifyFirstStepsLine(r: NotifyAskRecord, p: NotifyPhone): boolea
  *   Never again once closed (`onceClosedAt`): any answer on it, a yes included, or a Turn off in the app's own Settings,
  *   which is the member's choice even where the browser still allows the site.
  * - **line**, a named line at the member's own act: each kind once. The day of the join's screen still allows one.
- * - **home**, the card while something of theirs is live: not 7 days after a "Later", × puts it away 30 days and for good
- *   at the third, never with the once card.
+ * - **home**, the card while something of theirs is live ({@link notifyLive}): not 7 days after a "Later", × puts it away
+ *   30 days and for good at the third, never with the once card or the way-back card (one card in Home's slot).
  * - **fact**, the line over something that waited a day or more: at most once in 30 days.
  */
 export function notifyAsks(i: NotifyAskInput): NotifyAsks {
@@ -281,7 +287,7 @@ export function notifyAsks(i: NotifyAskInput): NotifyAsks {
 
     const line = canAsk && !!i.line && !(r.lines ?? []).includes(i.line) && (free || askedToday === 'join');
 
-    const home = canAsk && !!i.live && !once
+    const home = canAsk && !!i.live && !once && !i.wayBack
         && since(laterAt) >= NOTIFY_HOME_AFTER_LATER_DAYS * DAY_MS
         && since(r.homeAwayAt) >= NOTIFY_HOME_AWAY_DAYS * DAY_MS
         && (r.homeAways ?? 0) < NOTIFY_HOME_AWAYS
@@ -290,6 +296,125 @@ export function notifyAsks(i: NotifyAskInput): NotifyAsks {
     const fact = notifyTurnOn(p, r) !== 'none' && !!i.waited && since(r.factAt) >= NOTIFY_FACT_DAYS * DAY_MS && free;
 
     return { join, once, line, home, fact, firstSteps: once ? null : notifyFirstStepsLine(r, p), bell: notifyTurnOn(p, r) !== 'none' };
+}
+
+/**
+ * What of the member's is live, for the Home card (slice N3; the first design §4.3, amend1 §4.3): the first that holds, in
+ * this order, names the card's first line. A listing of theirs that is up ('offers' when every one is an Offer, else
+ * 'listings'), an open deal, a chat where their own line is the newest and waits ('waiting'), an event they answered Going
+ * or Interested that has not ended.
+ */
+export type NotifyLive =
+    | { kind: 'offers' | 'listings' | 'deals'; n: number }
+    | { kind: 'waiting' }
+    | { kind: 'event'; title: string; going: boolean };
+
+/** A line of the member's own that is the newest in its chat counts as waiting for this many days after it was sent. */
+export const NOTIFY_WAITING_DAYS = 30;
+
+/**
+ * What the phone already has, read for {@link notifyLive}. Every field may be missing: nothing is asked of the server.
+ *
+ * - `listings`: the member's own posts on this phone (type and status; events are not listings).
+ * - `deals`: open deals, from Home's answer (Your deals' `open`).
+ * - `waitingAt`: when the member's own line was sent, in each chat where it is the newest.
+ * - `events`: the events in Home's answer, each with the member's answer (`rsvp`) and its times.
+ */
+export interface NotifyLiveInput {
+    listings?: readonly { type?: unknown; status?: unknown }[] | null;
+    deals?: number | null;
+    waitingAt?: readonly (number | string | null | undefined)[] | null;
+    events?: readonly { title?: unknown; rsvp?: unknown; startsAt?: unknown; endsAt?: unknown }[] | null;
+    now: number;
+}
+
+const LIVE_STATUS = new Set(['active', 'pending']);
+const LISTING_TYPES = new Set(['offer', 'need']);
+
+/** A time as a number of ms: a number as it is, a string parsed, anything else null. */
+function msOf(v: unknown): number | null {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    if (typeof v !== 'string' || !v) return null;
+    const ms = Date.parse(v);
+    return Number.isFinite(ms) ? ms : null;
+}
+
+/** What is live ({@link NotifyLive}), or null: nothing an answer could come to, so no Home card. */
+export function notifyLive(i: NotifyLiveInput): NotifyLive | null {
+    const up = (i.listings ?? []).filter((l) => LIVE_STATUS.has(l?.status as string) && LISTING_TYPES.has(l?.type as string));
+    if (up.length) return { kind: up.every((l) => l.type === 'offer') ? 'offers' : 'listings', n: up.length };
+    const deals = typeof i.deals === 'number' && Number.isFinite(i.deals) ? Math.floor(i.deals) : 0;
+    if (deals > 0) return { kind: 'deals', n: deals };
+    const waiting = (i.waitingAt ?? []).some((at) => {
+        const ms = msOf(at);
+        return ms !== null && ms <= i.now && i.now - ms < NOTIFY_WAITING_DAYS * DAY_MS;
+    });
+    if (waiting) return { kind: 'waiting' };
+    for (const e of i.events ?? []) {
+        if (e?.rsvp !== 'going' && e?.rsvp !== 'interested') continue;
+        const title = typeof e.title === 'string' ? e.title.trim() : '';
+        const ends = msOf(e.endsAt) ?? msOf(e.startsAt);
+        if (title && ends !== null && ends > i.now) return { kind: 'event', title, going: e.rsvp === 'going' };
+    }
+    return null;
+}
+
+const HOME_OFFERS = wordn('You have {n} offer up.', 'You have {n} offers up.');
+const HOME_LISTINGS = wordn('You have {n} listing up.', 'You have {n} listings up.');
+const HOME_DEALS = wordn('You have {n} deal open.', 'You have {n} deals open.');
+
+/** The Home card's words: its band, what is live, what this phone won't do, its button and its ×'s label. */
+export interface NotifyHomeWords {
+    band: string;
+    fact: string;
+    wont: string;
+    turnOn: string;
+    away: string;
+}
+
+/**
+ * The Home card's words (the first design §4.3, §6.1; amend1 §4.3): "You have 1 offer up. This phone won't tell you when
+ * someone answers."; an event they marked: "You're going to {event}. This phone won't remind you." An event's title is
+ * the member's neighbour's words, never translated.
+ */
+export function notifyHomeWords(live: NotifyLive): NotifyHomeWords {
+    const base = { band: t('Notifications'), turnOn: t('Turn on'), away: t('Put this card away') };
+    if (live.kind === 'event') {
+        return {
+            ...base,
+            fact: live.going ? t("You're going to {event}.", { event: live.title }) : t("You're interested in {event}.", { event: live.title }),
+            wont: t("This phone won't remind you."),
+        };
+    }
+    const wont = t("This phone won't tell you when someone answers.");
+    if (live.kind === 'waiting') return { ...base, fact: t("You're waiting for an answer."), wont };
+    const w = live.kind === 'offers' ? HOME_OFFERS : live.kind === 'listings' ? HOME_LISTINGS : HOME_DEALS;
+    return { ...base, fact: tn(live.n, w.one, w.other), wont };
+}
+
+/**
+ * Whole days something waited for the member before they opened it (the fact line, the first design §4.4, amend1 §4.3):
+ * from when it arrived (a message, a notice, an event's change) to when it is opened. Null under a day, or with no time
+ * to go by: then no fact line.
+ */
+export function notifyWaitedDays(arrivedAt: number | string | null | undefined, openedAt: number): number | null {
+    const at = msOf(arrivedAt);
+    if (at === null || openedAt < at) return null;
+    const days = Math.floor((openedAt - at) / DAY_MS);
+    return days >= 1 ? days : null;
+}
+
+const FACT_WAITED = wordn('This waited {n} day for you.', 'This waited {n} days for you.');
+
+/**
+ * The fact line's words: "This waited 2 days for you." and its link, "Tell me next time ›" where a tap brings the phone's
+ * pop-up, "Turn on ›" where it opens the one line before the phone's settings ({@link notifyTurnOn} 'settings': the phone
+ * said no). Null where a tap has nothing to do (the phone allows them, or has none).
+ */
+export function notifyFactWords(days: number, p: NotifyPhone, r: NotifyAskRecord): { line: string; link: string } | null {
+    const way = notifyTurnOn(p, r);
+    if (way === 'none') return null;
+    return { line: tn(days, FACT_WAITED.one, FACT_WAITED.other), link: way === 'settings' ? t('Turn on ›') : t('Tell me next time ›') };
 }
 
 /**

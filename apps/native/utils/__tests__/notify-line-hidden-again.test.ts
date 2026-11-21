@@ -193,6 +193,11 @@ const PLACES: Record<string, PlaceRow> = {
         test: 'forum-render.test.ts',
         row: 'a screen opened over the topic and back: the follow line is gone, and the bell asks nothing more',
     },
+    'components/NeedsYouIcons.tsx': {
+        hiddenBy: 'visible',
+        test: 'notice-bell-header.test.ts',
+        row: 'the notice left for the list and read again: the fact line is gone, and none is asked again',
+    },
     'components/MyDealsSheet.tsx': {
         hiddenBy: 'visible',
         test: 'my-deals-listing-line-render.test.ts',

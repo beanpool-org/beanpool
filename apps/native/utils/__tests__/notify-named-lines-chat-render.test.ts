@@ -197,7 +197,7 @@ const KOFI_DM = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', createdBy: 
 type Answers = Record<string, unknown>;
 function standIn(over: Answers): void {
     const answers: Answers = {
-        getConversation: null, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null,
+        getConversation: null, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null, oldestUnreadAt: null,
         markConversationRead: undefined,
         getDb: { getAllAsync: async () => [], getFirstAsync: async () => null, runAsync: async () => ({}) },
         // The route's check before a chat opens in place (#3305 review F1): that community's copy holds it as a DM. A row
@@ -392,4 +392,49 @@ describe('the named line in a chat (slice N2a)', () => {
             askedNothing();
         });
     }
+});
+
+describe('the fact line in a chat (slice N3): opened a day or more late, in the named line\'s place', () => {
+    const DAY = 86_400_000;
+    it('their line waited 2 days: "This waited 2 days for you. Tell me next time ›" under it, never "writes again" too', async () => {
+        dm([mine('m1', 'Morning', 3 * DAY), theirs('k1', 'Yes, come by at five', 2 * DAY + 3_600_000)], { oldestUnreadAt: iso(now - 2 * DAY - 3_600_000) });
+        await open();
+        const shown = line('notify-line');
+        expect(shown?.textContent).toContain('This waited 2 days for you.');
+        expect(shown?.textContent).not.toContain('writes again');
+        expect(above(shown)).toContain('Yes, come by at five');
+        expect(record()).toMatchObject({ factAt: expect.any(Number), askKind: 'fact' });
+        askedNothing();
+        // Its link brings the phone's own pop-up; allowed, it says what will come now.
+        await tap('Tell me next time ›');
+        expect(phone.asked).toBe(1);
+        expect(line('notify-line-done')?.textContent).toContain("You'll hear when Kofi writes again.");
+    });
+
+    it('opened the same day it came: the named line as before, no fact line', async () => {
+        dm([theirs('k1', 'Yes, come by at five', 3_600_000)], { oldestUnreadAt: iso(now - 3_600_000) });
+        await open();
+        expect(line('notify-line')?.textContent).toContain('Hear when Kofi writes again.');
+        expect(record()?.factAt).toBeUndefined();
+    });
+
+    it('the fact line shown 10 days ago: at most once in 30 days, so the named line in its place', async () => {
+        store.map.set(NOTIFICATION_PERMISSION_STORE_KEY, JSON.stringify({ state: 'unanswered', updatedAt: 0, factAt: now - 10 * DAY }));
+        dm([theirs('k1', 'Yes, come by at five', 2 * DAY)], { oldestUnreadAt: iso(now - 2 * DAY) });
+        await open();
+        expect(line('notify-line')?.textContent).toContain('Hear when Kofi writes again.');
+        expect(line('notify-line')?.textContent).not.toContain('This waited');
+    });
+
+    it("after the iPhone's Don't Allow: the fact line still says what waited, and its link is Turn on › to the one Settings line", async () => {
+        phone.status = 'denied';
+        phone.canAskAgain = false;
+        dm([theirs('k1', 'Yes, come by at five', 3 * DAY)], { oldestUnreadAt: iso(now - 3 * DAY) });
+        await open();
+        expect(line('notify-line')?.textContent).toContain('This waited 3 days for you.');
+        askedNothing();
+        await tap('Turn on ›');
+        expect(phone.asked).toBe(0);
+        expect(alerts.said).toContain("Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.");
+    });
 });

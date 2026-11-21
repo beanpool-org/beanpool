@@ -41,7 +41,7 @@ import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { readGroupInvitations, type BillView, type GroupInvitations } from '@beanpool/core';
-import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, NOTIFY_WAITING_DAYS, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
@@ -2495,6 +2495,30 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
 // every poll tick; one POST per conversation per 10s is plenty for read receipts.
 const _lastReadPushAt: Record<string, number> = {};
 
+/**
+ * When the oldest line still unread here arrived (someone else's, counted as the badge counts: core countsAsUnreadSql), read
+ * before the chat marks itself read, for the fact line "This waited 2 days for you." (slice N3, core notifyWaitedDays). Null:
+ * nothing unread. The same copy the read marker uses (in place: that community's). Never throws.
+ */
+export async function oldestUnreadAt(conversationId: string, myPubkey: string, community?: ChatCommunity): Promise<string | null> {
+    try {
+        const copy = await chatReadFor(community);
+        if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return null;
+        const row = await copy.database.getFirstAsync<{ at: string | null }>(
+            `SELECT MIN(m.timestamp) AS at FROM messages m
+             JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
+             WHERE m.conversation_id = ?
+               AND m.author_pubkey != ?
+               AND m.timestamp > IFNULL(cp.last_read_at, '2000-01-01')
+               AND ${countsAsUnreadSql('m')}`,
+            [myPubkey, conversationId, myPubkey, myPubkey],
+        );
+        return typeof row?.at === 'string' ? row.at : null;
+    } catch {
+        return null;
+    }
+}
+
 /** The phone's own read marker (the Talk tab's badge counts from it); no request. */
 export async function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity) {
     const copy = await chatReadFor(community);
@@ -2577,6 +2601,30 @@ export async function peerReadCursors(myPubkey: string, peers: readonly string[]
     `, [...wanted, myPubkey]);
     for (const r of rows) out.set(r.public_key, r.read_at ?? null);
     return out;
+}
+
+/**
+ * When the member's own line was sent, in each of their chats where it is the newest line (a system line doesn't count),
+ * for Home's notifications card (slice N3, core `notifyLive` `waitingAt`: they wait on an answer). Only lines from the last
+ * `NOTIFY_WAITING_DAYS`; read from this phone alone, nothing decrypted. Never throws: an empty list.
+ */
+export async function getMyLinesWaiting(myPubkey: string, now: number = Date.now()): Promise<string[]> {
+    try {
+        const database = await getDb();
+        const since = new Date(now - NOTIFY_WAITING_DAYS * 86_400_000).toISOString();
+        const rows = await database.getAllAsync<{ at: string | null }>(`
+            SELECT m.timestamp AS at FROM messages m
+            WHERE m.author_pubkey = ? AND COALESCE(m.type, '') != 'system' AND m.timestamp > ?
+              AND m.conversation_id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
+              AND NOT EXISTS (
+                  SELECT 1 FROM messages n
+                  WHERE n.conversation_id = m.conversation_id AND COALESCE(n.type, '') != 'system' AND n.timestamp > m.timestamp
+              )
+        `, [myPubkey, since, myPubkey]);
+        return rows.map(r => r.at).filter((at): at is string => typeof at === 'string');
+    } catch {
+        return [];
+    }
 }
 
 /**

@@ -154,8 +154,8 @@ describe("Home's card while something is live, at 320 dp with 1.3x text", () => 
         expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
     });
 
-    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
-    const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
+    const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
+    const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\ufe0f\u200c\u200d]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
     const widthOf = (text: string, size: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * size * 1.3, 0);
     const widest = (text: string) => text.split(/[\s~]+/).flatMap((w) => (CJK.test(w) ? Array.from(w) : [w])).reduce((a, w) => (widthOf(w, 1) > widthOf(a, 1) ? w : a), '');
     const LINE = 320 - 2 * HOME_GUTTER_DP - 2 * HOME_CARD_PADDING_DP - 2;

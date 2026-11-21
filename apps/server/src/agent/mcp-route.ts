@@ -92,7 +92,7 @@ const HOST_SHAPE = /^[a-z0-9.\-:[\]]{1,255}$/i;
 /**
  * The address the welcome names, and Settings' connector address: the main one, else the host the assistant reached (a LAN or
  * bare-IP node can name itself no other way). X-Forwarded-Host is believed only from our own proxy (client-ip.ts
- * isTrustedProxy: loopback, this machine's private subnets, TRUSTED_PROXIES), as X-Forwarded-For is; Koa's ctx.host
+ * isTrustedProxy: loopback and TRUSTED_PROXIES, never a private subnet as such), as X-Forwarded-For is; Koa's ctx.host
  * under app.proxy would take it from anyone (#1881 review, finding 6).
  */
 export function nodeUrlFor(ctx: any): string {

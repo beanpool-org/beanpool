@@ -8,10 +8,11 @@ import {
 
 /**
  * The bell sheet's last line while this phone can't buzz (DESIGN-home-default-fable.md §2.5 "How to turn on later"):
- * "Notifications are off on this phone. Turn on". The way back after a "Not now", found where a missed answer is: only a
- * tap on Turn on brings the phone's own question (or, where the phone won't ask again, its settings). Nothing where the
- * phone already allows them or can't load notifications at all. Read again each time the sheet opens and when the app
- * comes back (from the phone's settings).
+ * "Notifications are off on this phone. Turn on". A standing line, not an ask (@beanpool/core notify-ask.ts `bell`): it
+ * stays after a "Later" and after the phone's "no", found where a missed answer is. Only a tap on Turn on brings the
+ * phone's own question (Android's second one after its first no; where the phone won't ask again, one line and then its
+ * settings). Nothing where the phone already allows them or can't load notifications at all. Read again each time the
+ * sheet opens and when the app comes back (from the phone's settings).
  */
 export function NotificationsOffLine({ publicKey, colors }: { publicKey: string | null | undefined; colors: AppColors }) {
     const [off, setOff] = useState(false);

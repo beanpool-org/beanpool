@@ -22,6 +22,7 @@ import { OutsideChatRow, OutsideChatThread, OutsideRequestCard, outsideRoundNow 
 import { GuestChatRow, GuestChatThread, GuestInvitationCard, guestChatAsListed, useGuestChats } from '../components/GuestChats';
 import { guestRowsKnown } from '../lib/guest-chat-live';
 import { guestChatListed, requestsRowCount, requestsPillText } from '@beanpool/core';
+import { notSeenInThread, notSeenWords } from '@beanpool/core';
 import { useRequestsUnseen } from '../lib/requests-seen';
 import { AddressCardPanel } from '../components/AddressCardPanel';
 import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
@@ -675,6 +676,24 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             id: m.id, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, type: m.type, metadata: m.metadata, timestamp: m.timestamp,
         })), ctx ? { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex } : null, ctx?.conversationId ?? activeConv.id);
     }, [shownMessages, activeConv, identity, isDmThread]);
+    // "Not seen yet." under my newest line the other person hasn't seen or answered (core notSeenInThread, slice N4), from
+    // the same tick the bubbles draw (the other person's read cursor) and the times only: the same whoever they are. Only
+    // this chat's own lines once they are loaded, never the last chat's. A node's notice, a line shown as nobody's and a
+    // deleted line (nothing left to see) are passed over; a line still on its way is in pendingHere, not here. Never while
+    // the chat is a message request: the sender is told only what the node said, and it withholds the other's cursor until
+    // they accept (engine/dm-requests.ts).
+    const notSeenHere = useMemo(() => {
+        if (!activeConv || activeConv.type !== 'dm' || loadedDmId !== activeConv.id || requestMode !== 'none') return null;
+        const readAt = activeConv.peerLastReadAt ? new Date(activeConv.peerLastReadAt).getTime() : null;
+        const found = notSeenInThread(shownMessages.map(m => ({
+            mine: m.authorPubkey === identity.publicKey,
+            at: m.timestamp,
+            seen: readAt != null && new Date(m.timestamp).getTime() <= readAt,
+            delivered: true,
+            counts: m.type !== 'system' && m.authorPubkey !== 'SYSTEM' && !dmLineIsUnattributed(lineViews?.get(m.id)) && !isDeletedRow(m),
+        })), Date.now());
+        return found ? { id: shownMessages[found.index].id, notSeen: found.notSeen } : null;
+    }, [shownMessages, activeConv, loadedDmId, identity.publicKey, lineViews, requestMode]);
     // The listing each line is about, opened once per load (core chat-about.ts) and not on every redraw, which the member's
     // every keystroke is: a key derivation and a decrypt a card. Only a line whose words opened (checkDmThread gives a
     // deleted line, one that did not open and one not from this pair no format), and never a deleted one, as the phone's
@@ -3575,7 +3594,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 )}
                             </div>
                         );
-                    })()}</Fragment>)}
+                    })()}{notSeenHere?.id === msg.id && (
+                        // A fact under my own line, in grey at its side: nothing to click (core notSeenWords).
+                        <div data-testid="not-seen-line" style={{
+                            alignSelf: 'flex-end', maxWidth: '85%', margin: '0 0 0.25rem', fontSize: '0.75rem', lineHeight: 1.35,
+                            color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'normal', overflowWrap: 'anywhere',
+                        }}>
+                            {notSeenWords(notSeenHere.notSeen, peerNameFor(activeConv))}
+                        </div>
+                    )}</Fragment>)}
                     {!chatSearch?.trim() && pendingHere.map(line => {
                         const failed = line.state === 'failed';
                         return (

@@ -30,8 +30,12 @@ describe('the phone photo step with no picture picked', () => {
         expect(step).toContain('resolveBundledAvatar(bundledAvatarForPubkey(pendingIdentity.publicKey))');
     });
 
-    it('says what the node asks for, by whether Beans are on', () => {
-        expect(step).toContain('photoStepNote(joinBeansOn)');
+    it('says what the node asks for, by whether Beans are on: one line only where it asks for a picture (slice S3)', () => {
+        // The phone's line is shorter than the web's (core photoStepNote, still the web app's): said only where the community
+        // asks for a picture before a first post; elsewhere the footer's "Skip for now" says it is optional.
+        expect(step).toMatch(/\{!pendingAvatar && postRulesFor\(joinBeansOn\)\.profilePhoto && \(\s*<Text style=\{styles\.subtitle\} testID="photo-step-note">\{t\('This community asks for a picture before you post\.'\)\}<\/Text>/);
+        expect(step).toContain("{pendingAvatar ? t('Next') : t('Skip for now')}");
+        expect(step).not.toContain('photoStepNote(');
         expect(photoStepNote(true)).toMatch(/before you post/);
         expect(photoStepNote(false)).toMatch(/optional/);
     });

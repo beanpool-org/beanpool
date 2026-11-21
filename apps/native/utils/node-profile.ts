@@ -144,6 +144,13 @@ export interface NodeFeatures {
      */
     askedPush?: boolean;
     /**
+     * The community tells its members when someone posts an event for all of them (`event.new`, notifications NEa; core
+     * newEventPushOn): at most once a day each, under its own switch (`notify_new_events`), which Settings → Notifications
+     * shows only then (slice NEb). A node that doesn't say (the worldwide one, a node from before it) sends no such push and
+     * takes no switch.
+     */
+    newEventPush?: boolean;
+    /**
      * Local knowledge is read in Learn here (@beanpool/core knowledge.ts, DESIGN-local-knowledge-fable.md §2.9): on a local
      * community, off on the worldwide one. Unlike the older switches a node that doesn't say is OFF, not on: a server from
      * before Learn has none (knowledgeFeatureMode reads `=== true`).
@@ -199,7 +206,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumPublic', 'forumNotices', 'outsideMessages', 'bills',
+    'askedPush', 'newEventPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumPublic', 'forumNotices', 'outsideMessages', 'bills',
     'groupGuests', 'contacts',
 ];
 

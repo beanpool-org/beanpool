@@ -55,6 +55,8 @@ export * from './beans-sign.js';
 export * from './address-reach.js';
 export * from './android-on-node-words.js';
 export * from './first-trade-words.js';
+// The owner's count on the Members page (notifications N6): members a phone can notify, of how many; a count, never names.
+export * from './notify-reach.js';
 export * from './need-answer-words.js';
 export * from './listing-price.js';
 export * from './post-type-lines.js';
@@ -123,6 +125,8 @@ export * from './claim-proof.js';
 export * from './jury-draw.js';
 export * from './jury-card.js';
 export * from './push-notice.js';
+// Which new events tell a local community, and whom (`event.new`; notifications amend2 slice NEa).
+export * from './new-event-push.js';
 export * from './vault-wire.js';
 export * from './door-work.js';
 export * from './blocked-beans-note.js';
@@ -156,6 +160,8 @@ export * from './chat-list-order.js';
 export * from './chat-links.js';
 export * from './tour.js';
 export * from './first-steps.js';
+// When notifications may be raised, and what a phone keeps of the answers (DESIGN-notify-and-backup-asks-fable-amend2.md, slice N1).
+export * from './notify-ask.js';
 export * from './home-welcome.js';
 export * from './community-welcome.js';
 export * from './help-map.js';
@@ -171,6 +177,7 @@ export * from './start-something.js';
 export * from './starter-offers.js';
 export * from './starter-sheet.js';
 export * from './deal-step.js';
+export * from './not-seen.js';
 export * from './standing-deal.js';
 export * from './enterprise-pledge.js';
 export * from './needs-you.js';

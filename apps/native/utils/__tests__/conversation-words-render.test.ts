@@ -597,3 +597,70 @@ describe("a request waiting for the member's answer in the chat's deal strip", (
         expect(host.textContent).not.toContain('Waiting on you: answer');
     });
 });
+
+// "Not seen yet" (DESIGN-notify-and-backup-asks-fable §4.5; amendment 2 §12.3, slice N4): core's line under my newest line
+// the other person hasn't seen or answered, from the tick (readByPeer) and the times getMessages hands over. Core's table
+// holds the rule (packages/beanpool-core not-seen.test.ts); this holds where the chat draws it, named, and in the member's language.
+describe('"Not seen yet" under my newest line the other person has not seen (slice N4)', () => {
+    const DAY = 86_400_000;
+    const theirs = (id: string, age: number) => ({ id, senderId: 'kofi-key', text: 'Is the ladder still free?', type: 'text', rawTimestamp: iso(now - age), timestamp: '' });
+    const mine = (id: string, age: number, over: Record<string, unknown> = {}) => ({
+        id, senderId: ME.publicKey, text: 'Yes, come by at five', type: 'text', outgoing: true, readByPeer: false, rawTimestamp: iso(now - age), timestamp: '', ...over,
+    });
+    const shown = () => Array.from(host.querySelectorAll('[data-testid="not-seen-line"]'));
+
+    it('4 days unseen: the days and the other way, named, once, straight under my line', async () => {
+        net.answer = node({ getMessages: [theirs('k1', 6 * DAY), mine('n1', 4 * DAY)] });
+        await renderIn('en');
+        expect(shown()).toHaveLength(1);
+        expect(shown()[0].textContent).toBe('Not seen in 4 days. You could try Kofi another way.');
+        expect(shown()[0].previousElementSibling?.textContent).toContain('Yes, come by at five');
+    });
+
+    it('25 hours unseen, a failed line after it: "Not seen yet." under the delivered one', async () => {
+        net.answer = node({ getMessages: [mine('n1', 25 * 3_600_000), { ...mine('n2', 60_000), text: 'running late', sendState: 'failed' }] });
+        await renderIn('en');
+        expect(shown()).toHaveLength(1);
+        expect(shown()[0].textContent).toBe('Not seen yet.');
+        expect(shown()[0].previousElementSibling?.textContent).toContain('Yes, come by at five');
+    });
+
+    it('my newest line deleted: the words go under the one before it, which still waits', async () => {
+        net.answer = node({ getMessages: [mine('n1', 4 * DAY), { ...mine('n2', 3_600_000), text: 'This message was deleted', type: 'removed', metadata: { removed: true } }] });
+        await renderIn('en');
+        expect(shown()).toHaveLength(1);
+        expect(shown()[0].textContent).toBe('Not seen in 4 days. You could try Kofi another way.');
+        expect(shown()[0].previousElementSibling?.textContent).toContain('Yes, come by at five');
+    });
+
+    it('seen (✓✓), or answered since, or sent an hour ago: nothing', async () => {
+        for (const lines of [
+            [mine('n1', 4 * DAY, { readByPeer: true })],
+            [mine('n1', 4 * DAY), theirs('k1', 3 * DAY)],
+            [mine('n1', 3_600_000)],
+        ]) {
+            net.answer = node({ getMessages: lines });
+            await renderIn('en');
+            expect(shown(), JSON.stringify(lines.map((l) => l.id))).toHaveLength(0);
+            act(() => root.unmount());
+            root = createRoot(host);
+        }
+    });
+
+    it('a chat still a message request (mine, waiting): nothing, as the node withholds the cursor until they accept', async () => {
+        net.answer = node({
+            getConversation: { ...DM_CONVERSATION, request: { state: 'pending', from: ME.publicKey, at: iso(now - 5 * DAY) } },
+            getMessages: [mine('n1', 4 * DAY)],
+        });
+        await renderIn('en');
+        expect(host.textContent).toContain('Yes, come by at five');
+        expect(shown()).toHaveLength(0);
+    });
+
+    it('in the pseudo-locale its words came through t()', async () => {
+        net.answer = node({ getMessages: [mine('n1', 26 * 3_600_000)] });
+        await renderIn('xx');
+        expect(shown()[0]?.textContent).toBe(pseudoLocalise('Not seen yet.'));
+        expect(bypassing()).toEqual([]);
+    });
+});

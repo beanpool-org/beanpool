@@ -536,12 +536,13 @@ export function requestsHereOfMail(answer: unknown): boolean {
  *
  * Held (Marty, 22 Nov 2026, from the PR #3347 max review finding 1: "HOLD DELIVERED"; DESIGN-no-switch-messaging-fable.md
  * DECIDED 22 Nov): a first line the member's own server's mark let in ({@link gateOutsideItem} `memberHere`: no chat here,
- * not let in, marked), straight in or as a request, and every later line in that chat until its receipts are let go
- * (`held`: the chat's own mark, kept by each app). Until then the sender sees Sent, exactly as when the member blocked
- * them (the line dropped, never receipted), so Delivered never tells a fellow member a block from a line still waiting:
- * a block stays hidden as it does inside ("They won't be told"). A total stranger's line through an open door, a line let
- * in, and a chat already open (made here before, by the member or by an earlier line) are receipted now, as before.
- * `verdict` is the gate's for this same input, `chat` the chat as the gate was given it.
+ * not let in, marked), straight in or as a request. Its chat is then marked held in each app's store, and a chat marked
+ * held sends none of the receipts it owes, its later lines' among them, until {@link outsideHeldReceipts} lets them go.
+ * Until then the sender sees Sent, exactly as when the member blocked them (the line dropped, never receipted), so
+ * Delivered never tells a fellow member a block from a line still waiting: a block stays hidden as it does inside ("They
+ * won't be told"). A total stranger's line through an open door, a line let in, and a line in a chat already here (made by
+ * the member, or by an earlier line) are receipted now, as before. `verdict` is the gate's for this same input, `chat`
+ * the chat as the gate was given it.
  */
 export type OutsideReceiptWhen = 'now' | 'held' | 'none';
 
@@ -550,11 +551,9 @@ export function outsideReceiptWhen(input: {
     chat: { state: OutsideChatState } | null;
     letIn?: boolean;
     memberHere?: boolean;
-    held: boolean;
 }): OutsideReceiptWhen {
     if (input.verdict !== 'line' && input.verdict !== 'request') return 'none';
-    if (input.held) return 'held';
-    // The gate's own order: a chat here, then let in, then the mark. Only a line the mark decided waits.
+    // The gate's own order: a chat here, then let in, then the mark. Only a line the mark decided starts a hold.
     return input.chat === null && input.letIn !== true && input.memberHere === true ? 'held' : 'now';
 }
 

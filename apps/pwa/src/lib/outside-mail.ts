@@ -599,10 +599,10 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 } catch {
                     done.push(env.itemId); out.dropped++; continue;
                 }
-                // Its Delivered (core outsideReceiptWhen, Marty 22 Nov 2026): a line the mark let in, and every later line of that
-                // chat, held until the member accepts, answers or opens it; the chat marked held before its line is written.
-                const receipt = outsideReceiptWhen({ verdict, chat, memberHere, held: await ctx.store.receiptsHeld(me, env.senderKey) });
-                if (receipt === 'held') await ctx.store.holdReceipts(me, env.senderKey, chatId);
+                // Its Delivered (core outsideReceiptWhen, Marty 22 Nov 2026): a line the mark let in marks its chat held, before the
+                // line is written; a chat marked held sends none of its receipts (later lines' too) until the member accepts,
+                // answers or opens it (heldReceiptsOn).
+                if (outsideReceiptWhen({ verdict, chat, memberHere }) === 'held') await ctx.store.holdReceipts(me, env.senderKey, chatId);
                 await ctx.store.writeTheirs(me, {
                     id: env.itemId, chatId, author: env.senderKey, text: opened.text, replyTo: opened.replyToId, at: env.at,
                     sealed: JSON.stringify({ envelope: env, payload: h.payload }),

@@ -2,9 +2,10 @@
  * Delivered, held for a line the member-here mark let in (Marty, 22 Nov 2026, from the PR #3347 max review finding 1: "HOLD
  * DELIVERED"; scratch/fable-design/DESIGN-no-switch-messaging-fable.md, DECIDED 22 Nov): core's one rule, both halves.
  *
- *   A  outsideReceiptWhen: who wrote (let in by the mark straight in or as a request, a stranger through an open door, let
- *      in, a chat already open, a request already waiting, blocked) x the chat already holding its receipts -> now, held or
- *      none, through the real gate (gateOutsideItem) for the same input.
+ *   A  outsideReceiptWhen: who wrote (let in by the mark straight in or as a request, a stranger through an open door or
+ *      at a closed one, let in, a chat already open with or without the mark, a request already waiting, blocked) -> now,
+ *      held or none, through the real gate (gateOutsideItem) for the same input. A held chat's later lines wait by its
+ *      mark in each app's store (the apps' held-receipts tests, section 3).
  *   B  outsideHeldReceipts: the member's step (none, open, accept, answer, decline, block) x the chat's state x blocked now x
  *      not sure no block bars them -> send, hold or forget.
  *
@@ -44,57 +45,48 @@ const INPUT: Record<Who, GateInput> = {
     'blocked, with the mark': { kind: 'dm-line', chat: null, doorOpen: true, blocked: true, memberHere: true, requestsHere: false },
 };
 
-/** What the sender should see, by the decision: Delivered now only where the mark played no part; held where it let the line in. */
-function wantWhen(who: Who, held: boolean): OutsideReceiptWhen {
+/** What the sender should see, by the decision: a hold only where the mark let the line in; now wherever it played no part. */
+function wantWhen(who: Who): OutsideReceiptWhen {
     if (who === 'stranger, door closed' || who === 'request already waiting (their second line)' || who === 'blocked, with the mark') return 'none';
-    if (held) return 'held';
     return who.startsWith('mark') ? 'held' : 'now';
 }
 
 type WhenRule = typeof outsideReceiptWhen;
-const whenOf = (rule: WhenRule, who: Who, held: boolean): OutsideReceiptWhen => {
+const whenOf = (rule: WhenRule, who: Who): OutsideReceiptWhen => {
     const input = INPUT[who];
-    const verdict = gateOutsideItem(input);
-    return rule({ verdict, chat: input.chat, letIn: input.letIn, memberHere: input.memberHere, held });
+    return rule({ verdict: gateOutsideItem(input), chat: input.chat, letIn: input.letIn, memberHere: input.memberHere });
 };
-const whenRows = WHO.flatMap((who) => [false, true].map((held) => ({ who, held })));
 
 describe('A  outsideReceiptWhen: when a line of theirs is receipted', () => {
-    it.each(whenRows)('$who, chat holding receipts: $held', ({ who, held }) => {
-        expect(whenOf(outsideReceiptWhen, who, held)).toBe(wantWhen(who, held));
+    it.each(WHO.map((who) => ({ who })))('$who', ({ who }) => {
+        expect(whenOf(outsideReceiptWhen, who)).toBe(wantWhen(who));
     });
 
     it('the review probe, in core: a member here not blocked is held, a blocked one and a stranger at a closed door get nothing', () => {
         expect({
-            memberHereNotBlocked: whenOf(outsideReceiptWhen, 'mark, straight in (requests off)', false),
-            memberHereBlocked: whenOf(outsideReceiptWhen, 'blocked, with the mark', false),
-            strangerClosedDoor: whenOf(outsideReceiptWhen, 'stranger, door closed', false),
+            memberHereNotBlocked: whenOf(outsideReceiptWhen, 'mark, straight in (requests off)'),
+            memberHereBlocked: whenOf(outsideReceiptWhen, 'blocked, with the mark'),
+            strangerClosedDoor: whenOf(outsideReceiptWhen, 'stranger, door closed'),
         }).toEqual({ memberHereNotBlocked: 'held', memberHereBlocked: 'none', strangerClosedDoor: 'none' });
     });
 
     // Each clause taken out gets rows wrong.
     const MUTANTS: Record<string, WhenRule> = {
         'no hold at all (before the decision)': (i) => (i.verdict === 'line' || i.verdict === 'request' ? 'now' : 'none'),
-        'the chat\'s own hold forgotten (only a first line waits)': (i) => {
-            if (i.verdict !== 'line' && i.verdict !== 'request') return 'none';
-            return i.chat === null && i.letIn !== true && i.memberHere === true ? 'held' : 'now';
-        },
         'let in not before the mark': (i) => {
             if (i.verdict !== 'line' && i.verdict !== 'request') return 'none';
-            if (i.held) return 'held';
             return i.chat === null && i.memberHere === true ? 'held' : 'now';
         },
         'a chat here not before the mark': (i) => {
             if (i.verdict !== 'line' && i.verdict !== 'request') return 'none';
-            if (i.held) return 'held';
             return i.letIn !== true && i.memberHere === true ? 'held' : 'now';
         },
         'every line held': (i) => (i.verdict === 'line' || i.verdict === 'request' ? 'held' : 'none'),
-        'a drop held too': (i) => (i.held || (i.chat === null && i.letIn !== true && i.memberHere === true) ? 'held' : i.verdict === 'line' || i.verdict === 'request' ? 'now' : 'none'),
+        'a drop held too': (i) => (i.chat === null && i.letIn !== true && i.memberHere === true ? 'held' : i.verdict === 'line' || i.verdict === 'request' ? 'now' : 'none'),
     };
     for (const [name, mutant] of Object.entries(MUTANTS)) {
         it(`without the rule: ${name}, gets rows wrong`, () => {
-            expect(whenRows.filter(({ who, held }) => whenOf(mutant, who, held) !== wantWhen(who, held)).length).toBeGreaterThan(0);
+            expect(WHO.filter((who) => whenOf(mutant, who) !== wantWhen(who)).length).toBeGreaterThan(0);
         });
     }
 });

@@ -23,6 +23,16 @@
  * 12. A member's page with its own photos: the same rules, no credits.
  * 13. A 1.4.7 phone's Edit: every source row back as label and link, credit rows included, and no picture list: pictures and
  *     credits as they were, once each, in their order.
+ * 13b. Two admins, one on a 1.4.7 phone whose Edit was opened before the other took picture 1 (or 3) off: after the phone's
+ *     save no row of the removed picture's credit is anywhere on the page, and every "📷 n" left is a credit row naming its
+ *     own picture (review of #3353). An admin's own source to a Commons file page, in their own words, stays.
+ * 13c. Every other way sources come in, each from a form opened before picture 1 came off (or sending its credit shape): a
+ *     member's fix and its approval, Approve with changes on a fix, an owner's own page, a member's new suggestion and Approve
+ *     with changes on it, an assistant's draft. None writes the credit's shape as a source; a member's own source to a Commons
+ *     file page stays.
+ * 14. Where the line is (engine/knowledge.ts creditShaped): every label the node writes (each open licence, a maker, none, one
+ *     cut short) on every Commons file page it writes is dropped, a hidden character in its head included; a Commons file page
+ *     in a person's own words, a camera with no number, and a "📷 n ·" label on any other address stay.
  *
  * Run: SERVER_SUITES_ONLY=test-knowledge-remove-photo TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -33,7 +43,7 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 
 import crypto from 'node:crypto';
 import sharp from 'sharp';
-import type { KnowledgePhotoCredit } from '@beanpool/core';
+import { knowledgeCreditLabel, type KnowledgePhotoCredit } from '@beanpool/core';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
 import { initStateEngine, broadcast, exportSyncState } from './state-engine.js';
@@ -46,7 +56,9 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { publishKnowledge } from './engine/knowledge.js';
+import { cleanKnowledgeInput, publishKnowledge } from './engine/knowledge.js';
+import { KNOWLEDGE_ABOUT, checkAssistantKnowledgeDraft } from './engine/knowledge-drafts.js';
+import { COMMONS_OPEN_LICENCES, commonsFilePage } from './agent/commons-pictures.js';
 import { getImageStore } from './storage/image-store.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -408,6 +420,118 @@ async function main(): Promise<void> {
             '13. pictures 1 2 3, in their order, no address moved');
         assert(same(creditsOf(p.id), [[1, C1.file, label(1, C1)], [3, C3.file, label(3, C3)]]) && same(ownOf(p.id), ['https://parks.example/headland']),
             `13. credits 📷 1 and 📷 3 once each, the own source once (${storedRow(p.id).knowledge_sources})`);
+    }
+
+    // As android-v1.4.7 sends a page's rows back (row 13): every row it drew, credit rows included, as trimmed label and link.
+    const phoneRowsOf = (page: any): { url: string; label: string }[] => (page.knowledge.sources as any[]).map((s) => ({ url: String(s.url).trim(), label: String(s.label ?? '').trim() }));
+    const storedList = (id: string): any[] => JSON.parse(storedRow(id).knowledge_sources ?? '[]');
+    /** Every "📷" row the page reads is a credit row (it carries `photo`) whose label names that same number. */
+    const cameraRowsAreCredits = async (id: string) => {
+        const reread = await readPage(id, mel);
+        const camera = ((reread?.knowledge?.sources ?? []) as any[]).filter((s) => String(s.label ?? '').trim().startsWith('📷'));
+        return { ok: camera.every((s) => Number.isInteger(s.photo) && String(s.label).startsWith(`📷 ${s.photo} · `)), labels: camera.map((s) => `${s.photo ?? '-'}:${s.label}`) };
+    };
+    const PARKS = WORDS.sources[0].url;
+    /** A person's own source to a file page on Commons, in their own words: never a credit, always kept. */
+    const MAP_SOURCE = { url: 'https://commons.wikimedia.org/wiki/File:Headland_map.png', label: 'Map of the headland, Wikimedia Commons' };
+
+    // ── 13b. A 1.4.7 phone's Edit opened before another admin takes a picture off (review of #3353) ─────────────────
+    console.log('── 13b. a 1.4.7 phone opened before a picture came off ──');
+    for (const [taken, keep, takenCredit, wantCredits] of [
+        [1, [1, 2], C1, [[2, C3.file, label(2, C3)]]],
+        [3, [0, 1], C3, [[1, C1.file, label(1, C1)]]],
+    ] as const) {
+        const p = freshPage();
+        const adaOpened = await readPage(p.id, ada);
+        const stale = phoneRowsOf(adaOpened);
+        require_(stale.length === 3 && stale.some((s) => s.url === takenCredit.url), "Ada's phone draws one own row and two credit rows");
+        const owenOpened = await readPage(p.id, owen);
+        const off = await edit(owen, p.id, { photos: keep.map((i) => owenOpened.photos[i]) });
+        require_(off.status === 200 && !storedList(p.id).some((s) => s.url === takenCredit.url), `Owen takes picture ${taken} off on the web, its credit with it`);
+        const r = await call(ada, 'POST', `/api/knowledge/posts/${p.id}/edit`,
+            { title: 'Ada saves from the phone', body: WORDS.body, topic: WORDS.topic, place: WORDS.place, sources: [...stale, MAP_SOURCE], freeTags: [] });
+        assert(r.status === 200 && storedRow(p.id).title === 'Ada saves from the phone' && same(picturesOf(p.id, p.bytes), taken === 1 ? [2, 3] : [1, 2]),
+            `13b. picture ${taken}: Ada's stale phone Edit saves its words, Owen's pictures stay (${show(r)})`);
+        assert(!storedList(p.id).some((s) => s.url === takenCredit.url || String(s.label).includes(takenCredit.maker)),
+            `13b. picture ${taken}: no row of its credit comes back, as a credit or as a source (${storedRow(p.id).knowledge_sources})`);
+        assert(same(creditsOf(p.id), wantCredits), `13b. picture ${taken}: the credit left is its own picture's, numbered by its place (${JSON.stringify(creditsOf(p.id))})`);
+        const camera = await cameraRowsAreCredits(p.id);
+        assert(camera.ok && camera.labels.length === 1, `13b. picture ${taken}: every 📷 the page reads is a credit row naming its own number (${camera.labels.join(' | ')})`);
+        assert(same(ownOf(p.id), [PARKS, MAP_SOURCE.url]), `13b. picture ${taken}: the own source and Ada's Commons map, in her own words, stay (${JSON.stringify(ownOf(p.id))})`);
+    }
+
+    // ── 13c. Every other way sources come in ──────────────────────────────────────────────────
+    console.log('── 13c. every other way sources come in ──');
+    {
+        const STALE_C1 = { url: C1.url, label: label(1, C1) };
+        const MEL_SOURCE = { url: 'https://commons.wikimedia.org/wiki/File:Headland_walk.jpg', label: 'The headland walk on Wikimedia Commons' };
+        const draftSources = (id: string): string[] =>
+            (JSON.parse((db.prepare('SELECT sources FROM knowledge_drafts WHERE id = ?').get(id) as { sources: string | null } | undefined)?.sources ?? '[]') as any[]).map((s) => s.url);
+        const p = freshPage();
+        const melOpened = phoneRowsOf(await readPage(p.id, mel));
+        const owenOpened = await readPage(p.id, owen);
+        require_((await edit(owen, p.id, { photos: [owenOpened.photos[1], owenOpened.photos[2]] })).status === 200, 'Owen takes picture 1 off');
+        const want = [[2, C3.file, label(2, C3)]];
+
+        // A member's fix, from a 1.4.7 phone opened before: every row it drew, and a source of her own.
+        const fix = await call(mel, 'POST', '/api/knowledge/drafts', { fixOf: p.id, note: 'The walk has its own page', title: WORDS.title, body: WORDS.body, topic: WORDS.topic, place: WORDS.place, sources: [...melOpened, MEL_SOURCE] });
+        const fixId = fix.body?.draft?.id;
+        assert(fix.status === 201 && same(draftSources(fixId), [PARKS, MEL_SOURCE.url]), `13c. Suggest a fix: the fix keeps the own row and Mel's Commons page, no credit (${show(fix)} ${JSON.stringify(draftSources(fixId))})`);
+        const fixOk = await call(owen, 'POST', `/api/knowledge/drafts/${fixId}/approve`, {});
+        assert(fixOk.status === 200 && same(creditsOf(p.id), want) && same(ownOf(p.id), [PARKS, MEL_SOURCE.url]) && (await cameraRowsAreCredits(p.id)).ok,
+            `13c. the fix approved: 📷 2 is picture 3's, Mel's source written (${show(fixOk)} ${storedRow(p.id).knowledge_sources})`);
+
+        // Approve with changes on a fix: the owner's form, opened before, sends every row back.
+        const fix2 = await call(mel, 'POST', '/api/knowledge/drafts', { fixOf: p.id, note: 'Nothing but this note' });
+        const fix2Id = fix2.body?.draft?.id;
+        require_(fix2.status === 201, `Mel sends a second fix (${show(fix2)})`);
+        const fix2Ok = await call(owen, 'POST', `/api/knowledge/drafts/${fix2Id}/approve`, { sources: [...melOpened, MEL_SOURCE] });
+        assert(fix2Ok.status === 200 && same(creditsOf(p.id), want) && same(ownOf(p.id), [PARKS, MEL_SOURCE.url]) && (await cameraRowsAreCredits(p.id)).ok,
+            `13c. Approve with changes on a fix: no credit comes back as a source (${show(fix2Ok)} ${storedRow(p.id).knowledge_sources})`);
+
+        // An owner's own page, sent with a credit's shape.
+        const own = await call(owen, 'POST', '/api/knowledge/posts', { ...WORDS, title: "Owen's own lookout page", sources: [WORDS.sources[0], STALE_C1, MEL_SOURCE] });
+        const ownId = own.body?.post?.id;
+        assert(own.status === 201 && same(ownOf(ownId), [PARKS, MEL_SOURCE.url]) && creditsOf(ownId).length === 0,
+            `13c. an owner's own page: the credit's shape dropped, the Commons page in its own words kept (${show(own)})`);
+
+        // A member's new suggestion, then Approve with changes on it.
+        const sug = await call(mel, 'POST', '/api/knowledge/drafts', { ...WORDS, title: "Mel's lookout notes", sources: [WORDS.sources[0], STALE_C1, MEL_SOURCE] });
+        const sugId = sug.body?.draft?.id;
+        assert(sug.status === 201 && same(draftSources(sugId), [PARKS, MEL_SOURCE.url]), `13c. a member's new suggestion: no credit's shape kept (${show(sug)} ${JSON.stringify(draftSources(sugId))})`);
+        const sugOk = await call(owen, 'POST', `/api/knowledge/drafts/${sugId}/approve`, { sources: [WORDS.sources[0], { url: C3.url, label: label(1, C3) }, MEL_SOURCE] });
+        const sugPage = sugOk.body?.post?.id;
+        assert(sugOk.status === 200 && same(ownOf(sugPage), [PARKS, MEL_SOURCE.url]) && creditsOf(sugPage).length === 0,
+            `13c. Approve with changes on it: a page with no picture writes no credit (${show(sugOk)})`);
+
+        // An assistant's draft (the door asks this before it files one).
+        const k = checkAssistantKnowledgeDraft('remove-photo-test-grant', { ...WORDS, about: KNOWLEDGE_ABOUT[0], sources: [WORDS.sources[0], STALE_C1, MEL_SOURCE] });
+        assert(same(k.sources.map((s) => s.url), [PARKS, MEL_SOURCE.url]), `13c. an assistant's draft: the credit's shape dropped (${JSON.stringify(k.sources)})`);
+    }
+
+    // ── 14. Where the line is ─────────────────────────────────────────────────────────────────
+    console.log('── 14. where the line is ──');
+    {
+        const keeps = (row: { url: string; label: string }) => cleanKnowledgeInput({ ...WORDS, sources: [row] }).sources.length === 1;
+        const files = ['Lookout_one.jpg', 'Przełęcz pod Kopą, 2019.jpg', 'Jane: a portrait (1).png'].map(commonsFilePage);
+        const makers = ['Ana Maker', '', 'Jane Doe & Co '.repeat(12)];
+        const dropped: Array<[string, { url: string; label: string }]> = [];
+        for (const l of COMMONS_OPEN_LICENCES) {
+            for (const [n, maker] of makers.entries()) dropped.push([`📷 ${n + 1}, ${l.name}, maker ${maker ? `${maker.length} letters` : 'none'}`, { url: files[n], label: knowledgeCreditLabel(n + 1, maker, l.name) }]);
+        }
+        dropped.push(
+            ['a hidden character in its head', { url: files[0], label: `📷​ 1 · Ana Maker · CC BY 4.0` }],
+            ['its link over http', { url: files[0].replace('https:', 'http:'), label: label(1, C1) }],
+            ["its link's host in capitals", { url: files[0].replace('commons.wikimedia.org', 'COMMONS.WIKIMEDIA.ORG'), label: label(1, C1) }],
+        );
+        for (const [what, row] of dropped) assert(!keeps(row), `14. dropped: the node's credit shape, ${what} (${row.label.slice(0, 40)})`);
+        const kept: Array<[string, { url: string; label: string }]> = [
+            ['a Commons file page in a person\'s own words', MAP_SOURCE],
+            ['the file page of a credit taken off, in a person\'s own words', { url: C1.url, label: 'Where the first photo came from' }],
+            ['a camera with no number', { url: C1.url.replace('Lookout_one', 'Lookout_dawn'), label: '📷 The lookout at dawn' }],
+            ['a "📷 n ·" label on any other address', { url: 'https://parks.example/photo-2', label: '📷 2 · Parks staff · CC BY 4.0' }],
+        ];
+        for (const [what, row] of kept) assert(keeps(row), `14. kept: ${what}`);
     }
 
     console.log(`\n${passed}/${run} passed`);

@@ -279,16 +279,44 @@ function creditsAfter(photos: readonly PagePhoto[], credits: readonly CreditRow[
     });
 }
 
+/** Commons' own host, where every credit's link is (agent/commons-pictures.ts COMMONS_HOST and commonsFilePage write it). */
+const COMMONS_HOST = 'commons.wikimedia.org';
+/** A credit row's label from its head, as core knowledgeCreditLabel writes it: the camera, the picture's number, a dot. */
+const CREDIT_LABEL_HEAD = new RegExp(`^${KNOWLEDGE_CREDIT_MARK}\\s*\\d+\\s*·`, 'u');
+
 /**
- * The standing rule (Question 5): a row sent in that carries the picture mark, or that points at one of the page's credited
- * pictures and starts with the camera mark (a 1.4.7 phone's form sends every row it draws back as label and link), is the
- * node's to write, never a person's. It is dropped before the limit is counted and before any other check of the row.
+ * A row in the node's own credit shape, whatever page it came from (review of #3353): a label that opens "📷 {n} ·" as
+ * knowledgeCreditLabel writes it, on a link to a file's page on Wikimedia Commons, as commonsFilePage writes it. creditRowOf
+ * writes exactly that pair and no form does. The line is the pair: a person's own source to a Commons file page in their own
+ * words ("Map of the headland", even "📷 The lookout at dawn", with no number and dot) is theirs and stays, and so does a
+ * "📷 2 · …" label on any other address, which no picture's credit has ever pointed at.
+ */
+function creditShaped(label: string, url: string): boolean {
+    if (!CREDIT_LABEL_HEAD.test(label)) return false;
+    let u: URL;
+    try { u = new URL(url.trim()); } catch { return false; }
+    return /^https?:$/.test(u.protocol) && u.hostname === COMMONS_HOST && /^\/wiki\/File(?::|%3A)/i.test(u.pathname);
+}
+
+/**
+ * The standing rule (Question 5): a row sent in that carries the picture mark, that is in the node's own credit shape
+ * (creditShaped), or that points at one of the page's credited pictures and starts with the camera mark (a 1.4.7 phone's form
+ * sends every row it draws back as label and link), is the node's to write, never a person's. It is dropped before the limit
+ * is counted and before any other check of the row. Its label is read as it would be stored (oneLine: hidden characters out),
+ * so a character no one sees can't carry a credit's shape past it. The shape is what holds when a picture is taken off (editKnowledge): a
+ * 1.4.7 phone's form opened before then sends that picture's credit back, its link no longer one of the page's credits, under a
+ * number that now names another picture; it never comes back as a source. Every write of a page's or a draft's sources reads
+ * the rows sent through here (cleanKnowledgeInput): Edit, Suggest a fix and a new suggestion, Approve with or without
+ * changes, an owner's or admin's own page, one made from a forum answer, and an assistant's draft.
  */
 function sentCredit(s: unknown, credited: ReadonlySet<string>): boolean {
     if (!s || typeof s !== 'object') return false;
     const item = s as { url?: unknown; label?: unknown; photo?: unknown };
     if (isKnowledgeCreditRow(item)) return true;
-    if (typeof item.label !== 'string' || !item.label.trim().startsWith(KNOWLEDGE_CREDIT_MARK) || typeof item.url !== 'string') return false;
+    if (typeof item.label !== 'string' || typeof item.url !== 'string') return false;
+    const label = oneLine(item.label, KNOWLEDGE_LIMITS.sourceLabel);
+    if (!label.startsWith(KNOWLEDGE_CREDIT_MARK)) return false;
+    if (creditShaped(label, item.url)) return true;
     const url = item.url.trim();
     let href = url;
     try { href = new URL(url).href; } catch { /* compared as sent */ }

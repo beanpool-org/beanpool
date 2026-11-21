@@ -76,8 +76,8 @@ const lines = [
     { id: 'notify', text: 'Hear when someone answers you', done: false },
 ];
 const tile = (shape, profile, beans) => (
-    <WelcomeTile shape={shape} place={profile === 'global' ? "You're in the global community" : "You're in Riverside."} inviter={profile === 'global' ? null : 'Asha'} firstHere={false}
-        lines={welcomeTileLines({ profile, beans })} tourLabel={t('Show me around')} colors={colors} onTour={noop} onGotIt={noop} onSayHello={noop} />
+    <WelcomeTile shape={shape} place={profile === 'global' ? "You're in the global community" : "You're in Riverside."}
+        lines={welcomeTileLines({ profile, beans })} tourLabel={t('Show me around')} colors={colors} onTour={noop} onGotIt={noop} />
 );
 const body = view === 'band' ? tile('band', 'local', true)
     : view === 'global' ? tile('full', 'global', false)

@@ -2523,9 +2523,17 @@ export default function WelcomeScreen() {
         void handleConfirmSeed();
     }
 
+    /**
+     * The screen's showing as it is written (the effect below). Each answer waits for it first: "Later" sits where the way
+     * back's "Later" sat, so a double tap there can answer before the showing is kept, and the showing's write would then
+     * land over the answer's (both read the record, then write it).
+     */
+    const notifyShowing = useRef<Promise<void>>(Promise.resolve());
+
     /** "Turn on notifications": the phone's own pop-up, only from this tap; whatever it answers, or if it fails, on. */
     async function handleNotifyTurnOn() {
         setLoading(true);
+        await notifyShowing.current;
         await turnOnFromJoin(pendingIdentity?.publicKey ?? null);
         setLoading(false);
         afterTheAsk();
@@ -2534,6 +2542,7 @@ export default function WelcomeScreen() {
     /** "Later": no "no" recorded, the phone's question unspent; on. */
     async function handleNotifyLater() {
         setLoading(true);
+        await notifyShowing.current;
         await laterFromJoin();
         setLoading(false);
         afterTheAsk();
@@ -2553,7 +2562,7 @@ export default function WelcomeScreen() {
     useEffect(() => {
         if (mode !== 'notify' || !pendingIdentity) return;
         let live = true;
-        void (async () => {
+        notifyShowing.current = (async () => {
             const due = await notifyJoinDue(notifyPath);
             if (!live) return;
             if (due) await showNotifyJoin();

@@ -343,6 +343,12 @@ describe('resuming on the notifications screen (N1j)', () => {
         expect(s).toContain('setKeptAtHandover(plan.wayBackKept);');
         expect(s).toContain('const wayBackIsKept = keptAtHandover || wayBackKept(');
         // A join resumed there whose phone answered since goes straight on (never stranded).
-        expect(s).toMatch(/const due = await notifyJoinDue\(notifyPath\);\s*if \(!live\) return;\s*if \(due\) await showNotifyJoin\(\);\s*else afterTheAsk\(\);/);
+        expect(s).toMatch(/notifyShowing\.current = \(async \(\) => \{\s*const due = await notifyJoinDue\(notifyPath\);\s*if \(!live\) return;\s*if \(due\) await showNotifyJoin\(\);\s*else afterTheAsk\(\);/);
+        // Each answer waits for the showing's write, so a double tap's Later is never written over by it.
+        for (const fn of ['handleNotifyTurnOn', 'handleNotifyLater']) {
+            const body = s.slice(s.indexOf(`async function ${fn}(`), s.indexOf('afterTheAsk();', s.indexOf(`async function ${fn}(`)));
+            expect(body.indexOf('await notifyShowing.current;'), fn).toBeGreaterThan(-1);
+            expect(body.indexOf('await notifyShowing.current;'), fn).toBeLessThan(body.search(/await (turnOnFromJoin|laterFromJoin)\(/));
+        }
     });
 });

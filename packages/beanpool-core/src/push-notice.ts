@@ -83,7 +83,10 @@ export function askedPushOn(features: object | null | undefined): boolean {
 
 /** The words both apps show for the `market.asked` push (design §2.1): the card's sentence and the Settings switch. */
 export const ASKED_PUSH_WORDS = {
-    /** What are you into?'s note where the community sends the push. */
+    /**
+     * What are you into?'s note where the community sends the push, and only while the device allows notifications: off,
+     * the note drops its promise (notify-ask.ts notifyInterestsPromise, slice N2b's true line).
+     */
     interestsNote: word("Tap a few. What you star comes first here and in the Market, and we'll tell you when a neighbour asks for it."),
     /** Settings → Notifications: the switch's name (and its label for a screen reader). */
     switchName: word("When a neighbour asks for something I'm into"),

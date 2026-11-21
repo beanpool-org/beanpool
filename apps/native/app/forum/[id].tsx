@@ -20,6 +20,9 @@
  * - **Links** (slice F9 part 3, components/forum/ForumLinks.tsx): the chips under the opening words, exactly as the node answered
  *   them for this member; the writer's ⋯ adds Link (the picker) and Make this a Need (utils/forum-need.ts). After a pick the topic
  *   is read again, so a chip is only ever the node's answer.
+ * - **Follow** (DESIGN-notify-and-backup-asks-fable-amend2.md §12.3 slice N2b): the bell's follow, once saved, may bring one
+ *   named line under it, "Hear when someone replies here." [Tell me], by core's rule (components/NotifyLine.tsx); it shows
+ *   while the topic stays followed, and leaving the topic is its no.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
@@ -50,6 +53,7 @@ import type { ForumDraft } from '../../utils/forum-kept';
 import { useForumStyles } from '../../components/forum/forum-style';
 import { LINK_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
 import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
+import { useNotifyLine, useScreenShowing } from '../../components/NotifyLine';
 
 type Menu = { kind: 'post'; post: ForumPost; confirm?: 'block' | 'remove' } | { kind: 'topic' } | null;
 
@@ -70,6 +74,10 @@ export default function ForumTopicScreen() {
     const screenKeyboard = useScreenKeyboardOffset();
     const insets = useSafeAreaInsets();
     const [me, setMe] = useState<string | null>(null);
+    // A topic followed may bring one named line under the bell, "Hear when someone replies here." [Tell me] (slice N2b; core's
+    // rule decides, once on a phone). Leaving the topic is its no.
+    const inFront = useScreenShowing();
+    const notify = useNotifyLine(me, inFront);
     const [front, setFront] = useState<ForumFront | null>(null);
     const [page, setPage] = useState<ForumTopicPage | null>(null);
     const [failed, setFailed] = useState(false);
@@ -344,7 +352,15 @@ export default function ForumTopicScreen() {
                     {topic && (
                         <Pressable accessibilityRole="button" testID="forum-follow" accessibilityState={{ selected: following }}
                             accessibilityLabel={following ? t(TOPIC_WORDS.following) : t(TOPIC_WORDS.follow)}
-                            onPress={() => void act(() => followForumTopic(topic.id, following ? null : 'following'))} style={styles.iconBtn}>
+                            onPress={() => {
+                                const next = following ? null : 'following';
+                                void act(async () => {
+                                    await followForumTopic(topic.id, next);
+                                    // Followed: the member's own act, the moment for "Hear when someone replies here."
+                                    // Never on a closed topic: it takes no replies (the node refuses them, forum.ts), so none can be heard.
+                                    if (next && open) void notify.offer({ kind: 'follow', align: 'end' });
+                                });
+                            }} style={styles.iconBtn}>
                             <MaterialCommunityIcons name={topic.follow === 'muted' ? 'bell-off-outline' : following ? 'bell' : 'bell-outline'} size={22} color={following ? colors.accent.primary : colors.text.muted} />
                         </Pressable>
                     )}
@@ -354,6 +370,8 @@ export default function ForumTopicScreen() {
                         </Pressable>
                     )}
                 </View>
+                {/* Under the bell, while the topic is still followed. */}
+                {following && notify.view ? <View style={{ paddingHorizontal: 12 }} testID="forum-follow-line">{notify.view}</View> : null}
                 <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={[styles.pad, { paddingTop: 10 }]} keyboardShouldPersistTaps="handled">
                     {failed && !page && (
                         <View style={{ gap: 8, alignItems: 'flex-start' }}>

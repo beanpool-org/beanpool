@@ -26,7 +26,7 @@
  *   {@link notificationsLater}, never a no. Nothing else in the join raises a permission.
  * - A restore asks nothing by itself: the once card on Home (slice N1h) is to be its one soft ask.
  */
-import { Alert, AppState, Linking, Platform } from 'react-native';
+import { Alert, AppState, Linking, Platform, TurboModuleRegistry, type TurboModule } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type * as ExpoNotifications from 'expo-notifications';
 import {
@@ -104,6 +104,11 @@ export interface OsNotificationPermission {
     canAskAgain: boolean;
     /** Android 13 and later: "can't ask again" needs this phone's record to mean the phone's no (core's `NotifyPhone`, amend3 §3). */
     cantAskNeedsRecord?: boolean;
+    /**
+     * Android 13 and later: Android's own "should show a reason" flag, read live (core's `NotifyPhone`, amend4 §3): on once
+     * the phone has said "Don't allow" one time and its last pop-up is still to come. Left out where the read fails.
+     */
+    saidNoOnce?: boolean;
 }
 
 /**
@@ -114,14 +119,43 @@ function androidPopUpPhone(): boolean {
     return Platform?.OS === 'android' && Number(Platform?.Version) >= 33;
 }
 
-/** Reads the phone's own notification permission. Never throws and never asks. */
+/** React Native's own permissions module on Android: the one call this file makes of it. */
+interface AndroidPermissionsModule extends TurboModule {
+    shouldShowRequestPermissionRationale: (permission: string) => Promise<boolean>;
+}
+
+const POST_NOTIFICATIONS = 'android.permission.POST_NOTIFICATIONS';
+
+/**
+ * Android's own "should show a reason" flag for notifications (amend4 §3), straight from React Native's permissions module
+ * (PermissionsModule.kt `shouldShowRequestPermissionRationale`; its public JS has no reader of its own): true once the
+ * phone has said "Don't allow" one time and will still show its pop-up. Undefined where it can't be read (no module, no
+ * screen in front, a failed call): the rule then reads as amend3 has it. Never throws and never asks.
+ */
+export async function readAndroidSaidNoOnce(): Promise<boolean | undefined> {
+    try {
+        const mod = TurboModuleRegistry.get<AndroidPermissionsModule>('PermissionsAndroid');
+        if (typeof mod?.shouldShowRequestPermissionRationale !== 'function') return undefined;
+        const flag = await mod.shouldShowRequestPermissionRationale(POST_NOTIFICATIONS);
+        return typeof flag === 'boolean' ? flag : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Reads the phone's own notification permission. Never throws and never asks. On Android 13+ it also reads Android's own
+ * "one no" flag (amend4), so core can tell "said no once" from "never asked", which Expo reads alike.
+ */
 export async function readOsNotificationPermission(): Promise<OsNotificationPermission> {
     try {
         const notif = await getNotificationsModule();
         if (!notif?.getPermissionsAsync) return { available: false, granted: false, canAskAgain: false };
         const res = await notif.getPermissionsAsync();
         const read: OsNotificationPermission = { available: true, granted: res?.status === 'granted', canAskAgain: res?.canAskAgain !== false };
-        return androidPopUpPhone() ? { ...read, cantAskNeedsRecord: true } : read;
+        if (!androidPopUpPhone()) return read;
+        const saidNoOnce = await readAndroidSaidNoOnce();
+        return { ...read, cantAskNeedsRecord: true, ...(saidNoOnce === undefined ? {} : { saidNoOnce }) };
     } catch {
         return { available: false, granted: false, canAskAgain: false };
     }
@@ -238,6 +272,10 @@ async function defaultOpenSettings(): Promise<void> {
  * had on record before it (core's `notifyPopUpAnswer`, amend3 §3.1): on Android 13+ a first "Don't allow" reads back
  * "can ask again", and a pop-up swiped away, backed out of or tapped outside reads "can't ask again" with no answer of the
  * phone's on record: that is a "Later". A second "Don't allow" is the phone's final no.
+ *
+ * On Android 13+ the phone's read before the tap (`readOs`) carries Android's own "one no" flag, and the ask's own "can ask
+ * again" is that flag after it: core takes both (amend4 §3.2), so the last pop-up's two answers can't swap on a phone whose
+ * first "Don't allow" isn't on record (1.4.7 wrote it as 'declined'). A flag that couldn't be read leaves amend3's rule.
  *
  * Where the phone won't show its pop-up again (core's `notifyTurnOn` 'settings': iOS after Don't Allow, Android 13+ after
  * a second no or a yes switched off, any phone switched off in its settings), asking would return "denied" with nothing

@@ -67,7 +67,7 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/EventCard', () => ({ EVENT_ACCENT: '#0a7' }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
-vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
+vi.mock('../../components/EventExtras', () => ({ useEventReminderChoice: () => ({ supported: true, offsets: null, defaults: [1440], marketplaceOn: true, known: false, setOffsets: () => {}, setUnsupported: () => {} }), EventReminder: () => null, EventShareAndCalendar: () => null }));
 
 import { EventDetail } from '../../components/EventDetail';
 import { REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT } from '../reportReasons';

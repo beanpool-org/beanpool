@@ -6,7 +6,7 @@
  * nothing is sent to the node.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NAME_BOX_WORDS } from '@beanpool/core';
 import { WelcomePage } from './WelcomePage';
 import { resetCapturedAuthReturn } from '../lib/web-join';
@@ -43,6 +43,12 @@ const inviteBox = () => {
     return screen.getByLabelText('Invite link or code') as HTMLInputElement;
 };
 const join = () => fireEvent.click(screen.getByTestId('name-step-join'));
+/**
+ * The join's end: Your photo, ready. A join runs on after its redeem goes out (the key saved, then the photo step), so a
+ * test that clicks Join waits for this before it ends; ended at the send, the page's last state change could land after
+ * the file's window was gone ("ReferenceError: window is not defined" at handleCreate, CI run 44900976683).
+ */
+const joined = () => waitFor(() => expect(screen.getByTestId('photo-step-choose')).not.toBeDisabled());
 /** Your name, opened from an invite link (the greeting's read of the code goes as it opens). */
 async function nameScreen() {
     window.history.replaceState(null, '', `/app?invite=${CODE}`);
@@ -103,6 +109,7 @@ describe('the web join\'s name box takes a name, never an invite or a link', () 
         join();
         await vi.waitFor(() => expect(node.sent().some((c) => c.path === '/api/invite/redeem' && c.body?.callsign === 'J.R. St.Kilda')).toBe(true));
         expect(screen.queryByText(NAME_BOX_WORDS.webLink)).toBeNull();
+        await joined();
     });
 });
 

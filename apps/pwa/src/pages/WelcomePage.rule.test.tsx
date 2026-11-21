@@ -44,6 +44,12 @@ async function fillIn() {
     typeName('Rowan');
 }
 const join = () => fireEvent.click(screen.getByTestId('name-step-join'));
+/**
+ * The join's end: Your photo, ready. A join runs on after its redeem goes out (the key saved, then the photo step), so a
+ * test that clicks Join waits for this before it ends; ended at the send, the page's last state change could land after
+ * the file's window was gone ("ReferenceError: window is not defined" at handleCreate, CI run 44900976683).
+ */
+const joined = () => waitFor(() => expect(screen.getByTestId('photo-step-choose')).not.toBeDisabled());
 
 beforeEach(() => {
     window.history.replaceState({}, '', '/welcome');
@@ -79,7 +85,7 @@ describe('the join step', () => {
         await screen.findByTestId('join-rule');
         join();
         await waitFor(() => expect(node.redeem()).toBeTruthy());
-        await new Promise(r => setTimeout(r, 0));
+        await joined();
         expect(node.consents()).toEqual([]);
     });
 
@@ -93,6 +99,7 @@ describe('the join step', () => {
             expect(screen.queryByTestId('join-rule')).toBeNull();
             join();
             await waitFor(() => expect(node.redeem()).toBeTruthy());
+            await joined();
         });
     }
 });

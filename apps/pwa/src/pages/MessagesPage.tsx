@@ -27,7 +27,7 @@ import { notSeenInThread, notSeenWords } from '@beanpool/core';
 import { useRequestsUnseen } from '../lib/requests-seen';
 import { AddressCardPanel } from '../components/AddressCardPanel';
 import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
-import { messagePathOnWeb, openAcrossOnWeb } from '../lib/message-anyone';
+import { messageOnWeb } from '../lib/message-anyone';
 import type { OutsideChat } from '../lib/outside-chat-store';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { ChatImageBubble, ChatPhotoShown } from '../components/ChatImageBubble';
@@ -2313,18 +2313,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         </div>
     ) : null;
 
-    // Message on a contact in another community (slice S5 part 2, lib/message-anyone.ts): a chat across already here opens;
-    // else one is made from their link and opens. A refusal says why, in the chat page's own refusal line.
+    // Message on a contact in another community (slice S5 part 2, lib/message-anyone.ts messageOnWeb): someone blocked is
+    // refused first, an existing chat across included (#3354 review); else a chat across the list shows opens, or one is made
+    // from their link. A refusal says why, in the chat page's own refusal line; never a tap that does nothing.
     const messageAcross = async (link: { key: string; community: string }, name: string) => {
-        const path = await messagePathOnWeb([{ community: link.community, key: link.key, name }]).catch(() => null);
-        if (path?.open === 'shared') { setShowContacts(null); void handleStartDm(path.key); return; }
-        if (path?.open === 'existing') { setShowContacts(null); setOpenOutside(path.chat.id); return; }
-        if (path?.open !== 'across') return;
-        const opened = await openAcrossOnWeb(path).catch(() => ({ refused: 'no-community' as const }));
+        const done = await messageOnWeb(link, name);
         setShowContacts(null);
-        if ('chatId' in opened) { setOpenOutside(opened.chatId); return; }
-        setChatRefusal(opened.refused === 'off' ? t("This community doesn't take messages from other communities.")
-            : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : t("Couldn't reach your community. Check your connection and try again."));
+        if ('dm' in done) void handleStartDm(done.dm);
+        else if ('across' in done) setOpenOutside(done.across);
+        else setChatRefusal(done.refused);
     };
 
     if (showContacts) {

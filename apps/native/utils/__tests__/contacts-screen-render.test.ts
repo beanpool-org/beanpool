@@ -5,7 +5,7 @@
  * Native's host components are plain tags (as members-on-demand-screens-render.test.ts). The communities are never asked:
  * checkContactsHere and syncContacts are spies. Each check names the change that turns it red.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, Fragment, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -47,7 +47,8 @@ const mem = vi.hoisted(() => ({
     settings: 0,
     // Message anyone (S5 part 2, utils/message-anyone.ts): the chats this phone has (here, in a held community, across, by
     // file), the across context, the community's switch, the cards an across chat was made from, and a block across.
-    chatsHere: [] as any[],
+    // As db.ts getConversations RETURNS them (its type, utils/message-anyone.ts HereChat), never its SQL row (#3354 review).
+    chatsHere: [] as import('../message-anyone').HereChat[],
     heldDirect: {} as Record<string, any[]>,
     acrossHere: [] as any[],
     heldAcross: {} as Record<string, any[]>,
@@ -55,6 +56,13 @@ const mem = vi.hoisted(() => ({
     outsideOn: true,
     acrossBlocked: false,
     cards: [] as Array<{ key: string; home: string; name: string | null }>,
+    // The block lists Message asks first (#3354 review; blocklist.ts readBlockLists): blocked on this phone is `blocked`;
+    // these are a held community's own list as last read, and blocked once and unblocked since. Unreadable: null.
+    seenThere: [] as string[],
+    once: [] as string[],
+    listsUnreadable: false,
+    // The held handles closed again (db.ts closeHeldCopies), #3302 review F3.
+    closes: 0,
 }));
 // The store loads Expo's file system, AsyncStorage and the share sheet with require() (utils/contacts-store.ts
 // phoneContactsDeps, use-contacts.ts shareContactsFile), which vi.mock doesn't reach: Node's loader hands these out instead.
@@ -175,12 +183,19 @@ vi.mock('../db', () => ({
     getConversations: async () => mem.chatsHere,
     getHeldConversations: async (_me: string, community: string) => mem.heldDirect[community] ?? [],
     getHeldOutsideChats: async (_me: string, community: string) => mem.heldAcross[community] ?? [],
+    closeHeldCopies: async () => { mem.closes++; },
 }));
 vi.mock('../outside-chat-live', () => ({
-    outsideContext: async () => (mem.noAcrossContext ? null : { nodeUrl: 'https://riverside.example', store: { chats: async () => mem.acrossHere } }),
+    outsideContext: async () => (mem.noAcrossContext ? null : {
+        nodeUrl: 'https://riverside.example', identity: ME, store: { chats: async () => mem.acrossHere }, isBlocked: async (k: string) => mem.blocked.includes(k),
+    }),
     outsideMessagesHere: async () => mem.outsideOn,
 }));
-vi.mock('../outside-mail', () => ({
+// The real outside-mail.ts loads for its chatsShown: its signing (utils/crypto.ts) needs expo-crypto, never asked here.
+vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
+vi.mock('../outside-mail', async (importOriginal) => ({
+    // What Chat lists of the across chats here: the real one (#3354 review: Message reads only what the list shows).
+    chatsShown: (await importOriginal<typeof import('../outside-mail')>()).chatsShown,
     openChatFromCard: async (_ctx: unknown, card: { key: string; home: string; name: string | null }) => {
         if (mem.acrossBlocked) return null;
         mem.cards.push(card);
@@ -201,8 +216,11 @@ vi.mock('../contacts-former', async (importOriginal) => ({
 }));
 vi.mock('../blocklist', () => ({
     BLOCKLIST_UPDATED_EVENT: 'blocklist', getBlockedUsers: async () => mem.blocked, unblockUser: vi.fn(async () => true),
+    isUserBlocked: async (k: string) => mem.blocked.includes(k),
     // "Add people I've chatted with" leaves out anyone blocked (slice S7b; its own table is let-in-once's, on the real lists).
     withoutBlockedPeople: async (_me: string, people: Array<{ key: string }>) => people.filter((p) => !mem.blocked.includes(p.key)),
+    // Message's block rule (#3354 review): the lists as blocklist.ts reads them, judged by the real rule (block-rules.ts blockedAnywhere).
+    readBlockLists: async () => (mem.listsUnreadable ? null : { onPhone: new Set(mem.blocked), once: new Set(mem.once), seenThere: new Set(mem.seenThere) }),
 }));
 vi.mock('../use-communities', () => ({ switchCommunity: vi.fn(async () => {}), communitySwitchUnderWay: () => false }));
 // The root layout's recognition, asked again before a move (Message on a contact in a held community: S0).
@@ -215,10 +233,17 @@ vi.mock('../contacts-sync', async (importOriginal) => ({
 }));
 const RIVERSIDE = 'https://riverside.example';
 const RIVERBEND = 'https://riverbend.example';
-vi.mock('../nodes', () => ({ getSavedNodes: async () => [{ url: 'https://riverside.example', alias: 'Riverside' }, { url: 'https://riverbend.example', alias: 'Riverbend' }] }));
+vi.mock('../nodes', () => ({
+    getSavedNodes: async () => [{ url: 'https://riverside.example', alias: 'Riverside' }, { url: 'https://riverbend.example', alias: 'Riverbend' }],
+    // What held-chats.ts reads to list another community's chats (Message reads through it: #3354 review).
+    getDatabaseFilenameForNode: (url: string | null) => `beanpool_${String(url ?? '').replace(/^https?:\/\//, '').replace(/\/+$/, '')}.db`,
+    isGuestNode: async (url: string) => (JSON.parse(mem.store.get('beanpool_guest_nodes') ?? '[]') as string[]).includes(url),
+    isGuestCopy: async (url: string) => (JSON.parse(mem.store.get('beanpool_guest_nodes') ?? '[]') as string[]).includes(url),
+}));
 
 import { newContactId, nodeHomeOf, putContact, removeEveryContact, emptyContactsList, type ContactsList } from '@beanpool/core';
 import ContactsScreen from '../../app/contacts';
+import type { HereChat } from '../message-anyone';
 import { changeContacts, emptySyncState, loadContacts, phoneContactsDeps } from '../contacts-store';
 import { syncContacts } from '../contacts-sync';
 import { switchCommunity } from '../use-communities';
@@ -237,6 +262,10 @@ const ANA = 'b2'.repeat(32);
 const BLOCKED = 'c3'.repeat(32);
 // Ana's key in Riverside, beside ANA in Riverbend (a contact keeps one link a key: S5 part 2's path rows).
 const ANA_HERE = 'd4'.repeat(32);
+/** A community this phone shares none with. */
+const FARAWAY = 'https://faraway.example';
+/** A direct chat here as db.ts getConversations returns it (typed by it: a renamed field is a type error here and a red row). */
+const hereDm = (id: string, key: string): HereChat => ({ id, type: 'dm', peerPubkey: key, peerKeys: [key] });
 const link = (key: string, community: string, callsign: string) => ({ key, community, callsign, how: 'profile' as const, at: '2026-11-12T01:00:00.000Z' });
 const person = (name: string, more: Partial<{ phones: string[]; emails: string[]; note: string; links: ReturnType<typeof link>[] }> = {}) =>
     ({ id: newContactId(), name, phones: [], emails: [], note: '', links: [], invite: null, ...more });
@@ -278,6 +307,11 @@ async function answer(choice: string) {
 const seedList = (list: (l: ContactsList) => ContactsList) => changeContacts(ME, list, phoneContactsDeps());
 const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhone;
 
+// Message's readers load on first use (utils/message-anyone.ts imports them lazily): loaded once here, so no row's settle()
+// is spent loading them and a first tap never lands in the next row.
+beforeAll(async () => {
+    await Promise.all([import('../held-chats'), import('../outside-mail'), import('../block-rules'), import('../dm-blocked'), import('../outside-chat-live')]);
+});
 beforeEach(() => {
     mem.former = false; mem.formerDeleted = 0; mem.deleteAnswer = { here: true, complete: true }; mem.chats = []; mem.friends = []; mem.events.clear();
     mem.store.clear(); mem.files.clear(); mem.alerts.length = 0; mem.shared.length = 0; mem.blocked = []; mem.pushed.length = 0;
@@ -286,6 +320,7 @@ beforeEach(() => {
     mem.book = []; mem.queries.length = 0; mem.picked = null; mem.settings = 0;
     mem.chatsHere = []; mem.heldDirect = {}; mem.acrossHere = []; mem.heldAcross = {}; mem.noAcrossContext = false; mem.outsideOn = true;
     mem.acrossBlocked = false; mem.cards = [];
+    mem.seenThere = []; mem.once = []; mem.listsUnreadable = false; mem.closes = 0;
     mem.store.set('beanpool_anchor_url', RIVERSIDE);
     vi.mocked(syncContacts).mockClear();
 });
@@ -483,7 +518,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         const HELD = () => mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: RIVERBEND }]));
         const ROWS: Array<{ name: string; links: Array<ReturnType<typeof link>>; set: () => void; pushed: unknown; started?: unknown[] }> = [
             { name: 'existing direct chat here, though they are in a held community too', links: [link(ANA, RIVERBEND, 'ana'), link(ANA, RIVERSIDE, 'ana')],
-                set: () => { HELD(); mem.chatsHere = [{ id: 'd-here', convType: 'dm', otherPubkey: ANA, otherKeys: ANA }]; mem.heldDirect[RIVERBEND] = [{ id: 'd-held', type: 'dm', peerPubkey: ANA, peerKeys: [ANA] }]; },
+                set: () => { HELD(); mem.chatsHere = [hereDm('d-here', ANA)]; mem.heldDirect[RIVERBEND] = [{ id: 'd-held', type: 'dm', peerPubkey: ANA, peerKeys: [ANA] }]; },
                 pushed: '/chat/d-here', started: [] },
             { name: 'existing direct chat in a held community: opened in place', links: [link(ANA, RIVERSIDE, 'ana')],
                 set: () => { HELD(); mem.heldDirect[RIVERBEND] = [{ id: 'd-held', type: 'dm', peerPubkey: ANA, peerKeys: [ANA] }]; },
@@ -518,6 +553,89 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
             expect(mem.pushed).toEqual([pushed]);
             expect(vi.mocked(createConversationApi).mock.calls).toEqual(started);
             expect(mem.alerts).toEqual([]);
+        });
+
+        it('the held copies Message read are closed again as it ends (#3302 review F3: Chat is not in view)', async () => {
+            HELD();
+            mem.heldDirect[RIVERBEND] = [{ id: 'd-held', type: 'dm', peerPubkey: ANA, peerKeys: [ANA] }];
+            await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, FARAWAY, 'ana')] })));
+            await render();
+            await press('Message');
+            expect(mem.pushed).toEqual([{ pathname: '/chat/[id]', params: { id: 'd-held', community: RIVERBEND, communityName: 'Riverbend' } }]);
+            expect(mem.closes).toBeGreaterThan(0);
+            // Mutation: heldChatsWith without its finally -> no close, and this goes red.
+        });
+
+        it('block lists that cannot be read: nothing opens, and it says so (never a tap that does nothing)', async () => {
+            mem.listsUnreadable = true;
+            mem.acrossHere = [{ id: 'x-here', peerKey: ANA }];
+            await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, FARAWAY, 'ana')] })));
+            await render();
+            await press('Message');
+            expect(mem.pushed).toEqual([]);
+            expect(mem.cards).toEqual([]);
+            expect(mem.alerts.map((a) => a.slice(0, 2))).toEqual([['Message', 'Please try again.']]);
+        });
+    });
+
+    /**
+     * Every path Message takes asks one block rule first (#3354 review: Message on a blocked contact in another community opened
+     * their hidden chat across, composer and all): (path) x (blocked here / in another held community / unblocked since /
+     * none). Blocked anywhere the phone holds (blocklist.ts blockedAnywhere) is refused on every path in the same words, and
+     * nothing opens, starts or is made; unblocked since and none open what the path opens. Mutations (PR body): no block asked
+     * -> the blocked rows open; the phone's list only (isUserBlocked) -> the "another held community" rows open; `once` asked
+     * (neverLetInQuietly) -> the "unblocked since" rows are refused; existing chats from the raw stores, not Chat's list ->
+     * with the block left out too, the hidden chats reopen.
+     */
+    describe('one block rule on every path', () => {
+        const HELD = () => mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: RIVERBEND }]));
+        const REFUSED = [['Message', 'You have blocked this user. Messaging is disabled.']];
+        const BLOCKS = [
+            { name: 'blocked here', set: () => { mem.blocked = [ANA]; }, refused: true },
+            { name: 'blocked in another held community', set: () => { mem.seenThere = [ANA]; }, refused: true },
+            { name: 'unblocked since', set: () => { mem.once = [ANA]; }, refused: false },
+            { name: 'none', set: () => {}, refused: false },
+        ];
+        const PATHS: Array<{ name: string; links: Array<ReturnType<typeof link>>; set: () => void; pushed: unknown; started?: unknown[]; card?: boolean; screenBlocks?: boolean }> = [
+            { name: 'existing direct chat here', links: [link(ANA, RIVERBEND, 'ana')], set: () => { HELD(); mem.chatsHere = [hereDm('d-here', ANA)]; }, pushed: '/chat/d-here' },
+            { name: 'existing direct chat in a held community (in place)', links: [link(ANA, FARAWAY, 'ana')],
+                set: () => { HELD(); mem.heldDirect[RIVERBEND] = [{ id: 'd-held', type: 'dm', peerPubkey: ANA, peerKeys: [ANA] }]; },
+                pushed: { pathname: '/chat/[id]', params: { id: 'd-held', community: RIVERBEND, communityName: 'Riverbend' } } },
+            { name: 'a held community, no chat yet (started in place)', links: [link(ANA, RIVERBEND, 'ana')], set: () => { HELD(); },
+                pushed: { pathname: '/chat/[id]', params: { id: 'conv-1', community: RIVERBEND, communityName: 'Riverbend' } }, started: [['dm', [ME.publicKey, ANA], ME.publicKey, undefined, undefined, RIVERBEND]] },
+            { name: 'existing chat across', links: [link(ANA, FARAWAY, 'ana')], set: () => { mem.acrossHere = [{ id: 'x-here', peerKey: ANA }]; }, pushed: '/outside-chat/x-here' },
+            { name: 'existing chat across in a held community\'s file', links: [link(ANA, FARAWAY, 'ana')], set: () => { HELD(); mem.heldAcross[RIVERBEND] = [{ id: 'x-held', peerKey: ANA }]; },
+                pushed: `/outside-chat/x-held?community=${encodeURIComponent(RIVERBEND)}` },
+            { name: 'a new chat across', links: [link(ANA, FARAWAY, 'ana')], set: () => {}, pushed: `/outside-chat/across-${ANA.slice(0, 4)}`, card: true },
+            // A link here that is on this phone's list shows Blocked + Unblock, not Message (the screen's own row, as before).
+            { name: 'the community in use, no chat yet', links: [link(ANA, RIVERSIDE, 'ana')], set: () => {}, pushed: '/chat/conv-1', started: [['dm', [ME.publicKey, ANA], ME.publicKey]], screenBlocks: true },
+        ];
+        const ROWS = PATHS.flatMap((path) => BLOCKS.map((block) => ({ ...path, block, row: `${path.name} x ${block.name}` })));
+        it.each(ROWS)('$row', async ({ links, set, pushed, started = [], card, screenBlocks, block }) => {
+            set();
+            block.set();
+            await seedList((l) => putContact(l, person('Ana Li', { links })));
+            await render();
+            const { createConversationApi } = await import('../db');
+            vi.mocked(createConversationApi).mockClear();
+            mem.pushed.length = 0;
+            if (block.refused && screenBlocks && block.name === 'blocked here') {
+                expect(button('Message')).toBeUndefined();
+                expect(text()).toContain('Blocked');
+                return;
+            }
+            await press('Message');
+            if (block.refused) {
+                expect(mem.alerts.map((a) => a.slice(0, 2))).toEqual(REFUSED);
+                expect(mem.pushed).toEqual([]);
+                expect(vi.mocked(createConversationApi).mock.calls).toEqual([]);
+                expect(mem.cards).toEqual([]);
+            } else {
+                expect(mem.alerts).toEqual([]);
+                expect(mem.pushed).toEqual([pushed]);
+                expect(vi.mocked(createConversationApi).mock.calls).toEqual(started);
+                expect(mem.cards.map((c) => c.key)).toEqual(card ? [ANA] : []);
+            }
         });
     });
 

@@ -17,8 +17,8 @@ const K2 = 'b'.repeat(64);
 const same = (a: string, b: string) => a.replace(/\/+$/, '').toLowerCase() === b.replace(/\/+$/, '').toLowerCase();
 
 type Input = Parameters<typeof messagePathFor>[0];
-const phone = (links: MessageLink[], chats: KnownChat[] = []): Input => ({ links, chats, setTo: HERE, held: [HELD_A, HELD_B], same });
-const web = (links: MessageLink[], chats: KnownChat[] = []): Input => ({ links, chats, setTo: HERE, held: [], same });
+const phone = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): Input => ({ links, chats, setTo: HERE, held: [HELD_A, HELD_B], same, blocked });
+const web = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): Input => ({ links, chats, setTo: HERE, held: [], same, blocked });
 
 interface Row { name: string; input: Input; want: MessagePath }
 const dHere: KnownChat = { kind: 'direct', community: HERE, id: 'd-here', key: K };
@@ -61,6 +61,16 @@ const ROWS: Row[] = [
     { name: 'web · across: any other community (the web holds none)', input: web([{ community: HELD_A, key: K, name: 'Dee' }]), want: across(HELD_A) },
     { name: 'web · across: a direct chat in another community does not count', input: web([{ community: HELD_A, key: K, name: 'Dee' }], [dA]), want: across(HELD_A) },
     { name: 'web · nothing: not on BeanPool yet', input: web([]), want: { open: 'nothing' } },
+    // ── blocked: asked first, on every path (#3354 review: an existing chat opened the hidden chat of someone blocked) ──
+    { name: 'phone · blocked: an existing direct chat here does not open', input: phone([{ community: HERE, key: K }], [dHere], true), want: { open: 'blocked' } },
+    { name: 'phone · blocked: an existing direct chat in a held community does not open', input: phone([{ community: AWAY, key: K }], [dA], true), want: { open: 'blocked' } },
+    { name: 'phone · blocked: an existing across chat does not open', input: phone([{ community: AWAY, key: K }], [xHere], true), want: { open: 'blocked' } },
+    { name: 'phone · blocked: no chat started in the community shared', input: phone([{ community: HELD_A, key: K }], [], true), want: { open: 'blocked' } },
+    { name: 'phone · blocked: no chat across made', input: phone([{ community: AWAY, key: K, name: 'Dee' }], [], true), want: { open: 'blocked' } },
+    { name: 'web · blocked: an existing across chat does not open', input: web([{ community: AWAY, key: K }], [xHere], true), want: { open: 'blocked' } },
+    { name: 'web · blocked: no chat started here', input: web([{ community: HERE, key: K }], [], true), want: { open: 'blocked' } },
+    { name: 'web · blocked: no chat across made', input: web([{ community: AWAY, key: K, name: 'Dee' }], [], true), want: { open: 'blocked' } },
+    { name: 'blocked, not on BeanPool yet: nothing (no key to block)', input: phone([], [], true), want: { open: 'nothing' } },
 ];
 
 describe('messagePathFor: which chat Message opens', () => {
@@ -88,6 +98,11 @@ describe('messagePathFor: which chat Message opens', () => {
             return shared.open === 'shared' ? shared : messagePathFor(i);
         },
         'chats in communities no longer held count': (i) => messagePathFor({ ...i, held: [...i.held, AWAY] }),
+        'no block asked': (i) => messagePathFor({ ...i, blocked: false }),
+        'the block asked only where no chat exists': (i) => {
+            const got = messagePathFor({ ...i, blocked: false });
+            return got.open === 'existing' ? got : messagePathFor(i);
+        },
     };
     for (const [name, mutant] of Object.entries(MUTANTS)) {
         it(`without the rule: ${name}, gets rows wrong`, () => {

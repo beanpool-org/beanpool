@@ -427,14 +427,18 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
     };
     // Message on a contact (slice S5 part 2, utils/message-anyone.ts; DESIGN-no-switch-messaging-fable.md §3): an existing
     // chat with them wins (here, in a held community in place, or across), else the community the phone shares with them
-    // (the one in use first, then one it holds), else a chat across from their link. A refusal says why.
+    // (the one in use first, then one it holds), else a chat across from their link. A refusal says why: someone blocked
+    // anywhere the phone holds is refused on every path, an existing chat included (#3354 review), in the across path's words.
     const messageAnyone = async (c: Contact) => {
         if (opening) return;
         const links = c.links.map((l) => ({ community: l.community, key: l.key, name: c.name }));
         setOpening(links[0]?.key ?? c.id);
         const path = await messagePathOnPhone(me, links, view.communities).catch(() => ({ open: 'nothing' as const }));
         setOpening(null);
-        if (path.open === 'existing') router.push(existingChatRoute(path.chat, view.anchor, (community) => communityLabel(view, community)) as any);
+        if (path.open === 'blocked') Alert.alert(t('Message', undefined, 'button: write to'), t('You have blocked this user. Messaging is disabled.'));
+        // Nothing to open (the link's address isn't a community's, or a read failed): said, never a tap that does nothing.
+        else if (path.open === 'nothing') Alert.alert(t('Message', undefined, 'button: write to'), t('Please try again.'));
+        else if (path.open === 'existing') router.push(existingChatRoute(path.chat, view.anchor, (community) => communityLabel(view, community)) as any);
         else if (path.open === 'shared') await (here(path.community) ? message(path.key) : messageThere(path.key, path.community));
         else if (path.open === 'across') {
             setOpening(path.key);

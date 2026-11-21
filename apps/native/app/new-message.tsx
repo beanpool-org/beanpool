@@ -21,7 +21,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { useContactsRecord } from '../utils/use-contacts';
-import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
+import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal, isNoCopyInPlace } from '../utils/db';
 import { heldCommunityList, heldPeopleMatching, type HeldPerson } from '../utils/held-chats';
 import { sameCommunity } from '../utils/push-pins';
 import { existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
@@ -316,9 +316,13 @@ export default function NewMessageScreen() {
             const heldUrls = heldList.map((h) => h.url);
             const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
             const where = held?.community ?? anchor;
+            // Someone blocked anywhere the phone holds is refused on every path, an existing chat included (#3354 review); lists
+            // that can't be read open nothing (`nothing`), and neither falls through to a chat here.
             const path: MessagePath = where
-                ? await messagePathOnPhone(identity.publicKey, [{ community: where, key: pubkey, name: held?.callsign ?? null }], heldUrls).catch(() => ({ open: 'shared' as const, community: where, key: pubkey }))
+                ? await messagePathOnPhone(identity.publicKey, [{ community: where, key: pubkey, name: held?.callsign ?? null }], heldUrls).catch(() => ({ open: 'nothing' as const }))
                 : { open: 'nothing' };
+            if (path.open === 'blocked') throw new Error(t('You have blocked this user. Messaging is disabled.'));
+            if (path.open === 'nothing' && where) throw new Error(t('Please try again.'));
             if (path.open === 'existing') {
                 router.replace(existingChatRoute(path.chat, anchor, (c) => heldList.find((h) => sameCommunity(h.url, c))?.name ?? held?.communityName ?? '') as any);
                 return;
@@ -343,8 +347,10 @@ export default function NewMessageScreen() {
             // Said, as Profile and People say it: the node's words when it refused (a paused account opens no new
             // conversation, 403 `paused`), db.ts's own sentence in the member's language when it gave none, else that
             // the phone isn't connected. Never a tap that does nothing.
+            // A held result whose copy can't be opened in place just now (a move or a delete under way: db.ts isNoCopyInPlace)
+            // asks for another try, never db.ts's own "switched community" sentence (#3354 review, noted).
             const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
-            Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : signedRequestWords(e.message));
+            Alert.alert(t('Error'), isNoCopyInPlace(e) ? t('Please try again.') : isOffline ? t('Connect to your community to start a chat.') : signedRequestWords(e.message));
         }
     }, [identity?.publicKey, creating, nodeResults]);
 

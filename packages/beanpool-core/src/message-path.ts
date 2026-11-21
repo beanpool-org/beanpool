@@ -10,7 +10,11 @@
  *    key, the address of their community as other servers name it, their name), through the member's own server.
  *
  * It replaces "Open {community} ›" and the switch question. The web holds one community (`held` empty), so a contact in any
- * other goes across there. A block is each app's own check at the tap, as before; this rule only picks the place.
+ * other goes across there.
+ *
+ * A block is asked first, before any of these (#3354 review): someone the account blocked is refused on every path, an
+ * existing chat included, with the same words on both apps. Each app reads its own lists (`blocked`) and hands in only the
+ * chats its chat list shows, so nothing a block hid is reopened.
  */
 import { nodeHomeOf } from './node-request-signing.js';
 import { word } from './words.js';
@@ -32,14 +36,17 @@ export type MessagePath =
     | { open: 'existing'; chat: KnownChat }
     | { open: 'shared'; community: string; key: string }
     | { open: 'across'; key: string; home: string; name: string | null }
+    | { open: 'blocked' }
     | { open: 'nothing' };
 
 /**
  * Where Message on a person goes ({@link MessagePath}). `setTo`: the community the device is set to (null: none, a guest's
  * look). `held`: the other communities it holds as a member, in the order it lists them (the web: none). `same`: whether
  * two spellings name one community (the apps' own rule). `chats`: every chat the device has that may be with this person;
- * only those under one of `links`' keys count, and a direct one only in `setTo` or a community in `held`.
- * `nothing`: no link (not on BeanPool yet), or across to an address that isn't one.
+ * only those under one of `links`' keys count, and a direct one only in `setTo` or a community in `held`. `blocked`: the
+ * app's block rule for this person, by any of `links`' keys (the phone: blocked anywhere it holds; the web: on this
+ * community's list); asked before anything, so no path opens. `nothing`: no link (not on BeanPool yet), or across to an
+ * address that isn't one.
  */
 export function messagePathFor(input: {
     links: readonly MessageLink[];
@@ -47,9 +54,12 @@ export function messagePathFor(input: {
     setTo: string | null;
     held: readonly string[];
     same: (a: string, b: string) => boolean;
+    blocked: boolean;
 }): MessagePath {
     const { links, chats, setTo, held, same } = input;
     if (links.length === 0) return { open: 'nothing' };
+    // 0. A block first: no chat opens, an existing one included (a chat a block hid stays hidden).
+    if (input.blocked) return { open: 'blocked' };
     const keys = new Set(links.map((l) => l.key));
     const theirs = chats.filter((c) => keys.has(c.key));
     const isSetTo = (c: string | null) => c === null || (!!setTo && same(c, setTo));

@@ -5,52 +5,82 @@
  * community the phone shares with them (the one it is set to first), else a chat across, made from the contact's link.
  * Nothing switches, and no question is asked.
  *
- * The chats it weighs are read where they live: the community in use's direct chats (db.ts getConversations), each other
- * held community's direct chats through S1's read-only handles (getHeldConversations), and the across chats kept in each
- * file (the store in use, getHeldOutsideChats). A read that fails counts as no chat there: the next rule then decides.
+ * The chats it weighs are the ones Chat lists, read by Chat's own readers (#3354 review): the community in use's direct chats
+ * (db.ts getConversations, less any Talk hides: dm-blocked.ts talkShowsChat), each other held community's direct and across
+ * chats (held-chats.ts heldChatsWith), and the across chats in the community in use's file (outside-mail.ts chatsShown). So
+ * nothing a block hid is reopened. A read that fails counts as no chat there: the next rule then decides.
+ *
+ * A block is asked first, on every path ({@link blockedForMessage}): someone the account blocked anywhere the phone holds
+ * is refused, with the words the across path already said, and nothing opens or is made.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
+import type { getConversations } from './db';
 import { sameCommunity } from './push-pins';
 
-/** Every chat this phone has with any of `keys`: direct ones in the community in use and in `held`, across ones in any of their files. */
-export async function knownChatsWith(me: string, keys: readonly string[], held: readonly string[]): Promise<KnownChat[]> {
+/** A chat of the community in use as Chat's list has it (db.ts getConversations): the fields Message reads. */
+export type HereChat = Pick<Awaited<ReturnType<typeof getConversations>>[number], 'id' | 'type' | 'peerPubkey' | 'peerKeys'>;
+
+/** The direct chats here with any of `keys`, from what Chat lists (`chats`, as getConversations returns them, less any `shows` hides). */
+export function directChatsHere(chats: readonly HereChat[], keys: readonly string[], community: string, shows: (c: HereChat) => boolean): KnownChat[] {
     const want = new Set(keys);
     const out: KnownChat[] = [];
-    const db = await import('./db');
-    const anchor = await anchorUrl();
-    const isDirect = (type: unknown) => type === null || type === undefined || type === 'dm';
-    const peersOf = (one: unknown, many: unknown) => [...new Set([...(typeof many === 'string' && many ? many.split(',') : Array.isArray(many) ? many : []), ...(typeof one === 'string' && one ? [one] : [])])];
-    if (anchor) {
-        for (const c of await db.getConversations(me).catch(() => [] as any[])) {
-            if (!isDirect(c?.convType)) continue;
-            for (const key of peersOf(c.otherPubkey, c.otherKeys)) if (want.has(key)) out.push({ kind: 'direct', community: anchor, id: String(c.id), key });
-        }
-    }
-    for (const community of held) {
-        for (const c of (await db.getHeldConversations(me, community).catch(() => null)) ?? []) {
-            if (!isDirect(c.type)) continue;
-            for (const key of peersOf(c.peerPubkey, c.peerKeys)) if (want.has(key)) out.push({ kind: 'direct', community, id: c.id, key });
-        }
-    }
-    const { outsideContext } = await import('./outside-chat-live');
-    const ctx = await outsideContext().catch(() => null);
-    for (const c of (ctx ? await ctx.store.chats(me).catch(() => []) : [])) if (want.has(c.peerKey)) out.push({ kind: 'across', community: null, id: c.id, key: c.peerKey });
-    for (const community of held) {
-        for (const c of (await db.getHeldOutsideChats(me, community).catch(() => null)) ?? []) if (want.has(c.peerKey)) out.push({ kind: 'across', community, id: c.id, key: c.peerKey });
+    for (const c of chats) {
+        if (c.type !== 'dm' || !shows(c)) continue;
+        for (const key of new Set([...c.peerKeys, ...(c.peerPubkey ? [c.peerPubkey] : [])])) if (want.has(key)) out.push({ kind: 'direct', community, id: String(c.id), key });
     }
     return out;
 }
 
+/** Every chat Chat lists with any of `keys`: direct ones in the community in use and in the other held ones, across ones in any of their files. */
+export async function knownChatsWith(me: string, keys: readonly string[]): Promise<KnownChat[]> {
+    const db = await import('./db');
+    const { talkShowsChat } = await import('./dm-blocked');
+    const { getBlockedUsers } = await import('./blocklist');
+    const { heldChatsWith } = await import('./held-chats');
+    const anchor = await anchorUrl();
+    const out: KnownChat[] = [];
+    if (anchor) {
+        const here = await db.getConversations(me).catch((): HereChat[] => []);
+        const blocked = await getBlockedUsers();
+        out.push(...directChatsHere(here, keys, anchor, (c) => talkShowsChat(c, blocked)));
+    }
+    out.push(...await heldChatsWith(me, keys).catch(() => [] as KnownChat[]));
+    const { outsideContext } = await import('./outside-chat-live');
+    const { chatsShown } = await import('./outside-mail');
+    const ctx = await outsideContext().catch(() => null);
+    const want = new Set(keys);
+    for (const c of (ctx ? await chatsShown(ctx).catch(() => []) : [])) if (want.has(c.peerKey)) out.push({ kind: 'across', community: null, id: c.id, key: c.peerKey });
+    return out;
+}
+
 /**
- * Where Message on a person goes from this phone ({@link knownChatsWith}, then core's rule). `held`: the other communities it
- * holds as a member (never a guest's look), in the order it lists them.
+ * Whether Message refuses this person (#3354 review), by any key `links` names them by: blocked anywhere the phone holds
+ * (blocklist.ts blockedAnywhere: on this phone's list now, or on any community's own list as the phone last read it, a block
+ * made in the web app or on another device). Someone blocked once and unblocked since is not: their chats show in Chat again,
+ * and Message is the member's own step to them (only a quiet let in asks `once`, blocklist.ts neverLetInQuietly). Null when
+ * the lists can't be read: nothing opens on a guess.
+ */
+export async function blockedForMessage(me: string, keys: readonly string[]): Promise<boolean | null> {
+    const { readBlockLists } = await import('./blocklist');
+    const { blockedAnywhere } = await import('./block-rules');
+    const lists = await readBlockLists(me).catch(() => null);
+    return lists ? blockedAnywhere(lists, keys) : null;
+}
+
+/**
+ * Where Message on a person goes from this phone: the block first ({@link blockedForMessage}), then core's rule over the
+ * chats Chat lists ({@link knownChatsWith}). `held`: the other communities it holds as a member (never a guest's look), in
+ * the order it lists them. `nothing` too when the block lists can't be read.
  */
 export async function messagePathOnPhone(me: string, links: readonly MessageLink[], held: readonly string[]): Promise<MessagePath> {
     const setTo = await anchorUrl();
     const others = held.filter((h) => !setTo || !sameCommunity(h, setTo));
-    const chats = links.length ? await knownChatsWith(me, links.map((l) => l.key), others) : [];
-    return messagePathFor({ links, chats, setTo, held: others, same: sameCommunity });
+    const keys = links.map((l) => l.key);
+    const blocked = keys.length ? await blockedForMessage(me, keys) : false;
+    if (blocked === null) return { open: 'nothing' };
+    const chats = keys.length && !blocked ? await knownChatsWith(me, keys) : [];
+    return messagePathFor({ links, chats, setTo, held: others, same: sameCommunity, blocked });
 }
 
 /** What became of an across chat asked for: opened (its id), or why not. */

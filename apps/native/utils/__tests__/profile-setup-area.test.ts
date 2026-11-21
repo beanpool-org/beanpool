@@ -7,7 +7,8 @@
  *
  * Nothing here draws a frame (vitest.config.ts): what is checked is the wizard's steps, its words, the controls' sizes
  * as styled, and the requests it makes. The step is there only on a community that says `nearbyListings`; Skip joins
- * nothing and writes nothing; a position is rounded to 0.1° before any request is built.
+ * nothing and writes nothing; a position is rounded to 0.1° before any request is built. It is the wizard's last step:
+ * saved or skipped, Done's own publish follows and the wizard is left (How it Works left the join on the phone, slice S5b).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: any) => children, KeyboardAwareScrollView: ({ children }: any) => children, KeyboardStickyView: ({ children }: any) => children }));
@@ -69,7 +70,6 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'uuid' }));
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
-vi.mock('../../components/OnboardingGuide', () => ({ OnboardingGuide: () => createElement('div', { 'data-testid': 'guide' }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span') }));
 const prof = vi.hoisted(() => ({ value: null as any }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => prof.value }));
@@ -155,30 +155,37 @@ async function press(selector: string) {
     await settle();
 }
 const nextButton = () => Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Next →') as HTMLElement;
+/** The wizard's end: Done's own publish of the profile (the area step is the last one), and every other request. */
+const profilePosts = () => requests.filter((r) => r.url === `${NODE}/api/profile/update`);
+const areaRequests = () => requests.filter((r) => r.url !== `${NODE}/api/profile/update`);
+const areaSigned = () => signed.calls.filter((c) => c.url !== `${NODE}/api/profile/update`);
 async function toAreaStep() {
     await act(async () => { nextButton().click(); });
     await settle();
 }
 
 describe('profile setup: the area step (S4)', () => {
-    it('is the third of four steps on a community that syncs by area, after the photo', async () => {
+    it('is the third and last step on a community that syncs by area, after the photo', async () => {
         await render(GLOBAL_FEATURES);
-        expect(text()).toContain('Step 2 of 4');
-        await toAreaStep();
-        expect(text()).toContain('Step 3 of 4');
-        expect(document.querySelector('[role="heading"]')?.textContent).toBe('Roughly where are you?');
-    });
-
-    it("is not there on a local community: the photo's Next goes to the guide, three steps as before", async () => {
-        await render(LOCAL_FEATURES);
         expect(text()).toContain('Step 2 of 3');
         await toAreaStep();
         expect(text()).toContain('Step 3 of 3');
+        expect(document.querySelector('[role="heading"]')?.textContent).toBe('Roughly where are you?');
+    });
+
+    it("is not there on a local community: the photo is the last step, its Done publishes and leaves; no How it Works", async () => {
+        await render(LOCAL_FEATURES);
+        expect(text()).toContain('Step 2 of 2');
+        expect(nextButton()).toBeUndefined();
+        await press('[aria-label="Done"]');
         expect(text()).not.toContain(AREA_WORDS.title);
-        expect(document.querySelector('[data-testid="guide"]')).not.toBeNull();
+        expect(text()).not.toContain('How BeanPool works');
+        expect(profilePosts()).toHaveLength(1);
+        expect(nav.router.replace).toHaveBeenCalledWith('/(tabs)');
         // Nor on a node whose profile this phone hasn't heard yet.
-        expect(profileSteps(null)).toEqual(['name', 'avatar', 'guide']);
-        expect(profileSteps({ nearbyListings: undefined })).toEqual(['name', 'avatar', 'guide']);
+        expect(profileSteps(null)).toEqual(['name', 'avatar']);
+        expect(profileSteps({ nearbyListings: undefined })).toEqual(['name', 'avatar']);
+        expect(profileSteps(GLOBAL_FEATURES as any)).toEqual(['name', 'avatar', 'area']);
     });
 
     it('says the words of §3.2, with the numbers the node gives, and no currency', async () => {
@@ -191,30 +198,31 @@ describe('profile setup: the area step (S4)', () => {
         expect(t).not.toMatch(/Ʀ|Beans/);
     });
 
-    it('Skip joins nothing and writes nothing, and goes on to the guide', async () => {
+    it("Skip joins nothing and keeps no area, and ends the wizard with Done's own publish", async () => {
         await render(GLOBAL_FEATURES);
         await toAreaStep();
-        const storeBefore = JSON.stringify([...mem.store.entries()]);
         await press('[data-testid="area-skip"]');
-        expect(requests).toEqual([]);
-        expect(signed.calls).toEqual([]);
+        expect(areaRequests()).toEqual([]);
+        expect(areaSigned()).toEqual([]);
         expect(loc.asked).toBe(0);
-        expect(JSON.stringify([...mem.store.entries()])).toBe(storeBefore);
-        expect(text()).toContain('Step 4 of 4');
-        expect(document.querySelector('[data-testid="guide"]')).not.toBeNull();
+        expect([...mem.store.keys()].filter((k) => k.startsWith('beanpool_area'))).toEqual([]);
+        expect(profilePosts()).toHaveLength(1);
+        expect(JSON.stringify(profilePosts())).not.toMatch(/lat|lng/);
+        expect(nav.router.replace).toHaveBeenCalledWith('/(tabs)');
+        expect(text()).not.toContain('How BeanPool works');
     });
 
     it('Use my location rounds to 0.1° before the request is built: the precise position is never signed or sent', async () => {
         await render(GLOBAL_FEATURES);
         await toAreaStep();
         await press('[data-testid="area-use-location"]');
-        expect(requests).toHaveLength(1);
+        expect(areaRequests()).toHaveLength(1);
         expect(requests[0]).toEqual({ url: `${NODE}/api/community/me/area`, method: 'POST', body: JSON.stringify({ lat: -28.6, lng: 153.6 }) });
-        expect(signed.calls).toEqual([{ method: 'POST', url: `${NODE}/api/community/me/area`, body: '{"lat":-28.6,"lng":153.6}' }]);
+        expect(areaSigned()).toEqual([{ method: 'POST', url: `${NODE}/api/community/me/area`, body: '{"lat":-28.6,"lng":153.6}' }]);
         const everything = JSON.stringify({ requests, signed: signed.calls });
         expect(everything).not.toContain('647412');
         expect(everything).not.toContain('612031');
-        expect(text()).toContain('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
     });
 
     it('a town typed is rounded the same way, and its name is kept on this phone only', async () => {
@@ -222,10 +230,10 @@ describe('profile setup: the area step (S4)', () => {
         await toAreaStep();
         await press('[data-testid="area-type-town"]');
         await press('[data-testid="pick-byron"]');
-        expect(requests.map(r => r.body)).toEqual(['{"lat":-28.6,"lng":153.6}']);
+        expect(areaRequests().map(r => r.body)).toEqual(['{"lat":-28.6,"lng":153.6}']);
         expect(JSON.stringify(requests)).not.toContain('Byron');
         expect(mem.store.get(`beanpool_area_place:${NODE}`)).toBe('Byron Bay');
-        expect(text()).toContain('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
     });
 
     it('location refused: one line, no request, still on the step, and Skip still goes on', async () => {
@@ -237,7 +245,7 @@ describe('profile setup: the area step (S4)', () => {
         expect(requests).toEqual([]);
         expect(text()).toContain('Location is off for BeanPool. Type a town instead, or skip for now.');
         await press('[data-testid="area-skip"]');
-        expect(text()).toContain('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
     });
 
     it('a refused save says so and never pretends: the step stays, Skip still goes on', async () => {
@@ -246,9 +254,10 @@ describe('profile setup: the area step (S4)', () => {
         await toAreaStep();
         await press('[data-testid="area-use-location"]');
         expect(text()).toContain('Only a member of this community can set an area here');
-        expect(text()).toContain('Step 3 of 4');
+        expect(text()).toContain('Step 3 of 3');
+        expect(profilePosts()).toHaveLength(0);
         await press('[data-testid="area-skip"]');
-        expect(text()).toContain('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
     });
 
     it('at 320 dp, 1.3x: every control on the step is at least 44 dp tall, full width, stacked', async () => {
@@ -295,12 +304,12 @@ describe('a reading or a save that never answers (review B2)', () => {
         await press('[data-testid="area-use-location"]');
         expect(disabledAttr('area-skip')).toBeNull();
         await press('[data-testid="area-skip"]');
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
         reading.resolve(PRECISE);
         await settle(10);
-        expect(requests).toEqual([]);
-        expect(signed.calls).toEqual([]);
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(areaRequests()).toEqual([]);
+        expect(areaSigned()).toEqual([]);
+        expect(profilePosts()).toHaveLength(1);
     });
 
     it('the permission prompt still open: Skip works, and a grant landing afterwards takes no reading and sends nothing (review N9)', async () => {
@@ -313,13 +322,13 @@ describe('a reading or a save that never answers (review B2)', () => {
         await press('[data-testid="area-use-location"]');
         expect(disabledAttr('area-skip')).toBeNull();
         await press('[data-testid="area-skip"]');
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
         prompt.resolve({ status: 'granted' });
         await settle(10);
         expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
-        expect(requests).toEqual([]);
-        expect(signed.calls).toEqual([]);
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(areaRequests()).toEqual([]);
+        expect(areaSigned()).toEqual([]);
+        expect(profilePosts()).toHaveLength(1);
     });
 
     it('← Back while a reading waits: the late reading sends nothing either', async () => {
@@ -330,11 +339,11 @@ describe('a reading or a save that never answers (review B2)', () => {
         await press('[data-testid="area-use-location"]');
         await act(async () => { (Array.from(document.querySelectorAll('button')).find(b => b.textContent === '← Back') as HTMLElement).click(); });
         await settle();
-        expect(stepNow()).toBe('Step 2 of 4');
+        expect(stepNow()).toBe('Step 2 of 3');
         reading.resolve(PRECISE);
         await settle(10);
         expect(requests).toEqual([]);
-        expect(stepNow()).toBe('Step 2 of 4');
+        expect(stepNow()).toBe('Step 2 of 3');
     });
 
     it('a save still pending: Skip works, the request is stopped, and the late answer neither moves on nor keeps the town', async () => {
@@ -346,12 +355,12 @@ describe('a reading or a save that never answers (review B2)', () => {
         expect(areaPosts()).toHaveLength(1);
         expect(disabledAttr('area-skip')).toBeNull();
         await press('[data-testid="area-skip"]');
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
         expect(node.signals[0]?.aborted).toBe(true);
         node.release();
         await settle(10);
         expect(mem.store.has(`beanpool_area_place:${NODE}`)).toBe(false);
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
         expect(areaPosts()).toHaveLength(1);
     });
 
@@ -387,7 +396,7 @@ describe('a reading or a save that never answers (review B2)', () => {
             vi.useRealTimers();
         }
         await press('[data-testid="area-skip"]');
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
     });
 
     it('a save that never answers ends after 30 s in the one line, its request stopped; the step stays', async () => {
@@ -403,7 +412,8 @@ describe('a reading or a save that never answers (review B2)', () => {
             await tick(1_500);
             expect(text()).toContain("Couldn't reach the community. Check your connection and try again.");
             expect(node.signals[0]?.aborted).toBe(true);
-            expect(stepNow()).toBe('Step 3 of 4');
+            expect(stepNow()).toBe('Step 3 of 3');
+            expect(profilePosts()).toHaveLength(0);
         } finally {
             vi.useRealTimers();
         }
@@ -452,7 +462,7 @@ describe('a town picked while a reading or a save waits: the newest choice wins 
         await settle(10);
         expect(areaPosts().map((r) => r.body)).toEqual([BYRON_AREA]);
         await node.release(0);
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
         expect(mem.store.get(`beanpool_area_place:${NODE}`)).toBe('Byron Bay');
         expect(areaPosts().map((r) => r.body)).toEqual([BYRON_AREA]);
     });
@@ -474,10 +484,11 @@ describe('a town picked while a reading or a save waits: the newest choice wins 
         expect((document.querySelector('[data-testid="area-use-location"]') as HTMLElement).getAttribute('aria-disabled')).toBe('true');
         // The node answers the first request anyway; that answer is dropped.
         await node.release(0);
-        expect(stepNow()).toBe('Step 3 of 4');
+        expect(stepNow()).toBe('Step 3 of 3');
+            expect(profilePosts()).toHaveLength(0);
         expect(text()).not.toContain("Couldn't reach the community");
         await node.release(1);
-        expect(stepNow()).toBe('Step 4 of 4');
+        expect(profilePosts()).toHaveLength(1);
         expect(mem.store.get(`beanpool_area_place:${NODE}`)).toBe('Byron Bay');
     });
 });

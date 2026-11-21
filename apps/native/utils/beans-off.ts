@@ -10,7 +10,7 @@
  * brings the phone's storage with it; core's words layer is pure); the test holds the two to the same answer.
  */
 
-import { parseHundredths, t, word } from '@beanpool/core';
+import { parseHundredths, t } from '@beanpool/core';
 import type { NodeFeatures } from './node-profile';
 import type { DecisionTouch, DecisionEffect } from './db';
 
@@ -51,23 +51,6 @@ export function groupPostMissingFields(features: NodeFeatures | null | undefined
 /** The sort Talk keeps. */
 export function talkSort<S extends string>(sortBy: S, features: NodeFeatures | null | undefined): S | 'recent' {
     return !beansShown(features) && (sortBy === 'credits_desc' || sortBy === 'credits_asc') ? 'recent' : sortBy;
-}
-
-/*
- * Profile setup's "How BeanPool works" step (components/OnboardingGuide.tsx). Its first three cards are about Beans:
- * zero is the place to be, a credit line to -2000, the Commons fee over 200, 40 Beans an hour, Beans held in trust.
- * With Beans off they are one card instead, the one the join wizard shows there (app/welcome.tsx).
- */
-
-/** The one card in place of the three about Beans: word() keys, shown through t() (the join wizard writes the same English). */
-export const NO_BEANS_GUIDE_CARD = {
-    title: word('🌍 A place to meet'),
-    text: word('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.'),
-} as const;
-
-/** The line under the step's title, in the member's language. */
-export function howItWorksSubtitle(features: NodeFeatures | null | undefined): string {
-    return beansShown(features) ? t('A quick look at this community economy.') : t('A quick look at this community.');
 }
 
 /*

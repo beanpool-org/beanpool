@@ -682,9 +682,12 @@ describe('the way back hands over: no notifications screen where it is not due',
 describe("back to the notifications screen from the owner's card: its answers work again", () => {
     it("Turn on → the Settings line's Not now → the owner's card → ← Back → the way back's Next → the screen → Later → the owner's card", async () => {
         phone.pending = { step: 'notify', flow: 'claim', anchorUrl: HERE, callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, communityName: 'Riverside' };
+        // Not the bound under test here: a slow runner must not read the phone as "never answered" (no screen, straight on).
+        NOTIFY_JOIN_WAIT_MS.phone = 3000;
         let atTap = false;
-        // Before the tap the phone can ask; at the tap it won't show its pop-up (the Settings line, nothing recorded).
-        os.read = async () => (atTap ? { status: 'denied', canAskAgain: false } : { status: 'undetermined', canAskAgain: true });
+        // Before the tap the phone can ask; at the tap it won't show its pop-up (the Settings line, nothing recorded). Each
+        // read takes 100 ms, past the harness's usual 40 ms bound, as a loaded runner's can.
+        os.read = async () => { await new Promise((r) => setTimeout(r, 100)); return atTap ? { status: 'denied', canAskAgain: false } : { status: 'undetermined', canAskAgain: true }; };
         await mount();
         // A claim resumes through more of the phone's own reads than an invite: wait for the screen, don't race it.
         expect(await until(() => q('notify-step-turn-on') !== null, 3000), 'the screen').toBe(true);

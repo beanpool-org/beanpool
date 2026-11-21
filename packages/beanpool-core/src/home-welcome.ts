@@ -32,6 +32,12 @@ export const WELCOME_TILE_WORDS = {
     noBeans: word('No Beans here. Trading in Beans happens in local communities.'),
     tour: word('Show me around'),
     gotIt: word('Got it'),
+    /** The tile folded to one band after seven days (§4.2): the band opens it again. */
+    band: word('Welcome to BeanPool ›'),
+    /** The band's ×, as a screen reader names it. */
+    away: word('Put the welcome away'),
+    /** The tile, and the band's open button, as a screen reader names them. */
+    name: word('Welcome to BeanPool'),
 } as const;
 
 /** Which picture a tile line wears (the app maps it to an icon it bundles): give and take, the scales, zero, people. */

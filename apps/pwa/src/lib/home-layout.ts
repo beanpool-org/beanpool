@@ -22,7 +22,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, resetHomeLayout, starterCards, t, word,
     newInstanceId, readChatSettings,
-    knockStillAnswerable, reorderIds, arrivingCards, keepArrivedCard, type LearnHomeOpens,
+    knockStillAnswerable, reorderIds, arrivingCards, keepArrivedCard, COMMUNITY_WELCOME_DISMISSED_KEY, type LearnHomeOpens,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
 import { drawnToolCardTypes } from '../tools/cards';
@@ -427,6 +427,17 @@ export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLay
     const l = layout ?? defaultHomeLayout();
     const at = iso(editAt(layout, now));
     return { ...l, dismissed: { ...l.dismissed, safety: at }, updatedAt: at };
+}
+
+/**
+ * The community's welcome was put away by its × (DESIGN-onboarding-home-landing-fable.md §4.3, slice W2): when, in the same
+ * `dismissed` map, under core's {@link COMMUNITY_WELCOME_DISMISSED_KEY} (the phone's key, slice S7, so every device of the
+ * account follows), dated as every edit here is. A Home never saved keeps the default list it was drawing.
+ */
+export function dismissWelcomeFrom(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {
+    const l = layout ?? defaultHomeLayout();
+    const at = iso(editAt(layout, now));
+    return { ...l, dismissed: { ...l.dismissed, [COMMUNITY_WELCOME_DISMISSED_KEY]: at }, updatedAt: at };
 }
 
 /** These two are word() keys: Home shows them through t(). */

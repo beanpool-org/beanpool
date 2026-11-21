@@ -25,18 +25,19 @@ function actionAround(label: string): string | null {
 
 describe('the web join steps\' main button stays on screen', () => {
     for (const label of [
-        "{loading ? t('Creating...') : t('Create Identity & Join →')}",
+        "{loading ? t('Joining…') : t('Join')}",
         "{loading ? t('Saving…') : renameUnsaved !== null",
-        "{loading ? t('Entering...') : t(\"Let's Begin! 🚀\")}",
+        "{pendingAvatar ? t('Next') : t('Skip for now')}",
+        "{loading ? t('Entering...') : t('Next →')}",
     ]) {
         it(`${label.slice(0, 60)}: in a StepAction`, () => {
             expect(actionAround(label)).not.toBeNull();
         });
     }
 
-    it('the photo step\'s and Safety Backup\'s Next are each in a StepAction', () => {
+    it("Your invite's Next is in a StepAction (W1: How it Works and its Let's Begin left the join)", () => {
         const nexts = [...welcome.matchAll(/\{t\('Next →'\)\}/g)].map((m) => m.index!);
-        expect(nexts).toHaveLength(2);
+        expect(nexts).toHaveLength(1);
         for (const at of nexts) {
             const open = welcome.lastIndexOf('<StepAction>', at);
             const close = welcome.indexOf('</StepAction>', open);
@@ -44,6 +45,7 @@ describe('the web join steps\' main button stays on screen', () => {
             expect(close).toBeGreaterThan(at);
             expect((welcome.slice(open, close).match(/<button/g) ?? []).length).toBe(1);
         }
+        expect(welcome).not.toContain("Let's Begin");
     });
 
     it('sticks to the bottom of the window, in the card\'s colours and across its padding, above the home indicator', () => {

@@ -906,7 +906,7 @@ describe('where the lobby does not show', () => {
     it('a local node (the switch off): the welcome page, as today', async () => {
         const calls = stubNode(LOCAL);
         render(<App />);
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         expect(screen.queryByTestId('guest-lobby')).toBeNull();
         // Nothing of the Market is read for a visitor there.
         expect(calls.some(c => c.path === '/api/marketplace/posts')).toBe(false);
@@ -1012,7 +1012,7 @@ describe("a sign-in in a page that heard another tab's sign-out: the account sig
         render(<App />);
         await act(async () => { await signOutInAnotherTab(); });
         const from = calls.length;
-        fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
+        fireEvent.click(await screen.findByTestId('front-door-used-before'));
         fireEvent.click(await screen.findByRole('button', { name: /Recover with 12 Words/ }));
         for (let i = 0; i < 12; i++) fireEvent.change(await screen.findByLabelText(`Recovery word ${i + 1}`), { target: { value: member.mnemonic![i] } });
         fireEvent.click(screen.getByRole('button', { name: 'Recover Identity' }));

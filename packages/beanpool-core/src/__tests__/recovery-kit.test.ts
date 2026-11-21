@@ -20,7 +20,9 @@ describe('recoveryKitHtml', () => {
         expect(web).toBeGreaterThan(phone);
         expect(html.indexOf('I&#39;ve used BeanPool before')).toBeGreaterThan(phone);
         expect(html.indexOf('I&#39;ve used BeanPool before')).toBeLessThan(web);
-        expect(html.indexOf('Restore Existing Identity')).toBeGreaterThan(web);
+        // The web's front door has the same button (slice W1): named again under In a web browser.
+        expect(html.indexOf('I&#39;ve used BeanPool before', web)).toBeGreaterThan(web);
+        expect(html).not.toContain('Restore Existing Identity');
         expect(KIT_RESTORE_STEPS).toHaveLength(6);
         expect(KIT_WEB_RESTORE_STEPS[0]).toBe('Open your community’s address (written above) in a web browser.');
         expect(KIT_WEB_RESTORE_STEPS[KIT_WEB_RESTORE_STEPS.length - 1]).toMatch(/^Click “Recover Identity”/);
@@ -29,13 +31,13 @@ describe('recoveryKitHtml', () => {
     it('on the web, names the way back on the global lobby and an open door as well as on an invite page', () => {
         const web = KIT_WEB_RESTORE_STEPS.join('\n');
         // The global community (and any open door): "Already have BeanPool?", then "Use my 12 words".
-        expect(KIT_WEB_RESTORE_STEPS[1]).toMatch(/^Click “Already have BeanPool\?”\./);
+        expect(KIT_WEB_RESTORE_STEPS[1]).toMatch(/^Click “Already have BeanPool\?”/);
         expect(web).toContain('“Use my 12 words”');
-        // An invite-only community: the button at the bottom of the invite page, then "Recover with 12 Words".
-        expect(KIT_WEB_RESTORE_STEPS[1]).toContain('If the page asks for an invite code instead, click “🔑 Restore Existing Identity →” at the bottom of the page.');
+        // An invite-only community: its front door's I've used BeanPool before (W1), then "Recover with 12 Words".
+        expect(KIT_WEB_RESTORE_STEPS[1]).toBe("Click “Already have BeanPool?” or “I've used BeanPool before”, whichever the page shows.");
         expect(web).toContain('“🔑 Recover with 12 Words”');
         const html = recoveryKitHtml(KIT);
-        expect(html).toContain('Click “Already have BeanPool?”.');
+        expect(html).toContain('Click “Already have BeanPool?” or “I&#39;ve used BeanPool before”, whichever the page shows.');
     });
 
     it('names the address it was given, an IP as well as a domain, and assumes no domain of its own', () => {

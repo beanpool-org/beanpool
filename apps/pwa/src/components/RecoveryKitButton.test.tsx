@@ -210,6 +210,7 @@ describe('the kit’s web steps match the web app’s screens (review 4170915901
     const app = src('../App.tsx');
     const lobby = src('../pages/GuestLobby.tsx');
     const join = src('./WebJoin.tsx');
+    const frontDoor = src('./FrontDoor.tsx');
     // The words as a member reads them in English: the emoji beside its words, and a sentence through the words layer
     // ({t('…')}, translated for other languages) as its English.
     const welcome = src('../pages/WelcomePage.tsx').replace(/<span aria-hidden="true">🔑<\/span> /g, '🔑 ')
@@ -218,8 +219,8 @@ describe('the kit’s web steps match the web app’s screens (review 4170915901
     const named = KIT_WEB_RESTORE_STEPS.join('\n').match(/“[^”]+”/g)!.map((q) => q.slice(1, -1));
 
     it('every button the steps name is on a web restore screen', () => {
-        expect(named).toEqual(['Already have BeanPool?', '🔑 Restore Existing Identity →', 'Use my 12 words', '🔑 Recover with 12 Words', 'Recover Identity']);
-        for (const name of named) expect([lobby, join, welcome].some((s) => s.includes(name))).toBe(true);
+        expect(named).toEqual(['Already have BeanPool?', "I've used BeanPool before", 'Use my 12 words', '🔑 Recover with 12 Words', 'Recover Identity']);
+        for (const name of named) expect([lobby, join, welcome, frontDoor].some((s) => s.includes(name))).toBe(true);
     });
 
     it('the global community: its address opens the lobby, whose "Already have BeanPool?" opens the ways back', () => {
@@ -239,10 +240,11 @@ describe('the kit’s web steps match the web app’s screens (review 4170915901
         expect(welcome).toMatch(/setShowRecovery\(true\); setError\(null\); \}\}[\s\S]{0,900}🔑 Recover with 12 Words/);
     });
 
-    it('a local community: the invite page’s "🔑 Restore Existing Identity →", and an open door’s "Already have BeanPool?"', () => {
-        const invite = between(welcome, '/* ===== NEW USER SIGNUP + FAQs ===== */', '/* ===== MAIN WELCOME');
-        expect(invite).toContain('Join with Invite Code');
-        expect(invite).toContain('🔑 Restore Existing Identity →');
+    it('a local community: the front door’s "I\'ve used BeanPool before" (W1), and an open door’s "Already have BeanPool?"', () => {
+        const door = between(welcome, '/* ===== THE FRONT DOOR', '/* ===== YOUR INVITE');
+        expect(door).toContain('<FrontDoor');
+        expect(door).toContain('onUsedBefore={() => { setError(null); setShowMemberOptions(true); }}');
+        expect(frontDoor).toContain("{t(\"I've used BeanPool before\")}");
         expect(between(join, "case 'lobby':", "case 'guard':")).toContain('Already have BeanPool?');
         // Every way ends at the twelve boxes and "Recover Identity".
         expect(between(welcome, '/* ===== RECOVERY FROM 12 WORDS ===== */', '← ')).toContain("'Recover Identity'");

@@ -340,9 +340,10 @@ describe('← Back on the photo step changes the name on the same account (card 
         fireEvent.click(screen.getByTestId('step-dots-back'));
         await waitFor(() => expect(nameField()).toHaveValue('Rowan'));
         // The name alone, on this account: no invite to type again, and no way off to another account from here.
-        expect(screen.queryByLabelText('Invite Code')).toBeNull();
+        expect(screen.queryByLabelText('Invite link or code')).toBeNull();
         expect(screen.queryByTestId('name-step-join')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Restore existing identity' })).toBeNull();
+        expect(screen.queryByTestId('invite-greeting-change')).toBeNull();
+        expect(screen.queryByTestId('front-door-used-before')).toBeNull();
         expect(screen.queryByRole('button', { name: '← Back to Home' })).toBeNull();
         expect(screen.queryByRole('button', { name: '← Back to the listings' })).toBeNull();
 

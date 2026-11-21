@@ -35,6 +35,6 @@ export async function openAcrossOnWeb(target: { key: string; home: string; name:
     const ctx = await outsideContext().catch(() => null);
     if (!ctx) return { refused: 'no-community' };
     if ((await outsideMessagesHere().catch(() => null)) !== true) return { refused: 'off' };
-    const chatId = await openChatFromCard(ctx, target);
+    const chatId = await openChatFromCard(ctx, { key: target.key, home: target.home, name: target.name });
     return chatId ? { chatId } : { refused: 'blocked' };
 }

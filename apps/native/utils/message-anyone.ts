@@ -68,7 +68,7 @@ export async function openAcrossChat(target: { key: string; home: string; name: 
     if (!ctx) return { refused: 'no-community' };
     if (!(await live.outsideMessagesHere(ctx.nodeUrl).catch(() => false))) return { refused: 'off' };
     const { openChatFromCard } = await import('./outside-mail');
-    const chatId = await openChatFromCard(ctx, target);
+    const chatId = await openChatFromCard(ctx, { key: target.key, home: target.home, name: target.name });
     return chatId ? { chatId } : { refused: 'blocked' };
 }
 

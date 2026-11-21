@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { readContactsCopy, toEd25519Pkcs8, type ContactsCopyWire } from '@beanpool/core';
+import { newContactId, putContact, readContactsCopy, toEd25519Pkcs8, type ContactsCopyWire } from '@beanpool/core';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { importIdentity, type BeanPoolIdentity } from '../lib/identity';
-import { contactsSnapshot, resetContactsStoreForTest, saveContactsNow } from '../lib/contacts-store';
+import { changeContacts, contactsSnapshot, resetContactsStoreForTest, saveContactsNow } from '../lib/contacts-store';
 import { ContactsPage } from './ContactsPage';
 import { AddToContacts } from '../components/AddToContacts';
 import { ContactsSignOutNote } from '../components/ContactsSignOutNote';
@@ -226,6 +226,24 @@ describe('Contacts on the web', () => {
         expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Message' }));
         expect(onMessage).toHaveBeenCalledWith(sam);
+    });
+
+    // S5 part 2 (DESIGN-no-switch-messaging-fable.md §3): the web holds one community, so a contact in any other gets Message,
+    // which MessagesPage opens across from their link (lib/message-anyone.ts), never an "Open {community} ›" link out.
+    it('a linked member in another community: Message, handed on with their link and name; no Open {community} ›', async () => {
+        const dee = 'cd'.repeat(32);
+        await changeContacts(me, (l) => putContact(l, {
+            id: newContactId(), name: 'Dée Walker', phones: [], emails: [], note: '', invite: null,
+            links: [{ key: dee, community: 'https://faraway.example', callsign: 'dee', how: 'profile', at: '2026-11-12T01:00:00.000Z' }],
+        }));
+        const onMessage = vi.fn();
+        const onMessageAcross = vi.fn();
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={onMessage} onMessageAcross={onMessageAcross} />);
+        expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /Open faraway\.example/ })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Message' }));
+        expect(onMessageAcross).toHaveBeenCalledWith({ key: dee, community: 'https://faraway.example' }, 'Dée Walker');
+        expect(onMessage).not.toHaveBeenCalled();
     });
 
     it('sign-out says when the community does not hold the latest copy yet, and Save now saves it', async () => {

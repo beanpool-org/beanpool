@@ -45,6 +45,16 @@ const mem = vi.hoisted(() => ({
     queries: [] as Array<{ fields: readonly string[] }>,
     picked: null as null | { uri: string; size: number; text: string },
     settings: 0,
+    // Message anyone (S5 part 2, utils/message-anyone.ts): the chats this phone has (here, in a held community, across, by
+    // file), the across context, the community's switch, the cards an across chat was made from, and a block across.
+    chatsHere: [] as any[],
+    heldDirect: {} as Record<string, any[]>,
+    acrossHere: [] as any[],
+    heldAcross: {} as Record<string, any[]>,
+    noAcrossContext: false,
+    outsideOn: true,
+    acrossBlocked: false,
+    cards: [] as Array<{ key: string; home: string; name: string | null }>,
 }));
 // The store loads Expo's file system, AsyncStorage and the share sheet with require() (utils/contacts-store.ts
 // phoneContactsDeps, use-contacts.ts shareContactsFile), which vi.mock doesn't reach: Node's loader hands these out instead.
@@ -161,6 +171,21 @@ vi.mock('../db', () => ({
     isNoCopyInPlace: (e: unknown) => !!(e as { noCopy?: boolean } | null)?.noCopy,
     enterChatInPlace: (community: string) => { holds.log.push(`enter ${community}`); },
     leaveChatInPlace: async (community: string) => { holds.log.push(`leave ${community}`); },
+    // The chats Message weighs (utils/message-anyone.ts knownChatsWith).
+    getConversations: async () => mem.chatsHere,
+    getHeldConversations: async (_me: string, community: string) => mem.heldDirect[community] ?? [],
+    getHeldOutsideChats: async (_me: string, community: string) => mem.heldAcross[community] ?? [],
+}));
+vi.mock('../outside-chat-live', () => ({
+    outsideContext: async () => (mem.noAcrossContext ? null : { nodeUrl: 'https://riverside.example', store: { chats: async () => mem.acrossHere } }),
+    outsideMessagesHere: async () => mem.outsideOn,
+}));
+vi.mock('../outside-mail', () => ({
+    openChatFromCard: async (_ctx: unknown, card: { key: string; home: string; name: string | null }) => {
+        if (mem.acrossBlocked) return null;
+        mem.cards.push(card);
+        return `across-${card.key.slice(0, 4)}`;
+    },
 }));
 /** What db.ts throws when that community's copy can't be opened in place (not on the phone yet, a move or a delete under way). */
 const NO_COPY_IN_PLACE = Object.assign(new Error('This phone has switched community since this chat was opened.'), { noCopy: true });
@@ -192,7 +217,7 @@ const RIVERSIDE = 'https://riverside.example';
 const RIVERBEND = 'https://riverbend.example';
 vi.mock('../nodes', () => ({ getSavedNodes: async () => [{ url: 'https://riverside.example', alias: 'Riverside' }, { url: 'https://riverbend.example', alias: 'Riverbend' }] }));
 
-import { newContactId, putContact, emptyContactsList, type ContactsList } from '@beanpool/core';
+import { newContactId, nodeHomeOf, putContact, removeEveryContact, emptyContactsList, type ContactsList } from '@beanpool/core';
 import ContactsScreen from '../../app/contacts';
 import { changeContacts, emptySyncState, loadContacts, phoneContactsDeps } from '../contacts-store';
 import { syncContacts } from '../contacts-sync';
@@ -210,6 +235,8 @@ const FILE = `file:///docs/contacts/${ME.publicKey}.json`;
 const SAM = 'a1'.repeat(32);
 const ANA = 'b2'.repeat(32);
 const BLOCKED = 'c3'.repeat(32);
+// Ana's key in Riverside, beside ANA in Riverbend (a contact keeps one link a key: S5 part 2's path rows).
+const ANA_HERE = 'd4'.repeat(32);
 const link = (key: string, community: string, callsign: string) => ({ key, community, callsign, how: 'profile' as const, at: '2026-11-12T01:00:00.000Z' });
 const person = (name: string, more: Partial<{ phones: string[]; emails: string[]; note: string; links: ReturnType<typeof link>[] }> = {}) =>
     ({ id: newContactId(), name, phones: [], emails: [], note: '', links: [], invite: null, ...more });
@@ -257,6 +284,8 @@ beforeEach(() => {
     mem.back.length = 0; mem.options.length = 0; mem.focused = true;
     mem.params = {}; mem.native = { ExpoContacts: true, ExpoDocumentPicker: true }; mem.asked = 0; mem.answer = { granted: true, canAskAgain: true };
     mem.book = []; mem.queries.length = 0; mem.picked = null; mem.settings = 0;
+    mem.chatsHere = []; mem.heldDirect = {}; mem.acrossHere = []; mem.heldAcross = {}; mem.noAcrossContext = false; mem.outsideOn = true;
+    mem.acrossBlocked = false; mem.cards = [];
     mem.store.set('beanpool_anchor_url', RIVERSIDE);
     vi.mocked(syncContacts).mockClear();
 });
@@ -267,7 +296,7 @@ afterEach(async () => {
 });
 
 describe('the Contacts screen (the web ContactsPage\'s words and order)', () => {
-    it('On BeanPool first, then Not on BeanPool yet, each by name; Message here, Open <community> › elsewhere, Blocked + Unblock; the footer', async () => {
+    it('On BeanPool first, then Not on BeanPool yet, each by name; Message here and elsewhere (S5 part 2: no Open <community> ›), Blocked + Unblock; the footer', async () => {
         mem.blocked = [BLOCKED];
         await seedList((l) => [
             person('Tom', { emails: ['tom@example.org'] }),
@@ -283,9 +312,9 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1]))).toBe(true);
         expect(t).toContain('@sam_j · Riverside');
         expect(t).toContain('0412 345 678');
-        expect(button('Message')).toBeDefined();
-        // Riverbend is not held here (nothing saved but the anchor): it still asks first.
-        expect(button('Open Riverbend ›')).toBeDefined();
+        // Riverbend is not held here (nothing saved but the anchor): Message too, which goes across (S5 part 2).
+        expect(Array.from(host.querySelectorAll('button')).filter((b) => b.textContent === 'Message')).toHaveLength(2);
+        expect(button('Open Riverbend ›')).toBeUndefined();
         expect(t).toContain('Blocked');
         expect(button('Unblock')).toBeDefined();
         // The phone keeps only Riverside here (its anchor; nothing in its saved list): the change in its wait goes there.
@@ -295,24 +324,38 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         // Mutation: one list sorted by name, no sections → Dee Walker before Sam Jones, and the order check fails.
     });
 
-    it('Message opens the chat with that member; Open <community> › asks before switching', async () => {
-        await seedList((l) => putContact(putContact(l, person('Sam Jones', { links: [link(SAM, RIVERSIDE, 'sam_j')] })), person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+    it('Message here opens the chat; Message on someone in a community the phone shares none with opens a chat across from their link, with no question and no switch (S5 part 2)', async () => {
+        await seedList((l) => putContact(l, person('Sam Jones', { links: [link(SAM, RIVERSIDE, 'sam_j')] })));
         await render();
         await press('Message');
         expect(mem.pushed).toContain('/chat/conv-1');
-        await press('Open Riverbend ›');
-        expect(mem.alerts.at(-1)?.[1]).toBe('Ana Li is in Riverbend. Switch to Riverbend to message them?');
+        await act(async () => { root?.unmount(); });
+        host.remove();
+        await seedList((l) => putContact(removeEveryContact(l), person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+        mem.pushed.length = 0;
+        vi.mocked(switchCommunity).mockClear();
+        await render();
+        await press('Message');
+        expect(mem.cards).toEqual([{ key: ANA, home: nodeHomeOf(RIVERBEND), name: 'Ana Li' }]);
+        expect(mem.pushed).toEqual([`/outside-chat/across-${ANA.slice(0, 4)}`]);
+        expect(mem.alerts).toEqual([]);
+        expect(switchCommunity).not.toHaveBeenCalled();
+        // Mutation: the switch question kept for a community the phone doesn't hold -> an alert, no card, nothing pushed.
     });
 
-    it('a switch that fails says so, in the Communities list\'s words, and never does nothing', async () => {
+    it.each([
+        { name: 'this community takes no messages from other communities', set: () => { mem.outsideOn = false; }, says: "This community doesn't take messages from other communities." },
+        { name: 'someone the account blocked', set: () => { mem.acrossBlocked = true; }, says: 'You have blocked this user. Messaging is disabled.' },
+        { name: 'no community in use', set: () => { mem.noAcrossContext = true; }, says: 'Connect to your community to start a chat.' },
+    ])('across refused ($name): says why, makes nothing, moves nowhere', async ({ set, says }) => {
         await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
         await render();
-        vi.mocked(switchCommunity).mockRejectedValueOnce(new Error(''));
-        await press('Open Riverbend ›');
-        await answer('Switch');
-        expect(switchCommunity).toHaveBeenCalledWith(RIVERBEND);
-        expect(mem.alerts.at(-1)?.slice(0, 2)).toEqual(["Couldn't switch community", 'Please try again.']);
-        // Mutation: switchCommunity(...).catch(() => {}) → the tap does nothing, and the last alert is still the question.
+        set();
+        await press('Message');
+        expect(mem.alerts.at(-1)?.[1]).toBe(says);
+        expect(mem.cards).toEqual([]);
+        expect(mem.pushed).toEqual([]);
+        expect(switchCommunity).not.toHaveBeenCalled();
     });
 
     it('a contact in another community this phone holds: Message starts the chat there and opens it in place, with no question and no switch (S2, Marty 19 Nov 2026)', async () => {
@@ -420,13 +463,62 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(createConversationApi).not.toHaveBeenCalled();
     });
 
-    it('a community the phone only looks at as a guest is not held: Open <community> › still asks first (S0)', async () => {
+    it('a community the phone only looks at as a guest is not held: Message goes across, with no question (S5 part 2)', async () => {
         mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: RIVERBEND }]));
         mem.store.set('beanpool_guest_nodes', JSON.stringify([RIVERBEND]));
         await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
         await render();
-        await press('Open Riverbend ›');
-        expect(mem.alerts.at(-1)?.[1]).toBe('Ana Li is in Riverbend. Switch to Riverbend to message them?');
+        await press('Message');
+        expect(mem.alerts).toEqual([]);
+        expect(mem.cards.map((c) => c.key)).toEqual([ANA]);
+        expect(mem.pushed).toEqual([`/outside-chat/across-${ANA.slice(0, 4)}`]);
+    });
+
+    /**
+     * Which chat Message opens (S5 part 2, core messagePathFor through utils/message-anyone.ts), drawn on the real screen: an
+     * existing chat wins (here, then in a held community in place, then across), else the community shared (here, then
+     * held, in place), else across. Each row is red without its rule (core's own table names the mutants).
+     */
+    describe('the path table: which chat Message opens', () => {
+        const HELD = () => mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: RIVERBEND }]));
+        const ROWS: Array<{ name: string; links: Array<ReturnType<typeof link>>; set: () => void; pushed: unknown; started?: unknown[] }> = [
+            { name: 'existing direct chat here, though they are in a held community too', links: [link(ANA, RIVERBEND, 'ana'), link(ANA, RIVERSIDE, 'ana')],
+                set: () => { HELD(); mem.chatsHere = [{ id: 'd-here', convType: 'dm', otherPubkey: ANA, otherKeys: ANA }]; mem.heldDirect[RIVERBEND] = [{ id: 'd-held', type: 'dm', peerPubkey: ANA, peerKeys: [ANA] }]; },
+                pushed: '/chat/d-here', started: [] },
+            { name: 'existing direct chat in a held community: opened in place', links: [link(ANA, RIVERSIDE, 'ana')],
+                set: () => { HELD(); mem.heldDirect[RIVERBEND] = [{ id: 'd-held', type: 'dm', peerPubkey: ANA, peerKeys: [ANA] }]; },
+                pushed: { pathname: '/chat/[id]', params: { id: 'd-held', community: RIVERBEND, communityName: 'Riverbend' } }, started: [] },
+            { name: 'a held group chat is no direct chat: the shared community instead', links: [link(ANA, RIVERSIDE, 'ana')],
+                set: () => { HELD(); mem.heldDirect[RIVERBEND] = [{ id: 'g-held', type: 'group', peerPubkey: ANA, peerKeys: [ANA] }]; },
+                pushed: '/chat/conv-1', started: [['dm', [ME.publicKey, ANA], ME.publicKey]] },
+            { name: 'existing chat across, though they share this community', links: [link(ANA, RIVERSIDE, 'ana')],
+                set: () => { mem.acrossHere = [{ id: 'x-here', peerKey: ANA }]; },
+                pushed: '/outside-chat/x-here', started: [] },
+            { name: 'existing chat across kept in a held community\'s file', links: [link(ANA, 'https://faraway.example', 'ana')],
+                set: () => { HELD(); mem.heldAcross[RIVERBEND] = [{ id: 'x-held', peerKey: ANA }]; },
+                pushed: `/outside-chat/x-held?community=${encodeURIComponent(RIVERBEND)}`, started: [] },
+            { name: 'no chat: the community in use first', links: [link(ANA, RIVERBEND, 'ana'), link(ANA_HERE, RIVERSIDE, 'ana')],
+                set: () => { HELD(); },
+                pushed: '/chat/conv-1', started: [['dm', [ME.publicKey, ANA_HERE], ME.publicKey]] },
+            { name: 'no chat: a held community, in place', links: [link(ANA, RIVERBEND, 'ana')],
+                set: () => { HELD(); },
+                pushed: { pathname: '/chat/[id]', params: { id: 'conv-1', community: RIVERBEND, communityName: 'Riverbend' } }, started: [['dm', [ME.publicKey, ANA], ME.publicKey, undefined, undefined, RIVERBEND]] },
+            { name: 'no chat, no community shared: across', links: [link(ANA, 'https://faraway.example', 'ana')],
+                set: () => { HELD(); },
+                pushed: `/outside-chat/across-${ANA.slice(0, 4)}`, started: [] },
+        ];
+        it.each(ROWS)('$name', async ({ links, set, pushed, started }) => {
+            set();
+            await seedList((l) => putContact(l, person('Ana Li', { links })));
+            await render();
+            const { createConversationApi } = await import('../db');
+            vi.mocked(createConversationApi).mockClear();
+            mem.pushed.length = 0;
+            await press('Message');
+            expect(mem.pushed).toEqual([pushed]);
+            expect(vi.mocked(createConversationApi).mock.calls).toEqual(started);
+            expect(mem.alerts).toEqual([]);
+        });
     });
 
     it('Add by hand: nothing typed says what is needed; a name and a number are kept, locked, on the phone', async () => {

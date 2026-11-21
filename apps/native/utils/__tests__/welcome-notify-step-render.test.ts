@@ -160,6 +160,47 @@ describe('the join\'s last screen, at 320 dp with 1.3x text', () => {
         expect(q('spinner')).toBeTruthy();
     });
 
+    // Review of #3335 at 95336d22, finding 2: the join's end runs from here now, and a failed end was drawn nowhere.
+    it('a failed end: its message in the foot and one button, Try again, which tries the end again; no second answer', () => {
+        const onRetry = vi.fn();
+        const { onTurnOn, onLater } = screen({ failed: { message: 'Failed to complete registration.', retry: 'Try again', onRetry } });
+        const foot = q('step-footer-notify')!;
+        const error = q('notify-step-error')!;
+        expect(foot.contains(error)).toBe(true);
+        expect(error.textContent).toBe('Failed to complete registration.');
+        expect(q('notify-step-turn-on')).toBeNull();
+        expect(q('notify-step-later')).toBeNull();
+        expect(foot.textContent).toBe('Failed to complete registration.Try again');
+        const retry = q('notify-step-retry')!;
+        expect(styleOf(retry).minHeight).toBeGreaterThanOrEqual(52);
+        act(() => { retry.click(); });
+        expect(onRetry).toHaveBeenCalledTimes(1);
+        expect(onTurnOn).not.toHaveBeenCalled();
+        expect(onLater).not.toHaveBeenCalled();
+        // While the end is tried again, the button waits.
+        act(() => root?.unmount()); host?.remove();
+        const again = vi.fn();
+        screen({ busy: true, failed: { message: 'x', retry: 'Try again', onRetry: again } });
+        act(() => { q('notify-step-retry')!.click(); });
+        expect(again).not.toHaveBeenCalled();
+        expect(q('spinner')).toBeTruthy();
+    });
+
+    for (const set of Object.keys(COLOUR_SETS)) {
+        it(`${set}: a failed end's message readable on the foot (4.5:1), from the central tokens`, () => {
+            theme.set = set;
+            screen({ failed: { message: 'Failed to complete registration.', retry: 'Try again', onRetry: () => {} } });
+            const { colors } = onboardingColors(set as never);
+            const chrome = (COLOUR_SETS as any)[set].surface.chrome as string;
+            const fg = styleOf(q('notify-step-error')).color;
+            expect(fg).toBe(colors.feedback.danger.fg);
+            if (hex(fg) && hex(chrome)) expect(contrast(fg, chrome), `${set}: the end's message`).toBeGreaterThanOrEqual(4.5);
+            const retry = q('notify-step-retry')!;
+            const label = styleOf(retry.querySelector('span')).color;
+            if (hex(label) && hex(colors.action.cta)) expect(contrast(label, colors.action.cta), `${set}: Try again`).toBeGreaterThanOrEqual(4.5);
+        });
+    }
+
     it('the bell band drops at 320 dp with 1.3x text, and shows on a roomy phone', () => {
         screen();
         expect(q('notify-step-band')).toBeNull();

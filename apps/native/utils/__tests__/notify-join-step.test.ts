@@ -9,7 +9,7 @@
  * Then the reviewer's three checks (amend2 §8): no hard ask without the tap just before it; "Later" is there and not final;
  * nothing else in the join raises a permission.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -33,9 +33,12 @@ const notifications = vi.hoisted(() => ({
 }));
 vi.mock('expo-notifications', () => ({ default: notifications, ...notifications }));
 vi.mock('../../services/push-notifications', () => ({ registerForPushNotifications: vi.fn(async () => null) }));
+// The app's own count (utils/db.ts recordOnboardingEvent, a signed POST): the rows below make it hang or fail.
+const db = vi.hoisted(() => ({ record: vi.fn(async (_event: string, _variant?: string): Promise<void> => undefined) }));
+vi.mock('../db', () => ({ recordOnboardingEvent: db.record }));
 
 import { NOTIFY_CHOICE, NOTIFY_SHOWN, localDay, type NotifyJoinPath } from '@beanpool/core';
-import { laterFromJoin, notifyJoinDue, notifyJoinPathOf, showNotifyJoin, turnOnFromJoin } from '../notify-join-step';
+import { NOTIFY_JOIN_WAIT_MS, laterFromJoin, notifyJoinDue, notifyJoinPathOf, showNotifyJoin, turnOnFromJoin } from '../notify-join-step';
 import { afterNotify, afterWayBack } from '../join-steps';
 import { readNotificationPermissionRecord } from '../notification-permission';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from '../storage-keys';
@@ -229,6 +232,83 @@ describe('every way off the screen goes on, also when the phone fails', () => {
         expect(src).toMatch(/const \{ recordOnboardingEvent \} = await import\('\.\/db'\);\s*await recordOnboardingEvent\(event, variant\);/);
         const db = fs.readFileSync(path.resolve(__dirname, '../db.ts'), 'utf8');
         expect(db).toMatch(/const alreadyCounted = onboardingEventKey\(anchorUrl, identity\.publicKey, event\);\s*if \(await AsyncStorage\.getItem\(alreadyCounted\)\) return;/);
+    });
+});
+
+/**
+ * Nothing between a tap and the next screen waits on the network or on a phone that doesn't answer (review of #3335 at
+ * 95336d22, finding 1; amend2 §4.2 "The screen waits on no network"). One row per wait on the way: the owner's two counts
+ * (each a signed POST a slow community holds for up to 12 s), the phone's state read, Android's channels. Each row hangs or
+ * fails that one call and checks the step still settles at once (well inside the bound), the pop-up still comes only from
+ * the tap, and each count is still sent once. The screen's own side (the pop-up at the tap, Later straight to Home, a
+ * failed end's message) is welcome-notify-never-waits-render.test.ts.
+ */
+describe('nothing on the way off the screen waits on the network or a silent phone', () => {
+    const never = <T,>() => new Promise<T>(() => {});
+    /** 'settled' if `p` settles within `ms`, else 'waiting'. */
+    const within = (p: Promise<unknown>, ms: number) => Promise.race([p.then(() => 'settled', () => 'settled'), new Promise((r) => setTimeout(() => r('waiting'), ms))]);
+    const wait = NOTIFY_JOIN_WAIT_MS.phone;
+    beforeEach(() => {
+        platform.OS = 'android';
+        notifications.getPermissionsAsync.mockResolvedValue({ status: 'undetermined', canAskAgain: true });
+        notifications.requestPermissionsAsync.mockImplementation(async () => { calls.order.push('ask'); return { status: 'granted', canAskAgain: true }; });
+        db.record.mockReset();
+        NOTIFY_JOIN_WAIT_MS.phone = 40;
+    });
+    afterEach(() => { NOTIFY_JOIN_WAIT_MS.phone = wait; });
+
+    const COUNTS: Array<{ name: string; count: () => Promise<void> }> = [
+        { name: 'hangs', count: () => never() },
+        { name: 'fails', count: async () => { throw new Error('502'); } },
+    ];
+    for (const c of COUNTS) {
+        it(`the app's count ${c.name}: the showing, Turn on (pop-up asked) and Later each settle at once, each count sent once`, async () => {
+            db.record.mockImplementation(c.count);
+            expect(await within(showNotifyJoin({ now: () => NOW }), 20), 'the showing').toBe('settled');
+            expect(await within(turnOnFromJoin('ab'.repeat(32), { now: () => NOW }), 20), 'Turn on').toBe('settled');
+            expect(calls.order).toContain('ask');
+            expect(await within(laterFromJoin({ now: () => NOW }), 20), 'Later').toBe('settled');
+            await new Promise((r) => setTimeout(r, 0));
+            expect(db.record.mock.calls).toEqual([[NOTIFY_SHOWN, undefined], [NOTIFY_CHOICE, 'on'], [NOTIFY_CHOICE, 'later']]);
+        });
+    }
+
+    it('an injected count that throws before it returns a promise is swallowed too', async () => {
+        const count = vi.fn((): Promise<void> => { throw new Error('sync'); });
+        await expect(laterFromJoin({ now: () => NOW, count })).resolves.toBe('later');
+        await new Promise((r) => setTimeout(r, 0));
+        expect(count).toHaveBeenCalledTimes(1);
+    });
+
+    it('the phone never says what it allows: no screen (the join goes on), within the bound', async () => {
+        notifications.getPermissionsAsync.mockImplementation(() => never());
+        const due = notifyJoinDue('invite', { now: () => NOW });
+        expect(await within(due, 400)).toBe('settled');
+        expect(await due).toBe(false);
+        expect(notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    });
+
+    it('the phone stops answering at the tap: a "Later" (never a no), no pop-up, counted once, within the bound', async () => {
+        notifications.getPermissionsAsync.mockImplementation(() => never());
+        const count = vi.fn(async () => undefined);
+        const answer = turnOnFromJoin(null, { now: () => NOW, count });
+        expect(await within(answer, 400)).toBe('settled');
+        expect(await answer).toBe('later');
+        expect(notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+        const rec = await readNotificationPermissionRecord();
+        expect(rec.laterAt).toBe(NOW);
+        expect(rec.phoneNoAt).toBeUndefined();
+        expect(count.mock.calls).toEqual([[NOTIFY_CHOICE, 'later']]);
+    });
+
+    it('Android never finishes making a channel: the pop-up is asked all the same, within the bound', async () => {
+        notifications.setNotificationChannelAsync.mockImplementation((id: string) => { calls.order.push(`channel:${id}`); return never(); });
+        const count = vi.fn(async () => undefined);
+        const answer = turnOnFromJoin(null, { now: () => NOW, count });
+        expect(await within(answer, 400)).toBe('settled');
+        expect(await answer).toBe('on');
+        expect(calls.order).toEqual(['channel:default', 'ask']);
+        expect(count.mock.calls).toEqual([[NOTIFY_CHOICE, 'on']]);
     });
 });
 

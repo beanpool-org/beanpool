@@ -1091,9 +1091,6 @@ export default function HomeScreen() {
     const onceMayNow = !!answer && !!identity && !lookingAround;
     onceMay.current = onceMayNow;
     useEffect(() => { if (onceMayNow) void readNotify(); }, [onceMayNow, readNotify]);
-    // The way-back card waits while the once card is up, and for the rest of a landing it was up on (amend2 §7).
-    const wayBackHeld = !once || once.held;
-    useEffect(() => { if (wayBackHeld) setSafetyUp(false); }, [wayBackHeld]);
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
     const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
@@ -1157,6 +1154,10 @@ export default function HomeScreen() {
     // Arrange (DESIGN-home-arrange-in-place-fable.md §2): Home itself. The drawn cards move; the rest of the list that this node
     // can show, with nothing to show now, are the strip's rows and keep their saved places.
     const arrangeOn = arranging && tailor && !!answer;
+    // The way-back card waits while the once card is up, and for the rest of a landing it was up on (amend2 §7). In Arrange
+    // the once card is not drawn, so the way-back card is there to be moved: one of the two at a time, always.
+    const wayBackHeld = (!once || once.held) && !arrangeOn;
+    useEffect(() => { if (wayBackHeld) setSafetyUp(false); }, [wayBackHeld]);
     const movable = arrangeOn ? drawn.filter(c => canMoveCard(c.type, pins)) : [];
     // What a drag places among (slice A4): the drawn cards that move and stand on the list, the places `moveCardTo` counts.
     // Worked out on Home too, so the hold that opens Arrange can carry its card on at once.

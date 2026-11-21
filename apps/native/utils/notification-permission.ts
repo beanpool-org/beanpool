@@ -409,23 +409,36 @@ function readWithin<T>(read: () => Promise<T>): Promise<T | null> {
  * has to ask and still can, the join's screen never shown here, not after the card's "Later" or its 7 days, one soft ask a
  * day), and if it does, marked shown now, so it takes the day (its 7 days start at its first showing). One decision at a
  * time with the named lines, so a line and the card never take the same day. Never asks, never shows anything itself, never
- * throws; a phone that doesn't say what it allows within {@link ONCE_CARD_WAIT_MS} gets no card that landing.
+ * throws; a phone that doesn't say what it allows within {@link ONCE_CARD_WAIT_MS} gets no card that landing, and Home is
+ * answered within twice that whatever waits ahead of it.
+ *
+ * The record is read after the phone (the slow read), and written only where the showing changes it: a return to the app on
+ * the day it was marked (back from the phone's pop-up) writes nothing, so it can never put back a record read before the
+ * pop-up's answer was kept.
  */
 export function offerOnceCard(
     storage: StorageLike = AsyncStorage,
     now: () => number = Date.now,
     readOs: () => Promise<OsNotificationPermission> = readOsNotificationPermission,
 ): Promise<boolean> {
+    let gaveUp = false;
     const decided = offering.then(async () => {
-        const record = await readNotificationPermissionRecord(storage);
+        if (gaveUp) return false;
         const phone = await readWithin(readOs);
+        if (!phone || gaveUp) return false;
+        const record = await readNotificationPermissionRecord(storage);
         const at = now();
-        if (!phone || !notifyAsks({ record, phone, now: at }).once) return false;
-        await writeNotificationPermissionRecord(markNotifyAsk(record, { type: 'shown', surface: 'once' }, at), storage);
-        return true;
+        if (!notifyAsks({ record, phone, now: at }).once) return false;
+        const shown = markNotifyAsk(record, { type: 'shown', surface: 'once' }, at);
+        const marked = record.askDay === shown.askDay && record.askKind === 'once' && record.onceAt === shown.onceAt;
+        if (!marked && !gaveUp) await writeNotificationPermissionRecord(shown, storage);
+        return !gaveUp;
     }).catch(() => false);
     offering = decided;
-    return decided;
+    return new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => { gaveUp = true; resolve(false); }, 2 * ONCE_CARD_WAIT_MS.phone);
+        void decided.then((v) => { clearTimeout(timer); resolve(v); });
+    });
 }
 
 /**

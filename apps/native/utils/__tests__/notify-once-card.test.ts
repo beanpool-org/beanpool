@@ -190,6 +190,32 @@ describe("the card's taps: Turn on through the one door; Later puts it away and 
     });
 });
 
+describe('the record the pop-up keeps is never put back by a landing read before it', () => {
+    it('a return to the app the day the card was marked (back from the pop-up) writes nothing', async () => {
+        store(DECLINED);
+        expect(await offerOnceCard(undefined, at(UPDATE), reads(IPHONE_ASK))).toBe(true);
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default as unknown as { setItem: ReturnType<typeof vi.fn> };
+        AsyncStorage.setItem.mockClear();
+        expect(await offerOnceCard(undefined, at(UPDATE + HOUR), reads(IPHONE_ASK))).toBe(true);
+        expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it("the phone's answer kept while the landing waits on the phone's read survives: the record is read after the phone", async () => {
+        store(DECLINED);
+        let release: ((os: OsNotificationPermission) => void) | null = null;
+        const slow = () => new Promise<OsNotificationPermission>((r) => { release = r; });
+        const offered = offerOnceCard(undefined, at(UPDATE), slow);
+        // The landing is waiting on the phone's own read.
+        while (!release) await new Promise((r) => setTimeout(r, 0));
+        // Meanwhile the pop-up's answer is kept (turnOnNotifications' own write).
+        store({ ...DECLINED, phoneNoAt: UPDATE - 1000 });
+        (release as unknown as (os: OsNotificationPermission) => void)(A13(false, false));
+        // A "Don't allow" now on record beside "can't ask": final, so no card, and the answer stays.
+        expect(await offered).toBe(false);
+        expect(stored().phoneNoAt).toBe(UPDATE - 1000);
+    });
+});
+
 describe("the reviewer's three checks (amend2 §8), for the once card", () => {
     const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../..', rel), 'utf8');
     const card = read('components/home/NotifyAskCard.tsx');
@@ -222,5 +248,19 @@ describe("the reviewer's three checks (amend2 §8), for the once card", () => {
         expect(card).not.toMatch(/Location|Camera|Contacts|ImagePicker|MediaLibrary|requestPermission/);
         const onceCode = home.slice(home.indexOf("Home's once card (slice N1h; DESIGN"), home.indexOf('// Read at each landing'));
         expect(onceCode).not.toMatch(/Location|Camera|Contacts|ImagePicker|MediaLibrary|requestPermission/);
+    });
+});
+
+// Last in the file on purpose: it leaves the one-at-a-time chain behind a read that never answers.
+describe('Home is never held by a decision stuck ahead of the card', () => {
+    it("a named line's phone read that never answers: the card's answer is no card within twice the wait, and nothing is written later", async () => {
+        store(DECLINED);
+        ONCE_CARD_WAIT_MS.phone = 20;
+        notifications.getPermissionsAsync.mockImplementationOnce(() => new Promise(() => {}));
+        void offerNamedLine('answer', undefined, at(UPDATE));
+        const t0 = Date.now();
+        expect(await offerOnceCard(undefined, at(UPDATE), reads(IPHONE_ASK))).toBe(false);
+        expect(Date.now() - t0).toBeLessThan(1000);
+        expect(stored()).toEqual(DECLINED);
     });
 });

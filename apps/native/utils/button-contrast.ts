@@ -14,7 +14,8 @@
  *   - style={styles.x}, arrays (later entries win), object literals, `cond && style`, `cond ? a : b`, spreads, StyleSheet.flatten,
  *     a Pressable's `({ pressed }) => [...]`, and a StyleSheet.create table found through `styles`, `useStyles(...)`,
  *     `useStyles(makeStyles)`, `useMemo(() => makeStyles(...))` or `makeStyles(...)`, also when several tables are
- *     destructured from one call (`const { styles, profileStyles } = useMemo(() => makeStyles(...))`: each name finds its own).
+ *     destructured from one call (`const { styles, profileStyles } = useMemo(() => makeStyles(...))`: each name finds its own),
+ *     or a table imported by name from one of FOLLOWED_MODULES (`import { marketTileStyles as tiles }`, then `tiles.photo`).
  *   - the Market's style box (components/market-card-shell.ts, FOLLOWED_MODULES): `shell.x` from its StyleSheet table; its chips,
  *     `<CardChip role="offer" />` or `role={a ? 'offer' : 'need'}`, as a ground and its words, one pair per role the prop can be;
  *     its tones as colours, `shell.tones.event.bg` or `const tone = shell.tones.event` then `tone.fg`, each from `chipTones(colors)`
@@ -241,9 +242,12 @@ function findCreate(n: ts.Node, hops = 0, want?: string): ts.ObjectLiteralExpres
  * Why a list and not every import (style box P2, 5 Nov 2026): following every relative import reads 14 more files and finds
  * two pairs under the bar in tools/ui.tsx that are not this change's to fix; that widening is its own change.
  * The forum's (components/forum/forum-style.ts, slice F3) is one table every forum screen reads through `useForumStyles()`, the
- * spec beside it, as the names list's.
+ * spec beside it, as the names list's. Home's Market tiles (components/home/market-tile-styles.ts, slice S8) are one static
+ * StyleSheet.create table in a file of its own (so the 320dp layout check reads it without the screen), imported by name.
  */
-const FOLLOWED_MODULES = new Set(['components/market-card-shell', 'utils/names-list-style', 'components/forum/forum-style', 'utils/dm-key-change']);
+const FOLLOWED_MODULES = new Set([
+    'components/market-card-shell', 'utils/names-list-style', 'components/forum/forum-style', 'utils/dm-key-change', 'components/home/market-tile-styles',
+]);
 
 /** The object literal a style-spec function returns: `(c) => ({ ... })`, or the first top-level `return { ... }` of its body. */
 function returnedObject(fn: ts.SignatureDeclaration): ts.ObjectLiteralExpression | undefined {
@@ -726,8 +730,9 @@ function evalStyle(e0: ts.Expression, ctx: Ctx, depth = 0): Alt[] {
     if (isMetricsCall(e)) return [emptyAlt()];
     const p = pathOf(e);
     if (p && p.path.length === 1) {
-        // styles.x, from the StyleSheet.create table `styles` was declared with
-        const decl = findDecl(p.root, e, true);
+        // styles.x, from the StyleSheet.create table `styles` was declared with, or the one imported by that name from one of
+        // FOLLOWED_MODULES (Home's Market tiles: `import { marketTileStyles as tiles } from './market-tile-styles'`, then `tiles.photo`).
+        const decl = findDecl(p.root, e, true) ?? importedDecl(p.root, e);
         const table = decl ? findCreate(decl, 0, isPatternInit(decl) ? p.root : undefined) : undefined;
         const entry = table?.properties.find((q) => propName(q) === p.path[0]);
         if (entry && ts.isPropertyAssignment(entry)) return evalStyle(entry.initializer, ctx, depth + 1);

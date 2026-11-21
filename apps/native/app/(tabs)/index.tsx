@@ -1199,7 +1199,7 @@ export default function HomeScreen() {
     const arrangeOn = arranging && tailor && !!answer;
     // The way-back card waits while the once card is up, and for the rest of a landing it was up on (amend2 §7). The same in
     // Arrange, where the once card stays drawn: opening Arrange never brings the way-back card into the list under a card the
-    // member is looking at or carrying (review of #3343). It is a row in the strip that landing, and moves on the next.
+    // member is looking at or carrying (review of #3343). It waits for the next landing, as on Home, and moves then.
     const wayBackHeld = !once || once.held;
     useEffect(() => { if (wayBackHeld) setSafetyUp(false); }, [wayBackHeld]);
     const movable = arrangeOn ? drawn.filter(c => canMoveCard(c.type, pins)) : [];

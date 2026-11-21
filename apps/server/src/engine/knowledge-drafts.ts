@@ -828,8 +828,9 @@ export function declineKnowledgeDraft(checker: string, id: unknown, reason: unkn
     }
     return db.transaction((): KnowledgeAnswer => {
         const r = waitingDraft(id);
-        db.prepare(`UPDATE knowledge_drafts SET state = 'declined', answered_at = ?, answered_by = ?, reason = ?, reason_words = ?
-                    WHERE id = ? AND state = 'waiting'`).run(iso(now), checker, reason, said || null, r.id);
+        // Its pictures go, and with them the node's credits for them: its own sources stay in the row for its 30 days.
+        db.prepare(`UPDATE knowledge_drafts SET state = 'declined', answered_at = ?, answered_by = ?, reason = ?, reason_words = ?, sources = ?
+                    WHERE id = ? AND state = 'waiting'`).run(iso(now), checker, reason, said || null, storedSourcesJson(sourcesOf(r.sources), []), r.id);
         deletePlainRows('knowledge_draft_photos', 'draft_id = ?', r.id);
         // A fix's notice names the page as it shows ("Your fix to "{title}" wasn't used"), or the fix's title once it doesn't.
         const title = r.kind === 'fix' ? (showingKnowledgeRow(r.post_id)?.title ?? r.title) : r.title;

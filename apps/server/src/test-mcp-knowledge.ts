@@ -135,18 +135,24 @@ const DRAFT = {
  * Learn's picture rule, word for word (DESIGN-learn-web-pictures-fable.md §6.6 "Now", §9 slice 1; Marty, 22 Nov 2026): whose a
  * picture must be, why one from the web is refused, what to tell the member, and that whoever checks can add their own.
  */
-const PICTURE_RULE_WORDS = 'Only pictures the member took or owns. A picture found on the web belongs to someone else, and this community would be '
-    + 'the one publishing it, so the server takes none: no stock sites, no search results. Say so to the member. A page without a picture '
-    + "shows its topic's picture, and whoever checks it can add their own in Edit first.";
+/**
+ * Slice 2 (the Commons door, §6.6 "With the door"): the rule now names the two kinds a page takes, the member's own and one from
+ * Wikimedia Commons whose licence the server reads; never any other picture from the web, with the why.
+ */
+const WEB_PICTURE_WHY = 'Any other picture found on the web belongs to someone else, and this community would be the one publishing it, so the '
+    + 'server takes none but from Wikimedia Commons under an open licence: no stock sites, no search results. Say so to the member.';
+const PICTURE_RULE_WORDS = 'Two kinds of picture only. One the member took or owns: upload it and give its photoId in photo_ids. Or one from Wikimedia '
+    + 'Commons: give its file page in commons_pictures, and this server reads its licence and maker itself and takes it only under an open licence. '
+    + `Never any other picture from the web, and never a picture by its own address. No picture of a private person. ${WEB_PICTURE_WHY} `
+    + "A page without a picture shows its topic's picture, and whoever checks it can add their own in Edit first.";
 /** Why, and what to do instead: the words every refusal of a web picture ends with. */
-const WEB_PICTURE_WHY = 'A picture found on the web belongs to someone else, and this community would be the one publishing it, so the server '
-    + 'takes none: no stock sites, no search results. Say so to the member.';
 const PICTURE_INSTEAD = "Instead, upload the member's own photo with photo_upload_link (or POST /mcp/photos) and give the photoId it answers in "
-    + "photo_ids. Or file the draft without one: a page without a picture shows its topic's picture, and whoever checks it can add their own in Edit first.";
-/** A picture by its address, written into the call, or under another name than photo_ids: refused in these words, whole. */
-const NO_WEB_PICTURE_WORDS = `A draft takes no picture from the web and none written into the call. ${WEB_PICTURE_WHY} ${PICTURE_INSTEAD}`;
+    + "photo_ids. Or give a picture's page on Wikimedia Commons in commons_pictures, and this server reads its licence and maker itself. "
+    + "Or file the draft without one: a page without a picture shows its topic's picture, and whoever checks it can add their own in Edit first.";
+/** A picture by its address, written into the call, or under another name than photo_ids and commons_pictures: refused in these words, whole. */
+const NO_WEB_PICTURE_WORDS = `A draft takes no picture by its own address and none written into the call. ${WEB_PICTURE_WHY} ${PICTURE_INSTEAD}`;
 /** An address given in photo_ids: refused naming the upload door. */
-const ADDRESS_IN_IDS_WORDS = `photo_ids #1 is an address: this server never fetches a picture for a draft. ${WEB_PICTURE_WHY} ${PICTURE_INSTEAD}`;
+const ADDRESS_IN_IDS_WORDS = `photo_ids #1 is an address: this server never fetches a picture by its address. ${WEB_PICTURE_WHY} ${PICTURE_INSTEAD}`;
 const knowledgePosts = () => (db.prepare("SELECT COUNT(*) AS n FROM posts WHERE type = 'knowledge'").get() as { n: number }).n;
 const draftCount = () => (db.prepare('SELECT COUNT(*) AS n FROM knowledge_drafts').get() as { n: number }).n;
 const draftRow = (id: string) => db.prepare('SELECT * FROM knowledge_drafts WHERE id = ?').get(id) as any;
@@ -222,8 +228,9 @@ async function main(): Promise<void> {
         // Its pictures (slice 1): an assistant that may post (so may upload) is told whose, and why one from the web is refused; one
         // that can't upload brings none.
         const ticked = a.getInstructions() ?? '';
-        assert(ticked.includes('write in your own words with 1 to 5 sources, bring only pictures Owen took or owns (never one found on the web: it belongs '
-            + 'to someone else, and this community would be the one publishing it), and write nothing about private people.')
+        assert(ticked.includes('write in your own words with 1 to 5 sources, bring only pictures Owen took or owns, or one from Wikimedia Commons by its '
+            + 'file page, whose licence this server reads itself (never any other picture found on the web: it belongs to someone else, and this community '
+            + 'would be the one publishing it), and write nothing about private people.')
             && welcome.includes('write in your own words with 1 to 5 sources, bring no pictures, and write nothing about private people.')
             && (c.getInstructions() ?? '').includes('bring no pictures,'),
             `1. the welcome: the ticked owner's brings only Owen's own pictures, and why; the unticked and the admin's bring none (${ticked.slice(ticked.indexOf('1 to 5 sources'), ticked.indexOf('1 to 5 sources') + 200)})`);
@@ -231,15 +238,16 @@ async function main(): Promise<void> {
         assert(prompts.includes('draft-local-knowledge') && prompts.includes('check-old-knowledge'), `1. the two prompts are in the menu (${prompts.join(', ')})`);
         const dp = await b.getPrompt({ name: 'draft-local-knowledge', arguments: { subject: 'the bus timetable' } });
         const dpText = (dp.messages[0]?.content as any)?.text ?? '';
-        assert(/Find out about the bus timetable for .+ from public pages, with your own web search: this server reaches no other server\./.test(dpText)
+        assert(/Find out about the bus timetable for .+ from public pages, with your own web search: this server reaches no other server but Wikimedia Commons, for a picture you name\./.test(dpText)
             && /Check knowledge_list first/.test(dpText) && /Give 1 to 5 sources\. Nothing about private people\. File it with knowledge_draft and tell me it is waiting for me in the app\./.test(dpText),
             `1. draft-local-knowledge asks for the assistant's own search, sources, no private people (${dpText.slice(0, 160)}…)`);
         // Its pictures (slice 1): the rule with its why, and the two ways that work (one I took or own, uploaded; or none, and the
         // checker adds their own).
         assert(dpText.includes('A picture only if I give you one I took or own: upload it with photo_upload_link and add its photoId. '
-            + 'Never a picture found on the web, from stock sites or search results: it belongs to someone else, and this community would be the one '
-            + "publishing it, so the server takes none. Without one, the page shows its topic's picture, and whoever checks it sees each picture "
-            + 'first and can add their own in Edit first.'),
+            + 'Or one from Wikimedia Commons: give its file page in commons_pictures, and this server reads its licence and maker itself and takes it '
+            + 'only under an open licence. Never any other picture found on the web, from stock sites or search results: it belongs to someone else, '
+            + "and this community would be the one publishing it. Without one, the page shows its topic's picture, and whoever checks it sees each "
+            + 'picture first and can add their own in Edit first.'),
             `1. draft-local-knowledge says the picture rule, why, and the two ways that work (${dpText.slice(dpText.indexOf('A picture'), dpText.indexOf('A picture') + 160)}…)`);
         // Who else: a member with no role, or a moderator, has no assistant at all (agent/mcp-route.ts: 401), so none of the five.
         const melToken = issueAutomationToken({ name: "Mel's Claude", scope: 'agent', expiresAt: Date.now() + 86_400_000, createdBy: mel.pk });
@@ -567,7 +575,7 @@ async function main(): Promise<void> {
         // Slice 1 (DESIGN-learn-web-pictures-fable.md §6.6 "Now"): each of the two says the whole rule, word for word, and never the
         // Market's "may use": a Learn page takes no picture by permission (Question 3, "no for now").
         for (const [where, text] of [['the description', schema9?.description ?? ''], ["photo_ids' description", props9.photo_ids?.description ?? '']] as const) {
-            const at = Math.max(0, text.indexOf('Only pictures'));
+            const at = Math.max(0, text.indexOf('Two kinds of picture'));
             assert(text.includes(PICTURE_RULE_WORDS) && !/may use/.test(text),
                 `9. ${where} carries the rule: whose, why a web picture is refused, what to tell the member, the checker adds their own (${text.slice(at, at + 140)}…)`);
         }
@@ -591,7 +599,7 @@ async function main(): Promise<void> {
             ['four pictures', a, { ...DRAFT, photo_ids: [keep1, keep1, keep1, keep1] }, /^At most 3 pictures a draft/],
             ['an id never uploaded', a, { ...DRAFT, photo_ids: [`ph_${'0'.repeat(32)}`] }, /not a photo this assistant uploaded/],
             ['the same id twice', a, { ...DRAFT, photo_ids: [keep1, keep1] }, /not a photo this assistant uploaded and has not used yet/],
-            ["another assistant's upload", c, { ...DRAFT, photo_ids: [keep1] }, /^Only an owner's assistant connected with "May post for me" can upload pictures/],
+            ["another assistant's upload", c, { ...DRAFT, photo_ids: [keep1] }, /^Only an owner's assistant connected with "May post for me" can add pictures/],
             ['no source, with a picture', a, { ...DRAFT, sources: [], photo_ids: [keep1] }, /^Local knowledge from the web needs at least one source link\.$/],
         ];
         for (const [what, client, args, words] of picRefusals) {

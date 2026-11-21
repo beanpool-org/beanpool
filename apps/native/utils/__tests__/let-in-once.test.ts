@@ -23,6 +23,9 @@
  *   third community, another account; and, inside the accept's own awaits before its POST (3b80f0ee F2, F3), an Ignore tapped
  *   and a switch to a third community} x where the request waits: their own answer stands, a Block holds, and an accept goes
  *   only to the community the list came from.
+ * - What "Add people I've chatted with and my friends" counts (1697ff89, R2-F1): exactly the chats the let-in reads as the
+ *   member's own (a line they wrote, a request they accepted), never a take-up of their Offer or a chat only the other wrote
+ *   in; after the tap, nobody it didn't count is let in.
  *
  * Then: the quiet POST is byte-equal to a tap's; nothing else is asked of any server; a direct chat lets in only the key it is
  * pinned to (never a former one); once per request; a copy in use lets in as a held one does; unreadable pins let nobody in;

@@ -32,6 +32,8 @@ The writer is told either way, in a notice that never names who answered. If the
 
 A member's photos come with their suggestion. **Remove photo** leaves one out, and **Approve** adds only the photos kept; you can't add one of your own to a member's suggestion.
 
+Your assistant's pictures show the same way, with a line under each. One it uploaded says "Uploaded by the assistant. Keep it only if it is your own." One from Wikimedia Commons shows who made it and its licence, "From Wikimedia Commons. Read by this server on" and the day, any note Commons has on other rights (a person in it, a trademark), and **Open its page**, which opens its page on Commons. Keep one if it is the writer's own, or if it shows who made it and its licence. A kept Commons picture's credit goes onto the page as a line in its sources, written by your server; **Edit** and **Suggest a fix** never show it, and nobody can change or remove it.
+
 Each member has at most 3 suggestions waiting and sends at most 5 in a day, and none while muted. What an owner or admin writes goes into Learn at once: **＋ Add local knowledge**, then **Publish**.
 
 ## Keeping pages right
@@ -52,12 +54,12 @@ If someone says a page copies their writing or their photo, take it down at once
 
 ## Your assistant can draft it
 
-Where Learn is on, an owner's or admin's AI assistant (see AI assistants) can look things up with its own web search and draft pages for you. Your server reaches no other server for it. It needs no extra tick when you connect it, because a draft changes nothing members see.
+Where Learn is on, an owner's or admin's AI assistant (see AI assistants) can look things up with its own web search and draft pages for you. Your server reaches no other server for it but Wikimedia Commons, for a picture the assistant names. It needs no extra tick when you connect it, because a draft changes nothing members see.
 
 - A draft has 1 to 5 sources, and says whether it is about a place, a service or how to do something. One without a source, or about anything else, is refused: Local knowledge is never about a private person.
 - It waits in **To check** like a member's suggestion, marked **Gathered with the assistant**. **Approve** waits until you tick **I opened the sources and they say this.**
 - Once approved, the page is yours: it says **Gathered with the assistant from the sources above. Checked by** and your name. The assistant can't edit or remove it, and its tools for undoing what it posted never touch it.
 - Its tools: **knowledge_list** and **knowledge_get** read the pages members read, never who wrote one, who it helped or a member's waiting suggestion; **knowledge_draft** files a draft; **my_knowledge_drafts** says how each ended; **knowledge_draft_withdraw** takes one back. It can't draft a fix yet: ask it what changed, and correct the page yourself.
 - Two prompts in its menu: **draft-local-knowledge** finds something out and drafts it; **check-old-knowledge** checks the pages marked out of date or not checked for a year against their sources and tells you what changed.
-- Pictures: only an owner's assistant that may post for them can add any, and only ones its owner took or owns, uploaded first, never one from the web. A picture found on the web belongs to someone else, and your community would be the one publishing it, so the server takes none, and the assistant is told to say so. A page without a picture shows its topic's picture, and you can add your own in **Edit first**. See "Photos: from the web, or uploaded first" in AI assistants.
+- Pictures: only an owner's assistant that may post for them can add any, of two kinds: ones its owner took or owns, uploaded first, or ones from Wikimedia Commons under public domain, CC0, CC BY 4.0 or CC BY-SA 4.0, whose licence and maker your server reads itself. Never any other picture from the web: it belongs to someone else, and your community would be the one publishing it, so the server takes none, and the assistant is told to say so. A page without a picture shows its topic's picture, and you can add your own in **Edit first**. See "Photos: from the web, or uploaded first" in AI assistants.
 - Limits: 10 drafts waiting and 20 a day for each connection, and 30 waiting from all assistants together, so members' suggestions are never buried. Disconnecting an assistant deletes its waiting drafts; pages a person approved stay. **Connected assistants** in Settings shows each one's drafts waiting.

@@ -13,10 +13,11 @@
  * with no answer: the line goes without a word. Words and button wrap at 320 px and 130% text; colours from the tokens.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { notifyLineWords, type NotifyLineKind, type NotifyPhone } from '@beanpool/core';
+import { notifyLineWords, t, type NotifyLineKind, type NotifyPhone } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { useLanguage } from '../lib/useLanguage';
 import { notifyPhoneHere, offerNamedLineHere, turnOnFromAsk } from '../lib/web-push';
+import { WEB_PUSH_ROW_WORDS } from './WebPushRow';
 
 export interface NotifyLineOffer {
     kind: NotifyLineKind;
@@ -28,7 +29,7 @@ export interface NotifyLineOffer {
     align?: 'start' | 'end';
 }
 
-type Shown = NotifyLineOffer & { state: 'offer' | 'busy' | 'done' };
+type Shown = NotifyLineOffer & { state: 'offer' | 'busy' | 'done' | 'failed' };
 
 /** A named line's words: the offer, what it says once notifications are on, and its button. */
 export type NotifyLineText = { line: string; done: string; button: string };
@@ -126,7 +127,9 @@ export function useNotifyLine(publicKey: string | null | undefined, showing = tr
         setShown((s) => (s ? { ...s, state: 'busy' } : s));
         // The browser's prompt is the first thing this tap waits on (turnOnFromAsk): its answer kept as the phone's is.
         void turnOnFromAsk(id, lang, 'line').then((r) => {
-            if (mounted.current) setShown((s) => (s && r === 'ok' ? { ...s, state: 'done' } : null));
+            // turnOnFromAsk's contract: a 'failed' (the browser allowed, the node didn't take it) is said, and Tell me stays, as
+            // the once card and the reminder box do; the kind was spent at the offer, so going quiet would lose it for good.
+            if (mounted.current) setShown((s) => (s && r === 'ok' ? { ...s, state: 'done' } : s && r === 'failed' ? { ...s, state: 'failed' } : null));
             noteBrowserChanged();
         });
     }, [lang]);
@@ -158,6 +161,9 @@ export function NotifyLine({ kind, name, state, onTellMe, align = 'start', words
     const busy = state === 'busy';
     return (
         <div data-testid="notify-line" className={`flex flex-wrap items-center gap-x-1 my-0.5 px-1 max-w-full min-w-0 ${side}`}>
+            {state === 'failed' && (
+                <p role="alert" data-testid="notify-line-failed" dir="auto" className="m-0 basis-full min-w-0 text-[0.8125rem] text-bp-ink-danger break-words">{t(WEB_PUSH_ROW_WORDS.failed)}</p>
+            )}
             <span dir="auto" className="min-w-0 text-[0.8125rem] text-text-secondary break-words">{words.line}</span>
             <button type="button" data-testid="notify-line-tell-me" onClick={onTellMe} disabled={busy} aria-busy={busy}
                 className="min-h-[44px] min-w-[44px] px-2.5 rounded-lg bg-transparent border-none text-sm font-bold text-bp-ink-info break-words cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand">

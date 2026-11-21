@@ -223,4 +223,14 @@ describe('the line drawn, and its Tell me', () => {
         expect(ask).toHaveBeenCalledTimes(1);
         expect(readNotifyAsk(ME).phoneNoAt).toEqual(expect.any(Number));
     });
+    it("Tell me: the browser allows but the node doesn't take it ('failed'): said in words, and Tell me stays to try again", async () => {
+        const ask = standBrowser('default', ME, 'granted');
+        await open([dm('conv-1')], { 'conv-1': [line('m-bob', 'conv-1', BOB, 'Want some sourdough?')] }, 'conv-1');
+        fireEvent.click(await screen.findByTestId('notify-line-tell-me'));
+        const held = await screen.findByTestId('chat-notify-line');
+        await within(held).findByTestId('notify-line-failed');
+        expect(within(held).getByTestId('notify-line-tell-me')).not.toHaveProperty('disabled', true);
+        expect(within(held).queryByTestId('notify-line-done')).toBeNull();
+        expect(ask).toHaveBeenCalledTimes(1);
+    });
 });

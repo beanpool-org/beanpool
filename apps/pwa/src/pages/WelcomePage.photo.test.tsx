@@ -1,14 +1,14 @@
 /**
  * Sign-up's photo step is never a gate (rehearsal 14 Oct S9; memory onboarding-no-hard-gates). Next was disabled until
- * a picture or an avatar was picked, with no Skip. Now Next works with none, and the step says what the node asks for:
- * where Beans are off (the worldwide community) a picture is optional; where Beans are on the node asks for one before
- * a first post (core postRulesFor, server engine/posts.ts assertProfileComplete), and sign-up still finishes.
+ * a picture or an avatar was picked, with no Skip. Since W1 (the phone's S3 trims) its button reads Skip for now with none
+ * and Next with one; where Beans are off (the worldwide community) Skip for now says on its own that a picture is optional,
+ * and where Beans are on one line says the node asks for one before a first post (core postRulesFor, server
+ * engine/posts.ts assertProfileComplete), and sign-up still finishes.
  *
- * The node is a stubbed fetch, entered through the open door as WelcomePage.howItWorks.test.tsx does.
+ * The node is a stubbed fetch, entered through the open door.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { photoStepNote } from '@beanpool/core';
 import { WelcomePage } from './WelcomePage';
 import { generateIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolIdentity } from '../lib/identity';
 import { resetCapturedAuthReturn } from '../lib/web-join';
@@ -65,11 +65,10 @@ async function toPhotoStep(info: unknown) {
 }
 
 describe('the photo step with no picture picked', () => {
-    it('lets a stranger on with Next where Beans are off, and says a picture is optional', async () => {
+    it('lets a stranger on with Skip for now where Beans are off, with no line: the button says a picture is optional', async () => {
         await toPhotoStep(GLOBAL);
-        expect(screen.getByTestId('photo-step-note')).toHaveTextContent(photoStepNote(false));
-        expect(photoStepNote(false)).toMatch(/optional/);
-        const next = screen.getByRole('button', { name: 'Next →' });
+        expect(screen.queryByTestId('photo-step-note')).toBeNull();
+        const next = screen.getByRole('button', { name: 'Skip for now' });
         expect(next).not.toBeDisabled();
         fireEvent.click(next);
         expect(await screen.findByText(/Your Safety Backup/)).toBeInTheDocument();
@@ -79,16 +78,18 @@ describe('the photo step with no picture picked', () => {
 
     it('says plainly where Beans are on that a picture is asked for before posting, and still finishes sign-up', async () => {
         await toPhotoStep(BEANS_ON);
-        expect(screen.getByTestId('photo-step-note')).toHaveTextContent(photoStepNote(true));
-        expect(photoStepNote(true)).toMatch(/before you post/);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        expect(screen.getByTestId('photo-step-note')).toHaveTextContent('This community asks for a picture before you post.');
+        fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
         expect(await screen.findByText(/Your Safety Backup/)).toBeInTheDocument();
     });
 
-    it('drops the note once an avatar is picked', async () => {
-        await toPhotoStep(GLOBAL);
+    it('drops the note once an avatar is picked, and Skip for now becomes Next', async () => {
+        await toPhotoStep(BEANS_ON);
+        expect(screen.getByTestId('photo-step-note')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('photo-step-choose'));
         fireEvent.click(screen.getByTitle('Green Bean'));
         expect(screen.queryByTestId('photo-step-note')).toBeNull();
+        expect(screen.getByTestId('photo-step-next')).toHaveTextContent('Next');
     });
 });
 

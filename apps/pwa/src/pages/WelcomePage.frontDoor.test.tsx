@@ -29,7 +29,7 @@ const CARD = {
     joining: 'requests', askUrl: 'https://open.example/?ask=riverside.example', globalUrl: 'https://open.example',
 };
 const CODE = 'BP-7K3X-9M2W';
-const RULE = { knownFloor: 0, creditSight: true };
+const RULE = { known: true, knownFloor: 100000, debtLinePct: 50, quietDays: 60, ruleFrom: '2026-11-16T04:00:00.000Z', debtLineFrom: null, quietDaysFrom: null };
 
 type Stub = { card?: unknown; check?: unknown; rule?: unknown };
 function stubNode({ card = CARD, check = { valid: true, inviterCallsign: 'Asha', communityName: 'Riverside Commons' }, rule = 404 }: Stub = {}) {

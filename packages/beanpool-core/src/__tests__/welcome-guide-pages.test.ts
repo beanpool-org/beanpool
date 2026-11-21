@@ -79,7 +79,8 @@ describe("the guide's pages on joining in a browser: the web's front door and do
         expect(joining).toContain("The first screen has three buttons, in the phone app and in the web app (the community's address followed by /app; the address alone shows the community's card");
         expect(joining).toContain('In a web browser, an invite link opens straight at your name.');
         // A community's bare address answers with its card (routes/community-card.ts), not the web app's front door.
-        expect(communities).toContain("A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member");
+        // The page's example address is one of ours: matched by its shape, so no community is named here (no_node_names).
+        expect(communities).toMatch(/A community's own address \(such as [a-z0-9-]+\.beanpool\.org\) shows its card to anyone who isn't a member/);
         expect(recovery).toContain("On the first screen, tap **I've used BeanPool before**. In a web browser, tap the same button, or **Already have BeanPool?** where the page shows that instead.");
         expect(joining).toContain('In a web browser, **Your invite** opens straight away, with a box for the invite link or code and **Next →**, but no **Scan a QR code**.');
     });

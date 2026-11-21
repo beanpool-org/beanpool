@@ -303,19 +303,22 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
         }
     });
 
-    it('the join page answers "Is my data private?" in the tip\'s own words, and in every language by the page\'s title', () => {
+    // The web's join FAQ left with the long page (onboarding W1, as the phone's join has none): "Is my data private?" is
+    // answered by Home's own tip, in the same words and in every language by the rules page's title, and a known rule is
+    // stated on Your name in the community's numbers (WelcomePage.rule.test.tsx).
+    it('the privacy answer is Home\'s tip, in every language by the rules page\'s title; the join page keeps no FAQ copy of it', () => {
         const START = 'Your identity is an Ed25519 key made on your device.';
         const source = readFileSync(join(ROOT, 'apps/pwa/src/pages/WelcomePage.tsx'), 'utf8');
-        expect(source).toContain(`${START} Your posts are shared within your community. ${String(tip().text)} Your key leaves`);
-        const catalogs = readdirSync(join(ROOT, 'apps/pwa/words')).filter(f => f.endsWith('.json'));
-        expect(catalogs.length).toBe(24);
-        for (const file of catalogs) {
-            const catalog = read('apps/pwa/words', file);
-            const answers = Object.keys(catalog).filter(k => k.startsWith(START));
-            expect(answers, `${file}: one answer`).toHaveLength(1);
-            expect(answers[0], `${file}: the English`).toContain(String(tip().text));
-            const title = read('packages/beanpool-core/words', file)[String(COMMUNITY_SHAPE_CARD_WORDS.title)];
-            expect(catalog[answers[0]!], `${file}: the rules page's title`).toContain(title);
+        expect(source).not.toContain(START);
+        expect(source).toContain('data-testid="join-rule"');
+        expect(String(tip().text)).toContain('How this community works');
+        for (const file of coreCatalogs()) {
+            const core = read('packages/beanpool-core/words', file);
+            const title = core[String(COMMUNITY_SHAPE_CARD_WORDS.title)];
+            const said = core[String(tip().text)];
+            expect(said, `${file}: the tip`).toBeTruthy();
+            expect(said, `${file}: the rules page's title`).toContain(title);
+            expect(Object.keys(read('apps/pwa/words', file)).filter(k => k.startsWith(START)), `${file}: no FAQ copy left`).toEqual([]);
         }
     });
 

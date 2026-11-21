@@ -48,14 +48,14 @@ export const KIT_RESTORE_STEPS = [
  *   community whose door is open (components/WebJoin.tsx): "Already have BeanPool?", then "Use my 12 words";
  * - the lobby on a node whose door is shut (pages/WelcomePage.tsx, `start === 'restore'`): "Already have BeanPool?",
  *   then "🔑 Recover with 12 Words";
- * - an invite-only community (WelcomePage's "🎟️ Join with Invite Code"): "🔑 Restore Existing Identity →" at the
- *   bottom of the page, then "🔑 Recover with 12 Words".
+ * - an invite-only community (WelcomePage's front door, slice W1): "I've used BeanPool before", then
+ *   "🔑 Recover with 12 Words".
  * Every way ends at the twelve boxes and "Recover Identity". The address is the community, so there is no community
  * box on the web.
  */
 export const KIT_WEB_RESTORE_STEPS = [
     'Open your community’s address (written above) in a web browser.',
-    'Click “Already have BeanPool?”. If the page asks for an invite code instead, click “🔑 Restore Existing Identity →” at the bottom of the page.',
+    "Click “Already have BeanPool?”. If the page shows “I've used BeanPool before” instead, click that.",
     'Click “Use my 12 words” or “🔑 Recover with 12 Words”, whichever the page shows.',
     'Type your 12 words in order, one in each box.',
     'Click “Recover Identity”. Your name and picture come back once you’re in.',

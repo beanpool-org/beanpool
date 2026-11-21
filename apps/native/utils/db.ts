@@ -19,7 +19,8 @@ import {
     type DmPeerPins, type DmPeerPin, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
 import { createDmVerifiedBook, isVerifiedPin, showsVerifiedMark, DmVerifiedStoreError, type DmVerifiedKeys } from './dm-verified-keys';
-import { dmPeerKeys, dmPeerName, isDmBlocked, isDmType } from './dm-blocked';
+import { dmPeerKeys, dmPeerName, isDmType } from './dm-blocked';
+import type { BlockLists } from './blocklist';
 import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
 import { LISTED_ADDRESS_FIELDS } from './listed-address-fields';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError, readDmSeen } from './dm-guard-list';
@@ -9733,11 +9734,47 @@ export async function getMessageRequests(myPubkey: string): Promise<{ count: num
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return null;
-        const raw = await AsyncStorage.getItem(messageRequestsStoreKey(myPubkey, getDatabaseFilenameForNode(anchorUrl)));
-        return raw ? JSON.parse(raw) : null;
+        const file = getDatabaseFilenameForNode(anchorUrl);
+        const raw = await AsyncStorage.getItem(messageRequestsStoreKey(myPubkey, file));
+        const kept = raw ? JSON.parse(raw) : null;
+        if (!kept || !Array.isArray(kept.conversations) || kept.conversations.length === 0) return kept;
+        // A filter that fails hides no card: the list stays as the node gave it, as before S7b.
+        return await withoutBlockedRequests(myPubkey, file, kept).catch((e) => {
+            console.warn('[Requests] The block lists could not be read; no request card is hidden', e);
+            return kept;
+        });
     } catch {
         return null;
     }
+}
+
+/** No blocks known: what lists that can't be read hide (no card), as before slice S7b. */
+const NO_BLOCK_LISTS: BlockLists = Object.freeze({ onPhone: new Set<string>(), once: new Set<string>(), seenThere: new Set<string>() });
+
+/**
+ * The requests kept for the community in use (`file`) less each whose opener is blocked anywhere (slice S7b, S7 design
+ * §2.4 rule 4: blocklist.ts blockedAnywhere, a block made in the web app or on another device included), by any key the
+ * person is known by in that copy: the listing's people and opener, the copy's own participant rows for the chat, and its
+ * pin (dm-blocked.ts dmPeerKeys, as requestsInPlace judges a card in place). The server stops listing them once it holds the
+ * block; this covers the minutes before. Their card and line preview never show, and `count` leaves them out. Nothing is
+ * read from the copy while nobody is blocked anywhere; lists that can't be read hide nothing.
+ */
+async function withoutBlockedRequests(me: string, file: string, kept: { count: number; conversations: any[] }): Promise<{ count: number; conversations: any[] }> {
+    const { blockedAnywhere, readBlockLists } = await import('./blocklist');
+    const lists = await readBlockLists(me);
+    if (!lists || (lists.onPhone.size === 0 && lists.seenThere.size === 0)) return kept;
+    const database = await getDb();
+    const pins = await dmPins.peek(me, file).catch(() => null);
+    const shown: any[] = [];
+    for (const c of kept.conversations) {
+        const held = await database.getFirstAsync<{ otherKeys: string | null }>(`SELECT ${otherKeysSql('?')} AS otherKeys`, [String(c?.id ?? ''), me]).catch(() => null);
+        const listed = [...(Array.isArray(c?.participants) ? c.participants : []), c?.request?.from].filter((k): k is string => typeof k === 'string' && k !== me);
+        const keys = dmPeerKeys([...listed, ...(held?.otherKeys ? held.otherKeys.split(',') : [])], pins ? dmPinFor(pins, String(c?.id ?? '')) : null);
+        if (!blockedAnywhere(lists, keys)) shown.push(c);
+    }
+    if (shown.length === kept.conversations.length) return kept;
+    const hidden = kept.conversations.length - shown.length;
+    return { ...kept, count: Math.max(shown.length, (Number.isSafeInteger(kept.count) ? kept.count : kept.conversations.length) - hidden), conversations: shown };
 }
 
 /** The message requests one community's node listed for the member, kept for that community (`file`) alone. */
@@ -9791,10 +9828,11 @@ export async function decideMessageRequest(conversationId: string, decision: 'ac
  *   writes a request when the phone is set there (`conv.type || 'dm'`), and never over a group whose keys that copy holds
  *   or a row of another kind (newDmFitsIn, #3305 review F1). A link can't reach this: only that server's list of the
  *   member's own requests. From then on S2's path (the preview's poll, the chat in place, Accept, Decline, Report) holds it.
- * - Never a request whose opener this phone's account blocked, by any key the person is known by there (the listing's
- *   people, that copy's own participant rows for the chat and its pin, as Chat's list, the held rows and the chat screen
- *   judge a DM: dm-blocked.ts talkShowsChat; the block list names every key of a re-keyed person): no card, no line read,
- *   nothing written (#3309 review F1, N1). `count` leaves those out.
+ * - Never a request whose opener is blocked anywhere (blocklist.ts blockedAnywhere, slice S7b: on this phone's list, or on
+ *   any community's own list as the phone last read it, a block made in the web app or on another device included), by any
+ *   key the person is known by there (the listing's people, that copy's own participant rows for the chat and its pin, as
+ *   Chat's list, the held rows and the chat screen judge a DM: dm-blocked.ts talkShowsChat; the block list names every key
+ *   of a re-keyed person): no card, no line read, nothing written (#3309 review F1, N1). `count` leaves those out.
  * - That copy's DM pins are read first, through the handle the rows are written with (§3.4 amendment 5: every writer reads
  *   the pins first), and a pinned DM's people are [me, the pinned key], as writeConversationFromNode writes them. Pins
  *   unread: nothing is written, and null.
@@ -9845,9 +9883,13 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
     const direct: any[] | null = listed && typeof listed === 'object' && Array.isArray(listed.conversations)
         ? listed.conversations.filter((c: any) => isDirectRequestFor(c, myPubkey))
         : null;
-    // The account's block list (one per account on this phone), read before the copy is taken.
-    const { getBlockedUsers } = await import('./blocklist');
-    const blocked = await getBlockedUsers();
+    // The account's blocks, here and as each community's own list was last read (S7b), read before the copy is taken, with
+    // this community's own list read once in this run first when a request waits (S7 design §2.4: a block made there in the
+    // web app hides its card from the first read). A read that fails, or lists that can't be read, hide no card, as before:
+    // let in once reads them again, and lets nobody in on a guess.
+    const { blockedAnywhere, blockListReadThisRun, readBlockLists } = await import('./blocklist');
+    if (direct && direct.length > 0) await blockListReadThisRun(myPubkey, here.anchorUrl);
+    const lists = (await readBlockLists(myPubkey)) ?? NO_BLOCK_LISTS;
     const database = await here.handle();
     if (!database) return null;
     // That copy's DM pins first, through this handle (§3.4 amendment 5): unread, nothing is written into a DM there.
@@ -9860,7 +9902,7 @@ export async function requestsInPlace(myPubkey: string, community: ChatCommunity
     // Every key the person is known by in that copy: the listing's, the copy's own rows for the chat, its pin (N1).
     const people = await requestPeople(database, direct ?? [], myPubkey, pins);
     if (!people) return null;
-    const kept = (direct ?? []).filter((c) => !isDmBlocked(people.get(c.id) ?? [], blocked));
+    const kept = (direct ?? []).filter((c) => !blockedAnywhere(lists, people.get(c.id) ?? []));
     // Before the first write: the account that asked is still the phone's (N2).
     if (!(await asked.still())) return null;
     const admitted: any[] = [];
@@ -9912,10 +9954,11 @@ async function requestPeople(database: SQLite.SQLiteDatabase, requests: readonly
  * (F2). The ids accepted; none when anything on the way fails (each is then an ordinary card).
  */
 async function quietlyLetIn(me: string, requests: readonly any[], people: ReadonlyMap<string, string[]>, community: ChatCommunity, asked: OwnListRead, decidedBefore: number): Promise<Set<string>> {
-    if (requests.length === 0) return new Set();
+    // Block first (slice S7b): `community`'s own block list is read in this run before any accept there.
+    if (requests.length === 0 || typeof community !== 'string' || !community) return new Set();
     try {
         const { acceptLetIn } = await import('./let-in');
-        return await acceptLetIn(me, requests.map((c) => ({ id: String(c.id), from: String(c.request?.from ?? ''), keys: people.get(c.id) ?? [] })),
+        return await acceptLetIn(me, community, requests.map((c) => ({ id: String(c.id), from: String(c.request?.from ?? ''), keys: people.get(c.id) ?? [] })),
             (id) => decideMessageRequest(id, 'accept', community, decidedBefore), asked.still);
     } catch (e) {
         console.warn('[LetIn] No request was accepted quietly', e);
@@ -11017,21 +11060,35 @@ export async function fetchFriendsFromServer(publicKey: string): Promise<any[]> 
  * in on every community this phone holds (let-in.ts). So only a chat the member took part in themselves counts, by the same
  * test let in once reads ({@link MEMBERS_OWN_CHAT_SQL}: a line they wrote, or a request they accepted themselves; #3319
  * review at 1697ff89, R2-F1, Marty 21 Nov 2026): never a chat only the other person wrote in, nor one opened by someone
- * taking up the member's Offer, nor a request someone sent them that they haven't accepted.
+ * taking up the member's Offer, nor a request someone sent them that they haven't accepted. And only the key let in once
+ * takes from such a chat ({@link letInOfRows}; #3319 final review, R3-F1): its pin's, else its one other person, nobody when
+ * its rows name several, never a key pinned before nor one on offer. Each with a card in this copy, and with `keys`, every
+ * key that chat knows them by (dm-blocked.ts dmPeerKeys), so a block under any of them holds (blocklist.ts
+ * withoutBlockedPeople, slice S7b). Throws when this copy or its DM pins can't be read: nobody is offered on a guess.
  */
-export async function getChattedWithMembers(myPubkey: string): Promise<{ publicKey: string; callsign: string }[]> {
-    const database = await getDb();
-    return database.getAllAsync<{ publicKey: string; callsign: string }>(
-        `SELECT DISTINCT m.public_key as publicKey, m.callsign
-         FROM conversation_participants cp
-         JOIN conversations c ON cp.conversation_id = c.id
-         JOIN conversation_participants cp2 ON cp2.conversation_id = c.id AND cp2.public_key != ?
-         JOIN members m ON m.public_key = cp2.public_key
-         WHERE cp.public_key = ? AND c.type = 'dm'
+export async function getChattedWithMembers(myPubkey: string): Promise<{ publicKey: string; callsign: string; keys: string[] }[]> {
+    const here = await chatCopyForRequest();
+    const pins = await dmPins.peekReadable(myPubkey, here.file);
+    const rows = await here.database.getAllAsync<{ id: string; keys: string | null }>(
+        `SELECT c.id AS id, ${otherKeysSql()} AS keys FROM conversations c
+         WHERE c.type = 'dm' AND c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
            AND ${NOT_A_REQUEST_FOR_ME('c.request')}
            AND ${MEMBERS_OWN_CHAT_SQL('c')}`,
         [myPubkey, myPubkey, myPubkey, myPubkey]
     );
+    const people = new Map<string, string[]>();
+    for (const row of rows) {
+        const [key] = letInOfRows([{ kind: 'dm', id: row.id, keys: row.keys }], pins, myPubkey);
+        if (!key) continue;
+        const keys = dmPeerKeys(row.keys ?? '', pins ? dmPinFor(pins, String(row.id)) : null);
+        people.set(key, [...new Set([...(people.get(key) ?? []), ...keys])]);
+    }
+    if (people.size === 0) return [];
+    const cards = await here.database.getAllAsync<{ publicKey: string; callsign: string }>(
+        `SELECT public_key AS publicKey, callsign FROM members WHERE public_key IN (${[...people.keys()].map(() => '?').join(', ')})`,
+        [...people.keys()]
+    );
+    return cards.map((m) => ({ publicKey: m.publicKey, callsign: m.callsign, keys: people.get(m.publicKey) ?? [m.publicKey] }));
 }
 
 /** Get recent chat peers (for "Recents" section in contact picker) */

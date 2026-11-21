@@ -357,10 +357,12 @@ async function inviteSentRecord(page) {
 /** The invite page on a node whose door is shut, a code and a name typed, and Create pressed. */
 async function sendInvite(page, origin, name) {
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
-    await page.getByText('Join with Invite Code').waitFor({ timeout: 20_000 });
-    await page.getByLabel('Invite Code').fill('BP-7K3X-9M2W');
-    await page.getByLabel('Your Callsign (Name)').fill(name);
-    await page.getByRole('button', { name: 'Create Identity & Join →' }).click();
+    await page.getByTestId('front-door-invite').waitFor({ timeout: 20_000 });
+    await page.getByTestId('front-door-invite').click();
+    await page.getByLabel('Invite link or code').fill('BP-7K3X-9M2W');
+    await page.getByTestId('your-invite-next').click();
+    await page.getByLabel('What should we call you?').fill(name);
+    await page.getByTestId('name-step-join').click();
 }
 
 /** Twelve words from the BIP-39 list, for a key restored at the door. A fixture: no account anywhere holds them. */
@@ -560,16 +562,18 @@ async function addressBarClean(page, origin, where) {
     if (url !== `${origin}/app`) throw new Failure(`${where}: the address bar still reads ${url}`);
 }
 
-/** Photo, 12 words, tour, and into the app. */
+/** Photo, 12 words, and into the app. */
 async function throughOnboarding(page, view, { shots = false, signIn = null } = {}) {
-    await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
-    // textContent, not innerText: under 360 px the bar draws marks only, its names hidden (the current one is said below it).
-    const bar = await page.getByTestId('onboarding-stepper').textContent();
-    if (!/Sign in/.test(bar)) throw new Failure(`the steps bar says "${bar.replace(/\s+/g, ' ')}", not "Sign in"`);
+    await page.getByTestId('step-dots').waitFor({ timeout: 20_000 });
+    // The dots (W1): the door's sign-in stands in for Your name, so the photo is the second of three; the words are a
+    // screen reader's only (textContent, not innerText).
+    const bar = await page.getByTestId('step-dots-steps').textContent();
+    if (bar !== 'Step 2 of 3') throw new Failure(`the step bar says "${bar}", not "Step 2 of 3"`);
     await noSideScroll(page, 'photo step');
     if (shots) await shot(page, view, 'photo');
+    await page.getByTestId('photo-step-choose').click();
     await page.getByTitle('Green Bean').click();
-    await page.getByRole('button', { name: 'Next →' }).click();
+    await page.getByTestId('photo-step-next').click();
     await page.getByText('Your Safety Backup').waitFor();
     if (signIn) {
         const line = await page.getByTestId('backup-signin-recovery').innerText();
@@ -578,10 +582,8 @@ async function throughOnboarding(page, view, { shots = false, signIn = null } = 
     }
     await noSideScroll(page, '12 words step');
     if (shots) await shot(page, view, 'words');
+    // The way back's Next goes in: How it Works left the join (W1).
     await page.getByRole('button', { name: 'Next →' }).click();
-    await page.getByRole('button', { name: "Let's Begin! 🚀" }).waitFor();
-    await noSideScroll(page, 'tour step');
-    await page.getByRole('button', { name: "Let's Begin! 🚀" }).click();
     await intoMarket(page);
 }
 
@@ -649,7 +651,7 @@ const SCENARIOS = [
             if ((await page.getByTestId('join-as').innerText()) !== 'Alice') throw new Failure('the name was lost on reload');
             if ((await pendingKey(page)) !== key) throw new Failure('a reload made a second key');
             await page.getByTestId('join-provider-google').click();
-            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            await page.getByTestId('step-dots').waitFor({ timeout: 20_000 });
             await addressBarClean(page, origin, 'back from Google');
             checkJoin(seen, 'google', key, 'Google');
             const q = seen.providerVisits[0].query;
@@ -678,7 +680,7 @@ const SCENARIOS = [
             await addressBarClean(page, origin, 'back from Google');
             await page.reload({ waitUntil: 'load' });
             // The node had the member: the page asks, is told "already a member", and carries on.
-            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            await page.getByTestId('step-dots').waitFor({ timeout: 20_000 });
             if ((await storedIdentityKey(page)) !== key) throw new Failure('after the reload the identity is not the one that joined');
             if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
         },
@@ -707,7 +709,7 @@ const SCENARIOS = [
             // The node answers again: a member, so the new member's steps follow.
             seen.membershipDown = false;
             await page.getByRole('button', { name: 'Try again' }).click();
-            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            await page.getByTestId('step-dots').waitFor({ timeout: 20_000 });
             if ((await storedIdentityKey(page)) !== key) throw new Failure('the identity is not the key that joined');
             if ((await pendingKey(page)) !== null) throw new Failure('the pending join was left behind');
             if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
@@ -720,7 +722,7 @@ const SCENARIOS = [
             await toSignIn(page, origin, view, 'Alice');
             const key = await pendingKey(page);
             await page.getByTestId('join-provider-apple').click();
-            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            await page.getByTestId('step-dots').waitFor({ timeout: 20_000 });
             await addressBarClean(page, origin, 'back from Apple');
             checkJoin(seen, 'apple', key, 'Apple');
             const q = seen.providerVisits[0].query;
@@ -734,7 +736,7 @@ const SCENARIOS = [
             await toSignIn(page, origin, view, 'Alice');
             const key = await pendingKey(page);
             await page.getByTestId('join-provider-facebook').click();
-            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            await page.getByTestId('step-dots').waitFor({ timeout: 20_000 });
             await addressBarClean(page, origin, 'back from Facebook');
             checkJoin(seen, 'facebook', key, 'Facebook');
             const stored = await page.evaluate(() => JSON.stringify({ ls: { ...localStorage }, ss: { ...sessionStorage } }));
@@ -758,7 +760,7 @@ const SCENARIOS = [
             await shot(page, view, 'cannot-tell');
             seen.membershipDown = false;
             await page.getByRole('button', { name: 'Try again' }).click();
-            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            await page.getByTestId('step-dots').waitFor({ timeout: 20_000 });
             if ((await storedIdentityKey(page)) !== key) throw new Failure('the identity is not the key that joined');
             if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
         },
@@ -893,7 +895,7 @@ const SCENARIOS = [
             seen.doorShut = true;
             await clearBrowser(page, origin);
             await page.goto(`${origin}/app`, { waitUntil: 'load' });
-            await page.getByRole('button', { name: 'Restore existing identity' }).click();
+            await page.getByTestId('front-door-used-before').click();
             await page.getByTestId('member-restore-signin').waitFor({ timeout: 20_000 });
             await noSideScroll(page, 'restore choices, invite door');
             await shot(page, view, 'restore-choices-invite-door');
@@ -935,7 +937,7 @@ const SCENARIOS = [
             await toSignIn(page, origin, view, 'Alice');
             const key = await pendingKey(page);
             await page.getByTestId('join-provider-google').click();
-            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 30_000 });
+            await page.getByTestId('step-dots').waitFor({ timeout: 30_000 });
             const google = seen.providerVisits.filter((v) => v.provider === 'google');
             if (google.length !== 2) throw new Failure(`went to Google ${google.length} times`);
             if (google[0].nonce === google[1].nonce) throw new Failure('the retry reused the spent nonce');
@@ -988,7 +990,7 @@ const SCENARIOS = [
             await toSignIn(tabA, origin, view, 'Alice');
             const key = await pendingKey(tabA);
             await tabA.getByTestId('join-provider-google').click();
-            await tabA.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            await tabA.getByTestId('step-dots').waitFor({ timeout: 20_000 });
             if ((await storedIdentityKey(page)) !== key) throw new Failure("tab A's account was not saved");
 
             await page.waitForFunction(() => !document.querySelector('[data-testid="join-start"]')?.hasAttribute('disabled'), null, { timeout: 10_000 });
@@ -1079,7 +1081,7 @@ const SCENARIOS = [
             await page.reload({ waitUntil: 'load' });
             await page.getByRole('heading', { name: 'Finish joining' }).waitFor({ timeout: 20_000 });
             if (await page.getByText(/already been used/).count()) throw new Failure('the browser\'s own key was called "already used"');
-            if (await page.getByText('Join with Invite Code').count()) throw new Failure('the invite form showed before the kept key was settled');
+            if (await page.getByTestId('front-door').count()) throw new Failure('the front door showed before the kept key was settled');
             await noSideScroll(page, 'finish joining');
             await shot(page, view, 'invite-finish-joining');
 
@@ -1089,8 +1091,9 @@ const SCENARIOS = [
             if ((await storedIdentityKey(page)) !== sent) throw new Failure('the kept key was not saved');
             if (await inviteSentRecord(page)) throw new Failure('the invite-sent record stayed after the save');
             if (seen.redeems.length !== 1) throw new Failure(`${seen.redeems.length} redeems were sent`);
+            await page.getByTestId('photo-step-choose').click();
             await page.getByTitle('Green Bean').click();
-            await page.getByRole('button', { name: 'Next →' }).click();
+            await page.getByTestId('photo-step-next').click();
             await page.getByText(/Your Safety Backup/).waitFor();
             const words = await page.getByTestId('backup-words').locator('strong').allInnerTexts();
             if (words.join(' ') !== (await storedIdentity(page)).mnemonic.join(' ')) throw new Failure("the 12 words shown are not the saved key's");
@@ -1109,11 +1112,11 @@ const SCENARIOS = [
             const key = await storedIdentityKey(page);
             if (!key || seen.redeems[0]?.body.publicKey !== key) throw new Failure('the key saved is not the one the node took');
 
-            await page.getByRole('button', { name: '← Back' }).click();
+            await page.getByTestId('step-dots-back').click();
             await page.getByRole('heading', { name: /Your name/ }).waitFor();
-            if (await page.getByLabel('Invite Code').count()) throw new Failure('the invite field came back after Back');
-            if (await page.getByRole('button', { name: 'Create Identity & Join →' }).count()) throw new Failure('the invite form came back after Back');
-            const field = page.getByLabel('Your Callsign (Name)');
+            if (await page.getByLabel('Invite link or code').count()) throw new Failure('the invite field came back after Back');
+            if (await page.getByTestId('name-step-join').count()) throw new Failure('the invite join came back after Back');
+            const field = page.getByLabel('What should we call you?');
             if ((await field.inputValue()) !== 'Rowan') throw new Failure(`the name step holds "${await field.inputValue()}"`);
             // The 20 characters a join keeps (MAX_JOIN_CALLSIGN): the app's register cuts a longer name on the node.
             if ((await field.getAttribute('maxlength')) !== '20') throw new Failure(`the name field takes ${await field.getAttribute('maxlength')} characters`);
@@ -1146,8 +1149,9 @@ const SCENARIOS = [
             if (saved?.publicKey !== key || saved?.callsign !== 'Robin') throw new Failure(`this browser holds ${saved?.callsign} (${saved?.publicKey})`);
             if (await inviteSentRecord(page)) throw new Failure('an invite-sent record was left');
 
+            await page.getByTestId('photo-step-choose').click();
             await page.getByTitle('Green Bean').click();
-            await page.getByRole('button', { name: 'Next →' }).click();
+            await page.getByTestId('photo-step-next').click();
             await page.getByText(/Your Safety Backup/).waitFor();
             const words = await page.getByTestId('backup-words').locator('strong').allInnerTexts();
             if (words.join(' ') !== saved.mnemonic.join(' ')) throw new Failure("the 12 words shown are not the saved key's");
@@ -1226,7 +1230,7 @@ const SCENARIOS = [
             const text = await page.getByTestId('join-held').innerText();
             if (!/may still go through/.test(text) || !/about \d+ minutes?/.test(text)) throw new Failure(`the held screen says "${text}"`);
             if (await page.getByRole('button', { name: /Finish joining/ }).count()) throw new Failure('the shut door offers to join again');
-            if (await page.getByText('Join with Invite Code').count()) throw new Failure('the invite page showed before the join was settled');
+            if (await page.getByTestId('front-door').count()) throw new Failure('the front door showed before the join was settled');
             if (!seen.probes.includes(key)) throw new Failure('the node was not asked about the sent join');
             await noSideScroll(page, 'held, door shut');
             await shot(page, view, 'held-door-shut');
@@ -1234,14 +1238,16 @@ const SCENARIOS = [
             // Half an hour on, that join can no longer land: the invite page, and the key kept as it was.
             await agePendingJoin(page, 30);
             await page.getByRole('button', { name: 'Check again' }).click();
-            await page.getByText('Join with Invite Code').waitFor({ timeout: 20_000 });
+            await page.getByTestId('front-door').waitFor({ timeout: 20_000 });
             if ((await pendingKey(page)) !== key) throw new Failure('the sent join was dropped');
 
             // Another tab saves an account; an invite here never replaces it.
             await saveIdentityElsewhere(page, OTHER_TAB_ACCOUNT);
-            await page.getByLabel('Invite Code').fill('BP-7K3X-9M2W');
-            await page.getByLabel('Your Callsign (Name)').fill('Rowan');
-            await page.getByRole('button', { name: 'Create Identity & Join →' }).click();
+            await page.getByTestId('front-door-invite').click();
+            await page.getByLabel('Invite link or code').fill('BP-7K3X-9M2W');
+            await page.getByTestId('your-invite-next').click();
+            await page.getByLabel('What should we call you?').fill('Rowan');
+            await page.getByTestId('name-step-join').click();
             await page.getByTestId('welcome-held').waitFor({ timeout: 20_000 });
             await noSideScroll(page, 'welcome: this browser already has an account');
             await shot(page, view, 'welcome-held');

@@ -53,15 +53,17 @@ async function openBackup() {
     window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
     stubNode(GLOBAL_OPEN, { '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' } }) });
     render(<WelcomePage onComplete={vi.fn()} />);
-    fireEvent.click(await screen.findByTitle(t('Green Bean')));
-    fireEvent.click(screen.getByRole('button', { name: t('Next →') }));
+    fireEvent.click(await screen.findByTestId('photo-step-choose'));
+    fireEvent.click(screen.getByTitle(t('Green Bean')));
+    fireEvent.click(screen.getByTestId('photo-step-next'));
     return screen.findByTestId('backup-words');
 }
 
 async function openRestore() {
     stubNode(LOCAL);
     render(<WelcomePage onComplete={vi.fn()} />);
-    fireEvent.click(await screen.findByRole('button', { name: t('Restore existing identity') }));
+    // The front door's I've used BeanPool before (W1).
+    fireEvent.click(await screen.findByTestId('front-door-used-before'));
     fireEvent.click(await screen.findByRole('button', { name: t('Recover with 12 Words') }));
     return (await screen.findByLabelText(t('Recovery word {n}', { n: 1 }))).parentElement!;
 }

@@ -167,7 +167,7 @@ describe('a sign-in coming back for a restore', () => {
         await backFromGoogle('jn-1');
         const calls = restoreNode({ '/api/join': () => json(200, { success: true, member: { callsign: 'Bea' } }) });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByTestId('onboarding-stepper');
+        await screen.findByTestId('step-dots');
         expect(calls.filter((c) => c.path === '/api/join')).toHaveLength(1);
         expect(calls.some((c) => c.path.startsWith('/api/recovery/'))).toBe(false);
         expect((await loadPendingRestore())?.nonce).toBe('rn-1');
@@ -205,13 +205,13 @@ describe('where it starts on the open door', () => {
         expect(screen.queryByTestId('restore-callsign')).toBeNull();
     });
 
-    it('a local community with an invite door: "Restore Existing Identity" → "Recover with Social Sign-In", the community by its name, nothing typed', async () => {
+    it('a local community with an invite door: "I\'ve used BeanPool before" → "Recover with Social Sign-In", the community by its name, nothing typed', async () => {
         restoreNode({
             '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } }),
             '/api/community/card': () => json(200, { name: 'Mullumbimby', host: 'mullum.beanpool.org', members: 77, area: null, joining: 'invite', doors: [] }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
+        fireEvent.click(await screen.findByTestId('front-door-used-before'));
         fireEvent.click(await screen.findByTestId('member-restore-signin'));
         await screen.findByTestId('restore-provider-google');
         // By the name on its card, once the card has come (the page's address until then).
@@ -227,7 +227,7 @@ describe('where it starts on the open door', () => {
             '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false }, recoveryCopies: 'none' }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
+        fireEvent.click(await screen.findByTestId('front-door-used-before'));
         await screen.findByText('Recover with 12 Words', { exact: false });
         // The node's answer is read once the page has asked: give it the moment, then the way is still not offered.
         await waitFor(() => expect(screen.queryByTestId('member-restore-signin')).toBeNull());

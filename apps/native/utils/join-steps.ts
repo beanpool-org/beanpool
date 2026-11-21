@@ -1,7 +1,6 @@
 /**
- * The join's step bar: one dot per screen the member will actually see on this phone, no words
- * (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §3.1, slice S3; Marty, 21 Nov: "a standard people are used to
- * rather than a long page"). The front door, Your invite and the ways back have no dot: they are not steps of a join.
+ * The join's step bar on the phone: one dot per screen the member will actually see, no words. The rule is core's, shared
+ * with the web (packages/beanpool-core/src/join-steps.ts): this names the phone's joins in it.
  *
  * - An invite: Your name (the global door's own screen stands in for it: it chooses the name), Your photo, the way back.
  * - The global door or another community's open door: the same three.
@@ -14,26 +13,19 @@
  *   never Android 8 to 12, which allows them without asking). Then the join is four dots, the front door still none (Marty's
  *   walk, 21 Nov: five screens, four dots); a claim three. {@link afterWayBack} names it as the way back's next screen.
  */
+import { joinStepList, stepDot, type JoinStep } from '@beanpool/core';
 import type { OnboardingFlow } from './onboarding-state';
 import type { DoorWay } from './global-join';
 import type { SignInCopies } from './vault-config';
 
-export type JoinStep = 'name' | 'photo' | 'wayBack' | 'notify';
-
-export function joinSteps(flow: OnboardingFlow, opts: { wayBack?: boolean; notify?: boolean } = {}): JoinStep[] {
-    const steps: JoinStep[] = flow === 'claim' ? ['photo', 'wayBack'] : ['name', 'photo', 'wayBack'];
-    const shown = opts.wayBack === false ? steps.filter((s) => s !== 'wayBack') : steps;
-    return opts.notify ? [...shown, 'notify'] : shown;
-}
+export { stepDot, type JoinStep };
 
 /**
- * Where a screen sits in its join's bar: `{ at, of }`, 1-based. Null when the screen is not one of this join's steps, or when
- * the join has a single step (one dot says nothing): no bar is drawn then.
+ * The phone's joins in core's rule: no name step on a claim; the way back left out only for `wayBack: false` (S4's skip); the
+ * notifications screen last only for `notify: true` (core's `notifyJoinStep`).
  */
-export function stepDot(steps: readonly JoinStep[], step: JoinStep): { at: number; of: number } | null {
-    const i = steps.indexOf(step);
-    if (i < 0 || steps.length < 2) return null;
-    return { at: i + 1, of: steps.length };
+export function joinSteps(flow: OnboardingFlow, opts: { wayBack?: boolean; notify?: boolean } = {}): JoinStep[] {
+    return joinStepList({ name: flow !== 'claim', wayBack: opts.wayBack !== false, notify: !!opts.notify });
 }
 
 /**

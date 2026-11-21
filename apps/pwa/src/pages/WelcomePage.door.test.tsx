@@ -7,13 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
 import {
-    generateIdentity, identityFromMnemonic, importIdentity, loadIdentity, loadPendingJoin, savePendingJoin, PENDING_JOIN_TTL_MS,
+    generateIdentity, identityFromMnemonic, importIdentity, loadIdentity, loadPendingJoin, savePendingJoin, seedViewedKey, PENDING_JOIN_TTL_MS,
     type BeanPoolIdentity, type PendingJoin,
 } from '../lib/identity';
 import { generateMnemonic } from '../lib/mnemonic';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { loadPendingLink } from '../lib/link-signin';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { oncePerPersonVariant } from '@beanpool/core';
 
 type Handler = (body: any, path: string) => Response;
 
@@ -75,11 +76,15 @@ describe('the open door joins a named community (join names N1, §2.5)', () => {
         expect(screen.queryByText(/global community/i)).toBeNull();
     });
 
-    it("a self-hoster's community that takes new members by invite: its invite form is headed with its name too", async () => {
-        stubNode({ ...GLOBAL_OPEN, features: { openJoin: false }, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' }, { '/api/community/card': () => json(200, CARD) });
+    it("a self-hoster's community that takes new members by invite: Your name names it, from the invite's own check (W1)", async () => {
+        stubNode({ ...GLOBAL_OPEN, features: { openJoin: false }, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' }, {
+            '/api/community/card': () => json(200, CARD),
+            '/api/invite/check': () => json(200, { valid: true, inviterCallsign: 'Asha', communityName: 'Hall Community' }),
+        });
+        window.history.replaceState(null, '', '/app?invite=BP-7K3X-9M2W');
         render(<WelcomePage onComplete={vi.fn()} />);
-        expect(await screen.findByRole('heading', { name: 'Join Hall Community with an invite' })).toBeTruthy();
-        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+        await waitFor(() => expect(screen.getByTestId('invite-greeting')).toHaveTextContent('Asha invited you to Hall Community'));
+        expect(screen.queryByTestId('join-screen-lobby')).toBeNull();
     });
 
     it('a card that does not answer: "Join {its address}", never "Join BeanPool"', async () => {
@@ -96,37 +101,36 @@ describe('which welcome a visitor gets', () => {
         stubNode(GLOBAL_OPEN);
         render(<WelcomePage onComplete={vi.fn()} />);
         await screen.findByTestId('join-screen-lobby');
-        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+        expect(screen.queryByTestId('front-door')).toBeNull();
     });
 
-    it('a local community: the invite form, as today', async () => {
+    it('a local community: the front door (W1)', async () => {
         stubNode({ ...GLOBAL_OPEN, profile: 'local', features: { openJoin: false } });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         expect(screen.queryByTestId('join-start')).toBeNull();
     });
 
     // A local community's listings are its members' (2026-09-28): its sign-in page sends a stranger to the global one.
-    it('a local community: no invite? the listings are for members, and a link to look around the global community', async () => {
-        stubNode({ ...GLOBAL_OPEN, profile: 'local', features: { openJoin: false } });
+    it('a local community too old to send a card: No invite? Look around links the global community', async () => {
+        stubNode({ ...GLOBAL_OPEN, profile: 'local', features: { openJoin: false } }, { '/api/community/card': () => json(404, { error: 'Not Found' }) });
         render(<WelcomePage onComplete={vi.fn()} />);
-        const card = await screen.findByTestId('welcome-no-invite');
-        expect(card.textContent).toContain("This community's listings are for its members");
-        expect(screen.getByTestId('look-around-global').getAttribute('href')).toBe('https://global.beanpool.org');
+        expect((await screen.findByTestId('front-door-look-around')).getAttribute('href')).toBe('https://global.beanpool.org');
     });
 
-    it('a global node whose door is shut: the invite form', async () => {
-        stubNode({ ...GLOBAL_OPEN, features: { openJoin: false } });
+    it('a global node whose door is shut: the front door, and no link to a global community it is not', async () => {
+        stubNode({ ...GLOBAL_OPEN, features: { openJoin: false } }, { '/api/community/card': () => json(404, { error: 'Not Found' }) });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
-        expect(screen.queryByTestId('welcome-no-invite')).toBeNull();
+        await screen.findByTestId('front-door');
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/community/card', expect.anything()));
+        expect(screen.queryByTestId('front-door-look-around')).toBeNull();
     });
 
-    it("an older node that says nothing about itself: the invite form", async () => {
-        stubNode({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0 });
+    it("an older node that says nothing about itself: the front door, with Look around", async () => {
+        stubNode({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0 }, { '/api/community/card': () => json(404, { error: 'Not Found' }) });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
-        expect(await screen.findByTestId('welcome-no-invite')).toBeTruthy();
+        await screen.findByTestId('front-door');
+        expect(await screen.findByTestId('front-door-look-around')).toBeTruthy();
     });
 
     it('a sign-in return on an invite-only node: the token leaves the address bar, and the invite page shows as always', async () => {
@@ -134,7 +138,7 @@ describe('which welcome a visitor gets', () => {
         const calls = stubNode({ ...GLOBAL_OPEN, profile: 'local', features: { openJoin: false } });
         render(<WelcomePage onComplete={vi.fn()} />);
         expect(window.location.hash).toBe('');
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         expect(screen.queryByText(/No invite needed/)).toBeNull();
         expect(calls.some((c) => c.path.startsWith('/api/join'))).toBe(false);
     });
@@ -143,12 +147,12 @@ describe('which welcome a visitor gets', () => {
         stubNode(new TypeError('Failed to fetch'));
         render(<WelcomePage onComplete={vi.fn()} />);
         expect(await screen.findByTestId('door-unreachable')).toHaveTextContent("Can't reach the community right now.");
-        expect(screen.getByText(/Join with Invite Code/)).toBeInTheDocument();
+        expect(screen.getByTestId('front-door-invite')).toBeInTheDocument();
     });
 });
 
 describe('after the door says yes: the same steps every new member has', () => {
-    it('photo, 12 words, tour; "Sign in" on the bar, no going back, the new name said, storage kept', async () => {
+    it('photo, 12 words, in; the sign-in stands for the first dot, no going back, the new name said, storage kept', async () => {
         await savePendingJoin({ identity, provider: 'google', nonce: 'n1', startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: false });
         const token = `${b64url('{"alg":"RS256"}')}.${b64url(JSON.stringify({ sub: 'g1', nonce: 'n1' }))}.c2ln`;
         window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
@@ -166,19 +170,18 @@ describe('after the door says yes: the same steps every new member has', () => {
 
         // Step 2, the photo.
         expect(await screen.findByTestId('joined-as-note')).toHaveTextContent("You're Alice2 here: Alice was taken.");
-        expect(screen.getByTestId('onboarding-stepper')).toHaveTextContent('Sign in');
-        expect(screen.queryByText('Your Name')).toBeNull();
-        expect(screen.queryByRole('button', { name: '← Back' })).toBeNull();
+        expect(screen.getByTestId('step-dots-steps')).toHaveTextContent('Step 2 of 3');
+        expect(screen.queryByTestId('step-dots-back')).toBeNull();
+        fireEvent.click(screen.getByTestId('photo-step-choose'));
         fireEvent.click(screen.getByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
 
         // Step 3, the 12 words of the key that joined.
         await screen.findByText(/Your Safety Backup/);
         for (const w of identity.mnemonic!) expect(screen.getAllByText(w).length).toBeGreaterThan(0);
         fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
 
-        // Step 4, the tour, then in.
-        fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
+        // Then in: How it Works left the join (W1).
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
         expect(onComplete.mock.calls[0][0]).toMatchObject({ publicKey: identity.publicKey, callsign: 'Alice2' });
         expect(persist).toHaveBeenCalledTimes(1);
@@ -199,8 +202,9 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
             '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' }, provider: 'google', recovery }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByText(/Your Safety Backup/);
         return calls;
     }
@@ -254,8 +258,9 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
         window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
         const calls = stubNode(GLOBAL_OPEN, { '/api/join/work': () => json(404, {}), ...handlers });
         render(<WelcomePage onComplete={vi.fn()} />);
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByText(/Your Safety Backup/);
         return calls;
     }
@@ -287,8 +292,9 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
             '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByTestId('backup-words-only');
         expect(screen.getByTestId('backup-no-copy').textContent).toBe("This community's server keeps no copy of your account.");
     });
@@ -365,8 +371,9 @@ describe('the words screen says how to put the same account on a phone (W1)', ()
         window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
         stubNode(info, { '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' }, provider: 'google', recovery }) });
         render(<WelcomePage onComplete={vi.fn()} />);
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByText(/Your Safety Backup/);
         return screen.getByTestId('backup-phone-later');
     }
@@ -403,7 +410,7 @@ describe('the words screen says how to put the same account on a phone (W1)', ()
 describe('a 12-words member who adds a sign-in from Safety Backup (review 4161723815)', () => {
     afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
 
-    it('leaves for the provider only after the tour, with the photo saved and the browser asked to keep the key', async () => {
+    it('leaves for the provider only once the join is done, with the photo saved and the browser asked to keep the key', async () => {
         const t0 = Date.now();
         // A 12-words join that went out; the node says member (the same steps follow as after the answer).
         await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
@@ -420,13 +427,14 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} />);
 
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByTestId('backup-words-only');
         fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
 
-        // The tour comes first, as for every new member; the sign-in is offered on it.
-        expect(await screen.findByRole('button', { name: "Let's Begin! 🚀" })).toBeInTheDocument();
+        // Its providers open right there, on the way back (How it Works left the join, W1).
+        expect(within(await screen.findByTestId('tour-add-sign-in')).getByRole('heading', { level: 4 })).toHaveTextContent('Add a sign-in as a second way back');
         fireEvent.click(await screen.findByTestId('add-sign-in-google'));
 
         // Only once the photo is on the node and the browser was asked to keep the key does the page leave.
@@ -458,8 +466,9 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         });
         Object.defineProperty(navigator, 'storage', { value: { persist: vi.fn(async () => true), persisted: vi.fn(async () => false) }, configurable: true });
         render(<WelcomePage onComplete={vi.fn()} />);
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByTestId('backup-words-only');
         fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
         fireEvent.click(await screen.findByTestId('add-sign-in-google'));
@@ -477,8 +486,9 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
             '/api/join/link/sso-nonce': () => json(200, { nonce: 'link-n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByTestId('backup-words-only');
         expect(within(screen.getByTestId('backup-add-sign-in')).queryByRole('button', { name: 'Add a sign-in as a second way back' })).toBeNull();
         fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in' }));
@@ -489,7 +499,37 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         expect(offered).not.toHaveTextContent(/locks a copy|second way back/);
     });
 
-    it('"Let\'s Begin!" still goes in without the sign-in: nothing is lost by changing their mind', async () => {
+    // Deciding review on #3333 (7c25e192): the providers open beside the tick box, which stays live, so the tick the
+    // member leaves with is their answer: kept as the page leaves for the provider, and counted once.
+    it('a tick made after the providers open is kept as the page leaves: the words on the account, counted once as words', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        const calls = stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+            '/api/profile/update': () => json(200, { success: true, profile: {} }),
+            '/api/join/link/sso-nonce': () => json(200, { nonce: 'link-n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null }),
+        });
+        Object.defineProperty(navigator, 'storage', { value: { persist: vi.fn(async () => true), persisted: vi.fn(async () => false) }, configurable: true });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
+        await screen.findByTestId('backup-words-only');
+        fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
+        await screen.findByTestId('add-sign-in-google');
+        // Opening the providers counted nothing: the member has not answered yet.
+        expect(calls.some((c) => c.path === '/api/funnel-event' && c.body?.event === 'protection_choice')).toBe(false);
+        fireEvent.click(screen.getByLabelText("I've written these words down somewhere safe"));
+        fireEvent.click(screen.getByTestId('add-sign-in-google'));
+
+        await waitFor(() => expect(loadPendingLink()).not.toBeNull());
+        await waitFor(() => expect(calls.filter((c) => c.path === '/api/members/preferences').map((c) => c.body.preferences)).toEqual([{ words_kept: true }]));
+        expect(calls.filter((c) => c.path === '/api/funnel-event' && c.body?.event === 'protection_choice').map((c) => c.body.variant))
+            .toEqual([oncePerPersonVariant('words')]);
+        expect(localStorage.getItem(seedViewedKey(identity.publicKey))).toBe('true');
+    });
+
+    it("the way back's Next still goes in without the sign-in: nothing is lost by changing their mind", async () => {
         const t0 = Date.now();
         await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
         const calls = stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } }, {
@@ -498,12 +538,13 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         });
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} />);
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByTestId('backup-words-only');
         fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
         await screen.findByTestId('add-sign-in-google');
-        fireEvent.click(screen.getByRole('button', { name: "Let's Begin! 🚀" }));
+        fireEvent.click(screen.getByTestId('backup-next'));
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
         expect(calls.find((c) => c.path === '/api/profile/update')?.body.avatar).toBe('bundled://bean-green');
         expect(loadPendingLink()).toBeNull();
@@ -522,9 +563,10 @@ describe('a join whose answer was lost (review 4106075404)', () => {
         render(<WelcomePage onComplete={onComplete} />);
 
         // Step 2, the photo, as after any join.
-        await screen.findByTestId('onboarding-stepper');
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByTestId('step-dots');
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         // Step 3: the words the member never saw.
         await screen.findByText(/Your Safety Backup/);
         for (const w of identity.mnemonic!) expect(screen.getAllByText(w).length).toBeGreaterThan(0);
@@ -677,12 +719,13 @@ describe('a join that went out is settled wherever the page lands, the door open
         render(<WelcomePage onComplete={onComplete} />);
 
         // Step 2, the photo, as after any join; never the invite page.
-        fireEvent.click(await screen.findByTitle('Green Bean'));
-        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        expect(screen.queryByTestId('front-door')).toBeNull();
         expect(probed(calls, identity.publicKey)).toBe(true);
         expect(await loadIdentity()).toMatchObject({ publicKey: identity.publicKey, mnemonic: identity.mnemonic });
         expect(await loadPendingJoin()).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByText(/Your Safety Backup/);
         for (const w of identity.mnemonic!) expect(screen.getAllByText(w).length).toBeGreaterThan(0);
         expect(calls.some((c) => c.path.startsWith('/api/join'))).toBe(false);
@@ -697,12 +740,12 @@ describe('a join that went out is settled wherever the page lands, the door open
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} />);
 
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         expect(probed(calls, identity.publicKey)).toBe(true);
         // Not a member and can't become one: kept as it was (only the node's refusal or the member lets it go).
         expect(await loadPendingJoin()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: sent.sentAt });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Restore existing identity' }));
+        fireEvent.click(screen.getByTestId('front-door-used-before'));
         fireEvent.click(await screen.findByRole('button', { name: /Recover with 12 Words/ }));
         fireEvent.change(await screen.findByLabelText('Recovery word 1'), { target: { value: words.join(' ') } });
         fireEvent.click(screen.getByRole('button', { name: 'Recover Identity' }));
@@ -716,7 +759,7 @@ describe('a join that went out is settled wherever the page lands, the door open
         render(<WelcomePage onComplete={vi.fn()} />);
 
         expect(await screen.findByTestId('join-held')).toHaveTextContent('may still go through');
-        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+        expect(screen.queryByTestId('front-door')).toBeNull();
         // The door is shut: nothing offers to join again.
         expect(screen.queryByRole('button', { name: /Finish joining/ })).toBeNull();
         expect(screen.queryByText(/No invite needed/)).toBeNull();
@@ -724,7 +767,7 @@ describe('a join that went out is settled wherever the page lands, the door open
 
         vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 10 * MIN);
         fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         expect((await loadPendingJoin())?.identity.publicKey).toBe(identity.publicKey);
     });
 
@@ -740,12 +783,12 @@ describe('a join that went out is settled wherever the page lands, the door open
         render(<WelcomePage onComplete={vi.fn()} />);
 
         await waitFor(() => expect(screen.getByTestId('join-checking')).toHaveTextContent("We can't tell yet whether you joined as Alice."));
-        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+        expect(screen.queryByTestId('front-door')).toBeNull();
         expect(screen.queryByRole('button', { name: '← Back' })).toBeNull();
 
         reachable = true;
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await screen.findByTitle('Green Bean');
+        await screen.findByText('Choose your look');
         expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
     });
 
@@ -756,12 +799,15 @@ describe('a join that went out is settled wherever the page lands, the door open
         });
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} />);
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         await seedSent(0);
 
-        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: 'BP-7K3X-9M2W' } });
-        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Rowan' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+        fireEvent.click(screen.getByTestId('front-door-invite'));
+        fireEvent.change(screen.getByLabelText('Invite link or code'), { target: { value: 'BP-7K3X-9M2W' } });
+        fireEvent.click(screen.getByTestId('your-invite-next'));
+        await screen.findByTestId('name-step');
+        fireEvent.change(screen.getByLabelText('What should we call you?'), { target: { value: 'Rowan' } });
+        fireEvent.click(screen.getByTestId('name-step-join'));
 
         expect(await screen.findByTestId('join-held')).toHaveTextContent('may still go through');
         expect(probed(calls, identity.publicKey)).toBe(true);
@@ -778,12 +824,15 @@ describe('one browser, one account on the welcome page too (review 4106962020, d
         });
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} />);
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         await importIdentity(identity); // another tab
 
-        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: 'BP-7K3X-9M2W' } });
-        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Rowan' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+        fireEvent.click(screen.getByTestId('front-door-invite'));
+        fireEvent.change(screen.getByLabelText('Invite link or code'), { target: { value: 'BP-7K3X-9M2W' } });
+        fireEvent.click(screen.getByTestId('your-invite-next'));
+        await screen.findByTestId('name-step');
+        fireEvent.change(screen.getByLabelText('What should we call you?'), { target: { value: 'Rowan' } });
+        fireEvent.click(screen.getByTestId('name-step-join'));
 
         expect(await screen.findByTestId('welcome-held')).toHaveTextContent('Alice');
         expect(await loadIdentity()).toMatchObject({ publicKey: identity.publicKey, mnemonic: identity.mnemonic });
@@ -797,10 +846,10 @@ describe('one browser, one account on the welcome page too (review 4106962020, d
         stubNode({ ...GLOBAL_OPEN, profile: 'local', features: { openJoin: false } });
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} />);
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         await importIdentity(identity); // another tab
 
-        fireEvent.click(screen.getByRole('button', { name: 'Restore existing identity' }));
+        fireEvent.click(screen.getByTestId('front-door-used-before'));
         fireEvent.click(await screen.findByRole('button', { name: /Recover with 12 Words/ }));
         fireEvent.change(await screen.findByLabelText('Recovery word 1'), { target: { value: generateMnemonic().join(' ') } });
         fireEvent.click(screen.getByRole('button', { name: 'Recover Identity' }));

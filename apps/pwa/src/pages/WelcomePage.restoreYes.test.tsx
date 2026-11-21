@@ -165,7 +165,7 @@ describe('the yes, joined with a restored account (slice Y0)', () => {
         fireEvent.click(screen.getByTestId('knock-join-name-go'));
 
         // Straight to the photo, joined with the restored key under the typed name.
-        fireEvent.click(await screen.findByTitle('Green Bean'));
+        await screen.findByText('Choose your look');
         const redeems = calls.filter(c => c.path === '/api/invite/redeem');
         expect(redeems).toHaveLength(1);
         expect(redeems[0].body).toMatchObject({ code: 'BP-KN0C-K1NV', publicKey: account.publicKey, callsign: 'CJ' });
@@ -173,23 +173,22 @@ describe('the yes, joined with a restored account (slice Y0)', () => {
         expect(isKnockKey(account)).toBe(false);
         expect(isEstablishedKey(account.publicKey)).toBe(false);
         expect(localStorage.getItem(seedViewedKey(account.publicKey))).toBe('true');
-        // Three steps, no Safety Backup.
-        const stepper = screen.getByTestId('onboarding-stepper');
-        expect(stepper.textContent).not.toContain('Safety Backup');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-        // How it works next, with the one line in the backup's place; the words are never shown again.
-        expect(await screen.findByTestId('tour-words-kept')).toHaveTextContent('Your 12 words stay the same: the ones you came back with.');
-        expect(screen.queryByTestId('backup-words')).toBeNull();
-        expect(screen.getByTestId('onboarding-stepper').textContent).not.toContain('Safety Backup');
-        // Back goes to the photo, not to a backup step.
-        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
-        expect(await screen.findByTitle('Green Bean')).toBeTruthy();
-        expect(screen.queryByTestId('backup-words')).toBeNull();
-        // And Back again, to the name: still three steps (review of b9a4a876: it said "Step 1 of 4" with Safety Backup).
-        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        // Two dots, no way back to keep: the words came back with the account (core join-steps.ts, wayBack off).
+        expect(screen.getByTestId('step-dots-steps')).toHaveTextContent('Step 2 of 2');
+        // ‹ to the name: still two (review of b9a4a876: it said "Step 1 of 4" with Safety Backup).
+        fireEvent.click(screen.getByTestId('step-dots-back'));
         await screen.findByText('✏️ Your name');
-        expect(screen.getByTestId('onboarding-stepper').textContent).not.toContain('Safety Backup');
+        expect(screen.getByTestId('step-dots-steps')).toHaveTextContent('Step 1 of 2');
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText('Choose your look');
+
+        // The photo is the last step: it goes in (How it Works left the join, W1), and the words are never shown again.
+        fireEvent.click(screen.getByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
+        await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+        expect(onComplete.mock.calls[0][0]).toMatchObject({ publicKey: account.publicKey });
+        expect(screen.queryByTestId('backup-words')).toBeNull();
     });
 
     it('a yes the community refuses after the name is typed: our words and Back to my request, never the form again', async () => {

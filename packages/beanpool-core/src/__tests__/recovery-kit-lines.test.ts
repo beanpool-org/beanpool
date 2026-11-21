@@ -164,7 +164,7 @@ describe('the kit steps name each button as the screen draws it', () => {
     it('the English steps quote the buttons below (so the languages are held to a list that is not empty)', () => {
         expect(SURFACES[0].steps.flatMap(quoted)).toEqual(["I've used BeanPool before", '🔑 Recover with 12 Words', 'Recover Identity']);
         expect(SURFACES[1].steps.flatMap(quoted)).toEqual([
-            'Already have BeanPool?', '🔑 Restore Existing Identity →', 'Use my 12 words', '🔑 Recover with 12 Words', 'Recover Identity',
+            'Already have BeanPool?', "I've used BeanPool before", 'Use my 12 words', '🔑 Recover with 12 Words', 'Recover Identity',
         ]);
     });
 

@@ -87,25 +87,26 @@ async function toThePhoto(info: unknown, areaAnswer: Handler = () => json(200, A
     });
     const onComplete = vi.fn();
     render(<WelcomePage onComplete={onComplete} />);
-    fireEvent.click(await screen.findByTitle('Green Bean'));
+    fireEvent.click(await screen.findByTestId('photo-step-choose'));
+    fireEvent.click(screen.getByTitle('Green Bean'));
     return { calls, onComplete };
 }
-const columns = () => Array.from(screen.getByTestId('onboarding-stepper').children).map((c) => (c.textContent ?? '').replace('✓', ''));
+/** The step bar's words for a screen reader (W1: dots, no labels on screen). */
+const steps = () => screen.getByTestId('step-dots-steps').textContent;
 const areaCalls = <T extends { path: string }>(calls: T[]) => calls.filter((c) => c.path === '/api/community/me/area');
 
 async function finishFromBackup(onComplete: ReturnType<typeof vi.fn>) {
     await screen.findByText(/Your Safety Backup/);
     fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-    fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
 }
 
 describe('Your Area at signup (S4)', () => {
-    it('five columns with the feature, Your Area after Your Photo; the step says the words of §3.2', async () => {
+    it('four dots with the feature, Your Area after Your Photo; the step says the words of §3.2', async () => {
         await toThePhoto(GLOBAL_BY_AREA);
-        expect(columns()).toEqual(['Sign in', 'Your Photo', 'Your Area', 'Safety Backup', 'How it Works']);
-        expect(screen.getByTestId('onboarding-stepper').style.gridTemplateColumns).toBe('repeat(5, minmax(0, 1fr))');
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        // The door's sign-in stands in for Your name (core join-steps.ts): photo 2 of 4, area 3 of 4, the words 4 of 4.
+        expect(steps()).toBe('Step 2 of 4');
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         expect(await screen.findByText(/Roughly where are you\?/)).toBeInTheDocument();
         const step = screen.getByTestId('area-step');
         expect(step).toHaveTextContent("The worldwide community shows you what's on offer near you: the nearest 500 listings within 250 km.");
@@ -115,40 +116,29 @@ describe('Your Area at signup (S4)', () => {
         expect(screen.getByRole('button', { name: /Use my location/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Type a town or suburb/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
+        expect(steps()).toBe('Step 3 of 4');
     });
 
-    it('below 360px wide, each column drops its label and the current step is named whole under the dots (review N5)', async () => {
+    it('below 360px wide the bar draws dots only, the count read once by a screen reader, never words that break (review N5, N10)', async () => {
         await toThePhoto(GLOBAL_BY_AREA);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await screen.findByText(/Roughly where are you\?/);
-        const stepper = screen.getByTestId('onboarding-stepper');
-        // Measured at 320px and 130% text in WelcomePage's wrappers: five columns of 29px break "Phot/o" and "Back/up".
-        for (const col of Array.from(stepper.children)) {
-            const label = col.querySelector(':scope > span') as HTMLElement;
-            expect(label.className.split(' ')).toContain('max-[359px]:hidden');
+        const bar = screen.getByTestId('step-dots');
+        // The labels that broke "Phot/o" and "Back/up" at 320 px are gone: the count is screen-reader text, the dots draw none.
+        expect(screen.getByTestId('step-dots-steps').className.split(' ')).toContain('sr-only');
+        for (const dot of [...screen.getAllByTestId('step-dots-on'), ...screen.getAllByTestId('step-dots-off')]) {
+            expect(dot.textContent).toBe('');
+            expect(dot.getAttribute('aria-hidden')).toBe('true');
         }
-        const current = screen.getByTestId('onboarding-stepper-current');
-        expect(current.className.split(' ')).toEqual(expect.arrayContaining(['hidden', 'max-[359px]:block']));
-        expect(current.textContent).toBe('Your Area · Step 3 of 5');
+        expect(screen.getAllByTestId('step-dots-on')).toHaveLength(3);
+        expect(screen.getAllByTestId('step-dots-off')).toHaveLength(1);
+        expect(bar.textContent).toBe('‹Step 3 of 4');
     });
 
-    it('the count under the dots never splits: a line too narrow breaks before the dot (review N10)', async () => {
-        await toThePhoto(GLOBAL_BY_AREA);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-        await screen.findByText(/Roughly where are you\?/);
-        // Measured in Chromium at 320px and 130% text in WelcomePage's wrappers: four columns gave "Safety Backup · Step
-        // 3 of" over "4"; with the count kept whole and the space outside it, "Safety Backup" over "· Step 3 of 4".
-        const current = screen.getByTestId('onboarding-stepper-current');
-        const count = current.querySelector('span') as HTMLElement;
-        expect(count.style.whiteSpace).toBe('nowrap');
-        expect(count.textContent).toBe('· Step 3 of 5');
-        expect(current.textContent).toBe('Your Area · Step 3 of 5');
-    });
-
-    it('four columns without the feature: the photo goes straight to the words, and the browser is never asked for a place', async () => {
+    it('three dots without the feature: the photo goes straight to the words, and the browser is never asked for a place', async () => {
         const { calls, onComplete } = await toThePhoto(GLOBAL_OPEN);
-        expect(columns()).toEqual(['Sign in', 'Your Photo', 'Safety Backup', 'How it Works']);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        expect(steps()).toBe('Step 2 of 3');
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         await finishFromBackup(onComplete);
         expect(screen.queryByText(/Roughly where are you\?/)).toBeNull();
         expect(areaCalls(calls)).toEqual([]);
@@ -157,7 +147,7 @@ describe('Your Area at signup (S4)', () => {
 
     it('Skip writes nothing and asks nothing: no request, no position, and none at the end either', async () => {
         const { calls, onComplete } = await toThePhoto(GLOBAL_BY_AREA);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         const before = calls.length;
         const stored = JSON.stringify({ ...localStorage });
         fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }));
@@ -170,7 +160,7 @@ describe('Your Area at signup (S4)', () => {
 
     it('Use my location rounds to 0.1° before the request: the precise position is never sent', async () => {
         const { calls, onComplete } = await toThePhoto(GLOBAL_BY_AREA);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Use my location/ }));
         await screen.findByText(/Your Safety Backup/);
         expect(geo.getCurrentPosition).toHaveBeenCalledTimes(1);
@@ -183,7 +173,7 @@ describe('Your Area at signup (S4)', () => {
 
     it('a typed town is rounded the same way; its name stays in this browser', async () => {
         const { calls } = await toThePhoto(GLOBAL_BY_AREA);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Type a town or suburb/ }));
         fireEvent.click(screen.getByTestId('pick-byron'));
         await screen.findByText(/Your Safety Backup/);
@@ -195,7 +185,7 @@ describe('Your Area at signup (S4)', () => {
     it('location refused: one line, no request, still on the step; Skip still goes on', async () => {
         position = { ok: false, code: 1 };
         const { calls } = await toThePhoto(GLOBAL_BY_AREA);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Use my location/ }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Location is off for this site. Type a town instead, or skip for now.');
         expect(areaCalls(calls)).toEqual([]);
@@ -205,11 +195,11 @@ describe('Your Area at signup (S4)', () => {
 
     it('a refused save says so and never pretends; Back returns to the photo', async () => {
         await toThePhoto(GLOBAL_BY_AREA, () => json(403, { error: 'Only a member of this community can set an area here' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Use my location/ }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Only a member of this community can set an area here');
         expect(screen.queryByText(/Your Safety Backup/)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        fireEvent.click(screen.getByTestId('step-dots-back'));
         expect(await screen.findByText(/Choose your look/)).toBeInTheDocument();
     });
 });
@@ -221,7 +211,7 @@ describe('a reading or a save that never answers (review B2)', () => {
         let late: PositionCallback | null = null;
         geo.getCurrentPosition.mockImplementation((ok: PositionCallback) => { late = ok; });
         const { calls, onComplete } = await toThePhoto(GLOBAL_BY_AREA);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Use my location/ }));
         const skip = screen.getByRole('button', { name: 'Skip for now' }) as HTMLButtonElement;
         expect(skip.disabled).toBe(false);
@@ -239,9 +229,9 @@ describe('a reading or a save that never answers (review B2)', () => {
         let late: PositionCallback | null = null;
         geo.getCurrentPosition.mockImplementation((ok: PositionCallback) => { late = ok; });
         const { calls } = await toThePhoto(GLOBAL_BY_AREA);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Use my location/ }));
-        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        fireEvent.click(screen.getByTestId('step-dots-back'));
         await screen.findByText(/Choose your look/);
         late!({ coords: { latitude: -28.647412, longitude: 153.612031 } } as GeolocationPosition);
         await new Promise((r) => setTimeout(r, 50));
@@ -256,7 +246,7 @@ describe('a reading or a save that never answers (review B2)', () => {
             signal = init.signal;
             return new Promise<Response>((r) => { release = r; }) as unknown as Response;
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Type a town or suburb/ }));
         fireEvent.click(screen.getByTestId('pick-byron'));
         await waitFor(() => expect(areaCalls(calls)).toHaveLength(1));
@@ -297,7 +287,7 @@ describe('a town picked while a reading or a save waits: the newest choice wins 
         geo.getCurrentPosition.mockImplementation((ok: PositionCallback) => { late = ok; });
         const node = heldPosts();
         const { calls, onComplete } = await toThePhoto(GLOBAL_BY_AREA, node.handler);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Type a town or suburb/ }));
         fireEvent.click(screen.getByRole('button', { name: /Use my location/ }));
         fireEvent.click(screen.getByTestId('pick-byron'));
@@ -316,7 +306,7 @@ describe('a town picked while a reading or a save waits: the newest choice wins 
         position = { ok: true, lat: -33.86, lng: 151.21 };
         const node = heldPosts();
         const { calls } = await toThePhoto(GLOBAL_BY_AREA, node.handler);
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         fireEvent.click(await screen.findByRole('button', { name: /Type a town or suburb/ }));
         fireEvent.click(screen.getByRole('button', { name: /Use my location/ }));
         await waitFor(() => expect(areaCalls(calls)).toHaveLength(1));

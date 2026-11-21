@@ -21,7 +21,7 @@ const flat = (rel: string) => page(rel).replace(/\s+/g, ' ');
 describe("the guide's joining page: the phone's three steps", () => {
     const joining = flat('getting-started/joining.md');
 
-    it('the phone has dots for the name, Your Photo and the way back, the way back last; How it Works only in a web browser', () => {
+    it('the phone has dots for the name, Your Photo and the way back, the way back last; the web the same since W1 (Safety Backup there), with no How it Works', () => {
         // Slice S3: the labelled bar became dots and ‹ (components/welcome/StepDots.tsx); the steps and their order are the same.
         // Slice S4: the way back is titled "Keep a way back in" on the phone (no screen says "Safety Backup" there any more),
         // skipped where a way back is already kept, and its ‹ is said as it is built (the Go back? question after an invite).
@@ -38,11 +38,16 @@ describe("the guide's joining page: the phone's three steps", () => {
         expect(joining).not.toContain('one dot each for your name, your photo and **Safety Backup**');
         expect(joining).not.toContain('**Rather write down 12 words?**');
         expect(joining).not.toContain("tap **Let's Begin!** here");
-        expect(joining).toContain('**Failed to register identity** (after you tap **Join**; in a web browser, **Next**)');
+        // Since W1 the web's Your name says Join too (WelcomePage.tsx), so the button is named once, for both apps.
+        expect(joining).toContain('**Failed to register identity** (after you tap **Join**)');
+        expect(joining).not.toContain('in a web browser, **Next**)');
         expect(joining).not.toContain('the bar at the top shows **Your Name**');
         expect(joining).not.toContain('**Restore Existing Identity**');
         expect(joining).not.toContain('The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.');
-        expect(joining).toContain('- **How it Works** (in a web browser only):');
+        // Slice W1 (#3333): the web's join has the same dots (apps/pwa/src/components/StepDots.tsx, core join-steps.ts) and
+        // How it Works left it, so the step the page kept "in a web browser only" until then is gone.
+        expect(joining).toContain('A web browser shows the same dots and **‹**, with **Safety Backup** last there, as it has no notifications step');
+        expect(joining).not.toContain('**How it Works**');
     });
 
     // Slice N1j (amend2 §4, §6; Marty, 21 Nov: "a soft ask (which opens the hard ask) in the onboard"): the join's last step
@@ -52,9 +57,58 @@ describe("the guide's joining page: the phone's three steps", () => {
         expect(joining).toContain('**First steps** on **Home** has **Hear when someone answers you**');
         expect(joining).toContain('**BeanPool never emails or texts you. Notifications are the only way it can reach you.**');
         expect(joining).toContain("**Turn on notifications** brings your phone's own question; **Your phone will ask you to confirm.** says so under it. **Later** carries on and is not final");
-        expect(joining).toContain('This is the only step of joining that asks your phone for anything.');
+        // Review of #3335, finding 4: the photo step's camera asks too, so the page says notifications, not "anything".
+        expect(joining).toContain('This is the only step of joining that asks about notifications.');
+        expect(joining).not.toContain('This is the only step of joining that asks your phone for anything.');
+        // Amend3 §1: a closed pop-up is a Later.
+        expect(joining).toContain('Closing your phone\'s question without answering it is the same as **Later**.');
         expect(joining).not.toContain('Joining asks nothing about notifications');
+        // Slice N2a (#3332): no pop-up at the first message or request to join; a named line's Tell me, as notifications.md says.
         expect(joining).not.toContain('or once when you send your first message or request to join');
+        expect(joining).toContain('or **Tell me** on a one-line offer such as **Hear when Asha answers.** under your first message.');
+    });
+});
+
+// Slice W1 (#3333, deciding review on 0c8dd9e4): the web's join opens on the phone's front door (apps/pwa/src/components/
+// FrontDoor.tsx), with Your invite, Your name and dots, and no tour. The pages say what the web draws now, and none of the
+// screens it replaced.
+describe("the guide's pages on joining in a browser: the web's front door and dots (W1)", () => {
+    const joining = flat('getting-started/joining.md');
+    const webApp = flat('getting-started/web-app.md');
+    const communities = flat('getting-started/communities.md');
+    const recovery = flat('settings/recovery.md');
+
+    it("names none of the web join's removed screens or buttons", () => {
+        const gone = [
+            '**Used BeanPool before?**', "**I'm New Here**", "**I'm Already a Member →**", '**Restore Existing Identity**',
+            '**Create Identity & Join →**', '**How it Works**', 'a short tour', '(in a web browser, **← Back**)', '(in the web app, **Next**)',
+        ];
+        // The community's card (routes/community-card.ts), at a community's bare address, keeps its own doors: the guide names them.
+        for (const door of ['**Ask to join**', '**I have an invite**', '**Already a member**']) expect(communities).toContain(door);
+        for (const [name, text] of Object.entries({ joining, webApp, communities, recovery })) {
+            for (const label of gone) expect(`${name}: ${text.includes(label) ? label : ''}`).toBe(`${name}: `);
+        }
+    });
+
+    it("the front door's buttons, the same on the phone and the web", () => {
+        expect(joining).toContain("The first screen has three buttons, in the phone app and in the web app (the community's address followed by /app; the address alone shows the community's card");
+        expect(joining).toContain('In a web browser, an invite link opens straight at your name.');
+        // A community's bare address answers with its card (routes/community-card.ts), not the web app's front door.
+        // The page's example address is one of ours: matched by its shape, so no community is named here (no_node_names).
+        expect(communities).toMatch(/A community's own address \(such as [a-z0-9-]+\.beanpool\.org\) shows its card to anyone who isn't a member/);
+        expect(recovery).toContain("On the first screen, tap **I've used BeanPool before**. In a web browser, tap the same button, or **Already have BeanPool?** where the page shows that instead.");
+        expect(joining).toContain('In a web browser, **Your invite** opens straight away, with a box for the invite link or code and **Next →**, but no **Scan a QR code**.');
+    });
+
+    it("the web's steps: dots and ‹, Next → on Safety Backup goes in, a sign-in chosen right there", () => {
+        expect(webApp).toContain('The dots at the top show the steps and where you are: one dot each for your name, your photo, your area and **Safety Backup**.');
+        expect(webApp).toContain('On **Safety Backup**, **Next →** takes you in.');
+        expect(webApp).toContain('tap it and choose the sign-in right there.');
+        expect(joining).toContain('in a web browser, **Next →** here takes you to **Home**');
+    });
+
+    it("the way back with a sign-in on a local community's web address is the front door's button", () => {
+        expect(webApp).toContain("On your own local community's web address, tap **Already have BeanPool?** or, where the page shows it instead, **I've used BeanPool before**, then **Recover with Social Sign-In**.");
     });
 });
 

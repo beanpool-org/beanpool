@@ -163,13 +163,10 @@ async function shot(page, name, theme) {
 
 const keptAtGlobal = (page) => page.evaluate(() => localStorage.getItem('beanpool_listing_after_join'));
 
-/** Riverside's page after the handoff's Join: the photo step, then the tour's last button, as a member taps them. */
+/** Riverside's page after the handoff's Join: the photo step, its last (W1: no way back to keep, How it Works gone). */
 async function throughTheSteps(popup, lang) {
-    await popup.getByText(say(lang, '📸 Choose your look')).waitFor({ timeout: 60_000 });
-    await popup.getByRole('button', { name: say(lang, 'Next →'), exact: true }).first().click();
-    const begin = popup.getByRole('button', { name: say(lang, "Let's Begin! 🚀") });
-    await begin.waitFor({ timeout: 30_000 });
-    await begin.click();
+    await popup.getByText(say(lang, 'Choose your look')).waitFor({ timeout: 60_000 });
+    await popup.getByRole('button', { name: say(lang, 'Skip for now'), exact: true }).first().click();
 }
 
 try {

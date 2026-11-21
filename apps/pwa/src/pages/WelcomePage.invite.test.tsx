@@ -15,6 +15,7 @@ import { openWithNodeName } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 import { inviteShareText } from '@beanpool/core';
+import { frontDoor, inviteThenName, joinWithInvite, photoNext, pressJoin, typeInvite, typeName } from './welcome-join.test-support';
 
 type Call = { path: string; body: any; headers: Record<string, string> };
 type Handler = (body: any, call: Call) => Response | Promise<Response>;
@@ -41,14 +42,12 @@ function stubNode(info: unknown, handlers: Record<string, Handler> = {}) {
     return { calls, redeems: () => calls.filter((c) => c.path === '/api/invite/redeem') };
 }
 
+/** The front door, Your invite with the code, Your name, Join (W1). */
 async function submitInvite(name = 'Rowan') {
-    await screen.findByText(/Join with Invite Code/);
-    fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: CODE } });
-    fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: name } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+    await joinWithInvite(CODE, name);
 }
 
-const tryAgain = () => fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+const tryAgain = () => pressJoin();
 
 let idb: MemoryIndexedDB;
 const peekPending = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
@@ -79,7 +78,7 @@ describe('an invite join saves its key only once the node has taken the invite (
         await submitInvite();
 
         expect(await screen.findByText('Invalid invite code')).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByTestId('name-step-join')).not.toBeDisabled());
         expect(await loadIdentity()).toBeNull();
         expect(peekPending()).toBeUndefined();
         expect(peekInviteSent()).toBeUndefined();
@@ -108,7 +107,7 @@ describe('an invite join saves its key only once the node has taken the invite (
         await submitInvite();
 
         expect(await screen.findByText("Can't reach the community right now. Try again in a minute.")).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByTestId('name-step-join')).not.toBeDisabled());
         expect(await loadIdentity()).toBeNull();
 
         tryAgain();
@@ -142,13 +141,14 @@ describe('an invite join saves its key only once the node has taken the invite (
         await submitInvite();
 
         expect(await screen.findByText("Can't reach the community right now. Try again in a minute.")).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByTestId('name-step-join')).not.toBeDisabled());
         expect(await loadIdentity()).toBeNull();
 
         tryAgain();
         await screen.findByText(/Choose your look/);
+        // Your name's greeting reads the code once as it opens (W1; a read, never spent), then one pre-flight per Join.
         const checks = node.calls.filter((c) => c.path.startsWith('/api/invite/check'));
-        expect(checks).toHaveLength(2);
+        expect(checks).toHaveLength(3);
         const [first, second] = node.redeems();
         expect(node.redeems()).toHaveLength(2);
         expect(second.body.publicKey).toBe(first.body.publicKey);
@@ -157,10 +157,10 @@ describe('an invite join saves its key only once the node has taken the invite (
     });
 
     it('a retry after the code was used by another key: the redeem refuses it, the node\'s words are shown, and nothing is saved', async () => {
-        let checks = 0;
         let n = 0;
         const node = stubNode(LOCAL, {
-            '/api/invite/check': () => json(200, ++checks === 1 ? { valid: true } : { valid: false, reason: 'used' }),
+            // Good until the first redeem went out (the greeting's read and the first pre-flight), used after it.
+            '/api/invite/check': () => json(200, n === 0 ? { valid: true } : { valid: false, reason: 'used' }),
             '/api/invite/redeem': () => {
                 if (++n === 1) throw new TypeError('Failed to fetch');
                 return json(400, { error: 'This invite has already been used' });
@@ -169,7 +169,7 @@ describe('an invite join saves its key only once the node has taken the invite (
         render(<WelcomePage onComplete={vi.fn()} />);
         await submitInvite();
         expect(await screen.findByText("Can't reach the community right now. Try again in a minute.")).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByTestId('name-step-join')).not.toBeDisabled());
 
         tryAgain();
         expect(await screen.findByText('This invite has already been used')).toBeInTheDocument();
@@ -318,11 +318,11 @@ describe('← Back on the photo step changes the name on the same account (card 
         return { ...node, state, updates, nameChecks };
     }
 
-    const nameField = () => screen.getByLabelText('Your Callsign (Name)');
+    const nameField = () => screen.getByLabelText('What should we call you?');
 
     /** From the photo step: ← Back, then `name` in the field, then Next. */
     async function backAndRename(name: string) {
-        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        fireEvent.click(screen.getByTestId('step-dots-back'));
         await waitFor(() => expect(nameField()).toHaveValue('Rowan'));
         fireEvent.change(nameField(), { target: { value: name } });
         fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
@@ -337,12 +337,13 @@ describe('← Back on the photo step changes the name on the same account (card 
         const saved = (await loadIdentity())!;
         expect(saved).toMatchObject({ publicKey: node.redeems()[0].body.publicKey, callsign: 'Rowan' });
 
-        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        fireEvent.click(screen.getByTestId('step-dots-back'));
         await waitFor(() => expect(nameField()).toHaveValue('Rowan'));
         // The name alone, on this account: no invite to type again, and no way off to another account from here.
-        expect(screen.queryByLabelText('Invite Code')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Create Identity & Join →' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Restore existing identity' })).toBeNull();
+        expect(screen.queryByLabelText('Invite link or code')).toBeNull();
+        expect(screen.queryByTestId('name-step-join')).toBeNull();
+        expect(screen.queryByTestId('invite-greeting-change')).toBeNull();
+        expect(screen.queryByTestId('front-door-used-before')).toBeNull();
         expect(screen.queryByRole('button', { name: '← Back to Home' })).toBeNull();
         expect(screen.queryByRole('button', { name: '← Back to the listings' })).toBeNull();
 
@@ -367,7 +368,6 @@ describe('← Back on the photo step changes the name on the same account (card 
         await expectWordsOf(saved);
         expect(onComplete).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-        fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
         expect(onComplete.mock.calls[0][0]).toMatchObject({ publicKey: saved.publicKey, callsign: 'Robin' });
         expect(node.redeems()).toHaveLength(1);
@@ -499,7 +499,6 @@ describe('← Back on the photo step changes the name on the same account (card 
         expect(node.state.members.get(saved.publicKey)).toBe(picked);
         await expectWordsOf(saved);
         fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-        fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
         const opened = onComplete.mock.calls[0][0] as BeanPoolIdentity;
         expect(opened).toMatchObject({ publicKey: saved.publicKey, callsign: picked });
@@ -561,7 +560,6 @@ describe('← Back on the photo step changes the name on the same account (card 
 
         await expectWordsOf(saved);
         fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-        fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
         const opened = onComplete.mock.calls[0][0] as BeanPoolIdentity;
         expect(opened).toEqual(saved);
@@ -647,9 +645,9 @@ describe('← Back on the photo step changes the name on the same account (card 
             const saved = (await loadIdentity())!;
             expect(saved).toMatchObject({ publicKey: redeem.body.publicKey, callsign: 'Sam2', mnemonic: expect.any(Array) });
             expect(screen.getByText('Sam2')).toBeInTheDocument();
-            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Sam2 here: Sam was taken. Tap ← Back to change it.");
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Sam2 here: Sam was taken. Tap ‹ to change it.");
 
-            fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+            fireEvent.click(screen.getByTestId('step-dots-back'));
             await waitFor(() => expect(nameField()).toHaveValue('Sam2'));
             expect(screen.getByText(/This is the name people here see/)).toBeInTheDocument();
             fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
@@ -658,7 +656,6 @@ describe('← Back on the photo step changes the name on the same account (card 
 
             await expectWordsOf(saved);
             fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
-            fireEvent.click(await screen.findByRole('button', { name: "Let's Begin! 🚀" }));
             await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
             const opened = onComplete.mock.calls[0][0] as BeanPoolIdentity;
             expect(opened).toEqual(saved);
@@ -674,17 +671,18 @@ describe('← Back on the photo step changes the name on the same account (card 
             render(<WelcomePage onComplete={vi.fn()} />);
             // The form takes no more than the node keeps. A longer name can still reach the node (a key kept from before
             // this, or a script), set here past the field's cut: the node's answer is what counts.
-            await screen.findByText(/Join with Invite Code/);
-            expect(screen.getByLabelText('Your Callsign (Name)')).toHaveAttribute('maxlength', '20');
-            await submitInvite('Rowan of the Valley Farm Wren');
+            await inviteThenName(CODE);
+            expect(screen.getByLabelText('What should we call you?')).toHaveAttribute('maxlength', '20');
+            typeName('Rowan of the Valley Farm Wren');
+            pressJoin();
             await screen.findByText(/Choose your look/);
             const key = node.redeems()[0].body.publicKey;
             expect(node.state.members.get(key)).toBe('Rowan of the Valley');
             expect(await loadIdentity()).toMatchObject({ publicKey: key, callsign: 'Rowan of the Valley' });
             expect(screen.getByText('Rowan of the Valley')).toBeInTheDocument();
-            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Rowan of the Valley here: a name here keeps 20 characters. Tap ← Back to change it.");
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Rowan of the Valley here: a name here keeps 20 characters. Tap ‹ to change it.");
 
-            fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+            fireEvent.click(screen.getByTestId('step-dots-back'));
             await waitFor(() => expect(nameField()).toHaveValue('Rowan of the Valley'));
             fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
             await screen.findByText(/Choose your look/);
@@ -698,17 +696,17 @@ describe('← Back on the photo step changes the name on the same account (card 
             render(<WelcomePage onComplete={vi.fn()} />);
             await submitInvite('Sam');
             expect(await screen.findByText("Can't reach the community right now. Try again in a minute.")).toBeInTheDocument();
-            await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+            await waitFor(() => expect(screen.getByTestId('name-step-join')).not.toBeDisabled());
             const key = node.redeems()[0].body.publicKey;
             expect(node.state.members.get(key)).toBe('Sam2');
 
-            fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Samuel' } });
+            fireEvent.change(screen.getByLabelText('What should we call you?'), { target: { value: 'Samuel' } });
             tryAgain();
             await screen.findByText(/Choose your look/);
             expect(node.redeems().map((r) => [r.body.publicKey, r.body.callsign])).toEqual([[key, 'Sam'], [key, 'Samuel']]);
             expect(await loadIdentity()).toMatchObject({ publicKey: key, callsign: 'Sam2' });
             expect(screen.getByText('Sam2')).toBeInTheDocument();
-            expect(screen.getByTestId('joined-as-note')).toHaveTextContent('You joined as Sam2 on an earlier try. Tap ← Back to change it.');
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent('You joined as Sam2 on an earlier try. Tap ‹ to change it.');
         });
 
         it('an answer naming another key changes nothing here: this browser keeps the name it sent, with no note', async () => {
@@ -837,7 +835,7 @@ describe('a join sent from another tab while the invite is at the node (#1171 de
         // That join can no longer land: back to the invite page, and the same key goes in.
         vi.spyOn(Date, 'now').mockReturnValue(t0 + 12 * MIN);
         fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('name-step');
         tryAgain();
         await screen.findByText(/Choose your look/);
         const [first, second] = node.redeems();
@@ -895,7 +893,7 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
     async function sendAndLoseTheAnswer() {
         await submitInvite();
         expect(await screen.findByText(/Can't reach the community right now/)).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByTestId('name-step-join')).not.toBeDisabled());
     }
 
     /** The tab is gone (a reload, a closed tab, old Android discarding it), and this browser opens the page again. */
@@ -923,9 +921,10 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
         expect(node.redeems()).toHaveLength(1);
         expect(screen.queryByText(/already been used/)).toBeNull();
 
-        // Its 12 words: the only copy of this member's key, shown before the tour.
+        // Its 12 words: the only copy of this member's key, shown before the app.
+        fireEvent.click(screen.getByTestId('photo-step-choose'));
         fireEvent.click(screen.getByTitle('Green Bean'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        photoNext();
         const words = await screen.findByTestId('backup-words');
         // In order, as they are to be written down (a phrase can hold the same word twice).
         expect(Array.from(words.children).map((c) => c.textContent)).toEqual(saved!.mnemonic!.map((w, i) => `${i + 1}. ${w}`));
@@ -939,7 +938,7 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
         render(<WelcomePage onComplete={vi.fn()} />);
         await submitInvite();
         expect(await screen.findByText('Invalid invite code')).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByTestId('name-step-join')).not.toBeDisabled());
         expect(await loadIdentity()).toBeNull();
         expect(peekInviteSent()).toBeUndefined();
         // The 400 alone didn't let the key go: the node was asked once, signed by the key, and said not a member (4112075324).
@@ -948,7 +947,7 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
         expect(probes()[0].headers['X-Public-Key']).toBe(node.redeems()[0].body.publicKey);
 
         reopen();
-        await screen.findByText(/Join with Invite Code/);
+        await frontDoor();
         expect(screen.queryByRole('heading', { name: 'Finish joining' })).toBeNull();
         // Nothing kept, so the reload asks the node nothing.
         expect(probes()).toHaveLength(1);
@@ -967,7 +966,7 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
         expect(await screen.findByRole('heading', { name: 'Finish joining' })).toBeInTheDocument();
         expect(screen.getByTestId('invite-sent-unreachable')).toHaveTextContent('Rowan');
         expect(screen.queryByText(/already been used/)).toBeNull();
-        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+        expect(screen.queryByTestId('front-door')).toBeNull();
         expect(await loadIdentity()).toBeNull();
         expect(peekInviteSent()?.identity.publicKey).toBe(key);
 
@@ -1042,12 +1041,11 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
         const key = node.redeems()[0].body.publicKey;
 
         reopen();
-        await screen.findByText(/Join with Invite Code/);
+        await frontDoor();
         expect(node.probes()).toEqual([key]);
         expect(peekInviteSent()?.identity.publicKey).toBe(key);
-        expect(screen.getByLabelText('Your Callsign (Name)')).toHaveValue('Rowan');
-
-        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: CODE } });
+        await inviteThenName(CODE);
+        expect(screen.getByLabelText('What should we call you?')).toHaveValue('Rowan');
         tryAgain();
         await screen.findByText(/Choose your look/);
         expect(node.redeems().map((r) => r.body.publicKey)).toEqual([key, key]);
@@ -1058,7 +1056,7 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
     it("another tab's invite key is on disk, unsettled: this page sends nothing with a key of its own, asks about that one, and finishes it", async () => {
         const node = inviteNode();
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
+        await frontDoor();
         // The other tab sent its key, and the node took it; that tab is gone.
         const theirs = await generateIdentity('Bea');
         await markInviteSent(theirs, 'their-hash', Date.now());
@@ -1083,7 +1081,7 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
 
         vi.spyOn(Date, 'now').mockReturnValue(t0 + 60 * MIN);
         reopen();
-        await screen.findByText(/Join with Invite Code/);
+        await frontDoor();
         await waitFor(() => expect(peekInviteSent()).toBeUndefined());
         expect(node.probes()).toEqual([key]);
         expect(await loadIdentity()).toBeNull();
@@ -1092,8 +1090,9 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
 
 /** On from the photo step: the 12 words shown are `saved`'s, in order. */
 async function expectWordsOf(saved: BeanPoolIdentity) {
+    fireEvent.click(screen.getByTestId('photo-step-choose'));
     fireEvent.click(screen.getByTitle('Green Bean'));
-    fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+    photoNext();
     const words = await screen.findByTestId('backup-words');
     expect(Array.from(words.children).map((c) => c.textContent)).toEqual(saved.mnemonic!.map((w, i) => `${i + 1}. ${w}`));
 }
@@ -1132,10 +1131,7 @@ describe("a redeem's 400 lets the kept key go only once the node says it is not 
     }
 
     async function submitTicket(name = 'Rowan') {
-        await screen.findByText(/Join with Invite Code/);
-        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: TICKET } });
-        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: name } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+        await joinWithInvite(TICKET, name);
     }
 
     it("a ticket's 400 that came after the node wrote the member: the node is asked with the key, says member, and the key is saved with its 12 words", async () => {
@@ -1164,7 +1160,7 @@ describe("a redeem's 400 lets the kept key go only once the node says it is not 
         await submitTicket();
 
         expect(await screen.findByText('Malformed or broken offline ticket payload')).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByTestId('name-step-join')).not.toBeDisabled());
         const [redeem] = node.redeems();
         expect(await loadIdentity()).toBeNull();
         expect(peekInviteSent()?.identity.publicKey).toBe(redeem.body.publicKey);
@@ -1213,16 +1209,14 @@ describe('an offline ticket gets past the pre-flight (4112846555)', () => {
             '/api/invite/redeem-offline': () => json(200, { success: true, member: {} }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
-        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: TICKET } });
-        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Rowan' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+        await joinWithInvite(TICKET, 'Rowan');
 
+        // The greeting's read as Your name opens, then the pre-flight: both with the ticket, BP- and all.
         const checks = () => node.calls.filter((c) => c.path.startsWith('/api/invite/check'));
-        await waitFor(() => expect(checks()).toHaveLength(1));
-        expect(checks().map(codeOf)).toEqual([TICKET]);
+        await waitFor(() => expect(checks()).toHaveLength(2));
+        expect(checks().map(codeOf)).toEqual([TICKET, TICKET]);
         await screen.findByText(/Choose your look/);
-        expect(checks()).toHaveLength(1);
+        expect(checks()).toHaveLength(2);
         const redeems = node.calls.filter((c) => c.path === '/api/invite/redeem-offline');
         expect(redeems.map((c) => c.body.ticketB64)).toEqual([TICKET.slice(3)]);
         expect(screen.queryByText(/wasn't recognised/)).toBeNull();
@@ -1388,15 +1382,18 @@ describe('a pasted invite names its community only while the field holds what it
     const NOT_RECOGNISED = "That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one.";
 
     async function pasteThenSubmit(typedAfter: string[]) {
-        const node = stubNode(LOCAL, { '/api/invite/check': () => json(200, { valid: false, reason: 'invalid' }) });
+        // The real check carries this community's name for every code, a refused one too (routes/community.ts /api/invite/check).
+        const node = stubNode(LOCAL, { '/api/invite/check': () => json(200, { valid: false, reason: 'invalid', communityName: 'Riverside Commons' }) });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
-        const field = screen.getByLabelText('Invite Code');
-        fireEvent.change(field, { target: { value: X_MESSAGE } });
+        fireEvent.click(await screen.findByTestId('front-door-invite'));
+        const field = screen.getByLabelText('Invite link or code');
+        typeInvite(X_MESSAGE);
         expect(field).toHaveValue('INV-K7Q2-BSXA');
         // Select all and type over it: one keystroke at a time, so the field is never empty.
-        for (const value of typedAfter) fireEvent.change(field, { target: { value } });
-        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Rowan' } });
+        for (const value of typedAfter) typeInvite(value);
+        fireEvent.click(screen.getByTestId('your-invite-next'));
+        await screen.findByTestId('name-step');
+        typeName('Rowan');
         tryAgain();
         await waitFor(() => expect(node.calls.some((c) => c.path.startsWith('/api/invite/check'))).toBe(true));
         return node;
@@ -1406,6 +1403,9 @@ describe('a pasted invite names its community only while the field holds what it
         const node = await pasteThenSubmit([]);
         expect(await screen.findByText(ELSEWHERE)).toBeInTheDocument();
         expect(node.redeems()).toHaveLength(0);
+        // Your name's band never greeted it with this community's name: a code the check refuses is "You're invited" alone
+        // (deciding review on #3333, 7c25e192: it said "You're invited to Riverside Commons" for the other community's invite).
+        expect(screen.getByTestId('invite-greeting').querySelector('h3')).toHaveTextContent(/^You're invited$/);
     });
 
     it('typed over after the paste, the code is the typed one, and a refusal is "not recognised", never the earlier paste\'s community', async () => {

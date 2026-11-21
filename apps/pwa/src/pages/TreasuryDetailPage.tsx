@@ -35,6 +35,7 @@ import { ReportModal } from '../components/ReportModal';
 import { PostPhotoPicker, MAX_POST_PHOTOS } from '../components/PostPhotoPicker';
 import { TagPicker } from '../components/TagPicker';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
+import { afterBlockWords } from '../lib/blocked-here';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 const EnterpriseLocationPicker = lazy(() => import('../components/EnterpriseLocationPicker').then(m => ({ default: m.EnterpriseLocationPicker })));
 import { Sentence } from '../components/Sentence';
@@ -1064,7 +1065,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             await blockUser(pubkey, identity.publicKey, 'Blocked from the enterprise page');
             setIsBlocked(true);
             setShowMoreMenu(false);
-            alert(t('{name} has been blocked and removed from your feed.', { name }));
+            // Where this block holds, and how to hold it everywhere (slice S7b, lib/blocked-here.ts).
+            alert(await afterBlockWords(t('{name} has been blocked and removed from your feed.', { name })));
         } catch (e: any) {
             alert(e?.message || t('Failed to block user. Please try again.'));
         } finally {

@@ -17,6 +17,7 @@ import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } f
 import { keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
 import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
+import { afterBlockWords } from '../lib/blocked-here';
 import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { marked, readsOwn, useFeatureMode } from '../lib/features';
@@ -132,7 +133,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             setIsBlocking(true);
             await blockUser(pubkey, identity.publicKey, 'Abusive user reported via Trust Profile');
             setIsBlocked(true);
-            alert(t('{name} has been blocked and removed from your feed.', { name: targetName }));
+            // Where this block holds, and how to hold it everywhere (slice S7b, lib/blocked-here.ts).
+            alert(await afterBlockWords(t('{name} has been blocked and removed from your feed.', { name: targetName })));
         } catch (e: any) {
             alert(e?.message || t('Failed to block user. Please try again.'));
         } finally {

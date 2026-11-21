@@ -248,6 +248,22 @@ describe('KeeperProtectionPanel, VR0: a build without a key vault draws none of 
     });
 });
 
+// The join's way back (onboarding S4): "Link a sign-in" opens the sign-in group alone in a build without a vault too, never the
+// "primary recovery" heading and its sentence again; covered, or with no words, it draws as before.
+describe('KeeperProtectionPanel rowAlone (the join\'s way back), in a build without a key vault', () => {
+    it('the sign-in group alone where no sign-in covers the account and the phone has the words; else as before', () => {
+        const alone = textOf(render(React.createElement(KeeperProtectionPanel, { protection: WORDS_ONLY, hasWords: true, onProtectSso: vi.fn(), rowAlone: true })));
+        expect(alone).not.toContain('Your 12 words are your primary recovery');
+        expect(alone).toContain('Sign-In Recovery Providers (1-of-N)');
+        expect(alone).toContain(COMMUNITY_SSO_GROUP_NOTE);
+        for (const [protection, hasWords] of [[COVERED, true], [COVERED, false], [WORDS_ONLY, false]] as const) {
+            const plain = textOf(render(React.createElement(KeeperProtectionPanel, { protection, hasWords, onProtectSso: vi.fn() })));
+            const withIt = textOf(render(React.createElement(KeeperProtectionPanel, { protection, hasWords, onProtectSso: vi.fn(), rowAlone: true })));
+            expect(withIt).toBe(plain);
+        }
+    });
+});
+
 describe('NoWordsNotice', () => {
     it('way back: the one line, and a way on to Account Protection', () => {
         const onPress = vi.fn();

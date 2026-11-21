@@ -19,10 +19,14 @@ describe('the phone photo step with no picture picked', () => {
         expect(step).not.toMatch(/!pendingAvatar && styles\.disabledBtn/);
     });
 
-    it('goes on to the 12 words without one', () => {
+    it('goes on to the way back without one (or past it, where one is already kept: slice S4)', () => {
         expect(handler).not.toMatch(/if \(!pendingIdentity \|\| !pendingAvatar\) return/);
         const noPicture = handler.slice(handler.indexOf('if (!pendingAvatar) {'));
-        expect(noPicture.slice(0, noPicture.indexOf('return;'))).toContain("setMode('seedBackup')");
+        expect(noPicture.slice(0, noPicture.indexOf('return;'))).toContain('await toWayBack();');
+        // toWayBack: the way back, unless one is kept already (utils/join-steps.ts wayBackSkipped); never a stop either way.
+        const to = SRC.slice(SRC.indexOf('async function toWayBack() {'), SRC.indexOf('async function handleCompleteProfile()'));
+        expect(to).toContain('if (skipWayBack) return handleConfirmSeed();');
+        expect(to).toContain("setMode('seedBackup');");
     });
 
     it('with no picture picked, the preview is the ready-made picture the key picks, never the first letter (Pictures S4)', () => {

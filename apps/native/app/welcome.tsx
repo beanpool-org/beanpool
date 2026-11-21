@@ -2690,7 +2690,7 @@ export default function WelcomeScreen() {
 
                         {/* Tile one: Link a sign-in. Opened (or a sign-in's copy already kept), the panel every sign-in member
                             sees: the vault's sentences as signed off on 27 Oct (SIGN_IN_ROW), "Who can open it ›", then Protect
-                            with. `waysBack` draws that row alone, never "your 12 words are your primary recovery" again. Where
+                            with. `rowAlone` draws that row alone, never "your 12 words are your primary recovery" again. Where
                             the community keeps no copies (VR2), its row in the tile's place (NO_COPIES_ROW: why no sign-in can be
                             linked here), and the 12-words tile alone under it; in by 12 words there, nothing in its place, since
                             the quiet "Add a sign-in" below still adds one (for the limits, not as a way back). */}
@@ -2698,7 +2698,7 @@ export default function WelcomeScreen() {
                             <KeeperProtectionPanel
                                 protection={protection}
                                 hasWords={hasWords}
-                                waysBack={!signInKept}
+                                rowAlone
                                 colors={colors}
                                 copyAt={joinFlow === 'claim' ? 'community' : undefined}
                                 copiesAt={backupCopiesAt}

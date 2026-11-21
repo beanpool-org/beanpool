@@ -229,7 +229,8 @@ describe('welcome.tsx wires them in one place each', () => {
         expect(words).toBeGreaterThan(tile);
         // The panel only once opened, kept, or where the community keeps none (its row says why no sign-in is offered).
         expect(s).toContain("{wordsMember && backupCopiesAt === 'none' ? null : backupCopiesAt === 'none' || signInKept || signInOpen || Platform.OS === 'web' ? (");
-        expect(s).toContain('waysBack={!signInKept}');
+        // The sign-in row alone once opened, in any build (KeeperProtectionPanel rowAlone); covered, the panel as ever.
+        expect(s).toMatch(/<KeeperProtectionPanel[\s\S]*?\n\s*rowAlone\n/);
         // The sentence Marty approved, 21 Nov; "your account goes too" is not true where an admin can set a member up again.
         expect(s).toContain("t('If this phone is lost, this is how you get back in.')");
         expect(s).not.toContain('Lose this phone');

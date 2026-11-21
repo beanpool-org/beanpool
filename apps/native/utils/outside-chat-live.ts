@@ -226,7 +226,7 @@ function roundWithDeadline(deadlineMs: number, community?: string | null): Promi
                 held = found.inPlace;
                 (await import('./db')).enterChatInPlace(held);
                 // A block from one of its chats whose answer never came (offline, the minute's limit: #3310 r3 review F1): sent
-                // there again, outside this round's deadline. Until S7 nothing else sends a block to a community not in use.
+                // there again, outside this round's deadline, without waiting for the next round of every held community.
                 const owedAt = held;
                 void (async () => { if (await blocksOwedAt(owedAt)) await syncBlocksAt(owedAt); })().catch(() => {});
             }

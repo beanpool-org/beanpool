@@ -488,11 +488,25 @@ describe('tailoring (§4)', () => {
 });
 
 describe('interests (§4.3, §6.2)', () => {
-    it("says we'll tell you when a neighbour asks only where the community says askedPush, as the phone does (cold start N3)", async () => {
-        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ features: { ...answer().features, askedPush: true } as HomeAnswer['features'], me: { ...answer().me!, interests: [] } })));
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-interests');
-        expect(screen.getByTestId('home-interests-note')).toHaveTextContent("Tap a few. What you star comes first here and in the Market, and we'll tell you when a neighbour asks for it.");
+    it("says we'll tell you when a neighbour asks only where the community says askedPush and this browser can tell them, as the phone does (cold start N3; N5b's true line)", async () => {
+        // This browser allows the site and this account's notifications are on here (the member's pin from a Turn on): the
+        // promise is true. Every other browser state drops it (HomePage.notify-lines.test.tsx).
+        Object.defineProperty(navigator, 'serviceWorker', { value: { register: vi.fn(), getRegistration: vi.fn(async () => undefined), addEventListener() {}, removeEventListener() {} }, configurable: true });
+        (globalThis as any).Notification = { permission: 'granted', requestPermission: vi.fn() };
+        (window as any).PushManager = function PushManager() {};
+        Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+        localStorage.setItem('beanpool_web_push', JSON.stringify([{ origin: window.location.origin, publicKey: ME.publicKey, subId: 'e'.repeat(64), pushKey: null, vapidKey: 'BAAA', for: 'member' }]));
+        try {
+            vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ features: { ...answer().features, askedPush: true } as HomeAnswer['features'], me: { ...answer().me!, interests: [] } })));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-interests');
+            // The browser is read as the card comes (its answer, then the note).
+            await waitFor(() => expect(screen.getByTestId('home-interests-note')).toHaveTextContent("Tap a few. What you star comes first here and in the Market, and we'll tell you when a neighbour asks for it."));
+        } finally {
+            delete (globalThis as any).Notification;
+            delete (window as any).PushManager;
+            delete (navigator as any).serviceWorker;
+        }
     });
 
     it('a community that says nothing of it keeps the note that promises no push', async () => {

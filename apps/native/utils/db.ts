@@ -9737,7 +9737,12 @@ export async function getMessageRequests(myPubkey: string): Promise<{ count: num
         const file = getDatabaseFilenameForNode(anchorUrl);
         const raw = await AsyncStorage.getItem(messageRequestsStoreKey(myPubkey, file));
         const kept = raw ? JSON.parse(raw) : null;
-        return kept && Array.isArray(kept.conversations) && kept.conversations.length > 0 ? await withoutBlockedRequests(myPubkey, file, kept) : kept;
+        if (!kept || !Array.isArray(kept.conversations) || kept.conversations.length === 0) return kept;
+        // A filter that fails hides no card: the list stays as the node gave it, as before S7b.
+        return await withoutBlockedRequests(myPubkey, file, kept).catch((e) => {
+            console.warn('[Requests] The block lists could not be read; no request card is hidden', e);
+            return kept;
+        });
     } catch {
         return null;
     }

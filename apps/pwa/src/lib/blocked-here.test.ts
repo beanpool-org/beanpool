@@ -11,7 +11,7 @@ vi.mock('./join-names', () => ({
     ownCommunityAddress: () => 'riverside.example',
 }));
 
-import { blockedHereSentence, blockedHereWords } from './blocked-here';
+import { afterBlockWords, blockedHereSentence, blockedHereWords } from './blocked-here';
 
 describe('blocked here (slice S7b)', () => {
     beforeEach(() => { card.read = async () => null; });
@@ -32,5 +32,11 @@ describe('blocked here (slice S7b)', () => {
         expect(await blockedHereSentence()).toBe('Blocked in riverside.example. To block them in all your communities, block them in the phone app.');
         card.read = async () => { throw new Error('offline'); };
         expect(await blockedHereSentence()).toBe('Blocked in riverside.example. To block them in all your communities, block them in the phone app.');
+    });
+
+    it('goes under a block\'s own confirmation, a blank line between', async () => {
+        card.read = async () => ({ name: 'Riverside', host: 'riverside.example' });
+        expect(await afterBlockWords('Ana has been blocked and removed from your feed.'))
+            .toBe('Ana has been blocked and removed from your feed.\n\nBlocked in Riverside. To block them in all your communities, block them in the phone app.');
     });
 });

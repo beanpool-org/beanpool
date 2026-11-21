@@ -36,7 +36,7 @@ vi.mock('../lib/blocklist', () => ({
 }));
 // Where a web block holds (slice S7b): its own words and the community's name are lib/blocked-here.test.ts's.
 const BLOCKED_HERE = vi.hoisted(() => 'Blocked in Riverside. To block them in all your communities, block them in the phone app.');
-vi.mock('../lib/blocked-here', () => ({ blockedHereSentence: vi.fn(async () => BLOCKED_HERE) }));
+vi.mock('../lib/blocked-here', () => ({ afterBlockWords: vi.fn(async (confirmation: string) => `${confirmation}\n\n${BLOCKED_HERE}`) }));
 
 const ME = { publicKey: 'member-ana', privateKey: 'k', callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as any;
 const ENT = 'enterprise-damo';

@@ -95,11 +95,19 @@ vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 // The block's own routing is blocks-reach-community.test.ts's: here it records the community the report handed it.
-vi.mock('../blocklist', () => ({
-    getBlockedUsers: vi.fn(async () => []),
-    blockUser: vi.fn(async (...args: unknown[]) => { h.blocks.push(args); return true; }),
-    isUserBlocked: vi.fn(async () => true),
-}));
+vi.mock('../blocklist', () => {
+    const getBlockedUsers = vi.fn(async (): Promise<string[]> => []);
+    return {
+        getBlockedUsers,
+        blockUser: vi.fn(async (...args: unknown[]) => { h.blocks.push(args); return true; }),
+        isUserBlocked: vi.fn(async () => true),
+        // Block first (slice S7b; its own tables are let-in-once's, on the real lists): here the phone's list is the one
+        // getBlockedUsers stubs, no community's own list holds anyone, and each community's list counts as read this run.
+        readBlockLists: async () => ({ onPhone: new Set(await getBlockedUsers()), once: new Set<string>(), seenThere: new Set<string>() }),
+        blockedAnywhere: (lists: { onPhone: ReadonlySet<string>; seenThere: ReadonlySet<string> }, keys: readonly string[]) => keys.some((k) => lists.onPhone.has(k) || lists.seenThere.has(k)),
+        blockListReadThisRun: async () => true,
+    };
+});
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),

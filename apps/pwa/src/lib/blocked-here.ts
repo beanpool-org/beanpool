@@ -26,3 +26,8 @@ export async function blockedHereSentence(): Promise<string> {
     }
     return blockedHereWords(card ? communityCardName(card, { t }) : ownCommunityAddress());
 }
+
+/** A block's own confirmation (already in the member's words), then {@link blockedHereSentence} under it. Never throws. */
+export async function afterBlockWords(confirmation: string): Promise<string> {
+    return `${confirmation}\n\n${await blockedHereSentence()}`;
+}

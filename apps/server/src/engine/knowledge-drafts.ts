@@ -595,7 +595,7 @@ export function knowledgeDraftWhole(id: unknown): KnowledgeDraftWhole | null {
     const changed = r.kind === 'fix' ? (fix?.changed ?? changedPartsOf(r)) : null;
     const pageChanged = r.kind === 'fix' ? (fix?.pageChanged ?? []) : null;
     const photos = draftPhotoData(r.id);
-    const credits = creditsOf(r.sources);
+    const credits = creditsByBytes(photos, creditsOf(r.sources));
     return {
         ...toCheckOf(r),
         title: words.title,
@@ -608,7 +608,8 @@ export function knowledgeDraftWhole(id: unknown): KnowledgeDraftWhole | null {
         note: r.note,
         photos,
         // What the node read from Wikimedia Commons for each picture, null for one uploaded: To check shows it under the picture.
-        photoCredits: photos.map((_, i) => credits.get(i + 1) ?? null),
+        // By its bytes, as Approve gives it (creditsFollow): an upload that is the very copy of a Commons picture shows its credit.
+        photoCredits: photos.map((p) => credits.get(p) ?? null),
         needsSourcesTicked: assistantGrantOf(r.via) !== null,
         post: pageWordsOf(page),
         changed: changed && wordParts(changed),
@@ -667,7 +668,8 @@ function keptPhotos(draftId: string, sent: unknown): string[] {
  */
 function assistantDraftPhotos(draftId: string, sent: unknown): string[] {
     const own = draftPhotoData(draftId);
-    if (sent === undefined || sent === null) return own;
+    // A page shows a picture once: two of the draft's that are the same bytes are one, as when To check sends both back.
+    if (sent === undefined || sent === null) return [...new Set(own)];
     if (!Array.isArray(sent) || sent.some((p) => typeof p !== 'string')) throw new KnowledgeRefusal(400, 'bad_photos', KNOWLEDGE_WORDS.photos);
     const kept = [...new Set((sent as string[]).map((p) => p.trim()))];
     const added = kept.filter((p) => !own.includes(p));
@@ -677,15 +679,28 @@ function assistantDraftPhotos(draftId: string, sent: unknown): string[] {
 }
 
 /**
+ * A draft's credits by the bytes of the picture each is for. Two of a draft's pictures with the same bytes are the same picture
+ * (an assistant's upload of the very copy it named on Commons, say), so whichever copy is kept carries the credit: the first
+ * credited one in the draft's order (review of #3351, B2: matching the first copy by position dropped it).
+ */
+function creditsByBytes(own: readonly string[], credits: ReadonlyMap<number, KnowledgePhotoCredit>): Map<string, KnowledgePhotoCredit> {
+    const out = new Map<string, KnowledgePhotoCredit>();
+    own.forEach((p, i) => {
+        const credit = credits.get(i + 1);
+        if (credit && !out.has(p)) out.set(p, credit);
+    });
+    return out;
+}
+
+/**
  * Each kept picture's credit at its place on the page (DESIGN-learn-web-pictures-fable.md §9 slice 2 item 4): a kept picture is
- * matched to the draft's own by its bytes as read, and its credit, if the node read one, follows it; a picture the checker added
- * has none. Only what the node stored: the app never sends a credit.
+ * matched to the draft's own by its bytes as read, and a credit the node read for any of the draft's pictures with those bytes
+ * follows it (creditsByBytes); a picture the checker added has none. Only what the node stored: the app never sends a credit.
  */
 function creditsFollow(r: DraftRow, photos: readonly string[]): { photo: number; credit: KnowledgePhotoCredit }[] {
-    const own = draftPhotoData(r.id);
-    const credits = creditsOf(r.sources);
+    const credits = creditsByBytes(draftPhotoData(r.id), creditsOf(r.sources));
     return photos.flatMap((p, j) => {
-        const credit = credits.get(own.indexOf(p) + 1);
+        const credit = credits.get(p);
         return credit ? [{ photo: j + 1, credit }] : [];
     });
 }

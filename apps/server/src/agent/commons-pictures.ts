@@ -25,7 +25,7 @@ import { KNOWLEDGE_LIMITS, type KnowledgePhotoCredit } from '@beanpool/core';
 import {
     PayloadTooLargeError, ProhibitedContentTypeError, RequestTimeoutError, type SsrfSafeResponse,
 } from '../engine/pulse-resolver.js';
-import { cleanMemberText } from './fence.js';
+import { cleanMemberText, fence } from './fence.js';
 import { admitAgentPhoto, agentPhotosPerDay, agentPhotosToday } from './limits.js';
 import { logger } from '../logger.js';
 import { fetchFixedHost, photoDayFull, PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES } from './owner-photos.js';
@@ -94,6 +94,16 @@ type Meta = Record<string, { value?: unknown } | undefined>;
 const metaText = (em: Meta | undefined, key: string): string => (typeof em?.[key]?.value === 'string' ? (em[key]!.value as string).trim() : '');
 /** What Commons said a licence is, for the words: plain, short. */
 const saidOf = (s: string): string => cleanMemberText(s, 60).replace(/[<>"]/g, '').replace(/\s+/g, ' ');
+/**
+ * What Commons calls a file's licence, for refusal words: the file page's own licence markup, which any uploader writes, so it
+ * reaches the assistant fenced as the maker does (DESIGN §6.5 "Hostile text"; review of #3351, N1). Empty when it says nothing.
+ */
+export function commonsSaid(boundary: string, n: number, said: string): string {
+    const fenced = fence(boundary, `commons_pictures #${n}, its licence as Commons names it`, said, 60);
+    return fenced ? ` What Commons calls its licence:\n${fenced.text}` : '';
+}
+/** A type as Commons names one (image/jpeg, application/ogg): anything else is not echoed. */
+const MIME_SHAPE = /^[a-z0-9][a-z0-9.+-]{0,39}\/[a-z0-9][a-z0-9.+-]{0,79}$/;
 
 export type LicenceVerdict =
     | { ok: true; licence: OpenLicence }
@@ -179,15 +189,17 @@ export const COMMONS_WORDS = {
     twice: (n: number, first: number) => `commons_pictures #${n} is the same file as #${first}.`,
     unreachable: 'Wikimedia Commons could not be reached: file the draft without commons_pictures, or try again later.',
     missing: (n: number) => `Wikimedia Commons has no file at commons_pictures #${n}: check its page address.`,
-    notOpen: (n: number, said: string) => `commons_pictures #${n} is listed on Commons as ${said || 'no licence'}: this server takes only public domain, CC0, `
-        + 'CC BY 4.0 and CC BY-SA 4.0. Pick another picture.',
+    /** `said`: what Commons calls the licence, fenced (commonsSaid), or empty. */
+    notOpen: (n: number, said: string) => `commons_pictures #${n} is under a licence this server doesn't take: it takes only public domain, CC0, `
+        + `CC BY 4.0 and CC BY-SA 4.0. Pick another picture.${said}`,
     unreadable: (n: number) => `Commons gives no licence this server can read for commons_pictures #${n}: pick another picture.`,
-    disagree: (n: number, said: string) => `Commons' licence details for commons_pictures #${n} (${said || 'none'}) don't agree, so this server can't tell `
-        + 'which applies: pick another picture.',
+    disagree: (n: number, said: string) => `Commons' licence details for commons_pictures #${n} don't agree, so this server can't tell `
+        + `which applies: pick another picture.${said}`,
     notFree: (n: number) => `Commons marks commons_pictures #${n} as not free: pick another picture.`,
     deletion: (n: number) => `commons_pictures #${n} is up for deletion on Commons: pick another picture.`,
     deletionUnclear: (n: number) => `Commons didn't say whether commons_pictures #${n} is up for deletion: try again later, or pick another picture.`,
-    notStill: (n: number, mime: string) => `commons_pictures #${n} is not a still picture (Commons lists it as ${saidOf(mime) || 'something else'}): pick a photo or drawing.`,
+    notStill: (n: number, mime: string) => `commons_pictures #${n} is not a still picture (Commons lists it as ${MIME_SHAPE.test(mime) ? mime : 'something else'}): `
+        + 'pick a photo or drawing.',
     noMaker: (n: number) => `Commons names nobody who made commons_pictures #${n}, and its licence needs that credit: pick another picture.`,
     tooTall: (n: number) => `commons_pictures #${n} is too tall for this server even at ${COMMONS_COPY_WIDTH} pixels wide: pick another picture.`,
     copyElsewhere: (n: number) => `Commons gave the copy of commons_pictures #${n} at an address that is not its picture host, so this server did not fetch it.`,
@@ -209,7 +221,7 @@ interface ImageInfo { mime?: unknown; thumburl?: unknown; thumbwidth?: unknown; 
  * the order given; or the first refusal, in words. The photo day is checked for all of them before anything is asked, and each
  * is counted as tried. Nothing is kept here: the caller files the draft with them or drops them.
  */
-export async function readCommonsPictures(grantId: string, names: readonly string[], nodeUrl?: string): Promise<CommonsRead> {
+export async function readCommonsPictures(grantId: string, names: readonly string[], boundary: string, nodeUrl?: string): Promise<CommonsRead> {
     if (agentPhotosToday(grantId) + names.length > agentPhotosPerDay()) return { ok: false, error: photoDayFull(grantId) };
     for (let i = 0; i < names.length; i++) if (!admitAgentPhoto(grantId)) return { ok: false, error: photoDayFull(grantId) };
     const headers = { 'User-Agent': userAgent(nodeUrl) };
@@ -218,7 +230,7 @@ export async function readCommonsPictures(grantId: string, names: readonly strin
         action: 'query', format: 'json', prop: 'imageinfo|categories', iiprop: 'url|size|mime|extmetadata', iiurlwidth: String(COMMONS_COPY_WIDTH),
         cllimit: 'max', titles: names.map((n) => `File:${n}`).join('|'),
     })) api.searchParams.set(k, v);
-    let answer: { query?: { pages?: Record<string, CommonsPage> | CommonsPage[]; normalized?: { from?: unknown; to?: unknown }[] } };
+    let answer: { error?: unknown; query?: { pages?: Record<string, CommonsPage> | CommonsPage[]; normalized?: { from?: unknown; to?: unknown }[] } };
     try {
         answer = await fetchFixedHost(api, { maxBytes: ANSWER_MAX_BYTES, allowedContentTypes: ['application/json'], headers: { ...headers, Accept: 'application/json' } },
             async (res: SsrfSafeResponse) => {
@@ -227,6 +239,11 @@ export async function readCommonsPictures(grantId: string, names: readonly strin
             });
     } catch {
         return refuse(grantId, COMMONS_HOST, 'unreachable', COMMONS_WORDS.unreachable);
+    }
+    // An error inside a 200 answer (a rate limit, say), or no query in it: Commons didn't answer the question, which is not
+    // "no such file" (review of #3351, N2).
+    if (!answer || typeof answer !== 'object' || answer.error !== undefined || !answer.query || typeof answer.query !== 'object') {
+        return refuse(grantId, COMMONS_HOST, 'api error', COMMONS_WORDS.unreachable);
     }
     const pages = Object.values(answer?.query?.pages ?? {}) as CommonsPage[];
     const renamed = new Map((answer?.query?.normalized ?? []).map((x) => [String(x.from), String(x.to)]));
@@ -242,7 +259,8 @@ export async function readCommonsPictures(grantId: string, names: readonly strin
         const em = info.extmetadata;
         const licence = commonsLicence(em);
         if (!licence.ok) {
-            const words = { not_free: COMMONS_WORDS.notFree(n), unreadable: COMMONS_WORDS.unreadable(n), not_open: COMMONS_WORDS.notOpen(n, licence.said), disagree: COMMONS_WORDS.disagree(n, licence.said) }[licence.why];
+            const said = commonsSaid(boundary, n, licence.said);
+            const words = { not_free: COMMONS_WORDS.notFree(n), unreadable: COMMONS_WORDS.unreadable(n), not_open: COMMONS_WORDS.notOpen(n, said), disagree: COMMONS_WORDS.disagree(n, said) }[licence.why];
             return refuse(grantId, COMMONS_HOST, `licence ${licence.why}`, words);
         }
         const deletion = commonsUpForDeletion(page, em);

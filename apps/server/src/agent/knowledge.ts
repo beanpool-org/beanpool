@@ -88,6 +88,13 @@ const NO_PICTURE_DOOR = 'Only an owner\'s assistant connected with "May post for
     + 'without photo_ids or commons_pictures, and the owner or admin who checks it can add their own.';
 const TOO_MANY_PICTURES = `At most ${KNOWLEDGE_LIMITS.photos} pictures a draft, as a page holds.`;
 /**
+ * The grant lost the picture door while Commons was asked (disconnected, "May post for me" unticked, AI assistants turned off,
+ * no longer an owner): nothing is filed, as the Market's post stops (owner-posts.ts withPhotos; the manual: "Disconnecting stops
+ * it at once"). Its uploads are left unused, so they can be sent again.
+ */
+export const STOPPED_WHILE_FETCHED = 'This assistant was disconnected, or may no longer add pictures, while its pictures were fetched from Wikimedia '
+    + 'Commons: no draft was filed.';
+/**
  * What the tool says about pictures, in its description and photo_ids', word for word as DESIGN-learn-web-pictures-fable.md §6.6
  * "Now" gives it (Marty, 16 Nov 2026 "through the upload link only"; 22 Nov 2026 "All six of Fable's picks"): whose, why a web
  * picture is refused, what to tell the member, and that the checker can add their own.
@@ -321,6 +328,8 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
         memberText: true,
         knowledge: true,
         write: true,
+        // commons_pictures: this server asks Wikimedia Commons, a server outside it (the MCP annotation's openWorldHint).
+        openWorld: true,
         refusedTo: () => (knowledgeOn() ? null : KNOWLEDGE_OFF_WORDS),
         inputSchema: {
             type: 'object',
@@ -394,8 +403,11 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
             let filed: ReturnType<typeof fileAssistantKnowledgeDraft> | null = null;
             let read: Awaited<ReturnType<typeof readCommonsPictures>> = { ok: true, pictures: [] };
             try {
-                if (commons.names.length > 0) read = await readCommonsPictures(grant.id, commons.names, nodeUrl);
+                if (commons.names.length > 0) read = await readCommonsPictures(grant.id, commons.names, boundary, nodeUrl);
                 if (!read.ok) return { ok: false, error: read.error };
+                // The read took seconds; the grant was checked before it. Checked again here, with nothing awaited between this
+                // and the filing: a revoke in that time finds no draft to drop, so the draft must not be written after it.
+                if (commons.names.length > 0 && !grantMayStillPost(grant)) return { ok: false, error: STOPPED_WHILE_FETCHED };
                 const fromCommons = read.pictures;
                 filed = fileAssistantKnowledgeDraft(
                     { id: grant.id, member: grant.member, name: grant.name },

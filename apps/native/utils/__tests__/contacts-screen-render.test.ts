@@ -174,7 +174,11 @@ vi.mock('../contacts-former', async (importOriginal) => ({
         return { deleted: mem.deleteAnswer.here ? 1 : 0, ...mem.deleteAnswer };
     }),
 }));
-vi.mock('../blocklist', () => ({ BLOCKLIST_UPDATED_EVENT: 'blocklist', getBlockedUsers: async () => mem.blocked, unblockUser: vi.fn(async () => true) }));
+vi.mock('../blocklist', () => ({
+    BLOCKLIST_UPDATED_EVENT: 'blocklist', getBlockedUsers: async () => mem.blocked, unblockUser: vi.fn(async () => true),
+    // "Add people I've chatted with" leaves out anyone blocked (slice S7b; its own table is let-in-once's, on the real lists).
+    withoutBlockedPeople: async (_me: string, people: Array<{ key: string }>) => people.filter((p) => !mem.blocked.includes(p.key)),
+}));
 vi.mock('../use-communities', () => ({ switchCommunity: vi.fn(async () => {}), communitySwitchUnderWay: () => false }));
 // The root layout's recognition, asked again before a move (Message on a contact in a held community: S0).
 vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'member' }) }));

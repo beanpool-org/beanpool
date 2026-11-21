@@ -1123,9 +1123,11 @@ describe("a block of someone since re-keyed follows them to their new key (follo
     it("nothing follows for a re-key of someone this phone never blocked, from a node that names no former keys, or with no blocks at all", async () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
-        // No blocks: not even the read.
+        // No blocks of its own: the list is read all the same (slice S7b, S7 design §2.4 item 2: it may hold a block made in the
+        // web app or on another device, which stops a quiet Accept), and nothing is sent.
         await app.followRekeyedBlocks();
-        expect(reads()).toEqual([]);
+        expect(reads()).toHaveLength(1);
+        expect(net.sent.filter((s) => Object.keys(s.body).length > 0)).toEqual([]);
 
         await app.blockUser(HARASSER, ana.publicKey);
         await app.blockSyncsEndedForTests();

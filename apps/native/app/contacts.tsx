@@ -36,7 +36,7 @@ import { checkContactsHere, contactsKeptAt, editContacts, syncContacts } from '.
 import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
 import { getSavedNodes } from '../utils/nodes';
-import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
+import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser, withoutBlockedPeople } from '../utils/blocklist';
 import { createConversationApi, enterChatInPlace, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace, leaveChatInPlace } from '../utils/db';
 import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { communitySwitchUnderWay, switchCommunity } from '../utils/use-communities';
@@ -249,13 +249,17 @@ export default function ContactsScreen() {
         ));
     }
     // "Add people I've chatted with and my friends" (C6): everyone this phone has a chat of two with here, and the member's
-    // friends here, each once, linked by hand to this community; nobody already linked. One tap to count them, one to add.
+    // friends here, each once, linked by hand to this community; nobody already linked, and nobody blocked anywhere or blocked
+    // once (utils/blocklist.ts withoutBlockedPeople, slice S7b). One tap to count them, one to add.
     const addPeople = async () => {
         if (!anchor) return;
         let people: BeanPoolPerson[];
         try {
             const [chats, friends] = await Promise.all([getChattedWithMembers(identity.publicKey), getFriendsLocal(identity.publicKey)]);
-            people = [...chats, ...friends].map((p: { publicKey?: unknown; callsign?: unknown }) => ({ key: String(p.publicKey ?? ''), callsign: String(p.callsign ?? '') }));
+            const found = [...chats, ...friends].map((p: { publicKey?: unknown; callsign?: unknown; keys?: unknown }) => ({
+                key: String(p.publicKey ?? ''), callsign: String(p.callsign ?? ''), keys: Array.isArray(p.keys) ? p.keys.filter((k): k is string => typeof k === 'string') : [],
+            }));
+            people = (await withoutBlockedPeople(identity.publicKey, found)).map(({ key, callsign }) => ({ key, callsign }));
         } catch {
             Alert.alert(t('Contacts'), addPeopleWords.unread());
             return;

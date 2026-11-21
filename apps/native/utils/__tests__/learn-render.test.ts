@@ -154,6 +154,10 @@ describe("Learn's front", () => {
     });
 
     it('a row draws the topic, the title, its first line and when it was checked, and opens the page on a tap', async () => {
+        // Checked 3 Nov 2026, read on 21 Nov 2026 (Date only; timers stay real; afterEach puts the clock back). On the real
+        // clock the row turns to "Checked over a year ago" from 3 Nov 2027, as it should (learn-lines checkedOverAYearAgo).
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.parse('2026-11-21T00:00:00.000Z'));
         h.pages = [page({ id: 'tip', title: 'How recycling works at the tip', description: 'Sort it at home.\nGlass in the blue bin.', category: 'local-services', knowledge: { helped: 12, checkedAt: '2026-11-03T00:00:00.000Z' } })];
         await show(createElement(LearnScreen));
         const row = q('learn-row-tip')!;

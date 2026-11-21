@@ -16,6 +16,8 @@
  */
 import { PROTOCOL_CONSTANTS } from './protocol.js';
 import { t, word } from './words.js';
+import { isKeptCommunityWelcome } from './community-welcome.js';
+import { WELCOME_BAND_DAYS } from './home-frame.js';
 
 /**
  * The WELCOME TO BEANPOOL! tile's words (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.1 item 1, Marty's
@@ -102,4 +104,108 @@ export function readerMayInvite(features: { invites?: unknown; door?: unknown },
     if (features.invites !== true) return false;
     if (features.door !== 'admins') return true;
     return role === 'owner' || role === 'admin';
+}
+
+// ── The community's own welcome on Home (DESIGN-onboarding-home-landing-fable.md §4.1 item 2, §4.2, §4.3, §4.5; slice S7) ──
+
+/**
+ * Where the community's welcome is put away: one more key in the Home layout's `dismissed` map (`{ card id: date }`, the
+ * map that keeps when "Your way back in" was put away), so it holds on every device of the account. A new key, no new
+ * shape; never a card id (no card type has a `-welcome` instance).
+ */
+export const COMMUNITY_WELCOME_DISMISSED_KEY = 'community-welcome';
+
+/** The community's welcome card's own words, shown through t(). The owners' words themselves never are. */
+export const COMMUNITY_WELCOME_CARD_WORDS = {
+    /** The card's caption, drawn in capitals: "FROM RIVERSIDE". */
+    caption: word('From {community}'),
+    /** A community whose name the answer doesn't carry (the notices card's name, the same English). */
+    captionUnnamed: word('From your community'),
+    /** An owner of a community whose server keeps a welcome, with none written yet. */
+    write: word("Write your community's welcome ›"),
+    /** The community card's line that shows the owners' words again once the welcome card has gone (§4.2 "Day 30"). */
+    again: word("{community}'s welcome ›"),
+    againUnnamed: word("Your community's welcome ›"),
+    /** The card's ×, as a screen reader says it (the caption names the community). */
+    away: word('Put this welcome away'),
+} as const;
+
+/** What the community's welcome card holds, when it is drawn. */
+export interface CommunityWelcomeCard {
+    /** "From Riverside", in the member's language. */
+    caption: string;
+    /** The owners' words exactly as they wrote them (never translated), or null where they wrote none. */
+    words: string | null;
+    /** Whose invite brought the reader, with a name to say ({@link welcomeFacts}). */
+    inviter: { key: string; name: string } | null;
+    /** An owner alone on a new local community ({@link welcomeFacts}). */
+    firstHere: boolean;
+    /** The community's members, for "84 members"; null where the answer has no count, and for the first one here. */
+    members: number | null;
+    /** "Write your community's welcome ›": an owner, on a server that keeps a welcome, with none written. */
+    ownerPrompt: boolean;
+}
+
+/** The parts of a Home answer the community's welcome reads (both apps' answers have this shape). */
+export interface CommunityWelcomeAnswer extends WelcomeAnswer {
+    me?: { joinedAt?: unknown; invitedBy?: { key?: unknown; name?: unknown } | null } | null;
+    cards?: { community?: { name?: string | null; members?: number | null; welcome?: unknown } | null } | null;
+}
+
+const DAY_MS = 86_400_000;
+
+/** The owners' welcome as an app may draw it: a kept text (core `isKeptCommunityWelcome`), else none. */
+export function communityWelcomeWords(answer: Pick<CommunityWelcomeAnswer, 'cards'>): string | null {
+    const raw = answer.cards?.community?.welcome;
+    return isKeptCommunityWelcome(raw) ? raw : null;
+}
+
+/**
+ * The community's welcome card under BeanPool's tile (§4.1 item 2), or null where it is not drawn. One rule for both apps.
+ *
+ * - **Whose:** a member's, never a visitor's. A newcomer's, in the same window as BeanPool's welcome: from joining to day
+ *   30 ({@link WELCOME_BAND_DAYS}), then never (§4.2 "Day 30": Home is the member's own). A join date not heard keeps it,
+ *   as it keeps BeanPool's tile: never hidden for a missing fact.
+ * - **Its own life:** it stays until its own × (`dismissedAt`, the layout's {@link COMMUNITY_WELCOME_DISMISSED_KEY}), not
+ *   BeanPool's Got it or the tour's end, and it is drawn in a second community on the same phone, where BeanPool's part
+ *   is not (§3.3).
+ * - **What it holds:** the owners' words as written; under them the inviter's line, or "You're the first one here."; the
+ *   member count. No owners' words yet: the inviter's line and the count alone. An owner of a community whose server
+ *   keeps a welcome and has none (`welcome: null`) is asked to write one; a server from before it (no field) asks nothing.
+ * - **Nothing to say:** no words, no inviter, not the first one here and no prompt: not drawn ("cards with nothing to show
+ *   stay undrawn"). The community card at the foot already gives the count.
+ */
+export function communityWelcomeCard(
+    answer: CommunityWelcomeAnswer,
+    ctx: { role?: string | null; dismissedAt?: string | null; now?: number } = {},
+): CommunityWelcomeCard | null {
+    const me = answer.me;
+    const community = answer.cards?.community;
+    if (!me || !community || ctx.dismissedAt) return null;
+    const joined = typeof me.joinedAt === 'string' ? Date.parse(me.joinedAt) : NaN;
+    if (Number.isFinite(joined) && (ctx.now ?? Date.now()) - joined >= WELCOME_BAND_DAYS * DAY_MS) return null;
+    const words = communityWelcomeWords(answer);
+    const facts = welcomeFacts(answer);
+    const ownerPrompt = !words && community.welcome === null && ctx.role === 'owner';
+    if (!words && !facts.inviter && !facts.firstHere && !ownerPrompt) return null;
+    const name = typeof community.name === 'string' ? community.name.trim() : '';
+    return {
+        caption: name ? t(COMMUNITY_WELCOME_CARD_WORDS.caption, { community: name }) : t(COMMUNITY_WELCOME_CARD_WORDS.captionUnnamed),
+        words,
+        inviter: facts.inviter,
+        firstHere: facts.firstHere,
+        members: !facts.firstHere && typeof community.members === 'number' && community.members > 0 ? community.members : null,
+        ownerPrompt,
+    };
+}
+
+/**
+ * The community card's line that opens the owners' words again (§4.2 "Day 30"): "Riverside's welcome ›", where the owners
+ * wrote words, for whenever the welcome card itself is not drawn (put away, or past the newcomer's days). Null where they
+ * wrote none. The app draws it only while {@link communityWelcomeCard} is null, so the words are never on Home twice.
+ */
+export function communityWelcomeAgainLine(answer: Pick<CommunityWelcomeAnswer, 'cards'>): string | null {
+    if (!communityWelcomeWords(answer)) return null;
+    const name = typeof answer.cards?.community?.name === 'string' ? answer.cards.community.name.trim() : '';
+    return name ? t(COMMUNITY_WELCOME_CARD_WORDS.again, { community: name }) : t(COMMUNITY_WELCOME_CARD_WORDS.againUnnamed);
 }

@@ -21,7 +21,9 @@
  * the next account on the phone.
  *
  * And the community keeps the block for the account (POST /api/blocks, the web app's route, apps/server routes/blocks.ts),
- * so it stops delivering the blocked member's messages (Marty, 23 Oct, design message-a-friend Q5).
+ * so it stops delivering the blocked member's messages (Marty, 23 Oct, design message-a-friend Q5). Every community this
+ * phone holds keeps it, not only the one in use (slice S7a, scratch/fable-design/DESIGN-s7-blocks-verified-everywhere-fable.md
+ * §2.2; Marty, 21 Nov): a block, an unblock and Unblock All reach each of them at the tap, side by side ({@link syncBlocks}).
  *
  * The community's list is the truth about a block; the phone's list is derived (review of #3268, round 4). What the
  * phone keeps is the member's own changes, each block and unblock in the order they made them (storage-keys.ts
@@ -46,7 +48,9 @@ import { DeviceEventEmitter } from 'react-native';
 import { onAccountOnPhone } from './account-on-phone';
 import { loadIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
+import { isPlainNodeAddress, plainOriginOf } from './node-url';
 import { isGuestNode } from './nodes';
+import { readKeptCommunities, sameCommunity as sameAddress } from './push-pins';
 import { blockChangesStoreKey, blockedKeyChainsStoreKey, blockedUsersStoreKey, communityBlocksStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
 
 export const BLOCKLIST_UPDATED_EVENT = 'beanpool_blocklist_updated';
@@ -483,9 +487,8 @@ export async function blockUser(
     /**
      * Another community this phone holds, where the member blocked from (slice S3: a request card "In {community}", its
      * saved address): its report goes there and nowhere else, and that community hears the block now as well
-     * ({@link syncBlocksAt}), even when the person was blocked on this phone already (then false comes back, as for any
-     * block that is not new). Left out: the community the phone is set to, as before. The block itself is the account's,
-     * on every community on this phone either way.
+     * ({@link syncBlocksAt}). Left out: the community the phone is set to, as before. The block itself is the account's,
+     * on every community on this phone either way, and every one it holds hears it ({@link syncBlocks}).
      */
     community?: string,
 ): Promise<boolean> {
@@ -502,22 +505,18 @@ export async function blockUser(
             await saveBlocks(owner, blocks, was);
             return true;
         });
-        if (made) {
-            // Blocked on the phone already: the block goes to the community without waiting for its answer, nor for a
-            // sync already under way. The report goes side by side, and is sent or queued before this returns. Blocked from
-            // another community in place: that community hears it too, and has the report.
-            void syncBlocks();
-            if (community) void syncBlocksAt(community);
-            await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId, community);
-            return true;
-        }
-        if (community) {
-            // Blocked on this phone already (from another community: until S7 a block reaches only the community the phone
-            // is set to), yet blocked again from this community's card in place: this community may never have heard it,
-            // and goes on listing their request until it does (#3309 review F1). It hears it now, and has the report.
-            void syncBlocksAt(community);
-            await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId, community);
-        }
+        // Blocked on the phone already: the block goes to every community this phone holds without waiting for their
+        // answers, nor for a sync already under way. The report goes side by side, and is sent or queued before this
+        // returns. Blocked from another community in place: that community hears it too, and has the report.
+        //
+        // Blocked on this phone before (nothing new is recorded, and false comes back), yet blocked again from a card: a
+        // community that has not heard it yet (offline at the block, a round cut off) goes on listing their request until
+        // it does (#3309 review F1). The same: every community is brought in line, and the report still goes where the
+        // member blocked (S7 design §2.2).
+        void syncBlocks();
+        if (community) void syncBlocksAt(community);
+        await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId, community);
+        return made;
     } catch (e) {
         console.error('[blocklist] Failed to block user', e);
     }
@@ -574,7 +573,8 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
             await saveBlocks(owner, blocks, was);
             return true;
         });
-        // Unblocked on the phone already: the community hears of it without this waiting for its answer.
+        // Unblocked on the phone already: every community this phone holds hears of it without this waiting for an answer,
+        // each this phone put the block on taking it off (#3310 review N1: the community carrying an across chat too).
         if (made) void syncBlocks();
         return made;
     } catch (e) {
@@ -598,9 +598,9 @@ export async function clearBlocklist(): Promise<boolean> {
             recordChange(blocks.changes, [...new Set([...blocks.list, ...blocked])], false);
             await saveBlocks(owner, blocks, was);
         });
-        // Takes off the community's list each block this phone sent there, even one the web app had made too (the community
-        // keeps one list), and no other: a block made only in the web app stays. One request each, not waited for, so the
-        // list on screen empties at once.
+        // Takes off each held community's list each block this phone sent there, even one the web app had made too (a
+        // community keeps one list), and no other: a block made only in the web app stays. One request each, not waited
+        // for, so the list on screen empties at once.
         void syncBlocks();
         return true;
     } catch (e) {
@@ -627,13 +627,30 @@ const MEMBER_KEY = /^[0-9a-f]{64}$/;
  */
 const NO_MEMBER_CODES: ReadonlySet<string> = new Set(['not_a_member', 'account_closed']);
 /**
- * At most this many block requests a minute: a quarter of what a community takes from one member (the gateway's 120 a
- * minute, apps/server gateway-rate-limit.ts), so a first sync with many keys the community has no row for, each sent on
- * its own, or an Unblock All, never leaves the app's own requests answered 429. Measured on a real node before this: 150
- * such keys sent 121 requests in 0.6 s, and the 121st, and the member's next read of their chats, were answered 429.
+ * How long a community that answered that the account is no member there ({@link NO_MEMBER_CODES}) is left alone, unless
+ * the phone hears first that the account is a member there ({@link blocksAtJoin}, {@link blocksAtMember}): a saved
+ * community is not always one the account belongs to, and asking each of them every 5 minutes was a rule for the one
+ * community in use (S7 design §2.2), which keeps it ({@link askedEachRound}).
+ */
+const NO_MEMBER_WAIT_MS = 60 * 60 * 1000;
+/**
+ * The most keys one person is on this phone: the key they hold now and 4 before it, as a DM pin keeps its former keys
+ * (dm-peer-pins.ts FORMER_MAX). A community's answer that would make anyone more is not learned (S7 design §2.5): which keys
+ * are one person is each community's word, and with every block reaching every community in minutes, a community that
+ * joined other people's keys to someone blocked would have them blocked at all the others.
+ */
+const PERSON_KEYS_MAX = 5;
+/**
+ * At most this many block requests a minute to each community: a quarter of what a community takes from one member (the
+ * gateway's 120 a minute, apps/server gateway-rate-limit.ts), so a first sync with many keys the community has no row for,
+ * each sent on its own, or an Unblock All, never leaves the app's own requests answered 429. Measured on a real node before
+ * this: 150 such keys sent 121 requests in 0.6 s, and the 121st, and the member's next read of their chats, were answered
+ * 429. Each community counts its own (S7 design §2.2): one community's turn uses nothing of another's.
  */
 const BLOCK_REQUESTS_PER_MINUTE = 30;
 const MINUTE_MS = 60 * 1000;
+/** Less than this left of a deadline ({@link syncOwedBlocks}): no further request starts. */
+const DEADLINE_MIN_MS = 1000;
 
 /**
  * What this phone knows of one community's list for one account: `on`, the keys on the community's last answer of people
@@ -644,7 +661,9 @@ const MINUTE_MS = 60 * 1000;
  * the person counts as held here only once this community has answered about every key the phone knows them by
  * ({@link heldAt}). After a refusal asking again won't soon change: `waitUntil`, when it may be asked anything again (it
  * has no block list, or refused a removal); `addsWaitUntil`, when it may be sent blocks again (it refused one), while
- * unblocks still go.
+ * unblocks still go; `noMemberUntil`, when it may be asked anything again after it said the account is no member there
+ * ({@link NO_MEMBER_WAIT_MS}; a join there lifts it, {@link blocksAtJoin}, and so does the phone's check saying it is a member,
+ * {@link blocksAtMember}; never kept for the community in use at a round, {@link askedEachRound}).
  */
 interface BlocksAt {
     on: string[];
@@ -652,6 +671,7 @@ interface BlocksAt {
     asked: string[];
     waitUntil?: number;
     addsWaitUntil?: number;
+    noMemberUntil?: number;
 }
 
 /**
@@ -669,14 +689,84 @@ interface ListAnswer {
     person: string[] | null;
 }
 
-let syncing: Promise<void> = Promise.resolve();
-/** When each block request of the last minute went, oldest first. */
-let requestsSentAt: number[] = [];
-/** The sync set for when there is room for another request, if one is. */
-let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Each community's own queue of block work, by its address in one spelling ({@link queueKey}): its syncs, its list reads, and
+ * what the phone hears of the account's membership there run one at a time and in the order they were begun, so none writes
+ * back what it read before another; one community's queue never waits for another's (S7 design §2.2: one community failing
+ * never holds up the next).
+ */
+const queues = new Map<string, Promise<void>>();
+/** Every piece of block work begun so far, settled or not ({@link blockSyncsEndedForTests}). */
+let begun: Promise<unknown> = Promise.resolve();
+/** The rounds' reads of the held communities, one after another: a round's work at a community queues behind the one before it. */
+let listing: Promise<unknown> = Promise.resolve();
+/** When each block request of the last minute went to each community, oldest first. */
+const requestsSentAt = new Map<string, number[]>();
+/** The sync set for when a community has room for another request, if one is. */
+const syncWhenRoom = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** A community's address in one spelling, for its queue and its count of requests: its origin (node-url.ts), else as written. */
+function queueKey(community: string): string {
+    return (plainOriginOf(community) ?? community.trim().replace(/\/+$/, '')).toLowerCase();
+}
+
+function track<T>(run: Promise<T>): Promise<T> {
+    // Settles to nothing, so the chain holds no value of the work before it (a bare Promise.all nested one array a call).
+    begun = Promise.all([begun, run.catch(() => undefined)]).then(() => undefined);
+    return run;
+}
+
+/** `work` on `community`'s queue, after whatever is on it now, however that ended. */
+function queueAt(community: string, work: () => Promise<void>): Promise<void> {
+    const key = queueKey(community);
+    const run = (queues.get(key) ?? Promise.resolve()).then(work, work);
+    const settled = run.catch(() => undefined);
+    queues.set(key, settled);
+    void settled.then(() => {
+        if (queues.get(key) === settled) queues.delete(key);
+    });
+    return track(run);
+}
 
 /**
- * Brings the block list the community the phone is set to keeps for the account on the phone (routes/blocks.ts) in line
+ * The communities this phone holds (S7 design §2.2): the one it is set to first, then each one it saved, one of each however
+ * it is spelled. The list other-communities-unread.ts's rounds read (push-pins.ts readKeptCommunities); a saved one only at a
+ * plain address (node-url.ts: on iOS another reaches a host it doesn't name, and is signed for), and none the phone only looks
+ * at as a guest (nodes.ts markGuestNode, each spelling as {@link communityToSyncAt} reads it). Being saved is not belonging:
+ * a community that says the account is no member there is left alone for {@link NO_MEMBER_WAIT_MS}. A community taken off
+ * the phone is not on it, and is told nothing until it comes back; its record stays for then. Empty when the phone's storage
+ * can't be read.
+ */
+async function heldCommunities(): Promise<{ held: string[]; inUse: string | null }> {
+    try {
+        const { anchor, kept } = await readKeptCommunities(AsyncStorage);
+        const held: string[] = [];
+        for (const community of kept) {
+            if (held.some((h) => h === community || sameAddress(h, community))) continue;
+            if (community !== anchor && !isPlainNodeAddress(community)) continue;
+            if (!(await communityToSyncAt(community))) continue;
+            held.push(community);
+        }
+        return { held, inUse: anchor !== null && held.includes(anchor) ? anchor : null };
+    } catch (e) {
+        console.warn('[blocklist] Could not read the communities this phone holds; the next round tries again', e);
+        return { held: [], inUse: null };
+    }
+}
+
+/**
+ * `work` for each community this phone holds ({@link heldCommunities}), each on its own queue, side by side, told whether it
+ * is the one in use; settles when every one has ended.
+ */
+function eachHeld(work: (community: string, inUse: boolean) => Promise<void>): Promise<void> {
+    const listed = listing.then(heldCommunities, heldCommunities);
+    listing = listed;
+    return track(listed.then(({ held, inUse }) => Promise.all(held.map((c) => queueAt(c, () => work(c, c === inUse)))))
+        .then(() => undefined));
+}
+
+/**
+ * Brings the block list each community this phone holds keeps for the account on the phone (routes/blocks.ts) in line
  * with the member's changes, person by person ({@link planChange}): each person the member blocks whom the community's
  * answers don't show it holds is sent, by every key the phone knows them by (a re-key is one community's own: the
  * community says which of them it has), and each this phone put there whom the member no longer blocks is taken off.
@@ -686,82 +776,84 @@ let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
  * off when the member unblocks them on the phone, even if the web app had blocked them too, since the community keeps
  * one list for the member. Nothing is sent when nothing changed.
  *
- * - Each community the member is on with this phone gets the phone's list; the first time, every block from before this
- *   build, in one request (a key the community has no row for, which a list skips, goes again on its own, as the web
- *   app's move sends it). An unblock reaches each community this phone put that block on, when the phone is next there.
+ * - Every community this phone holds ({@link heldCommunities}: the one in use first, then each it saved) gets the phone's
+ *   list, side by side, each in its own turn: one that doesn't answer, or refuses, holds up no other (S7 design §2.2). The
+ *   first time, every block from before this build, in one request (a key the community has no row for, which a list
+ *   skips, goes again on its own, as the web app's move sends it). An unblock reaches each community this phone put that
+ *   block on. A community taken off the phone is told nothing while it is off; its record stays, so it hears what changed
+ *   if it comes back.
  * - A community the phone visits as a guest (nodes.ts markGuestNode: "Guest view first", Add & Connect) is sent nothing:
  *   the account is no member there, and the list is the member's own business. Joining there clears the mark (every
- *   invite join: db.ts redeemInvite), and the next sync sends the list.
+ *   invite join: db.ts redeemInvite), and the list goes then ({@link blocksAtJoin}).
  * - No answer (no connection, a timeout, a server error, 401, 408, 425, 429): asked again at the next sync. A block whose
  *   answer never came may be on the list, so it is taken off all the same when the member unblocks.
  * - A community that has the account as no member, yet or now (403 not_a_member, or account_closed: removed, or deleted by
  *   its owner), keeps no list for it: nothing this phone sent counts as on its list any more
- *   ({@link communityKeepsNoBlocks}), and it is asked again at the next sync. So a member who joins there, or whom a
- *   vote brings back, has the whole list sent then, not a day later and not never.
+ *   ({@link communityKeepsNoBlocks}). The community in use is asked again at every round, as it always was: one community
+ *   fits that rule (S7 design §2.2), and a member let in there, or brought back by a vote, may tell the phone nothing. Each
+ *   other community it holds is asked again in an hour ({@link NO_MEMBER_WAIT_MS}), or at once when the phone hears the
+ *   account is a member there: it joins there with an invite, an answered request to join included ({@link blocksAtJoin}),
+ *   or the phone's own check of it says so ({@link blocksAtMember}). So a member who joins, or whom a vote brings back, has
+ *   the whole list sent at the next round there at the latest, not an hour, a day later or never.
  * - A node with no block list (404, 405): that community is not asked again for a day. Any other refusal (a 403, the
  *   community's limit) of a block: it is sent no blocks for a day, but unblocks still go, so the blocked member's lines
  *   are withheld no longer than the member wants (the limit's own answer is "Unblock someone to block another"); of an
  *   unblock: it is asked nothing for a day. The phone's own block stands throughout.
- * - Only ever the account's own: sent to the community the phone is set to as the sync starts, each request signed by the
- *   key of the account whose list it is, and only while that account is on the phone. One sync at a time.
- * - At most {@link BLOCK_REQUESTS_PER_MINUTE} requests a minute: past that, the sync stops, and the next one starts by
- *   itself as soon as there is room.
+ * - Only ever the account's own: each request signed by the key of the account whose list it is, for that community's own
+ *   name, and only while that account is on the phone. One sync at a time at each community.
+ * - At most {@link BLOCK_REQUESTS_PER_MINUTE} requests a minute to each community: past that, its sync stops, and the next
+ *   one there starts by itself as soon as there is room.
  */
 export function syncBlocks(): Promise<void> {
-    // After the one before it, however that ended: a sync that failed never stops the next.
-    const run = syncing.then(() => syncBlocksOnce(), () => syncBlocksOnce());
-    syncing = run;
-    return run;
+    return eachHeld((community, inUse) => syncBlocksOnce(community, undefined, inUse));
 }
 
 /**
- * {@link syncBlocks}, for `community`, another community this phone holds, by its saved address (slice S3: a block made on
- * its request card in place): the same plan, the same one-at-a-time queue and the same limits, sent to that community and
- * signed for its name, never to the community in use. A guest's look is sent nothing, as there.
+ * {@link syncBlocks}, for `community` alone, by its saved address (slice S3: a block made on its request card in place; S4:
+ * the round of its across mail): the same plan, the same queue and the same limits, sent to that community and signed for
+ * its name. A guest's look is sent nothing, as there.
  */
 export function syncBlocksAt(community: string): Promise<void> {
-    const run = syncing.then(() => syncBlocksOnce(community), () => syncBlocksOnce(community));
-    syncing = run;
-    return run;
+    return queueAt(community, () => syncBlocksOnce(community));
 }
 
 /** For tests: settles once every sync begun so far has ended. Block, Unblock and Unblock All begin one and don't wait for it. */
 export function blockSyncsEndedForTests(): Promise<void> {
-    return syncing;
+    return begun.then(() => undefined);
 }
 
-async function syncBlocksOnce(at?: string): Promise<void> {
+/**
+ * One community's sync, until nothing is left, it is waited for, or an answer doesn't come. `deadline` (ms, the background
+ * task's: {@link syncOwedBlocks}): no request starts with less than {@link DEADLINE_MIN_MS} left, and none runs past it.
+ * `inUse`: the community the phone is set to, in a round ({@link syncBlocks}), asked whatever it last said of the account
+ * ({@link askedEachRound}).
+ */
+async function syncBlocksOnce(at: string, deadline?: number, inUse = false): Promise<void> {
     try {
         const owner = await accountOnPhone();
         if (!owner) return;
-        const community = at ? await communityToSyncAt(at) : await communityToSync();
+        const community = await communityToSyncAt(at);
         if (!community) return;
+        if (inUse) await askedEachRound(owner, community);
         // Each change at most once a sync: one the community's answer leaves undone waits for the next.
         const tried = new Set<string>();
         for (;;) {
+            const left = deadline === undefined ? REPORT_TIMEOUT_MS : deadline - Date.now();
+            if (left < DEADLINE_MIN_MS) return;
             const change = await serially(() => planChange(owner, community, tried));
             if (!change) return;
-            const answer = await sendBlockChange(owner, community, change.path, change.body);
+            const answer = await sendBlockChange(owner, community, change.path, change.body, Math.min(REPORT_TIMEOUT_MS, left));
             if (!(await serially(() => takeAnswer(owner, community, change, answer)))) return;
         }
     } catch (e) {
-        console.warn('[blocklist] Could not bring the community\'s block list in line with this phone\'s; tried again at the next sync', e);
+        console.warn('[blocklist] Could not bring a community\'s block list in line with this phone\'s; tried again at the next sync', e);
     }
 }
 
-/** The community the phone is set to, as its records name it, or null with none, or on a guest visit there. */
-async function communityToSync(): Promise<string | null> {
-    const anchor = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
-    const community = anchor?.replace(/\/+$/, '');
-    if (!anchor || !community) return null;
-    // Marked as the visit wrote the address, with or without its trailing slash.
-    for (const url of new Set([anchor, community, `${community}/`])) {
-        if (await isGuestNode(url)) return null;
-    }
-    return community;
-}
-
-/** `at`, a saved address, as the records name it: null for none, or a guest's look there (as {@link communityToSync}). */
+/**
+ * `at`, an address the phone holds, as the records name it (no trailing slash): null for none, or a guest's look there,
+ * marked as the visit wrote the address, with or without its trailing slash.
+ */
 async function communityToSyncAt(at: string): Promise<string | null> {
     const community = at.replace(/\/+$/, '');
     if (!community) return null;
@@ -769,6 +861,36 @@ async function communityToSyncAt(at: string): Promise<string | null> {
         if (await isGuestNode(url)) return null;
     }
     return community;
+}
+
+/**
+ * The background sync's turn for blocks (services/background-task.ts, every 15 minutes at best): each held community still
+ * owed a change ({@link owes}: worked out on the phone, nothing asked) gets its sync, side by side, inside `budgetMs`, what
+ * is left of that wake's time (S7 design §2.2). Nothing owed anywhere: nothing is sent, not even a read. Settles by the
+ * deadline whatever the communities do. Returns how many communities were owed. Never throws.
+ */
+export async function syncOwedBlocks(budgetMs: number): Promise<number> {
+    const deadline = Date.now() + budgetMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        const owner = await accountOnPhone();
+        if (!owner || budgetMs < DEADLINE_MIN_MS) return 0;
+        const owed: string[] = [];
+        for (const held of (await heldCommunities()).held) {
+            const community = await communityToSyncAt(held);
+            if (community && await serially(() => owes(owner, community))) owed.push(community);
+        }
+        if (owed.length === 0) return 0;
+        const syncs = Promise.all(owed.map((c) => queueAt(c, () => syncBlocksOnce(c, deadline))));
+        const out = new Promise<void>((resolve) => { timer = setTimeout(resolve, Math.max(0, deadline - Date.now())); });
+        await Promise.race([syncs, out]);
+        return owed.length;
+    } catch (e) {
+        console.warn('[blocklist] The background sync\'s blocks wait for the next round', e);
+        return 0;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /** One change to send: where, its body, the keys it names, and whether it blocks. */
@@ -835,10 +957,36 @@ function heldAt(at: BlocksAt, person: ReadonlySet<string>): boolean {
 async function planChange(owner: string, community: string, tried: Set<string>): Promise<PlannedChange | null> {
     const blocks = await readBlocks(owner);
     const { record, at } = await recordOf(owner, community);
-    const now = Date.now();
-    if (at.waitUntil !== undefined && now < at.waitUntil) return null;
-    let dirty = at.waitUntil !== undefined;
+    const { change, dirty } = nextChange(owner, blocks, at, tried, Date.now());
+    if (dirty) await saveRecord(owner, record, community, at);
+    return change;
+}
+
+/**
+ * Whether `community` is owed a change now ({@link planChange}'s plan, worked out and not written down): what the background
+ * sync asks before it sends anything ({@link syncOwedBlocks}). Only inside {@link serially}.
+ */
+async function owes(owner: string, community: string): Promise<boolean> {
+    const blocks = await readBlocks(owner);
+    const { at } = await recordOf(owner, community);
+    return nextChange(owner, blocks, { ...at, on: [...at.on], sent: [...at.sent], asked: [...at.asked] }, new Set(), Date.now()).change !== null;
+}
+
+/** Whether a wait set at most `most` ms long holds at `now`: a clock set back since says nothing of when it ends. */
+function waiting(until: number | undefined, now: number, most: number): boolean {
+    return until !== undefined && now < until && until - now <= most;
+}
+
+/**
+ * {@link planChange}'s plan for one community from `blocks` and its record `at`, which it brings up to date (waits that are
+ * over go, a block about to go is written down as sent): `dirty` when it did.
+ */
+function nextChange(owner: string, blocks: Blocks, at: BlocksAt, tried: Set<string>, now: number): { change: PlannedChange | null; dirty: boolean } {
+    if (at.waitUntil !== undefined && now < at.waitUntil) return { change: null, dirty: false };
+    if (waiting(at.noMemberUntil, now, NO_MEMBER_WAIT_MS)) return { change: null, dirty: false };
+    let dirty = at.waitUntil !== undefined || at.noMemberUntil !== undefined;
     delete at.waitUntil;
+    delete at.noMemberUntil;
     if (at.addsWaitUntil !== undefined && now >= at.addsWaitUntil) {
         delete at.addsWaitUntil;
         dirty = true;
@@ -874,8 +1022,7 @@ async function planChange(owner: string, community: string, tried: Set<string>):
         at.sent = [...new Set([...at.sent, ...change.keys])];
         dirty = true;
     }
-    if (dirty) await saveRecord(owner, record, community, at);
-    return change;
+    return { change, dirty };
 }
 
 /**
@@ -887,7 +1034,9 @@ async function takeAnswer(owner: string, community: string, change: PlannedChang
     if (answer === 'later') return false;
     const { record, at } = await recordOf(owner, community);
     if (answer === 'no member') {
+        // Asked again in an hour, or at once if the phone joins there (S7 design §2.2): not every round.
         keepsNone(at);
+        at.noMemberUntil = Date.now() + NO_MEMBER_WAIT_MS;
         await saveRecord(owner, record, community, at);
         return false;
     }
@@ -921,7 +1070,11 @@ function reconcile(owner: string, blocks: Blocks, at: BlocksAt, answer: ListAnsw
         if (!now || formers.length === 0 || chain.includes(owner) || !chain.some(k => stake.has(k))) return;
         const known = blocks.chains[now] ?? [];
         const more = formers.filter(f => f !== now && !known.includes(f));
-        if (more.length > 0) blocks.chains[now] = [...known, ...more];
+        if (more.length === 0) return;
+        const joined = [...known, ...more];
+        // Not learned when it would make anyone more than PERSON_KEYS_MAX keys (S7 design §2.5).
+        if (personKeys(now, { ...blocks.chains, [now]: joined }).size > PERSON_KEYS_MAX) return;
+        blocks.chains[now] = joined;
     };
     if (answer.person) learn(answer.person);
     for (const [now, formers] of Object.entries(answer.formerKeys)) if (answer.keys.includes(now)) learn([now, ...formers]);
@@ -948,27 +1101,29 @@ function reconcile(owner: string, blocks: Blocks, at: BlocksAt, answer: ListAnsw
  * runs, utils/dm-blocked.ts). It also finds what the community no longer holds of this phone's, and the next sync sends
  * it again. Nothing is reported, and nothing is sent but the one read.
  *
- * Only while the account has a block here or on the community's list from this phone, only for the account on the phone
- * at the community it is set to, never on a guest visit, and one at a time with every sync ({@link syncBlocks}). It runs
- * at start, on each return and every 5 minutes (app/_layout.tsx), just before the sync.
+ * At every community this phone holds, side by side (S7 design §2.5: a re-key at one community is learned there, and
+ * reaches the others in the same round, {@link syncBlocks}). At each, only while the account has a block here or on that
+ * community's list from this phone, only for the account on the phone, never on a guest's look, never while it is waited
+ * for, and one at a time with that community's syncs. It runs at start, on each return and every 5 minutes
+ * (app/_layout.tsx), just before the sync.
  */
 export function followRekeyedBlocks(): Promise<void> {
-    const run = syncing.then(followOnce, followOnce);
-    syncing = run;
-    return run;
+    return eachHeld(followOnce);
 }
 
-async function followOnce(): Promise<void> {
+async function followOnce(at: string, inUse: boolean): Promise<void> {
     try {
         const owner = await accountOnPhone();
         if (!owner) return;
-        const community = await communityToSync();
+        const community = await communityToSyncAt(at);
         if (!community) return;
+        if (inUse) await askedEachRound(owner, community);
         const ask = await serially(async () => {
             const { list } = await readBlocks(owner);
-            const { at } = await recordOf(owner, community);
-            if (list.length + at.on.length + at.sent.length === 0) return false;
-            return at.waitUntil === undefined || Date.now() >= at.waitUntil;
+            const { at: record } = await recordOf(owner, community);
+            if (list.length + record.on.length + record.sent.length === 0) return false;
+            const now = Date.now();
+            return (record.waitUntil === undefined || now >= record.waitUntil) && !waiting(record.noMemberUntil, now, NO_MEMBER_WAIT_MS);
         });
         if (!ask) return;
         const answer = await readList(owner, community);
@@ -988,12 +1143,12 @@ async function followOnce(): Promise<void> {
 
 /**
  * The community's read of `owner`'s list, or null when it couldn't be read, or isn't the node's answer. Counted with the
- * block requests ({@link roomForARequest}).
+ * block requests to that community ({@link roomForARequest}).
  */
 async function readList(owner: string, community: string): Promise<ListAnswer | null> {
     const signer = await loadIdentity();
     if (!signer?.privateKey || signer.publicKey !== owner) return null;
-    if (!roomForARequest()) return null;
+    if (!roomForARequest(community)) return null;
     const controller = new AbortController();
     try {
         const { res, text } = await withTimeout((async () => {
@@ -1034,12 +1189,12 @@ function listAnswerOf(answer: unknown): ListAnswer | null {
 
 /**
  * One change to `community`'s list for `owner`, signed by `owner`'s key, which must be the one on the phone: when it
- * isn't, nothing is sent, and the change waits for its account (`later`).
+ * isn't, nothing is sent, and the change waits for its account (`later`). Given up at `timeoutMs`.
  */
-async function sendBlockChange(owner: string, community: string, path: string, body: Record<string, unknown>): Promise<ChangeAnswer> {
+async function sendBlockChange(owner: string, community: string, path: string, body: Record<string, unknown>, timeoutMs: number): Promise<ChangeAnswer> {
     const signer = await loadIdentity();
     if (!signer?.privateKey || signer.publicKey !== owner) return 'later';
-    if (!roomForARequest()) return 'later';
+    if (!roomForARequest(community)) return 'later';
     // One deadline over the request and the reading of its answer, and the request aborted at it (as purgeAccountOnNode
     // does, node-post.ts): fetch can settle as the headers arrive, and React Native's never gives up by itself, so an
     // answer whose body stalled after them would hold this sync, and every one queued behind it, until the app closed.
@@ -1050,7 +1205,7 @@ async function sendBlockChange(owner: string, community: string, path: string, b
         ({ res, text } = await withTimeout((async () => {
             const answer = await signedPost(community, path, body, signer, controller.signal);
             return { res: answer, text: await answer.text() };
-        })(), REPORT_TIMEOUT_MS));
+        })(), timeoutMs));
     } catch {
         // Not left running behind the next sync.
         controller.abort();
@@ -1075,22 +1230,24 @@ async function sendBlockChange(owner: string, community: string, path: string, b
 }
 
 /**
- * Room for one more block request this minute ({@link BLOCK_REQUESTS_PER_MINUTE}), counted when there is. When there
- * isn't, a sync is set for the moment there will be, and the change waits for it.
+ * Room for one more block request to `community` this minute ({@link BLOCK_REQUESTS_PER_MINUTE}), counted when there is.
+ * When there isn't, a sync of that community is set for the moment there will be, and the change waits for it.
  */
-function roomForARequest(): boolean {
+function roomForARequest(community: string): boolean {
+    const key = queueKey(community);
     const now = Date.now();
     // A clock set back counts nothing sent in the future it came from.
-    requestsSentAt = requestsSentAt.filter(t => t <= now && now - t < MINUTE_MS);
-    if (requestsSentAt.length < BLOCK_REQUESTS_PER_MINUTE) {
-        requestsSentAt.push(now);
+    const sent = (requestsSentAt.get(key) ?? []).filter(t => t <= now && now - t < MINUTE_MS);
+    requestsSentAt.set(key, sent);
+    if (sent.length < BLOCK_REQUESTS_PER_MINUTE) {
+        sent.push(now);
         return true;
     }
-    if (!syncWhenRoom) {
-        syncWhenRoom = setTimeout(() => {
-            syncWhenRoom = null;
-            void syncBlocks();
-        }, requestsSentAt[0] + MINUTE_MS - now);
+    if (!syncWhenRoom.has(key)) {
+        syncWhenRoom.set(key, setTimeout(() => {
+            syncWhenRoom.delete(key);
+            void syncBlocksAt(community);
+        }, sent[0] + MINUTE_MS - now));
     }
     return false;
 }
@@ -1109,40 +1266,83 @@ function keepsNone(at: BlocksAt): void {
 /**
  * The phone has heard, for certain, that the account `publicKey` is no member of `community`, so that community keeps no
  * block list for it: its membership check answered that the key is a stranger there or its account closed
- * (app/NodeStatusContext.tsx), or the account has just joined there as a new member (db.ts `redeemInvite`). A list the
- * community had is gone: removed accounts' and deleted ones' go with them (server adminPruneUser, purgeMemberSelf), and a
- * node set up again at the address never had one. So nothing this phone sent there counts as on its list any more, and
- * the next sync there, once the account is a member (it joins, or a vote brings it back), sends the whole list again.
+ * (app/NodeStatusContext.tsx), or the account has just joined there as a new member (db.ts `redeemInvite`, through
+ * {@link blocksAtJoin}). A list the community had is gone: removed accounts' and deleted ones' go with them (server
+ * adminPruneUser, purgeMemberSelf), and a node set up again at the address never had one. So nothing this phone sent there
+ * counts as on its list any more, and the next sync there, once the account is a member (it joins, or a vote brings it
+ * back), sends the whole list again.
  *
- * After any sync under way, as a sync is, so none writes back what it read before. Never throws, and never waited for by
- * those callers: they go on at once.
+ * After any sync under way there, as a sync is, so none writes back what it read before. Never throws, and never waited
+ * for by those callers: they go on at once.
  */
 export function communityKeepsNoBlocks(publicKey: string, community: string): Promise<void> {
-    const forget = async () => {
-        try {
-            const here = sameCommunity(community);
-            const storeKey = communityBlocksStoreKey(publicKey);
-            await serially(async () => {
-                const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
-                const entries = Object.entries(record).filter(([url, at]) => here(url) && at.on.length > 0);
-                if (entries.length === 0) return;
-                for (const [, at] of entries) keepsNone(at);
-                await AsyncStorage.setItem(storeKey, JSON.stringify(record));
-            });
-        } catch (e) {
-            console.warn('[blocklist] Could not forget what a community that keeps no list held; the next refusal there does', e);
-        }
-    };
-    const run = syncing.then(forget, forget);
-    syncing = run;
-    return run;
+    return queueAt(community, () => tellRecord(publicKey, community, { keepsNoList: true, joined: false }));
+}
+
+/**
+ * The account `publicKey` has just joined `community` with an invite (db.ts `redeemInvite`, an answered request to join too:
+ * its yes is an invite the phone redeems, join-another-community.ts; S7 design §2.2): the community
+ * gets the whole list now, not at the next round, and not an hour after it last said the account was no member there. A new
+ * member there keeps no list there yet ({@link communityKeepsNoBlocks}); one who was a member already keeps theirs. Then that
+ * community's sync, as the account on the phone's. Never throws, and never waited for by the join: it goes on at once.
+ */
+export function blocksAtJoin(publicKey: string, community: string, newMember: boolean): Promise<void> {
+    void queueAt(community, () => tellRecord(publicKey, community, { keepsNoList: newMember, joined: true }));
+    return syncBlocksAt(community);
+}
+
+/**
+ * The phone's own check of `community` answered that the account `publicKey` IS a member there (app/NodeStatusContext.tsx:
+ * at start, on each return to the app, and for each account that comes on the phone, one switched back included): the
+ * hour's wait after a "no member" answer there goes, and that community's sync runs now, as the account on the phone's.
+ * Whatever the phone counts as on its list stays: a member's list is still there. Nothing is sent when nothing is owed.
+ * Never throws, and never waited for by the check: it goes on at once.
+ */
+export function blocksAtMember(publicKey: string, community: string): Promise<void> {
+    return blocksAtJoin(publicKey, community, false);
+}
+
+/**
+ * The community the phone is set to is asked at every round, whatever it last said of the account ({@link syncBlocks}): the
+ * hour's wait after a "no member" answer is for the other communities the phone holds (S7 design §2.2: "today's every-round
+ * rule fits one community, not six"). A member let in there by its admins, or brought back by a vote, tells this phone
+ * nothing (blocks-reach-community-e2e.test.ts), so the round's own request is how it learns. On the queue, like a sync.
+ */
+async function askedEachRound(owner: string, community: string): Promise<void> {
+    await tellRecord(owner, community, { keepsNoList: false, joined: true });
+}
+
+/**
+ * What the phone heard of `publicKey`'s membership at `community` (its record there, in any spelling): `keepsNoList`, nothing
+ * this phone sent there counts as on its list any more ({@link keepsNone}); `joined`, the wait after a "no member" answer
+ * goes. Only on that community's queue. Never throws.
+ */
+async function tellRecord(publicKey: string, community: string, heard: { keepsNoList: boolean; joined: boolean }): Promise<void> {
+    try {
+        const here = sameCommunity(community);
+        const storeKey = communityBlocksStoreKey(publicKey);
+        await serially(async () => {
+            const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
+            const entries = Object.entries(record).filter(([url, at]) => here(url)
+                && ((heard.keepsNoList && at.on.length > 0) || (heard.joined && at.noMemberUntil !== undefined)));
+            if (entries.length === 0) return;
+            for (const [, at] of entries) {
+                if (heard.keepsNoList) keepsNone(at);
+                if (heard.joined) delete at.noMemberUntil;
+            }
+            await AsyncStorage.setItem(storeKey, JSON.stringify(record));
+        });
+    } catch (e) {
+        console.warn('[blocklist] Could not write down what the phone heard of a community; the next answer there does', e);
+    }
 }
 
 /**
  * Whether a block went to `community` (a saved address: another community this phone holds, blocked at in place) and its answer
  * never came (no connection, a timeout, the minute's limit): the account's record there still has it as sent. The round of that
- * community's across mail sends it again ({@link syncBlocksAt}; utils/outside-chat-live.ts, #3310 r3 review F1), since the
- * syncs that run by themselves reach only the community in use. False on a guest's look, with no account, or on any failure.
+ * community's across mail sends it again ({@link syncBlocksAt}; utils/outside-chat-live.ts, #3310 r3 review F1), as soon as
+ * that round runs, before the next of the rounds that reach every held community ({@link syncBlocks}). False on a guest's
+ * look, with no account, or on any failure.
  */
 export async function blocksOwedAt(community: string): Promise<boolean> {
     try {
@@ -1187,6 +1387,7 @@ function parseCommunityBlocks(raw: string | null): Record<string, BlocksAt> {
             out[community] = { on: keysIn(value.on), sent: keysIn(value.sent), asked: keysIn(value.asked) };
             if (typeof value.waitUntil === 'number') out[community].waitUntil = value.waitUntil;
             if (typeof value.addsWaitUntil === 'number') out[community].addsWaitUntil = value.addsWaitUntil;
+            if (typeof value.noMemberUntil === 'number') out[community].noMemberUntil = value.noMemberUntil;
         }
         return out;
     } catch {

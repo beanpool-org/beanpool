@@ -79,7 +79,7 @@ function Place({ showing }: { showing?: boolean }) {
     return createElement('div', null, notify.view);
 }
 async function draw(showing?: boolean): Promise<void> {
-    await act(async () => { root.render(createElement(Place, { showing })); });
+    await act(async () => { root.render(createElement(Place, { showing }) as any); });
     await settle();
 }
 async function moment(o: NotifyLineOffer = { kind: 'answer', name: 'Asha' }): Promise<boolean> {

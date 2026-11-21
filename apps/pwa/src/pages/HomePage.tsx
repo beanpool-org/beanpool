@@ -1338,6 +1338,11 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const askedPush = askedPushOn(answer?.features);
     const interestsLine = useNotifyLine(publicKey, interestsOpen, identity ?? null);
     const interestsPromise = notifyInterestsPromise(askedPush, useNotifyBrowser(publicKey, askedPush));
+    // A star counted here and offered once its render is in (the card is open by then, also on a first tap).
+    const [starred, setStarred] = useState(0);
+    useEffect(() => {
+        if (starred) void interestsLine.offer({ kind: 'star' });
+    }, [starred]);
     // "Your way back in" is drawn: only the card knows (its schedule is in this browser), and it says so before the paint.
     const [safetyDrawn, setSafetyDrawn] = useState(false);
     const [tipsGuide, setTipsGuide] = useState<Guide | null>(() => {
@@ -2513,7 +2518,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         setInterestsOpen(true);
         void shareInterests(publicKey, next);
         // A star, the member's own act: the moment for "Hear when a neighbour asks for one of these." (core's rule decides).
-        if (starring && askedPush) void interestsLine.offer({ kind: 'star' });
+        if (starring && askedPush) setStarred(n => n + 1);
     }
 
     function openTune() {

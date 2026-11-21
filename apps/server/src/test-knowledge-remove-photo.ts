@@ -520,7 +520,7 @@ async function main(): Promise<void> {
             for (const [n, maker] of makers.entries()) dropped.push([`📷 ${n + 1}, ${l.name}, maker ${maker ? `${maker.length} letters` : 'none'}`, { url: files[n], label: knowledgeCreditLabel(n + 1, maker, l.name) }]);
         }
         dropped.push(
-            ['a hidden character in its head', { url: files[0], label: `📷​ 1 · Ana Maker · CC BY 4.0` }],
+            ['a hidden character in its head', { url: files[0], label: `📷\u200b 1 · Ana Maker · CC BY 4.0` }],
             ['its link over http', { url: files[0].replace('https:', 'http:'), label: label(1, C1) }],
             ["its link's host in capitals", { url: files[0].replace('commons.wikimedia.org', 'COMMONS.WIKIMEDIA.ORG'), label: label(1, C1) }],
         );

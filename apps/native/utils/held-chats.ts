@@ -10,7 +10,7 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation } from './db';
+import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { communityAddress, sameCommunity } from './push-pins';
@@ -117,6 +117,27 @@ async function heldCommunities(): Promise<Array<{ url: string; file: string; nam
         out.push({ url, file, name: typeof savedName === 'string' && savedName.trim() ? savedName.trim() : communityName(node) });
     }
     return out;
+}
+
+/**
+ * What each other community's copy says for let in once (slice S3b, let-in.ts): whom it lets in, and the keys its pins say
+ * are not a person's key now, read through held, read-only handles (db.ts getHeldLetIn): the same communities Chat reads.
+ * Null when any of their pins can't be read (nobody is let in quietly then: #3319 review F1). The handles are Chat's: what
+ * this opened closes as it ends, unless Chat is in view.
+ */
+export async function heldLetIn(myPubkey: string): Promise<LetInRead | null> {
+    try {
+        const out: LetInRead = { letIn: [], notCurrent: [] };
+        for (const { url } of await heldCommunities()) {
+            const one = await getHeldLetIn(myPubkey, url);
+            if (!one) return null;
+            out.letIn.push(...one.letIn);
+            out.notCurrent.push(...one.notCurrent);
+        }
+        return out;
+    } finally {
+        await closeUnlessInView();
+    }
 }
 
 async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promise<HeldChatRow[]> {

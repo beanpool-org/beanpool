@@ -570,6 +570,11 @@ export interface DmPinBook<H> {
      */
     peek(myPubkey: string, file: string): Promise<DmPeerPins | null>;
     /**
+     * As {@link peek}, but a store that can't be read throws (DmPinStoreError) instead of reading as none stored: for a
+     * reader that must fail closed (db.ts let in once, #3319 review F1: the keys a file's pins know were replaced).
+     */
+    peekReadable(myPubkey: string, file: string): Promise<DmPeerPins | null>;
+    /**
      * Run `change` on those pins after every change queued before it, once `at`'s file is seeded; written through when it
      * returns true. `change` may wait (db.ts reads the member's list in the turn, and the member's taps write it there:
      * #3316 N2); it changes the pins only after its last wait, so no reader meets them half changed.
@@ -760,6 +765,9 @@ export function createDmPinBook<H>(
             return null;
         }
     }
+    async function peekReadable(myPubkey: string, file: string): Promise<DmPeerPins | null> {
+        return (await load(myPubkey, file)).pins;
+    }
     async function idle(): Promise<void> {
         await Promise.all([...queues.values()].map((turn) => turn.catch(() => {})));
     }
@@ -769,7 +777,7 @@ export function createDmPinBook<H>(
         for (const key of [...copies.keys()]) if (key.endsWith(tail)) copies.delete(key);
         for (const key of [...seeds.keys()]) if (key.endsWith(tail)) seeds.delete(key);
     }
-    return { read, peek, update, reset, idle, forgetFile, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
+    return { read, peek, peekReadable, update, reset, idle, forgetFile, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
 }
 
 /** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */

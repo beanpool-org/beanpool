@@ -2,21 +2,26 @@
  * Let in once (slice S3b; scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3, Marty 19 Nov 2026 "yes to all 5"; the
  * block first: DESIGN-s7-blocks-verified-everywhere-fable.md §2.4, Marty 21 Nov: someone unblocked is not let in quietly).
  *
- * One table (close the class): who the member let in {wrote a line, accepted their request, friend, bought from them, sold to
- * them, paid them, a linked contact} and who they did not {they paid the member, a deal only asked, a chat only they wrote in,
- * nobody} x what else holds {nothing, blocked here, blocked in another held community, blocked and unblocked later, the
+ * One table (close the class): who the member let in {wrote a line, accepted their request themselves, friend, bought from
+ * them, sold to them on their own Need, paid them, a linked contact} and who they did not {they paid the member, a deal only
+ * asked, a chat only they wrote in, nobody} x what else holds {nothing, blocked here, blocked in another held community, blocked and unblocked later, the
  * person re-keyed since, the account switching as the list is read, the copy that lets them in a guest's look (a linked contact is in none)} x where the
  * request waits {in another held community, read in place (requestsInPlace); in the community in use (syncMessages)}. Each
  * row: accepted quietly (one POST /api/messages/request {accept} to the request's own community, and no card) or an ordinary
  * card (no POST, the request still waiting). Accepted exactly when the person was let in and nothing else holds.
  *
- * Two more tables close the classes the deciding review found (#3319 at 2dd93abe):
+ * More tables close the classes the deciding reviews found (#3319 at 2dd93abe and at 3b80f0ee):
+ * - Who made the row (3b80f0ee F1: only a step the member took lets anyone in) {the member, the other person alone, the node
+ *   on its own (a trade's acceptance, a sync)} x every source {a line in a direct chat, a request's acceptance, a friend, a
+ *   deal the member bought in, a deal the member sold in, a payment, a linked contact} x where the request waits, and across:
+ *   let in only for the member's own row. Then the review's own case: Ann Ignores Sid, Sid takes up her Offer and cancels.
  * - Which key asks (F1) {their key now, the old key of a re-keyed person, a key a listing names as a former one, the key on
  *   offer, the pinned key a chat waits over} x every source above x where the request waits: only the person's key now is let
  *   in, whatever source names it; what a chat's pin in a third community says is enough.
  * - What the member does between the list read and the accept (F2, F3) {nothing, Ignore answered, Ignore answered while the
  *   list's answer was on its way, Decline still on its way, Decline all, Decline all still on its way, Block, a switch to a
- *   third community, another account} x where the request waits: their own answer stands, a Block holds, and an accept goes
+ *   third community, another account; and, inside the accept's own awaits before its POST (3b80f0ee F2, F3), an Ignore tapped
+ *   and a switch to a third community} x where the request waits: their own answer stands, a Block holds, and an accept goes
  *   only to the community the list came from.
  *
  * Then: the quiet POST is byte-equal to a tap's; nothing else is asked of any server; a direct chat lets in only the key it is
@@ -53,6 +58,8 @@ const h = vi.hoisted(() => ({
     duringList: null as null | { origin: string; act: () => Promise<void> },
     /** An Ignore held at the node until this settles: the member's answer still on its way. */
     holdIgnore: null as null | Promise<void>,
+    /** Run once at the next read of the community address; that read still answers what it read before (it landed after). */
+    atAddressRead: null as null | (() => Promise<void>),
 }));
 
 vi.mock('react-native', () => ({
@@ -108,7 +115,15 @@ vi.mock('expo-file-system/legacy', async () => {
 });
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (k: string) => h.store.get(k) ?? null),
+        getItem: vi.fn(async (k: string) => {
+            const was = h.store.get(k) ?? null;
+            const once = k === 'beanpool_anchor_url' ? h.atAddressRead : null;
+            if (once) {
+                h.atAddressRead = null;
+                await once();
+            }
+            return was;
+        }),
         setItem: vi.fn(async (k: string, v: string) => { h.store.set(k, String(v)); }),
         removeItem: vi.fn(async (k: string) => { h.store.delete(k); }),
         getAllKeys: vi.fn(async () => [...h.store.keys()]),
@@ -152,6 +167,7 @@ import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { blockUser, unblockUser, blockSyncsEndedForTests } from '../blocklist';
 import { acceptLetIn, letInFor, _resetLetInForTests } from '../let-in';
+import { gateOutsideItem } from '@beanpool/core';
 
 const realLoad = (Module as any)._load;
 (Module as any)._load = function (request: string, ...rest: any[]) {
@@ -181,7 +197,7 @@ function person(): Person {
 // ── The node ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** `at`: the community whose node holds it, for Decline all (left out: every one, as the lists here are). */
-interface Conv { id: string; type: string; participants: string[]; request?: { from: string; state: string; at: string }; at?: string }
+interface Conv { id: string; type: string; participants: string[]; request?: { from: string; state: string; at: string; acceptedByYou?: true }; at?: string }
 const node = { convs: [] as Conv[] };
 interface Asked { method: string; url: string; body: string | undefined; headers: Record<string, string> }
 let asked: Asked[] = [];
@@ -203,8 +219,11 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
         const conv = node.convs.find((c) => c.id === body.conversationId);
         if (!conv?.request) return answer(404, { error: 'There is no message request for you in this chat.', code: 'request_not_found' });
         // As engine/dm-requests.ts decideRequest: an accept takes any request not accepted yet, one ignored included (and
-        // rings its opener); an ignore of one accepted is refused.
-        if (body.decision === 'accept') conv.request = { ...conv.request, state: 'accepted' };
+        // rings its opener), and the member reads it accepted by their own act; one accepted already stays as it is; an ignore
+        // of one accepted is refused.
+        if (body.decision === 'accept') {
+            if (conv.request.state !== 'accepted') conv.request = { ...conv.request, state: 'accepted', acceptedByYou: true };
+        }
         else if (conv.request.state === 'accepted') return answer(409, { error: 'You have accepted this chat already, so it is no longer a request.', code: 'request_accepted' });
         else conv.request = { ...conv.request, state: 'ignored' };
         return answer(200, { success: true, request: conv.request });
@@ -267,6 +286,7 @@ async function phoneHoldingThree(): Promise<void> {
     h.afterContacts = null;
     h.duringList = null;
     h.holdIgnore = null;
+    h.atAddressRead = null;
     me = person();
     them = person();
     h.me = { ...me };
@@ -299,14 +319,28 @@ function dmIn(sql: DatabaseSync, other: string, request: object | null, author: 
     return id;
 }
 
+/** A listing in a copy, as its sync keeps it: `author`'s Offer or Need. */
+function listingIn(sql: DatabaseSync, author: string, type: 'offer' | 'need'): string {
+    const id = randomUUID();
+    sql.prepare('INSERT INTO posts (id, type, category, title, description, author_pubkey) VALUES (?, ?, \'general\', \'Eggs\', \'A dozen\', ?)').run(id, type, author);
+    return id;
+}
+/** A deal in a copy, as its sync writes one, on `post` (a listing that copy may not hold). */
+function dealIn(sql: DatabaseSync, d: { buyer: string; seller: string; status: string; post?: string }): void {
+    sql.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status) VALUES (?, ?, ?, ?, ?)')
+        .run(randomUUID(), d.post ?? randomUUID(), d.buyer, d.seller, d.status);
+}
+
 /** Who the member let in, or not: written into `community`'s copy for the person known there by `key`. */
 interface Source { name: string; letsIn: boolean; put: (community: string, key: string) => void; notInACopy?: true }
 const SOURCES: Source[] = [
     { name: 'wrote a line', letsIn: true, put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, null, me.publicKey); }) },
-    { name: 'accepted their request', letsIn: true, put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, { from: k, state: 'accepted', at: iso() }, k); }) },
+    // Accepted by the member's own act: the node says so (engine/dm-requests.ts RequestView acceptedByYou).
+    { name: 'accepted their request themselves', letsIn: true, put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, { from: k, state: 'accepted', at: iso(), acceptedByYou: true }, k); }) },
     { name: 'friend', letsIn: true, put: (c, k) => intoCopy(c, (s) => { s.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(me.publicKey, k); }) },
     { name: 'bought from them', letsIn: true, put: (c, k) => intoCopy(c, (s) => { s.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status) VALUES (?, ?, ?, ?, \'completed\')').run(randomUUID(), randomUUID(), me.publicKey, k); }) },
-    { name: 'sold to them', letsIn: true, put: (c, k) => intoCopy(c, (s) => { s.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status) VALUES (?, ?, ?, ?, \'pending\')').run(randomUUID(), randomUUID(), k, me.publicKey); }) },
+    // The member offered on their Need, and they approved it (#3319 review F1: a deal on the member's own Offer is no step of theirs).
+    { name: 'sold to them on their own Need', letsIn: true, put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'pending', post: listingIn(s, k, 'need') }); }) },
     { name: 'paid them', letsIn: true, put: (c, k) => intoCopy(c, (s) => { s.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c) VALUES (?, ?, ?, 100)').run(randomUUID(), me.publicKey, k); }) },
     // The account's own list on the phone, in no community's copy: a guest's look takes nothing from it.
     { name: 'a linked contact', letsIn: true, put: (_c, k) => { h.contacts = [{ links: [{ key: k }] }]; }, notInACopy: true },
@@ -445,13 +479,15 @@ describe('let in once: which key asks x who let them in x where the request wait
 /**
  * What the member does between the read of the request's list and its quiet accept (#3319 review F2, F3). `when`: 'list',
  * while that list's answer is on its way (the node made it, then took the member's answer, then the phone read it);
- * 'accept', after every copy was read, just before the accept. The member let them in as a linked contact, so the contacts
- * list is the let-in's last read. Their own answer stands, a Block since holds, and an accept goes only to the community the
+ * 'accept', after every copy was read, just before the accept; 'inside', inside the accept itself, at its read of the
+ * community address (chatCopyForRequest), after every check before it and before its POST (#3319 review at 3b80f0ee, F2 and
+ * F3), that read still answering the address it read. The member let them in as a linked contact, so the contacts list is
+ * the let-in's last read. Their own answer stands, a Block since holds, and an accept goes only to the community the
  * list came from.
  */
 interface Between {
     name: string;
-    when: 'list' | 'accept';
+    when: 'list' | 'accept' | 'inside';
     act: (ctx: { req: Conv; place: Place; after: Array<() => Promise<void>> }) => Promise<void>;
     quiet: (place: Place) => boolean;
     state: (place: Place) => 'accepted' | 'ignored' | 'pending';
@@ -496,6 +532,20 @@ const BETWEEN: Between[] = [
         name: 'the account on the phone changes', when: 'accept', quiet: () => false, state: () => 'pending',
         act: async () => { const other = person(); h.me = { ...other }; announceAccountOnPhone(other.publicKey); },
     },
+    {
+        // Asked after every await on the way to the POST (db.ts decideMessageRequest): a tap landing during them stands.
+        name: 'Ignore tapped inside the accept, before its POST', when: 'inside', quiet: () => false, state: () => 'ignored',
+        act: async ({ req, place, after }) => {
+            const answered = db.decideMessageRequest(req.id, 'ignore', tapCommunity(place)).catch((e) => e);
+            after.push(async () => { await answered; });
+        },
+    },
+    {
+        // One read of the address decides where it goes (db.ts chatCopyForRequest), never to the third: in place, the accept
+        // still goes to the request's own community; the one in use's request has no copy in place there, so nothing is sent.
+        name: 'the phone switches to a third community inside the accept', when: 'inside', act: async () => { await switchPhoneTo(C); },
+        quiet: (p) => p.at === A, state: (p) => (p.at === A ? 'accepted' : 'pending'),
+    },
 ];
 /** The request's row in `community`'s copy as an earlier read in place left it (the card the member taps there was drawn from it). */
 function requestHeldIn(community: string, req: Conv): void {
@@ -521,6 +571,7 @@ describe('let in once: what the member does between the list read and the accept
                 let acted = false;
                 const act = async () => { acted = true; await between.act({ req, place, after }); };
                 if (between.when === 'list') h.duringList = { origin: place.at, act };
+                else if (between.when === 'inside') h.afterContacts = async () => { h.atAddressRead = act; };
                 else h.afterContacts = act;
                 asked = [];
                 await place.read();
@@ -532,6 +583,159 @@ describe('let in once: what the member does between the list read and the accept
             });
         }
     }
+});
+
+/**
+ * Who made the row (#3319 review at 3b80f0ee, F1; the director's call of 21 Nov 2026 on the PR's own rule "one person's word
+ * doesn't count": only a step the member took lets anyone in) x every source the let-in reads x where the request waits, and
+ * across. Each row is let in exactly when the member made it; each is red without the line of db.ts LET_IN_SQL (or the
+ * contacts read) that judges it. Cells the node never makes (a friend, a contact) have no row of the node's.
+ */
+type Maker = 'the member' | 'the other person alone' | 'the node on its own';
+interface Made { source: string; by: Maker; how: string; put: (community: string, key: string) => void }
+function lineIn(sql: DatabaseSync, conversationId: string, author: string, type: string): void {
+    sql.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, \'x\', \'n\', ?, ?)')
+        .run(randomUUID(), conversationId, author, type, iso());
+}
+const friendIn = (sql: DatabaseSync, owner: string, friend: string) => sql.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(owner, friend);
+const paymentIn = (sql: DatabaseSync, from: string, to: string) => sql.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c) VALUES (?, ?, ?, 100)').run(randomUUID(), from, to);
+const MADE: Made[] = [
+    { source: 'a line in a direct chat', by: 'the member', how: 'the member wrote it', put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, null, me.publicKey); }) },
+    { source: 'a line in a direct chat', by: 'the other person alone', how: 'only they wrote', put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, null, k); }) },
+    { source: 'a line in a direct chat', by: 'the node on its own', how: 'a system line (a trade\'s note)', put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, null, k), 'SYSTEM', 'system'); }) },
+    { source: 'a line in a direct chat', by: 'the node on its own', how: 'a system line in the member\'s name', put: (c, k) => intoCopy(c, (s) => { lineIn(s, dmIn(s, k, null, k), me.publicKey, 'system'); }) },
+    {
+        source: 'a request\'s acceptance', by: 'the member', how: 'their own Accept (the node says acceptedByYou)',
+        put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, { from: k, state: 'accepted', at: iso(), acceptedByYou: true }, k); }),
+    },
+    {
+        source: 'a request\'s acceptance', by: 'the other person alone', how: 'it reads accepted, not by the member\'s act',
+        put: (c, k) => intoCopy(c, (s) => { dmIn(s, k, { from: k, state: 'accepted', at: iso() }, k); }),
+    },
+    {
+        source: 'a request\'s acceptance', by: 'the node on its own', how: 'a trade accepted one the member Ignored, the deal cancelled',
+        put: (c, k) => intoCopy(c, (s) => {
+            dmIn(s, k, { from: k, state: 'accepted', at: iso() }, k);
+            dealIn(s, { buyer: k, seller: me.publicKey, status: 'cancelled', post: listingIn(s, me.publicKey, 'offer') });
+        }),
+    },
+    { source: 'a friend', by: 'the member', how: 'the member added them', put: (c, k) => intoCopy(c, (s) => { friendIn(s, me.publicKey, k); }) },
+    { source: 'a friend', by: 'the other person alone', how: 'they added the member', put: (c, k) => intoCopy(c, (s) => { friendIn(s, k, me.publicKey); }) },
+    {
+        source: 'a deal, the member buying', by: 'the member', how: 'took up their Offer (pending)',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: me.publicKey, seller: k, status: 'pending', post: listingIn(s, k, 'offer') }); }),
+    },
+    {
+        source: 'a deal, the member buying', by: 'the member', how: 'approved their offer on the member\'s Need (completed)',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: me.publicKey, seller: k, status: 'completed', post: listingIn(s, me.publicKey, 'need') }); }),
+    },
+    {
+        source: 'a deal, the member buying', by: 'the other person alone', how: 'they offered on the member\'s Need, never approved',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: me.publicKey, seller: k, status: 'requested', post: listingIn(s, me.publicKey, 'need') }); }),
+    },
+    {
+        source: 'a deal, the member buying', by: 'the node on its own', how: 'their offer rejected as another was approved',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: me.publicKey, seller: k, status: 'rejected', post: listingIn(s, me.publicKey, 'need') }); }),
+    },
+    {
+        source: 'a deal, the member selling', by: 'the member', how: 'offered on their Need, they approved (pending)',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'pending', post: listingIn(s, k, 'need') }); }),
+    },
+    {
+        source: 'a deal, the member selling', by: 'the member', how: 'offered on their Need, done (completed)',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'completed', post: listingIn(s, k, 'need') }); }),
+    },
+    {
+        source: 'a deal, the member selling', by: 'the other person alone', how: 'they took up the member\'s Offer (pending)',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'pending', post: listingIn(s, me.publicKey, 'offer') }); }),
+    },
+    {
+        source: 'a deal, the member selling', by: 'the other person alone', how: 'they took up the member\'s Offer and released it (completed)',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'completed', post: listingIn(s, me.publicKey, 'offer') }); }),
+    },
+    {
+        source: 'a deal, the member selling', by: 'the other person alone', how: 'they took up a listing this copy doesn\'t hold (pending)',
+        put: (c, k) => intoCopy(c, (s) => { dealIn(s, { buyer: k, seller: me.publicKey, status: 'pending' }); }),
+    },
+    { source: 'a payment', by: 'the member', how: 'the member paid them', put: (c, k) => intoCopy(c, (s) => { paymentIn(s, me.publicKey, k); }) },
+    { source: 'a payment', by: 'the other person alone', how: 'they paid the member', put: (c, k) => intoCopy(c, (s) => { paymentIn(s, k, me.publicKey); }) },
+    { source: 'a payment', by: 'the node on its own', how: 'a deal\'s escrow paid them', put: (c, k) => intoCopy(c, (s) => { paymentIn(s, `escrow_${randomUUID()}`, k); }) },
+    { source: 'a linked contact', by: 'the member', how: 'the member linked them', put: (_c, k) => { h.contacts = [{ links: [{ key: k }] }]; } },
+];
+
+describe('let in once: who made the row x every source x where the request waits, and across (#3319 review at 3b80f0ee, F1)', () => {
+    for (const made of MADE) {
+        const letsIn = made.by === 'the member';
+        for (const place of PLACES) {
+            it(`${place.name} | ${made.source} | ${made.by}: ${made.how} -> ${letsIn ? 'accepted quietly' : 'a card'}`, async () => {
+                await phoneHoldingThree();
+                made.put(place.source, them.publicKey);
+                const req: Conv = { id: randomUUID(), type: 'dm', participants: [them.publicKey, me.publicKey], request: { from: them.publicKey, state: 'pending', at: iso() } };
+                node.convs.push(req);
+                asked = [];
+                await place.read();
+                await settle();
+                expect(acceptsTo(place.at)).toEqual(letsIn ? [{ origin: place.at, body: { conversationId: req.id, decision: 'accept' } }] : []);
+                expect(req.request?.state).toBe(letsIn ? 'accepted' : 'pending');
+            });
+        }
+        it(`across | ${made.source} | ${made.by}: ${made.how} -> ${letsIn ? 'their first line opens a chat, door closed' : 'their first line goes nowhere, door closed'}`, async () => {
+            await phoneHoldingThree();
+            made.put(C, them.publicKey);
+            const letIn = await letInFor(me.publicKey)(them.publicKey);
+            expect(letIn).toBe(letsIn);
+            expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe(letsIn ? 'line' : 'drop');
+        });
+    }
+});
+
+/** A request from `from` waiting for the member, in `at`'s list (left out: every list, as the node stand-in lists them). */
+const waitingRequest = (from: string, at?: string): Conv => ({ id: randomUUID(), type: 'dm', participants: [from, me.publicKey], request: { from, state: 'pending', at: iso() }, ...(at ? { at } : {}) });
+
+describe('let in once: the review\'s own case (#3319 at 3b80f0ee, F1): Ann Ignores Sid, Sid takes up her Offer, then cancels', () => {
+    it('Sid is let in nowhere: no request of his is accepted quietly, in another community or in hers, and his first line across meets her closed door', async () => {
+        await phoneHoldingThree();
+        const sid = them.publicKey;
+        // In A, Ann's Offer, as A's copy holds it; Sid writes her a line there, a request, which she reads in place.
+        let offer = '';
+        intoCopy(A, (s) => { offer = listingIn(s, me.publicKey, 'offer'); });
+        const inA = waitingRequest(sid, A);
+        node.convs.push(inA);
+        requestHeldIn(A, inA);
+        intoCopy(A, (s) => { lineIn(s, inA.id, sid, 'text'); });
+        // She taps Ignore on its card.
+        await db.decideMessageRequest(inA.id, 'ignore', A);
+        expect(inA.request?.state).toBe('ignored');
+        // Sid takes up her Offer alone (escrow.ts acceptPost): the trade accepts his request (dm-requests.ts acceptOnTrade,
+        // accepted_by null, so no acceptedByYou), and A's next sync brings the chat as the node lists it and the deal, pending.
+        inA.request = { from: sid, state: 'accepted', at: inA.request!.at };
+        intoCopy(A, (s) => {
+            s.prepare('UPDATE conversations SET request = ? WHERE id = ?').run(JSON.stringify(inA.request), inA.id);
+            dealIn(s, { buyer: sid, seller: me.publicKey, status: 'pending', post: offer });
+        });
+        // While it waits: his request in B, the community in use, is a card.
+        const inB = waitingRequest(sid, B);
+        node.convs.push(inB);
+        asked = [];
+        await db.syncMessages(me.publicKey);
+        await settle();
+        expect(acceptPosts()).toEqual([]);
+        expect(inB.request?.state).toBe('pending');
+        // He cancels (escrow.ts cancelPostTransaction: refunded in full); his request in A stays accepted.
+        intoCopy(A, (s) => { s.prepare('UPDATE marketplace_transactions SET status = \'cancelled\' WHERE buyer_pubkey = ?').run(sid); });
+        const inC = waitingRequest(sid, C);
+        node.convs.push(inC);
+        asked = [];
+        await db.requestsInPlace(me.publicKey, C);
+        await db.syncMessages(me.publicKey);
+        await settle();
+        expect(acceptPosts()).toEqual([]);
+        expect([inB.request?.state, inC.request?.state]).toEqual(['pending', 'pending']);
+        // Across: nobody let him in, so his first line meets her door, closed.
+        const letIn = await letInFor(me.publicKey)(sid);
+        expect(letIn).toBe(false);
+        expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe('drop');
+    });
 });
 
 describe('let in once: the rest of the rule', () => {

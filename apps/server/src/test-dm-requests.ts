@@ -13,6 +13,7 @@
  *      open with no line yet asks nothing (not listed, counted or ignorable), and the 30 days run from the line
  *   2. someone the person has added, and a node role, go straight through (R3, R6)
  *   3. Accept: the sender hears it and their next line arrives, pushed; only the person it was sent to decides (R8, R17);
+ *      she reads the acceptance as her own act (`acceptedByYou`), the sender never does (PR #3319 review F1);
  *      a decision's refusal comes in the member's language, its status and code as they were (member-words.ts, #2400)
  *   4. the person's own first line accepts it (an owner's answer from the node's inbox too), and so does adding the sender
  *      as a friend (R11)
@@ -44,7 +45,8 @@
  * Local (the child run):
  *  15. off by default: a stranger's open and two lines arrive as today, and nothing says requests (R1)
  *  16. an owner turns them on under How this community works (node/config's old dmRequests is refused); then a stranger's open is a request, and a chat opened before stays open
- *  17. a trade's chat and a pending or completed trade go straight through; a trade opening accepts a request (R5, R7)
+ *  17. a trade's chat and a pending or completed trade go straight through; a trade opening accepts a request (R5, R7),
+ *      one she Ignored too, as nobody's act: neither reads `acceptedByYou` (PR #3319 review F1)
  *  18. turned off again: a waiting request is an ordinary chat; one Ann ignored, or a removed member's (one that had lapsed
  *      too), stays out of her chats and her unread count until one of them writes in it again or she opens it herself; so
  *      does one she ignored and then blocked its opener, accepted by his own act while on, or written in by him while off,
@@ -403,6 +405,13 @@ async function globalRun(): Promise<void> {
     const annList3 = await listOf(ann);
     assert(inChats(annList3, boConv) && !inRequests(annList3, boConv) && entryOf(annList3, boConv)?.request?.state === 'accepted',
         'the chat moves to her chats');
+    // Whose act accepted it, to that person alone (the phone's let in once counts only an acceptance of the member's own:
+    // PR #3319 review F1): Ann reads it, in her answer and her list; Bo, the opener, never does, in his list or what he hears.
+    const boList3 = await listOf(bo);
+    assert(acc.body?.request?.acceptedByYou === true && entryOf(annList3, boConv)?.request?.acceptedByYou === true
+        && entryOf(boList3, boConv)?.request?.state === 'accepted' && !('acceptedByYou' in (entryOf(boList3, boConv)?.request ?? {}))
+        && heardOf(boSock, boConv, boHeard).every(e => !('acceptedByYou' in (e.request ?? {}))),
+        `Ann reads the acceptance as her own act, Bo reads no such thing (${JSON.stringify(entryOf(annList3, boConv)?.request)}; ${JSON.stringify(entryOf(boList3, boConv)?.request)})`);
     const pushed3 = pushesTo(ann).length;
     const b3 = await send(boConv, bo);
     await sleep(200);
@@ -466,6 +475,8 @@ async function globalRun(): Promise<void> {
     const annCy = await listOf(ann);
     assert(addCy.status === 200 && rowOf(cyConv)?.state === 'accepted' && inChats(annCy, cyConv) && !inRequests(annCy, cyConv),
         `Ann adds Cy as a friend: his request is accepted, and the chat is in her chats (${show(addCy)})`);
+    assert(entryOf(annCy, cyConv)?.request?.acceptedByYou === true && !('acceptedByYou' in (entryOf(await listOf(cy), cyConv)?.request ?? {})),
+        `her add is her own act: she reads acceptedByYou, Cy doesn't (${JSON.stringify(entryOf(annCy, cyConv)?.request)})`);
     const c3 = await send(cyConv, cy);
     assert(c3.status === 200, `and his next line arrives (${show(c3)})`);
     // Asking for the chat herself (Message on his profile) is reaching out to him, as writing is (§4.3 "opened the
@@ -1248,6 +1259,20 @@ async function localRun(): Promise<void> {
     await send(gusConv, gus);
     attempt(() => ensureTransactionConversation(post(gus), ann.pk, gus.pk));
     assert(rowOf(gusConv)?.state === 'accepted' && (await send(gusConv, gus)).status === 200, 'a trade between them opening accepts the request');
+    // A trade's acceptance is nobody's act (accepted_by null): neither reads it as their own, so the phone's let in once
+    // never counts it (PR #3319 review F1). Nor when Ann had Ignored the request and Sid then took up her Offer alone.
+    const gusRead = entryOf(await listOf(ann), gusConv)?.request;
+    assert(gusRead?.state === 'accepted' && !('acceptedByYou' in gusRead) && !('acceptedByYou' in (entryOf(await listOf(gus), gusConv)?.request ?? {})),
+        `a trade's acceptance reads as neither one's act (${JSON.stringify(gusRead)})`);
+    const sid = member('Sid');
+    const sidConv: string = (await open(sid, ann)).body?.conversation?.id;
+    await send(sidConv, sid);
+    const annIgnores = await decide(ann, sidConv, 'ignore');
+    attempt(() => ensureTransactionConversation(post(ann), sid.pk, ann.pk));
+    const sidRead = entryOf(await listOf(ann), sidConv)?.request;
+    assert(annIgnores.status === 200 && rowOf(sidConv)?.state === 'accepted' && rowOf(sidConv)?.accepted_by === null
+        && sidRead?.state === 'accepted' && !('acceptedByYou' in sidRead),
+        `Ann Ignores Sid, then he takes up her Offer: the trade accepts it, and she reads no act of hers in it (${show(annIgnores)}; ${JSON.stringify(sidRead)})`);
 
     // ── 18. turned off again ────────────────────────────────────────────────────────────────────
     console.log('── 18. turned off again ──');

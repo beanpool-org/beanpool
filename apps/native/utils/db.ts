@@ -975,14 +975,14 @@ export type ChatCommunity = string | null | undefined;
  * SWITCHED_SINCE_CHAT_OPENED_TEXT when the phone keeps switching while the copy opens (three tries).
  */
 export async function chatCopyForRequest(community?: ChatCommunity): Promise<ChatRequestCopy> {
-    // A chat of another community this phone holds: read and written in its own copy, open in place, and sent to its own
-    // server (slice S2). The community in use, however spelled, goes on as before.
-    if (community && getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) !== getDatabaseFilenameForNode(community)) {
-        return copyInPlaceFor(community);
-    }
     for (let tries = 0; tries < 3; tries++) {
+        // One read of the address decides both where the request goes and whose copy it takes (#3319 review F2): a switch
+        // landing between two reads sent a request for the community in use to the one switched to.
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         const file = getDatabaseFilenameForNode(anchorUrl);
+        // A chat of another community this phone holds: read and written in its own copy, open in place, and sent to its own
+        // server (slice S2). The community in use, however spelled, goes on as before.
+        if (community && file !== getDatabaseFilenameForNode(community)) return copyInPlaceFor(community);
         const database = await getDb();
         if (dbFileOf.get(database) === file) {
             // A copy keeps its file for its life (dbFileOf), and every switch, swap, move or close takes it out of `db`
@@ -2015,10 +2015,21 @@ const HELD_PREVIEWS_SQL = `
 
 /**
  * The people this member let in, as one copy holds them (slice S3b, DESIGN-no-switch-messaging-fable.md §3 "Let in once"):
- * derived at each read, never stored or sent. Rows of two kinds: `dm`, a direct chat the member wrote a line in or whose
- * request reads accepted, with its other people's keys (letInOfRows takes the chat's pinned key); `key`, a friend the member
- * added, the other side of a deal both took up (pending or completed: a deal only asked, declined or cancelled before that
- * is one person's word), or someone the member paid. A payment received is not here: anyone can send a member a Bean.
+ * derived at each read, never stored or sent. Only a step the member took lets anyone in (#3319 review F1, the director's
+ * call of 21 Nov 2026 on the rule "one person's word doesn't count": a stranger must not skip the door by his own act), so
+ * each row is one the member made:
+ * - `dm`: a direct chat the member wrote a line in (a system line is the node's, authored 'SYSTEM'), or whose request they
+ *   accepted themselves: the node's `acceptedByYou` (engine/dm-requests.ts RequestView), never a request that reads
+ *   accepted by the other's act, a trade's (acceptOnTrade: someone taking up the member's Offer, even one they Ignored) or
+ *   a node from before the field. letInOfRows takes the chat's pinned key.
+ * - `key`: a friend the member added (owner_pubkey is the signer); a deal (pending or completed: one only asked, declined
+ *   or cancelled before that is one person's word) where the member took a step: as its buyer (on an Offer they took it up
+ *   or asked for it; on their own Need they approved the other's offer: only the buyer's act makes either), or as the
+ *   seller on the buyer's own Need (the member offered, the buyer approved: the listing as this copy holds it names the
+ *   buyer its author). A deal on the member's own Offer never counts on its own: a 1-step take-up (escrow.ts acceptPost)
+ *   puts it at 'pending' with nothing from the seller, and only the buyer completes; whether the member approved a request
+ *   instead is not on the phone. And someone the member paid (from_pubkey is theirs). A payment received is not here:
+ *   anyone can send a member a Bean.
  * Binds my key seven times: the chat's other people, the participant row, my line, friends, my buys, my sales, my payments.
  */
 const LET_IN_SQL = `
@@ -2026,10 +2037,12 @@ const LET_IN_SQL = `
     WHERE (c.type IS NULL OR c.type = 'dm')
       AND c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
       AND (EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.author_pubkey = ? AND IFNULL(m.type, 'text') != 'system')
-           OR (CASE WHEN json_valid(c.request) THEN json_extract(c.request, '$.state') = 'accepted' ELSE 0 END))
+           OR (CASE WHEN json_valid(c.request)
+                    THEN json_extract(c.request, '$.state') = 'accepted' AND json_extract(c.request, '$.acceptedByYou') IS 1 ELSE 0 END))
     UNION ALL SELECT 'key', NULL, friend_pubkey FROM friends WHERE owner_pubkey = ?
     UNION ALL SELECT 'key', NULL, seller_pubkey FROM marketplace_transactions WHERE buyer_pubkey = ? AND status IN ('pending', 'completed')
-    UNION ALL SELECT 'key', NULL, buyer_pubkey FROM marketplace_transactions WHERE seller_pubkey = ? AND status IN ('pending', 'completed')
+    UNION ALL SELECT 'key', NULL, t.buyer_pubkey FROM marketplace_transactions t WHERE t.seller_pubkey = ? AND t.status IN ('pending', 'completed')
+      AND EXISTS (SELECT 1 FROM posts p WHERE p.id = t.post_id AND p.author_pubkey = t.buyer_pubkey)
     UNION ALL SELECT 'key', NULL, to_pubkey FROM transactions WHERE from_pubkey = ?
 `;
 const letInParams = (me: string): string[] => [me, me, me, me, me, me, me];

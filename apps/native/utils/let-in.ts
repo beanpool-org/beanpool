@@ -5,10 +5,14 @@
  * (db.ts decideMessageRequest), so no server learns anything new; and their first line across opens a chat, door open or
  * not (outside-mail.ts, core outside-chat.ts gateOutsideItem `letIn`).
  *
- * - **Who is let in** (derived at each read, never stored or sent): the other person of a direct chat the member wrote a line
- *   in or accepted, a friend they added, the other side of a deal both took up, someone they paid (db.ts LET_IN_SQL, one
- *   plain SELECT through each copy: the one in use and every held one, held-chats.ts heldLetIn), and each private contact
- *   linked to a member (contacts-store.ts; opened only when a copy doesn't already let the person in). Only under a key that
+ * - **Who is let in** (derived at each read, never stored or sent): only someone the member took a step towards themselves
+ *   (#3319 review at 3b80f0ee, F1; the director's call of 21 Nov 2026: a stranger must not skip the door by his own act).
+ *   The other person of a direct chat the member wrote a line in, or whose request they accepted by their own act (the
+ *   node's `acceptedByYou`, never a trade's acceptance), a friend they added, the other side of a deal the member took a
+ *   step in (as its buyer; as its seller only on the buyer's own Need, never on the member's own Offer), someone they paid
+ *   (db.ts LET_IN_SQL, one plain SELECT through each copy: the one in use and every held one, held-chats.ts heldLetIn), and
+ *   each private contact the member linked to a member (contacts-store.ts; opened only when a copy doesn't already let the
+ *   person in). Someone who took up the member's Offer, paid them or wrote to them alone is not let in. Only under a key that
  *   is the person's now, from every source alike (#3319 review F1): never one any copy's DM pins say a re-key replaced (a
  *   lost phone's, perhaps), nor one in question while a chat waits for the member over another key on offer.
  * - **The block first** (DESIGN-s7-blocks-verified-everywhere-fable.md §2.4; Marty 21 Nov: someone unblocked is not let in

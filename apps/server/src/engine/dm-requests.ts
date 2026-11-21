@@ -167,6 +167,13 @@ export interface RequestView {
      * their lines (openerLinesSince), and not refused (the header's "What the opener reads"). Never in the other's view.
      */
     nextLineIsRequest?: boolean;
+    /**
+     * True when the viewer reads it accepted and the acceptance was their own act (`accepted_by` is theirs: their Accept,
+     * line, own open of the chat, or friend add), never the other's, nor a trade's or a second acceptance's (`accepted_by`
+     * null). The phone's let in once counts only an acceptance of the member's own (#3319 review F1: a stranger taking up
+     * the member's Offer must not let himself in). Absent otherwise.
+     */
+    acceptedByYou?: true;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -213,6 +220,7 @@ function viewOf(row: RequestRow, viewer: string, now: number): RequestView {
     }
     const view: RequestView = { state, from: row.from_pubkey, at: row.requested_at };
     if (viewer === row.from_pubkey && state !== 'accepted') view.nextLineIsRequest = state === 'expired' || openerLinesSince(row) === 0;
+    if (state === 'accepted' && row.accepted_by === viewer) view.acceptedByYou = true;
     return view;
 }
 

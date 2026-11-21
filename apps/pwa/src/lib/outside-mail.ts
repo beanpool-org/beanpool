@@ -648,7 +648,10 @@ export async function heldReceiptsOn(ctx: Pick<OutsideMailContext, 'identity' | 
     return what;
 }
 
-/** A round's look at the chats holding receipts: those whose sender is blocked now (on any device, anywhere) forget them. */
+/**
+ * A round's look at the chats holding receipts: those whose sender is blocked now (isBlocked, the account's list as this page
+ * read it), a block made outside that chat included (a profile, another tab or device), forget them.
+ */
 async function forgetBlockedHeld(ctx: OutsideMailContext): Promise<void> {
     const me = ctx.identity.publicKey;
     for (const peer of await ctx.store.heldReceiptPeers(me)) {

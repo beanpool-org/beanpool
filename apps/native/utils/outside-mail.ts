@@ -659,8 +659,8 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
  * holds (core outsideHeldReceipts, Marty 22 Nov 2026): let go, to be sent at the next round, once (the chat's mark goes with
  * them, so later lines are receipted as any other); kept held; or forgotten, never to be sent. `barred` is the phone's
  * strongest look (utils/let-in.ts unbarredFor: blocked anywhere, or blocked here and since unblocked, or lists that can't
- * be read), the one a first line from a member here met. Nothing when the chat holds none. Never throws on a read: a step
- * that can't look holds.
+ * be read), the one a first line from a member here met. Nothing when the chat holds none. A block read that fails holds;
+ * a store that can't be read throws, and the caller's step leaves them held.
  */
 export async function heldReceiptsOn(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked' | 'unbarred'>, chatId: string, action: OutsideReceiptAction): Promise<'send' | 'hold' | 'forget' | null> {
     const me = ctx.identity.publicKey;
@@ -674,7 +674,10 @@ export async function heldReceiptsOn(ctx: Pick<OutsideMailContext, 'identity' | 
     return what;
 }
 
-/** A round's look at the chats holding receipts: those whose sender is blocked now (on any device, anywhere) forget them. */
+/**
+ * A round's look at the chats holding receipts: those whose sender is blocked now (isBlocked, the phone's list), a block
+ * made outside that chat included (a profile, another screen), forget them; a read that fails leaves them held.
+ */
 async function forgetBlockedHeld(ctx: OutsideMailContext): Promise<void> {
     const me = ctx.identity.publicKey;
     for (const peer of await ctx.store.heldReceiptPeers(me)) {

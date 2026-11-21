@@ -1326,6 +1326,9 @@ export default function HomeScreen() {
                         accountDismissedAt={layout?.dismissed.safety ?? null}
                         onDismiss={at => changeLayout(dismissSafety(layoutRef.current, at))}
                         onUp={setSafetyUp}
+                        // What there is to lose here, for the card's schedule (core way-back-schedule.ts, slice B1): the
+                        // balance in Home's answer (null without Your Beans), an open deal, a role in the community.
+                        toLose={{ balance_c: answer.cards.beans?.balance_c ?? null, holds: (answer.cards.deals?.open ?? 0) > 0 || role === 'owner' || role === 'admin' || role === 'moderator' }}
                         onActionsAt={at => band.report('safety:actions', at)}
                         // It has no band on Home; in Arrange it gets one across the top of its own frame, and goes quiet under it.
                         band={arrange && drawn.some(d => d.id === id) ? <ArrangeBandRow id={id} caption={caption} hue={hue} colors={colors} arrange={arrange} style={{ marginTop: -HOME_CARD_PADDING_DP }} onLift={liftInArrange(id)} /> : undefined}

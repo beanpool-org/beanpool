@@ -1192,7 +1192,7 @@ describe('after Remove everything, the "one way back" card learns there is no va
 
         expect(await vaultCopyKnown(kim.publicKey)).toBe(false);
         const after = await oneWayBackFromNode(kim.publicKey, GLOBAL, standing, Date.now(), { vaultCopy: await vaultCopyKnown(kim.publicKey) });
-        expect(oneWayBackPlace(after, Date.now(), false)).toBe('card');
+        expect(oneWayBackPlace(after, Date.now())).toBe('card');
         expect(mem.async.has(`beanpool_one_way_back:${kim.publicKey.toLowerCase()}`)).toBe(true);
     });
 });

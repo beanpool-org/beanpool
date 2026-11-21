@@ -59,9 +59,9 @@ Your phone checks that the words belong to your account, the same check as **Che
 
 You can join the global community with 12 secret words alone, without a Google, Apple or Facebook account (see "Joining BeanPool"). If that made you a new account, your 12 words are your only way back in. No copy of your account is kept anywhere but on your phone, and nobody can reset them: not BeanPool, and not the community. If you lose them and your phone, the account is gone for good. (If you joined with the account you already had, a sign-in you linked in another community still brings it back there.)
 
-The app says so when you join, beside your words (**Keep a way back in**; in a web browser, **Safety Backup**). After you join, a card on **Home** says it again, on the phone and in the web app: **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything. On the phone:
+The app says so when you join, beside your words (**Keep a way back in**; in a web browser, **Safety Backup**). After you join, a card on **Home** says it again. On the phone it says **If this phone is lost, this is how you get back in.**; in the web app, **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything. On the phone:
 
-- **✕** puts the card away. It comes back once after your first post and once after a week, then stays only in **Settings**, under **Account Protection**.
+- **✕** puts the card away. It comes back once when you first have Beans, once 30 days after you joined, then every 90 days while you have something to lose here (see "When the phone reminds you" in "Getting your account back"). Between times it stays in **Settings**, under **Account Protection**.
 - **Show my 12 words** opens **Account Protection**, where you can see them again.
 - In **Account Protection**, **I still have my 12 words** puts the card away for good. **Add a sign-in** stays there.
 

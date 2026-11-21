@@ -18,6 +18,7 @@ import {
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
 import { NotificationsOffLine } from './NotificationsOffLine';
+import { WayBackBellLine } from './WayBackBellLine';
 import {
     BELL_EVENTS, bellBadge, bellClearWords, bellLabel, bellReadWords, isOthersListingDoorbell, isPushNoticeKind, needsYouCounts, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
 } from '@beanpool/core';
@@ -473,6 +474,8 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                             <Text style={[s.lifetime, { color: colors.text.muted }]}>{t('Older notices are gone after 7 days.')}</Text>
                             {/* While this phone can't buzz: the way to turn notifications on (DESIGN-home-default-fable.md §2.5). */}
                             {sheet && <NotificationsOffLine publicKey={me} colors={colors} />}
+                            {/* After Home's way-back card is put away, until a way back is kept (core way-back-schedule.ts `bell`, slice B1). */}
+                            {sheet && <WayBackBellLine publicKey={me} colors={colors} onOpen={closeSheet} />}
                         </ScrollView>
                         </>)}
                     </View>

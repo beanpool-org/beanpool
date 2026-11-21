@@ -49,7 +49,7 @@ Under **Your communities** there is always a row for the **Global community**. I
 - Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.
 - Then choose your photo for the global community, as for any new community, and then roughly where you are (**Roughly where are you?**; you can tap **Skip for now**): the global community shows you the listings near it. See "Joining BeanPool".
 
-Nothing changes in your other communities, and your 12 words stay the same. A sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See "Getting your account back". A sign-in you linked to your account before keeps working. If you join with 12 words and no sign-in keeps a copy of your account, the app shows the **Your account has one way back** card, as for anyone who joins with 12 words (see "Joining BeanPool").
+Nothing changes in your other communities, and your 12 words stay the same. A sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See "Getting your account back". A sign-in you linked to your account before keeps working. If you join with 12 words and no sign-in keeps a copy of your account, the app shows the **Your way back in** card on **Home**, as for anyone who joins with 12 words (see "Joining BeanPool").
 
 If the app says **This sign-in already joined the global community with a different BeanPool account**, that sign-in has its own account there. Use a different sign-in: one sign-in account makes one account in the global community.
 

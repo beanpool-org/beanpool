@@ -78,6 +78,7 @@ vi.mock('../../components/LinkSignInSheet', () => ({
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { ONE_WAY_BACK_TEXT, finishOneWayBack, readOneWayBack, startOneWayBack, startOneWayBackPutAway } from '../one-way-back';
 import { draftIdentity } from '../identity';
+import { wordsWrittenDownStoreKey } from '../storage-keys';
 
 const GLOBAL = 'https://global.beanpool.org';
 const OTHER = 'https://mullum.beanpool.org';
@@ -309,38 +310,44 @@ describe('Home\'s Arrange band: the card\'s inside is not rebuilt when the band 
 
 // DESIGN-home-default-fable.md §2.5 (Marty's pick 2, 13 Nov 2026; slice D2): the reminder for every member whose 12 words
 // are their only way back, by what the account has (Home's `me.wayBack`), not how it joined. Sign-up counts as the first
-// showing: day one is First steps' line only, the card comes once after the first post and once after a week, then
-// Settings. Where the node takes no sign-in from them (review of #3110, round 2: `linkState` refuses an invited member),
-// the card offers none.
-describe('an invite sign-up that carried on: no card on day one, card after the first post, card after a week, then Settings', () => {
+// showing: day one is First steps' line only. Then core's schedule (slice B1 of DESIGN-notify-and-backup-asks-fable-amend2.md
+// §12.3, Marty's pick 10 of 21 Nov 2026): once at the first Beans, with the fact; once 30 days after joining; then every 90
+// days while there is something to lose. Where the node takes no sign-in from them (review of #3110, round 2: `linkState`
+// refuses an invited member), the card offers none.
+describe('an invite sign-up that carried on: no card on day one, then the first Beans, 30 days, and every 90 days while there is something to lose', () => {
     const SIGNED_UP = Date.parse('2026-10-02T08:00:00Z');
+    const DAY = 24 * 3600_000;
     const kept: unknown[] = [];
     /** Home's word for an invited member with no sign-in: the words are the only way back, and the node takes no sign-in from them. */
     const homeWord = (over: Partial<{ words: boolean; door: boolean; kept: boolean }> = {}) => ({
         url: OTHER, standing: { words: true, joinedAt: SIGNED_UP, door: false, kept: false, ...over },
     });
-    async function drawCard(place: 'landing' | 'settings', word = homeWord()) {
+    type ToLose = { balance_c: number | null; holds: boolean };
+    async function drawCard(place: 'landing' | 'settings', word = homeWord(), toLose?: ToLose) {
         host = document.createElement('div');
         document.body.appendChild(host);
         root = createRoot(host);
-        await act(async () => { root!.render(createElement(OneWayBackCard, { place, homeWord: word }) as unknown as Parameters<Root['render']>[0]); });
+        await act(async () => { root!.render(createElement(OneWayBackCard, { place, homeWord: word, toLose }) as unknown as Parameters<Root['render']>[0]); });
         await settle();
     }
-    const again = async (place: 'landing' | 'settings' = 'landing', word = homeWord()) => {
+    const again = async (place: 'landing' | 'settings' = 'landing', word = homeWord(), toLose?: ToLose) => {
         act(() => root?.unmount());
         host?.remove();
-        await drawCard(place, word);
+        await drawCard(place, word, toLose);
     };
-    const short = () => text().includes('Your 12 words are how you get back in. Check you still have them.');
-    const posted = async (yes: boolean) => {
+    /** The card's one sentence (core WAY_BACK_WORDS.line), the same on every card since B1. */
+    const short = () => text().includes(ONE_WAY_BACK_TEXT.body);
+    const FACT = "You have 40 Beans here now. Keep a way back in, so they don't go with a lost phone.";
+    const fact = () => text().includes(FACT);
+    const posted = async (posts: { id: string; status?: string }[]) => {
         const db = await import('../db');
-        (db.getMyPosts as ReturnType<typeof vi.fn>).mockResolvedValue(yes ? [{ id: 'p1' }] : []);
+        (db.getMyPosts as ReturnType<typeof vi.fn>).mockResolvedValue(posts);
     };
 
     beforeEach(async () => {
         mem.anchor = OTHER;
         kept.length = 0;
-        await posted(false);
+        await posted([]);
         const nodeFetch = globalThis.fetch;
         globalThis.fetch = vi.fn(async (url: any, init?: any) => {
             const u = new URL(String(url));
@@ -357,51 +364,84 @@ describe('an invite sign-up that carried on: no card on day one, card after the 
     it('day one: no card on Home, the record is put away and only Home\'s word moves it (/api/community/me is never asked)', async () => {
         await drawCard('landing');
         expect(short()).toBe(false);
-        expect(warning()).toBe(false);
         expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ url: OTHER, by: 'wayBack', dismissedAt: SIGNED_UP });
         expect(node.asks).toBe(0);
     });
 
-    it('after the first post: the card once, with its own words, no "Add a sign-in", and Show my 12 words / I still have my 12 words', async () => {
-        await posted(true);
+    it('a first post no longer brings it (1.4.7 did); the first Beans do, once, with the fact, no "Add a sign-in", and Show my 12 words / I still have my 12 words', async () => {
+        await posted([{ id: 'p1' }]);
         vi.setSystemTime(SIGNED_UP + 2 * 3600_000);
         await drawCard('landing');
-        expect(short()).toBe(true);
-        expect(warning()).toBe(false);
-        // The card's name for TalkBack says the same, not "one way back" (review of #3113, §2.5).
+        expect(short()).toBe(false);
+        // Home's answer says 40 Beans: the record keeps when they were first seen, and the card comes with the fact.
+        await again('landing', homeWord(), { balance_c: 4000, holds: false });
+        expect(fact()).toBe(true);
+        expect(short()).toBe(false);
+        expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ beansAt: SIGNED_UP + 2 * 3600_000 });
+        // The card's name for TalkBack says the same, never "one way back".
         const labels = Array.from(document.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'));
-        expect(labels).toContain('Your 12 words are how you get back in. Check you still have them.');
+        expect(labels).toContain(FACT);
         expect(labels.join('\n')).not.toContain('one way back');
         expect(text()).not.toContain('Add a sign-in');
         expect(text()).toContain('Show my 12 words');
         expect(text()).toContain('I still have my 12 words');
         await act(async () => { button('✕').click(); });
         await settle();
-        expect(short()).toBe(false);
-        await again();
-        expect(short()).toBe(false);
+        expect(fact()).toBe(false);
+        await again('landing', homeWord(), { balance_c: 4000, holds: false });
+        expect(fact() || short()).toBe(false);
         expect(node.asks).toBe(0);
     });
 
-    it('after a week: once more; then Settings only', async () => {
-        vi.setSystemTime(SIGNED_UP + 8 * 24 * 3600_000);
+    it('30 days after joining: once more, nothing to lose needed; then every 90 days only while there is something to lose', async () => {
+        vi.setSystemTime(SIGNED_UP + 30 * DAY - 60_000);
         await drawCard('landing');
+        expect(short()).toBe(false);
+        vi.setSystemTime(SIGNED_UP + 30 * DAY);
+        await again();
         expect(short()).toBe(true);
         await act(async () => { button('✕').click(); });
         await settle();
         await again();
         expect(short()).toBe(false);
-        vi.setSystemTime(SIGNED_UP + 40 * 24 * 3600_000);
+        // 90 days on with nothing to lose: stays away; Settings still has it.
+        vi.setSystemTime(SIGNED_UP + 121 * DAY);
         await again();
         expect(short()).toBe(false);
         await again('settings');
         expect(short()).toBe(true);
         expect(text()).not.toContain('Add a sign-in');
+        // A live listing of theirs on this phone: something to lose, so it is back.
+        await posted([{ id: 'p1', status: 'active' }]);
+        await again();
+        expect(short()).toBe(true);
+        await act(async () => { button('✕').click(); });
+        await settle();
+        // An open deal or a role, from Home: back again 90 days after that ✕, not before.
+        await posted([]);
+        vi.setSystemTime(SIGNED_UP + 210 * DAY);
+        await again('landing', homeWord(), { balance_c: 0, holds: true });
+        expect(short()).toBe(false);
+        vi.setSystemTime(SIGNED_UP + 211 * DAY);
+        await again('landing', homeWord(), { balance_c: 0, holds: true });
+        expect(short()).toBe(true);
+    });
+
+    it('a way back kept is never reminded: the words said written down in Ways back, with Beans and 400 days gone', async () => {
+        mem.async.set(wordsWrittenDownStoreKey(who.identity.publicKey), '1');
+        vi.setSystemTime(SIGNED_UP + 400 * DAY);
+        await drawCard('landing', homeWord(), { balance_c: 4000, holds: true });
+        expect(short() || fact()).toBe(false);
+        // Control: taken back in Ways back, the card is due again.
+        mem.async.set(wordsWrittenDownStoreKey(who.identity.publicKey), '0');
+        await again('landing', homeWord(), { balance_c: 4000, holds: true });
+        expect(short() || fact()).toBe(true);
     });
 
     it('"I still have my 12 words" is kept on the account (words_kept), and the card is done on this phone', async () => {
-        await posted(true);
+        vi.setSystemTime(SIGNED_UP + 30 * DAY);
         await drawCard('landing');
+        expect(short()).toBe(true);
         await act(async () => { button('I still have my 12 words').click(); });
         await settle();
         expect(kept).toEqual([{ words_kept: true }]);
@@ -410,7 +450,7 @@ describe('an invite sign-up that carried on: no card on day one, card after the 
     });
 
     it('said on another device (Home\'s word kept) or a sign-in linked there (wayBack covered): done here too', async () => {
-        await posted(true);
+        vi.setSystemTime(SIGNED_UP + 30 * DAY);
         await drawCard('landing', homeWord({ kept: true }));
         expect(short()).toBe(false);
         expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ done: 'checked' });
@@ -421,7 +461,7 @@ describe('an invite sign-up that carried on: no card on day one, card after the 
     });
 
     it('a say-so on another device that lands while the card is up ends it on this visit, with no new focus (review of #3113)', async () => {
-        await posted(true);
+        vi.setSystemTime(SIGNED_UP + 30 * DAY);
         await drawCard('landing');
         expect(short()).toBe(true);
         // Home's network answer replaces its stored copy: the same community, `words` still true, `kept` now true.
@@ -442,31 +482,29 @@ describe('an invite sign-up that carried on: no card on day one, card after the 
         expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ url: OTHER, by: 'wayBack', joinedAt: SIGNED_UP, dismissedAt: SIGNED_UP });
     });
 
-    // The parity read of D2 against D3 (rows 9 and 10), one rule with the web (components/OneWayBack.tsx): "one way back"
-    // only on the global community's door, where no admin can set a member up again (§2.5); before, the phone said it to the
-    // door's members of a local community too. And "I still have my 12 words" on the door's own Home card, as the web's has
-    // it: before, the phone offered it there only where no sign-in could be added.
-    it('the 12-words door of a local community (Home\'s safety card): Add a sign-in, I still have my 12 words, and never "one way back"', async () => {
+    // The parity read of D2 against D3 (rows 9 and 10): "I still have my 12 words" on the door's own Home card, as the web's
+    // has it. Since B1 every card says the one sentence, "If this phone is lost, this is how you get back in." (true on every
+    // door, the first design §5.1), and never "one way back".
+    it('the 12-words door of a local community (Home\'s safety card): Add a sign-in, I still have my 12 words, and the one sentence', async () => {
         mem.async.clear();
         await startOneWayBack(who.identity.publicKey, OTHER, SIGNED_UP);
         await drawCard('landing', homeWord({ door: true }));
-        expect(warning()).toBe(false);
-        expect(text()).toContain('Your 12 words are how you get back in. Check you still have them, or add a sign-in.');
+        expect(short()).toBe(true);
         const labels = Array.from(document.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'));
-        expect(labels).toContain('Your 12 words are how you get back in. Check you still have them, or add a sign-in.');
+        expect(labels).toContain(ONE_WAY_BACK_TEXT.body);
         expect(labels.join('\n')).not.toContain('one way back');
         expect(text()).toContain('Add a sign-in');
         expect(text()).toContain('I still have my 12 words');
         expect(text()).toContain('Show my 12 words');
     });
 
-    it('the global community\'s door: "one way back" (no admin there can set a member up again), with I still have my 12 words beside the sign-in', async () => {
+    it('the global community\'s door: the one sentence, its name for TalkBack the same, with I still have my 12 words beside the sign-in', async () => {
         mem.async.clear();
         mem.anchor = GLOBAL;
         await startOneWayBack(who.identity.publicKey, GLOBAL, SIGNED_UP);
         await drawCard('landing', { url: GLOBAL, standing: { words: true, joinedAt: SIGNED_UP, door: true, kept: false } });
         expect(warning()).toBe(true);
-        expect(Array.from(document.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'))).toContain('Your account has one way back');
+        expect(Array.from(document.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'))).toContain(ONE_WAY_BACK_TEXT.body);
         expect(text()).toContain('Add a sign-in');
         await act(async () => { button('I still have my 12 words').click(); });
         await settle();

@@ -129,11 +129,14 @@ vi.mock('../pulse-token-store', () => ({ forgetAllPulseTokens: vi.fn(async () =>
  * The phone's own answer about notifications (utils/notification-permission.ts readOsNotificationPermission reads it). null:
  * none to give, as on a runner without them (the read fails: nothing to turn on), which every case but the interests note's has.
  */
-const phoneSays = vi.hoisted(() => ({ now: null as null | { status: string; canAskAgain: boolean } }));
+const phoneSays = vi.hoisted(() => ({ now: null as null | { status: string; canAskAgain: boolean }, asked: 0 }));
 vi.mock('expo-notifications', () => {
     const getPermissionsAsync = async () => { if (!phoneSays.now) throw new Error('no notifications here'); return phoneSays.now; };
-    return { default: { getPermissionsAsync }, getPermissionsAsync };
+    // The phone's own pop-up, only ever after a tap on one of our asks: it says yes here.
+    const requestPermissionsAsync = async () => { phoneSays.asked++; phoneSays.now = { status: 'granted', canAskAgain: true }; return phoneSays.now; };
+    return { default: { getPermissionsAsync, requestPermissionsAsync }, getPermissionsAsync, requestPermissionsAsync };
 });
+vi.mock('../../services/push-notifications', () => ({ registerForPushNotifications: vi.fn(async () => null) }));
 const who = vi.hoisted(() => ({ identity: null as any }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: who.identity }) }));
 const scheme = vi.hoisted(() => ({ dark: false }));
@@ -209,7 +212,7 @@ import * as tourStore from '../tour-store';
 import { DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, HOME_STARTER_SET, START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
 import { lightColors } from '../../constants/colors';
 import { QUIET_OPACITY } from '../../components/home/quiet';
-import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey, homeWelcomePartStoreKey } from '../storage-keys';
+import { KNOCKS_STORE_KEY, NOTIFICATION_PERMISSION_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey, homeWelcomePartStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
@@ -288,6 +291,7 @@ let host: HTMLElement | null = null;
 beforeEach(async () => {
     mem.store.clear();
     phoneSays.now = null;
+    phoneSays.asked = 0;
     resetHomeStoreForTests();
     nav.params = {};
     hooks.handlers.clear();
@@ -786,6 +790,86 @@ describe('tailoring: the "…" menu, Arrange, interests', () => {
         const note = () => document.querySelector('[data-testid="home-interests-note"]')?.textContent;
         await render();
         expect(note()).toBe('Tap a few. What you star comes first here and in the Market.');
+    });
+});
+
+// Slice N2b (DESIGN-notify-and-backup-asks-fable-amend2.md §12.3): a star on What are you into?, where the community tells members
+// when a neighbour asks, is the moment for "Hear when a neighbour asks for one of these." [Tell me] under the chips. Whether it
+// shows is core's rule through this phone's record (the real utils/notification-permission.ts) and the phone's own answer.
+describe('What are you into?: the named line at a star (slice N2b)', () => {
+    afterEach(() => { scheme.dark = false; });
+    const RECORD_KEY = NOTIFICATION_PERMISSION_STORE_KEY;
+    const LINE = 'Hear when a neighbour asks for one of these.';
+    const tapChip = async (id: string) => {
+        await act(async () => { (document.querySelector(`[data-testid="home-interest-${id}"]`) as HTMLElement).click(); });
+        await settle(6);
+    };
+    const lineEl = () => document.querySelector('[data-testid="notify-line"]');
+    const asksPush = () => { node.answer = { ...localMember(), features: { ...localMember().features, askedPush: true } as HomeAnswer['features'] }; };
+
+    for (const dark of [false, true]) {
+        it(`${dark ? 'dark' : 'light'}: never asked, a star brings the line under the chips; Tell me brings the phone's pop-up, says so, and the note promises the push`, async () => {
+            scheme.dark = dark;
+            asksPush();
+            phoneSays.now = { status: 'undetermined', canAskAgain: true };
+            await render();
+            expect(lineEl()).toBeNull();
+            await tapChip('labour');
+            expect(lineEl()?.textContent).toContain(LINE);
+            // Under the chips: after the last one.
+            const chips = Array.from(document.querySelectorAll('[data-testid^="home-interest-"]'));
+            expect(!!(chips[chips.length - 1].compareDocumentPosition(lineEl()!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+            expect(phoneSays.asked).toBe(0);
+            expect(JSON.parse(mem.store.get(RECORD_KEY)!)).toMatchObject({ askKind: 'line', lines: ['star'] });
+            await act(async () => { (document.querySelector('[data-testid="notify-line-tell-me"]') as HTMLElement).click(); });
+            await settle(6);
+            expect(phoneSays.asked).toBe(1);
+            expect(document.querySelector('[data-testid="notify-line-done"]')?.textContent).toContain("You'll hear when a neighbour asks for one of these.");
+            expect(document.querySelector('[data-testid="home-interests-note"]')?.textContent).toBe("Tap a few. What you star comes first here and in the Market, and we'll tell you when a neighbour asks for it.");
+        });
+    }
+
+    for (const [state, says, record] of [
+        ["the phone said no (an iPhone's Don't Allow)", { status: 'denied', canAskAgain: false }, null],
+        ["the phone said no (Android 13+'s first)", { status: 'denied', canAskAgain: true }, { state: 'unanswered', updatedAt: 0, phoneNoAt: Date.now() - 86_400_000 }],
+        ['allowed already (or Android 8 to 12)', { status: 'granted', canAskAgain: true }, null],
+        ["the day already taken (Home's once card today)", { status: 'undetermined', canAskAgain: true }, { state: 'unanswered', updatedAt: 0, askDay: localDay(new Date()), askKind: 'once', onceAt: Date.now() - 60_000 }],
+        ['the star line shown before', { status: 'undetermined', canAskAgain: true }, { state: 'unanswered', updatedAt: 0, askDay: '2026-01-01', askKind: 'line', lines: ['star'] }],
+    ] as const) {
+        it(`${state}: a star brings no line, and the phone is not asked`, async () => {
+            asksPush();
+            phoneSays.now = says;
+            if (record) mem.store.set(RECORD_KEY, JSON.stringify(record));
+            await render();
+            await tapChip('labour');
+            expect(lineEl()).toBeNull();
+            expect(phoneSays.asked).toBe(0);
+        });
+    }
+
+    it('a community that sends no such push (global, Beans off): no line, and the rule is not asked', async () => {
+        phoneSays.now = { status: 'undetermined', canAskAgain: true };
+        await render();
+        await tapChip('labour');
+        expect(lineEl()).toBeNull();
+        expect(mem.store.get(RECORD_KEY)).toBeUndefined();
+    });
+
+    it('taking a star off is no moment: no line, though the rule would allow one by then', async () => {
+        asksPush();
+        phoneSays.now = { status: 'undetermined', canAskAgain: true };
+        // The star goes on while the day is taken (no line), then the day is free again, then the star comes off.
+        const taken = { state: 'unanswered', updatedAt: 0, askDay: localDay(new Date()), askKind: 'once', onceAt: Date.now() - 60_000 };
+        mem.store.set(RECORD_KEY, JSON.stringify(taken));
+        await render();
+        await tapChip('labour');
+        expect(lineEl()).toBeNull();
+        expect(document.querySelector('[data-testid="home-interest-labour"]')?.textContent).toContain('★');
+        mem.store.set(RECORD_KEY, JSON.stringify({ state: 'unanswered', updatedAt: 0 }));
+        await tapChip('labour');
+        expect(document.querySelector('[data-testid="home-interest-labour"]')?.textContent).not.toContain('★');
+        expect(lineEl()).toBeNull();
+        expect(JSON.parse(mem.store.get(RECORD_KEY)!)).toEqual({ state: 'unanswered', updatedAt: 0 });
     });
 });
 

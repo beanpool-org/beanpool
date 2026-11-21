@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { notifyLineWords } from '@beanpool/core';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, buildIcs, buildShareText, effectiveEventAudience, eventLink,
     formatReminderChoice, formatReminderOffsets, googleCalendarUrl, icsEscape, icsFileName, icsFold, myEventAsPost,
@@ -26,6 +27,14 @@ describe('the reminder offsets are the shared contract, and nothing else', () =>
 
     it('defaults everyone to the day before', () => {
         expect(DEFAULT_REMINDER_OFFSETS).toEqual([1440]);
+    });
+
+    // Slice N2b: the named line under Going and Interested promises "a reminder the day before"; that is true only while the
+    // default every member starts on is one day. Moving the default means changing those words with it.
+    it('the named line at Going and Interested says the day before, the default reminder', () => {
+        expect(DEFAULT_REMINDER_OFFSETS).toEqual([1440]);
+        expect(notifyLineWords('going').line).toBe('Get a reminder the day before, and hear if it changes.');
+        expect(notifyLineWords('interested').line).toBe('Get a reminder the day before.');
     });
 });
 

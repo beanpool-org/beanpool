@@ -4606,8 +4606,6 @@
   "Held in trust and system notifications": "Emanet ve sistem bildirimleri",
   "When someone asks to join your community": "Biri topluluğuna katılmak istediğinde",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Hangi anlık bildirimlerin cihazınızı uyandıracağını kontrol edin. Değişiklikler otomatik olarak kaydedilir.",
-  "Turn on notifications?": "Bildirimleri aç?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Biri size yanıt verdiğinde, mesaj attığında veya katılmak istediğinde haberdar olun. Başka hiçbir şey için değil.",
   "{name} has no owner yet": "{name} topluluğunun henüz bir sahibi yok",
   "If you installed it, claim it with the one-time code on the server.": "Eğer siz kurduysanız, sunucudaki tek kullanımlık kodla sahiplenin.",
   "Claim {name}": "{name} topluluğunu sahiplen",

@@ -4606,8 +4606,6 @@
   "Held in trust and system notifications": "Mga notification ng hawak sa tiwala at sistema",
   "When someone asks to join your community": "Kapag may humiling na sumali sa iyong komunidad",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Kontrolin kung aling mga push notification ang gigising sa iyong device. Awtomatikong nase-save ang mga pagbabago.",
-  "Turn on notifications?": "I-on ang mga notification?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para marinig mo kapag may sumagot sa iyo, nagpadala ng mensahe, o humiling na sumali. Wala nang iba.",
   "{name} has no owner yet": "Wala pang may-ari ang {name}",
   "If you installed it, claim it with the one-time code on the server.": "Kung ikaw ang nag-install nito, i-claim ito gamit ang one-time code sa server.",
   "Claim {name}": "I-claim ang {name}",

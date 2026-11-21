@@ -12,8 +12,11 @@
  *   through the bell's fixed table (components/NeedsYouIcons.tsx goToNoticeTarget), or opens nothing and shows
  *   FORGED_NOTICE_LINE once. The waiting page (`?door=ask`) checks its own (pages/KnockWaitingPage.tsx).
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { checkClickedNotice, keepWebPushAtOpen, noticeInHash, readWebPushPin, webPushOrigin } from './web-push';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    checkClickedNotice, keepWebPushAtOpen, laterFromAsk, markNotifyAskHere, noticeInHash, notifyOnceDueHere, readWebPushPin, turnOnFromAsk, webPushOrigin,
+    type PushEnv,
+} from './web-push';
 import { getNodeApiUrl, getPushNoticeDetails } from './api';
 import type { BeanPoolIdentity } from './identity';
 
@@ -84,4 +87,46 @@ export function useWebPushMember(
 
     const dismissForged = useCallback(() => setForged(false), []);
     return { forged, dismissForged };
+}
+
+/**
+ * Home's once card (scratch/fable-design/DESIGN-notify-and-backup-asks-fable-amend2.md §7, slice N5a; the phone's N1h):
+ * the join's ask, once, for a member who never met the join's screen in this browser, by core's own rule (notifyAsks
+ * `once`, read through lib/web-push.ts notifyOnceDueHere): first on a free day, then at each landing until Later or for 7
+ * days; only where web push reaches this browser, it can still ask, and this account's notifications are not on here.
+ * Never where the browser blocks the site or can't be told.
+ *
+ * Decided as Home lands for this key (`landed`), and kept for that landing after an answer, so the way-back card waits for
+ * the next landing: never both on one screen, this one first. Marked shown only once Home has drawn it (`drawn`). Nothing
+ * asks the browser until Turn on: its prompt only inside that tap (turnOnFromAsk). A subscription the community did not
+ * take keeps the card, saying so.
+ */
+export function useNotifyOnce(identity: BeanPoolIdentity | null, publicKey: string | null, lang: string, drawn: boolean, env?: PushEnv) {
+    // Read once for each key's landing: an answer made here changes the record, never this landing's decision.
+    const landed = useMemo(() => !!publicKey && notifyOnceDueHere(publicKey, env), [publicKey]);
+    const [answered, setAnswered] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [failed, setFailed] = useState(false);
+    const open = landed && answered !== publicKey;
+
+    useEffect(() => {
+        if (open && drawn && publicKey) markNotifyAskHere(publicKey, { type: 'shown', surface: 'once' });
+    }, [open, drawn, publicKey]);
+
+    const turnOn = () => {
+        if (!identity || !publicKey || busy) return;
+        setBusy(true);
+        setFailed(false);
+        void turnOnFromAsk(identity, lang, 'once', env).then((r) => {
+            setBusy(false);
+            if (r === 'failed') setFailed(true);
+            else setAnswered(publicKey);
+        });
+    };
+    const later = () => {
+        if (!publicKey) return;
+        laterFromAsk(publicKey, 'once');
+        setAnswered(publicKey);
+    };
+    return { landed, open, busy, failed, turnOn, later };
 }

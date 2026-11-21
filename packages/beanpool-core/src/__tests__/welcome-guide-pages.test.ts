@@ -52,19 +52,19 @@ describe("the guide's pages on joining in a browser: the web's front door and do
         const gone = [
             '**Used BeanPool before?**', "**I'm New Here**", "**I'm Already a Member →**", '**Restore Existing Identity**',
             '**Create Identity & Join →**', '**How it Works**', 'a short tour', '(in a web browser, **← Back**)', '(in the web app, **Next**)',
-            '**Already a member**',
         ];
+        // The community's card (routes/community-card.ts), at a community's bare address, keeps its own doors: the guide names them.
+        for (const door of ['**Ask to join**', '**I have an invite**', '**Already a member**']) expect(communities).toContain(door);
         for (const [name, text] of Object.entries({ joining, webApp, communities, recovery })) {
             for (const label of gone) expect(`${name}: ${text.includes(label) ? label : ''}`).toBe(`${name}: `);
         }
     });
 
     it("the front door's buttons, the same on the phone and the web", () => {
-        expect(joining).toContain('The first screen has three buttons, in the phone app and in a web browser alike.');
+        expect(joining).toContain("The first screen has three buttons, in the phone app and in the web app (the community's address followed by /app; the address alone shows the community's card");
         expect(joining).toContain('In a web browser, an invite link opens straight at your name.');
-        expect(communities).toContain("- **I've used BeanPool before**: the ways back into your account.");
-        expect(communities).toContain('- **No invite? Look around**: the global community, where the community links to one.');
-        expect(communities).toContain('- **More ways in ›**, then **Ask a community to join**, where the community takes requests to join:');
+        // A community's bare address answers with its card (routes/community-card.ts), not the web app's front door.
+        expect(communities).toContain("A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member");
         expect(recovery).toContain("On the first screen, tap **I've used BeanPool before**. In a web browser, tap the same button, or **Already have BeanPool?** where the page shows that instead.");
         expect(joining).toContain('In a web browser, **Your invite** opens straight away, with a box for the invite link or code and **Next →**, but no **Scan a QR code**.');
     });

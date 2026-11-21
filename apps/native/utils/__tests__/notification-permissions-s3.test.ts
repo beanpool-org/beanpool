@@ -1,15 +1,20 @@
 /**
- * Front doors S3: notification permission at the tap, never at account creation (Fable design §0, §1.9, §3.9, §7).
+ * Front doors S3: notification permission at the tap, never at account creation (Fable design §0, §1.9, §3.9, §7), as
+ * notifications amendment 2 changes it (DESIGN-notify-and-backup-asks-fable-amend2.md §6, §8, slice N1; Marty 21 Nov 2026).
  *
  * Requirements:
  * - No requestPermissionsAsync in the identity effect (app/_layout.tsx:769-772 removed).
- * - "Turn on notifications?" card at the end of How it Works and on Home until answered.
+ * - The phone's pop-up only after a tap on one of our asks.
+ * - The record keeps "Later" and the phone's "no" apart, with dates. "Not now" is a "Later": never final. An older
+ *   app's "Not now" ('declined') reads as a "Later", and nothing stored is rewritten.
+ * - First steps' line stays through a "Later" and leaves after the phone's "no".
+ * - The pop-up at the first post, message or ask to join stays (until slice N2a), once in all, and asks nothing after
+ *   the phone's "no".
  * - Words:
  *     Title: "Turn on notifications?"
  *     Body: "So you hear when someone answers you, messages you, or asks to join. Nothing else."
  *     Buttons: "Turn on" · "Not now"
- * - Nothing asked after a restore (lands on Home; card asks only when tapped).
- * - Ask again at the first knock or message if declined, with the app's one-line reason first; never on second knock/message.
+ * - Nothing asked by a restore itself (it lands on Home; asks come at a tap).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
@@ -67,16 +72,28 @@ vi.mock('../../services/push-notifications', () => pushServiceMock);
 import {
     NOTIFICATION_CARD_WORDS,
     readNotificationPermissionRecord,
-    shouldShowNotificationCard,
+    writeNotificationPermissionRecord,
+    markNotificationAsk,
     turnOnNotifications,
-    declineNotifications,
+    notificationsLater,
     askNotificationPermissionOnAction,
     NOTIFICATIONS_OFF_IN_SETTINGS,
     registerWhenNotificationsAllowed,
     notificationsOffHere,
     notifyStep,
+    readOsNotificationPermission,
     type NotificationPermissionRecord,
 } from '../notification-permission';
+import { NOTIFICATION_PERMISSION_STORE_KEY } from '../storage-keys';
+import { notifyAsks } from '@beanpool/core';
+
+/** What core's rule says this phone may draw now, from its record and its own state. */
+const asksNow = async (extra: { line?: string; live?: boolean; waited?: boolean } = {}) =>
+    notifyAsks({ record: await readNotificationPermissionRecord(), phone: await readOsNotificationPermission(), now: Date.now(), ...extra });
+/** First steps' line as Home reads it today (`notifyStep`; slice N1h hides it while the once card is up). */
+const stepNow = async () => notifyStep(await readNotificationPermissionRecord(), await readOsNotificationPermission());
+/** Our record as stored, raw. */
+const stored = () => JSON.parse(mem.async.get(NOTIFICATION_PERMISSION_STORE_KEY) ?? 'null');
 
 describe('S3: notification permission at the tap, never at account creation', () => {
     beforeEach(() => {
@@ -100,15 +117,17 @@ describe('S3: notification permission at the tap, never at account creation', ()
     });
 
     describe("the card's state machine", () => {
-        it('starts in unanswered state on a fresh install and shows card until answered', async () => {
+        it('starts in unanswered state on a fresh install, and the rule lets the join or Home ask once', async () => {
             const record = await readNotificationPermissionRecord();
-            expect(record.state).toBe('unanswered');
-            expect(shouldShowNotificationCard(record, false)).toBe(true);
+            expect(record).toEqual({ state: 'unanswered', updatedAt: 0, actionAsked: false });
+            expect(await asksNow()).toMatchObject({ join: true, once: true, bell: true });
         });
 
-        it('does not show card if OS permission was already granted', () => {
-            const record: NotificationPermissionRecord = { state: 'unanswered', updatedAt: Date.now() };
-            expect(shouldShowNotificationCard(record, true)).toBe(false);
+        it('asks nothing if OS permission was already granted', async () => {
+            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as any);
+            expect(await asksNow({ line: 'answer', live: true, waited: true })).toEqual({
+                join: false, once: false, line: false, home: false, fact: false, firstSteps: null, bell: false,
+            });
         });
 
         it('tapping Turn on requests permission, records granted state, and registers push token', async () => {
@@ -121,7 +140,8 @@ describe('S3: notification permission at the tap, never at account creation', ()
 
             const updated = await readNotificationPermissionRecord();
             expect(updated.state).toBe('granted');
-            expect(shouldShowNotificationCard(updated, false)).toBe(false);
+            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as any);
+            expect(await asksNow()).toMatchObject({ join: false, once: false, firstSteps: true });
         });
 
         it('tapping Turn on without publicKey falls back to stored identity', async () => {
@@ -133,26 +153,53 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(pushServiceMock.registerForPushNotifications).toHaveBeenCalledWith('stored-pubkey');
         });
 
-        it('tapping Turn on when permission is denied records declined state and does not register token', async () => {
+        it("tapping Turn on when the phone says no records the phone's no with its date, and registers no token", async () => {
             notificationsMock.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' } as any);
 
+            const before = Date.now();
             const result = await turnOnNotifications('test-pubkey');
             expect(result).toBe('declined');
             expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
             expect(pushServiceMock.registerForPushNotifications).not.toHaveBeenCalled();
 
             const updated = await readNotificationPermissionRecord();
-            expect(updated.state).toBe('declined');
-            expect(shouldShowNotificationCard(updated, false)).toBe(false);
+            expect(updated.phoneNoAt).toBeGreaterThanOrEqual(before);
+            expect(updated.laterAt).toBeUndefined();
+            expect(updated.state).toBe('unanswered');
+            // Android can still ask once more (canAskAgain), but nothing of ours asks: only the bell's line and Settings stay.
+            expect(await asksNow({ line: 'answer', live: true })).toMatchObject({ join: false, once: false, line: false, home: false, firstSteps: null, bell: true });
         });
 
-        it('tapping Not now transitions to declined and hides the card', async () => {
-            await declineNotifications();
+        for (const [what, answer] of [['closes with no answer', { status: 'undetermined' }], ['fails', null]] as const) {
+            it(`the phone's pop-up ${what}: a Later, never a no`, async () => {
+                if (answer) notificationsMock.requestPermissionsAsync.mockResolvedValueOnce(answer as any);
+                else notificationsMock.requestPermissionsAsync.mockRejectedValueOnce(new Error('no answer'));
+                expect(await turnOnNotifications('test-pubkey')).toBe('unanswered');
+                const rec = await readNotificationPermissionRecord();
+                expect(rec.phoneNoAt).toBeUndefined();
+                expect(rec.laterAt).toEqual(expect.any(Number));
+                expect(notifyStep(rec, await readOsNotificationPermission())).toBe(false);
+            });
+        }
+
+        it('Later is recorded with its date, not as a no; First steps keeps its line', async () => {
+            const before = Date.now();
+            await notificationsLater();
 
             const record = await readNotificationPermissionRecord();
-            expect(record.state).toBe('declined');
-            expect(shouldShowNotificationCard(record, false)).toBe(false);
+            expect(record.state).toBe('unanswered');
+            expect(record.laterAt).toBeGreaterThanOrEqual(before);
+            expect(record.phoneNoAt).toBeUndefined();
             expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+            expect(await stepNow()).toBe(false);
+        });
+
+        it('Later on the once card also puts the card away; the rest of the record is kept', async () => {
+            await writeNotificationPermissionRecord({ state: 'unanswered', updatedAt: 0, actionAsked: true, onceAt: Date.now() - 1000 });
+            await notificationsLater(undefined, 'once');
+            const rec = await readNotificationPermissionRecord();
+            expect(rec).toMatchObject({ actionAsked: true, onceClosedAt: rec.laterAt });
+            expect((await asksNow()).once).toBe(false);
         });
 
         it('after restore, nothing is asked automatically; the record is unanswered until a tap or a first action', async () => {
@@ -160,27 +207,36 @@ describe('S3: notification permission at the tap, never at account creation', ()
             const record = await readNotificationPermissionRecord();
             expect(record.state).toBe('unanswered');
             expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
-            // How it Works' card would still show it (Home has none: DESIGN-home-default-fable.md §2.5).
-            expect(shouldShowNotificationCard(record, false)).toBe(true);
+            // The rule's once card is for it (drawn by slice N1h); nothing here asks by itself.
+            expect((await asksNow()).once).toBe(true);
 
-            // A tap on Turn on (How it Works, First steps' line, the bell's line) asks for permission
+            // A tap on Turn on (First steps' line, the bell's line) asks for permission
             await turnOnNotifications('restored-pubkey');
             expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
-
-            const after = await readNotificationPermissionRecord();
-            expect(shouldShowNotificationCard(after, false)).toBe(false);
+            expect((await readNotificationPermissionRecord()).state).toBe('granted');
         });
 
-        // DESIGN-home-default-fable.md §2.5 (Marty's pick 3, 13 Nov 2026): after one "Not now", nothing asks again. The
-        // old rule asked once more at the first knock and the first message even after a Not now.
+        // Amendment 2 §6 (Marty, 21 Nov 2026) reverses 13 Nov's pick 3: a "Not now" is a "Later", never final. Until slice
+        // N2a replaces the pop-up, a Later from anywhere (an older app's How it Works card included) leaves its one showing.
         for (const action of ['post', 'message', 'knock'] as const) {
-            it(`after Not now nothing asks again: the first ${action} asks nothing`, async () => {
-                await declineNotifications();
+            it(`after a Later the pop-up still asks once: the first ${action}`, async () => {
+                await notificationsLater();
                 const promptUser = vi.fn(async () => 'turn_on' as const);
                 const res = await askNotificationPermissionOnAction(action, 'test-pubkey', { promptUser });
+                expect(promptUser).toHaveBeenCalledTimes(1);
+                expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+                expect(res).toBe('granted');
+            });
+
+            it(`after the phone's no nothing of ours asks: the first ${action} asks nothing and spends nothing`, async () => {
+                notificationsMock.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' } as any);
+                await turnOnNotifications('test-pubkey');
+                notificationsMock.requestPermissionsAsync.mockClear();
+                const promptUser = vi.fn(async () => 'turn_on' as const);
+                expect(await askNotificationPermissionOnAction(action, 'test-pubkey', { promptUser })).toBe('declined');
                 expect(promptUser).not.toHaveBeenCalled();
                 expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
-                expect(res).toBe('declined');
+                expect((await readNotificationPermissionRecord()).actionAsked).toBe(false);
             });
         }
 
@@ -199,15 +255,29 @@ describe('S3: notification permission at the tap, never at account creation', ()
                 expect(promptUser).toHaveBeenCalledTimes(1);
             });
 
-            it(`unanswered: Not now at the first ${first} is final, for every kind`, async () => {
+            it(`unanswered: Not now at the first ${first} is a Later, not a no; the pop-up stays once in all`, async () => {
                 const promptUser = vi.fn(async () => 'not_now' as const);
-                expect(await askNotificationPermissionOnAction(first, 'test-pubkey', { promptUser })).toBe('declined');
-                expect((await readNotificationPermissionRecord()).state).toBe('declined');
+                expect(await askNotificationPermissionOnAction(first, 'test-pubkey', { promptUser })).toBe('later');
+                const rec = await readNotificationPermissionRecord();
+                expect(rec).toMatchObject({ state: 'unanswered', actionAsked: true, laterAt: expect.any(Number) });
+                expect(rec.phoneNoAt).toBeUndefined();
                 for (const next of [...later, first]) {
-                    expect(await askNotificationPermissionOnAction(next, 'test-pubkey', { promptUser })).toBe('declined');
+                    expect(await askNotificationPermissionOnAction(next, 'test-pubkey', { promptUser })).toBe('unanswered');
                 }
                 expect(promptUser).toHaveBeenCalledTimes(1);
                 expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+                // Not final: First steps keeps its line, and its tap still brings the phone's pop-up.
+                expect(await stepNow()).toBe(false);
+                await turnOnNotifications('test-pubkey');
+                expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+            });
+
+            it(`unanswered: Turn on at the first ${first}, then the phone's no: recorded as the phone's, and spent`, async () => {
+                notificationsMock.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' } as any);
+                const promptUser = vi.fn(async () => 'turn_on' as const);
+                expect(await askNotificationPermissionOnAction(first, 'test-pubkey', { promptUser })).toBe('declined');
+                expect(await readNotificationPermissionRecord()).toMatchObject({ actionAsked: true, phoneNoAt: expect.any(Number) });
+                expect((await readNotificationPermissionRecord()).laterAt).toBeUndefined();
             });
         }
 
@@ -227,11 +297,9 @@ describe('S3: notification permission at the tap, never at account creation', ()
     describe('the phone already allows notifications', () => {
         for (const state of ['unanswered', 'declined'] as const) {
             for (const action of ['post', 'knock', 'message'] as const) {
-                it(`record ${state}, first ${action}: no prompt, the token is registered silently, nothing stored as declined`, async () => {
-                    if (state === 'declined') {
-                        notificationsMock.getPermissionsAsync.mockResolvedValueOnce({ status: 'undetermined' } as any);
-                        await declineNotifications();
-                    }
+                it(`record ${state}, first ${action}: no prompt, the token is registered silently, the record's state not rewritten`, async () => {
+                    // 'declined': an older app's record of its "Not now", as that app stored it.
+                    if (state === 'declined') mem.async.set(NOTIFICATION_PERMISSION_STORE_KEY, JSON.stringify({ state: 'declined', updatedAt: 5 }));
                     notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as any);
                     const promptUser = vi.fn(async () => 'not_now' as const);
 
@@ -252,17 +320,40 @@ describe('S3: notification permission at the tap, never at account creation', ()
             }
         }
 
-        it('Not now on the card stores nothing when the phone already allows notifications', async () => {
-            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as any);
-            await declineNotifications();
-            expect((await readNotificationPermissionRecord()).state).toBe('unanswered');
+        // A Later is never a no: it writes its date and nothing else, whatever the phone says.
+        for (const status of ['granted', 'denied'] as const) {
+            it(`Later stores its date and never 'declined' (phone: ${status})`, async () => {
+                notificationsMock.getPermissionsAsync.mockResolvedValue({ status, canAskAgain: true } as any);
+                await notificationsLater();
+                expect(stored()).toEqual({ state: 'unanswered', updatedAt: 0, actionAsked: false, laterAt: expect.any(Number) });
+            });
+        }
+    });
+
+    // Slice N1: no conversion code. The record keeps its key and gains fields; an older app's record is read as it is.
+    describe("the phone's record across versions", () => {
+        it("an older app's \"Not now\" reads as a Later: First steps' line comes back, and the once card is for it", async () => {
+            mem.async.set(NOTIFICATION_PERMISSION_STORE_KEY, JSON.stringify({ state: 'declined', actionAsked: false, updatedAt: 1_700_000_000_000 }));
+            const rec = await readNotificationPermissionRecord();
+            expect(rec).toEqual({ state: 'declined', actionAsked: false, updatedAt: 1_700_000_000_000 });
+            expect(notifyStep(rec, await readOsNotificationPermission())).toBe(false);
+            expect(await asksNow()).toMatchObject({ once: true, join: true });
+            // Read, never rewritten: the stored text is the older app's.
+            expect(stored()).toEqual({ state: 'declined', actionAsked: false, updatedAt: 1_700_000_000_000 });
         });
 
-        it('Not now on the card stores declined when the phone has not allowed them', async () => {
-            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true } as any);
-            await declineNotifications();
-            expect((await readNotificationPermissionRecord()).state).toBe('declined');
+        it('an event adds its own fields and keeps the rest, the old pop-up\'s mark included', async () => {
+            mem.async.set(NOTIFICATION_PERMISSION_STORE_KEY, JSON.stringify({ state: 'declined', actionAsked: true, updatedAt: 5 }));
+            await markNotificationAsk({ type: 'shown', surface: 'line', line: 'answer' });
+            expect(stored()).toMatchObject({ state: 'declined', actionAsked: true, updatedAt: 5, lines: ['answer'], askKind: 'line' });
         });
+
+        for (const junk of ['not json', '"text"', '42', 'null', '[1,2]', '{"state":"maybe","laterAt":"soon","lines":"answer"}']) {
+            it(`unreadable or odd storage is a new record: ${junk}`, async () => {
+                mem.async.set(NOTIFICATION_PERMISSION_STORE_KEY, junk);
+                expect(await readNotificationPermissionRecord()).toEqual({ state: 'unanswered', updatedAt: 0, actionAsked: false });
+            });
+        }
     });
 
     // #2524 deciding review, finding 3: once the phone won't show its dialog again (iOS after Don't Allow, Android 13+
@@ -274,7 +365,7 @@ describe('S3: notification permission at the tap, never at account creation', ()
             notificationsMock.requestPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false } as any);
         });
 
-        it("Turn on gives the one-line reason, then opens the phone's settings; the card stays", async () => {
+        it("Turn on gives the one-line reason, then opens the phone's settings; nothing is recorded", async () => {
             const confirmSettings = vi.fn(async () => 'turn_on' as const);
             const openSettings = vi.fn(async () => {});
 
@@ -284,9 +375,11 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(confirmSettings).toHaveBeenCalledTimes(1);
             expect(openSettings).toHaveBeenCalledTimes(1);
             expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
-            const rec = await readNotificationPermissionRecord();
-            expect(rec.state).toBe('unanswered');
-            expect(shouldShowNotificationCard(rec, false)).toBe(true);
+            expect(mem.async.has(NOTIFICATION_PERMISSION_STORE_KEY)).toBe(false);
+            // The phone said no: no ask of ours, First steps' line gone, the bell's line and the fact line stay.
+            expect(await asksNow({ live: true, waited: true })).toEqual({
+                join: false, once: false, line: false, home: false, fact: true, firstSteps: null, bell: true,
+            });
         });
 
         it('the default Turn on shows the reason in an Alert, and its Open Settings opens Linking.openSettings', async () => {
@@ -306,47 +399,60 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect((await readNotificationPermissionRecord()).state).toBe('unanswered');
         });
 
-        it('Not now at that line stores declined and opens nothing', async () => {
+        it("Not now at that line records nothing and opens nothing: the phone's no already stands", async () => {
             const openSettings = vi.fn(async () => {});
             const res = await turnOnNotifications('test-pubkey', undefined, {
                 confirmSettings: vi.fn(async () => 'not_now' as const), openSettings,
             });
-            expect(res).toBe('declined');
+            expect(res).toBe('unanswered');
             expect(openSettings).not.toHaveBeenCalled();
-            expect((await readNotificationPermissionRecord()).state).toBe('declined');
+            expect(mem.async.has(NOTIFICATION_PERMISSION_STORE_KEY)).toBe(false);
         });
 
-        it('once the phone allows them, the card goes (back from settings)', async () => {
+        it('once the phone allows them, nothing asks (back from settings)', async () => {
             await turnOnNotifications('test-pubkey', undefined, { confirmSettings: async () => 'turn_on', openSettings: async () => {} });
             notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as any);
-            const rec = await readNotificationPermissionRecord();
-            expect(shouldShowNotificationCard(rec, true)).toBe(false);
+            expect(await asksNow({ line: 'answer', live: true, waited: true })).toEqual({
+                join: false, once: false, line: false, home: false, fact: false, firstSteps: null, bell: false,
+            });
         });
 
-        // Unanswered here (a Not now is final since DESIGN-home-default-fable.md §2.5, so a declined record is never asked):
-        // the phone's settings say off, as after iOS's Don't Allow.
-        it("first message: one prompt that says they're off in settings; its button opens the settings, with no second dialog", async () => {
-            const promptUser = vi.fn(async (_kind: 'ask' | 'settings') => 'turn_on' as const);
-            const openSettings = vi.fn(async () => {});
+        // Amendment 2 §6: after the phone's no, nothing of ours raises it, and we never put the phone's settings in front of
+        // anyone by ourselves; the bell's line opens them at the member's own tap. The pop-up used to say "off in settings".
+        it('first message: no prompt, no settings opened, and the one pop-up is not spent', async () => {
+            const promptUser = vi.fn(async (_kind: 'ask') => 'turn_on' as const);
             const rn = await import('react-native');
 
-            const res = await askNotificationPermissionOnAction('message', 'test-pubkey', { promptUser, openSettings });
+            const res = await askNotificationPermissionOnAction('message', 'test-pubkey', { promptUser });
 
-            expect(promptUser).toHaveBeenCalledTimes(1);
-            expect(promptUser).toHaveBeenCalledWith('settings');
-            expect(openSettings).toHaveBeenCalledTimes(1);
+            expect(promptUser).not.toHaveBeenCalled();
             expect(rn.Alert.alert).not.toHaveBeenCalled();
+            expect(rn.Linking.openSettings).not.toHaveBeenCalled();
             expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
-            // The settings opened; nothing is answered yet, and the one ask is spent.
-            expect(res).toBe('unanswered');
-            expect((await readNotificationPermissionRecord()).actionAsked).toBe(true);
+            expect(res).toBe('declined');
+            expect((await readNotificationPermissionRecord()).actionAsked).toBe(false);
         });
 
         it('while the phone can still ask, the first-message prompt is the plain ask', async () => {
             notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'undetermined', canAskAgain: true } as any);
-            const promptUser = vi.fn(async (_kind: 'ask' | 'settings') => 'not_now' as const);
+            const promptUser = vi.fn(async (_kind: 'ask') => 'not_now' as const);
             await askNotificationPermissionOnAction('message', 'test-pubkey', { promptUser });
             expect(promptUser).toHaveBeenCalledWith('ask');
+        });
+
+        it('the default pop-up gives the reason and its Turn on brings the phone\'s own', async () => {
+            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'undetermined', canAskAgain: true } as any);
+            notificationsMock.requestPermissionsAsync.mockResolvedValueOnce({ status: 'granted' } as any);
+            const rn = await import('react-native');
+            const alert = vi.mocked(rn.Alert.alert);
+            alert.mockImplementationOnce((_title, _body, buttons) => { buttons?.[1]?.onPress?.(); });
+
+            expect(await askNotificationPermissionOnAction('post', 'test-pubkey')).toBe('granted');
+            const [title, body, buttons] = alert.mock.calls[0];
+            expect(title).toBe('Turn on notifications?');
+            expect(body).toBe(NOTIFICATION_CARD_WORDS.body);
+            expect(buttons?.map((b) => b.text)).toEqual(['Not now', 'Turn on']);
+            expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -403,14 +509,14 @@ describe('S3: notification permission at the tap, never at account creation', ()
         it("How it Works' card left the join with How it Works: no notification card in the join, and nothing asked there", () => {
             expect(welcome).not.toContain('testID="guide-notification-card"');
             expect(welcome).not.toContain('setNotifVisible');
-            expect(welcome).not.toMatch(/turnOnNotifications\(|declineNotifications\(|requestPermissionsAsync/);
+            expect(welcome).not.toMatch(/turnOnNotifications\(|notificationsLater\(|requestPermissionsAsync/);
             expect(card).toBe('');
         });
 
         // DESIGN-home-default-fable.md §2.5 (Marty's pick 3): no card at the top of Home; the card component is gone.
         it('Home draws no notifications card', () => {
             // No card and no card rule; the phone's own question only at First steps' tap (turnOnNotifications in onStep).
-            expect(home).not.toMatch(/NotificationPermissionCard|shouldShowNotificationCard|declineNotifications/);
+            expect(home).not.toMatch(/NotificationPermissionCard|shouldShowNotificationCard|notificationsLater|markNotificationAsk/);
             expect(home.match(/turnOnNotifications\(/g)).toHaveLength(1);
             expect(home).toMatch(/else if \(step === 'notify'\) \{\s*void turnOnNotifications\(/);
             expect(fs.existsSync(path.join(root, 'components/NotificationPermissionCard.tsx'))).toBe(false);
@@ -425,16 +531,31 @@ describe('S3: notification permission at the tap, never at account creation', ()
         });
 
 
-        // §2.4: First steps' line "Hear when someone answers you", from this phone alone.
-        it("First steps' notifications line: only on a phone that has to ask, ticked when allowed through it, gone after Not now", () => {
-            const os = (granted: boolean, available = true) => ({ available, granted, canAskAgain: true });
-            const rec = (state: NotificationPermissionRecord['state']): NotificationPermissionRecord => ({ state, updatedAt: 1 });
+        // §2.4: First steps' line "Hear when someone answers you", from this phone alone; amendment 2 §6: it stays through a
+        // Later and leaves after the phone's no.
+        it("First steps' notifications line: on a phone that has to ask, through a Later; ticked when allowed through it; gone after the phone's no", () => {
+            const os = (granted: boolean, available = true, canAskAgain = true) => ({ available, granted, canAskAgain });
+            const rec = (state: NotificationPermissionRecord['state'], more: Partial<NotificationPermissionRecord> = {}): NotificationPermissionRecord => ({ state, updatedAt: 1, ...more });
             expect(notifyStep(rec('unanswered'), os(false))).toBe(false);
             expect(notifyStep(rec('granted'), os(true))).toBe(true);
             // Android 8 to 12: allowed without asking, so no line at all.
             expect(notifyStep(rec('unanswered'), os(true))).toBeNull();
-            expect(notifyStep(rec('declined'), os(false))).toBeNull();
+            // A Later, and an older app's Not now: the line stays.
+            expect(notifyStep(rec('unanswered', { laterAt: 5 }), os(false))).toBe(false);
+            expect(notifyStep(rec('declined'), os(false))).toBe(false);
+            // The phone's no, recorded (Android could still ask once more) or read from the phone (an iPhone's Don't Allow).
+            expect(notifyStep(rec('unanswered', { phoneNoAt: 5 }), os(false))).toBeNull();
+            expect(notifyStep(rec('declined'), os(false, true, false))).toBeNull();
             expect(notifyStep(rec('unanswered'), os(false, false))).toBeNull();
+        });
+
+        // Amendment 2 §8: the file's own words carry the rule's new sentence, word for word, and no longer the old finality.
+        it("the file's header carries the 26 Oct rule and the 21 Nov exception, word for word", () => {
+            const src = fs.readFileSync(path.join(root, 'utils/notification-permission.ts'), 'utf8');
+            const header = src.slice(0, src.indexOf('*/')).replace(/\n \* ?/g, ' ').replace(/\s+/g, ' ');
+            expect(header).toContain('Notifications are the one exception (Marty, 21 Nov 2026). The join\'s last screen may carry one soft ask for notifications: our own screen, with the reason, a "Turn on notifications" button and a "Later" that is not final. The hard ask (the phone\'s pop-up) still comes only after the member taps that button, never by itself. Members who are already in see the same soft ask once on Home. The reason for the exception: a notification takes nothing from the phone, and it is the only way BeanPool can reach a member. This is not a pattern. Photos, camera, location, contacts and every other permission keep the rule above with no exception, and no other permission may be raised in the join.');
+            expect(header).toContain('never at install, sign-up or first launch');
+            expect(src).not.toMatch(/Not now is final|nothing asks again|Never at install, sign-up or right after an account exists/i);
         });
     });
 

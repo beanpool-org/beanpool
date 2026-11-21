@@ -4381,26 +4381,32 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(cards()[0]).toBe('start');
     });
 
-    it('Welcome says who invited them, and "Say hello ›" opens the chat with that person', async () => {
+    // Slice S7 (DESIGN-onboarding-home-landing-fable.md §4.1 item 2): whose invite brought them moved from BeanPool's tile to
+    // the community's welcome card under it, with the same words and the same "Say hello ›".
+    it('the community\'s welcome under the tile says who invited them, and "Say hello ›" opens the chat with that person', async () => {
         const inviter = 'aa'.repeat(32);
         node.answer = { ...newcomer(), me: { ...newcomer().me!, invitedBy: { key: inviter, name: 'Ana' } } };
         await render();
-        expect(document.querySelector('[data-testid="home-start-inviter"]')!.textContent).toBe('Ana invited you.');
-        expect(document.querySelector('[data-testid="home-start-hello"]')!.textContent).toBe('Say hello ›');
-        expect(byLabel('Say hello to Ana')).not.toBeNull();
-        await act(async () => { (document.querySelector('[data-testid="home-start-hello"]') as HTMLElement).click(); });
+        const tile = document.querySelector('[data-testid="home-card-start"]')!;
+        const welcome = document.querySelector('[data-testid="home-welcome-community"]')!;
+        expect(tile.textContent).not.toContain('Ana invited you.');
+        expect(document.querySelector('[data-testid="home-welcome-community-inviter"]')!.textContent).toBe('Ana invited you.');
+        expect(document.querySelector('[data-testid="home-welcome-community-hello"]')!.textContent).toBe('Say hello ›');
+        expect(welcome.contains(byLabel('Say hello to Ana'))).toBe(true);
+        await act(async () => { (document.querySelector('[data-testid="home-welcome-community-hello"]') as HTMLElement).click(); });
         await settle(3);
         expect(dmStarts).toEqual([[who.identity.publicKey, inviter]]);
         expect(nav.router.push).toHaveBeenCalledWith('/chat/dm-with-inviter');
     });
 
-    it('an owner alone on a new community: "You\'re the first one here." with Invite someone, in place of an inviter', async () => {
+    it('an owner alone on a new community: "You\'re the first one here." with Invite someone, in place of an inviter, on the community\'s welcome', async () => {
         const a = newcomer();
         node.answer = { ...a, me: { ...a.me!, invitedBy: null }, cards: { ...a.cards, community: { name: 'Mullumbimby', members: 1 } } };
         await render();
-        expect(document.querySelector('[data-testid="home-start-first"]')!.textContent).toBe("You're the first one here.");
-        expect(document.querySelector('[data-testid="home-start-hello"]')).toBeNull();
-        await act(async () => { (document.querySelector('[data-testid="home-start-invite"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="home-welcome-community-first"]')!.textContent).toBe("You're the first one here.");
+        expect(document.querySelector('[data-testid="home-welcome-community-hello"]')).toBeNull();
+        expect(document.querySelector('[data-testid="home-card-start"]')!.textContent).not.toContain("You're the first one here.");
+        await act(async () => { (document.querySelector('[data-testid="home-welcome-community-invite"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     });
 
@@ -5490,5 +5496,178 @@ describe('the wait after a doorbell on Home', () => {
         await act(async () => { await new Promise(r => setTimeout(r, 3_300)); });
         await settle();
         expect(homeReads().length).toBe(before + 1);
+    });
+});
+
+// ── The community's own welcome on Home (scratch/fable-design/DESIGN-onboarding-home-landing-fable.md §4.1 item 2, §4.2,
+// §4.3, §4.5; slice S7) at 320 x 569 dp with text at 1.3x, light and dark ──────────────────────────────────────────────
+describe("S7: the community's welcome under BeanPool's tile (owner-written, members only, never translated)", () => {
+    const WORDS = "G'day and welcome. Market day is Saturday at the hall.\nPost what you grow, make or can lend.";
+    const ASHA = { key: 'aa'.repeat(32), name: 'Asha' };
+    /** A newcomer of `days` in Riverside who never saved a Home, never ended the tour; `welcome` absent = a 1.4.7 server. */
+    const newcomerIn = (over: { welcome?: string | null; invitedBy?: typeof ASHA | null; days?: number; members?: number } = {}): HomeAnswer => {
+        const a = localMember();
+        const { tour: _t, ...me } = a.me!;
+        const community: Record<string, unknown> = { name: 'Riverside', members: over.members ?? 84, tradesThisMonth: 23 };
+        if ('welcome' in over) community.welcome = over.welcome;
+        return {
+            ...a,
+            me: { ...me, joinedAt: iso(Date.now() - (over.days ?? 3) * 24 * H), invitedBy: over.invitedBy === undefined ? ASHA : over.invitedBy },
+            layout: null,
+            cards: { ...a.cards, community: community as HomeAnswer['cards']['community'] },
+        };
+    };
+    const prefsPosts = (from = 0) => node.requests.slice(from).filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences');
+    const roleReads = () => node.requests.filter(r => new URL(r.url).pathname === '/api/node-admin/me');
+    const welcomeCard = () => document.querySelector('[data-testid="home-welcome-community"]');
+    const testIdIn = (el: Element | null, id: string) => el?.querySelector(`[data-testid="${id}"]`) ?? null;
+    /** The drawn slots in order, with the community's welcome where it sits among them. */
+    const topOfHome = () => Array.from(document.querySelectorAll('[data-testid^="home-slot-"], [data-testid="home-welcome-community"]'))
+        .filter(e => e.getAttribute('data-testid') === 'home-welcome-community' || e.querySelector('[data-testid^="home-card-"]') !== null)
+        .map(e => e.getAttribute('data-testid')!.replace('home-slot-', ''));
+    beforeEach(() => {
+        tourStore.closeTour();
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+    });
+    afterEach(() => { scheme.dark = false; });
+
+    for (const dark of [false, true]) {
+        const theme = dark ? 'dark' : 'light';
+
+        it(`${theme}: a welcome written: "FROM RIVERSIDE" with its ×, the owners' words as written, the inviter's line and the count, under the tile`, async () => {
+            scheme.dark = dark;
+            node.answer = newcomerIn({ welcome: WORDS });
+            await render();
+            const card = welcomeCard()!;
+            expect(card).not.toBeNull();
+            expect(card.querySelector('[role="heading"]')!.textContent).toBe('From Riverside');
+            expect(testIdIn(card, 'home-welcome-community-words')!.textContent).toBe(WORDS);
+            expect(testIdIn(card, 'home-welcome-community-inviter')!.textContent).toBe('Asha invited you.');
+            expect(testIdIn(card, 'home-welcome-community-members')!.textContent).toBe('84 members');
+            expect(card.contains(byLabel('Put this welcome away'))).toBe(true);
+            expect(testIdIn(card, 'home-welcome-community-write')).toBeNull();
+            // Joined to the tile's foot, inside the tile's slot: the tile, then this card, then First steps (not a card of the list, no "…").
+            expect(topOfHome().slice(0, 4)).toEqual(['start', 'home-welcome-community', 'steps', 'market']);
+            expect(document.querySelector('[data-testid="home-slot-start"]')!.contains(card)).toBe(true);
+            expect(cards()).toEqual(['start', 'steps', 'market', 'interests', 'events', 'pulse', 'beans', 'joined', 'tips', 'community']);
+            expect(card.querySelector('[aria-label^="Card options"]')).toBeNull();
+            // Never twice on Home: the community card has no "Riverside's welcome ›" while this card is up.
+            expect(document.querySelector('[data-testid="home-community-welcome-again"]')).toBeNull();
+        });
+
+        it(`${theme}: no welcome written: the inviter's line and the count alone; a member who is no owner is never asked to write one`, async () => {
+            scheme.dark = dark;
+            node.answer = newcomerIn({ welcome: null });
+            node.role = null;
+            await render();
+            await settle(5);
+            const card = welcomeCard()!;
+            expect(testIdIn(card, 'home-welcome-community-words')).toBeNull();
+            expect(testIdIn(card, 'home-welcome-community-inviter')!.textContent).toBe('Asha invited you.');
+            expect(testIdIn(card, 'home-welcome-community-members')!.textContent).toBe('84 members');
+            expect(testIdIn(card, 'home-welcome-community-write')).toBeNull();
+            expect(document.body.textContent).not.toContain("Write your community's welcome");
+        });
+
+        it(`${theme}: an owner of a community with none: "Write your community's welcome ›", which opens Settings as Manage does`, async () => {
+            scheme.dark = dark;
+            node.answer = newcomerIn({ welcome: null, invitedBy: null });
+            node.role = 'owner';
+            await render();
+            await settle(5);
+            const write = testIdIn(welcomeCard(), 'home-welcome-community-write') as HTMLElement;
+            expect(write.getAttribute('aria-label')).toBe("Write your community's welcome ›");
+            expect(write.getAttribute('role')).toBe('button');
+            await act(async () => { write.click(); });
+            expect(manage.start).toHaveBeenCalledWith('Riverside');
+        });
+
+        it(`${theme}: the ×: one layout write that keeps the member's Home and adds the community-welcome date; the card goes, and "Riverside's welcome ›" shows the words again`, async () => {
+            scheme.dark = dark;
+            node.answer = newcomerIn({ welcome: WORDS });
+            await render();
+            const from = node.requests.length;
+            await act(async () => { byLabel('Put this welcome away')!.click(); });
+            await settle(20);
+            const writes = prefsPosts(from).map(r => JSON.parse(r.body).preferences).filter(p => 'home.layout' in p);
+            expect(writes).toHaveLength(1);
+            const layout = writes[0]['home.layout'];
+            expect(Object.keys(layout.dismissed)).toEqual(['community-welcome']);
+            expect(Number.isFinite(Date.parse(layout.dismissed['community-welcome']))).toBe(true);
+            // Nothing else on Home changed: the newcomer's default list, BeanPool's tile included (it leaves by its own Got it).
+            expect(layout.cards.map((c: { id: string }) => c.id)).toEqual(HOME_DEFAULT_LIST);
+            expect(welcomeCard()).toBeNull();
+            expect(cards()[0]).toBe('start');
+            const again = document.querySelector('[data-testid="home-community-welcome-again"]') as HTMLElement;
+            expect(again.getAttribute('aria-label')).toBe("Riverside's welcome ›");
+            expect(document.querySelector('[data-testid="home-card-community"]')!.contains(again)).toBe(true);
+            expect(document.querySelector('[data-testid="home-community-welcome-words"]')).toBeNull();
+            const before = node.requests.length;
+            await act(async () => { again.click(); });
+            await settle(3);
+            expect(document.querySelector('[data-testid="home-community-welcome-words"]')!.textContent).toBe(WORDS);
+            // Read again in place: nothing is written by it.
+            expect(prefsPosts(before)).toEqual([]);
+        });
+    }
+
+    it("a second community on the same phone: no BeanPool tile (its once-per-phone mark is elsewhere), the community's own welcome still on top", async () => {
+        mem.store.set(homeWelcomePartStoreKey(who.identity.publicKey), JSON.stringify({ v: 1, where: 'hilltop.example', at: iso(Date.now() - H) }));
+        node.answer = newcomerIn({ welcome: WORDS });
+        await render();
+        await settle(5);
+        expect(cards()).not.toContain('start');
+        expect(welcomeCard()).not.toBeNull();
+        expect(topOfHome()[0]).toBe('home-welcome-community');
+        expect(testIdIn(welcomeCard(), 'home-welcome-community-words')!.textContent).toBe(WORDS);
+    });
+
+    it("after BeanPool's Got it the community's welcome stays, at the top, until its own ×", async () => {
+        const a = newcomerIn({ welcome: WORDS });
+        node.answer = { ...a, me: { ...a.me!, tour: { v: 1, state: 'skipped', at: iso(Date.now() - H) } } };
+        await render();
+        expect(cards()).not.toContain('start');
+        expect(topOfHome()[0]).toBe('home-welcome-community');
+    });
+
+    it('a 1.4.7 community (no welcome field): no owners\' words and no prompt, even for an owner, and no role asked for it; the inviter\'s line stays', async () => {
+        node.answer = newcomerIn({});
+        node.role = 'owner';
+        await render();
+        await settle(5);
+        const card = welcomeCard()!;
+        expect(testIdIn(card, 'home-welcome-community-words')).toBeNull();
+        expect(testIdIn(card, 'home-welcome-community-write')).toBeNull();
+        expect(testIdIn(card, 'home-welcome-community-inviter')!.textContent).toBe('Asha invited you.');
+        expect(roleReads()).toEqual([]);
+        expect(document.querySelector('[data-testid="home-community-welcome-again"]')).toBeNull();
+    });
+
+    it('nothing to say (no words, no inviter, not an owner): no card at all', async () => {
+        node.answer = newcomerIn({ welcome: null, invitedBy: null });
+        node.role = null;
+        await render();
+        await settle(5);
+        expect(welcomeCard()).toBeNull();
+    });
+
+    it("a member of months: no welcome card (the newcomer's 30 days are over), and the community card's line reads the words", async () => {
+        node.answer = newcomerIn({ welcome: WORDS, days: 45 });
+        await render();
+        expect(welcomeCard()).toBeNull();
+        expect(document.querySelector('[data-testid="home-community-welcome-again"]')!.getAttribute('aria-label')).toBe("Riverside's welcome ›");
+    });
+
+    it('the owners\' words are drawn as written whatever language the phone is in (never through t())', async () => {
+        const arabic = 'مرحبا بكم في السوق يوم السبت';
+        node.answer = newcomerIn({ welcome: arabic });
+        setLanguage('fr');
+        try {
+            await render();
+            expect(testIdIn(welcomeCard(), 'home-welcome-community-words')!.textContent).toBe(arabic);
+        } finally {
+            setLanguage('en');
+        }
     });
 });

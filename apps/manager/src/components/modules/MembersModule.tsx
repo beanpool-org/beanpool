@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { KNOWLEDGE_TYPE, tierForCredit } from '@beanpool/core';
+import { KNOWLEDGE_TYPE, tierForCredit, isNotifyReach, notifyReachLines } from '@beanpool/core';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
-import { t } from '../../lib/fresh-proof';
+import { t, tn } from '../../lib/fresh-proof';
 import { FLAG_WORDS as FW, flagHeading } from '../../lib/flag-words';
 import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { RolesViewer } from './NodeRolesPanel';
@@ -552,6 +552,12 @@ export function MembersModule({
         return { ios, android, pwa, unknown };
     }, [members, countedPlatforms]);
 
+    // The owner's count (notifications N6): members a phone can notify, of how many, as the node counted them (core's
+    // notifyReachCount). A count only, never a list of names. A node from before it sends none, and then nothing shows:
+    // the pages read so far are not every member, so the screen never counts it itself.
+    const countedNotify = nodeData?.counts?.notify;
+    const notifyLines = isNotifyReach(countedNotify) ? notifyReachLines(countedNotify, { t, tn }) : null;
+
     return (
         <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6 shadow-xl font-sans animate-fade-in">
             <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
@@ -733,6 +739,14 @@ export function MembersModule({
                             </span>
                         </div>
                     </div>
+
+                    {/* The owner's count, beside the totals: information only, no warning and no action. */}
+                    {notifyLines && (
+                        <div data-testid="notify-reach" className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1 text-xs">
+                            <p className="m-0 font-bold text-white">{notifyLines.headline}</p>
+                            {notifyLines.others && <p className="m-0 text-nature-300 leading-relaxed">{notifyLines.others}</p>}
+                        </div>
+                    )}
 
                     {/* Member Roster Table */}
                     <div className="space-y-3">

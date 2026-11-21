@@ -22,7 +22,7 @@ import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCac
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import {
     bundledAvatarForPubkey, combineKnockTicks, inviteForInviteBox, joinRuleLines, knockTickOf, landingPostId, listingAfterJoinHost, lowercaseRecoveryWords, NAME_BOX_WORDS, notANameIn,
-    photoStepNote, postIdFromInviteLink, splitBold,
+    postIdFromInviteLink, postRulesFor, splitBold,
     type KnockWatchTick, type KnownRule,
     shareAddress,
 } from '@beanpool/core';
@@ -104,6 +104,7 @@ import { holdPostAfterJoin } from '../utils/post-after-join';
 import { joinedForListing } from '../utils/listing-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
+import { StepBar } from '../components/welcome/StepDots';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
 
 /** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. Not
@@ -179,7 +180,7 @@ export default function WelcomeScreen() {
         }
     }
 
-    const { styles, profileStyles, stepperStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+    const { styles, profileStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
     const accentInk = dark ? palette.blue400 : palette.blue600;
     const params = useGlobalSearchParams();
@@ -384,7 +385,6 @@ export default function WelcomeScreen() {
     const [backupCopiesAt, setBackupCopiesAt] = useState<SignInCopies>(() => signInCopiesAt());
     /** Read the rule again: the sheet found it moved on since the step read it, and linked nothing. */
     const [backupCopiesRead, setBackupCopiesRead] = useState(0);
-    const [inviterName, setInviterName] = useState<string | null>(null);
     /**
      * The name screen's greeting (onboarding §3.1 C): who invited and to which community, from the node's invite check (a
      * read: nothing is made by it), with the address it was read at and the code it was read for. The band names them only
@@ -1419,8 +1419,6 @@ export default function WelcomeScreen() {
                     // Safety Backup, as the redeem that landed would have gone.
                     inAlready = true;
                 }
-                setInviterName(check?.inviterCallsign || null);
-
                 // Per-node callsign uniqueness: check against the target node BEFORE we
                 // create the identity or register, so a brand-new member picks a name
                 // that's actually free here instead of being silently renamed on the
@@ -2374,35 +2372,6 @@ export default function WelcomeScreen() {
         setInviteNote(null);
     }
 
-    // --- Onboarding Progress Stepper ---
-    // Three equal thirds of the row (How it Works left the path, slice S5), each label up to three centred lines, shrinking
-    // to 0.7 at most: at 320dp and 1.3x text the four English labels of old needed 237dp on one line even at 0.7 against
-    // the row's 184dp (measured with real shaping), so one line cut them off. Two lines hold every language; the third is
-    // for the pseudo-locale's +35% (utils/__tests__/language-switch-render.test.ts).
-    function OnboardingStepper({ step }: { step: 1 | 2 | 3 }) {
-        const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup')];
-        return (
-            <View style={stepperStyles.container}>
-                {steps.map((label, i) => {
-                    const stepNum = i + 1;
-                    const isActive = stepNum === step;
-                    const isCompleted = stepNum < step;
-                    return (
-                        <React.Fragment key={i}>
-                            {i > 0 && <View style={[stepperStyles.line, (isCompleted || isActive) && stepperStyles.lineActive]} />}
-                            <View style={stepperStyles.stepItem}>
-                                <View style={[stepperStyles.dot, isActive && stepperStyles.dotActive, isCompleted && stepperStyles.dotCompleted]}>
-                                    {isCompleted && <Text style={stepperStyles.dotCheck}>✓</Text>}
-                                </View>
-                                <Text style={[stepperStyles.label, isActive && stepperStyles.labelActive]} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
-                            </View>
-                        </React.Fragment>
-                    );
-                })}
-            </View>
-        );
-    }
-
     // --- Copy seed phrase to clipboard ---
     async function handleCopySeed() {
         // What the step shows: the member's new words, or the phone's own account's once its lock has passed.
@@ -2532,27 +2501,20 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
-                    <OnboardingStepper step={2} />
+                    {/* ‹ only on an invite's join: a global join or a claim is done by this step (the node has the member), so
+                        there is nothing to go back to: the door would only say "already a member", the claim "already owned". */}
+                    <StepBar
+                        step="photo"
+                        flow={joinFlow}
+                        busy={loading}
+                        onBack={joinFlow === 'invite' ? () => {
+                            updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
+                            setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setInviteRedeemed(false); setShowAvatarPicker(false); setError(null);
+                        } : undefined}
+                    />
                     <View style={styles.card}>
-                        {inviterName && (
-                            <View style={styles.inviteVerifiedBox}>
-                                <Text style={styles.inviteVerifiedText}>
-                                    <Sentence
-                                        text={greeting?.community
-                                            ? t('🎟️ Your invite from {inviter} checks out — welcome to {community}!')
-                                            : t('🎟️ Your invite from {inviter} checks out!')}
-                                        parts={{
-                                            inviter: <Text style={{ fontWeight: 'bold' }}>{inviterName}</Text>,
-                                            community: <Text style={{ fontWeight: 'bold' }}>{greeting?.community}</Text>,
-                                        }}
-                                    />
-                                </Text>
-                            </View>
-                        )}
-                        <Text style={styles.title}>{t('📸 Choose your look')}</Text>
-                        <Text style={styles.subtitle}>
-                            {t('Add a photo, or pick a fun avatar — whatever feels like you.')}
-                        </Text>
+                        {/* Who invited, and to where, is said once, on Your name's greeting band (§3.1 C). */}
+                        <Text style={styles.title} accessibilityRole="header">{t('Choose your look')}</Text>
 
                         {/* Preview circle */}
                         <View style={profileStyles.previewContainer}>
@@ -2575,16 +2537,15 @@ export default function WelcomeScreen() {
                             </Text>
                         </View>
 
-                        {/* Choose Photo Button */}
+                        {/* A photo or an avatar, both inside (components/AvatarPickerSheet.tsx; Marty's walk, 21 Nov). */}
                         <Pressable
                             style={styles.secondaryBtn}
                             onPress={() => setShowAvatarPicker(true)}
                             disabled={loading}
                             accessibilityRole="button"
+                            testID="photo-step-choose"
                         >
-                            <Text style={styles.secondaryBtnText}>
-                                {pendingAvatar ? t('Change Photo or Avatar') : t('Choose Photo or Avatar')}
-                            </Text>
+                            <Text style={styles.secondaryBtnText}>{t('Choose a picture')}</Text>
                         </Pressable>
 
                         {loading && (
@@ -2596,25 +2557,10 @@ export default function WelcomeScreen() {
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
-                        {!pendingAvatar && (
-                            <Text style={styles.subtitle} testID="photo-step-note">{photoStepNote(joinBeansOn)}</Text>
-                        )}
-
-                        {/* A global join or a claim is done by this step (the node has the member), so there is
-                            nothing to go back to: the door would only say "already a member", the claim "already owned". */}
-                        {joinFlow === 'invite' && (
-                        <Pressable
-                            style={styles.backBtn}
-                            onPress={() => {
-                                updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
-                                setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setInviteRedeemed(false); setShowAvatarPicker(false); setError(null);
-                            }}
-                            disabled={loading}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Back')}
-                        >
-                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
-                        </Pressable>
+                        {/* Only where the community asks for a picture before a first post (core postRulesFor): elsewhere
+                            "Skip for now" says it is optional. */}
+                        {!pendingAvatar && postRulesFor(joinBeansOn).profilePhoto && (
+                            <Text style={styles.subtitle} testID="photo-step-note">{t('This community asks for a picture before you post.')}</Text>
                         )}
                     </View>
                 </ScrollView>
@@ -2629,7 +2575,7 @@ export default function WelcomeScreen() {
                         {loading ? (
                             <ActivityIndicator color={colors.text.inverse} />
                         ) : (
-                            <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
+                            <Text style={styles.primaryBtnText}>{pendingAvatar ? t('Next') : t('Skip for now')}</Text>
                         )}
                     </Pressable>
                 </StepFooter>
@@ -2656,7 +2602,7 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
-                    <OnboardingStepper step={3} />
+                    <StepBar step="wayBack" flow={joinFlow} busy={loading} onBack={handleSeedBackPress} />
                     <View style={styles.card}>
                         {/* In by 12 words (two-doors design §2.5): what the words are, first; a sign-in is offered below the
                             tickbox, as a second way back. Once one is added, the panel every sign-in member sees. */}
@@ -2898,16 +2844,6 @@ export default function WelcomeScreen() {
                         />
 
                         {error && <Text style={styles.error}>{error}</Text>}
-
-                        <Pressable
-                            style={styles.backBtn}
-                            onPress={handleSeedBackPress}
-                            disabled={loading}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Back')}
-                        >
-                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
-                        </Pressable>
                     </View>
                 </ScrollView>
                 {/* The step's main button stays on screen, above the system bar and the keyboard (components/welcome/StepFooter.tsx). */}
@@ -3099,7 +3035,8 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
-                    <OnboardingStepper step={1} />
+                    {/* ‹ is the front door. It waits while Join is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
+                    <StepBar step="name" flow={joinFlow} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
                     <View style={styles.card}>
                         <View style={styles.greetingBand} testID="invite-greeting">
                             <Text style={styles.greetingText} accessibilityRole="header">
@@ -3158,12 +3095,7 @@ export default function WelcomeScreen() {
                             autoCapitalize="words"
                             accessibilityLabel={t('Your name or nickname')}
                         />
-                        <Text style={styles.callsignHelper}>
-                            {t('This is your display name — how the community sees you, e.g. Sarah. You can change it later.')}
-                        </Text>
-                        <Text style={styles.callsignTip}>
-                            {t('💡 Tip: adding your suburb helps locals find you!')}
-                        </Text>
+                        <Text style={styles.callsignHelper}>{t('You can change it later.')}</Text>
 
                         {callsignSuggestions.length > 0 && (
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -3214,31 +3146,8 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        {/* Restore Existing Identity CTA for returning members (#98). This and Back to Home wait while
-                            Next is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
-                        <View style={styles.restorePromptBox}>
-                            <Text style={styles.restorePromptLabel}>{t('Already have an account or switching phones?')}</Text>
-                            <Pressable
-                                style={[styles.restorePromptBtn, loading && styles.closedWhileNextIsOut]}
-                                onPress={() => leaveUnlessNextIsOut(nextOutRef, () => { setMode('member'); setError(null); })}
-                                disabled={loading}
-                                accessibilityRole="button"
-                                accessibilityLabel={t('Restore existing identity')}
-                            >
-                                <Text style={styles.restorePromptBtnText}>{t('🔑 Restore Existing Identity →')}</Text>
-                            </Pressable>
-                        </View>
-
-                        <Pressable
-                            style={[styles.backBtn, loading && styles.closedWhileNextIsOut]}
-                            onPress={() => leaveUnlessNextIsOut(nextOutRef, goBack)}
-                            disabled={loading}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Back to Home')}
-                        >
-                            <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
-                        </Pressable>
-
+                        {/* The ways back for a returning member are the front door's third button (§3.1 A), one ‹ away; a
+                            spent invite still offers one above. */}
                         <Text style={styles.tosText}>
                             <Sentence
                                 text={t('By joining you agree to our {terms} and {privacy}.')}
@@ -3257,10 +3166,11 @@ export default function WelcomeScreen() {
                         onPress={handleCreate}
                         disabled={loading}
                         accessibilityRole="button"
-                        accessibilityLabel={loading ? t('Joining network...') : t('Next')}
+                        accessibilityLabel={loading ? t('Joining network...') : t('Join')}
                         accessibilityState={{ disabled: loading, busy: loading }}
+                        testID="name-step-join"
                     >
-                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Next →')}</Text>}
+                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Join')}</Text>}
                     </Pressable>
                 </StepFooter>
                 {Scanner && (
@@ -3296,7 +3206,7 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                        <OnboardingStepper step={1} />
+                        <StepBar step="name" flow={joinFlow} busy={loading} />
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
 
@@ -4154,8 +4064,6 @@ const styles = StyleSheet.create({
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
     card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
-    inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
-    inviteVerifiedText: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 14, lineHeight: 20 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
     tosLink: { color: dark ? palette.blue400 : palette.blue600, textDecorationLine: 'underline' },
     restoreSecondaryBtn: {
@@ -4183,40 +4091,6 @@ const styles = StyleSheet.create({
     },
     // The owner's card: the claimed community's full address, wrapped, never cut (the one thing a phishing server can't fake).
     ownerAddress: { fontSize: 15, color: colors.text.secondary, marginTop: 4, marginBottom: 8, lineHeight: 21, fontFamily: 'monospace' },
-    restorePromptBox: {
-        marginTop: 16,
-        padding: 14,
-        borderRadius: 14,
-        backgroundColor: 'rgba(59, 130, 246, 0.08)',
-        borderWidth: 1,
-        borderColor: 'rgba(59, 130, 246, 0.25)',
-        alignItems: 'center',
-        width: '100%',
-    },
-    restorePromptLabel: {
-        color: colors.text.secondary,
-        fontSize: 13,
-        marginBottom: 8,
-        fontWeight: '500',
-        textAlign: 'center',
-    },
-    restorePromptBtn: {
-        width: '100%',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: palette.blue600,
-        backgroundColor: 'transparent',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 44,
-    },
-    restorePromptBtnText: {
-        color: dark ? palette.blue400 : palette.blue600,
-        fontSize: 14,
-        fontWeight: '700',
-    },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
@@ -4236,8 +4110,7 @@ const styles = StyleSheet.create({
     // Callsign (Step 1) — larger, labeled input
     callsignLabel: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8, marginTop: 8 },
     callsignInput: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 16, color: colors.text.heading, fontSize: 16, marginBottom: 8 },
-    callsignHelper: { fontSize: 13, color: colors.text.secondary, marginBottom: 4, lineHeight: 18 },
-    callsignTip: { fontSize: 13, color: colors.text.muted, marginBottom: 20, fontStyle: 'italic' },
+    callsignHelper: { fontSize: 13, color: colors.text.secondary, marginBottom: 20, lineHeight: 18 },
 
     // Main welcome buttons
     memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12, shadowColor: palette.blue600, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 14, elevation: 6 },
@@ -4381,68 +4254,5 @@ const profileStyles = StyleSheet.create({
     },
 });
 
-// Styles for the onboarding progress stepper
-const stepperStyles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 24,
-        paddingHorizontal: 8,
-    },
-    stepItem: {
-        alignItems: 'center',
-        flex: 1,
-        minWidth: 0,
-    },
-    dot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: colors.border.strong,
-        marginBottom: 6,
-    },
-    dotActive: {
-        backgroundColor: palette.blue600,
-        width: 14,
-        height: 14,
-        borderRadius: 7,
-    },
-    dotCompleted: {
-        backgroundColor: palette.green500,
-        width: 14,
-        height: 14,
-        borderRadius: 7,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    dotCheck: {
-        // Dark ink on the green dot in both schemes: white on green500 read 2.28:1, this reads 6.36:1.
-        color: palette.green950,
-        fontSize: 9,
-        fontWeight: '800',
-    },
-    label: {
-        fontSize: 11,
-        color: colors.text.secondary,
-        fontWeight: '500',
-        textAlign: 'center',
-    },
-    labelActive: {
-        color: colors.text.heading,
-        fontWeight: '700',
-    },
-    line: {
-        width: 12,
-        height: 2,
-        backgroundColor: colors.border.strong,
-        marginBottom: 18,
-        marginHorizontal: 2,
-    },
-    lineActive: {
-        backgroundColor: palette.green500,
-    },
-});
-
-return { styles, profileStyles, stepperStyles };
+return { styles, profileStyles };
 }

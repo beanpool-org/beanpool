@@ -110,15 +110,30 @@ export function wayBackSchedule(i: WayBackScheduleInput): WayBackSchedule {
     return { show: false, why: null, next, bell };
 }
 
-/** The card's words (amend2 §12.3 B1; the first design §6.1). The phone keeps its buttons' words where they were. */
+/**
+ * The card's words (amend2 §12.3 B1; the first design §6.1). The phone keeps its buttons' words where they were.
+ *
+ * `lineBrowser` and `beansBrowser` are the same two sentences in the web app (slice B2): a browser is not a phone, and what
+ * it loses an account to is its saved data being cleared (Safari's after a week without a visit, a sign-out, a lost
+ * device), so "this phone is lost" would not be true there. Side by side here so the two never drift.
+ */
 export const WAY_BACK_WORDS = {
     line: word('If this phone is lost, this is how you get back in.'),
     beans: word("You have {amount} here now. Keep a way back in, so they don't go with a lost phone."),
+    lineBrowser: word('If this browser forgets your account, this is how you get back in.'),
+    beansBrowser: word("You have {amount} here now. Keep a way back in, so they don't go if this browser forgets your account."),
     bell: word('No way back in yet.'),
     bellKeep: word('Keep one'),
 } as const;
 
-/** The card's sentence for why it is up: the fact on the first Beans (`amount` already written, "40 Beans"), else the one line. */
-export function wayBackLine(why: WayBackReturn | null, amount: string | null): string {
+/** Where the card is drawn: the phone app, or a web browser (the web app). */
+export type WayBackOn = 'phone' | 'browser';
+
+/**
+ * The card's sentence for why it is up: the fact on the first Beans (`amount` already written, "40 Beans"), else the one
+ * line; in the phone's words, or the browser's (`on`).
+ */
+export function wayBackLine(why: WayBackReturn | null, amount: string | null, on: WayBackOn = 'phone'): string {
+    if (on === 'browser') return why === 'beans' && amount ? t(WAY_BACK_WORDS.beansBrowser, { amount }) : t(WAY_BACK_WORDS.lineBrowser);
     return why === 'beans' && amount ? t(WAY_BACK_WORDS.beans, { amount }) : t(WAY_BACK_WORDS.line);
 }

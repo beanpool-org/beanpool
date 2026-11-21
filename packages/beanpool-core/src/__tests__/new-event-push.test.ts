@@ -13,7 +13,9 @@ import { NEW_EVENT_PUSH_WORDS, PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, isPushNotic
 
 const NOW_MS = Date.UTC(2026, 10, 21, 9, 0, 0);
 const NOW = Math.floor(NOW_MS / 1000);
-const DAY = NEW_EVENT_PUSH_GAP_SECONDS;
+// The cap's length written out, never read from the constant it checks: a gap edited to hours, minutes or milliseconds
+// goes red here (PR #3323's MAX review, F1).
+const DAY = 86_400;
 
 /** A new event that tells the community. */
 const EVENT: NewEventFacts = {
@@ -83,6 +85,10 @@ describe('which new events tell the community (newEventSilence)', () => {
 });
 
 describe('which members a new event tells (newEventRecipientRefusal)', () => {
+    it('the daily cap is a day of whole seconds: 86,400', () => {
+        expect(NEW_EVENT_PUSH_GAP_SECONDS).toBe(86_400);
+    });
+
     it('a member here, reachable, with both switches on and not told today is told', () => {
         expect(newEventRecipientRefusal(MEMBER, NOW)).toBeNull();
         expect(newEventRecipientRefusal({ ...MEMBER, newEventsSwitch: 'true', marketplaceSwitch: 'true' }, NOW)).toBeNull();
@@ -105,6 +111,8 @@ describe('which members a new event tells (newEventRecipientRefusal)', () => {
         ['a member with no phone or browser here', { reachable: false }, 'no-device'],
         ['a member told of a new event a moment ago', { lastToldAt: NOW }, 'told-today'],
         ['a member told a second short of a day ago', { lastToldAt: NOW - DAY + 1 }, 'told-today'],
+        ['a member told 23 hours ago', { lastToldAt: NOW - 23 * 3600 }, 'told-today'],
+        ['a member told 2 hours ago', { lastToldAt: NOW - 2 * 3600 }, 'told-today'],
         ['a member whose stamp is ahead of the clock', { lastToldAt: NOW + 600 }, 'told-today'],
     ];
     for (const [what, change, why] of rows) {

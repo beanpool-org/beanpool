@@ -16,6 +16,9 @@
  * on holiday (quiet); a member with Marketplace Activity off (the category the push rides: muted); a member with this
  * switch off; a member told of another new event an hour ago (the daily cap). Only "a member" is ever told.
  *
+ * The cap's length, from the stamp the server wrote: whole seconds, now; 86,399 seconds on a member told is not told again,
+ * 86,400 seconds on they are (PR #3323's MAX review, F1 and F2).
+ *
  * And the one door in code: `noticeNewEvent` is called from state-engine's createPost and nowhere else, so a row that
  * tells nobody because it never comes through createPost (an edit, a roll, a put-back, a sync or a federation copy, which
  * write the posts table themselves) goes red here the day someone calls it from there too.
@@ -269,11 +272,15 @@ async function main(): Promise<void> {
         }
         // The day's cap is stamped on exactly those told: a stamp on anyone else would keep the next event from them, for
         // nothing (the dispatcher's own filters may still keep the push away, so the stamp is the only trace of such a slip).
-        const stamped = (db.prepare('SELECT public_key AS pk, pref_value AS v FROM member_preferences WHERE pref_key = ?').all(stampKey) as { pk: string; v: string }[])
-            .filter(r => r.pk !== toldToday.pubKeyHex || Number(r.v) > Math.floor(Date.now() / 1000) - 3000)
-            .map(r => columns.find(c => c.who.pubKeyHex === r.pk)?.name ?? r.pk.slice(0, 6)).sort();
+        // And each stamp is whole seconds, now: one in milliseconds would silence its member for good (PR #3323's MAX review, F2).
+        const nowS = Math.floor(Date.now() / 1000);
+        const stampRows = (db.prepare('SELECT public_key AS pk, pref_value AS v FROM member_preferences WHERE pref_key = ?').all(stampKey) as { pk: string; v: string }[])
+            .filter(r => r.pk !== toldToday.pubKeyHex || Number(r.v) > nowS - 3000);
+        const stamped = stampRows.map(r => columns.find(c => c.who.pubKeyHex === r.pk)?.name ?? r.pk.slice(0, 6)).sort();
+        const offTheClock = stampRows.filter(r => !/^\d+$/.test(r.v) || Math.abs(Number(r.v) - nowS) > 5).map(r => r.v);
         const toldNames = columns.filter(c => row.tells && c.told).map(c => c.name).sort();
-        assert(show(stamped) === show(toldNames), `${row.door}: the day's cap is stamped on exactly those told (${show(stamped)})`);
+        assert(show(stamped) === show(toldNames) && offTheClock.length === 0,
+            `${row.door}: the day's cap is stamped on exactly those told, in whole seconds, now (${show(stamped)}${offTheClock.length ? `; not now in seconds: ${show(offTheClock)}` : ''})`);
         const strangers = notices.filter(pk => !columns.some(c => c.who.pubKeyHex === pk));
         assert(rowRight && strangers.length === 0,
             `${row.door}: ${row.tells ? 'a member is told exactly once, and nobody else' : 'nobody is told'} (${cells.join('; ')}${strangers.length ? `; ${strangers.length} others` : ''})`);
@@ -284,6 +291,31 @@ async function main(): Promise<void> {
         }
         clearHostsEvents();
     }
+
+    // ── The cap's length, from the stamp the server wrote (PR #3323's MAX review, F1 and F2) ───────────────────────────
+    // Driven through noticeNewEvent's own clock from the stamp as written, never one written by hand: 86,399 seconds on,
+    // the member told is not told again; 86,400 seconds on, they are. The member told an hour before the stamp is told at
+    // the first, so that call is not silent for some other reason.
+    const { noticeNewEvent } = await import('./engine/event-new-push.js');
+    freshDay();
+    const capEvent = await viaRoute('Hana hosts a lantern walk');
+    await settle();
+    const written = (db.prepare('SELECT pref_value AS v FROM member_preferences WHERE public_key = ? AND pref_key = ?')
+        .get(member.pubKeyHex, stampKey) as { v: string } | undefined)?.v ?? '';
+    const nowS = Math.floor(Date.now() / 1000);
+    assert(!!capEvent.id && /^\d+$/.test(written) && Math.abs(Number(written) - nowS) <= 5,
+        `the member told is stamped in whole seconds, now (${written} against ${nowS}; ${capEvent.status} ${capEvent.error ?? ''})`);
+    const chosenAt = (at: number): string[] => {
+        const got: string[] = [];
+        noticeNewEvent({ id: capEvent.id ?? '', author: host.pubKeyHex }, ((targets: string[]) => { got.push(...targets); return targets.length; }) as any, at);
+        return got;
+    };
+    const nameOf = (pk: string) => columns.find(c => c.who.pubKeyHex === pk)?.name ?? pk.slice(0, 6);
+    const shortOfADay = chosenAt(Number(written) + 86_399);
+    const aDayOn = chosenAt(Number(written) + 86_400);
+    assert(shortOfADay.includes(toldToday.pubKeyHex) && !shortOfADay.includes(member.pubKeyHex) && aDayOn.includes(member.pubKeyHex),
+        `86,399 seconds after the stamp a member told is not told again, 86,400 seconds after it they are (${show(shortOfADay.map(nameOf))} then ${show(aDayOn.map(nameOf))})`);
+    clearHostsEvents();
 
     // ── The one door in code ──────────────────────────────────────────────────────────────────────────────────────────
     const callers: string[] = [];

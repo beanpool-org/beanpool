@@ -11,12 +11,15 @@
  *      alone) say where a tap lands and nothing else
  *   3. the daily cap, per recipient, on the server: a second event that day (from the same host or another, or two at once)
  *      reaches nobody already told; a member not yet told still is; the cap holds when the notices kept for the member are
- *      thinned; a day later the member is told again
+ *      thinned; a day later the member is told again; the stamp the server writes is whole seconds, now, and from it a
+ *      second short of a day tells nobody again while a day to the second does
  *   4. which posts: an Offer, a Need, a group's own event, an event for one person, an owner's assistant's event and a
  *      member's copy of another community's event tell nobody of a new event
  *   5. the switch: `notify_new_events` served on by default, turned off and on through the preferences route; the cap's
  *      stamp is never served and no app can set it
  *   6. where: `features.newEventPush` on a local community, and nothing on the global one, where an event tells nobody
+ *   7. a failover the same day: the stamp moves the member's row, so the next delta carries it to a standby, and the
+ *      standby, promoted, does not tell that member of another new event that day
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-event-new-push)
  */
@@ -244,10 +247,29 @@ async function main(): Promise<void> {
     const dayAgo = String(Math.floor(Date.now() / 1000) - 24 * 3600 - 60);
     db.prepare('UPDATE member_preferences SET pref_value = ? WHERE pref_key = ? AND public_key = ?').run(dayAgo, stampKey, gil.pubKeyHex);
     since = mark();
-    await event(ben, { title: 'Ben hosts a talk' });
+    const talk = await event(ben, { title: 'Ben hosts a talk' });
     await settle();
     assert(show(toldSince(since)) === show([gil.pubKeyHex]),
         `a day after being told, a member is told again, and the others still wait their day (${show(names(toldSince(since), all))})`);
+
+    // The cap's length and the stamp's unit, from the stamp the server itself wrote (PR #3323's MAX review, F1 and F2),
+    // driven through noticeNewEvent's own clock: never a stamp written by hand.
+    const stampOf = (pk: string): string | undefined => (db.prepare(
+        'SELECT pref_value AS v FROM member_preferences WHERE public_key = ? AND pref_key = ?',
+    ).get(pk, stampKey) as { v: string } | undefined)?.v;
+    const written = stampOf(gil.pubKeyHex) ?? '';
+    const nowS = Math.floor(Date.now() / 1000);
+    assert(/^\d+$/.test(written) && Math.abs(Number(written) - nowS) <= 5,
+        `the day's stamp the server wrote is in whole seconds, now (${written} against ${nowS})`);
+    const chosenAt = (at: number): string[] => {
+        const got: string[] = [];
+        pushed.noticeNewEvent?.({ id: talk, author: ben.pubKeyHex }, (targets: string[]) => { got.push(...targets); return targets.length; }, at);
+        return got;
+    };
+    const shortOfADay = chosenAt(Number(written) + 86_399);
+    const aDayOn = chosenAt(Number(written) + 86_400);
+    assert(!shortOfADay.includes(gil.pubKeyHex) && aDayOn.includes(gil.pubKeyHex),
+        `86,399 seconds after the stamp the member is not told again; 86,400 seconds after it they are (${show(names(shortOfADay, all))} then ${show(names(aDayOn, all))})`);
 
     // ── 4. Which posts tell nobody ─────────────────────────────────────────────────────────────────────────────────
     fresh();
@@ -328,6 +350,63 @@ async function main(): Promise<void> {
     } finally {
         delete process.env.NODE_PROFILE;
     }
+
+    // ── 7. A failover the same day ──────────────────────────────────────────────────────────────────────────────────
+    // The copies go into this same database, as test-relay-complaint's section 10 does it: the main server's stamp made
+    // here, the standby's day before it (none of today's stamps) put back, the delta imported, and the role handed back.
+    const { generateKeyPair } = await import('@libp2p/crypto/keys');
+    const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+    const { setPrivateKeyForTests } = await import('./p2p.js');
+    const { pinMainServerForTests } = await import('./standby-pin-test-helper.js');
+    const { setNodeRole } = await import('./config/node-role.js');
+    const nodeIdentity = await generateKeyPair('Ed25519');
+    setPrivateKeyForTests(nodeIdentity);
+    const nodeId = peerIdFromPrivateKey(nodeIdentity).toString();
+    pinMainServerForTests(nodeId);
+    const fay = makeIdentity('Fay');
+    const gus = makeIdentity('Gus');
+    all.push(fay, gus);
+    const rowMoved = (pk: string): string => (db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(pk) as { updated_at: string }).updated_at;
+    fresh();
+    await settle();
+    const cursor = new Date().toISOString();
+    await settle();
+    const gilRowBefore = rowMoved(gil.pubKeyHex);
+    since = mark();
+    await event(fay, { title: 'Fay hosts a bike ride' });
+    await settle();
+    const toldByFay = toldSince(since);
+    const gilStamp = stampOf(gil.pubKeyHex);
+    assert(toldByFay.includes(gil.pubKeyHex) && !!gilStamp && rowMoved(gil.pubKeyHex) > cursor,
+        `on the main server the member told is stamped, and their row moves with the stamp (updated_at ${gilRowBefore} → ${rowMoved(gil.pubKeyHex)})`);
+    const delta: any = await se.exportSyncState(nodeId, cursor);
+    const carried = ((delta.members ?? []) as any[]).filter(m => m?.preferences?.[stampKey]);
+    assert(show(carried.map(m => m.publicKey).sort()) === show([...toldByFay].sort())
+        && carried.find(m => m.publicKey === gil.pubKeyHex)?.preferences?.[stampKey] === gilStamp,
+        `the next delta carries the day's stamp of each member told, as written (${carried.length} carried, ${toldByFay.length} told)`);
+    fresh(); // the standby, before this delta, held none of today's stamps
+    setNodeRole('backup');
+    let imported: string | null = null;
+    try {
+        await se.importRemoteState(delta);
+    } catch (e: any) {
+        imported = e?.message ?? String(e);
+    } finally {
+        setNodeRole('primary');
+    }
+    assert(imported === null && stampOf(gil.pubKeyHex) === gilStamp,
+        `a standby that takes the delta holds the member's stamp as the main server wrote it (${imported ?? stampOf(gil.pubKeyHex)})`);
+    // The take-over, the same day: the standby is the main server from here. A member who joined after the delta, and so
+    // was never told, shows the promoted server does tell.
+    const ned = makeIdentity('Ned');
+    all.push(ned);
+    since = mark();
+    await event(gus, { title: 'Gus hosts a beach clean' });
+    await settle();
+    const afterTakeover = toldSince(since);
+    assert(afterTakeover.includes(ned.pubKeyHex) && !afterTakeover.includes(gil.pubKeyHex)
+        && toldByFay.filter(pk => pk !== gus.pubKeyHex).every(pk => !afterTakeover.includes(pk)),
+        `promoted that day, the standby tells nobody already told today, and still tells a member who was not (${show(names(afterTakeover, all))})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

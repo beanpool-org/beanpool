@@ -20,7 +20,9 @@
  *
  * The daily cap is a stamp per recipient, kept with their preferences ({@link NEW_EVENT_PUSH_STAMP_KEY}, whole seconds),
  * written for everyone chosen in the same transaction that chose them and before anything is sent: two events at once
- * never both reach one member, and a send that fails costs that member a push, never adds one. Not a setting: no app can
+ * never both reach one member, and a send that fails costs that member a push, never adds one. It moves the member's row
+ * (members.updated_at) with it, so the next delta takes it to a standby and a standby promoted that day keeps the cap.
+ * Not a setting: no app can
  * send it (setMemberPreferences refuses any key it doesn't name), nobody is served it, and it goes with the member's other
  * preferences on a re-key or a deletion. Not the notices kept for the recipient (push_notices): those are thinned to a
  * member's newest hundred.
@@ -140,9 +142,16 @@ export function noticeNewEvent(post: NewEventPost, push: PushFn, now: number = M
         const facts = storedEventFacts(post);
         if (!facts || newEventSilence(facts, getNodeProfile(), now * 1000) !== null) return 0;
         const stamp = db.prepare('INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)');
+        // The member's row moves with the stamp: a standby's delta carries a member's preferences only with their row
+        // (@beanpool/engine sync.ts exportSyncState, members.updated_at), so a standby promoted the same day holds the cap
+        // too. The phones' member sync reads joined_at and profile_updated_at, never this, so no phone re-reads the row.
+        const touch = db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`);
         const chosen = db.transaction(() => {
             const pks = newEventRecipients(post, now);
-            for (const pk of pks) stamp.run(pk, NEW_EVENT_PUSH_STAMP_KEY, String(now));
+            for (const pk of pks) {
+                stamp.run(pk, NEW_EVENT_PUSH_STAMP_KEY, String(now));
+                touch.run(pk);
+            }
             return pks;
         })();
         if (chosen.length === 0) return 0;

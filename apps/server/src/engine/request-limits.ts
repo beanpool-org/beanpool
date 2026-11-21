@@ -12,6 +12,15 @@
  * with a block counts as a line's report does (the apps send one when the line is gone), and an open nobody wrote in is no
  * request received. Accepted, it is an ordinary chat, and a report in it is an ordinary report.
  *
+ * A line from another community counts the same way when it is a request by this community's own rule (slice S5, PR #3347
+ * review; engine/relay-complaint.ts submitOutsideLineReport): its sender is a member here, it came to the reporter's
+ * mailbox here as a first line they have not answered (relay-mail.ts heldAsFirstLine), and a line from that member to them
+ * would be a request inside now. Its `request_conversation_id` is the pair's own conversation id, from the two keys, and its
+ * wording the reporter's words as here: one rule weighs both, so a member who writes across meets the same limit, and the
+ * limit makes their lines across no longer "from a member here" (relay-mail.ts fromMemberHere). The server knows a line came
+ * as a first line while it keeps its id (relay-mail.ts MAIL_SEEN_MS, 8 days), so one reported later reaches the moderators
+ * and counts for nothing here.
+ *
  * There is no 7-day or standing rule on reporters here (Marty, 1 Nov), unlike a post's auto-hide. A reporter has to have been
  * written to first, which is what those rules stand in for on a post, where anyone can report anything.
  *

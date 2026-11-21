@@ -19,7 +19,15 @@
  *      written (dm_requests), on probation, blocked by the recipient: `memberHere: false` while any holds, so the line
  *      meets the door as a stranger's; true once it is over, or where it does not apply. Where the rule refuses the
  *      member inside too, the same row shows the community's own route refusing them, so the mark and the inside rule
- *      are one rule
+ *      are one rule. The request limit's row is earned as well as written: three circles reporting lines the member wrote
+ *      them across limit them, and the mark goes (PR #3347 review, relay-mail.ts:606)
+ *   6  one rule, earned across or inside (engine/request-limits.ts, engine/relay-complaint.ts): reports {across only,
+ *      inside only, mixed} x {1, 2, 3 circles}, and the same reporter twice: the limit is made at 3 circles however the
+ *      reports came, never from one reporter's repeats, and then the mark is false and the inside open refused in the
+ *      limit's own words. A report across counts only when the line was a request here (its sender a member here, held for
+ *      the reporter as a first line they have not answered, and a request inside now): a stranger's, an answered one, a
+ *      friend's, one never held here, and any where requests are off count for nothing, and their rows carry no request
+ *      column, as before
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-mail-member-here.ts
  */
@@ -34,7 +42,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    NODE_KEY_VALIDITY_MS, buildNodeRequestHeaders, relayPayloadHash, signNodeKeyDocument, signRelayEnvelope, type RelayItemKind,
+    NODE_KEY_VALIDITY_MS, buildNodeRequestHeaders, relayConversationId, relayPayloadHash, sealOutsideLine, signNodeKeyDocument,
+    signRelayEnvelope, type RelayItemKind,
 } from '@beanpool/core';
 import { signedHeaders } from './signed-request-test-helper.js';
 
@@ -48,6 +57,7 @@ let BASE = '';
 interface Keys { seed: Uint8Array; key: string }
 const keys = (): Keys => { const seed = crypto.randomBytes(32); return { seed, key: Buffer.from(ed25519.getPublicKey(seed)).toString('hex') }; };
 const signerOf = (seed: Uint8Array) => (b: Uint8Array) => ed25519.sign(b, seed);
+const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 
 interface Answer { status: number; body: any }
 async function send(method: string, p: string, headers: Record<string, string>, body?: string): Promise<Answer> {
@@ -69,6 +79,7 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { __useNodeKeyFetchForTests } = await import('./engine/node-signature.js');
     const mail = await import('./engine/relay-mail.js');
+    const outbox = await import('./engine/relay-outbox.js');
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;
@@ -233,8 +244,37 @@ async function main(): Promise<void> {
             }
         };
         const refusedWith = (code: string) => (a: Answer) => a.status === 403 && a.body?.code === code;
+        // A report's complaint to the sender's home (a.example) is answered here: nothing leaves this machine.
+        const complaints: string[] = [];
+        outbox.__useRelayTransportForTests(async (url) => { complaints.push(url); return { status: 202, body: { received: true } }; });
+        /** A real line across (core sealOutsideLine, under a UUID v4 id, which a report's check asks), in its sender's envelope. */
+        const sealed = async (from: Keys, to: Keys, text: string): Promise<Record<string, unknown>> => {
+            const itemId = crypto.randomUUID();
+            const payload = sealOutsideLine({ text, name: 'Someone', myEdPrivHex: hex(from.seed), myKey: from.key, peerKey: to.key, messageId: itemId });
+            const envelope = await signRelayEnvelope({
+                kind: 'dm-line', itemId, senderKey: from.key, senderHome: 'a.example', recipient: to.key, recipientHome: 'b.example', at: Date.now(),
+                payloadHash: relayPayloadHash(payload),
+            }, signerOf(from.seed));
+            return { envelope, payload };
+        };
+        const reportAcross = (who: Keys, item: Record<string, unknown>, words: string) => inside(who, '/api/mail/report', { item, reason: 'Spam or scam', words });
+        const reportInside = (who: Keys, s: Keys) => inside(who, '/api/reports', { targetPubkey: s.key, reason: 'Spam or scam' });
+        /** Three members, each their own circle, report a line `s` wrote them across: the limit, by reports across alone. */
+        const earnAcross = async (s: Keys) => {
+            const reporters = [member(`E ${++n}`), member(`E ${++n}`), member(`E ${++n}`)];
+            const lines: Array<Record<string, unknown>> = [];
+            for (const r of reporters) {
+                const l = await sealed(s, r, `Across to ${r.key.slice(0, 8)}`);
+                if ((await bring([l])).status !== 202) throw new Error('a line across was not brought');
+                lines.push(l);
+            }
+            for (const [i, r] of reporters.entries()) {
+                const a = await reportAcross(r, lines[i], `Across to reporter ${i}`);
+                if (a.status !== 200) throw new Error(`a report across was refused (${a.status} ${JSON.stringify(a.body)})`);
+            }
+        };
 
-        type Switches = { dmRequests?: boolean; probation?: boolean };
+        type Switches = { dmRequests?: boolean; probation?: boolean; autoHideReports?: boolean };
         interface Row {
             rule: string; state: string; switches?: Switches; expected: boolean;
             /** The state, made once the line across is held: the mark is said at the fetch. */
@@ -265,6 +305,9 @@ async function main(): Promise<void> {
                 make: (s) => limit(s, Date.now() + 7 * DAY),
                 inside: { what: 'a new conversation', ask: open, refused: refusedWith('dm_requests_limited') } },
             { rule: 'request limit', state: 'none', switches: REQUESTS_ON, expected: true, make: () => {} },
+            { rule: 'request limit', state: 'earned by reports of across lines (3 circles)', switches: { dmRequests: true, autoHideReports: true },
+                expected: false, make: (s) => earnAcross(s),
+                inside: { what: 'a new conversation', ask: open, refused: refusedWith('dm_requests_limited') } },
             { rule: 'waiting request', state: 'holds (its one line written)', switches: REQUESTS_ON, expected: false,
                 make: (s, r) => request(s, r), inside: secondLine },
             { rule: 'waiting request', state: 'holds (ignored)', switches: REQUESTS_ON, expected: false,
@@ -292,6 +335,7 @@ async function main(): Promise<void> {
             assert(brought.status === 202, `${name}: brought (got ${brought.status})`);
             setSwitchOverride('dmRequests', !!row.switches?.dmRequests);
             setSwitchOverride('probation', !!row.switches?.probation);
+            setSwitchOverride('autoHideReports', !!row.switches?.autoHideReports);
             try {
                 await row.make(s, r);
                 const got = await heldOf(r, s);
@@ -306,8 +350,118 @@ async function main(): Promise<void> {
             } finally {
                 setSwitchOverride('dmRequests', false);
                 setSwitchOverride('probation', false);
+                setSwitchOverride('autoHideReports', false);
             }
         }
+
+        // ── 6. One rule, earned across or inside ────────────────────────────────────────────
+        console.log('\n6. Reports across, inside or both x circles x the same reporter twice: one limit, and the mark it ends');
+        type Mode = 'across' | 'inside';
+        interface Six {
+            name: string;
+            /** Each report: by which reporter (each a member invited by the owner, so their own circle), of which kind. */
+            reports: Array<[number, Mode]>;
+            /** The limit is made, and how. */
+            limit: 'many_reports' | 'same_wording' | null;
+            /** The reports across carry the request columns (they count); false: none does, as before this slice. */
+            counted?: boolean;
+            /** The sender is no member here (a stranger across). */
+            stranger?: boolean;
+            /** Requests off here (dmRequests), the rest of the moderation on. */
+            requestsOff?: boolean;
+            /** The lines across are reported without ever being held here. */
+            neverHeld?: boolean;
+            /** What each reporter did once their line was held and before they reported it. */
+            since?: (s: Keys, r: Keys) => void;
+            /** The reporter's words for report `k`. */
+            words?: (k: number) => string;
+        }
+        const SAME = 'Buy my miracle seeds now, today only, from the finest grower in the valley';
+        const answered = (s: Keys, r: Keys) => db.prepare(`INSERT INTO relay_outbox (sender_key, item_id, kind, recipient, recipient_home, state, created_at, updated_at)
+            VALUES (?, ?, 'dm-line', ?, 'a.example', 'delivered', ?, ?)`).run(r.key, crypto.randomUUID(), s.key, Date.now(), Date.now());
+        const added = (s: Keys, r: Keys) => db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(r.key, s.key);
+        const SIX: Six[] = [];
+        // The table: {across only, inside only, mixed} x {1, 2, 3 circles}, then the same reporter twice beside one other.
+        const MIXED: Record<number, Array<[number, Mode]>> = {
+            1: [[0, 'inside'], [0, 'across']],
+            2: [[0, 'inside'], [1, 'across']],
+            3: [[0, 'inside'], [1, 'across'], [2, 'across']],
+        };
+        for (const circles of [1, 2, 3]) {
+            const each = (mode: Mode) => Array.from({ length: circles }, (_, i) => [i, mode] as [number, Mode]);
+            const limit = circles >= 3 ? 'many_reports' : null;
+            SIX.push({ name: `across only, ${circles} circle(s)`, reports: each('across'), limit });
+            SIX.push({ name: `inside only, ${circles} circle(s)`, reports: each('inside'), limit });
+            SIX.push({ name: `mixed, ${circles} circle(s)`, reports: MIXED[circles], limit });
+        }
+        SIX.push({ name: 'across only, the same reporter twice and one other (3 reports, 2 circles)', reports: [[0, 'across'], [0, 'across'], [1, 'across']], limit: null });
+        SIX.push({ name: 'inside only, the same reporter twice and one other (3 reports, 2 circles)', reports: [[0, 'inside'], [0, 'inside'], [1, 'inside']], limit: null });
+        SIX.push({ name: 'mixed, the same reporter across and inside and one other (3 reports, 2 circles)', reports: [[0, 'inside'], [0, 'across'], [1, 'inside']], limit: null });
+        // The same wording from 2 circles, a line long enough to compare: the rule's second way, across as inside.
+        SIX.push({ name: 'across only, the same long wording from 2 circles', reports: [[0, 'across'], [1, 'across']], limit: 'same_wording', words: () => SAME });
+        // Reports across that are no request's: 3 circles, and none counts.
+        const THREE: Array<[number, Mode]> = [[0, 'across'], [1, 'across'], [2, 'across']];
+        SIX.push({ name: "a stranger's lines (no member here), 3 circles", reports: THREE, limit: null, counted: false, stranger: true });
+        SIX.push({ name: 'lines each reporter had answered across before reporting, 3 circles', reports: THREE, limit: null, counted: false, since: answered });
+        SIX.push({ name: 'lines from someone each reporter had added here, 3 circles', reports: THREE, limit: null, counted: false, since: added });
+        SIX.push({ name: 'lines never held here, 3 circles', reports: THREE, limit: null, counted: false, neverHeld: true });
+        SIX.push({ name: 'requests off here, 3 circles', reports: THREE, limit: null, counted: false, requestsOff: true });
+
+        for (const row of SIX) {
+            const name = `6. ${row.name}`;
+            setSwitchOverride('autoHideReports', true);
+            setSwitchOverride('dmRequests', !row.requestsOff);
+            try {
+                const s = row.stranger ? keys() : member(`S6 ${++n}`);
+                const reporters = Array.from({ length: Math.max(...row.reports.map(([i]) => i)) + 1 }, () => member(`R6 ${++n}`));
+                // The lines across first, then the requests inside, then the reports: no limit is made before every request is.
+                const lines = new Map<number, Record<string, unknown>>();
+                for (const [k, [i, mode]] of row.reports.entries()) {
+                    if (mode !== 'across') continue;
+                    const l = await sealed(s, reporters[i], `Line ${k} to reporter ${i}`);
+                    if (!row.neverHeld) assert((await bring([l])).status === 202, `${name}: line ${k} brought`);
+                    lines.set(k, l);
+                }
+                const asked = new Set<number>();
+                for (const [i, mode] of row.reports) {
+                    if (mode === 'inside' && !asked.has(i)) { await request(s, reporters[i]); asked.add(i); }
+                }
+                for (const [i, mode] of row.reports) if (mode === 'across') row.since?.(s, reporters[i]);
+                for (const [k, [i, mode]] of row.reports.entries()) {
+                    const words = row.words?.(k) ?? `Line ${k} to reporter ${i}`;
+                    const a = mode === 'across' ? await reportAcross(reporters[i], lines.get(k)!, words) : await reportInside(reporters[i], s);
+                    assert(a.status === 200, `${name}: report ${k} (${mode}) taken (got ${a.status} ${a.body?.code ?? a.body?.error ?? ''})`);
+                }
+                const across = db.prepare(`SELECT reporter_pubkey AS r, request_conversation_id AS c, request_wording AS w FROM abuse_reports
+                                            WHERE target_pubkey = ? AND json_extract(disclosure, '$.kind') = 'outside-line'`).all(s.key) as Array<{ r: string; c: string | null; w: string | null }>;
+                const counted = row.counted ?? true;
+                const acrossFiled = row.reports.filter(([, m]) => m === 'across').length;
+                assert(across.length === acrossFiled, `${name}: ${acrossFiled} report(s) across on file (got ${across.length})`);
+                if (acrossFiled) {
+                    assert(across.every((x) => x.c === (counted ? relayConversationId(s.key, x.r) : null) && (counted || x.w === null)),
+                        `${name}: each report across ${counted ? "carries the pair's conversation id (it counts)" : 'carries no request column (as before)'}`);
+                }
+                const made = db.prepare('SELECT how FROM request_limits WHERE sender_pubkey = ?').all(s.key) as Array<{ how: string }>;
+                assert(made.length === (row.limit ? 1 : 0) && (made[0]?.how ?? null) === row.limit,
+                    `${name}: limit ${row.limit ? `made (${row.limit})` : 'not made'} (got ${JSON.stringify(made)})`);
+                if (row.stranger) continue;
+                // The mark, to a member who never reported them: false while the limit holds; and inside, the open refused alike.
+                const x = member(`X6 ${++n}`);
+                assert((await bring([await item(s, x.key)])).status === 202, `${name}: a line to a fourth member brought`);
+                const got = await heldOf(x, s);
+                assert(got.length === 1 && got[0].memberHere === !row.limit, `${name}: memberHere ${!row.limit} (got ${JSON.stringify(got[0]?.memberHere)})`);
+                assert(mail.fromMemberHere(s.key, x.key) === !row.limit, `${name}: fromMemberHere says the same`);
+                const o = await open(s, x);
+                assert(row.limit ? refusedWith('dm_requests_limited')(o) : o.status === 200,
+                    `${name}: inside, a new conversation is ${row.limit ? "refused in the limit's words" : 'let through'} too (got ${o.status} ${o.body?.code ?? ''})`);
+            } finally {
+                setSwitchOverride('dmRequests', false);
+                setSwitchOverride('autoHideReports', false);
+            }
+        }
+        assert(complaints.length > 0 && complaints.every((u) => u === 'https://a.example/api/relay/complaint'),
+            `6. every report across still tells the sender's home, and only it (${complaints.length} complaints)`);
+        outbox.__useRelayTransportForTests(null);
     }
 
     console.log(`\n${passed}/${run} passed`);

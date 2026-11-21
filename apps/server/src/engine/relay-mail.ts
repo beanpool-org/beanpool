@@ -387,6 +387,18 @@ function hasWrittenTo(member: string, key: string): boolean {
     return !!db.prepare("SELECT 1 FROM relay_outbox WHERE sender_key = ? AND recipient = ? AND kind != 'receipt' LIMIT 1").get(member, key);
 }
 
+/**
+ * Whether `senderKey`'s item `itemId` came here as a first line to `member`: held for them while they had never written to
+ * that key (relay_mail_seen.stranger_to, this server's own record, never the sending server's word), and they have written
+ * nothing back since (the outbox, as {@link hasWrittenTo}: a reply across is the chat accepted). What a report of it needs
+ * to count as a request's report (engine/relay-complaint.ts submitOutsideLineReport). Read from the ids seen, kept
+ * MAIL_SEEN_MS: a line reported after that is no longer known here as a first line.
+ */
+export function heldAsFirstLine(member: string, senderKey: string, itemId: string): boolean {
+    return !!db.prepare('SELECT 1 FROM relay_mail_seen WHERE sender_key = ? AND item_id = ? AND stranger_to = ?').get(senderKey, itemId, member)
+        && !hasWrittenTo(member, senderKey);
+}
+
 // ── The ring: a held line from someone the member wrote to (slice S4) ──────────────────────────
 
 /**
@@ -587,7 +599,9 @@ export interface HeldItem {
  *   and keeps no exception for a chat they already have);
  * - muted by a moderator or auto-mute (auto-moderation.ts muteOf, what assertNotMuted refuses an open and a line with);
  * - held by reports from making a new request (request-limits.ts, asked as createConversation asks it: dm-requests.ts
- *   newRequestRefusal, so only where requests are on and only to someone it would be a request to);
+ *   newRequestRefusal, so only where requests are on and only to someone it would be a request to). Reports of their lines
+ *   across earn it as reports of their requests inside do (relay-complaint.ts submitOutsideLineReport, one rule), so a
+ *   member who writes only across meets it too;
  * - waiting on a request to the recipient here already, whose one line is written (dm-requests.ts nextLineWaitsOnRequest:
  *   lineThroughRequest refuses their next line, one the recipient ignored included);
  * - on probation (probation.ts probationState). Inside, probation lets them reach 10 new people a day (3 by 12 words:

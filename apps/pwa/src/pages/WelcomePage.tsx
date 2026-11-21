@@ -1243,8 +1243,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         onComplete(pendingIdentity);
     }
 
-    /** Off the notifications screen to Home, whatever the answer, with the answer counted once (N1c: on, later, no), unawaited. */
+    /**
+     * Off the notifications screen to Home, whatever the answer, with the answer counted once (N1c: on, later, no), unawaited.
+     * Once only: Later while Turn on's subscription is still out leaves at once, and that subscription's answer, when it
+     * comes, leaves nothing a second time.
+     */
+    const notifyLeft = useRef(false);
     function leaveNotify(choice: 'on' | 'later' | 'no') {
+        if (notifyLeft.current) return;
+        notifyLeft.current = true;
         void recordOnboardingEvent(NOTIFY_CHOICE, choice);
         if (pendingIdentity) onComplete(pendingIdentity);
     }
@@ -1252,13 +1259,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     /**
      * Turn on notifications: the browser's own prompt, only inside this tap (lib/web-push.ts turnOnFromAsk), then Home with
      * whatever it answered. A prompt closed with no answer is a Later, never a no. Only a subscription the community did not
-     * take keeps the screen, saying so, with both buttons still there: Later is still the way on.
+     * take keeps the screen, saying so, with both buttons still there: Later is still the way on, and never waits on a slow
+     * community (the subscription's post has no time limit of its own).
      */
     function notifyTurnOn() {
         if (!pendingIdentity || notifyBusy) return;
         setNotifyBusy(true);
         setNotifyFailed(false);
         void turnOnFromAsk(pendingIdentity, currentLanguage(), 'join').then((r) => {
+            if (notifyLeft.current) return;
             setNotifyBusy(false);
             const outcome = notifyBrowserOutcome(r);
             if (outcome) leaveNotify(notifyJoinChoice(outcome));

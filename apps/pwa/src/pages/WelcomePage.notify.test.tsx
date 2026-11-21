@@ -175,6 +175,20 @@ describe('the web join with web push here, never asked: the screen, last, after 
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     });
 
+    it('a slow community never holds the screen: Later goes Home while the subscription is still out, counted once, later', async () => {
+        browser('push', 'granted');
+        const onComplete = await toWayBackNext();
+        pushPost = () => new Promise<Response>(() => {}) as unknown as Response;
+        fireEvent.click(screen.getByTestId('backup-next'));
+        fireEvent.click(await screen.findByTestId('notify-ask-turn-on'));
+        await waitFor(() => expect(pushPosts()).toHaveLength(1));
+        expect(screen.getByTestId('notify-ask-turn-on')).toBeDisabled();
+        expect(screen.getByTestId('notify-ask-later')).not.toBeDisabled();
+        fireEvent.click(screen.getByTestId('notify-ask-later'));
+        await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(counts().filter(c => c[0] === NOTIFY_CHOICE)).toEqual([[NOTIFY_CHOICE, oncePerPersonVariant('later')]]));
+    });
+
     it('‹ goes back to the way back, whose Next brings the screen again', async () => {
         browser('push');
         await toWayBackNext();

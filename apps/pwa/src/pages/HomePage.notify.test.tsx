@@ -177,6 +177,21 @@ describe("the once card's answers", () => {
         expect(r.phoneNoAt).toBeUndefined();
     });
 
+    it('Later still works while Turn on is out (a slow community): the card goes', async () => {
+        browser('push', 'granted');
+        // The worker never activates in time here: Turn on stays busy.
+        Object.defineProperty(navigator, 'serviceWorker', {
+            value: { register: vi.fn(() => new Promise(() => {})), getRegistration: vi.fn(async () => undefined), addEventListener() {}, removeEventListener() {} },
+            configurable: true,
+        });
+        await land();
+        await act(async () => { fireEvent.click(screen.getByTestId('notify-ask-turn-on')); });
+        expect(screen.getByTestId('notify-ask-turn-on')).toBeDisabled();
+        fireEvent.click(screen.getByTestId('notify-ask-later'));
+        expect(screen.queryByTestId('notify-once-card')).toBeNull();
+        expect(readNotifyAsk(ME.publicKey).onceClosedAt).toEqual(expect.any(Number));
+    });
+
     it("allowed, but the subscription isn't taken: the card stays and says so", async () => {
         browser('push', 'granted');
         await land();

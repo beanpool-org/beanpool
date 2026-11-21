@@ -22,7 +22,7 @@ export function NotifyAsk({ form, words, busy, failed, onTurnOn, onLater }: {
     /** `step`: the join's last screen, its two buttons in the sticky foot; `card`: Home's once card. */
     form: 'step' | 'card';
     words: NotifyJoinWords;
-    /** The tap's work is out (the browser's prompt, the subscription): both buttons wait. */
+    /** The tap's work is out (the browser's prompt, the subscription): Turn on waits; Later never does. */
     busy: boolean;
     /** The browser allowed and the community did not take the subscription: said, with both buttons still there. */
     failed: boolean;
@@ -38,8 +38,10 @@ export function NotifyAsk({ form, words, busy, failed, onTurnOn, onLater }: {
                 {words.turnOn}
             </button>
             {words.confirm && <p dir="auto" data-testid="notify-ask-confirm" className="m-0 mt-2 text-xs text-center text-text-secondary break-words">{words.confirm}</p>}
-            <button type="button" data-testid="notify-ask-later" onClick={onLater} disabled={busy}
-                className="block w-full min-h-[48px] px-3 mt-1 bg-transparent border-none text-base font-bold text-text-primary break-words cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand">
+            {/* Never waits: the subscription after the browser's yes goes to the community, which can be slow, and Later is
+                always the way on. */}
+            <button type="button" data-testid="notify-ask-later" onClick={onLater}
+                className="block w-full min-h-[48px] px-3 mt-1 bg-transparent border-none text-base font-bold text-text-primary break-words cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand">
                 {words.later}
             </button>
         </div>

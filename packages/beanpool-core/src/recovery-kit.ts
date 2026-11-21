@@ -55,7 +55,7 @@ export const KIT_RESTORE_STEPS = [
  */
 export const KIT_WEB_RESTORE_STEPS = [
     'Open your community’s address (written above) in a web browser.',
-    "Click “Already have BeanPool?” or “I've used BeanPool before”, whichever the page shows.",
+    "Click “Already have BeanPool?”. If the page shows “I've used BeanPool before” instead, click that.",
     'Click “Use my 12 words” or “🔑 Recover with 12 Words”, whichever the page shows.',
     'Type your 12 words in order, one in each box.',
     'Click “Recover Identity”. Your name and picture come back once you’re in.',

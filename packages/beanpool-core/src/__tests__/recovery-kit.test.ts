@@ -34,10 +34,11 @@ describe('recoveryKitHtml', () => {
         expect(KIT_WEB_RESTORE_STEPS[1]).toMatch(/^Click “Already have BeanPool\?”/);
         expect(web).toContain('“Use my 12 words”');
         // An invite-only community: its front door's I've used BeanPool before (W1), then "Recover with 12 Words".
-        expect(KIT_WEB_RESTORE_STEPS[1]).toBe("Click “Already have BeanPool?” or “I've used BeanPool before”, whichever the page shows.");
+        // Its first sentence as every printed kit has read (the web app's recovery-kit.words.test.ts pins it in English).
+        expect(KIT_WEB_RESTORE_STEPS[1]).toBe("Click “Already have BeanPool?”. If the page shows “I've used BeanPool before” instead, click that.");
         expect(web).toContain('“🔑 Recover with 12 Words”');
         const html = recoveryKitHtml(KIT);
-        expect(html).toContain('Click “Already have BeanPool?” or “I&#39;ve used BeanPool before”, whichever the page shows.');
+        expect(html).toContain('Click “Already have BeanPool?”. If the page shows “I&#39;ve used BeanPool before” instead, click that.');
     });
 
     it('names the address it was given, an IP as well as a domain, and assumes no domain of its own', () => {

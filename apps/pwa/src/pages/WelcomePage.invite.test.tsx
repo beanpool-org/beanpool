@@ -1404,7 +1404,7 @@ describe('a pasted invite names its community only while the field holds what it
         expect(await screen.findByText(ELSEWHERE)).toBeInTheDocument();
         expect(node.redeems()).toHaveLength(0);
         // Your name's band never greeted it with this community's name: a code the check refuses is "You're invited" alone
-        // (deciding review on #3333, 7c25e192: it said "You're invited to Riverside Commons" for Byron's invite).
+        // (deciding review on #3333, 7c25e192: it said "You're invited to Riverside Commons" for the other community's invite).
         expect(screen.getByTestId('invite-greeting').querySelector('h3')).toHaveTextContent(/^You're invited$/);
     });
 

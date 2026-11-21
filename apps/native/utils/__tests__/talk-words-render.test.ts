@@ -154,7 +154,11 @@ vi.mock('../node-post', () => ({
     signedGet: (origin: string) => knockReads.answers.get(origin)?.() ?? new Promise(() => {}), signedPost: () => new Promise(() => {}),
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
-vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
+// Nobody blocked, in every list Message asks first (utils/message-anyone.ts blockedForMessage, #3354 review).
+vi.mock('../blocklist', () => ({
+    getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated',
+    readBlockLists: async () => ({ onPhone: new Set<string>(), once: new Set<string>(), seenThere: new Set<string>() }),
+}));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
 vi.mock('../member-statements', () => ({ makeOfflineTicket: () => new Promise(() => {}) }));
 const membership = vi.hoisted(() => ({ isMember: true }));
@@ -176,7 +180,12 @@ const globalDoor = vi.hoisted(() => ({ entry: 'checking' as string, here: false 
 vi.mock('../global-join-existing', () => ({ isGlobalCommunity: () => globalDoor.here }));
 vi.mock('../use-global-entry', () => ({ useGlobalEntry: () => globalDoor.entry }));
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
-vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => net.answer?.(name, args)));
+vi.mock('../db', async () => ({
+    ...(await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => net.answer?.(name, args)),
+    // A pure check, answered as db.ts answers it (no promise): no error a row here throws is its in-place refusal (a private
+    // class there). New message asks it in its catch (#3354 review, noted: that refusal says "Please try again.").
+    isNoCopyInPlace: () => false,
+}));
 const openNoticeCalls = vi.hoisted(() => ({ calls: [] as Array<{ url: string; id: string | null; route: unknown }> }));
 vi.mock('../push-notice-switch', async (importOriginal) => {
     const orig = await importOriginal<Record<string, unknown>>();
@@ -276,6 +285,8 @@ type Answers = Record<string, unknown>;
 function community(over: Answers = {}): (name: string, args: unknown[]) => Promise<unknown> | undefined {
     const answers: Answers = {
         getConversations: CONVERSATIONS, getActionableDeals: DEALS, syncMessages: undefined, getFriendsLocal: FRIENDS,
+        // Message's look at the held communities closes their copies as it ends (held-chats.ts heldChatsWith, #3354 review).
+        closeHeldCopies: undefined,
         fetchYourGroups: { items: YOUR_GROUPS, totalUnread: 4 }, fetchAddedYou: { addedYou: ADDED_YOU, more: 2 },
         getRecentChatMembers: [{ publicKey: 'kofi-key', callsign: 'Kofi', avatar_url: null }],
         getDb: { getAllAsync: async (sql: string) => (/FROM members/.test(sql) ? MEMBERS : []), getFirstAsync: async () => null, runAsync: async () => ({}) },
@@ -520,8 +531,19 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         expect(bypassing()).toEqual([]);
     });
 
+    // The refusal rows below start a chat with Zoe in a community with no chat yet (`getConversations: []`): with her DM here
+    // (c-zoe), Message's rule 1 opens it (utils/message-anyone.ts, S5 part 2; #3354 review: a real phone never found it).
+    it('the New message picker, someone with a chat here already: it opens, nothing is started and nothing is said', async () => {
+        await renderIn('xx', createElement(NewMessageScreen));
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
+        expect(net.calls).toContain('db.getConversations');
+        expect(net.calls).not.toContain('db.createConversationApi');
+        expect(alerts.said).toEqual([]);
+        expect(bypassing()).toEqual([]);
+    });
+
     it("the New message picker, a conversation the node won't open (a paused account): its words, never nothing", async () => {
-        net.answer = community({ createConversationApi: new Error(PAUSED_OPEN_WORDS) });
+        net.answer = community({ getConversations: [], createConversationApi: new Error(PAUSED_OPEN_WORDS) });
         await renderIn('xx', createElement(NewMessageScreen));
         await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
         expect(net.calls).toContain('db.createConversationApi');
@@ -530,7 +552,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
     });
 
     it('the New message picker, offline: the phone says to connect, in the member\'s language', async () => {
-        net.answer = community({ createConversationApi: new Error('You are off-grid. Please connect to a node first.') });
+        net.answer = community({ getConversations: [], createConversationApi: new Error('You are off-grid. Please connect to a node first.') });
         await renderIn('xx', createElement(NewMessageScreen));
         await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
         expect(alerts.said).toEqual([pseudoLocalise('Error'), pseudoLocalise('Connect to your community to start a chat.')]);
@@ -538,7 +560,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
     });
 
     it("the New message picker, a refusal without the node's words: the phone's own sentence, in the member's language", async () => {
-        net.answer = community({ createConversationApi: new Error('Failed to create conversation thread.') });
+        net.answer = community({ getConversations: [], createConversationApi: new Error('Failed to create conversation thread.') });
         await renderIn('xx', createElement(NewMessageScreen));
         await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
         expect(net.calls).toContain('db.createConversationApi');

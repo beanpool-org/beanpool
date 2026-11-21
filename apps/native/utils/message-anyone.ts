@@ -27,31 +27,37 @@ export function directChatsHere(chats: readonly HereChat[], keys: readonly strin
     const out: KnownChat[] = [];
     for (const c of chats) {
         if (c.type !== 'dm' || !shows(c)) continue;
-        for (const key of new Set([...c.peerKeys, ...(c.peerPubkey ? [c.peerPubkey] : [])])) if (want.has(key)) out.push({ kind: 'direct', community, id: String(c.id), key });
+        // Every key Talk knows them by here (dm-blocked.ts talkShowsChat reads the same two fields).
+        const theirs = new Set([...(Array.isArray(c.peerKeys) ? c.peerKeys : []), ...(c.peerPubkey ? [c.peerPubkey] : [])]);
+        for (const key of theirs) if (want.has(key)) out.push({ kind: 'direct', community, id: String(c.id), key });
     }
     return out;
 }
 
-/** Every chat Chat lists with any of `keys`: direct ones in the community in use and in the other held ones, across ones in any of their files. */
+/**
+ * Every chat Chat lists with any of `keys`: direct ones in the community in use and in the other held ones, across ones in
+ * any of their files. Each source is read on its own: one that fails counts as no chat there, and the others still count.
+ */
 export async function knownChatsWith(me: string, keys: readonly string[]): Promise<KnownChat[]> {
-    const db = await import('./db');
-    const { talkShowsChat } = await import('./dm-blocked');
-    const { getBlockedUsers } = await import('./blocklist');
-    const { heldChatsWith } = await import('./held-chats');
-    const anchor = await anchorUrl();
-    const out: KnownChat[] = [];
-    if (anchor) {
-        const here = await db.getConversations(me).catch((): HereChat[] => []);
-        const blocked = await getBlockedUsers();
-        out.push(...directChatsHere(here, keys, anchor, (c) => talkShowsChat(c, blocked)));
-    }
-    out.push(...await heldChatsWith(me, keys).catch(() => [] as KnownChat[]));
-    const { outsideContext } = await import('./outside-chat-live');
-    const { chatsShown } = await import('./outside-mail');
-    const ctx = await outsideContext().catch(() => null);
     const want = new Set(keys);
-    for (const c of (ctx ? await chatsShown(ctx).catch(() => []) : [])) if (want.has(c.peerKey)) out.push({ kind: 'across', community: null, id: c.id, key: c.peerKey });
-    return out;
+    const anchor = await anchorUrl();
+    const directHere = async (): Promise<KnownChat[]> => {
+        if (!anchor) return [];
+        const db = await import('./db');
+        const { talkShowsChat } = await import('./dm-blocked');
+        const { getBlockedUsers } = await import('./blocklist');
+        const [here, blocked] = await Promise.all([db.getConversations(me), getBlockedUsers()]);
+        return directChatsHere(here, keys, anchor, (c) => talkShowsChat(c, blocked));
+    };
+    const held = async (): Promise<KnownChat[]> => (await import('./held-chats')).heldChatsWith(me, keys);
+    const acrossHere = async (): Promise<KnownChat[]> => {
+        const { outsideContext } = await import('./outside-chat-live');
+        const { chatsShown } = await import('./outside-mail');
+        const ctx = await outsideContext();
+        return ctx ? (await chatsShown(ctx)).filter((c) => want.has(c.peerKey)).map((c) => ({ kind: 'across' as const, community: null, id: c.id, key: c.peerKey })) : [];
+    };
+    const none = (): KnownChat[] => [];
+    return [...await directHere().catch(none), ...await held().catch(none), ...await acrossHere().catch(none)];
 }
 
 /**

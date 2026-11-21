@@ -32,8 +32,12 @@
  * across, the old key isn't let in; an Ignored request isn't pressed later in the run; 500 chats timed.
  *
  * Real SQLite files on disk (node:sqlite), the real db.ts, the real blocklist (its block, unblock and remembered changes),
- * real held handles. The node is a stand-in that answers as routes/messaging.ts does and keeps no block list (404). The
+ * real held handles. The node is a stand-in that answers as routes/messaging.ts does, and keeps the account's block list as
+ * routes/blocks.ts does (slice S7b reads it back before a quiet accept: a node with none lets nobody in quietly). The
  * private contacts list is a stand-in for contacts-store's loadContacts (its opening is contacts-store.test.ts's).
+ *
+ * Block first, everywhere (slice S7b) has its own tables at the end: what holds x where it is judged, and the design's
+ * quiet-Accept table.
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import Module from 'node:module';

@@ -27,7 +27,7 @@ In the phone app, confirm with **Block User** (**Block** on an enterprise's page
 
 Your community keeps your blocks for you, from the phone app and from the web app. A block made in the phone app reaches your community as soon as the phone is connected. Without a connection, the phone blocks them at once and tells your community when it is back online.
 
-If you belong to more than one community on the phone, your blocks reach each one when you next use it on that phone. A community you are only looking around as a guest gets none of them. If you join it, they reach it then.
+If you belong to more than one community on the phone, a block you make on it reaches every one of them, as soon as each is connected. A community you are only looking around as a guest gets none of them. If you join it, they reach it then.
 
 If your community's server is too old to keep blocks, a block made in the phone app stays on that phone. The phone tries again each day, until the server is updated.
 
@@ -57,7 +57,8 @@ If your community's server is too old to keep blocks, a block made in the phone 
 - In the phone app, if you reinstall the app or use another phone, your community still keeps your blocks, so their messages still don't reach you. The phone app does not get your list back: block them again there to hide their posts.
 - In the web app, your community keeps your blocks with your account. Sign in on any browser and they come back. Signing out leaves nothing about them on that computer. See "Using BeanPool in a web browser".
 - The people who run your community's server can see whom you blocked, in either app, as they can see reports.
-- A block made in the phone app shows in the web app too. A block made in the web app does not show in the phone app, but your community keeps it, so their messages don't reach you on either.
+- A block made in the phone app shows in the web app too. A block made in the web app does not show in the phone app, but your community keeps it, so their messages don't reach you on either. The phone app reads it too: it shows no message request from them, in any community on the phone, and never accepts one for you.
+- A block made in the web app holds in that community only. To block someone in all your communities, block them in the phone app.
 - If you unblock someone in the web app whom you blocked in the phone app, unblock them in the phone app too. The phone keeps its own list, and still hides them.
 
 ## Unblocking

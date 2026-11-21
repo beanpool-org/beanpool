@@ -1,0 +1,188 @@
+{
+ "continue": {
+  "gcmcontinue": "20261121172115|203571035",
+  "continue": "gcmcontinue||"
+ },
+ "query": {
+  "pages": {
+   "203571036": {
+    "pageid": 203571036,
+    "ns": 6,
+    "title": "File:Kartagina amfiteater.jpg",
+    "imagerepository": "local",
+    "imageinfo": [
+     {
+      "size": 1521272,
+      "width": 2592,
+      "height": 1944,
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Kartagina_amfiteater.jpg/960px-Kartagina_amfiteater.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbwidth": 960,
+      "thumbheight": 720,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Kartagina_amfiteater.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Kartagina_amfiteater.jpg",
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC0",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "License": {
+        "value": "cc0",
+        "source": "commons-templates",
+        "hidden": ""
+       },
+       "LicenseUrl": {
+        "value": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+        "source": "commons-desc-page"
+       },
+       "AttributionRequired": {
+        "value": "false",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Artist": {
+        "value": "<a href=\"//commons.wikimedia.org/wiki/User:JoMK\" title=\"User:JoMK\">JoMK</a>",
+        "source": "commons-desc-page"
+       },
+       "UsageTerms": {
+        "value": "Creative Commons Zero, Public Domain Dedication",
+        "source": "commons-desc-page"
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Categories": {
+        "value": "CC-Zero|Creative Commons CC0 1.0 Universal Public Domain Dedication missing SDC copyright license|Self-published work|Self-published work missing SDC copyright license|All media needing categories as of 2026|Media needing categories as of 21 November 2026",
+        "source": "commons-categories",
+        "hidden": ""
+       },
+       "Copyrighted": {
+        "value": "True",
+        "source": "commons-desc-page",
+        "hidden": ""
+       }
+      }
+     }
+    ],
+    "categories": [
+     {
+      "ns": 14,
+      "title": "Category:All media needing categories as of 2026"
+     },
+     {
+      "ns": 14,
+      "title": "Category:CC-Zero"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Creative Commons CC0 1.0 Universal Public Domain Dedication missing SDC copyright license"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Media needing categories as of 21 November 2026"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Self-published work"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Self-published work missing SDC copyright license"
+     }
+    ]
+   },
+   "203571037": {
+    "pageid": 203571037,
+    "ns": 6,
+    "title": "File:Kartagina Apoloninove terme.jpg",
+    "imagerepository": "local",
+    "imageinfo": [
+     {
+      "size": 1036382,
+      "width": 2592,
+      "height": 1944,
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/Kartagina_Apoloninove_terme.jpg/960px-Kartagina_Apoloninove_terme.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbwidth": 960,
+      "thumbheight": 720,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/66/Kartagina_Apoloninove_terme.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Kartagina_Apoloninove_terme.jpg",
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC0",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "License": {
+        "value": "cc0",
+        "source": "commons-templates",
+        "hidden": ""
+       },
+       "LicenseUrl": {
+        "value": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+        "source": "commons-desc-page"
+       },
+       "AttributionRequired": {
+        "value": "false",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Artist": {
+        "value": "<a href=\"//commons.wikimedia.org/wiki/User:JoMK\" title=\"User:JoMK\">JoMK</a>",
+        "source": "commons-desc-page"
+       },
+       "UsageTerms": {
+        "value": "Creative Commons Zero, Public Domain Dedication",
+        "source": "commons-desc-page"
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Categories": {
+        "value": "CC-Zero|Creative Commons CC0 1.0 Universal Public Domain Dedication missing SDC copyright license|Self-published work|Self-published work missing SDC copyright license|All media needing categories as of 2026|Media needing categories as of 21 November 2026",
+        "source": "commons-categories",
+        "hidden": ""
+       },
+       "Copyrighted": {
+        "value": "True",
+        "source": "commons-desc-page",
+        "hidden": ""
+       }
+      }
+     }
+    ],
+    "categories": [
+     {
+      "ns": 14,
+      "title": "Category:All media needing categories as of 2026"
+     },
+     {
+      "ns": 14,
+      "title": "Category:CC-Zero"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Creative Commons CC0 1.0 Universal Public Domain Dedication missing SDC copyright license"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Media needing categories as of 21 November 2026"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Self-published work"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Self-published work missing SDC copyright license"
+     }
+    ]
+   }
+  }
+ }
+}

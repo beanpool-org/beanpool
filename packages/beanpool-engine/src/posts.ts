@@ -853,13 +853,21 @@ export function generateSearchKeywords(title: string, description: string, categ
     return [...expanded].join(' ');
 }
 
-/** A stored list of sources (posts.knowledge_sources, JSON), read tolerantly: anything odd is no source. */
+/**
+ * A stored list of sources (posts.knowledge_sources, JSON), read tolerantly: anything odd is no source. A credit row the node
+ * wrote for a picture from Wikimedia Commons keeps its mark, `photo` (core KnowledgeSource): an app that doesn't know it draws the
+ * row as a source, its label already the credit.
+ */
 function knowledgeSourcesOf(raw: unknown): KnowledgeSource[] {
     if (typeof raw !== 'string' || raw === '') return [];
     try {
         const list = JSON.parse(raw);
         return Array.isArray(list)
-            ? list.filter((x) => x && typeof x.url === 'string').map((x) => ({ url: x.url as string, label: typeof x.label === 'string' ? x.label : '' }))
+            ? list.filter((x) => x && typeof x.url === 'string').map((x) => ({
+                url: x.url as string,
+                label: typeof x.label === 'string' ? x.label : '',
+                ...(Number.isInteger(x.photo) && x.photo >= 1 ? { photo: x.photo as number } : {}),
+            }))
             : [];
     } catch {
         return [];

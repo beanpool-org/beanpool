@@ -278,7 +278,8 @@ async function main(): Promise<void> {
             'suggest_action', 'tags_search', 'take_backup', 'update_post']),
         `an owner's assistant has the ten S1 tools, S4's suggest_action, the owner's posts (MCP-OWNER-POSTS), S2's reads and undo, the upload link, the poll tools, S3's groups and enterprises and Local knowledge's five (K6) (${names.join(', ')})`);
         assert(tools.every(t => /^Reads .+\.\nNever returns .+\./.test(t.description ?? '') && !!t.outputSchema), 'each description says what it reads, then what it never returns; each has an outputSchema');
-        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,knowledge_get,knowledge_list,listings_search,my_enterprises,my_groups,my_knowledge_drafts,my_posts,poll_results,report_get,reports_list',
+        // knowledge_draft answers each Wikimedia Commons picture's maker as Commons gave it, fenced (learn web pictures slice 2).
+        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,knowledge_draft,knowledge_get,knowledge_list,listings_search,my_enterprises,my_groups,my_knowledge_drafts,my_posts,poll_results,report_get,reports_list',
             'the tools that can return member text say it is data');
         const tb = tools.find(t => t.name === 'take_backup');
         const sa = tools.find(t => t.name === 'suggest_action');
@@ -293,10 +294,13 @@ async function main(): Promise<void> {
             && creates.length === 8 && creates.every(t => t.annotations?.readOnlyHint === false && t.annotations?.idempotentHint === false && t.annotations?.destructiveHint === false)
             && uploadLink?.readOnlyHint === false && uploadLink?.idempotentHint === false && uploadLink?.destructiveHint === false
             && KNOWLEDGE_WRITES.every(n => { const a = tools.find(t => t.name === n)?.annotations; return a?.readOnlyHint === false && a?.idempotentHint === false && a?.destructiveHint === false; })
+            // knowledge_draft asks Wikimedia Commons for a picture's licence and copy: it reaches a server outside this one.
+            && tools.find(t => t.name === 'knowledge_draft')?.annotations?.openWorldHint === true
+            && tools.find(t => t.name === 'knowledge_draft_withdraw')?.annotations?.openWorldHint === false
             && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action' && t.name !== 'photo_upload_link' && !t.name.startsWith('create_') && !S2_WRITES.includes(t.name) && !KNOWLEDGE_WRITES.includes(t.name)).every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false)
             // Slice S2: an edit is a write, not destructive; the two removals are destructive, and so is close_poll: nothing reopens a poll.
             && S2_WRITES.every(n => { const a = tools.find(t => t.name === n)?.annotations; return a?.readOnlyHint === false && a?.idempotentHint === false && a?.destructiveHint === (n !== 'update_post'); }),
-        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action, the five creates, photo_upload_link and update_post are writes, neither idempotent nor destructive; remove_post, remove_all_i_made and close_poll are destructive');
+        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action, the five creates, photo_upload_link and update_post are writes, neither idempotent nor destructive; remove_post, remove_all_i_made and close_poll are destructive; knowledge_draft says it reaches an outside server (openWorldHint), knowledge_draft_withdraw does not');
         const prompts = (await client.listPrompts()).prompts.map(p => p.name).sort();
         assert(JSON.stringify(prompts) === JSON.stringify(['backup-check', 'check-old-knowledge', 'draft-announcement', 'draft-local-knowledge', 'safety-settings-check', 'summarise-reports', 'triage-report',
             'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu, and Local knowledge's two where Learn is on (K6) (${prompts.join(', ')})`);

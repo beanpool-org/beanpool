@@ -1,0 +1,525 @@
+{
+ "continue": {
+  "clcontinue": "69654637|Featured_pictures_of_Jordan",
+  "continue": "||imageinfo"
+ },
+ "query": {
+  "pages": {
+   "11393260": {
+    "pageid": 11393260,
+    "ns": 6,
+    "title": "File:Przełęcz Karkonoska - panorama.jpg",
+    "imagerepository": "local",
+    "imageinfo": [
+     {
+      "size": 2463095,
+      "width": 3074,
+      "height": 1005,
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/Prze%C5%82%C4%99cz_Karkonoska_-_panorama.jpg/960px-Prze%C5%82%C4%99cz_Karkonoska_-_panorama.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbwidth": 960,
+      "thumbheight": 314,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/1/12/Prze%C5%82%C4%99cz_Karkonoska_-_panorama.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Prze%C5%82%C4%99cz_Karkonoska_-_panorama.jpg",
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "Public domain",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "License": {
+        "value": "pd",
+        "source": "commons-templates",
+        "hidden": ""
+       },
+       "AttributionRequired": {
+        "value": "false",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Artist": {
+        "value": "<table cellspacing=\"5\" style=\"width:400px; text-align:center; color:#000; background:#EEEEEE; border:2px solid #bbb; margin:1px; direction:ltr;\" class=\"layouttemplate\">\n<tbody><tr>\n<td style=\"width:25px; height:25px;\"><span typeof=\"mw:File\"><a href=\"//commons.wikimedia.org/wiki/File:Camera2_mgx.svg\" class=\"mw-file-description\"><img src=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/Camera2_mgx.svg/60px-Camera2_mgx.svg.png?utm_source=commons.wikimedia.org&amp;utm_campaign=parser&amp;utm_content=thumbnail\" decoding=\"async\" loading=\"lazy\" width=\"60\" height=\"52\" class=\"mw-file-element\" srcset=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/Camera2_mgx.svg/120px-Camera2_mgx.svg.png?utm_source=commons.wikimedia.org&amp;utm_campaign=parser&amp;utm_content=thumbnail 2x\" data-file-width=\"512\" data-file-height=\"444\"></a></span>\n</td>\n<td style=\"font-size:9pt; padding:1pt; line-height:1.1em;\">\n<p>This photo was taken by <a href=\"//commons.wikimedia.org/wiki/User:Przemek_Jahr\" class=\"mw-redirect\" title=\"User:Przemek Jahr\">Przemysław Jahr</a><br>Autorem zdjęcia jest <a href=\"//commons.wikimedia.org/wiki/User:Przemek_Jahr\" class=\"mw-redirect\" title=\"User:Przemek Jahr\">Przemysław Jahr</a><br><br>Wykorzystując zdjęcie proszę podać jako autora:<br><b>Przemysław Jahr / Wikimedia Commons</b>\n</p>\n</td></tr></tbody></table>",
+        "source": "commons-desc-page"
+       },
+       "UsageTerms": {
+        "value": "Public domain",
+        "source": "commons-desc-page"
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Categories": {
+        "value": "Featured pictures of the Czech Republic|Przełęcz Karkonoska|Schronisko Odrodzenie|Taken with Sony DSLR-A100|Self-published work|Created with Hugin|PD-self|Photographs by pjahr|Files with derivative versions|Featured pictures on Wikipedia, Polish|Featured pictures of landscapes in Poland|Featured photographs in the public domain|Assessment tagged pages marked as POTY candidates",
+        "source": "commons-categories",
+        "hidden": ""
+       },
+       "Copyrighted": {
+        "value": "False",
+        "source": "commons-desc-page",
+        "hidden": ""
+       }
+      }
+     }
+    ],
+    "categories": [
+     {
+      "ns": 14,
+      "title": "Category:Assessment tagged pages marked as POTY candidates"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Created with Hugin"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Featured photographs in the public domain"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Featured pictures of landscapes in Poland"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Featured pictures of the Czech Republic"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Featured pictures on Wikimedia Commons"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Featured pictures on Wikipedia, Polish"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Files with derivative versions"
+     },
+     {
+      "ns": 14,
+      "title": "Category:PD-self"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Photographs by pjahr"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Pictures of the Year (2010)"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Pictures of the Year (candidate)"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Pictures of the day (2010)"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Przełęcz Karkonoska"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Quality images"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Quality images missing SDC creator"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Quality images missing SDC depicts"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Quality images of Hradec Králové Region"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Quality images of Lower Silesian Voivodeship"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Schronisko Odrodzenie"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Self-published work"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Taken with Sony DSLR-A100"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Valued images missing SDC creator"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Valued images missing SDC depicts"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Valued images of Lower Silesian Voivodeship"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Valued images of nature"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Valued images of the Czech Republic"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Valued images promoted 2010-10"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Valued images sorted by promotion date"
+     }
+    ]
+   },
+   "32654594": {
+    "pageid": 32654594,
+    "ns": 6,
+    "title": "File:\"Hundreaaorsnotti\", Bolette C. Pavels Larsen, 1997.ogg",
+    "imagerepository": "local",
+    "imageinfo": [
+     {
+      "size": 5066273,
+      "width": 0,
+      "height": 0,
+      "thumburl": "https://commons.wikimedia.org/w/resources/assets/file-type-icons/fileicon-ogg.png",
+      "thumbwidth": 960,
+      "thumbheight": 960,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/e/e4/%22Hundreaaorsnotti%22%2C_Bolette_C._Pavels_Larsen%2C_1997.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:%22Hundreaaorsnotti%22,_Bolette_C._Pavels_Larsen,_1997.ogg",
+      "mime": "application/ogg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC BY-SA 3.0",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "License": {
+        "value": "cc-by-sa-3.0",
+        "source": "commons-templates",
+        "hidden": ""
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by-sa/3.0",
+        "source": "commons-desc-page"
+       },
+       "AttributionRequired": {
+        "value": "true",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Artist": {
+        "value": "Sogndal bibliotek og Ingrid Anne Yttri.",
+        "source": "commons-desc-page"
+       },
+       "UsageTerms": {
+        "value": "Creative Commons Attribution-Share Alike 3.0",
+        "source": "commons-desc-page"
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Categories": {
+        "value": "Nynorsk|Bolette C. Pavels Larsen|Deletion requests November 2026",
+        "source": "commons-categories",
+        "hidden": ""
+       },
+       "Copyrighted": {
+        "value": "True",
+        "source": "commons-desc-page",
+        "hidden": ""
+       }
+      }
+     }
+    ],
+    "categories": [
+     {
+      "ns": 14,
+      "title": "Category:Bolette C. Pavels Larsen"
+     },
+     {
+      "ns": 14,
+      "title": "Category:CC-BY-SA-3.0"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Deletion requests November 2026"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Nynorsk"
+     }
+    ]
+   },
+   "67596906": {
+    "pageid": 67596906,
+    "ns": 6,
+    "title": "File:\"A Russian Honeymoon\" - Madison Square Theatre, N.Y. - Act II, last scene. Photographed in the theatre at midnight May 1st 1883 by Falk LCCN2006682502.jpg",
+    "imagerepository": "local",
+    "imageinfo": [
+     {
+      "size": 253901,
+      "width": 1536,
+      "height": 1007,
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/08/%22A_Russian_Honeymoon%22_-_Madison_Square_Theatre%2C_N.Y._-_Act_II%2C_last_scene._Photographed_in_the_theatre_at_midnight_May_1st_1883_by_Falk_LCCN2006682502.jpg/960px-%22A_Russian_Honeymoon%22_-_Madison_Square_Theatre%2C_N.Y._-_Act_II%2C_last_scene._Photographed_in_the_theatre_at_midnight_May_1st_1883_by_Falk_LCCN2006682502.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbwidth": 960,
+      "thumbheight": 629,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/0/08/%22A_Russian_Honeymoon%22_-_Madison_Square_Theatre%2C_N.Y._-_Act_II%2C_last_scene._Photographed_in_the_theatre_at_midnight_May_1st_1883_by_Falk_LCCN2006682502.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:%22A_Russian_Honeymoon%22_-_Madison_Square_Theatre,_N.Y._-_Act_II,_last_scene._Photographed_in_the_theatre_at_midnight_May_1st_1883_by_Falk_LCCN2006682502.jpg",
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "Public domain",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "License": {
+        "value": "pd",
+        "source": "commons-templates",
+        "hidden": ""
+       },
+       "AttributionRequired": {
+        "value": "false",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Artist": {
+        "value": "<bdi><a href=\"https://www.wikidata.org/wiki/Q4480964\" class=\"extiw\" title=\"d:Q4480964\"><span title=\"American photographer (1853–1925)\">Benjamin Joseph Falk</span></a></bdi>",
+        "source": "commons-desc-page"
+       },
+       "UsageTerms": {
+        "value": "Public domain",
+        "source": "commons-desc-page"
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Categories": {
+        "value": "1883 in New York City|Madison Square Theatre|Agnes Booth|Images from the Library of Congress|1883 in theatre|Images uploaded by Fæ|1883-05-01|PD US expired|PD-old-100|CC-PD-Mark|Miscellaneous Items in High Demand, PPOC, Library of Congress|Photographs by Benjamin Falk|A Russian Honeymoon",
+        "source": "commons-categories",
+        "hidden": ""
+       },
+       "Copyrighted": {
+        "value": "False",
+        "source": "commons-desc-page",
+        "hidden": ""
+       }
+      }
+     }
+    ],
+    "categories": [
+     {
+      "ns": 14,
+      "title": "Category:1883-05-01"
+     },
+     {
+      "ns": 14,
+      "title": "Category:1883 in New York City"
+     },
+     {
+      "ns": 14,
+      "title": "Category:1883 in theatre"
+     },
+     {
+      "ns": 14,
+      "title": "Category:A Russian Honeymoon"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Agnes Booth"
+     },
+     {
+      "ns": 14,
+      "title": "Category:CC-PD-Mark"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Images from the Library of Congress"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Images uploaded by Fæ"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Madison Square Theatre"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Miscellaneous Items in High Demand, PPOC, Library of Congress"
+     },
+     {
+      "ns": 14,
+      "title": "Category:PD-old-100"
+     },
+     {
+      "ns": 14,
+      "title": "Category:PD US expired"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Photographs by Benjamin Falk"
+     }
+    ]
+   },
+   "69654637": {
+    "pageid": 69654637,
+    "ns": 6,
+    "title": "File:Roughtail rock agama (Stellagama stellio brachydactyla).jpg",
+    "imagerepository": "local",
+    "imageinfo": [
+     {
+      "size": 8010594,
+      "width": 3552,
+      "height": 2369,
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Roughtail_rock_agama_%28Stellagama_stellio_brachydactyla%29.jpg/960px-Roughtail_rock_agama_%28Stellagama_stellio_brachydactyla%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbwidth": 960,
+      "thumbheight": 640,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/2/25/Roughtail_rock_agama_%28Stellagama_stellio_brachydactyla%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Roughtail_rock_agama_(Stellagama_stellio_brachydactyla).jpg",
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC BY-SA 4.0",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "License": {
+        "value": "cc-by-sa-4.0",
+        "source": "commons-templates",
+        "hidden": ""
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by-sa/4.0",
+        "source": "commons-desc-page"
+       },
+       "AttributionRequired": {
+        "value": "true",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Artist": {
+        "value": "<bdi><a href=\"https://www.wikidata.org/wiki/Q54800218\" class=\"extiw\" title=\"d:Q54800218\"><span title=\"Scottish wildlife photographer\">Charles J. Sharp</span></a></bdi>",
+        "source": "commons-desc-page"
+       },
+       "UsageTerms": {
+        "value": "Creative Commons Attribution-Share Alike 4.0",
+        "source": "commons-desc-page"
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Categories": {
+        "value": "Laudakia stellio|Featured pictures of Jordan|Reptiles of Jordan|Photographs by Charlesjsharp|Self-published work|Featured pictures on Wikipedia, English|Featured pictures by Charlesjsharp|Files with coordinates missing SDC location of creation|Jordan photographs taken on 2018-05-11|Featured pictures by Charlesjsharp/Jordan|Featured pictures of Agamidae|Shadows of animals|Featured pictures on English Wikipedia by Charlesjsharp|Featured pictures of reptiles by Charlesjsharp",
+        "source": "commons-categories",
+        "hidden": ""
+       },
+       "Copyrighted": {
+        "value": "True",
+        "source": "commons-desc-page",
+        "hidden": ""
+       }
+      }
+     }
+    ],
+    "categories": [
+     {
+      "ns": 14,
+      "title": "Category:CC-BY-SA-4.0"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Featured pictures by Charlesjsharp"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Featured pictures by Charlesjsharp/Jordan"
+     },
+     {
+      "ns": 14,
+      "title": "Category:Featured pictures of Agamidae"
+     }
+    ]
+   },
+   "141121289": {
+    "pageid": 141121289,
+    "ns": 6,
+    "title": "File:Sanderling Westkapelle 02.jpg",
+    "imagerepository": "local",
+    "imageinfo": [
+     {
+      "size": 9710656,
+      "width": 4980,
+      "height": 3320,
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/75/Sanderling_Westkapelle_02.jpg/960px-Sanderling_Westkapelle_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbwidth": 960,
+      "thumbheight": 640,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/7/75/Sanderling_Westkapelle_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Sanderling_Westkapelle_02.jpg",
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC BY 4.0",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "License": {
+        "value": "cc-by-4.0",
+        "source": "commons-templates",
+        "hidden": ""
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by/4.0",
+        "source": "commons-desc-page"
+       },
+       "AttributionRequired": {
+        "value": "true",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Artist": {
+        "value": "<a href=\"//commons.wikimedia.org/wiki/User:Stephan_Sprinz\" title=\"User:Stephan Sprinz\">Stephan Sprinz</a>",
+        "source": "commons-desc-page"
+       },
+       "UsageTerms": {
+        "value": "Creative Commons Attribution 4.0",
+        "source": "commons-desc-page"
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Categories": {
+        "value": "Calidris alba|Self-published work|Photographs by Stephan Sprinz|Featured pictures by Stephan Sprinz|Birds of Zeeland|Files with coordinates missing SDC location of creation (51° N, 3° E)|Nature of Westkapelle (Walcheren)|Featured pictures of birds in the Netherlands",
+        "source": "commons-categories",
+        "hidden": ""
+       },
+       "Copyrighted": {
+        "value": "True",
+        "source": "commons-desc-page",
+        "hidden": ""
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}

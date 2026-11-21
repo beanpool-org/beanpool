@@ -5,6 +5,8 @@
  * node apps/pwa/e2e/learn-pictures-320.mjs [--shots <dir>]
  *   an assistant's draft with two pictures, each with Remove photo; the same with the first removed (dimmed, "Left out", Keep this
  *   photo); Edit first opening on the one kept.
+ *   Slice 2 of DESIGN-learn-web-pictures-fable.md (§6.2): the second picture is from Wikimedia Commons, with its credit (a long
+ *   maker's name, to wrap), the day read, Commons' note and Open its page; the first, uploaded, says whose it must be.
  *
  * The real LearnPage with the real stylesheet (e2e/learn-harness.tsx); every /api call is answered here and nothing leaves the
  * machine. Checks, read from the live layout: no sideways scroll; every button at least 44 px tall and inside the screen;
@@ -43,6 +45,12 @@ const DRAFT = {
     ...TO_CHECK.drafts[0], body: 'The garden is behind the hall on Station Street. Plots are free; ask at the shed on Saturday mornings.',
     place: 'Behind the hall on Station Street', sources: [{ url: 'https://www.council.example/gardens', label: 'Council gardens page' }], lang: 'en', about: 'place',
     note: null, photos: PHOTOS, needsSourcesTicked: true, post: null, changed: null, pageChanged: null, freeTags: [],
+    photoCredits: [null, {
+        url: 'https://commons.wikimedia.org/wiki/File:Community_garden_behind_the_hall_in_late_spring_with_raised_beds.jpg',
+        file: 'File:Community garden behind the hall in late spring with raised beds.jpg',
+        maker: 'Bartholomew Featherstonehaugh-Ramaswamy and the Station Street Photography Collective', licence: 'CC BY-SA 4.0',
+        licenceUrl: 'https://creativecommons.org/licenses/by-sa/4.0/', restrictions: ['personality'], readAt: at(1),
+    }],
 };
 const LIVE = { features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, knowledge: true } };
 
@@ -113,6 +121,15 @@ try {
                 }
                 return out;
             }, [WIDTH]);
+            if (st.name === 'check-pictures') {
+                const lines = await tab.evaluate(() => ({
+                    credit: document.querySelectorAll('[data-testid="learn-check-credit"]').length,
+                    note: document.querySelectorAll('[data-testid="learn-check-credit-note"]').length,
+                    page: document.querySelectorAll('[data-testid="learn-check-credit-page"]').length,
+                    uploaded: document.querySelectorAll('[data-testid="learn-check-uploaded"]').length,
+                }));
+                if (lines.credit !== 1 || lines.note !== 1 || lines.page !== 1 || lines.uploaded !== 1) found.push(`the picture lines are not one each: ${JSON.stringify(lines)}`);
+            }
             if (st.keptInForm !== undefined) {
                 const inForm = await tab.locator('[data-testid="learn-form"] img[alt^="photo"]').count();
                 if (inForm !== st.keptInForm) found.push(`Edit first holds ${inForm} picture(s), not the ${st.keptInForm} kept`);

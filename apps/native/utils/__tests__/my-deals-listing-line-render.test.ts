@@ -86,6 +86,13 @@ const render = async (props: Record<string, unknown> = {}) => {
     await settle();
 };
 const byTestId = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+/** The sheet's own tab bar, as a member taps it. */
+async function tapTab(label: string): Promise<void> {
+    const tab = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.trim() === label);
+    expect(tab, `the "${label}" tab`).toBeTruthy();
+    await act(async () => { tab!.click(); });
+    await settle();
+}
 
 describe('Your deals after a first listing (slice N2a)', () => {
     for (const dark of [false, true]) {
@@ -128,6 +135,37 @@ describe('Your deals after a first listing (slice N2a)', () => {
         await render();
         expect(notifyAsk.offered).toEqual(['listing']);
         expect(byTestId('notify-line')).toBeNull();
+    });
+
+    // Fix round of #3332's deciding review (MyDealsSheet.tsx:398): Market keeps this sheet mounted and only flips `visible`
+    // (app/(tabs)/market.tsx), so the line is for one visit of My Posts. The row above remounts; Market never does.
+    it("Market's way: one sheet, closed and opened again (only visible flips): no line, and the rule was asked once", async () => {
+        noteNotifyMoment(LISTING_MOMENT, { kind: 'listing' });
+        await render();
+        expect(byTestId('notify-line')?.textContent).toContain('Hear when someone answers.');
+        await render({ visible: false });
+        expect(byTestId('notify-line')).toBeNull();
+        await render({ visible: true });
+        expect(host.textContent).toContain('Ladder to lend');
+        expect(byTestId('notify-line')).toBeNull();
+        // A later listing on a later day, the same mount: its kind was spent by leaving, so nothing is asked or drawn.
+        noteNotifyMoment(LISTING_MOMENT, { kind: 'listing' });
+        await render({ visible: false });
+        await render({ visible: true });
+        expect(byTestId('notify-line')).toBeNull();
+        expect(notifyAsk.offered).toEqual(['listing']);
+    });
+
+    it('another tab of the sheet and back to My Posts: the line is gone', async () => {
+        noteNotifyMoment(LISTING_MOMENT, { kind: 'listing' });
+        await render();
+        expect(byTestId('notify-line')).not.toBeNull();
+        await tapTab('In Progress');
+        expect(byTestId('notify-line')).toBeNull();
+        await tapTab('My Posts');
+        expect(host.textContent).toContain('Ladder to lend');
+        expect(byTestId('notify-line')).toBeNull();
+        expect(notifyAsk.offered).toEqual(['listing']);
     });
 
     it('in the preview (a guest looking around): never', async () => {

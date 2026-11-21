@@ -83,11 +83,18 @@ vi.mock('react-native', () => {
     };
 });
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
+/** The chat in front, or covered by another screen (a profile, a listing): useFocusEffect as react-navigation runs it. */
+const focus = vi.hoisted(() => ({ inFront: true, listeners: new Set<() => void>() }));
 vi.mock('expo-router', async () => {
-    const { useEffect: effect } = await import('react');
+    const { useEffect: effect, useSyncExternalStore } = await import('react');
+    const subscribe = (l: () => void) => { focus.listeners.add(l); return () => { focus.listeners.delete(l); }; };
     return {
         router: { push() {}, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
-        useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
+        // On focus, and its cleanup on blur.
+        useFocusEffect: (cb: () => void | (() => void)) => {
+            const inFront = useSyncExternalStore(subscribe, () => focus.inFront);
+            effect(() => (inFront ? cb() : undefined), [cb, inFront]);
+        },
         useLocalSearchParams: () => params.now,
         Stack: { Screen: () => null },
         ErrorBoundary: () => null,
@@ -221,6 +228,7 @@ beforeEach(() => {
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'global', features: {}, checkedAt: new Date().toISOString() } }));
     route.now = { view: 'dm', screenId: 'dm1' };
+    focus.inFront = true;
     Object.assign(phone, { status: 'undetermined', canAskAgain: true, answer: 'granted', asked: 0 });
     params.now = { id: 'dm1' };
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
@@ -345,6 +353,26 @@ describe('the named line in a chat (slice N2a)', () => {
         expect(host.textContent).not.toContain('Hear when Kofi answers.');
         expect(above(shown)).toContain('I can do Saturday');
         expect(record()).toMatchObject({ lines: ['offer'] });
+        askedNothing();
+    });
+
+    // Fix round of #3332's deciding review: the chat stays mounted under a screen opened over it, so the line is for one
+    // visit. Back in the chat, it is gone; and no other line comes in its place (the class: notify-line-hidden-again.test.ts).
+    it('a screen opened over the chat and back: the line is gone, and none comes on their next line', async () => {
+        const lines: unknown[] = [mine('m1', 'Morning', 7_200_000), theirs('k1', 'Yes, come by at five', 3_600_000)];
+        dm([], { getMessages: () => Promise.resolve([...lines]) });
+        await open();
+        expect(line('notify-line')?.textContent).toContain('Hear when Kofi writes again.');
+        await act(async () => { focus.inFront = false; focus.listeners.forEach((l) => l()); });
+        await settle();
+        expect(line('notify-line')).toBeNull();
+        lines.push(theirs('k2', 'Bring gloves', 60_000));
+        await act(async () => { focus.inFront = true; focus.listeners.forEach((l) => l()); });
+        await settle();
+        expect(host.textContent).toContain('Bring gloves');
+        expect(line('notify-line')).toBeNull();
+        expect(line('notify-line-done')).toBeNull();
+        expect(record()).toMatchObject({ lines: ['again'] });
         askedNothing();
     });
 

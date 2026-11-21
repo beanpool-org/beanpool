@@ -4,7 +4,8 @@
  * request accepted, a first listing, a first offer or request on someone's listing, an ask to join. It replaces the old
  * pop-up of ours at the first post, message and ask to join.
  *
- * One line with one button and no "Not now": leaving the screen is the no. Whether it shows is core's rule
+ * One line with one button and no "Not now": leaving the screen is the no, once per visit (a screen covered by another, a
+ * sheet closed, then shown again: no line; useNotifyLine's `showing`). Whether it shows is core's rule
  * (utils/notification-permission.ts `offerNamedLine`): each kind once on a phone, one soft ask a day (the join's day allows
  * one), never after the phone's no, never where the phone allows notifications without asking (Android 8 to 12). Only a
  * tap on Tell me brings the phone's own pop-up. Allowed: the line says "You'll hear when Asha answers.". Refused, or closed
@@ -13,6 +14,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { notifyLineWords, type NotifyLineKind } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 
@@ -49,19 +51,49 @@ export function takeNotifyMoment(where: string): NotifyLineOffer | null {
 }
 
 /**
+ * Whether a screen is the one in front: false while another screen covers it, true again when it comes back (expo-router's
+ * focus). A stack screen stays mounted under the next one, so this, not mounting, is what a visit is.
+ */
+export function useScreenShowing(): boolean {
+    const [showing, setShowing] = useState(true);
+    useFocusEffect(useCallback(() => {
+        setShowing(true);
+        return () => setShowing(false);
+    }, []));
+    return showing;
+}
+
+/**
  * One screen's named line: `offer` asks core's rule and, where it allows, shows the line (one per screen); `view` is the
  * line to draw, or null. The rule and the turn-on are loaded at the call, so a screen never loads expo-notifications as it
  * opens, and a failure only means no line.
+ *
+ * `showing` is whether the place is on screen now: a stack screen's focus (useScreenShowing), a sheet's `visible`. A place
+ * can stay mounted while hidden (Market keeps Your deals mounted and only flips `visible`), so a mount is not a visit: when
+ * `showing` goes false the line goes for good. Leaving is the no for that kind, it never comes back on the next visit,
+ * and a line from an earlier day can never stand beside that day's other line. Nothing is offered while hidden, and an
+ * answer that lands after the place was hidden shows nothing.
  */
-export function useNotifyLine(publicKey: string | null | undefined) {
+export function useNotifyLine(publicKey: string | null | undefined, showing: boolean) {
     const [shown, setShown] = useState<Shown | null>(null);
     const taken = useRef(false);
     const mounted = useRef(true);
+    const showingNow = useRef(showing);
+    /** Counts the times the place was hidden: an answer asked for in one visit is drawn only in that visit. */
+    const visit = useRef(0);
     useEffect(() => () => { mounted.current = false; }, []);
+    useEffect(() => {
+        showingNow.current = showing;
+        if (!showing) {
+            visit.current++;
+            setShown(null);
+        }
+    }, [showing]);
 
     const offer = useCallback(async (next: NotifyLineOffer): Promise<boolean> => {
-        if (taken.current) return false;
+        if (taken.current || !showingNow.current) return false;
         taken.current = true;
+        const askedIn = visit.current;
         let ok = false;
         try {
             ok = await (await import('../utils/notification-permission')).offerNamedLine(next.kind);
@@ -69,7 +101,7 @@ export function useNotifyLine(publicKey: string | null | undefined) {
             ok = false;
         }
         if (!ok) taken.current = false;
-        else if (mounted.current) setShown({ ...next, state: 'offer' });
+        else if (mounted.current && showingNow.current && visit.current === askedIn) setShown({ ...next, state: 'offer' });
         return ok;
     }, []);
 
@@ -84,8 +116,10 @@ export function useNotifyLine(publicKey: string | null | undefined) {
         if (mounted.current) setShown((s) => (s && granted ? { ...s, state: 'done' } : null));
     }, [publicKey]);
 
-    const view = shown ? <NotifyLine kind={shown.kind} name={shown.name} state={shown.state} onTellMe={tellMe} align={shown.align} /> : null;
-    return { line: shown, offer, view };
+    // Hidden: nothing drawn even for the one render before the effect above lets the line go.
+    const line = showing ? shown : null;
+    const view = line ? <NotifyLine kind={line.kind} name={line.name} state={line.state} onTellMe={tellMe} align={line.align} /> : null;
+    return { line, offer, view };
 }
 
 export function NotifyLine({ kind, name, state, onTellMe, align = 'start' }: {

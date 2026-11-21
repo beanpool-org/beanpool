@@ -39,7 +39,7 @@ import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords, findTownSearchWords, nearWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
-import { useNotifyLine } from '../components/NotifyLine';
+import { useNotifyLine, useScreenShowing } from '../components/NotifyLine';
 import { DoorRuleLine } from '../components/DoorRuleLine';
 import { communityRecordByKey, directoryRowCommunity, recordAddresses } from '../utils/community-index';
 import { askMemberHere, directoryRowDoor } from '../utils/member-here';
@@ -233,7 +233,9 @@ export default function FindCommunityScreen() {
     // The community just asked here: once its request reads as waiting, the named line "Hear when Riverside answers." under
     // it (slice N2a; core's rule says whether), in place of the old pop-up before the request went.
     const [justAsked, setJustAsked] = useState<{ url: string; name: string } | null>(null);
-    const notify = useNotifyLine(pubkey);
+    // One visit: a screen opened over this one (a community's card) and back, and the line is gone.
+    const inFront = useScreenShowing();
+    const notify = useNotifyLine(pubkey, inFront);
     // The community in front, once the records are read: a row whose key is one of the phone's communities opens it
     // (addresses S5, §3.6; community-index.ts directoryRowCommunity), whatever address the row carries.
     const [anchorNow, setAnchorNow] = useState<string | null | undefined>(undefined);

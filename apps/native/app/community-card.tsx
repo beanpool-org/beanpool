@@ -30,7 +30,7 @@ import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
-import { useNotifyLine } from '../components/NotifyLine';
+import { useNotifyLine, useScreenShowing } from '../components/NotifyLine';
 import { DoorRuleLine } from '../components/DoorRuleLine';
 import { communityRecordNaming, linkLanding, recordAddresses } from '../utils/community-index';
 import { askMemberHere } from '../utils/member-here';
@@ -203,7 +203,9 @@ export default function CommunityCardScreen() {
     // Asked from this card: once the request reads as waiting, the named line "Hear when Riverside answers." under it (slice
     // N2a; core's rule says whether), in place of the old pop-up before the request went.
     const [justAsked, setJustAsked] = useState<string | null>(null);
-    const notify = useNotifyLine(identity?.publicKey);
+    // One visit: a screen opened over the card and back, and the line is gone.
+    const inFront = useScreenShowing();
+    const notify = useNotifyLine(identity?.publicKey, inFront);
     const justAskedWaits = !!justAsked && knock.kind === 'waiting';
     useEffect(() => {
         if (justAskedWaits && justAsked) void notify.offer({ kind: 'join', name: justAsked });

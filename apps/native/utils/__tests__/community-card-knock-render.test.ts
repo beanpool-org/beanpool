@@ -140,6 +140,14 @@ vi.mock('../notification-permission', () => ({
     offerNamedLine: vi.fn(async (kind: string) => { notifyAsk.offered.push(kind); return notifyAsk.offer; }),
     turnOnNotifications: vi.fn(async () => { notifyAsk.turnOns++; return 'granted'; }),
 }));
+// The card in front, or a screen opened over it: useFocusEffect never runs here (above), so the card's focus as the named
+// line reads it (components/NotifyLine.tsx useScreenShowing; its own wiring is notify-line-hidden-again.test.ts's).
+const cardFocus = vi.hoisted(() => ({ inFront: true, listeners: new Set<() => void>() }));
+vi.mock('../../components/NotifyLine', async (importOriginal) => {
+    const { useSyncExternalStore } = await import('react');
+    const subscribe = (l: () => void) => { cardFocus.listeners.add(l); return () => { cardFocus.listeners.delete(l); }; };
+    return { ...(await importOriginal<Record<string, unknown>>()), useScreenShowing: () => useSyncExternalStore(subscribe, () => cardFocus.inFront) };
+});
 // The registrations a remembered knock runs (web push W4: a waiting phone's token goes to the community it asked).
 const pushRuns = vi.hoisted(() => ({ count: 0, asked: [] as string[] }));
 vi.mock('../../services/push-notifications', () => ({ registerAfterKnock: async (community: string) => { pushRuns.count++; pushRuns.asked.push(community); } }));
@@ -183,6 +191,7 @@ let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
     notifyAsk.offer = false; notifyAsk.offered = []; notifyAsk.turnOns = 0;
+    cardFocus.inFront = true;
     pushRuns.count = 0;
     pushRuns.asked = [];
     host = document.createElement('div');
@@ -376,6 +385,31 @@ describe("a member's request to join, on the community's card", () => {
         expect(notifyAsk.turnOns).toBe(1);
         expect(byTestId('notify-line')).toBeNull();
         expect(byTestId('notify-line-done')?.textContent).toContain("You'll hear when Riverside answers.");
+    });
+
+    // Fix round of #3332's deciding review: the card stays mounted under a screen opened over it, so the line is for one
+    // visit (the class: notify-line-hidden-again.test.ts).
+    it('asked from the card, then a screen opened over it and back: the named line is gone', async () => {
+        notifyAsk.offer = true;
+        await open();
+        await tap(byTestId('community-card-ask'));
+        const message = host.querySelectorAll('input')[1] as HTMLInputElement;
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(message, 'I live by the river and grow tomatoes.');
+            message.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
+        expect(byTestId('notify-line')?.textContent).toContain('Hear when Riverside answers.');
+        await act(async () => { cardFocus.inFront = false; cardFocus.listeners.forEach((l) => l()); });
+        await settle();
+        expect(byTestId('notify-line')).toBeNull();
+        await act(async () => { cardFocus.inFront = true; cardFocus.listeners.forEach((l) => l()); });
+        await settle();
+        expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
+        expect(byTestId('notify-line')).toBeNull();
+        expect(byTestId('notify-line-done')).toBeNull();
+        expect(notifyAsk.offered).toEqual(['join']);
     });
 
     it('a request remembered from before: no named line (it belongs to the moment of asking)', async () => {

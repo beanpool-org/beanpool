@@ -394,8 +394,9 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
     }, [initialTab]);
 
     // Just posted (app/new-listing.tsx lands here on My Posts): the named line "Hear when someone answers." over the list
-    // (slice N2a; core's rule says whether). Never in the preview.
-    const notify = useNotifyLine(ownIdentity?.publicKey);
+    // (slice N2a; core's rule says whether). Never in the preview. Market keeps this sheet mounted and only flips `visible`,
+    // so the line belongs to one visit of My Posts: the sheet closed, or another tab of it, and the line is gone for good.
+    const notify = useNotifyLine(ownIdentity?.publicKey, visible && !preview && dealsTab === 'active');
     useEffect(() => {
         if (!visible || preview || dealsTab !== 'active') return;
         const moment = takeNotifyMoment(LISTING_MOMENT);

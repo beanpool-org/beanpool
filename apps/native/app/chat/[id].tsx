@@ -68,7 +68,7 @@ import { chatLineWords } from '../../utils/chat-line-words';
 import { listingHeaderStatusWords } from '../../utils/listing-status-words';
 import { NotDeliveredMark } from '../../components/chat/NotDeliveredMark';
 import { NotSeenLine } from '../../components/chat/NotSeenLine';
-import { chatMoment, takeNotifyMoment, useNotifyLine, type NotifyLineOffer } from '../../components/NotifyLine';
+import { chatMoment, takeNotifyMoment, useNotifyLine, useScreenShowing, type NotifyLineOffer } from '../../components/NotifyLine';
 import { notSeenInThread, notSeenWords } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { signedRequestWords } from '../../components/signed-request-lines';
@@ -963,7 +963,9 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     // a day, never after the phone's no): "Hear when {name} answers." under my first message sent, "Hear when {name} writes
     // again." under their line read here (a request accepted included), "Hear when {name} says yes." after a request on
     // their listing (app/post/[id].tsx hands that moment over; it waits for a line to hang under). One per visit.
-    const notify = useNotifyLine(identity?.publicKey);
+    // A visit is while the chat is in front: a screen opened over it (a profile, a listing) and back, and the line is gone.
+    const inFront = useScreenShowing();
+    const notify = useNotifyLine(identity?.publicKey, inFront);
     const namedFor = convRow && peerPubkey ? peerName : null;
     const momentRef = useRef<NotifyLineOffer | null>(null);
     useEffect(() => {

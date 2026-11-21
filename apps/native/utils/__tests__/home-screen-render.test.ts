@@ -1147,6 +1147,227 @@ describe("Home's card while something is live (slice N3): the slot's rules, row 
         expect(JSON.parse(mem.store.get(RECORD_KEY)!)).toMatchObject({ state: 'granted' });
         expect(homeCard()).toBeNull();
     });
+
+    // Fix round 3 (deciding review of #3348 at 4b9716b3, inline at index.tsx `homeMay`): the app back while Home is in front (a
+    // pull-down of the phone's own panels, a system prompt) reads Home again, and the card went for the whole read (up to 15 s)
+    // and came back, the cards under it jumping up and back. A card already drawn now stays, the same view in the same place,
+    // while a re-read of the same account is out; it goes only on a definite answer. A card not drawn yet still waits for the
+    // landing to settle (the first finding's rule: never drawn for a moment and then gone). Nothing here draws a frame, so
+    // "no jump" is the DOM's own record: the card's view never leaves the tree, and the views above Home's list (what sets the
+    // cards' y) stay the same.
+    describe('a card already drawn, then a re-read while Home is in front: kept in its place, gone only on a definite answer', () => {
+        /** Each time the card's view came into the tree or left it, since the call. */
+        function watchCard() {
+            const seen: string[] = [];
+            const isCard = (n: Node) => n instanceof Element && (n.matches('[data-testid="home-notify-live"]') || !!n.querySelector('[data-testid="home-notify-live"]'));
+            const take = (rs: MutationRecord[]) => rs.forEach((r) => {
+                r.addedNodes.forEach((n) => { if (isCard(n)) seen.push('in'); });
+                r.removedNodes.forEach((n) => { if (isCard(n)) seen.push('out'); });
+            });
+            const obs = new MutationObserver(take);
+            obs.observe(document.body, { childList: true, subtree: true });
+            return { seen: () => { take(obs.takeRecords()); return [...seen]; }, stop: () => obs.disconnect() };
+        }
+        /** The views above Home's list, in order: what the cards' y is made of. */
+        const above = () => {
+            const out: string[] = [];
+            for (let e = document.querySelector('[data-testid="home-list"]')?.previousElementSibling; e; e = e.previousElementSibling) out.unshift(e.getAttribute('data-testid') ?? e.tagName);
+            return out;
+        };
+        const record = () => mem.store.get(RECORD_KEY);
+        /** The card drawn on a first landing that settled (the way-back card listed, not due), the day its. */
+        async function drawnOnLanding(o: { beans?: boolean } = {}) {
+            phoneSays.now = { status: 'undetermined', canAskAgain: true };
+            mem.store.set(RECORD_KEY, JSON.stringify(JOINED));
+            safety.beans = !!o.beans;
+            const listeners = vi.mocked(AppState.addEventListener).mock.calls.length;
+            await render();
+            const card = homeCard();
+            expect(card).not.toBeNull();
+            expect(dayTaken()).toBe(true);
+            return { card, listeners, places: above(), kept: record() };
+        }
+        /** The landing the way-back card was last told is settled (Home's `settleFor`): a newer one once its own answer is in. */
+        const settledOn = () => (typeof safety.props?.settleFor === 'number' ? safety.props.settleFor : 0);
+        /**
+         * Home's next read held at the node: the release, which waits (bounded) until a newer landing than the one before has its
+         * answer in, then lets the decision run. A held once card takes the way-back card off Home: nothing to wait for then.
+         */
+        const holdRead = () => {
+            let go = () => {};
+            node.homeGate = new Promise<void>((r) => { go = r; });
+            const was = settledOn();
+            return async () => {
+                await act(async () => { go(); });
+                for (let i = 0; i < 200 && settledOn() <= was && !onceCard(); i++) await settle(1);
+                await settle();
+            };
+        };
+        /** While the read is out: the very card still drawn where it was, nothing above the list changed. */
+        const stillInPlace = (s: { card: Element | null; places: string[] }, watch: { seen: () => string[] }) => {
+            expect(homeCard()).toBe(s.card);
+            expect(above()).toEqual(s.places);
+            expect(watch.seen()).toEqual([]);
+        };
+
+        it('the app back, nothing changed: drawn through the read and after it, the same card, the day not spent again', async () => {
+            const s = await drawnOnLanding();
+            const reads = homeReads().length;
+            const release = holdRead();
+            const watch = watchCard();
+            await appBack(s.listeners);
+            stillInPlace(s, watch);
+            await release();
+            expect(homeReads().length).toBe(reads + 1);
+            stillInPlace(s, watch);
+            expect(record()).toBe(s.kept);
+            watch.stop();
+        });
+
+        it('Home landed on again (a tab and back), nothing changed: the same, kept through its read', async () => {
+            const s = await drawnOnLanding();
+            const release = holdRead();
+            const watch = watchCard();
+            await landAgain();
+            stillInPlace(s, watch);
+            await release();
+            stillInPlace(s, watch);
+            expect(record()).toBe(s.kept);
+            watch.stop();
+        });
+
+        it('the read brings the first Beans and the way-back card comes up: drawn through the read, then gone as that card comes', async () => {
+            const s = await drawnOnLanding({ beans: true });
+            expect(document.querySelector('[data-testid="one-way-back"]')).toBeNull();
+            node.answer = { ...node.answer, cards: { ...node.answer.cards, beans: { ...node.answer.cards.beans!, balance_c: 4000 } } };
+            const release = holdRead();
+            const watch = watchCard();
+            await appBack(s.listeners);
+            stillInPlace(s, watch);
+            await release();
+            expect(document.querySelector('[data-testid="one-way-back"]')).not.toBeNull();
+            expect(homeCard()).toBeNull();
+            expect(watch.seen()).toEqual(['out']);
+            watch.stop();
+        });
+
+        it('nothing live in the fresh read (no longer going): drawn through the read, gone only once it is in', async () => {
+            const s = await drawnOnLanding();
+            const items = node.answer.cards.events!.items.map(e => ({ ...e, rsvp: null }));
+            node.answer = { ...node.answer, cards: { ...node.answer.cards, events: { ...node.answer.cards.events!, items } } };
+            const release = holdRead();
+            const watch = watchCard();
+            await appBack(s.listeners);
+            stillInPlace(s, watch);
+            await release();
+            expect(homeCard()).toBeNull();
+            expect(watch.seen()).toEqual(['out']);
+            watch.stop();
+        });
+
+        it('the once card comes up at a return while the read is out (another day: its record lets it again): it takes the slot then', async () => {
+            const s = await drawnOnLanding();
+            const release = holdRead();
+            const watch = watchCard();
+            await appBack(s.listeners);
+            stillInPlace(s, watch);
+            mem.store.set(RECORD_KEY, JSON.stringify(DECLINED_147));
+            await appBack(s.listeners);
+            expect(onceCard()).not.toBeNull();
+            expect(homeCard()).toBeNull();
+            await release();
+            expect(onceCard()).not.toBeNull();
+            expect(homeCard()).toBeNull();
+            expect(watch.seen()).toEqual(['out']);
+            watch.stop();
+        });
+
+        it("the phone's answer changes while the read is out (back from its settings with notifications on): gone then, not after the read", async () => {
+            const s = await drawnOnLanding();
+            const release = holdRead();
+            const watch = watchCard();
+            await appBack(s.listeners);
+            stillInPlace(s, watch);
+            phoneSays.now = { status: 'granted', canAskAgain: true };
+            await appBack(s.listeners);
+            expect(homeCard()).toBeNull();
+            await release();
+            expect(homeCard()).toBeNull();
+            expect(watch.seen()).toEqual(['out']);
+            watch.stop();
+        });
+
+        it("once gone, it stays gone while the read is out even if the phone's answer goes back: then decided afresh", async () => {
+            const s = await drawnOnLanding();
+            const release = holdRead();
+            const watch = watchCard();
+            phoneSays.now = { status: 'granted', canAskAgain: true };
+            await appBack(s.listeners);
+            expect(homeCard()).toBeNull();
+            // Turned off again in the phone's settings, and back, the read still out: withdrawn is withdrawn, never drawn undecided.
+            phoneSays.now = { status: 'undetermined', canAskAgain: true };
+            await appBack(s.listeners);
+            expect(homeCard()).toBeNull();
+            expect(watch.seen()).toEqual(['out']);
+            await release();
+            // The landing settled: decided again, a new card (the day was its already: nothing written again).
+            expect(homeCard()).not.toBeNull();
+            expect(homeCard()).not.toBe(s.card);
+            expect(record()).toBe(s.kept);
+            watch.stop();
+        });
+
+        it('another account on the phone while the read is out (its Home kept here): gone with the account, decided afresh on its own landing', async () => {
+            const s = await drawnOnLanding();
+            const release = holdRead();
+            const watch = watchCard();
+            await appBack(s.listeners);
+            stillInPlace(s, watch);
+            const other = await draftIdentity();
+            mem.store.set(homeLayoutStoreKey(other.publicKey, NODE), JSON.stringify(node.answer.layout));
+            mem.store.set(homeAnswerStoreKey(other.publicKey, NODE), JSON.stringify({
+                url: NODE, publicKey: other.publicKey, asked: 'needs,safety,steps,deals,enterprise,events,market,decide,groups,joined,pulse,beans,notices,community',
+                etag: 'W/"home-x"', answer: node.answer, at: Date.now() - 60_000,
+            }));
+            who.identity = other;
+            await act(async () => { root!.render(createElement(HomeScreen) as unknown as Parameters<Root['render']>[0]); });
+            await settle();
+            // Its Home drawn from the phone's copy, its own read out: no card on the kept answer.
+            expect(cards()).toContain('community');
+            expect(homeCard()).toBeNull();
+            expect(watch.seen()).toEqual(['out']);
+            await release();
+            // Its own landing settled: the card is decided for it, a new one.
+            expect(homeCard()).not.toBeNull();
+            expect(homeCard()).not.toBe(s.card);
+            watch.stop();
+        });
+
+        // The first finding's rule through a re-read: a card not drawn yet is decided only on the fresh, settled landing.
+        for (const beans of [false, true]) {
+            it(`a card not drawn yet, then the app back with the phone now able to ask and the read held${beans ? ', the read bringing the first Beans' : ''}: not drawn while it is out; then ${beans ? 'the way-back card, never this one' : 'drawn'}`, async () => {
+                phoneSays.now = null;
+                mem.store.set(RECORD_KEY, JSON.stringify(JOINED));
+                safety.beans = beans;
+                const listeners = vi.mocked(AppState.addEventListener).mock.calls.length;
+                await render();
+                expect(homeCard()).toBeNull();
+                if (beans) node.answer = { ...node.answer, cards: { ...node.answer.cards, beans: { ...node.answer.cards.beans!, balance_c: 4000 } } };
+                const release = holdRead();
+                const watch = watchCard();
+                phoneSays.now = { status: 'undetermined', canAskAgain: true };
+                await appBack(listeners);
+                expect(homeCard()).toBeNull();
+                expect(dayTaken()).toBe(false);
+                await release();
+                expect(!!homeCard()).toBe(!beans);
+                expect(dayTaken()).toBe(!beans);
+                expect(watch.seen()).toEqual(beans ? [] : ['in']);
+                if (beans) expect(document.querySelector('[data-testid="one-way-back"]')).not.toBeNull();
+                watch.stop();
+            });
+        }
+    });
 });
 
 describe('the cached answer, the 304, and states that never block', () => {

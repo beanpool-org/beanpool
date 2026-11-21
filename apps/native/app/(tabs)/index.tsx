@@ -1672,7 +1672,7 @@ export default function HomeScreen() {
     // on again: review of #3348 at 4b9716b3), so the cards under it never jump up and back. It goes only on a definite answer:
     // the no above, another account, the phone's answer changed (back from its settings with notifications on), or the fresh
     // read's own decision (nothing live any more). A card not drawn yet still waits for `homeMay`.
-    const homeShown = homeLive && !homeBlocked && homeLive.key === identity?.publicKey && (homeMay || samePhoneAnswer(homeLive.phone, phone)) ? homeLive.live : null;
+    const homeCardLive = homeLive && !homeBlocked && homeLive.key === identity?.publicKey && (homeMay || samePhoneAnswer(homeLive.phone, phone)) ? homeLive.live : null;
     const homeLiveAnswer = homeNotifyLive(answer);
     const homeLiveRef = useRef(homeLiveAnswer);
     homeLiveRef.current = homeLiveAnswer;
@@ -1696,7 +1696,7 @@ export default function HomeScreen() {
         return () => { current = false; };
     }, [homeMay, notifyLanding, homeLiveKey]);
     // Gone for good once nothing keeps it: the same answer coming back later never draws it again undecided.
-    const homeKept = homeShown !== null;
+    const homeKept = homeCardLive !== null;
     useEffect(() => { if (!homeMay && !homeKept) setHomeLive(null); }, [homeMay, homeKept]);
     // Leaving Arrange (Done, Back, leaving Home, whatever ends it): the bar goes from above the cards, and the way-back card's
     // band from its top, so a view scrolled down goes up by each that stood above the top of the screen, and the card the
@@ -1906,11 +1906,11 @@ export default function HomeScreen() {
                         />
                     )}
                     {/* Home's card while something of the member's is live (slice N3), in the once card's slot: never with it or with
-                        the way-back card (`homeShown`, read again here so a card that comes up hides it in the same frame), and kept
+                        the way-back card (`homeCardLive`, read again here so a card that comes up hides it in the same frame), and kept
                         through a re-read. In Arrange it stays, quiet, as the once card does, so the cards under it keep their places. */}
-                    {homeShown && answer && (
+                    {homeCardLive && answer && (
                         <NotifyHomeCard
-                            words={notifyHomeWords(homeShown)}
+                            words={notifyHomeWords(homeCardLive)}
                             colors={colors}
                             busy={homeBusy}
                             onTurnOn={homeTurnOn}

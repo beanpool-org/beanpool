@@ -2545,8 +2545,18 @@ export default function WelcomeScreen() {
      */
     const [endTried, setEndTried] = useState(false);
 
+    /**
+     * An answer on this screen has been tapped (review of #3335, finding 2): one tap is one end. Set before either answer
+     * waits, so a resumed screen whose phone read comes back "not due" after the tap doesn't end the join a second time,
+     * and a second tap while the first waits does nothing. Cleared as the screen is entered and on ‹.
+     */
+    const answering = useRef(false);
+    useEffect(() => { if (mode === 'notify') answering.current = false; }, [mode]);
+
     /** "Turn on notifications": the phone's own pop-up, only from this tap; whatever it answers, or if it fails, on. */
     async function handleNotifyTurnOn() {
+        if (answering.current) return;
+        answering.current = true;
         setLoading(true);
         await notifyShowing.current;
         await turnOnFromJoin(pendingIdentity?.publicKey ?? null);
@@ -2556,6 +2566,8 @@ export default function WelcomeScreen() {
 
     /** "Later": no "no" recorded, the phone's question unspent; on. */
     async function handleNotifyLater() {
+        if (answering.current) return;
+        answering.current = true;
         setLoading(true);
         await notifyShowing.current;
         await laterFromJoin();
@@ -2566,6 +2578,7 @@ export default function WelcomeScreen() {
     /** ‹ on the notifications screen: the way back, or the photo where the way back was skipped. */
     function backFromNotify() {
         const to = skipWayBack ? 'profileSetup' : 'seedBackup';
+        answering.current = false;
         updatePendingOnboarding({ step: to }).catch(() => {});
         setError(null);
         setEndTried(false);
@@ -2582,7 +2595,7 @@ export default function WelcomeScreen() {
             const due = await notifyJoinDue(notifyPath);
             if (!live) return;
             if (due) await showNotifyJoin();
-            else afterTheAsk();
+            else if (!answering.current) afterTheAsk();
         })();
         return () => { live = false; };
     }, [mode, pendingIdentity?.publicKey]);

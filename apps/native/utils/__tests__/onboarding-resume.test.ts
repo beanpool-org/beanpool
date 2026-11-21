@@ -342,8 +342,14 @@ describe('resuming on the notifications screen (N1j)', () => {
         expect(hand).toContain("updatePendingOnboarding({ step: 'ownerCard', wayBackKept: wayBackIsKept })");
         expect(s).toContain('setKeptAtHandover(plan.wayBackKept);');
         expect(s).toContain('const wayBackIsKept = keptAtHandover || wayBackKept(');
-        // A join resumed there whose phone answered since goes straight on (never stranded).
-        expect(s).toMatch(/notifyShowing\.current = \(async \(\) => \{\s*const due = await notifyJoinDue\(notifyPath\);\s*if \(!live\) return;\s*if \(due\) await showNotifyJoin\(\);\s*else afterTheAsk\(\);/);
+        // A join resumed there whose phone answered since goes straight on (never stranded), unless an answer was already
+        // tapped: that tap ends the join, once (review of #3335, finding 2).
+        expect(s).toMatch(/notifyShowing\.current = \(async \(\) => \{\s*const due = await notifyJoinDue\(notifyPath\);\s*if \(!live\) return;\s*if \(due\) await showNotifyJoin\(\);\s*else if \(!answering\.current\) afterTheAsk\(\);/);
+        // Each answer marks the tap before it waits, and a second tap while the first waits does nothing.
+        for (const fn of ['handleNotifyTurnOn', 'handleNotifyLater']) {
+            const body = s.slice(s.indexOf(`async function ${fn}(`), s.indexOf('await notifyShowing.current;', s.indexOf(`async function ${fn}(`)));
+            expect(body, fn).toMatch(/if \(answering\.current\) return;\s*answering\.current = true;/);
+        }
         // Each answer waits for the showing's write, so a double tap's Later is never written over by it.
         for (const fn of ['handleNotifyTurnOn', 'handleNotifyLater']) {
             const body = s.slice(s.indexOf(`async function ${fn}(`), s.indexOf('afterTheAsk();', s.indexOf(`async function ${fn}(`)));

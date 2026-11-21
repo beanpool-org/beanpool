@@ -26,12 +26,12 @@
  *   {@link notificationsLater}, never a no. Nothing else in the join raises a permission.
  * - A restore asks nothing by itself: the once card on Home (slice N1h) is to be its one soft ask.
  */
-import { Alert, Linking, Platform } from 'react-native';
+import { Alert, AppState, Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type * as ExpoNotifications from 'expo-notifications';
 import {
-    t, word, markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyTurnOn,
-    type NotifyAskEvent, type NotifyAskRecord, type NotifyAskSurface, type NotifyLineKind,
+    t, word, markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyPopUpAnswer, notifyTurnOn,
+    type NotifyAskEvent, type NotifyAskRecord, type NotifyAskSurface, type NotifyLineKind, type NotifyPopUpRead,
 } from '@beanpool/core';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
 import { setNotificationChannels, type ChannelMaker } from './notification-channels';
@@ -99,8 +99,19 @@ export interface OsNotificationPermission {
     available: boolean;
     granted: boolean;
     /** Whether the system dialog can still be shown. False after iOS's Don't Allow, a second denial on Android 13+,
-     *  or notifications switched off in the phone's settings: only the phone's settings can turn them on then. */
+     *  or notifications switched off in the phone's settings: only the phone's settings can turn them on then. On
+     *  Android 13+ also after a pop-up closed with no answer: see `cantAskNeedsRecord`. */
     canAskAgain: boolean;
+    /** Android 13 and later: "can't ask again" needs this phone's record to mean the phone's no (core's `NotifyPhone`, amend3 §3). */
+    cantAskNeedsRecord?: boolean;
+}
+
+/**
+ * Android 13 (API 33) and later, where the pop-up exists: Expo marks the permission asked before the pop-up opens, and
+ * then reads "denied, can't ask again" for a pop-up closed with no answer as for a second "Don't allow" (amend3 §2).
+ */
+function androidPopUpPhone(): boolean {
+    return Platform?.OS === 'android' && Number(Platform?.Version) >= 33;
 }
 
 /** Reads the phone's own notification permission. Never throws and never asks. */
@@ -109,7 +120,8 @@ export async function readOsNotificationPermission(): Promise<OsNotificationPerm
         const notif = await getNotificationsModule();
         if (!notif?.getPermissionsAsync) return { available: false, granted: false, canAskAgain: false };
         const res = await notif.getPermissionsAsync();
-        return { available: true, granted: res?.status === 'granted', canAskAgain: res?.canAskAgain !== false };
+        const read: OsNotificationPermission = { available: true, granted: res?.status === 'granted', canAskAgain: res?.canAskAgain !== false };
+        return androidPopUpPhone() ? { ...read, cantAskNeedsRecord: true } : read;
     } catch {
         return { available: false, granted: false, canAskAgain: false };
     }
@@ -174,6 +186,33 @@ export interface TurnOnOptions {
     readOs?: () => Promise<OsNotificationPermission>;
     /** How long Android's channels may take before the pop-up is asked without them (ms); unbounded when not given. */
     channelWaitMs?: number;
+    /** Watches whether the app leaves the foreground while Android 13+ asks (tests inject it; the app uses AppState). */
+    watchForeground?: () => ForegroundWatch;
+}
+
+/** Whether the app left the foreground since the watch began, and its end. */
+export interface ForegroundWatch {
+    left: () => boolean;
+    stop: () => void;
+}
+
+/**
+ * Android's pop-up is a window of its own: the app leaves the foreground under it (AppState goes to the background, and
+ * the window loses focus). Where nothing can be watched, it reads as left: the pop-up is taken to have come (a "Later").
+ */
+function watchAppForeground(): ForegroundWatch {
+    let left = false;
+    const subs: Array<{ remove: () => void }> = [];
+    try {
+        subs.push(AppState.addEventListener('change', (state) => { if (state !== 'active') left = true; }));
+        subs.push(AppState.addEventListener('blur', () => { left = true; }));
+    } catch {
+        left = true;
+    }
+    return {
+        left: () => left,
+        stop: () => subs.forEach((sub) => { try { sub.remove(); } catch { /* gone */ } }),
+    };
 }
 
 /** Waits for `work`, or for `ms` (when given), whichever is first; never rejects. */
@@ -190,12 +229,21 @@ async function defaultOpenSettings(): Promise<void> {
 }
 
 /**
- * A tap on "Turn on" (First steps' line, the bell's line, a named line's Tell me): the phone's own pop-up, where it can
- * still show it. Its yes is recorded and registers the push token. Its no is recorded as the phone's no, with its date
- * ('declined'). Closed with no answer, it is a "Later", never a no ('unanswered'). Where the phone won't show its pop-up
- * again (`canAskAgain: false`: iOS after Don't Allow, Android 13+ after a second no, or switched off in the phone's
- * settings), asking would return "denied" with nothing shown, so one line says why and its button opens BeanPool's page
- * in the phone's settings ('settings'); "Not now" there records nothing, as the phone's no already stands.
+ * A tap on "Turn on" (First steps' line, the bell's line, a named line's Tell me, the join's screen, a tool's own switch):
+ * the one door to the phone's own pop-up, where it can still show it, so every answer the phone gives is heard and kept.
+ * Its yes is recorded and registers the push token. Its no is recorded as the phone's no, with its date ('declined').
+ * Closed with no answer, it is a "Later", never a no ('unanswered').
+ *
+ * What the pop-up answered is read from the ask's own answer, its status and its "can ask again", beside what this phone
+ * had on record before it (core's `notifyPopUpAnswer`, amend3 §3.1): on Android 13+ a first "Don't allow" reads back
+ * "can ask again", and a pop-up swiped away, backed out of or tapped outside reads "can't ask again" with no answer of the
+ * phone's on record: that is a "Later". A second "Don't allow" is the phone's final no.
+ *
+ * Where the phone won't show its pop-up again (core's `notifyTurnOn` 'settings': iOS after Don't Allow, Android 13+ after
+ * a second no or a yes switched off, any phone switched off in its settings), asking would return "denied" with nothing
+ * shown, so one line says why and its button opens BeanPool's page in the phone's settings ('settings'); "Not now" there
+ * records nothing, as the phone's no already stands. On Android 13+ the same line follows an ask whose pop-up never came
+ * up (the app never left the foreground, amend3 §3.3): the phone refused by itself, and nothing is recorded from it.
  */
 export async function turnOnNotifications(
     publicKey?: string | null,
@@ -203,36 +251,51 @@ export async function turnOnNotifications(
     options: TurnOnOptions = {},
 ): Promise<TurnOnResult> {
     const os = await (options.readOs ?? readOsNotificationPermission)();
-    const way = notifyTurnOn(os);
-    let status = os.granted ? 'granted' : 'unanswered';
-    if (way === 'settings') {
+    const before = await readNotificationPermissionRecord(storage);
+    const way = notifyTurnOn(os, before);
+    const toSettings = async (): Promise<TurnOnResult> => {
         const choice = await (options.confirmSettings ?? settingsPrompt)();
         if (choice !== 'turn_on') return 'unanswered';
         await (options.openSettings ?? defaultOpenSettings)();
         return 'settings';
-    }
-    if (way === 'ask') {
-        try {
-            const notif = await getNotificationsModule();
-            // Android's channels first (slice N1j, amend2 §4.2): Android 13's pop-up shows only once the app has a channel,
-            // and a new phone has none before its first token. A channel that can't be made, or (where the caller bounds
-            // it) one the phone doesn't make in time, never stops the ask.
-            if (notif) await atMost(setNotificationChannels(notif as unknown as ChannelMaker, Platform?.OS === 'android'), options.channelWaitMs);
-            if (notif?.requestPermissionsAsync) status = (await notif.requestPermissionsAsync()).status;
-        } catch {
-            // No answer
-        }
-    }
-    if (status === 'granted') {
+    };
+    if (way === 'settings') return toSettings();
+    if (way === 'none') {
+        if (!os.granted) return 'unanswered';
         await markNotificationAsk({ type: 'granted' }, storage);
         await registerPushToken(publicKey);
         return 'granted';
     }
-    if (status === 'denied') {
+    let read: NotifyPopUpRead = { status: 'unanswered', canAskAgain: true };
+    const watch = os.cantAskNeedsRecord ? (options.watchForeground ?? watchAppForeground)() : null;
+    try {
+        const notif = await getNotificationsModule();
+        // Android's channels first (slice N1j, amend2 §4.2): Android 13's pop-up shows only once the app has a channel,
+        // and a new phone has none before its first token. A channel that can't be made, or (where the caller bounds
+        // it) one the phone doesn't make in time, never stops the ask.
+        if (notif) await atMost(setNotificationChannels(notif as unknown as ChannelMaker, Platform?.OS === 'android'), options.channelWaitMs);
+        if (notif?.requestPermissionsAsync) {
+            const res = await notif.requestPermissionsAsync();
+            read = { status: res?.status ?? 'unanswered', canAskAgain: res?.canAskAgain !== false };
+        }
+    } catch {
+        // No answer
+    } finally {
+        watch?.stop();
+    }
+    const answer = notifyPopUpAnswer(before, os, read);
+    if (answer === 'granted') {
+        await markNotificationAsk({ type: 'granted' }, storage);
+        await registerPushToken(publicKey);
+        return 'granted';
+    }
+    if (answer === 'phone-no') {
         await markNotificationAsk({ type: 'phone-no' }, storage);
         return 'declined';
     }
-    if (way === 'ask') await notificationsLater(storage);
+    if (answer === 'none') return 'unanswered';
+    if (read.status === 'denied' && watch && !watch.left()) return toSettings();
+    await notificationsLater(storage);
     return 'unanswered';
 }
 
@@ -297,4 +360,4 @@ export function notifyStep(record: NotificationPermissionRecord, os: OsNotificat
 }
 
 /** Whether the bell's sheet says notifications are off here: the phone can have them and doesn't allow them now. */
-export const notificationsOffHere = (os: OsNotificationPermission): boolean => notifyTurnOn(os) !== 'none';
+export const notificationsOffHere = (os: OsNotificationPermission): boolean => notifyTurnOn(os, {}) !== 'none';

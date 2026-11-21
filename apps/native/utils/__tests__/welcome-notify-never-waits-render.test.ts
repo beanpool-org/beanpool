@@ -604,3 +604,71 @@ describe("the join's end, run from the notifications screen", () => {
         expect(photo.sent).toEqual([{ url: `${HERE}/api/profile/update`, stoppable: true }]);
     });
 });
+
+/**
+ * One tap, one end (review of #3335 at ba4139d3, finding 2): resumed on the screen while the phone's state is still being
+ * read, an answer tapped before the read comes back "not due" used to end the join twice (two guide_complete counts, and
+ * Turn on's Later counted with no showing). welcome.tsx's `answering` guard: each answer marks the tap before it waits, and
+ * the effect's not-due branch leaves the end to that tap. Take either half away and a row goes red.
+ */
+describe('one tap on the notifications screen ends the join once', () => {
+    const guideCompletes = () => net.counts.filter((c) => c === 'guide_complete').length;
+    const pause = async (ms: number) => { await act(async () => { await new Promise((r) => setTimeout(r, ms)); }); };
+
+    it("resumed while the phone's state is still read, Later tapped before it answers: the join ends once", async () => {
+        os.read = () => never();
+        NOTIFY_JOIN_WAIT_MS.phone = 150;
+        await mount();
+        expect(q('notify-step-later'), 'the screen is drawn while it reads').toBeTruthy();
+        await tap('notify-step-later');
+        expect(await until(atHome, 1500), 'Home').toBe(true);
+        await pause(300);
+        expect(net.ends, 'the join ended').toBe(1);
+        expect(guideCompletes(), 'guide_complete sent').toBe(1);
+        expect(notifyCounts()).toEqual([`${NOTIFY_CHOICE}:later`]);
+    });
+
+    it("resumed while the phone's state is still read, Turn on tapped before it answers: the join ends once", async () => {
+        os.read = () => never();
+        NOTIFY_JOIN_WAIT_MS.phone = 150;
+        await mount();
+        await tap('notify-step-turn-on');
+        expect(await until(atHome, 1500), 'Home').toBe(true);
+        await pause(400);
+        expect(net.ends, 'the join ended').toBe(1);
+        expect(guideCompletes(), 'guide_complete sent').toBe(1);
+    });
+});
+
+/**
+ * Android 8 to 12 never meets the screen from the way back (review of #3335 at ba4139d3, finding 3): welcome.tsx's hand-over
+ * goes straight on where the screen isn't due (`if (!due) return afterTheAsk();`). Watched in the DOM from the way back's tap
+ * to Home: never drawn, not for a frame. Without that line the screen flashes (or stands, both answers live, while a slow
+ * phone is read) on every hand-over.
+ */
+describe('the way back hands over: no notifications screen where it is not due', () => {
+    async function watchHandOver(): Promise<number> {
+        phone.pending = { ...phone.pending, step: 'seedBackup' };
+        await mount();
+        let drawn = 0;
+        const seen = new MutationObserver(() => { if (host!.querySelector('[data-testid="notify-step-title"]')) drawn += 1; });
+        seen.observe(host!, { childList: true, subtree: true });
+        await tap('way-back-button');
+        expect(await until(atHome), 'Home').toBe(true);
+        seen.disconnect();
+        return drawn;
+    }
+
+    it('a phone that allows without asking (Android 8 to 12): never drawn, nothing counted', async () => {
+        os.read = async () => ({ status: 'granted', canAskAgain: true });
+        expect(await watchHandOver(), 'times drawn').toBe(0);
+        expect(notifyCounts()).toEqual([]);
+    });
+
+    it('a phone that never says what it allows: never drawn, nothing recorded or counted', async () => {
+        os.read = () => never();
+        expect(await watchHandOver(), 'times drawn').toBe(0);
+        expect(notifyCounts()).toEqual([]);
+        expect((await readNotificationPermissionRecord()).joinAt).toBeUndefined();
+    });
+});

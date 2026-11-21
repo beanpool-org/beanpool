@@ -11,11 +11,14 @@ import {
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, welcomeTileLines, WELCOME_TILE_WORDS, type TourProgress,
     COMMUNITY_WELCOME_DISMISSED_KEY, communityWelcomeAgainLine, communityWelcomeCard, communityWelcomeWords,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
-    starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout,
+    starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout, notifyOnceWords,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { twoParagraphs } from '../../utils/alert-words';
-import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications, type OsNotificationPermission } from '../../utils/notification-permission';
+import {
+    notifyStep, offerOnceCard, onceCardLater, readNotificationPermissionRecord, readOsNotificationPermission, turnOnFromOnceCard, turnOnNotifications,
+    type OsNotificationPermission,
+} from '../../utils/notification-permission';
 import { useScreenShowing } from '../../components/NotifyLine';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
 import { resendWordsKept } from '../../utils/words-kept';
@@ -23,6 +26,7 @@ import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
+import { NotifyAskCard } from '../../components/home/NotifyAskCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { AddressLine } from '../../components/AddressLine';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
@@ -280,13 +284,47 @@ export default function HomeScreen() {
     const [notify, setNotify] = useState<boolean | null>(null);
     /** The phone's own answer at the same reads, for What are you into?'s true note (slice N2b); null: not read yet. */
     const [phone, setPhone] = useState<OsNotificationPermission | null>(null);
+    /**
+     * Home's once card (slice N1h; DESIGN-notify-and-backup-asks-fable-amend2.md §7), by utils/notification-permission.ts
+     * `offerOnceCard`: `up` while it is drawn; `held` while the way-back card waits for the next landing (never both on one
+     * landing: the once card goes first, amend1 §4.4). null: not decided on this landing yet, and the way-back card waits for
+     * it, so it never shows for a moment and then gives way.
+     */
+    const [once, setOnce] = useState<{ up: boolean; held: boolean } | null>(null);
+    const [onceBusy, setOnceBusy] = useState(false);
+    /** Whether the once card may be drawn now: a member's Home with its answer (set where the answer is read, below). */
+    const onceMay = useRef(false);
+    /** The next decision is a new landing's, the only one that lets the way-back card back. */
+    const freshLanding = useRef(true);
+    const onceCall = useRef(0);
     const readNotify = useCallback(async () => {
+        const call = ++onceCall.current;
+        const may = onceMay.current;
+        const up = may ? await offerOnceCard() : false;
+        if (call === onceCall.current) {
+            if (may) {
+                const fresh = freshLanding.current;
+                freshLanding.current = false;
+                setOnce(o => ({ up, held: up || (!fresh && !!o?.held) }));
+            } else setOnce(o => (o ? { ...o, up: false } : o));
+        }
         const [record, os] = await Promise.all([readNotificationPermissionRecord(), readOsNotificationPermission()]);
-        setNotify(notifyStep(record, os));
+        // First steps' line waits while the once card is up (amend1 §4.2), and is back once it is answered or folds.
+        setNotify(up ? null : notifyStep(record, os));
         setPhone(os);
     }, []);
+    // The once card's two taps: Turn on is the phone's pop-up through the one door; Later puts it away at once (not a no).
+    const onceTurnOn = useCallback(() => {
+        setOnceBusy(true);
+        void turnOnFromOnceCard(identityRef.current?.publicKey).finally(() => { setOnceBusy(false); void readNotify(); });
+    }, [readNotify]);
+    const onceLater = useCallback(() => {
+        setOnce(o => (o ? { up: false, held: true } : o));
+        void onceCardLater().catch(() => undefined).finally(() => { void readNotify(); });
+    }, [readNotify]);
     // Read at each landing and on each return to the app (back from the phone's settings after Turn on).
     useFocusEffect(useCallback(() => {
+        freshLanding.current = true;
         void readNotify();
         const sub = AppState.addEventListener?.('change', next => { if (next === 'active') void readNotify(); });
         return () => sub?.remove?.();
@@ -1049,6 +1087,13 @@ export default function HomeScreen() {
 
     // ── What to draw ──
     const answer = stored?.answer ?? null;
+    // The once card is a member's: Home with its answer, and an account (looking around has none to ask for).
+    const onceMayNow = !!answer && !!identity && !lookingAround;
+    onceMay.current = onceMayNow;
+    useEffect(() => { if (onceMayNow) void readNotify(); }, [onceMayNow, readNotify]);
+    // The way-back card waits while the once card is up, and for the rest of a landing it was up on (amend2 §7).
+    const wayBackHeld = !once || once.held;
+    useEffect(() => { if (wayBackHeld) setSafetyUp(false); }, [wayBackHeld]);
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
     const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
@@ -1317,7 +1362,9 @@ export default function HomeScreen() {
                 return frame(<NeedsBody entries={needsEntries} colors={colors} onOpen={openNeeds} />, { accent: hasAccent, hue: hasAccent ? 'amber' : 'sage' });
             }
             case 'safety':
-                // Its own card (the two-doors design's): it says when it is up, and keeps its own ✕ and schedule.
+                // Its own card (the two-doors design's): it says when it is up, and keeps its own ✕ and schedule. Never on one
+                // landing with Home's once card: that goes first, and this takes the next landing (amend2 §7).
+                if (wayBackHeld) return null;
                 return (
                     <OneWayBackCard
                         place="landing"
@@ -1666,8 +1713,6 @@ export default function HomeScreen() {
                     <AddressLine colors={colors} />
                     {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
                     {!lookingAround && <CopiesRuleCard colors={colors} />}
-                    {/* No notifications card here (DESIGN-home-default-fable.md §2.5): First steps has the line, the first post,
-                        message or ask to join asks once, and the bell's sheet says so while this phone can't buzz. */}
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
                             {t("Couldn't reach your community; showing what we had.")}
@@ -1687,6 +1732,17 @@ export default function HomeScreen() {
                         </Text>
                     )}
                     {empty}
+                    {/* Home's once card (slice N1h): the join's ask once, for a member already in or a restore on a new phone, at the
+                        top of Home and above the cards, so their places in the list stay as Arrange measures them. Not in Arrange. */}
+                    {onceMayNow && once?.up && !arrangeOn && answer && (
+                        <NotifyAskCard
+                            words={notifyOnceWords({ global: answer.profile === 'global', community: answer.cards.community?.name })}
+                            colors={colors}
+                            busy={onceBusy}
+                            onTurnOn={onceTurnOn}
+                            onLater={onceLater}
+                        />
+                    )}
                     {/* Above the cards, not among them: the cards' places inside the list (`cardY`) are the same as on Home. */}
                     {arrangeOn && <ArrangeBar colors={colors} notOnAccount={notOnAccount ? t(LINES.notOnAccount) : null} onHeight={onArrangeBar} />}
                     <Animated.View onLayout={e => { listY.current = e.nativeEvent.layout.y; }} style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>

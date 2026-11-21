@@ -24,7 +24,10 @@
  * - The join's last screen (slice N1j, utils/notify-join-step.ts, components/welcome/NotifyStep.tsx) is the join's one
  *   soft ask: "Turn on notifications" brings the phone's pop-up through {@link turnOnNotifications}; "Later" is
  *   {@link notificationsLater}, never a no. Nothing else in the join raises a permission.
- * - A restore asks nothing by itself: the once card on Home (slice N1h) is to be its one soft ask.
+ * - Members already in, and a restore on a new phone, never pass the join's screen: Home's once card (slice N1h,
+ *   components/home/NotifyAskCard.tsx, {@link offerOnceCard}) is their one soft ask, the join's words once, where the phone
+ *   has to ask and still can. Its "Turn on notifications" is this file's one door ({@link turnOnFromOnceCard}); its
+ *   "Later" ({@link onceCardLater}) puts it away and is not a no. A restore itself asks nothing.
  */
 import { Alert, AppState, Linking, Platform, TurboModuleRegistry, type TurboModule } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -385,6 +388,70 @@ export function offerNamedLine(kind: NotifyLineKind, storage: StorageLike = Asyn
     }).catch(() => false);
     offering = decided;
     return decided;
+}
+
+/** How long Home waits on the phone's own read before it decides the once card without it (ms): no card that landing. */
+export const ONCE_CARD_WAIT_MS = { phone: 4000 };
+
+/** What `read` gives, or null once the phone has had {@link ONCE_CARD_WAIT_MS} without answering, or on a throw. */
+function readWithin<T>(read: () => Promise<T>): Promise<T | null> {
+    return new Promise<T | null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), ONCE_CARD_WAIT_MS.phone);
+        Promise.resolve().then(read).then(
+            (v) => { clearTimeout(timer); resolve(v); },
+            () => { clearTimeout(timer); resolve(null); },
+        );
+    });
+}
+
+/**
+ * Home's once card (slice N1h, amend2 §7): whether it shows on this landing, by core's rule (`notifyAsks` `once`: a phone that
+ * has to ask and still can, the join's screen never shown here, not after the card's "Later" or its 7 days, one soft ask a
+ * day), and if it does, marked shown now, so it takes the day (its 7 days start at its first showing). One decision at a
+ * time with the named lines, so a line and the card never take the same day. Never asks, never shows anything itself, never
+ * throws; a phone that doesn't say what it allows within {@link ONCE_CARD_WAIT_MS} gets no card that landing.
+ */
+export function offerOnceCard(
+    storage: StorageLike = AsyncStorage,
+    now: () => number = Date.now,
+    readOs: () => Promise<OsNotificationPermission> = readOsNotificationPermission,
+): Promise<boolean> {
+    const decided = offering.then(async () => {
+        const record = await readNotificationPermissionRecord(storage);
+        const phone = await readWithin(readOs);
+        const at = now();
+        if (!phone || !notifyAsks({ record, phone, now: at }).once) return false;
+        await writeNotificationPermissionRecord(markNotifyAsk(record, { type: 'shown', surface: 'once' }, at), storage);
+        return true;
+    }).catch(() => false);
+    offering = decided;
+    return decided;
+}
+
+/**
+ * "Turn on notifications" on Home's once card: the phone's own pop-up through the one door ({@link turnOnNotifications}),
+ * so its answer is heard and kept as at every other tap. A yes, or the phone's no, ends the card by the phone's own answer
+ * (core's rule). Anything else (the pop-up closed with no answer, the one Settings line's "Not now", Settings opened) is
+ * the card's "Later": put away, never a no. Never throws.
+ */
+export async function turnOnFromOnceCard(
+    publicKey?: string | null,
+    storage: StorageLike = AsyncStorage,
+    options: TurnOnOptions = {},
+): Promise<TurnOnResult> {
+    let result: TurnOnResult = 'unanswered';
+    try {
+        result = await turnOnNotifications(publicKey, storage, options);
+    } catch {
+        // No answer to read: a "Later", never a no.
+    }
+    if (result !== 'granted' && result !== 'declined') await onceCardLater(storage).catch(() => undefined);
+    return result;
+}
+
+/** "Later" on Home's once card: put away for good, recorded with its date, never a no (First steps' line is back). */
+export function onceCardLater(storage: StorageLike = AsyncStorage): Promise<void> {
+    return notificationsLater(storage, 'once');
 }
 
 /**

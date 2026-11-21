@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToOpenOnAComputer, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, FORUM_PUSH_WORDS, forumNoticesOn, forumPublicOn, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToOpenOnAComputer, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, FORUM_PUSH_WORDS, forumNoticesOn, forumPublicOn, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, NEW_EVENT_PUSH_WORDS, newEventPushOn, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
 import { copyChatText } from '../lib/copy-chat-text';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
@@ -409,6 +409,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     // The Forum switch (slice F5): on until the member turns it off, shown only where the community sends the forum's
     // notices (core forumNoticesOn).
     const [notifForum, setNotifForum] = useState(true);
+    // "When someone posts a new event" (notifications NEb): on until the member turns it off, shown only where the community
+    // sends that notice (core newEventPushOn), saved as `notify_new_events`.
+    const [notifNewEvents, setNotifNewEvents] = useState(true);
     // Whether "Requests to join" means anything to this member (core knockSwitchShown): their node role, as the node says
     // it. Not known yet (or no answer): the switch waits.
     const [nodeRole, setNodeRole] = useState<unknown>(undefined);
@@ -435,6 +438,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 setNotifKnocks(prefs.notify_knocks === 'true' || prefs.notify_knocks === true);
                 setNotifAsked(prefs.notify_asked !== 'false' && prefs.notify_asked !== false);
                 setNotifForum(prefs.notify_forum !== 'false' && prefs.notify_forum !== false);
+                setNotifNewEvents(prefs.notify_new_events !== 'false' && prefs.notify_new_events !== false);
                 setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
             }
         } catch (e) {
@@ -470,13 +474,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         }
     };
 
-    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow' | 'knocks' | 'asked' | 'forum') => {
+    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow' | 'knocks' | 'asked' | 'forum' | 'newEvents') => {
         const nextChat = key === 'chat' ? !notifChat : notifChat;
         const nextMkt = key === 'marketplace' ? !notifMarketplace : notifMarketplace;
         const nextEscrow = key === 'escrow' ? !notifEscrow : notifEscrow;
         const nextKnocks = key === 'knocks' ? !notifKnocks : notifKnocks;
         const nextAsked = key === 'asked' ? !notifAsked : notifAsked;
         const nextForum = key === 'forum' ? !notifForum : notifForum;
+        const nextNewEvents = key === 'newEvents' ? !notifNewEvents : notifNewEvents;
 
         if (key === 'chat') setNotifChat(nextChat);
         if (key === 'marketplace') setNotifMarketplace(nextMkt);
@@ -484,6 +489,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         if (key === 'knocks') setNotifKnocks(nextKnocks);
         if (key === 'asked') setNotifAsked(nextAsked);
         if (key === 'forum') setNotifForum(nextForum);
+        if (key === 'newEvents') setNotifNewEvents(nextNewEvents);
 
         try {
             await updateNotificationPreferences(identity.publicKey, {
@@ -495,6 +501,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 ...(askedPushOn(communityInfo?.features) ? { notify_asked: nextAsked } : {}),
                 // The same for the Forum switch (core forumNoticesOn).
                 ...(forumNoticesOn(communityInfo?.features) ? { notify_forum: nextForum } : {}),
+                // The same for the new-events switch (core newEventPushOn).
+                ...(newEventPushOn(communityInfo?.features) ? { notify_new_events: nextNewEvents } : {}),
             });
         } catch (e) {
             console.warn('[NotifPrefs] Save failed:', e);
@@ -1878,6 +1886,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             checked={notifAsked}
                                             onChange={() => handleToggleNotif('asked')}
                                             label={t(ASKED_PUSH_WORDS.switchName)}
+                                        />
+                                    </div>
+                                )}
+
+                                {newEventPushOn(communityInfo?.features) && (
+                                    <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800" data-testid="settings-notify-new-events">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-bold text-nature-900 dark:text-white">{t(NEW_EVENT_PUSH_WORDS.switchName)}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t(NEW_EVENT_PUSH_WORDS.switchLine)}</div>
+                                        </div>
+                                        <ToggleSwitch
+                                            checked={notifNewEvents}
+                                            onChange={() => handleToggleNotif('newEvents')}
+                                            label={t(NEW_EVENT_PUSH_WORDS.switchName)}
                                         />
                                     </div>
                                 )}

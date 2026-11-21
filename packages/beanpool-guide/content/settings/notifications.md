@@ -13,6 +13,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 - **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in. Also when your community opens a vote on removing a member that you can vote on and, where a jury decides that vote instead, when you are drawn for the jury, and the reminders a juror gets.
 - **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.
 - **When a neighbour asks for something I'm into:** when someone in your community posts a Need in a category you starred on **What are you into?** on **Home**, at most once a day. It is on until you switch it off. It comes with your **Marketplace Activity** alerts, so it stops if you switch those off too. Only communities that send it show this switch: the global community doesn't.
+- **When someone posts a new event:** when someone in your community posts an event open to everyone there, at most once a day. You aren't told of an event you posted yourself, or of one only a group can see. It is on until you switch it off. It comes with your **Marketplace Activity** alerts, so it stops if you switch those off too. Only communities that send it show this switch: the global community doesn't.
 - **Held in Trust & System:** beans held, released or in question.
 - **Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown.
 - **Forum:** replies in forum topics you follow, mentions of you in the forum, and, for owners, admins and moderators, a first topic waiting for a look. Only communities whose forum sends alerts show this switch. See "The forum".
@@ -44,6 +45,7 @@ An alert on your phone or in your browser says only what kind of news it is, for
 - "There is news on one of your trades."
 - "Someone in your community asked for something you're into." It never says who asked or what for: tap it to open the Need.
 - "An event you're going to starts soon."
+- "There is a new event in your community." It never says what the event is or who posted it: tap it to open the event.
 - "Your community has a notice for you."
 - "Your community opened a vote on removing a member." It never says who the vote is about. Where a jury decides, only the jurors are alerted, with "You were drawn for a jury in your community." instead; everyone else gets no alert.
 - "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside." When less than two days of the vote are left, it says so: "You were drawn for a jury in your community, and its vote closes in less than two days."
@@ -104,7 +106,7 @@ Reminders arrive with your **Marketplace Activity** alerts, so they stop if you 
 
 ## No alerts at all?
 
-BeanPool asks for notification permission only when you tap to turn it on: **Hear when someone answers you** in **First steps** on **Home**, or when you send your first message or request to join. It never asks at install, when you create your account or while you join, and nothing is asked after you restore an account. If your phone already allows notifications for BeanPool, nothing is asked at all.
+BeanPool asks for notification permission only when you tap to turn it on: **Hear when someone answers you** in **First steps** on **Home**, or **Tell me** on a one-line offer such as **Hear when Asha answers.** under your first message. The same line shows once after your first listing, a request on someone's listing, a request to join, or a message you read, never more than one a day. It never asks at install, when you create your account or while you join, and nothing is asked after you restore an account. If your phone already allows notifications for BeanPool, nothing is asked at all.
 
 **Not now** is never final. If you tapped it, **Hear when someone answers you** stays in **First steps**, and the last line under the bell at the top, **Notifications are off on this phone.**, has **Turn on**: either brings your phone's own question when you choose.
 

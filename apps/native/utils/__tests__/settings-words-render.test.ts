@@ -58,6 +58,9 @@ vi.mock('react-native', () => {
         if (typeof s.minHeight === 'number') attrs['data-min-height'] = String(s.minHeight);
         if (typeof s.fontSize === 'number') attrs['data-font'] = String(s.fontSize);
         if (s.textTransform) attrs['data-transform'] = s.textTransform;
+        // The colours a row is drawn in, so a case can check a row in light and in dark against its neighbours (NEb).
+        if (typeof s.color === 'string') attrs['data-color'] = s.color;
+        if (typeof s.backgroundColor === 'string') attrs['data-bg'] = s.backgroundColor;
         return createElement(tag, attrs, children);
     };
     const listener = () => ({ remove() {} });
@@ -324,6 +327,7 @@ import { copiesRuleNow } from '../copies-rule';
 import { PUSH_REGISTERED_AT_STORE_KEY } from '../storage-keys';
 import { readerFeaturesHeld } from '../reads-own';
 import SettingsScreen from '../../app/(tabs)/settings';
+import { lightColors, darkColors } from '../../constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addSavedNode, clearGuestNode, markGuestNode } from '../nodes';
 import { transferTarget } from '../pair-device-target';
@@ -839,6 +843,118 @@ describe('Notification Preferences: the Forum switch only where the community se
     });
 });
 
+describe('Notification Preferences: "When someone posts a new event" only where the community sends it (notifications NEb)', () => {
+    // Its own switch for `event.new` (amend2 §12.3 row 15): on until the member turns it off, saved as notify_new_events alone,
+    // and shown only where the node says newEventPush (core newEventPushOn): not the global community, not a node from before
+    // NEa. Drawn at 320 dp with 1.3x text (this file's screen), in light and in dark.
+    const SWITCH = 'When someone posts a new event';
+    const LINE = 'At most once a day, and only for events open to everyone here';
+    const newEventsRow = () => host.querySelector('[data-testid="settings-notify-new-events"]');
+    const newEventsSwitch = () => host.querySelector('[data-testid="settings-notify-new-events-toggle"]') as HTMLElement | null;
+    type Said = 'on' | 'off' | 'older';
+    // askedPush too, so the row beside it is drawn to compare colours with.
+    const sayNewEventPush = (said: Said) => store.map.set('beanpool_node_profiles', JSON.stringify({
+        [NODE]: { profile: 'local', features: { beans: true, escrow: true, askedPush: true, ...(said === 'on' ? { newEventPush: true } : said === 'off' ? { newEventPush: false } : {}) }, checkedAt: new Date().toISOString() },
+    }));
+    const openPreferences = async (lang: UiLang = 'en') => {
+        await renderIn(lang);
+        await click(row('Notification Preferences', lang), 'Notification Preferences');
+        expect(host.textContent).toContain(lang === 'xx' ? pseudoLocalise('1 day before') : '1 day before');
+    };
+    /** What the node keeps of what was saved, served back as the server serves it: each value a string. */
+    const keepSaved = () => {
+        for (const saved of node.prefsSaved) for (const [k, v] of Object.entries(saved)) node.prefsServed[k] = String(v);
+    };
+    /** Opened afresh: the screen unmounted and drawn again, reading the preferences from the node. */
+    const reopen = async () => {
+        act(() => root.unmount());
+        root = createRoot(host);
+        await openPreferences();
+    };
+
+    // One row per state; each is red without its line in settings.tsx (the gate, the read, or the state's default).
+    const rows: Array<{ name: string; said: Said; served: Record<string, string>; shown: boolean; on?: boolean; readFails?: boolean }> = [
+        { name: 'the node says newEventPush, the member never chose: shown, on', said: 'on', served: {}, shown: true, on: true },
+        { name: "the node says newEventPush, the preferences read fails: shown, on (the node's own default)", said: 'on', served: {}, shown: true, on: true, readFails: true },
+        { name: "the node says newEventPush, the member left it on ('true'): shown, on", said: 'on', served: { notify_new_events: 'true' }, shown: true, on: true },
+        { name: "the node says newEventPush, the member turned it off ('false'): shown, off", said: 'on', served: { notify_new_events: 'false' }, shown: true, on: false },
+        { name: 'the node says newEventPush is off (the global community): no switch', said: 'off', served: {}, shown: false },
+        { name: 'an older node, without the field: no switch', said: 'older', served: {}, shown: false },
+    ];
+    for (const theme of ['light', 'dark'] as const) {
+        for (const r of rows) {
+            it(`${theme}, 320 dp at 1.3x: ${r.name}`, async () => {
+                look.theme = theme;
+                sayNewEventPush(r.said);
+                node.prefsServed = { ...r.served };
+                if (r.readFails) {
+                    const answered = globalThis.fetch;
+                    globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => (String(url).includes('/api/members/preferences')
+                        ? new Response('', { status: 503 })
+                        : answered(url, init))) as typeof fetch;
+                }
+                await openPreferences();
+                // The asked switch's row beside it is drawn in every case: the screen is the notifications screen.
+                expect(byLabel("When a neighbour asks for something I'm into")).not.toBeNull();
+                if (!r.shown) {
+                    expect(newEventsRow()).toBeNull();
+                    expect(host.textContent).not.toContain(SWITCH);
+                    expect(host.textContent).not.toContain(LINE);
+                    expect(node.prefsSaved).toEqual([]);
+                    return;
+                }
+                expect(newEventsRow()?.textContent).toContain(SWITCH);
+                expect(newEventsRow()?.textContent).toContain(LINE);
+                const toggle = newEventsSwitch()!;
+                expect(toggle.getAttribute('aria-label')).toBe(SWITCH);
+                expect(toggle.getAttribute('aria-checked')).toBe(String(r.on));
+                // Its colours are the shared tokens, the same as the asked row's beside it, in this theme.
+                const palette = theme === 'dark' ? darkColors : lightColors;
+                const asked = host.querySelector('[data-testid="settings-notify-asked"]')!;
+                const title = (el: Element) => el.querySelector('span[data-font="15"]')!;
+                const sub = (el: Element) => el.querySelector('span[data-font="12"]')!;
+                expect(title(newEventsRow()!).getAttribute('data-color')).toBe(palette.text.body);
+                expect(sub(newEventsRow()!).getAttribute('data-color')).toBe(palette.text.muted);
+                expect(title(newEventsRow()!).getAttribute('data-color')).toBe(title(asked).getAttribute('data-color'));
+                expect(sub(newEventsRow()!).getAttribute('data-color')).toBe(sub(asked).getAttribute('data-color'));
+                expect(toggle.getAttribute('data-bg')).toBe(r.on ? palette.brand.fill : palette.border.default);
+                // At 320 dp its words wrap beside the switch (flex: 1), never held to a line or shrunk.
+                const words = title(newEventsRow()!).parentElement!;
+                expect(words.getAttribute('data-flex')).toBe('1');
+                for (const span of [title(newEventsRow()!), sub(newEventsRow()!)]) {
+                    expect(span.getAttribute('data-lines')).toBeNull();
+                    expect(span.getAttribute('data-shrinks')).toBeNull();
+                }
+            });
+        }
+    }
+
+    it('a tap saves notify_new_events off, alone; a reload reads it back off; a second tap saves it on, and a reload reads that', async () => {
+        sayNewEventPush('on');
+        await openPreferences();
+        await click(newEventsSwitch(), SWITCH);
+        expect(node.prefsSaved).toEqual([{ notify_new_events: false }]);
+        expect(newEventsSwitch()?.getAttribute('aria-checked')).toBe('false');
+        keepSaved();
+        await reopen();
+        expect(newEventsSwitch()?.getAttribute('aria-checked')).toBe('false');
+        await click(newEventsSwitch(), SWITCH);
+        expect(node.prefsSaved).toEqual([{ notify_new_events: false }, { notify_new_events: true }]);
+        keepSaved();
+        await reopen();
+        expect(newEventsSwitch()?.getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('in the pseudo-locale: the switch, its line and its label all came through t()', async () => {
+        sayNewEventPush('on');
+        await openPreferences('xx');
+        expect(newEventsRow()?.textContent).toContain(pseudoLocalise(SWITCH));
+        expect(newEventsRow()?.textContent).toContain(pseudoLocalise(LINE));
+        expect(newEventsSwitch()?.getAttribute('aria-label')).toBe(pseudoLocalise(SWITCH));
+        expect(bypassing()).toEqual([]);
+    });
+});
+
 describe('Settings → "Use BeanPool on a computer: open <address>": every member, with this community\'s address (computer-line)', () => {
     // What Share sends and a screen reader reads: the whole line, https:// and all. What is drawn leaves the https:// off the address.
     const LINE = `Use BeanPool on a computer: open ${NODE}`;
@@ -1299,6 +1415,30 @@ describe('Settings at 320 dp with 1.3× text, in the pseudo-locale', () => {
         await renderIn('xx');
         expect(host.querySelectorAll('span[data-font="15"]').length).toBeGreaterThan(20);
         expect(tooWide()).toEqual([]);
+    });
+
+    it('Notification Preferences\' "When someone posts a new event" (NEb): its name and line fit the column beside its switch, in light and dark', async () => {
+        store.map.set('beanpool_node_profiles', JSON.stringify({
+            [NODE]: { profile: 'local', features: { beans: true, escrow: true, newEventPush: true }, checkedAt: new Date().toISOString() },
+        }));
+        for (const theme of ['light', 'dark'] as const) {
+            look.theme = theme;
+            act(() => root.unmount());
+            root = createRoot(host);
+            await renderIn('xx');
+            await click(row('Notification Preferences'), 'Notification Preferences');
+            const newEvents = host.querySelector('[data-testid="settings-notify-new-events"]');
+            expect(newEvents, theme).not.toBeNull();
+            const spans = Array.from(newEvents!.querySelectorAll('span[data-font="15"], span[data-font="12"]'));
+            expect(spans).toHaveLength(2);
+            for (const span of spans) {
+                // Beside a switch: 204 - 50. Its longest word, at 1.3x the size it is drawn, fits that column.
+                expect(columnOf(span)).toBe(ROW_TEXT - 50);
+                const px = Number(span.getAttribute('data-font')) * SCALE;
+                const word = longestWord(span.textContent ?? '');
+                expect(widthOf(word, px), `${theme}: ${word}`).toBeLessThanOrEqual(ROW_TEXT - 50);
+            }
+        }
     });
 
     it('section headers carry their own capitals: none is upper-cased by the phone', async () => {

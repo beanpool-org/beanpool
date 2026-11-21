@@ -21,9 +21,24 @@ const flat = (rel: string) => page(rel).replace(/\s+/g, ' ');
 describe("the guide's joining page: the phone's three steps", () => {
     const joining = flat('getting-started/joining.md');
 
-    it('the phone has dots for the name, Your Photo and Safety Backup, Safety Backup last; the web the same since W1, with no How it Works', () => {
+    it('the phone has dots for the name, Your Photo and the way back, the way back last; the web the same since W1 (Safety Backup there), with no How it Works', () => {
         // Slice S3: the labelled bar became dots and ‹ (components/welcome/StepDots.tsx); the steps and their order are the same.
-        expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo and **Safety Backup**, and **Safety Backup** is the last step.');
+        // Slice S4: the way back is titled "Keep a way back in" on the phone (no screen says "Safety Backup" there any more),
+        // skipped where a way back is already kept, and its ‹ is said as it is built (the Go back? question after an invite).
+        expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo and **Keep a way back in**, the last step.');
+        // Round 2 of the review of #3330: a claim is never skipped; a sign-in's copy at the vault counts, an admins' copy never.
+        expect(joining).toContain("a sign-in's copy at BeanPool's key vault, or your 12 words already noted as written down), an invite or the global community's join has no way-back step, and two dots. A claim always shows it.");
+        expect(joining).toContain("**Your community's admins**, in **Account Protection**, doesn't count here either: the step and the card still show.");
+        expect(joining).not.toContain('there is no way-back step, and two dots.');
+        // ‹ keeps the account and its words (join-after-lost-answer.test.ts: the same key after Go Back), never a new account.
+        expect(joining).toContain('after an invite it first asks **Have you saved your words?**, then goes back to your name. It is still the same account, with the same 12 words: tap **Join** and you carry on (with the account the phone already had, straight into the community).');
+        expect(joining).not.toContain('with a new account');
+        expect(joining).not.toContain('one dot each for your name, your photo and **Safety Backup**');
+        expect(joining).not.toContain('**Rather write down 12 words?**');
+        expect(joining).not.toContain("tap **Let's Begin!** here");
+        // Since W1 the web's Your name says Join too (WelcomePage.tsx), so the button is named once, for both apps.
+        expect(joining).toContain('**Failed to register identity** (after you tap **Join**)');
+        expect(joining).not.toContain('in a web browser, **Next**)');
         expect(joining).not.toContain('the bar at the top shows **Your Name**');
         expect(joining).not.toContain('**Restore Existing Identity**');
         expect(joining).not.toContain('The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.');
@@ -104,10 +119,13 @@ describe("the guide's Home page: the tile, its band, its end, the order", () => 
 });
 
 describe("the guide's notifications page", () => {
-    it('names no card at the end of How it Works: the phone asks from First steps, or at the first message or request to join', () => {
+    // Slice N2a: no pop-up at the first message or request to join; a named line's Tell me there instead.
+    it('names no card at the end of How it Works: the phone asks from First steps, or from Tell me on a named line', () => {
         const notifications = flat('settings/notifications.md');
         expect(notifications).not.toContain('the card at the end of How it Works');
-        expect(notifications).toContain('**Hear when someone answers you** in **First steps** on **Home**, or when you send your first message or request to join.');
+        expect(notifications).not.toContain('or when you send your first message or request to join');
+        expect(notifications).toContain('**Hear when someone answers you** in **First steps** on **Home**, or **Tell me** on a one-line offer such as **Hear when Asha answers.** under your first message.');
+        expect(notifications).toContain("The same line shows once after your first listing, a request on someone's listing, a request to join, or a message you read, never more than one a day.");
     });
 });
 

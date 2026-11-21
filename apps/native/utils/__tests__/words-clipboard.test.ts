@@ -185,7 +185,10 @@ describe('every Copy of the words', () => {
     it('goes through copyWordsForAMinute, and nothing writes the words to the clipboard directly', () => {
         const welcome = read('app/welcome.tsx');
         const settings = read('app/(tabs)/settings.tsx');
-        expect(welcome.match(/copyWordsForAMinute\(/g)?.length).toBe(2);
+        // One in welcome: the replace screen's. The join's way back has no Copy (onboarding S4, Marty's walk 21 Nov: paper only).
+        expect(welcome.match(/copyWordsForAMinute\(/g)?.length).toBe(1);
+        const join = welcome.slice(welcome.indexOf("if (mode === 'seedBackup' && pendingIdentity)"), welcome.indexOf("if (mode === 'ownerCard' && pendingIdentity)"));
+        expect(join).not.toContain('copyWordsForAMinute');
         expect(settings.match(/copyWordsForAMinute\(/g)?.length).toBe(2);
         for (const src of [welcome, settings]) {
             expect(src).not.toMatch(/Clipboard\.setStringAsync\((words|mnemonicWords|seedWords|pendingWords|outgoingWords)/);
@@ -195,7 +198,8 @@ describe('every Copy of the words', () => {
     it('says next to the button that the copy clears in a minute', async () => {
         const { COPY_CLEARS_LINE } = await helper();
         expect(COPY_CLEARS_LINE).toBe('The copy clears from your clipboard after a minute. If you leave BeanPool first, it clears when you come back.');
-        expect(read('app/welcome.tsx').match(/<CopyClearsNote /g)?.length).toBe(2);
+        // The replace screen's; the join's way back has no Copy, so no line about one (onboarding S4).
+        expect(read('app/welcome.tsx').match(/<CopyClearsNote /g)?.length).toBe(1);
         expect(read('app/(tabs)/settings.tsx').match(/<CopyClearsNote /g)?.length).toBe(2);
     });
 

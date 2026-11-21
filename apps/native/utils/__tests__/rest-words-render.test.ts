@@ -112,7 +112,7 @@ vi.mock('../one-way-back', async (importOriginal) => ({
     dismissOneWayBack: vi.fn(async () => {}),
     finishOneWayBack: vi.fn(async () => {}),
 }));
-vi.mock('../vault', () => ({ vaultCopyKnown: vi.fn(async () => oneWay.vault) }));
+vi.mock('../vault', () => ({ vaultSignInCopyKnown: vi.fn(async () => oneWay.vault) }));
 // The sign-in sheet is the key sweep's.
 vi.mock('../../components/LinkSignInSheet', () => ({ LinkSignInSheet: () => null }));
 vi.mock('../../services/pillar-sync', () => ({ getLastSyncTime: async () => Date.now() - 90_000 }));

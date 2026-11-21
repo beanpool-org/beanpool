@@ -25,7 +25,7 @@ import {
     type OneWayBackStanding,
 } from '../utils/one-way-back';
 import { anchorUrl } from '../utils/node-post';
-import { vaultCopyKnown } from '../utils/vault';
+import { vaultSignInCopyKnown } from '../utils/vault';
 import { GLOBAL_NODE_URL } from '../utils/global-node-url';
 import { getSavedNodes } from '../utils/nodes';
 import { communityName } from '../utils/community-name';
@@ -141,7 +141,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         const key = identity?.publicKey;
         const [stored, vault] = await Promise.all([
             readOneWayBack(key),
-            key ? vaultCopyKnown(key).catch(() => false) : Promise.resolve(false),
+            // A sign-in's copy at the key vault, never a community's half there (review of #3330, round 2: half a pair opens nothing).
+            key ? vaultSignInCopyKnown(key).catch(() => false) : Promise.resolve(false),
         ]);
         if (call !== latest.current) return;
         // The phone's own record at once; then the node's word, which decides when it comes.

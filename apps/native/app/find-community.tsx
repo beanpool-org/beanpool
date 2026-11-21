@@ -39,7 +39,7 @@ import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords, findTownSearchWords, nearWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
-import { askNotificationPermissionOnAction } from '../utils/notification-permission';
+import { useNotifyLine, useScreenShowing } from '../components/NotifyLine';
 import { DoorRuleLine } from '../components/DoorRuleLine';
 import { communityRecordByKey, directoryRowCommunity, recordAddresses } from '../utils/community-index';
 import { askMemberHere, directoryRowDoor } from '../utils/member-here';
@@ -230,6 +230,12 @@ export default function FindCommunityScreen() {
     const [members, setMembers] = useState<Record<string, string>>({});
     // Requests this key cancelled within the day (utils/knock.ts cancelledKnocks): said so, and not asked again yet.
     const [cancelled, setCancelled] = useState<Record<string, number>>({});
+    // The community just asked here: once its request reads as waiting, the named line "Hear when Riverside answers." under
+    // it (slice N2a; core's rule says whether), in place of the old pop-up before the request went.
+    const [justAsked, setJustAsked] = useState<{ url: string; name: string } | null>(null);
+    // One visit: a screen opened over this one (a community's card) and back, and the line is gone.
+    const inFront = useScreenShowing();
+    const notify = useNotifyLine(pubkey, inFront);
     // The community in front, once the records are read: a row whose key is one of the phone's communities opens it
     // (addresses S5, §3.6; community-index.ts directoryRowCommunity), whatever address the row carries.
     const [anchorNow, setAnchorNow] = useState<string | null | undefined>(undefined);
@@ -467,7 +473,6 @@ export default function FindCommunityScreen() {
             return;
         }
         if (!identity) setIdentity(signer);
-        await askNotificationPermissionOnAction('knock', signer.publicKey);
         setSending(true);
         setFormError(null);
         // Profile S2-W: knocks do not leak another community's photo
@@ -489,6 +494,7 @@ export default function FindCommunityScreen() {
                 const justAsked = c.url;
                 void import('../services/push-notifications').then((m) => m.registerAfterKnock(justAsked)).catch(() => {});
                 setAsked(await rememberedKnocks(signer.publicKey));
+                setJustAsked({ url: c.url, name: c.name || c.url.replace(/^https:\/\//, '') });
                 setOpenForm(null);
                 setMessage('');
                 readStatus(c.url, signer);
@@ -568,6 +574,10 @@ export default function FindCommunityScreen() {
     const stateFor = (url: string | null): KnockCardState => url && cancelled[url] && !askedUrls.has(url)
         ? { kind: 'cancelled', note: KNOCK_MESSAGES.cancelled }
         : knockCardState(!!url, !!url && askedUrls.has(url), url && askedUrls.has(url) ? statuses[url] : undefined, url ? members[url] : null);
+    const justAskedWaits = !!justAsked && stateFor(justAsked.url).kind === 'waiting';
+    useEffect(() => {
+        if (justAskedWaits && justAsked) void notify.offer({ kind: 'join', name: justAsked.name, anchor: justAsked.url });
+    }, [justAskedWaits]);
 
     // ── Drawing ─────────────────────────────────────────────────────────────────────────────────────────
     // A plain function, not a component: a component made inside render is a new type on every render, and its
@@ -580,6 +590,7 @@ export default function FindCommunityScreen() {
                 <View>
                     {/* Polite: the yes that replaces this line is read out (the same Text, its words changed). */}
                     <Text style={styles.note} accessibilityLiveRegion="polite">{findLineWords(state.note)}</Text>
+                    {notify.line?.anchor === url && notify.view}
                     {!!cancelNotes[url] && <Text style={styles.refusal}>{findLineWords(cancelNotes[url])}</Text>}
                     <View style={styles.actions}>
                         <Pressable

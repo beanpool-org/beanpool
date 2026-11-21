@@ -21,6 +21,7 @@ import {
     lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
 } from '../../utils/db';
 import { PerItemFields } from '../../components/PerItemFields';
+import { chatMoment, noteNotifyMoment } from '../../components/NotifyLine';
 import { PerItemTakeUp } from '../../components/PerItemTakeUp';
 import {
     carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
@@ -2354,6 +2355,8 @@ function PostDetailModal() {
                                         setAccepting(true);
                                         try {
                                             const estimatedHrs = hoursRead?.ok ? hoursRead.value : undefined;
+                                            // Asked, not taken (a Need, or a loan): the author's yes is the next step.
+                                            const waitsForYes = !(isOffer && !isLoan);
                                             if (isOffer && !isLoan) {
                                                 await acceptMarketplacePost(post.id, identity.publicKey, estimatedHrs);
                                             } else {
@@ -2375,6 +2378,8 @@ function PostDetailModal() {
                                             try {
                                                 const conv = await createConversationApi('dm', [post.author_pubkey, identity.publicKey], identity.publicKey, undefined, post.id);
                                                 if (conv) {
+                                                    // The named line "Hear when Asha says yes." (slice N2a) in the chat it opens.
+                                                    if (waitsForYes) noteNotifyMoment(chatMoment(String(conv.id)), { kind: 'offer', name: post.author_callsign || null });
                                                     router.replace(`/chat/${conv.id}`);
                                                     return;
                                                 }

@@ -122,9 +122,10 @@ vi.mock('../node-admin', async (importOriginal) => ({ ...(await importOriginal<o
 vi.mock('../node-post', async (importOriginal) => ({ ...(await importOriginal<object>()), anchorUrl: vi.fn(async () => manage.anchor) }));
 // The first knock asks about notifications before it sends (find-community.tsx, front doors S3; its own suite is
 // notification-permissions-s3): answered at once here, so Send doesn't wait on loading the real expo-notifications.
+// No named line on these screens here (slice N2a draws it in its own suites): the rule answers no.
 vi.mock('../notification-permission', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../notification-permission')>()),
-    askNotificationPermissionOnAction: vi.fn(async () => 'unanswered' as const),
+    offerNamedLine: vi.fn(async () => false),
 }));
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';

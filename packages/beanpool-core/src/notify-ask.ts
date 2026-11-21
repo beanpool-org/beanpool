@@ -253,9 +253,10 @@ export function notifyFirstStepsLine(r: NotifyAskRecord, p: NotifyPhone): boolea
  * - **join**, the join's last screen: also on a later join after a "Later", never twice in a day; one shown today and not
  *   yet answered shows again (a join killed on it resumes on it).
  * - **once**, the card on Home for a member who never met the join's screen on this phone (after the update, after a
- *   restore; an older app's "Not now" included): first shown on a free day, then each landing until it is answered or for
- *   7 days. Never again once closed (`onceClosedAt`): any answer on it, a yes included, or a Turn off in the app's own
- *   Settings, which is the member's choice even where the browser still allows the site.
+ *   restore; an older app's "Not now" included): first shown on a free day that no "Later" was said on (a pop-up closed
+ *   at First steps' line or the bell's is that day's answer), then each landing until it is answered or for 7 days.
+ *   Never again once closed (`onceClosedAt`): any answer on it, a yes included, or a Turn off in the app's own Settings,
+ *   which is the member's choice even where the browser still allows the site.
  * - **line**, a named line at the member's own act: each kind once. The day of the join's screen still allows one.
  * - **home**, the card while something of theirs is live: not 7 days after a "Later", × puts it away 30 days and for good
  *   at the third, never with the once card.
@@ -274,8 +275,9 @@ export function notifyAsks(i: NotifyAskInput): NotifyAsks {
     const join = canAsk && (free || joinUnanswered);
 
     const onceOpen = typeof r.onceAt === 'number' && since(r.onceAt) < NOTIFY_ONCE_CARD_DAYS * DAY_MS;
+    const laterToday = laterAt !== null && localDay(new Date(laterAt)) === today;
     const once = canAsk && typeof r.joinAt !== 'number' && typeof r.onceClosedAt !== 'number'
-        && (typeof r.onceAt !== 'number' ? free : onceOpen && (free || askedToday === 'once'));
+        && (typeof r.onceAt !== 'number' ? free && !laterToday : onceOpen && (free || askedToday === 'once'));
 
     const line = canAsk && !!i.line && !(r.lines ?? []).includes(i.line) && (free || askedToday === 'join');
 
@@ -504,6 +506,17 @@ export function notifyJoinWords(o: { kind: NotifyJoinKind; community?: string | 
         turnOn: t('Turn on notifications'),
         confirm: o.prompter === 'none' ? '' : o.prompter === 'browser' ? t('Your browser will ask you to confirm.') : t('Your phone will ask you to confirm.'),
         later: t('Later'),
+    };
+}
+
+/**
+ * Home's once card (amend2 §7, slice N1h): the join's own words, for a member already in, with "a neighbour" for the name (no
+ * join to name an inviter from), and its band's word. The global community's line on the global community's Home.
+ */
+export function notifyOnceWords(o: { global: boolean; community?: string | null }): NotifyJoinWords & { band: string } {
+    return {
+        ...notifyJoinWords({ kind: o.global ? 'global' : 'community', community: o.global ? null : o.community, inviter: null }),
+        band: t('Notifications'),
     };
 }
 

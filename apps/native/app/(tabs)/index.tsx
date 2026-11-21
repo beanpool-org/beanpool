@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, ScrollView, Pressable, RefreshControl, StyleSheet, Animated, AccessibilityInfo, AppState, BackHandler, DeviceEventEmitter,
     Alert, ActivityIndicator, LayoutAnimation, Platform, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
@@ -11,11 +11,14 @@ import {
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, welcomeTileLines, WELCOME_TILE_WORDS, type TourProgress,
     COMMUNITY_WELCOME_DISMISSED_KEY, communityWelcomeAgainLine, communityWelcomeCard, communityWelcomeWords,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
-    starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout,
+    starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout, notifyOnceWords,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { twoParagraphs } from '../../utils/alert-words';
-import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications, type OsNotificationPermission } from '../../utils/notification-permission';
+import {
+    notifyStep, offerOnceCard, onceCardLater, readNotificationPermissionRecord, readOsNotificationPermission, turnOnFromOnceCard, turnOnNotifications,
+    type OsNotificationPermission,
+} from '../../utils/notification-permission';
 import { useScreenShowing } from '../../components/NotifyLine';
 import { oneAskAtATime } from '../../utils/one-ask';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
@@ -24,6 +27,7 @@ import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
+import { NotifyAskCard } from '../../components/home/NotifyAskCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { AddressLine } from '../../components/AddressLine';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
@@ -283,13 +287,47 @@ export default function HomeScreen() {
     const notifyAsk = useRef(oneAskAtATime()).current;
     /** The phone's own answer at the same reads, for What are you into?'s true note (slice N2b); null: not read yet. */
     const [phone, setPhone] = useState<OsNotificationPermission | null>(null);
+    /**
+     * Home's once card (slice N1h; DESIGN-notify-and-backup-asks-fable-amend2.md §7), by utils/notification-permission.ts
+     * `offerOnceCard`: `up` while it is drawn; `held` while the way-back card waits for the next landing (never both on one
+     * landing: the once card goes first, amend1 §4.4). null: not decided on this landing yet, and the way-back card waits for
+     * it, so it never shows for a moment and then gives way.
+     */
+    const [once, setOnce] = useState<{ up: boolean; held: boolean } | null>(null);
+    const [onceBusy, setOnceBusy] = useState(false);
+    /** Whether the once card may be drawn now: a member's Home with its answer (set where the answer is read, below). */
+    const onceMay = useRef(false);
+    /** The next decision is a new landing's, the only one that lets the way-back card back. */
+    const freshLanding = useRef(true);
+    const onceCall = useRef(0);
     const readNotify = useCallback(async () => {
+        const call = ++onceCall.current;
+        const may = onceMay.current;
+        const up = may ? await offerOnceCard() : false;
+        if (call === onceCall.current) {
+            if (may) {
+                const fresh = freshLanding.current;
+                freshLanding.current = false;
+                setOnce(o => ({ up, held: up || (!fresh && !!o?.held) }));
+            } else setOnce(o => (o ? { ...o, up: false } : o));
+        }
         const [record, os] = await Promise.all([readNotificationPermissionRecord(), readOsNotificationPermission()]);
-        setNotify(notifyStep(record, os));
+        // First steps' line waits while the once card is up (amend1 §4.2), and is back once it is answered or folds.
+        setNotify(up ? null : notifyStep(record, os));
         setPhone(os);
     }, []);
+    // The once card's two taps: Turn on is the phone's pop-up through the one door; Later puts it away at once (not a no).
+    const onceTurnOn = useCallback(() => {
+        setOnceBusy(true);
+        void turnOnFromOnceCard(identityRef.current?.publicKey).finally(() => { setOnceBusy(false); void readNotify(); });
+    }, [readNotify]);
+    const onceLater = useCallback(() => {
+        setOnce(o => (o ? { up: false, held: true } : o));
+        void onceCardLater().catch(() => undefined).finally(() => { void readNotify(); });
+    }, [readNotify]);
     // Read at each landing and on each return to the app (back from the phone's settings after Turn on).
     useFocusEffect(useCallback(() => {
+        freshLanding.current = true;
         void readNotify();
         const sub = AppState.addEventListener?.('change', next => { if (next === 'active') void readNotify(); });
         return () => sub?.remove?.();
@@ -390,9 +428,34 @@ export default function HomeScreen() {
     // Arrange opens; the bar's first measure then moves the view down with them, so the card the member was looking at stays
     // where it was on the screen (and is never pushed off the bottom of it).
     const keepPlace = useRef(false);
+    /**
+     * The way-back card as Arrange opens (review of #3343): it has no band on Home and gets one in Arrange, so it is taller there.
+     * Where it stood: above the top of the screen (`aboveTop`), above the card Arrange opened from (`aboveFrom`: the card a hold
+     * carries on). The band's first measure moves the view down by what it adds when the card stood above the place kept. Null:
+     * no way-back card drawn as Arrange opened, or its band already measured.
+     */
+    const wayBackKeep = useRef<{ aboveTop: boolean; aboveFrom: boolean } | null>(null);
+    /** The way-back card's id while it is drawn (it decides whether it is up), set at each render. */
+    const wayBackId = useRef<string | null>(null);
+    /** The scroll last asked for while Arrange opens or closes, until the list says where it is (onScroll). */
+    const askedY = useRef<number | null>(null);
+    /** Moves the view by `dp` with what came or went above the place kept: from the last move asked for, if the list has not yet said. */
+    const moveView = useCallback((dp: number) => {
+        if (!dp) return;
+        const y = Math.max(0, (askedY.current ?? scrollY.current) + dp);
+        askedY.current = y;
+        scrollRef.current?.scrollTo({ y, animated: false });
+    }, []);
     const startArrange = useCallback((from?: string) => {
         arrangeFrom.current = from ?? null;
         keepPlace.current = true;
+        askedY.current = null;
+        const wb = wayBackId.current;
+        const wbY = wb ? cardY.current.get(wb) : undefined;
+        const fromY = from ? cardY.current.get(from) : undefined;
+        wayBackKeep.current = wb && wbY !== undefined
+            ? { aboveTop: listY.current + wbY < scrollY.current, aboveFrom: fromY !== undefined && wbY < fromY }
+            : null;
         setArranging(true);
         AccessibilityInfo.announceForAccessibility(t(ARRANGE_WORDS.openedDrag));
     }, []);
@@ -442,17 +505,35 @@ export default function HomeScreen() {
     }), [bandVersion, updateFab]);
     const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
         scrollY.current = e.nativeEvent.contentOffset.y;
+        askedY.current = null;
         updateFab();
     }, [updateFab]);
+    // Arrange keeps the member's place (§2.1; review of #3343). What it puts above the cards is the bar (above the list) and
+    // the way-back card's band (inside its own frame); the once card stays, quiet, and the way-back card stays held while the
+    // once card holds it, so nothing else comes or goes. Opening, the view moves down by each that lands above the place kept;
+    // leaving, up by each that goes. The place kept: the top of the screen, or the card a hold on Home carries on.
     // The bar's height with its gap, once, when Arrange opens (startArrange): a view scrolled down moves down with the cards.
     // A card the hold on Home lifted stays under the finger even from the top of the list: the view moves with it.
     const carrying = useRef(false);
+    /** The bar's height as last measured, and the way-back card's band's addition: what goes from above the cards at the end. */
+    const barDp = useRef(0);
+    const wayBackBandDp = useRef(0);
     const onArrangeBar = useCallback((dp: number) => {
+        barDp.current = dp;
         if (!keepPlace.current) return;
         keepPlace.current = false;
         // `scrollY` is left to onScroll: where the list can't scroll that far, it says where the list really is.
-        if (scrollY.current > 0 || carrying.current) scrollRef.current?.scrollTo({ y: scrollY.current + dp, animated: false });
-    }, []);
+        if (scrollY.current > 0 || carrying.current) moveView(dp);
+    }, [moveView]);
+    // The band sits in the card's frame over its top padding (`marginTop: -HOME_CARD_PADDING_DP`): the card grows by the rest.
+    const onWayBackBand = useCallback((height: number) => {
+        const dp = Math.max(0, height - HOME_CARD_PADDING_DP);
+        wayBackBandDp.current = dp;
+        const keep = wayBackKeep.current;
+        if (!keep) return;
+        wayBackKeep.current = null;
+        if (carrying.current ? keep.aboveFrom : keep.aboveTop) moveView(dp);
+    }, [moveView]);
 
     // ── The reveal and the hint (§6.2): once per account, never again ──
     const reveal = useRef(new Animated.Value(1)).current;
@@ -1052,6 +1133,10 @@ export default function HomeScreen() {
 
     // ── What to draw ──
     const answer = stored?.answer ?? null;
+    // The once card is a member's: Home with its answer, and an account (looking around has none to ask for).
+    const onceMayNow = !!answer && !!identity && !lookingAround;
+    onceMay.current = onceMayNow;
+    useEffect(() => { if (onceMayNow) void readNotify(); }, [onceMayNow, readNotify]);
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
     const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
@@ -1115,6 +1200,11 @@ export default function HomeScreen() {
     // Arrange (DESIGN-home-arrange-in-place-fable.md §2): Home itself. The drawn cards move; the rest of the list that this node
     // can show, with nothing to show now, are the strip's rows and keep their saved places.
     const arrangeOn = arranging && tailor && !!answer;
+    // The way-back card waits while the once card is up, and for the rest of a landing it was up on (amend2 §7). The same in
+    // Arrange, where the once card stays drawn: opening Arrange never brings the way-back card into the list under a card the
+    // member is looking at or carrying (review of #3343). It waits for the next landing, as on Home, and moves then.
+    const wayBackHeld = !once || once.held;
+    useEffect(() => { if (wayBackHeld) setSafetyUp(false); }, [wayBackHeld]);
     const movable = arrangeOn ? drawn.filter(c => canMoveCard(c.type, pins)) : [];
     // What a drag places among (slice A4): the drawn cards that move and stand on the list, the places `moveCardTo` counts.
     // Worked out on Home too, so the hold that opens Arrange can carry its card on at once.
@@ -1320,7 +1410,9 @@ export default function HomeScreen() {
                 return frame(<NeedsBody entries={needsEntries} colors={colors} onOpen={openNeeds} />, { accent: hasAccent, hue: hasAccent ? 'amber' : 'sage' });
             }
             case 'safety':
-                // Its own card (the two-doors design's): it says when it is up, and keeps its own ✕ and schedule.
+                // Its own card (the two-doors design's): it says when it is up, and keeps its own ✕ and schedule. Never on one
+                // landing with Home's once card: that goes first, and this takes the next landing (amend2 §7).
+                if (wayBackHeld) return null;
                 return (
                     <OneWayBackCard
                         place="landing"
@@ -1335,7 +1427,7 @@ export default function HomeScreen() {
                         toLose={{ balance_c: answer.cards.beans?.balance_c ?? null, holds: (answer.cards.deals?.open ?? 0) > 0 || role === 'owner' || role === 'admin' || role === 'moderator' }}
                         onActionsAt={at => band.report('safety:actions', at)}
                         // It has no band on Home; in Arrange it gets one across the top of its own frame, and goes quiet under it.
-                        band={arrange && drawn.some(d => d.id === id) ? <ArrangeBandRow id={id} caption={caption} hue={hue} colors={colors} arrange={arrange} style={{ marginTop: -HOME_CARD_PADDING_DP }} onLift={liftInArrange(id)} /> : undefined}
+                        band={arrange && drawn.some(d => d.id === id) ? <ArrangeBandRow id={id} caption={caption} hue={hue} colors={colors} arrange={arrange} style={{ marginTop: -HOME_CARD_PADDING_DP }} onLift={liftInArrange(id)} onLayout={e => onWayBackBand(e.nativeEvent.layout.height)} /> : undefined}
                     />
                 );
             case 'find': {
@@ -1516,6 +1608,27 @@ export default function HomeScreen() {
     // Each card in the member's order: the drawn ones, and the "one way back" card while it may be up (it decides).
     const list = ordered.filter(c => drawn.some(d => d.id === c.id) || (c.type === 'safety' && !!answer));
     const firstDrawn = list.find(c => c.type !== 'safety' || safetyUp);
+    wayBackId.current = safetyUp && !wayBackHeld ? list.find(c => c.type === 'safety')?.id ?? null : null;
+    // Leaving Arrange (Done, Back, leaving Home, whatever ends it): the bar goes from above the cards, and the way-back card's
+    // band from its top, so a view scrolled down goes up by each that stood above the top of the screen, and the card the
+    // member was looking at stays where it was (review of #3343). At the top of the list nothing is kept, as on opening. Read
+    // before the list lays out again: the places are still Arrange's.
+    const wasArranging = useRef(false);
+    useLayoutEffect(() => {
+        if (arrangeOn) { wasArranging.current = true; return; }
+        if (!wasArranging.current) return;
+        wasArranging.current = false;
+        keepPlace.current = false;
+        wayBackKeep.current = null;
+        askedY.current = null;
+        const wb = wayBackId.current;
+        const wbY = wb ? cardY.current.get(wb) : undefined;
+        const band = wbY !== undefined && listY.current + wbY < scrollY.current ? wayBackBandDp.current : 0;
+        const bar = barDp.current;
+        barDp.current = 0;
+        wayBackBandDp.current = 0;
+        if (scrollY.current > 0) moveView(-(bar + band));
+    }, [arrangeOn, moveView]);
     // Where Beans are previewed, the Your Beans card (design §1 row 1): no API, the Ledger's example behind its link. It
     // sits under First steps while that is up, else under the first card, and only its own "Hide this card" puts it away:
     // First steps done, removed or out of its days leaves it. While Getting started is up for a tour not yet ended it waits,
@@ -1670,8 +1783,6 @@ export default function HomeScreen() {
                     <AddressLine colors={colors} />
                     {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
                     {!lookingAround && <CopiesRuleCard colors={colors} />}
-                    {/* No notifications card here (DESIGN-home-default-fable.md §2.5): First steps has the line, the first post,
-                        message or ask to join asks once, and the bell's sheet says so while this phone can't buzz. */}
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
                             {t("Couldn't reach your community; showing what we had.")}
@@ -1691,9 +1802,23 @@ export default function HomeScreen() {
                         </Text>
                     )}
                     {empty}
+                    {/* Home's once card (slice N1h): the join's ask once, for a member already in or a restore on a new phone, at the
+                        top of Home and above the cards, so their places in the list stay as Arrange measures them. In Arrange it
+                        stays where it is, quiet like every card's inside, so the bar is all that Arrange puts above the cards and
+                        the member's place holds (review of #3343). */}
+                    {onceMayNow && once?.up && answer && (
+                        <NotifyAskCard
+                            words={notifyOnceWords({ global: answer.profile === 'global', community: answer.cards.community?.name })}
+                            colors={colors}
+                            busy={onceBusy}
+                            onTurnOn={onceTurnOn}
+                            onLater={onceLater}
+                            quiet={arrangeOn}
+                        />
+                    )}
                     {/* Above the cards, not among them: the cards' places inside the list (`cardY`) are the same as on Home. */}
                     {arrangeOn && <ArrangeBar colors={colors} notOnAccount={notOnAccount ? t(LINES.notOnAccount) : null} onHeight={onArrangeBar} />}
-                    <Animated.View onLayout={e => { listY.current = e.nativeEvent.layout.y; }} style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+                    <Animated.View onLayout={e => { listY.current = e.nativeEvent.layout.y; }} testID="home-list" style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
                         {/* The community card is always last (`FIXED_LAST`), so Home is these cards and then it. Each stays in its own slot of this
                             list in both states: React must not rebuild a card that Arrange only quiets (the bodies of tool cards and of Find your
                             community hold what they have read), so the community card is not moved to another parent when Arrange opens. */}

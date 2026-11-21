@@ -74,7 +74,7 @@ import {
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
     type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder, firstStepsOver, homeCardType, type HomeNodeFacts,
-    type HomeLearnCard, clipName, servedName,
+    type HomeLearnCard, clipName, servedName, WAY_BACK_ASKS,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -1733,14 +1733,27 @@ function cardsToBuild(c: Ctx, asked: string[] | undefined, layout: HomeLayout | 
     const joinedMs = joinedAt ? Date.parse(joinedAt) : NaN;
     const findPinned = !Number.isFinite(joinedMs) || c.now - joinedMs < FIND_PINNED_DAYS * DAY_MS;
     if (frame) {
-        // Version 2: the list is the Home. A card not in it is not built; the two always drawn and a pinned find are.
+        // Version 2: the list is the Home. A card not in it is not built; the two always drawn and a pinned find are, and the
+        // cards "Your way back in" goes by (withWayBackAsks).
         const out: HomeCardInstance[] = [...UNHIDEABLE].map(id => ({ id, type: id }));
         if (findPinned) out.push({ id: 'find', type: 'find' });
         for (const card of frame.cards) if (!out.some(o => o.id === card.id)) out.push(isHomeCardId(card.id) ? asBuilt(card.id, card) : card);
-        return out.sort(compareForAsk);
+        return withWayBackAsks(out).sort(compareForAsk);
     }
     const hidden = new Set<string>(layout?.v === 1 ? layout.hidden : []);
-    return HOME_CARD_IDS.filter(id => !hidden.has(id) || UNHIDEABLE.has(id) || (id === 'find' && findPinned)).map(id => ({ id, type: id }));
+    return withWayBackAsks(HOME_CARD_IDS.filter(id => !hidden.has(id) || UNHIDEABLE.has(id) || (id === 'find' && findPinned)).map(id => ({ id, type: id })));
+}
+
+/**
+ * With no `cards=`, where the list holds "Your way back in", the cards its schedule goes by are built too: Your Beans and
+ * Your deals (core `WAY_BACK_ASKS`, its balance and an open deal), on the list or not. The apps ask them with it whatever
+ * the list says (core `cardsToAsk`), and the web app counts a read made with no `cards=` as built for that same set, so its
+ * first landing in a browser has the balance at the first paint (review of #3341). Neither app draws a card not on its list.
+ */
+function withWayBackAsks(out: HomeCardInstance[]): HomeCardInstance[] {
+    if (!out.some(o => o.type === 'safety')) return out;
+    for (const id of WAY_BACK_ASKS) if (!out.some(o => o.id === id)) out.push({ id, type: id });
+    return out;
 }
 
 /** The whole Home, and what its tag is made of besides the answer itself (routes/home.ts homeEtag). */

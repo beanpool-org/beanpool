@@ -15,7 +15,8 @@ import {
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { twoParagraphs } from '../../utils/alert-words';
-import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications } from '../../utils/notification-permission';
+import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications, type OsNotificationPermission } from '../../utils/notification-permission';
+import { useScreenShowing } from '../../components/NotifyLine';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
 import { resendWordsKept } from '../../utils/words-kept';
 import { useTheme } from '../ThemeContext';
@@ -198,6 +199,8 @@ const globalAsk = (global: boolean) => (global ? { profile: 'global' as const, f
 
 export default function HomeScreen() {
     const { colors, theme } = useTheme();
+    // Whether Home is the screen in front: a named line on a card goes when Home is covered (components/NotifyLine.tsx).
+    const inFront = useScreenShowing();
     const { identity } = useIdentity();
     const lookingAround = useLookingAround();
     const { width: winW, height: winH, fontScale } = useWindowDimensions();
@@ -275,9 +278,12 @@ export default function HomeScreen() {
     const tipsRef = useRef<TipsRecord | null>(null);
     /** First steps' "Hear when someone answers you" from this phone (utils/notification-permission.ts `notifyStep`); null: no such line. */
     const [notify, setNotify] = useState<boolean | null>(null);
+    /** The phone's own answer at the same reads, for What are you into?'s true note (slice N2b); null: not read yet. */
+    const [phone, setPhone] = useState<OsNotificationPermission | null>(null);
     const readNotify = useCallback(async () => {
         const [record, os] = await Promise.all([readNotificationPermissionRecord(), readOsNotificationPermission()]);
         setNotify(notifyStep(record, os));
+        setPhone(os);
     }, []);
     // Read at each landing and on each return to the app (back from the phone's settings after Turn on).
     useFocusEffect(useCallback(() => {
@@ -1321,7 +1327,8 @@ export default function HomeScreen() {
                         onDismiss={at => changeLayout(dismissSafety(layoutRef.current, at))}
                         onUp={setSafetyUp}
                         // What there is to lose here, for the card's schedule (core way-back-schedule.ts, slice B1): the
-                        // balance in Home's answer (null without Your Beans), an open deal, a role in the community.
+                        // balance in Home's answer, an open deal, a role in the community. Your Beans and Your deals are
+                        // asked with this card whether or not they are on Home (core WAY_BACK_ASKS; review of #3341).
                         toLose={{ balance_c: answer.cards.beans?.balance_c ?? null, holds: (answer.cards.deals?.open ?? 0) > 0 || role === 'owner' || role === 'admin' || role === 'moderator' }}
                         onActionsAt={at => band.report('safety:actions', at)}
                         // It has no band on Home; in Arrange it gets one across the top of its own frame, and goes quiet under it.
@@ -1364,7 +1371,7 @@ export default function HomeScreen() {
                     />
                 );
             }
-            case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} askedPush={askedPushOn(answer?.features)} />);
+            case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} askedPush={askedPushOn(answer?.features)} phone={phone} showing={inFront} />);
             case 'tips': return tipsView ? frame(
                 <TipsBody
                     view={tipsView}

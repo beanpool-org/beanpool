@@ -56,15 +56,23 @@ const nav = vi.hoisted(() => ({ pushed: [] as unknown[], back: 0, under: true, p
 // A screen focused again (the member came back to the tab, a screen on top of it closed): `refocus()` runs each focus effect
 // again, as expo-router does, its last undo first.
 const focus = vi.hoisted(() => new Set<() => void>());
+// The same, in two steps the stack runs as two renders: a screen covered (`covered`: each focus effect's undo), then shown again
+// (`shownAgain`: each effect once more).
+const stack = vi.hoisted(() => ({ covered: new Set<() => void>(), shownAgain: new Set<() => void>() }));
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => { nav.pushed.push(to); }, back: () => { nav.back += 1; }, replace: (to: unknown) => { nav.pushed.push(to); }, canGoBack: () => nav.under },
     useLocalSearchParams: () => nav.params,
     useFocusEffect: (effect: () => void | (() => void)) => {
         useEffect(() => {
             let undo = effect();
+            let hidden = false;
             const again = () => { if (typeof undo === 'function') undo(); undo = effect(); };
+            const cover = () => { if (hidden) return; hidden = true; if (typeof undo === 'function') undo(); undo = undefined; };
+            const show = () => { if (!hidden) return; hidden = false; undo = effect(); };
             focus.add(again);
-            return () => { focus.delete(again); if (typeof undo === 'function') undo(); };
+            stack.covered.add(cover);
+            stack.shownAgain.add(show);
+            return () => { focus.delete(again); stack.covered.delete(cover); stack.shownAgain.delete(show); if (typeof undo === 'function') undo(); };
         }, [effect]);
     },
 }));
@@ -164,6 +172,14 @@ vi.mock('../forum', () => ({
     keepForumDraft: vi.fn(async () => {}),
 }));
 
+// A topic followed may bring a named line under the bell (slice N2b): whether it shows is core's rule through this phone's
+// record (utils/notification-permission.ts offerNamedLine, its own table in notify-named-lines.test.ts), answered here.
+const notifyAsk = vi.hoisted(() => ({ offer: false, offered: [] as string[], turnOns: 0 }));
+vi.mock('../notification-permission', () => ({
+    offerNamedLine: vi.fn(async (kind: string) => { notifyAsk.offered.push(kind); return notifyAsk.offer; }),
+    turnOnNotifications: vi.fn(async () => { notifyAsk.turnOns++; return 'granted'; }),
+}));
+
 import { ForumPane } from '../../components/forum/ForumPane';
 import ForumTopicScreen from '../../app/forum/[id]';
 import NewForumTopicScreen from '../../app/forum/new';
@@ -256,6 +272,8 @@ beforeEach(() => {
     document.body.innerHTML = '';
     // An earlier case's screens are never focused again (their roots are left, not unmounted).
     focus.clear();
+    stack.covered.clear();
+    stack.shownAgain.clear();
     nav.pushed = [];
     nav.back = 0;
     nav.under = true;
@@ -265,7 +283,100 @@ beforeEach(() => {
     picker.asked = 0;
     composerCalls.length = 0;
     Object.assign(worldwide, { joined: false, opened: [], answer: 'switched' });
+    Object.assign(notifyAsk, { offer: false, offered: [], turnOns: 0 });
     vi.clearAllMocks();
+});
+
+// Slice N2b (DESIGN-notify-and-backup-asks-fable-amend2.md §12.3): following a topic is the member's own act, and the moment for
+// "Hear when someone replies here." [Tell me] under the bell, while the topic stays followed. Leaving is its no.
+describe.each(LOOKS)('following a topic in %s (%s): the named line under the bell (slice N2b)', (_name, set) => {
+    /** The bell's tap as the node answers it: the follow saved, and the topic read again with it. */
+    async function follow(host: HTMLElement, to: 'following' | null) {
+        const forum = await import('../forum');
+        vi.mocked(forum.followForumTopic).mockImplementationOnce(async () => {
+            node.topic = { ...node.topic, topic: { ...node.topic.topic, follow: to } };
+            return to;
+        });
+        await press(byId(host, 'forum-follow'));
+        await act(async () => {});
+        await act(async () => {});
+    }
+    const unfollowed = () => { node.topic = { ...TOPIC, topic: { ...TOPIC.topic, follow: null } }; };
+
+    it('the bell followed: "Hear when someone replies here." under it, in readable ink; Tell me turns them on and says so', async () => {
+        unfollowed();
+        notifyAsk.offer = true;
+        const host = await render(set, ForumTopicScreen);
+        expect(byId(host, 'forum-follow-line')).toBeNull();
+        await follow(host, 'following');
+        expect(notifyAsk.offered).toEqual(['follow']);
+        const line = byId(host, 'forum-follow-line');
+        expect(words(byId(line, 'notify-line'))).toContain('Hear when someone replies here.');
+        expect(words(byId(line, 'notify-line-tell-me'))).toBe('Tell me');
+        // Under the bell: after the head row, before the topic's words.
+        expect(!!(byId(host, 'forum-follow').compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+        expect(!!(line.compareDocumentPosition(byId(host, 'forum-topic-title')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+        expectReadable(host, set);
+        await press(byId(host, 'notify-line-tell-me'));
+        await act(async () => {});
+        expect(notifyAsk.turnOns).toBe(1);
+        expect(words(byId(host, 'notify-line-done'))).toBe("You'll hear when someone replies here.");
+    });
+
+    it('a closed topic: the follow saves but nothing offers to tell of replies that can never come', async () => {
+        node.topic = { ...TOPIC, topic: { ...TOPIC.topic, follow: null, closed: '2026-11-20T00:00:00.000Z' } };
+        notifyAsk.offer = true;
+        const host = await render(set, ForumTopicScreen);
+        await follow(host, 'following');
+        expect(notifyAsk.offered).toEqual([]);
+        expect(byId(host, 'forum-follow-line')).toBeNull();
+    });
+
+    it("the rule says no (a day already taken, the phone's no, allowed already): the follow saves and no line shows", async () => {
+        unfollowed();
+        const host = await render(set, ForumTopicScreen);
+        await follow(host, 'following');
+        expect(notifyAsk.offered).toEqual(['follow']);
+        expect(byId(host, 'forum-follow-line')).toBeNull();
+        expect(byId(host, 'notify-line')).toBeNull();
+    });
+
+    it('unfollowing asks nothing, and takes a line already shown away', async () => {
+        unfollowed();
+        notifyAsk.offer = true;
+        const host = await render(set, ForumTopicScreen);
+        await follow(host, 'following');
+        expect(byId(host, 'forum-follow-line')).toBeTruthy();
+        await follow(host, null);
+        expect(notifyAsk.offered).toEqual(['follow']);
+        expect(byId(host, 'forum-follow-line')).toBeNull();
+    });
+
+    it('a follow the node refuses brings no line', async () => {
+        unfollowed();
+        notifyAsk.offer = true;
+        const host = await render(set, ForumTopicScreen);
+        const forum = await import('../forum');
+        vi.mocked(forum.followForumTopic).mockRejectedValueOnce(new Error('Not saved.'));
+        await press(byId(host, 'forum-follow'));
+        await act(async () => {});
+        expect(notifyAsk.offered).toEqual([]);
+        expect(byId(host, 'forum-follow-line')).toBeNull();
+    });
+
+    it('a screen opened over the topic and back: the follow line is gone, and the bell asks nothing more', async () => {
+        unfollowed();
+        notifyAsk.offer = true;
+        const host = await render(set, ForumTopicScreen);
+        await follow(host, 'following');
+        expect(byId(host, 'forum-follow-line')).toBeTruthy();
+        await act(async () => { for (const cover of [...stack.covered]) cover(); });
+        expect(byId(host, 'forum-follow-line')).toBeNull();
+        await act(async () => { for (const show of [...stack.shownAgain]) show(); });
+        await act(async () => {});
+        expect(byId(host, 'forum-follow-line')).toBeNull();
+        expect(notifyAsk.offered).toEqual(['follow']);
+    });
 });
 
 describe.each(LOOKS)('the forum list in %s (%s)', (_name, set) => {

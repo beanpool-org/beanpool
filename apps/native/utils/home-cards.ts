@@ -898,6 +898,9 @@ export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): bo
  * draws (review of #1699, finding 5). With none yet, every type in the list is asked, and the answer says which stay.
  * Find your community is asked as before (by its pin, and wherever the list names it): the node builds it only where
  * its directory is, and keeping it keeps a local member's address what their first read's was, so a return is a 304.
+ * Where "Your way back in" is asked, Your Beans and Your deals are too, on the list or not (core `WAY_BACK_ASKS`): its
+ * schedule goes by the balance and an open deal, so it keeps the web's days whatever the member keeps on Home (review of
+ * #3341). Home draws only the list.
  */
 export function cardsToAsk(
     layout: HomeLayout | null, pinned: readonly HomeCardId[] = [], answer?: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards; me?: HomeMe | null } | null,
@@ -906,11 +909,7 @@ export function cardsToAsk(
     // has answered, the caller passes the global node's profile when the phone's copy says it is that one (index.tsx
     // `globalAsk`, §2.9); with nothing known, the node builds none it doesn't show (routes/home-answer.ts `shownHere`), and
     // once an answer is in hand only those it shows are asked (review of #1699, finding 5).
-    const base = layout ?? defaultHomeLayout();
-    return frameCardsToAsk(base, pinned).filter(id => {
-        const type = base.cards.find(l => l.id === id)?.type ?? id;
-        return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));
-    });
+    return frameCardsToAsk(layout ?? defaultHomeLayout(), pinned, type => HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer)));
 }
 
 /**

@@ -74,7 +74,7 @@ vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }))
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('../../components/EventCard', () => ({ EVENT_ACCENT: '#0a7' }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
-vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
+vi.mock('../../components/EventExtras', () => ({ useEventReminderChoice: () => ({ supported: true, offsets: null, defaults: [1440], marketplaceOn: true, known: false, setOffsets: () => {}, setUnsupported: () => {} }), EventReminder: () => null, EventShareAndCalendar: () => null }));
 // The face as a tag carrying what it was given, so the test can see whose picture is drawn.
 vi.mock('../../components/MemberAvatar', () => ({
     MemberAvatar: (p: { avatarUrl?: string | null; pubkey?: string; callsign?: string; size?: number }) =>

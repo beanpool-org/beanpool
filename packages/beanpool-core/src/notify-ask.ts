@@ -9,7 +9,9 @@
  * - "Later" and the phone's "no" are kept apart, each with its date. "Later" is never final.
  * - The phone says whether it can still ask (`canAskAgain`); nothing WE said ("Later", an old "Not now") ever overrides
  *   it. On Android 13 and later (`cantAskNeedsRecord`, amend3) "can't ask again" also reads back after a pop-up closed
- *   with no answer, so there it is the phone's no only beside an answer the phone itself gave at one of our taps.
+ *   with no answer, so there it is the phone's no only beside an answer the phone itself gave at one of our taps. Where
+ *   the phone also reads Android's own "one no" flag (`saidNoOnce`, amend4), that flag says whether the phone has said
+ *   no once, whatever the record holds, and before and after a tap it says which pop-up was answered and how.
  * - One soft ask a day across the join's screen, the once card, the named lines, the Home card and the fact line. The
  *   join's screen is its day's, with one named line still allowed that day. First steps' line and the bell's line are
  *   standing lines, not asks, and are never counted.
@@ -19,7 +21,7 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
 import { localDay } from './home-tips.js';
-import { t } from './words.js';
+import { t, word } from './words.js';
 
 const DAY_MS = 86_400_000;
 
@@ -78,6 +80,14 @@ export interface NotifyPhone {
      * apart. Absent (an iPhone, Android 8 to 12, a browser): the flag alone is the phone's answer.
      */
     cantAskNeedsRecord?: boolean;
+    /**
+     * Android 13 and later: Android's own "should show a reason" flag for notifications, read live by the phone's reader
+     * (amend4 §3). On once the phone has said "Don't allow" one time and its last pop-up is still to come; off when it
+     * was never asked, said no twice, had a pop-up closed with no answer, or allows them. Absent where it can't be read
+     * (no screen in front, a failed call; an iPhone, Android 8 to 12, a browser): amend3's rule stands for that read. It
+     * counts only beside `cantAskNeedsRecord`.
+     */
+    saidNoOnce?: boolean;
 }
 
 export interface NotifyAskInput {
@@ -138,23 +148,35 @@ function phoneAnswerOnRecord(r: NotifyAskRecord): boolean {
     return typeof r.phoneNoAt === 'number' || r.state === 'granted';
 }
 
+/** Android's own "one no" flag where the phone read it beside the Android 13+ mark; else undefined, and amend3 stands (amend4 §3.4). */
+function androidSaidNoOnce(p: Pick<NotifyPhone, 'cantAskNeedsRecord' | 'saidNoOnce'>): boolean | undefined {
+    return p.cantAskNeedsRecord && typeof p.saidNoOnce === 'boolean' ? p.saidNoOnce : undefined;
+}
+
 /**
- * Whether the phone's pop-up can still come (amend3 §3.2). The phone's own flag, except where its "can't ask again" needs
+ * Whether the phone's pop-up can still come (amend3 §3.2, amend4 §3.1). The phone's own flag, except where its "can't ask again" needs
  * the record (`cantAskNeedsRecord`, Android 13+): there it is final only beside an answer the phone gave and this phone
  * recorded, a "Don't allow" (said twice, the second final) or a yes now switched off. With neither on record it is "no
  * answer on file" (a pop-up closed with no answer, the app closed with it up, a phone restored from a backup): it can ask.
+ * Where Android's own flag was read (amend4 §3.1) it replaces Expo's "can ask again", which reads the same for "never asked"
+ * and "said no once": on, the last pop-up is still to come, whatever the record holds; off, the same record rule.
  */
 export function notifyCanAskAgain(r: NotifyAskRecord, p: NotifyPhone): boolean {
+    const saidNoOnce = androidSaidNoOnce(p);
+    if (saidNoOnce !== undefined) return saidNoOnce || !phoneAnswerOnRecord(r);
     if (p.canAskAgain) return true;
     return !!p.cantAskNeedsRecord && !phoneAnswerOnRecord(r);
 }
 
 /**
  * The phone said no: at its pop-up (recorded), or it won't show the pop-up again ({@link notifyCanAskAgain}, which on
- * Android 13+ needs the record). Never while it allows them. Nothing we said (a "Later", an old "Not now") counts.
+ * Android 13+ needs the record). Never while it allows them. Nothing we said (a "Later", an old "Not now") counts. On Android 13+ with its
+ * own flag read (amend4 §3.1), the flag on is the phone's no, said once, whatever is on record: an old `declined` that held
+ * it, or a write that was lost.
  */
 export function notifyPhoneSaidNo(r: NotifyAskRecord, p: NotifyPhone): boolean {
     if (!p.available || p.granted) return false;
+    if (androidSaidNoOnce(p)) return true;
     return typeof r.phoneNoAt === 'number' || !notifyCanAskAgain(r, p);
 }
 
@@ -168,7 +190,10 @@ export function notifyTurnOn(p: NotifyPhone, r: NotifyAskRecord): 'ask' | 'setti
     return notifyCanAskAgain(r, p) ? 'ask' : 'settings';
 }
 
-/** What the phone's pop-up read back at a tap: Expo's `requestPermissionsAsync` status and its own "can ask again". */
+/**
+ * What the phone's pop-up read back at a tap: Expo's `requestPermissionsAsync` status and its own "can ask again". On
+ * Android 13+ that "can ask again" is Android's own flag as it stands after the ask (Expo has marked it asked by then).
+ */
 export interface NotifyPopUpRead {
     status: string;
     canAskAgain: boolean;
@@ -186,11 +211,21 @@ export interface NotifyPopUpRead {
  *   second pop-up closed with no answer ('none': the first no stands). "denied, can't ask again" is the second "Don't
  *   allow" where an answer of the phone's is on record ('phone-no', now final), else a pop-up closed with no answer
  *   (swiped, backed out of, tapped outside): 'later', never a no.
+ * - Android 13+ with its own flag read just before the ask (`saidNoOnce`, amend4 §3.2): the flag before beside the flag
+ *   after decides, and the record is not asked. Off then on: a first "Don't allow" ('phone-no'). On then off: the final
+ *   "Don't allow" ('phone-no'). On then on: the last pop-up closed with no answer ('none': the phone's one no stands).
+ *   Off then off: a pop-up closed with no answer ('later'), or one that never came, which only the phone can tell (amend4
+ *   §3.3, utils/notification-permission.ts on the phone).
  */
-export function notifyPopUpAnswer(r: NotifyAskRecord, p: Pick<NotifyPhone, 'cantAskNeedsRecord'>, read: NotifyPopUpRead): 'granted' | 'phone-no' | 'later' | 'none' {
+export function notifyPopUpAnswer(r: NotifyAskRecord, p: Pick<NotifyPhone, 'cantAskNeedsRecord' | 'saidNoOnce'>, read: NotifyPopUpRead): 'granted' | 'phone-no' | 'later' | 'none' {
     if (read.status === 'granted') return 'granted';
     if (read.status !== 'denied') return 'later';
     if (!p.cantAskNeedsRecord) return 'phone-no';
+    const before = androidSaidNoOnce(p);
+    if (before !== undefined) {
+        if (before !== read.canAskAgain) return 'phone-no';
+        return before ? 'none' : 'later';
+    }
     if (read.canAskAgain) return typeof r.phoneNoAt === 'number' ? 'none' : 'phone-no';
     return phoneAnswerOnRecord(r) ? 'phone-no' : 'later';
 }
@@ -253,24 +288,83 @@ export function notifyAsks(i: NotifyAskInput): NotifyAsks {
 /**
  * The named lines at the member's own acts (amend2 §12.3 slice N2a; the first design §4.2, amend1 §4.3), each kind shown
  * once on a phone (the record's `lines`): a first message sent ('answer'), a first message read or a request accepted
- * ('again'), a first listing ('listing'), a first offer or request on someone's listing ('offer'), an ask to join ('join').
- * One line with one button and no "Not now": leaving the screen is the no.
+ * ('again'), a first listing ('listing'), a first offer or request on someone's listing ('offer'), an ask to join ('join');
+ * and (slice N2b) Going on an event ('going'), Interested on one ('interested'), a starred interest where the community
+ * tells members when a neighbour asks ('star'), a forum topic followed ('follow'). One line with one button and no "Not
+ * now": leaving the screen is the no.
  */
-export const NOTIFY_LINE_KINDS = ['answer', 'again', 'listing', 'offer', 'join'] as const;
+export const NOTIFY_LINE_KINDS = ['answer', 'again', 'listing', 'offer', 'join', 'going', 'interested', 'star', 'follow'] as const;
 export type NotifyLineKind = typeof NOTIFY_LINE_KINDS[number];
 
 /**
  * A named line's words: the offer, and what it says once the phone allows notifications. `name` is the person (answer,
- * again, offer) or the community (join) they wait on; without one, or for a first listing, "someone".
+ * again, offer) or the community (join) they wait on; without one, or for a first listing, "someone". The event, interest
+ * and forum lines name nobody; Interested gets the reminder only, as a change to an event is told to Going alone.
  */
 export function notifyLineWords(kind: NotifyLineKind, name?: string | null): { line: string; done: string; button: string } {
-    const who = kind === 'listing' ? '' : (name ?? '').trim();
     const button = t('Tell me');
+    switch (kind) {
+        case 'going': return { line: t('Get a reminder the day before, and hear if it changes.'), done: t("You'll get a reminder the day before, and hear if it changes."), button };
+        case 'interested': return { line: t('Get a reminder the day before.'), done: t("You'll get a reminder the day before."), button };
+        case 'star': return { line: t('Hear when a neighbour asks for one of these.'), done: t("You'll hear when a neighbour asks for one of these."), button };
+        case 'follow': return { line: t('Hear when someone replies here.'), done: t("You'll hear when someone replies here."), button };
+        default: break;
+    }
+    const who = kind === 'listing' ? '' : (name ?? '').trim();
     if (!who) return { line: t('Hear when someone answers.'), done: t("You'll hear when someone answers."), button };
     if (kind === 'again') return { line: t('Hear when {name} writes again.', { name: who }), done: t("You'll hear when {name} writes again.", { name: who }), button };
     if (kind === 'offer') return { line: t('Hear when {name} says yes.', { name: who }), done: t("You'll hear when {name} says yes.", { name: who }), button };
     return { line: t('Hear when {name} answers.', { name: who }), done: t("You'll hear when {name} answers.", { name: who }), button };
 }
+
+/**
+ * What the node will still tell a member of an event they answered, read by its own rule (the phone's
+ * apps/native/utils/event-extras.ts eventNoticesComing): `dayBefore`, the reminder the day before is still to come for them;
+ * `changes`, a change of time or place or a cancellation will be told to them (Going only, apps/server/src/engine/posts.ts).
+ */
+export interface NotifyEventComing {
+    dayBefore: boolean;
+    changes: boolean;
+}
+
+/**
+ * The named line under an answer to an event (slice N2b), saying only what will come: the reminder the day before only while
+ * it is still to come, a change only where one is told (Going). Neither: null, and no line is offered or drawn. The words
+ * follow what is true now, not the answer that brought the line: Going then Interested drops the change, and a reminder
+ * choice changed to none drops the reminder.
+ */
+export function notifyEventLineWords(coming: NotifyEventComing): { line: string; done: string; button: string } | null {
+    if (coming.dayBefore && coming.changes) return notifyLineWords('going');
+    if (coming.dayBefore) return notifyLineWords('interested');
+    if (coming.changes) return { line: t('Hear if it changes.'), done: t("You'll hear if it changes."), button: t('Tell me') };
+    return null;
+}
+
+/**
+ * The two true lines (amend1 §4.3, amend2 §6, slice N2b). Neither is a soft ask: each is the true state of something the
+ * member asked for, so it shows in every state of the record, after a "Later" and after the phone's "no" alike, and never
+ * takes the day. `phone` null: not read yet; neither says anything new then, and nothing is promised.
+ *
+ * - An event's reminder ({@link notifyRemindersOff}): while this phone can't notify and notifications can be had here,
+ *   "⏰ Remind me: a day before" becomes "⏰ Reminders need notifications on." [Turn on]. Its Turn on is
+ *   {@link notifyTurnOn}'s: the phone's pop-up where it can still show it, else the one line before the phone's settings.
+ * - What are you into?'s note ({@link notifyInterestsPromise}): "we'll tell you when a neighbour asks for it" only where the
+ *   community sends that push and this phone allows notifications. Off, the note says the rest and promises nothing.
+ */
+export function notifyRemindersOff(p: NotifyPhone | null | undefined): boolean {
+    // Whether there is anything to turn on is the phone's alone; the record only chooses the pop-up or the settings line.
+    return !!p && notifyTurnOn(p, {}) !== 'none';
+}
+
+/** Whether What are you into?'s note may say "we'll tell you when a neighbour asks for it" (see {@link notifyRemindersOff}). */
+export function notifyInterestsPromise(askedPush: boolean, p: NotifyPhone | null | undefined): boolean {
+    return askedPush && !!p && p.available && p.granted;
+}
+
+/** The reminder's true line, in place of "⏰ Remind me: …" while this phone can't notify ({@link notifyRemindersOff}). */
+export const NOTIFY_TRUE_WORDS = {
+    reminders: word('⏰ Reminders need notifications on.'),
+} as const;
 
 export type NotifyAskEvent =
     /** A soft ask was drawn (a named line with its kind). */

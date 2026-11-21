@@ -42,7 +42,7 @@ import {
     googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets, type ShareableEvent,
 } from '../utils/event-extras';
 import { NOTIFY_TRUE_WORDS, notifyRemindersOff, t, tn } from '@beanpool/core';
-import { notePhoneChanged, useNotifyPhone } from './NotifyLine';
+import { notePhoneChanged, useNotifyPhone } from './useNotifyPhone';
 import { Sentence } from './Sentence';
 import { ShareButton } from './SharePost';
 import { reminderBeforeWords } from './settings/settings-lines';

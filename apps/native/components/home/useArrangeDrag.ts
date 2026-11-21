@@ -90,7 +90,16 @@ export function useArrangeDrag(home: ArrangeDragHome): ArrangeDragView {
         },
         moveGhost: (x, y) => { ghostX.value = x; ghostY.value = y; },
         place: (id, point, current) => placeLifted(homeRef.current.items(), id, point, 1, colWidth(homeRef.current.width), 0, current),
-        toList: p => ({ x: colWidth(homeRef.current.width) / 2, y: p.y + homeRef.current.scrollY.current - homeRef.current.listY.current }),
+        // Into the cards' own stack, the places `placeLifted` counts from 0: it starts at the first card's top in the list, under
+        // whatever the list draws above its first card (the community's welcome stands there while nothing is above it).
+        // Counted from the list's top, the finger read that much lower and a card carried on from a hold landed a place
+        // down (review of #3343).
+        toList: p => {
+            const h = homeRef.current;
+            let stackTop = Infinity;
+            for (const it of h.items()) { const y = h.cardY.current.get(it.id); if (y !== undefined && y < stackTop) stackTop = y; }
+            return { x: colWidth(h.width) / 2, y: p.y + h.scrollY.current - h.listY.current - (Number.isFinite(stackTop) ? stackTop : 0) };
+        },
         viewport: () => ({ top: 0, bottom: viewH.current }),
         scrollBy: dy => {
             const h = homeRef.current;

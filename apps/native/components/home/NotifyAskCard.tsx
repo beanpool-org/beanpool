@@ -19,16 +19,21 @@ import type { NotifyJoinWords } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { FabAware, HOME_TARGET_DP, HomeCard } from './HomeParts';
 
-export function NotifyAskCard({ words, colors, busy, onTurnOn, onLater }: {
+export function NotifyAskCard({ words, colors, busy, onTurnOn, onLater, quiet }: {
     words: NotifyJoinWords & { band: string };
     colors: AppColors;
     /** The answer is being kept (the phone's pop-up is up): both buttons wait. */
     busy: boolean;
     onTurnOn: () => void;
     onLater: () => void;
+    /**
+     * In Arrange: the card stays where it is, the same height, its inside quiet like every card's (no tap, nothing for TalkBack)
+     * until Done, so the cards under it keep their places on the screen (review of #3343).
+     */
+    quiet?: boolean;
 }) {
     return (
-        <HomeCard id="notify-once" caption={words.band} colors={colors} hue="sky" testID="home-notify-once">
+        <HomeCard id="notify-once" caption={words.band} colors={colors} hue="sky" testID="home-notify-once" quiet={quiet}>
             <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header" testID="notify-once-title">{words.title}</Text>
             <Text style={[styles.body, { color: colors.text.body }]}>
                 {words.never} <Text style={[styles.strong, { color: colors.text.heading }]}>{words.only}</Text>

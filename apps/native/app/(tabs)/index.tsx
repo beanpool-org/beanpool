@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, ScrollView, Pressable, RefreshControl, StyleSheet, Animated, AccessibilityInfo, AppState, BackHandler, DeviceEventEmitter,
     Alert, ActivityIndicator, LayoutAnimation, Platform, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
@@ -425,9 +425,34 @@ export default function HomeScreen() {
     // Arrange opens; the bar's first measure then moves the view down with them, so the card the member was looking at stays
     // where it was on the screen (and is never pushed off the bottom of it).
     const keepPlace = useRef(false);
+    /**
+     * The way-back card as Arrange opens (review of #3343): it has no band on Home and gets one in Arrange, so it is taller there.
+     * Where it stood: above the top of the screen (`aboveTop`), above the card Arrange opened from (`aboveFrom`: the card a hold
+     * carries on). The band's first measure moves the view down by what it adds when the card stood above the place kept. Null:
+     * no way-back card drawn as Arrange opened, or its band already measured.
+     */
+    const wayBackKeep = useRef<{ aboveTop: boolean; aboveFrom: boolean } | null>(null);
+    /** The way-back card's id while it is drawn (it decides whether it is up), set at each render. */
+    const wayBackId = useRef<string | null>(null);
+    /** The scroll last asked for while Arrange opens or closes, until the list says where it is (onScroll). */
+    const askedY = useRef<number | null>(null);
+    /** Moves the view by `dp` with what came or went above the place kept: from the last move asked for, if the list has not yet said. */
+    const moveView = useCallback((dp: number) => {
+        if (!dp) return;
+        const y = Math.max(0, (askedY.current ?? scrollY.current) + dp);
+        askedY.current = y;
+        scrollRef.current?.scrollTo({ y, animated: false });
+    }, []);
     const startArrange = useCallback((from?: string) => {
         arrangeFrom.current = from ?? null;
         keepPlace.current = true;
+        askedY.current = null;
+        const wb = wayBackId.current;
+        const wbY = wb ? cardY.current.get(wb) : undefined;
+        const fromY = from ? cardY.current.get(from) : undefined;
+        wayBackKeep.current = wb && wbY !== undefined
+            ? { aboveTop: listY.current + wbY < scrollY.current, aboveFrom: fromY !== undefined && wbY < fromY }
+            : null;
         setArranging(true);
         AccessibilityInfo.announceForAccessibility(t(ARRANGE_WORDS.openedDrag));
     }, []);
@@ -477,17 +502,35 @@ export default function HomeScreen() {
     }), [bandVersion, updateFab]);
     const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
         scrollY.current = e.nativeEvent.contentOffset.y;
+        askedY.current = null;
         updateFab();
     }, [updateFab]);
+    // Arrange keeps the member's place (§2.1; review of #3343). What it puts above the cards is the bar (above the list) and
+    // the way-back card's band (inside its own frame); the once card stays, quiet, and the way-back card stays held while the
+    // once card holds it, so nothing else comes or goes. Opening, the view moves down by each that lands above the place kept;
+    // leaving, up by each that goes. The place kept: the top of the screen, or the card a hold on Home carries on.
     // The bar's height with its gap, once, when Arrange opens (startArrange): a view scrolled down moves down with the cards.
     // A card the hold on Home lifted stays under the finger even from the top of the list: the view moves with it.
     const carrying = useRef(false);
+    /** The bar's height as last measured, and the way-back card's band's addition: what goes from above the cards at the end. */
+    const barDp = useRef(0);
+    const wayBackBandDp = useRef(0);
     const onArrangeBar = useCallback((dp: number) => {
+        barDp.current = dp;
         if (!keepPlace.current) return;
         keepPlace.current = false;
         // `scrollY` is left to onScroll: where the list can't scroll that far, it says where the list really is.
-        if (scrollY.current > 0 || carrying.current) scrollRef.current?.scrollTo({ y: scrollY.current + dp, animated: false });
-    }, []);
+        if (scrollY.current > 0 || carrying.current) moveView(dp);
+    }, [moveView]);
+    // The band sits in the card's frame over its top padding (`marginTop: -HOME_CARD_PADDING_DP`): the card grows by the rest.
+    const onWayBackBand = useCallback((height: number) => {
+        const dp = Math.max(0, height - HOME_CARD_PADDING_DP);
+        wayBackBandDp.current = dp;
+        const keep = wayBackKeep.current;
+        if (!keep) return;
+        wayBackKeep.current = null;
+        if (carrying.current ? keep.aboveFrom : keep.aboveTop) moveView(dp);
+    }, [moveView]);
 
     // ── The reveal and the hint (§6.2): once per account, never again ──
     const reveal = useRef(new Animated.Value(1)).current;
@@ -1154,9 +1197,10 @@ export default function HomeScreen() {
     // Arrange (DESIGN-home-arrange-in-place-fable.md §2): Home itself. The drawn cards move; the rest of the list that this node
     // can show, with nothing to show now, are the strip's rows and keep their saved places.
     const arrangeOn = arranging && tailor && !!answer;
-    // The way-back card waits while the once card is up, and for the rest of a landing it was up on (amend2 §7). In Arrange
-    // the once card is not drawn, so the way-back card is there to be moved: one of the two at a time, always.
-    const wayBackHeld = (!once || once.held) && !arrangeOn;
+    // The way-back card waits while the once card is up, and for the rest of a landing it was up on (amend2 §7). The same in
+    // Arrange, where the once card stays drawn: opening Arrange never brings the way-back card into the list under a card the
+    // member is looking at or carrying (review of #3343). It is a row in the strip that landing, and moves on the next.
+    const wayBackHeld = !once || once.held;
     useEffect(() => { if (wayBackHeld) setSafetyUp(false); }, [wayBackHeld]);
     const movable = arrangeOn ? drawn.filter(c => canMoveCard(c.type, pins)) : [];
     // What a drag places among (slice A4): the drawn cards that move and stand on the list, the places `moveCardTo` counts.
@@ -1380,7 +1424,7 @@ export default function HomeScreen() {
                         toLose={{ balance_c: answer.cards.beans?.balance_c ?? null, holds: (answer.cards.deals?.open ?? 0) > 0 || role === 'owner' || role === 'admin' || role === 'moderator' }}
                         onActionsAt={at => band.report('safety:actions', at)}
                         // It has no band on Home; in Arrange it gets one across the top of its own frame, and goes quiet under it.
-                        band={arrange && drawn.some(d => d.id === id) ? <ArrangeBandRow id={id} caption={caption} hue={hue} colors={colors} arrange={arrange} style={{ marginTop: -HOME_CARD_PADDING_DP }} onLift={liftInArrange(id)} /> : undefined}
+                        band={arrange && drawn.some(d => d.id === id) ? <ArrangeBandRow id={id} caption={caption} hue={hue} colors={colors} arrange={arrange} style={{ marginTop: -HOME_CARD_PADDING_DP }} onLift={liftInArrange(id)} onLayout={e => onWayBackBand(e.nativeEvent.layout.height)} /> : undefined}
                     />
                 );
             case 'find': {
@@ -1561,6 +1605,27 @@ export default function HomeScreen() {
     // Each card in the member's order: the drawn ones, and the "one way back" card while it may be up (it decides).
     const list = ordered.filter(c => drawn.some(d => d.id === c.id) || (c.type === 'safety' && !!answer));
     const firstDrawn = list.find(c => c.type !== 'safety' || safetyUp);
+    wayBackId.current = safetyUp && !wayBackHeld ? list.find(c => c.type === 'safety')?.id ?? null : null;
+    // Leaving Arrange (Done, Back, leaving Home, whatever ends it): the bar goes from above the cards, and the way-back card's
+    // band from its top, so a view scrolled down goes up by each that stood above the top of the screen, and the card the
+    // member was looking at stays where it was (review of #3343). At the top of the list nothing is kept, as on opening. Read
+    // before the list lays out again: the places are still Arrange's.
+    const wasArranging = useRef(false);
+    useLayoutEffect(() => {
+        if (arrangeOn) { wasArranging.current = true; return; }
+        if (!wasArranging.current) return;
+        wasArranging.current = false;
+        keepPlace.current = false;
+        wayBackKeep.current = null;
+        askedY.current = null;
+        const wb = wayBackId.current;
+        const wbY = wb ? cardY.current.get(wb) : undefined;
+        const band = wbY !== undefined && listY.current + wbY < scrollY.current ? wayBackBandDp.current : 0;
+        const bar = barDp.current;
+        barDp.current = 0;
+        wayBackBandDp.current = 0;
+        if (scrollY.current > 0) moveView(-(bar + band));
+    }, [arrangeOn, moveView]);
     // Where Beans are previewed, the Your Beans card (design §1 row 1): no API, the Ledger's example behind its link. It
     // sits under First steps while that is up, else under the first card, and only its own "Hide this card" puts it away:
     // First steps done, removed or out of its days leaves it. While Getting started is up for a tour not yet ended it waits,
@@ -1735,19 +1800,22 @@ export default function HomeScreen() {
                     )}
                     {empty}
                     {/* Home's once card (slice N1h): the join's ask once, for a member already in or a restore on a new phone, at the
-                        top of Home and above the cards, so their places in the list stay as Arrange measures them. Not in Arrange. */}
-                    {onceMayNow && once?.up && !arrangeOn && answer && (
+                        top of Home and above the cards, so their places in the list stay as Arrange measures them. In Arrange it
+                        stays where it is, quiet like every card's inside, so the bar is all that Arrange puts above the cards and
+                        the member's place holds (review of #3343). */}
+                    {onceMayNow && once?.up && answer && (
                         <NotifyAskCard
                             words={notifyOnceWords({ global: answer.profile === 'global', community: answer.cards.community?.name })}
                             colors={colors}
                             busy={onceBusy}
                             onTurnOn={onceTurnOn}
                             onLater={onceLater}
+                            quiet={arrangeOn}
                         />
                     )}
                     {/* Above the cards, not among them: the cards' places inside the list (`cardY`) are the same as on Home. */}
                     {arrangeOn && <ArrangeBar colors={colors} notOnAccount={notOnAccount ? t(LINES.notOnAccount) : null} onHeight={onArrangeBar} />}
-                    <Animated.View onLayout={e => { listY.current = e.nativeEvent.layout.y; }} style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+                    <Animated.View onLayout={e => { listY.current = e.nativeEvent.layout.y; }} testID="home-list" style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
                         {/* The community card is always last (`FIXED_LAST`), so Home is these cards and then it. Each stays in its own slot of this
                             list in both states: React must not rebuild a card that Arrange only quiets (the bodies of tool cards and of Find your
                             community hold what they have read), so the community card is not moved to another parent when Arrange opens. */}

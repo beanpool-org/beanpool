@@ -150,13 +150,18 @@ vi.mock('../../components/PageTitle', () => ({
     PageTitle: ({ title }: { title: string }) => createElement('h1', null, title),
     useTabRetapScrollTop: () => {},
 }));
-const safety = vi.hoisted(() => ({ props: null as any }));
+/** The way-back card's stand-in: `due` makes it up, drawn as a card (a test's own `onUp(true)` does the same without drawing it). */
+const safety = vi.hoisted(() => ({ props: null as any, due: false }));
 // A found old phone's card (key-replaced.ts): drawn only once the node said this key was replaced; its own tests are
 // group-history-after-rekey.test.ts and e2e/locked-history-320.mjs.
 vi.mock('../../components/KeyMovedCard', () => ({ KeyMovedCard: () => null }));
 vi.mock('../../components/OneWayBackCard', () => ({
     // Up only when a test says so (props.onUp(true)); in Arrange it draws the band Home hands it, as the real card does.
-    OneWayBackCard: (props: any) => { safety.props = props; useEffect(() => { props.onUp?.(false); }, []); return props.band ?? null; },
+    OneWayBackCard: (props: any) => {
+        safety.props = props;
+        useEffect(() => { props.onUp?.(safety.due); }, []);
+        return safety.due ? createElement('div', { 'data-testid': 'one-way-back' }, props.band ?? null) : (props.band ?? null);
+    },
 }));
 vi.mock('../../components/NewPostTypeSheet', () => ({ NewPostTypeSheet: ({ visible }: { visible: boolean }) => (visible ? createElement('div', { 'data-testid': 'post-type-sheet' }) : null) }));
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
@@ -212,6 +217,7 @@ import * as tourStore from '../tour-store';
 import { DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, HOME_STARTER_SET, START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
 import { lightColors } from '../../constants/colors';
 import { QUIET_OPACITY } from '../../components/home/quiet';
+import { HOME_CARD_PADDING_DP } from '../../components/home/HomeParts';
 import { KNOCKS_STORE_KEY, NOTIFICATION_PERMISSION_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey, homeWelcomePartStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
@@ -292,6 +298,7 @@ beforeEach(async () => {
     mem.store.clear();
     phoneSays.now = null;
     phoneSays.asked = 0;
+    safety.due = false;
     resetHomeStoreForTests();
     nav.params = {};
     hooks.handlers.clear();
@@ -2257,6 +2264,186 @@ describe('Arrange', () => {
             }
             expect(lists).toHaveLength(2);
             expect(lists[1]).toEqual(lists[0]);
+        });
+
+        // ── Arrange keeps the member's place, whatever stands above the cards (review of #3343) ──
+        // Nothing here draws a frame, so `frame` lays one out as a phone would: each thing drawn above the list stands its own
+        // height (Home's once card ONCE_DP, the bar BAR_DP, anything else ABOVE_DP), each slot of the list a card's height while it
+        // holds one and nothing while it holds none, the way-back card plus what its band adds in Arrange (it sits
+        // HOME_CARD_PADDING_DP into the card's frame), the community's welcome its own. The screen is handed those places as
+        // onLayout would; its scrollTo is read back as onScroll. No jump: every card from the one the member was looking at down
+        // stands where it stood on the screen; a card carried on from a hold on Home stays under the finger and in its own place.
+        describe("Arrange keeps the member's place whatever stands above the cards: one row per thing x opening, leaving, a hold carried on (review of #3343)", () => {
+            const ABOVE_DP = 40;
+            const ONCE_DP = 380;
+            const BAR_DP = 104;
+            const BAND_DP = 48;
+            const WELCOME_DP = 220;
+            const TOP = 30;
+            const view = { y: 0 };
+            const scrollTo = async (y: number) => {
+                view.y = y;
+                await act(async () => { hooks.handlers.get('home-scroll')!.onScroll!({ nativeEvent: { contentOffset: { y } } }); });
+            };
+            const lay = (id: string, y: number, height: number) => hooks.handlers.get(id)!.onLayout!({ nativeEvent: { layout: { x: 0, y, width: 320, height } } });
+            const slotHeight = (slot: Element) => {
+                let h = 0;
+                if (slot.querySelector('[data-testid="one-way-back"]')) h += CARD_DP + (slot.querySelector('[data-testid^="card-band-"]') ? BAND_DP - HOME_CARD_PADDING_DP : 0);
+                else if (slot.querySelector('[data-testid^="home-card-"]')) h += CARD_DP;
+                if (slot.querySelector('[data-testid="home-welcome-community"]')) h += WELCOME_DP;
+                return h;
+            };
+            /** One frame: lays out what is drawn now, hands each place to the screen, and gives each card's top in the scroll's content. */
+            const frame = async () => {
+                const scroll = document.querySelector('[data-testid="home-scroll"]')!;
+                const list = document.querySelector('[data-testid="home-list"]')!;
+                const tops = new Map<string, number>();
+                await act(async () => {
+                    let y = 0;
+                    for (const el of Array.from(scroll.children)) {
+                        if (el === list) break;
+                        const id = el.getAttribute('data-testid');
+                        const h = id === 'home-arrange-bar' ? BAR_DP : id === 'home-notify-once' ? ONCE_DP : ABOVE_DP;
+                        if (id === 'home-arrange-bar') lay(id, y, h);
+                        y += h;
+                    }
+                    lay('home-list', y, 3000);
+                    let inList = 0;
+                    for (const el of Array.from(list.children)) {
+                        const id = el.getAttribute('data-testid') ?? '';
+                        if (!id.startsWith('home-slot-')) { inList += id === 'home-welcome-community' ? WELCOME_DP : 100; continue; }
+                        const h = slotHeight(el);
+                        lay(id, inList, h);
+                        tops.set(id.replace('home-slot-', ''), y + inList);
+                        inList += h;
+                    }
+                    const band = document.querySelector('[data-testid="one-way-back"] [data-testid^="card-band-"]');
+                    if (band) lay(band.getAttribute('data-testid')!, 0, BAND_DP);
+                });
+                return tops;
+            };
+            /** The screen's own scrollTo since `mark`, as the list answers it. */
+            const follow = async (mark: number) => {
+                const asked = hooks.scrollTo.mock.calls.slice(mark);
+                if (asked.length) await scrollTo(Math.max(0, (asked.at(-1)![0] as { y: number }).y));
+            };
+            /** Each drawn card's top on the screen, from the card the place is kept by down (not the community card, which the strip and the tile go above). */
+            const onScreen = (tops: Map<string, number>, from: string, order: string[]) => Object.fromEntries(
+                order.slice(order.indexOf(from)).filter(id => id !== 'community' && tops.has(id)).map(id => [id, tops.get(id)! - view.y]),
+            );
+            /** The first card that moves, under what the row is about: the card the member is looking at (or holds). */
+            const anchorUnder = (thing: Element) => {
+                const slot = Array.from(document.querySelectorAll('[data-testid^="home-slot-"]')).find(el =>
+                    !!(thing.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) && !thing.contains(el) && !el.contains(thing)
+                    && !!el.querySelector('[data-testid$="-menu"]'));
+                expect(slot, 'a card that moves, under it').toBeDefined();
+                return slot!.getAttribute('data-testid')!.replace('home-slot-', '');
+            };
+            const drawnOrder = () => Array.from(document.querySelectorAll('[data-testid^="home-slot-"]')).map(e => e.getAttribute('data-testid')!.replace('home-slot-', ''));
+            const DECLINED_147 = { state: 'declined', updatedAt: Date.now() - 20 * 86_400_000 };
+            const newcomer = (gotIt: boolean): HomeAnswer => {
+                const a = localMember();
+                const { tour: _t, ...me } = a.me!;
+                return {
+                    ...a,
+                    me: { ...me, joinedAt: iso(Date.now() - 3 * 24 * H), invitedBy: { key: 'aa'.repeat(32), name: 'Asha' }, ...(gotIt ? { tour: { v: 1, state: 'skipped', at: iso(Date.now() - H) } } : {}) } as HomeAnswer['me'],
+                    layout: null,
+                    cards: { ...a.cards, community: { name: 'Riverside', members: 84, tradesThisMonth: 23, welcome: "G'day and welcome." } as HomeAnswer['cards']['community'] },
+                };
+            };
+            const asNewcomer = (gotIt: boolean) => {
+                tourStore.closeTour();
+                mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+                mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+                node.answer = newcomer(gotIt);
+            };
+            const THINGS: Array<{ name: string; setup: () => void; thing: () => Element | null }> = [
+                {
+                    // Up with the way-back card due and held behind it: in Arrange neither may come or go.
+                    name: "Home's once card, above the list, with the way-back card held",
+                    setup: () => {
+                        phoneSays.now = { status: 'undetermined', canAskAgain: true };
+                        mem.store.set(NOTIFICATION_PERMISSION_STORE_KEY, JSON.stringify(DECLINED_147));
+                        safety.due = true;
+                    },
+                    thing: () => document.querySelector('[data-testid="home-notify-once"]'),
+                },
+                { name: "BeanPool's welcome tile, the community's welcome under it", setup: () => asNewcomer(false), thing: () => document.querySelector('[data-testid="home-welcome-community"]') },
+                { name: "the community's welcome alone at the top (after BeanPool's Got it)", setup: () => asNewcomer(true), thing: () => document.querySelector('[data-testid="home-welcome-community"]') },
+                { name: 'the way-back card, which has a band only in Arrange', setup: () => { safety.due = true; }, thing: () => document.querySelector('[data-testid="one-way-back"]') },
+            ];
+
+            for (const { name, setup, thing } of THINGS) {
+                describe(name, () => {
+                    const landed = async () => {
+                        setup();
+                        await render();
+                        await settle(4);
+                        const el = thing();
+                        expect(el, 'drawn on Home').not.toBeNull();
+                        const tops = await frame();
+                        const anchor = anchorUnder(el!);
+                        await scrollTo(tops.get(anchor)! - TOP);
+                        return { el: el!, anchor, tops: await frame() };
+                    };
+
+                    it('opening Arrange: the cards stay where they were on the screen, and it is still there, the same', async () => {
+                        const { el, anchor, tops } = await landed();
+                        const order = drawnOrder();
+                        const before = onScreen(tops, anchor, order);
+                        expect(before[anchor]).toBe(TOP);
+                        const mark = hooks.scrollTo.mock.calls.length;
+                        await open();
+                        const after = await frame();
+                        await follow(mark);
+                        expect(has('home-arrange-bar')).toBe(true);
+                        expect(thing()).toBe(el);
+                        expect(drawnOrder().slice(0, order.length)).toEqual(order);
+                        expect(onScreen(after, anchor, order)).toEqual(before);
+                        await done();
+                    });
+
+                    it('leaving Arrange (Done): the cards stay where they were on the screen', async () => {
+                        const { el, anchor } = await landed();
+                        let mark = hooks.scrollTo.mock.calls.length;
+                        await open();
+                        let tops = await frame();
+                        await follow(mark);
+                        await scrollTo(tops.get(anchor)! - TOP);
+                        tops = await frame();
+                        const order = drawnOrder().filter(id => id !== 'community');
+                        const before = onScreen(tops, anchor, order);
+                        expect(before[anchor]).toBe(TOP);
+                        mark = hooks.scrollTo.mock.calls.length;
+                        await done();
+                        tops = await frame();
+                        await follow(mark);
+                        expect(has('home-arrange-bar')).toBe(false);
+                        expect(thing()).toBe(el);
+                        expect(onScreen(tops, anchor, order)).toEqual(before);
+                    });
+
+                    it('a hold on Home carried on: the card stays under the finger, in its own place at the first move, and nothing is saved', async () => {
+                        const { el, anchor } = await landed();
+                        const order = cards();
+                        const posts = sent().length;
+                        const mark = hooks.scrollTo.mock.calls.length;
+                        // The band, 20 dp into the card, where the card stands on the screen.
+                        await hold(`card-band-${anchor}`, TOP + 20);
+                        expect(has('home-arrange-bar')).toBe(true);
+                        expect(has(`home-lifted-${anchor}`)).toBe(true);
+                        const tops = await frame();
+                        await follow(mark);
+                        expect(thing()).toBe(el);
+                        expect(tops.get(anchor)! - view.y).toBe(TOP);
+                        await move(TOP + 20);
+                        expect(cards()).toEqual(order);
+                        await release();
+                        expect(sent().length).toBe(posts);
+                        expect(cards()).toEqual(order);
+                    });
+                });
+            }
         });
     });
 });

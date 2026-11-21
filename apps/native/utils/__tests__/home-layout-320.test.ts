@@ -875,12 +875,17 @@ describe("Home's once card at 320dp × 1.3 (N1h)", () => {
         }
     });
 
-    it('Home draws it at the top, above the cards (their places stay as Arrange measures them), never in Arrange, and the way-back card waits', () => {
+    // Review of #3343: "never in Arrange" took the card from above the list as the bar went in, and every card jumped up by its
+    // height. In Arrange it now stays where it is, quiet, and the way-back card stays held there too (the render suite's table
+    // "Arrange keeps the member's place" measures the places).
+    it('Home draws it at the top, above the cards (their places stay as Arrange measures them); in Arrange it stays there, quiet, and the way-back card waits there too', () => {
         const home = read('app/(tabs)/index.tsx');
         const at = home.indexOf('<NotifyAskCard');
         expect(at).toBeGreaterThan(-1);
         expect(at).toBeLessThan(home.indexOf('<Animated.View onLayout={e => { listY.current'));
-        expect(home.slice(at - 200, at)).toContain('onceMayNow && once?.up && !arrangeOn && answer && (');
+        expect(home.slice(at - 200, at)).toContain('onceMayNow && once?.up && answer && (');
+        expect(home.slice(at, home.indexOf('/>', at))).toContain('quiet={arrangeOn}');
+        expect(home).toContain('const wayBackHeld = !once || once.held;');
         const safety = home.slice(home.indexOf("case 'safety':"), home.indexOf('<OneWayBackCard'));
         expect(safety).toContain('if (wayBackHeld) return null;');
     });

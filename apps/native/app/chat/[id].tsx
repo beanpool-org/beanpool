@@ -1785,7 +1785,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         );
         // The other person's name only once the chat has said it (never "Loading..."); before, "them".
         const notSeenText = notSeen && notSeen.id === item.id ? notSeenWords(notSeen.notSeen, convRow ? peerName : null) : null;
-        const named = notify.line?.anchor === item.id ? notify.view : null;
+        // Never in a chat blocked, or paused on a new key, since the line was offered (both are read after the thread).
+        const named = notify.line?.anchor === item.id && !isPeerBlocked && !keyChangePending ? notify.view : null;
         return notSeenText || named ? (
             <View>
                 {row}

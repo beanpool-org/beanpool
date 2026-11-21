@@ -45,8 +45,7 @@ export function takeNotifyMoment(where: string): NotifyLineOffer | null {
     const m = moments.get(where);
     moments.delete(where);
     if (!m || Date.now() - m.at >= MOMENT_MS) return null;
-    const { at: _at, ...offer } = m;
-    return offer;
+    return { kind: m.kind, name: m.name, anchor: m.anchor, align: m.align };
 }
 
 /**

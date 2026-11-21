@@ -37,7 +37,7 @@ vi.mock('expo-notifications', () => ({ default: notifications, ...notifications 
 vi.mock('../../services/push-notifications', () => ({ registerForPushNotifications: vi.fn(async () => null) }));
 
 import { localDay, type NotifyAskRecord } from '@beanpool/core';
-import { homeCardAway, offerFactLine, offerHomeCard, turnOnFromHomeCard, type OsNotificationPermission } from '../notification-permission';
+import { homeCardAway, offerFactLine, offerHomeCard, samePhoneAnswer, turnOnFromHomeCard, type OsNotificationPermission } from '../notification-permission';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from '../storage-keys';
 
 const DAY = 86_400_000;
@@ -165,4 +165,27 @@ describe("the reviewer's three checks (amend2 §8), for the Home card and the fa
             expect(read(f)).not.toMatch(/Camera|Location|Contacts|MediaLibrary|requestForegroundPermissions/);
         }
     });
+});
+
+// Home keeps a card already drawn through a re-read until a definite answer (index.tsx `homeCardLive`, review of #3348 at
+// 4b9716b3): the phone's answer changed is one, by this comparison. A read that could not say is not.
+describe("the phone's answer, then and now (samePhoneAnswer)", () => {
+    const ask: OsNotificationPermission = { available: true, granted: false, canAskAgain: true };
+    const rows: [string, OsNotificationPermission | null, OsNotificationPermission | null, boolean][] = [
+        ['the same', ask, { ...ask }, true],
+        ['granted since (back from its settings)', ask, { ...ask, granted: true }, false],
+        ["its last pop-up gone (can't ask again)", ask, { ...ask, canAskAgain: false }, false],
+        ['notifications gone from the phone', ask, { ...ask, available: false }, false],
+        ['Android 13: the record now needed to read it', ask, { ...ask, cantAskNeedsRecord: true }, false],
+        ["Android's own flag: said no once since", { ...ask, saidNoOnce: false }, { ...ask, saidNoOnce: true }, false],
+        ["Android's own flag: its read failed this time", { ...ask, saidNoOnce: false }, ask, true],
+        ["Android's own flag: its read failed then", ask, { ...ask, saidNoOnce: true }, true],
+        ['not read then', null, ask, true],
+        ['not read now', ask, null, true],
+    ];
+    for (const [name, was, now, same] of rows) {
+        it(`${name}: ${same ? 'the same answer' : 'a new answer'}`, () => {
+            expect(samePhoneAnswer(was, now)).toBe(same);
+        });
+    }
 });

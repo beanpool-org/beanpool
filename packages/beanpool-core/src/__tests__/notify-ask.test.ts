@@ -9,8 +9,8 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, it, expect } from 'vitest';
 import {
-    markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyLaterAt, notifyLineWords, notifyPhoneSaidNo, notifyTurnOn,
-    NOTIFY_FACT_DAYS, NOTIFY_HOME_AFTER_LATER_DAYS, NOTIFY_HOME_AWAY_DAYS, NOTIFY_HOME_AWAYS, NOTIFY_LINE_KINDS, NOTIFY_ONCE_CARD_DAYS,
+    markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyInterestsPromise, notifyLaterAt, notifyLineWords, notifyPhoneSaidNo,
+    notifyRemindersOff, notifyTurnOn, NOTIFY_TRUE_WORDS, NOTIFY_FACT_DAYS, NOTIFY_HOME_AFTER_LATER_DAYS, NOTIFY_HOME_AWAY_DAYS, NOTIFY_HOME_AWAYS, NOTIFY_LINE_KINDS, NOTIFY_ONCE_CARD_DAYS,
     type NotifyAskInput, type NotifyAskRecord, type NotifyAsks, type NotifyAskSurface, type NotifyLineKind, type NotifyPhone,
 } from '../notify-ask.js';
 import { localDay } from '../home-tips.js';
@@ -302,6 +302,8 @@ describe('the named lines (slice N2a)', () => {
     const MOMENTS: Record<NotifyLineKind, string> = {
         answer: 'a first message sent', again: 'a first message read, or a request accepted', listing: 'a first listing',
         offer: 'a first offer or request on a listing', join: 'an ask to join',
+        // Slice N2b's four (their own block below).
+        going: 'Going on an event', interested: 'Interested in an event', star: 'a starred interest', follow: 'a forum topic followed',
     };
     const YESTERDAY = localDay(new Date(ago(1)));
     const STATES: Array<[string, NotifyPhone, NotifyAskRecord, boolean]> = [
@@ -319,7 +321,7 @@ describe('the named lines (slice N2a)', () => {
         ['another named line shown today', ASK, { ...today('line'), lines: ['some-other-kind'] }, false],
     ];
 
-    it('the kinds are the five moments the design names', () => {
+    it("the kinds are the moments the design names: N2a's five, then N2b's four", () => {
         expect([...NOTIFY_LINE_KINDS]).toEqual(Object.keys(MOMENTS));
     });
 
@@ -376,5 +378,90 @@ describe('the named lines (slice N2a)', () => {
             expect(typeof c[key], `${lang} ${key}`).toBe('string');
             if (key.includes('{name}')) expect(c[key], `${lang} ${key}`).toContain('{name}');
         }
+    });
+});
+
+// Slice N2b (amend2 §12.3): the named lines at Going, Interested, a starred interest and a followed topic, and the two true
+// lines. One table: (moment) × (phone and record) → the line or not; the true lines over the same states, whatever the record.
+describe('the named lines at events, interests and the forum, and the two true lines (slice N2b)', () => {
+    afterEach(() => setLanguage('en'));
+    const MOMENTS: Array<[NotifyLineKind, string]> = [
+        ['going', 'Going on an event'], ['interested', 'Interested in an event'], ['star', 'a starred interest'], ['follow', 'a forum topic followed'],
+    ];
+    const YESTERDAY = localDay(new Date(ago(1)));
+    /** [state, the phone, this phone's record, a named line shown?] */
+    const STATES: Array<[string, NotifyPhone, NotifyAskRecord, boolean]> = [
+        ['never asked', ASK, {}, true],
+        ['Later today (on a named line of another kind: the day is taken)', ASK, { ...today('line'), lines: ['answer'], laterAt: NOW - HOUR }, false],
+        ["Later today on the join's screen (its day still allows one line)", ASK, { ...today('join'), joinAt: NOW - 2 * HOUR, laterAt: NOW - HOUR }, true],
+        ['Later today on the once card (the day is taken)', ASK, { ...today('once'), onceAt: NOW - 2 * HOUR, onceClosedAt: NOW - HOUR, laterAt: NOW - HOUR }, false],
+        ['Later yesterday', ASK, { askDay: YESTERDAY, askKind: 'join', joinAt: ago(1), laterAt: ago(1) }, true],
+        ["an older app's Not now (a Later)", ASK, { state: 'declined', updatedAt: ago(20) }, true],
+        ["the phone said no (Android 13+'s first, recorded)", ASK, { phoneNoAt: ago(1) }, false],
+        ["the phone said no (an iPhone's Don't Allow, or Android's second)", SETTINGS, { phoneNoAt: ago(3) }, false],
+        ['allowed through one of our asks', ON, { state: 'granted' }, false],
+        ['Android 8 to 12 (allowed without asking)', ON, {}, false],
+        ['notifications cannot load here', NONE, {}, false],
+    ];
+
+    it("the kinds are N2b's four moments, after N2a's five", () => {
+        expect(NOTIFY_LINE_KINDS.slice(5)).toEqual(MOMENTS.map(([k]) => k));
+    });
+
+    for (const [kind, moment] of MOMENTS) {
+        for (const [state, phone, record, shown] of STATES) {
+            it(`${moment} × ${state}: ${shown ? 'the line' : 'no line'}`, () => {
+                expect(notifyAsks({ record, phone, now: NOW, line: kind }).line).toBe(shown);
+                if (!shown) return;
+                // Shown: it takes the day and its kind is spent; the other N2b moments wait for another day, and this one never returns.
+                const after = markNotifyAsk(record, { type: 'shown', surface: 'line', line: kind }, NOW);
+                expect(after.lines).toContain(kind);
+                for (const [other] of MOMENTS) expect(notifyAsks({ record: after, phone, now: NOW + HOUR, line: other }).line, other).toBe(false);
+                expect(notifyAsks({ record: { ...after, askDay: localDay(new Date(NOW + 2 * DAY)) }, phone, now: NOW + 3 * DAY, line: kind }).line).toBe(false);
+            });
+        }
+    }
+
+    // The true lines are states, not asks: in every row, whatever the record holds (a Later, the phone's no, the day taken).
+    for (const [state, phone, record] of STATES) {
+        const off = phone.available && !phone.granted;
+        it(`the true lines × ${state}: ${off ? 'Reminders need notifications on; no promise' : phone.granted ? 'Remind me; the promise where the community sends it' : 'Remind me; no promise'}`, () => {
+            expect(notifyRemindersOff(phone)).toBe(off);
+            expect(notifyInterestsPromise(true, phone)).toBe(phone.available && phone.granted);
+            // Never where the community sends no such push (global, Beans off, a server from before cold start N3).
+            expect(notifyInterestsPromise(false, phone)).toBe(false);
+            // Neither takes the day nor needs it: the record is not an input.
+            expect(notifyAsks({ record, phone, now: NOW }).bell).toBe(off);
+        });
+    }
+
+    it('the true lines before the phone has been read: Remind me as it was, and no promise', () => {
+        for (const p of [null, undefined]) {
+            expect(notifyRemindersOff(p)).toBe(false);
+            expect(notifyInterestsPromise(true, p)).toBe(false);
+        }
+    });
+
+    const WORDS: Array<[NotifyLineKind, string, string]> = [
+        ['going', 'Get a reminder the day before, and hear if it changes.', "You'll get a reminder the day before, and hear if it changes."],
+        ['interested', 'Get a reminder the day before.', "You'll get a reminder the day before."],
+        ['star', 'Hear when a neighbour asks for one of these.', "You'll hear when a neighbour asks for one of these."],
+        ['follow', 'Hear when someone replies here.', "You'll hear when someone replies here."],
+    ];
+    it.each(WORDS)('%s: "%s", then "%s"; a name given changes nothing', (kind, line, done) => {
+        expect(notifyLineWords(kind)).toEqual({ line, done, button: 'Tell me' });
+        expect(notifyLineWords(kind, 'Asha')).toEqual({ line, done, button: 'Tell me' });
+    });
+
+    it("the reminder's true line is a whole sentence through the words layer", () => {
+        expect(NOTIFY_TRUE_WORDS.reminders).toBe('⏰ Reminders need notifications on.');
+    });
+
+    const catalog = (lang: string): Catalog => JSON.parse(readFileSync(new URL(`../../words/${lang}.json`, import.meta.url), 'utf8')) as Catalog;
+    const SENTENCES = [...WORDS.flatMap(([, line, done]) => [line, done]), NOTIFY_TRUE_WORDS.reminders as string];
+    it.each(LANGS.filter((l) => l !== 'en'))('%s: a machine draft for every sentence, the clock kept on the reminder line', (lang) => {
+        const c = catalog(lang) as Record<string, unknown>;
+        for (const key of SENTENCES) expect(typeof c[key], `${lang} ${key}`).toBe('string');
+        expect(c[NOTIFY_TRUE_WORDS.reminders], lang).toMatch(/^⏰ /);
     });
 });

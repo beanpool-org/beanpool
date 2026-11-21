@@ -20,9 +20,17 @@ const flat = (rel: string) => page(rel).replace(/\s+/g, ' ');
 describe("the guide's joining page: the phone's three steps", () => {
     const joining = flat('getting-started/joining.md');
 
-    it('the phone has dots for the name, Your Photo and Safety Backup, Safety Backup last; How it Works only in a web browser', () => {
+    it('the phone has dots for the name, Your Photo and the way back, the way back last; How it Works only in a web browser', () => {
         // Slice S3: the labelled bar became dots and ‹ (components/welcome/StepDots.tsx); the steps and their order are the same.
-        expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo and **Safety Backup**, and **Safety Backup** is the last step.');
+        // Slice S4: the way back is titled "Keep a way back in" on the phone (no screen says "Safety Backup" there any more),
+        // skipped where a way back is already kept, and its ‹ is said as it is built (the Go back? question after an invite).
+        expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo and **Keep a way back in**, the last step.');
+        expect(joining).toContain('there is no way-back step, and two dots.');
+        expect(joining).toContain('after an invite it first asks **Have you saved your words?**, because going back from there starts over at your name, with a new account.');
+        expect(joining).not.toContain('one dot each for your name, your photo and **Safety Backup**');
+        expect(joining).not.toContain('**Rather write down 12 words?**');
+        expect(joining).not.toContain("tap **Let's Begin!** here");
+        expect(joining).toContain('**Failed to register identity** (after you tap **Join**; in a web browser, **Next**)');
         expect(joining).not.toContain('the bar at the top shows **Your Name**');
         expect(joining).not.toContain('**Restore Existing Identity**');
         expect(joining).not.toContain('The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.');

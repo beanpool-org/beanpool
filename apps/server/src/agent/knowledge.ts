@@ -20,7 +20,10 @@
  *   photo_ids is refused in words, and this server fetches no picture for a draft. The pictures wait with the draft
  *   (engine/knowledge-drafts.ts), seen by nobody but the owners and admins in To check, who keep or remove each before
  *   Approve; an upload is used up only by a draft that was filed. The tool tells the assistant: only pictures the member took
- *   or owns, never one found on the web.
+ *   or owns, and why (DESIGN-learn-web-pictures-fable.md §6.6 "Now", slice 1; Marty, 22 Nov 2026, "All six of Fable's picks"):
+ *   a picture found on the web belongs to someone else and the community would be the one publishing it, so the server takes
+ *   none. Every refusal of one says so and what to do instead: the member's own photo through the door, or none, which the
+ *   checker can add in Edit first. Words only: what is taken and refused is as #3230 built it.
  * - **Its own tags** (Learn's tags, 16 Nov 2026): `free_tags`, the words a member types in the apps' Tags field, under the
  *   Market's rule for them (engine/knowledge.ts cleanKnowledgeInput, the same door as a member's). Never the library's ids:
  *   `tags` is refused in words, as the node refuses it, so the assistant never believes a library tag is on a page.
@@ -60,17 +63,32 @@ export const knowledgeOn = (): boolean => getProfileSwitches().knowledge === tru
 
 /** A call by name while Learn is off (a tools list read before an owner switched it off). */
 export const KNOWLEDGE_OFF_WORDS = 'Local knowledge is switched off on this community: there is no Learn here.';
-/** The one door for a draft's pictures, in the words every picture refusal ends with. */
+/** The one door for a draft's pictures. */
 const PICTURE_DOOR = "upload the member's own photo with photo_upload_link (or POST /mcp/photos) and give the photoId it answers in photo_ids.";
+/**
+ * Why this server takes no picture from the web, for the assistant to pass on (DESIGN-learn-web-pictures-fable.md §6.6 "Now";
+ * Marty, 22 Nov 2026): it is someone else's, and the community would be the one publishing it.
+ */
+const WEB_PICTURE_WHY = 'A picture found on the web belongs to someone else, and this community would be the one publishing it, so the server '
+    + 'takes none: no stock sites, no search results. Say so to the member.';
+/** What a page with no picture shows, and who can still add one (the checker, in To check's Edit first). */
+const NO_PICTURE_SHOWS = "a page without a picture shows its topic's picture, and whoever checks it can add their own in Edit first.";
+/** What to do instead, the words every refusal of a web picture ends with: the member's own through the door, or none. */
+const PICTURE_INSTEAD = `Instead, ${PICTURE_DOOR} Or file the draft without one: ${NO_PICTURE_SHOWS}`;
 /** A picture by its address, written into the call, or under any other name than photo_ids. */
-export const NO_WEB_PICTURE = `A draft takes no picture from the web and none written into the call: ${PICTURE_DOOR}`;
+export const NO_WEB_PICTURE = `A draft takes no picture from the web and none written into the call. ${WEB_PICTURE_WHY} ${PICTURE_INSTEAD}`;
 /** A grant that can't use the upload door (an admin's, or an owner's without the tick): the door's own rule. */
 const NO_PICTURE_DOOR = 'Only an owner\'s assistant connected with "May post for me" can upload pictures, so this one can\'t add any: file the draft '
     + 'without photo_ids, and the owner or admin who checks it can add their own.';
 const TOO_MANY_PICTURES = `At most ${KNOWLEDGE_LIMITS.photos} pictures a draft, as a page holds.`;
-/** What the tool says about pictures, in its description and photo_ids' (Marty, 16 Nov 2026). */
-const PICTURE_RULE = 'Only pictures the member took or owns, never one found on the web; the checker sees each and keeps or removes it before '
-    + 'anything shows';
+/**
+ * What the tool says about pictures, in its description and photo_ids', word for word as DESIGN-learn-web-pictures-fable.md §6.6
+ * "Now" gives it (Marty, 16 Nov 2026 "through the upload link only"; 22 Nov 2026 "All six of Fable's picks"): whose, why a web
+ * picture is refused, what to tell the member, and that the checker can add their own.
+ */
+const PICTURE_RULE = `Only pictures the member took or owns. ${WEB_PICTURE_WHY} ${NO_PICTURE_SHOWS.charAt(0).toUpperCase()}${NO_PICTURE_SHOWS.slice(1)}`;
+/** What happens to each picture that does come, through the door. */
+const CHECKER_SEES = 'The checker sees each and keeps or removes it before anything shows.';
 const NO_FIX_YET = 'A fix to a page showing comes with a later version of this server: tell the admin what changed, with the source that says so, '
     + 'and they edit the page in the app (Learn, the page, Edit).';
 /** Library ids on a draft: Local knowledge takes its own tags only, as the node refuses them (engine/knowledge.ts). */
@@ -133,7 +151,7 @@ function picturesOf(grant: AgentGrant, raw: unknown): Pictures {
     if (raw.length > KNOWLEDGE_LIMITS.photos) return { ok: false, error: TOO_MANY_PICTURES };
     for (let i = 0; i < raw.length; i++) {
         const v = typeof raw[i] === 'string' ? (raw[i] as string).trim() : '';
-        if (ADDRESS.test(v)) return { ok: false, error: `photo_ids #${i + 1} is an address: this server never fetches a picture for a draft. Instead, ${PICTURE_DOOR}` };
+        if (ADDRESS.test(v)) return { ok: false, error: `photo_ids #${i + 1} is an address: this server never fetches a picture for a draft. ${WEB_PICTURE_WHY} ${PICTURE_INSTEAD}` };
         if (/^data:/i.test(v)) return { ok: false, error: `photo_ids #${i + 1} is a picture written into the call: ${PICTURE_DOOR}` };
     }
     if (!grantMayStillPost(grant)) return { ok: false, error: NO_PICTURE_DOOR };
@@ -264,11 +282,12 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
         title: 'Draft Local knowledge',
         reads: 'nothing: it files a draft of Local knowledge (title, body, topic, what it is about, 1 to 5 sources, and if you like the '
             + `place, its language, up to ${FREE_TAGS_MAX} tags of its own and up to ${KNOWLEDGE_LIMITS.photos} pictures uploaded first through photo_upload_link) that waits `
-            + `for an owner or admin to check in the app (Learn, To check) beside its sources; nothing shows to members until a person approves it. ${PICTURE_RULE}. `
+            + `for an owner or admin to check in the app (Learn, To check) beside its sources; nothing shows to members until a person approves it. ${PICTURE_RULE} `
             + `At most ${ASSISTANT_KNOWLEDGE_LIMITS.waiting} waiting and `
             + `${ASSISTANT_KNOWLEDGE_LIMITS.perDay} in 24 hours for this connection, ${ASSISTANT_KNOWLEDGE_LIMITS.allWaiting} waiting from all `
             + 'assistants together. It answers the draft\'s id and the words to pass on',
-        never: 'a published page, or a picture from the web: the assistant cannot publish Local knowledge, edit or remove a page, or give a picture by its address',
+        never: 'a published page, or a picture from the web: the assistant cannot publish Local knowledge, edit or remove a page, or give a picture found on the '
+            + 'web or by its address',
         knowledge: true,
         write: true,
         refusedTo: () => (knowledgeOn() ? null : KNOWLEDGE_OFF_WORDS),
@@ -302,7 +321,7 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
                     description: `optional: up to ${KNOWLEDGE_LIMITS.photos} pictures for the page, each uploaded first: get an address with photo_upload_link and send `
                         + `each image to it (a JPEG, WebP or PNG, at most ${PHOTO_SOURCE_MAX_BYTES / (1024 * 1024)} MB; the server makes it 800 px with nothing hidden in it), `
                         + `then give the photoId it answers here, once, within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours. Only an owner's assistant connected with `
-                        + `"May post for me" can upload. ${PICTURE_RULE}. Never an address: this server fetches no picture for a draft`,
+                        + `"May post for me" can upload. ${PICTURE_RULE} ${CHECKER_SEES} Never an address: this server fetches no picture for a draft`,
                 },
             },
             required: ['title', 'body', 'topic', 'about', 'sources'],

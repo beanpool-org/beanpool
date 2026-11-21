@@ -450,8 +450,8 @@ export function notifyLineWords(kind: NotifyLineKind, name?: string | null): { l
 }
 
 /**
- * What the node will still tell a member of an event they answered, read by its own rule (the phone's
- * apps/native/utils/event-extras.ts eventNoticesComing): `dayBefore`, the reminder the day before is still to come for them;
+ * What the node will still tell a member of an event they answered, read by its own rule (event-notices.ts
+ * eventNoticesComing, both apps): `dayBefore`, the reminder the day before is still to come for them;
  * `changes`, a change of time or place or a cancellation will be told to them (Going only, apps/server/src/engine/posts.ts).
  */
 export interface NotifyEventComing {

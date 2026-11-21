@@ -156,6 +156,8 @@ export * from './chat-list-order.js';
 export * from './chat-links.js';
 export * from './tour.js';
 export * from './first-steps.js';
+// When notifications may be raised, and what a phone keeps of the answers (DESIGN-notify-and-backup-asks-fable-amend2.md, slice N1).
+export * from './notify-ask.js';
 export * from './home-welcome.js';
 export * from './community-welcome.js';
 export * from './help-map.js';

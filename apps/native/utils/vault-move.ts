@@ -48,7 +48,7 @@ import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import { signedDelete, signedPost } from './node-post';
 import { offeredProviders, type SsoProvider } from './sso-providers';
 import { vaultMoveLaterStoreKey, vaultMoveUnfinishedStoreKey } from './storage-keys';
-import { connectWanted, disconnectFromVault, hasVault, signInCopiesAt, vaultStatus, VaultError } from './vault';
+import { connectWanted, disconnectFromVault, hasVault, signInCopiesAt, vaultSignInCopyKnown, vaultStatus, VaultError } from './vault';
 import { knownCopiesRule } from './copies-rule';
 import { sameCommunity } from './ways-back-state';
 import { unopenableOf, type CommunityCopyUnopenable } from './community-copy-state';
@@ -199,6 +199,17 @@ export async function removeAdminsCopy(identity: BeanPoolIdentity, url: string):
  * on a guess. First, deletes this phone sent that didn't land are tried again: only copies this phone moved or was
  * asked to remove. A copy the vault already has is not deleted from the community on that ground alone.
  */
+/**
+ * Whether Home's "rule changed" card offers **Move mine** (components/CopiesRuleCard.tsx): the community moved members'
+ * copies from BeanPool's key vault to itself, and this phone knows the vault keeps a sign-in's copy for the account, the
+ * only kind the move card moves ({@link vaultMoveOffer} reads the sign-ins in `vaultStatus().providers`). The half the vault
+ * keeps for a community's admins is no sign-in's copy (utils/vault.ts `vaultSignInCopyKnown`): offered Move mine for it,
+ * the member found nothing to move in Account Protection (review of #3330, round 2).
+ */
+export async function moveMineOffered(publicKey: string, change: { from: string; to: string }): Promise<boolean> {
+    return change.to === 'community' && change.from === 'vault' && await vaultSignInCopyKnown(publicKey);
+}
+
 export async function vaultMoveOffer(
     identity: BeanPoolIdentity, communityUrl: string | null, now: number = Date.now(),
 ): Promise<VaultMoveOffer | null> {

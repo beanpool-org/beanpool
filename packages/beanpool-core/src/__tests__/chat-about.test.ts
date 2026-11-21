@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { checkDmThread, newDmMessageId, sealDmLine, openDmLine } from '../dm-crypto.js';
+import { checkDmThread, DM_NONCE_PREFIX, newDmMessageId, sealDmLine, openDmLine } from '../dm-crypto.js';
 import {
     aboutOfPost, chatAboutCard, chatAboutChipWords, chatAboutDrafts, chatAboutOfLine, DM_ABOUT_KEY, hasChatAbout,
     metadataWithAbout, parseChatAbout, sealChatAbout, CHAT_ABOUT_TITLE_MAX,
@@ -29,6 +29,30 @@ function lineAbout(from: typeof rob, to: typeof rob, text: string, post: any, re
     const sealed = sealChatAbout(chip, ctxOf(from, to), { senderPubHex: from.publicKey, messageId: id, replyToId });
     const metadata = metadataWithAbout(replyToId ? JSON.stringify({ replyToId }) : undefined, sealed);
     return { id, authorPubkey: from.publicKey, ...words, metadata };
+}
+
+/**
+ * The words of `readables` a node could read in a stored line. The sealed parts (each `ciphertext` and `nonce`, the line's
+ * own and the listing's in its metadata) are random base64, so they are read as the bytes they decode to, never as their
+ * base64 letters, where a word like "offer" turns up by chance. Every other field is read as it is stored.
+ */
+function wordsOnTheNode(line: Record<string, unknown>, readables: string[]): string[] {
+    const sealedBytes: Uint8Array[] = [];
+    const sealedPart = (v: unknown) => {
+        if (typeof v !== 'string') return v;
+        sealedBytes.push(new Uint8Array(Buffer.from(v.startsWith(DM_NONCE_PREFIX) ? v.slice(DM_NONCE_PREFIX.length) : v, 'base64')));
+        return '';
+    };
+    const plain = (o: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(Object.entries(o).map(([k, v]) => [k,
+        k === 'ciphertext' || k === 'nonce' ? sealedPart(v)
+            : k === 'metadata' && typeof v === 'string' ? JSON.stringify(plain(JSON.parse(v)))
+            : v && typeof v === 'object' ? plain(v as Record<string, unknown>) : v]));
+    const rest = JSON.stringify(plain(line));
+    const hasBytes = (hay: Uint8Array, needle: Uint8Array) => {
+        for (let i = 0; i + needle.length <= hay.length; i++) if (needle.every((b, j) => hay[i + j] === b)) return true;
+        return false;
+    };
+    return readables.filter((w) => rest.includes(w) || sealedBytes.some((b) => hasBytes(b, utf8ToBytes(w))));
 }
 
 describe('the chip for a listing', () => {
@@ -66,9 +90,22 @@ describe('the reference, sealed', () => {
 
     it('leaves nothing readable on the node: no listing id, title or kind in the stored row', () => {
         const l = lineAbout(rob, ana, 'Is this still available?', EGGS);
-        const row = JSON.stringify(l);
-        for (const readable of ['post-eggs-1', 'Fresh eggs', 'offer', 'eggs', 'available']) expect(row).not.toContain(readable);
+        const readables = ['post-eggs-1', 'Fresh eggs', 'offer', 'eggs', 'available'];
+        expect(wordsOnTheNode(l, readables)).toEqual([]);
         expect(Object.keys(JSON.parse(l.metadata))).toEqual([DM_ABOUT_KEY]);
+    });
+
+    it('reads the sealed parts as their bytes, so a chance run of letters in their base64 is no readable word', () => {
+        // The sealed bytes and the nonce are random base64: a run like "offer" turns up in them now and then (CI, #3325),
+        // and is no word anyone can read there. Words are looked for in the row's other fields, and in those parts' bytes.
+        const l = lineAbout(rob, ana, 'hello', EGGS);
+        const chance = { ...l, ciphertext: 'AAofferAeggs', nonce: `${DM_NONCE_PREFIX}offerAAA` };
+        expect(JSON.stringify(chance)).toContain('offer');
+        expect(wordsOnTheNode(chance, ['offer', 'eggs'])).toEqual([]);
+        // Still found: a word in a plain field, in the metadata beside the sealed listing, or in the sealed parts' bytes.
+        expect(wordsOnTheNode({ ...l, title: 'Fresh eggs' }, ['eggs'])).toEqual(['eggs']);
+        expect(wordsOnTheNode({ ...l, metadata: JSON.stringify({ ...JSON.parse(l.metadata), kind: 'offer' }) }, ['offer'])).toEqual(['offer']);
+        expect(wordsOnTheNode({ ...l, ciphertext: Buffer.from('a Fresh eggs line').toString('base64') }, ['Fresh eggs'])).toEqual(['Fresh eggs']);
     });
 
     it('does not change the words: the thread opens the line as the words alone', () => {

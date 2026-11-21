@@ -1664,8 +1664,10 @@ export default function WelcomeScreen() {
             // The 12-words reminder (DESIGN-home-default-fable.md §2.5). "Later" on the way back is true to its word (onboarding
             // S4, design §3.1 E): Home's "Your way back in" card shows from the first landing, over a record marked done that the
             // phone does not count as a way back (a sign-in added with no copy). Only a way back kept (a sign-in's copy, the tick,
-            // a Yes after the kit, or one the phone already knew) starts it put away. A record already running (a 12-words join's)
-            // is kept, and so is any record when a way back is kept (a Yes after the kit just now); a sign-in added ends it at Home.
+            // a Yes after the kit, or one the phone already knew) starts it put away. Over a record the account already has
+            // (utils/one-way-back.ts startOneWayBackShown): one showing now is kept; the 12-words door's own, put away, comes back
+            // up; a reminder put away, or one marked done, is started again about the community just joined. Any record is kept
+            // when a way back is kept (a Yes after the kit just now); a sign-in added ends it at Home.
             const joinedHere = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
             const startReminder = wayBackIsKept ? startOneWayBackPutAway : startOneWayBackShown;
             if (joinedHere) await startReminder(pendingIdentity.publicKey, joinedHere.replace(/\/+$/, '')).catch(() => undefined);

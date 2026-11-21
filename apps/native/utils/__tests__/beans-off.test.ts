@@ -16,7 +16,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 import {
-    groupPostPrice, groupPostPriceInvalid, groupPostMissingFields, howItWorksSubtitle, NO_BEANS_GUIDE_CARD, talkSort,
+    groupPostPrice, groupPostPriceInvalid, groupPostMissingFields, talkSort,
     decisionTouchesFor, decisionEffectsFor, proposeTitlePlaceholder,
 } from '../beans-off';
 import { beansOn, readNodeProfile, type NodeFeatures } from '../node-profile';
@@ -97,21 +97,6 @@ describe('Talk’s sort (app/(tabs)/chats.tsx)', () => {
     for (const [name, f] of BEANS_ON) {
         it(`Beans on (${name}): every sort stands`, () => {
             for (const s of SORTS) expect(talkSort(s, f)).toBe(s);
-        });
-    }
-});
-
-describe('profile setup’s "How BeanPool works" (components/OnboardingGuide.tsx)', () => {
-    it('Beans off: one card that says there are no Beans here, and no Beans figure', () => {
-        expect(NO_BEANS_GUIDE_CARD.text).toContain('There are no Beans here');
-        expect(`${NO_BEANS_GUIDE_CARD.title} ${NO_BEANS_GUIDE_CARD.text}`).not.toMatch(/\d/);
-        expect(howItWorksSubtitle(GLOBAL)).toBe('A quick look at this community.');
-        expect(howItWorksSubtitle(GLOBAL)).not.toMatch(/econom|bean/i);
-    });
-
-    for (const [name, f] of BEANS_ON) {
-        it(`Beans on (${name}): today’s line`, () => {
-            expect(howItWorksSubtitle(f)).toBe('A quick look at this community economy.');
         });
     }
 });
@@ -208,27 +193,18 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         expect(block(src, '{showsBeans && (')).toContain('router.push(START_ENTERPRISE_BRIDGE.route)');
     });
 
-    it('profile setup: the no-Beans card in place of the three about Beans, and no Ledger tip', () => {
+    it('profile setup and the join draw no How it Works: on a community with no Beans, Home’s tile says where Beans live', () => {
+        // How it Works left the join wizard in slice S5 and profile setup in S5b (DESIGN-onboarding-home-landing-fable.md
+        // §3.1, "deleted from the path, on the phone"; review of #3315): its cards of Beans' figures, its no-Beans card and
+        // its Ledger tip went with it. On a community with no Beans, Home's WELCOME TO BEANPOOL! tile says where Beans live
+        // instead (core welcomeTileLines), and says nothing of Beans' figures.
         const setup = read('app/profile-setup.tsx');
-        expect(setup).toContain('<OnboardingGuide beansOn={beansOn(nodeProfile?.features)} community={otherDoorUrl ? communityName({ url: otherDoorUrl, alias: otherDoorAlias }) : undefined} />');
-        expect(setup).toContain('{howItWorksSubtitle(nodeProfile?.features)}');
-        const guide = read('components/OnboardingGuide.tsx');
-        expect(guide).toContain('export function OnboardingGuide({ beansOn = true, community }: { beansOn?: boolean; community?: string })');
-        const at = (s: string) => { const i = guide.indexOf(s); expect(i, s).toBeGreaterThan(0); return i; };
-        const open = at('{beansOn ? (');
-        const other = at(') : (');
-        for (const figure of ['(0 Beans)', '0 Bean limit', '-2000 Beans', 'above 200 Beans', '40 Beans', 'Trust Wallet']) {
-            expect(at(figure)).toBeGreaterThan(open);
-            expect(at(figure)).toBeLessThan(other);
-        }
-        // Drawn in the member's language (words S3e): the card's words are word() keys, t()'d where shown.
-        expect(at('{t(NO_BEANS_GUIDE_CARD.text)}')).toBeGreaterThan(other);
-        expect(block(guide, '{beansOn && (')).toContain('tab to send credits');
-        // The join wizard has no How it Works since slice S5 (DESIGN-onboarding-home-landing-fable.md §3.1): on a community
-        // with no Beans, Home's WELCOME TO BEANPOOL! tile says where Beans live instead (core welcomeTileLines), and says
-        // nothing of Beans' figures.
+        expect(setup).not.toMatch(/OnboardingGuide|howItWorksSubtitle|How BeanPool works/);
+        expect(fs.existsSync(path.resolve(__dirname, '../..', 'components/OnboardingGuide.tsx'))).toBe(false);
+        const beansOff = read('utils/beans-off.ts');
+        expect(beansOff).not.toMatch(/NO_BEANS_GUIDE_CARD|howItWorksSubtitle/);
         const welcome = read('app/welcome.tsx');
-        expect(welcome).not.toContain(NO_BEANS_GUIDE_CARD.title);
+        expect(welcome).not.toContain('🌍 A place to meet');
         const global = welcomeTileLines({ profile: 'global', beans: false }).map((l) => l.text).join(' ');
         expect(global).toContain('No Beans here. Trading in Beans happens in local communities.');
         expect(global).not.toMatch(/\d/);

@@ -8,13 +8,7 @@ export { ErrorBoundary };
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
-import { OnboardingGuide } from '../components/OnboardingGuide';
 import { useNodeProfile } from '../utils/use-node-profile';
-import { beansOn } from '../utils/node-profile';
-import { howItWorksSubtitle } from '../utils/beans-off';
-import { communityName } from '../utils/community-name';
-import { doorNodeAt } from '../utils/open-door';
-import { getSavedNodes } from '../utils/nodes';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../utils/avatar-value';
@@ -58,29 +52,15 @@ export default function ProfileSetupScreen() {
     };
 
     const [step, setStep] = useState<Step>('name');
-    // The guide step: on a community with Beans off (the worldwide one) it says so, in place of the cards about Beans.
     const nodeProfile = useNodeProfile();
     // On a community that syncs listings by area (the worldwide one), "Roughly where are you?" comes after the photo
-    // (utils/member-area.ts); a local community's wizard is unchanged.
+    // (utils/member-area.ts); a local community's wizard is unchanged. The last step's button is Done: How it Works left
+    // the join on the phone (DESIGN-onboarding-home-landing-fable.md §3.1, slice S5b; Home's welcome tile says it now).
     const stepOrder = profileSteps(nodeProfile?.features);
     const [anchorUrl, setAnchorUrl] = useState<string | null>(null);
     useEffect(() => {
         AsyncStorage.getItem('beanpool_anchor_url').then(setAnchorUrl).catch(() => setAnchorUrl(null));
     }, []);
-    // Another community's open door (slice S2; issue #2563): the Beans-off card of the guide says that community's own name,
-    // not "the global community". The name is the phone's saved one (every join path saves the node's own, as the one-way-back
-    // card reads it), else the host: nothing is asked of any node here. Only where the card is drawn: Beans off, not the global.
-    const otherDoorUrl = anchorUrl && doorNodeAt(anchorUrl)?.global !== true && !beansOn(nodeProfile?.features) ? anchorUrl : null;
-    const [otherDoorAlias, setOtherDoorAlias] = useState<string | null>(null);
-    useEffect(() => {
-        if (!otherDoorUrl) { setOtherDoorAlias(null); return; }
-        let live = true;
-        const same = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
-        void getSavedNodes().catch(() => []).then((saved) => {
-            if (live) setOtherDoorAlias(saved.find((n) => same(n.url, otherDoorUrl))?.alias ?? null);
-        });
-        return () => { live = false; };
-    }, [otherDoorUrl]);
     // The name the steps start from is this community's own (read from its members row below), never the phone's:
     // `identity.callsign` is only the join pre-fill, and is whatever name the member last chose in ANY community
     // (Profile S2). Until the row is read the box is empty, or holds the name the door joined with.
@@ -145,7 +125,15 @@ export default function ProfileSetupScreen() {
 
     const nameOk = callsign.trim().length >= 2;
     const stepIndex = stepOrder.indexOf(step);
-    const nextStep = () => { setError(null); setStep(stepOrder[stepIndex + 1] ?? 'guide'); };
+    const lastStep = stepIndex === stepOrder.length - 1;
+    const finishing = useRef(false);
+    // The next step, or, from the last one, Done: the profile is published and the wizard left (handleFinish).
+    const nextStep = () => {
+        setError(null);
+        const next = stepOrder[stepIndex + 1];
+        if (next) setStep(next);
+        else void handleFinish();
+    };
 
     // What the wizard SHOWS: this session's pick, else this community's current photo. It is also what
     // "do you have an avatar yet?" means for the Next button, so someone whose photo is already on the
@@ -202,7 +190,9 @@ export default function ProfileSetupScreen() {
     };
 
     async function handleFinish() {
-        if (!identity || !nameOk || !displayAvatar) return;
+        // One Done at a time: the last step's button, or the area step's save or skip, while a publish is still out.
+        if (!identity || !nameOk || !displayAvatar || finishing.current) return;
+        finishing.current = true;
         setLoading(true);
         setError(null);
         const finalCallsign = callsign.trim();
@@ -310,6 +300,7 @@ export default function ProfileSetupScreen() {
         } catch (err: any) {
             setError(err?.message || t('Could not save your profile. Try again.'));
         } finally {
+            finishing.current = false;
             setLoading(false);
         }
     }
@@ -435,15 +426,28 @@ export default function ProfileSetupScreen() {
                                 </Text>
                             </Pressable>
                             {error && <Text style={styles.error}>{error}</Text>}
-                            <Pressable
-                                style={[styles.primaryBtn, !displayAvatar && styles.disabledBtn]}
-                                disabled={!displayAvatar}
-                                onPress={nextStep}
-                                accessibilityRole="button"
-                            >
-                                <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
-                            </Pressable>
-                            <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                            {lastStep ? (
+                                <Pressable
+                                    style={[styles.primaryBtn, (!displayAvatar || loading) && styles.disabledBtn]}
+                                    disabled={!displayAvatar || loading}
+                                    onPress={handleFinish}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={loading ? t('Saving profile...') : t('Done')}
+                                    accessibilityState={{ disabled: !displayAvatar || loading, busy: loading }}
+                                >
+                                    {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Done ✓')}</Text>}
+                                </Pressable>
+                            ) : (
+                                <Pressable
+                                    style={[styles.primaryBtn, !displayAvatar && styles.disabledBtn]}
+                                    disabled={!displayAvatar}
+                                    onPress={nextStep}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={styles.primaryBtnText}>{t('Next →')}</Text>
+                                </Pressable>
+                            )}
+                            <Pressable style={styles.backBtn} onPress={goBackStep} disabled={loading} accessibilityRole="button" accessibilityLabel={t('Back')}>
                                 <Text style={styles.backBtnText}>{t('← Back')}</Text>
                             </Pressable>
                         </>
@@ -461,33 +465,14 @@ export default function ProfileSetupScreen() {
                                 }}
                                 onSkip={nextStep}
                             />
-                            <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel={t('Back')}>
-                                <Text style={styles.backBtnText}>{t('← Back')}</Text>
-                            </Pressable>
-                        </>
-                    )}
-
-                    {step === 'guide' && (
-                        <>
-                            <Text style={styles.title}>{t('🫘 How BeanPool works')}</Text>
-                            <Text style={styles.subtitle}>{howItWorksSubtitle(nodeProfile?.features)}</Text>
-                            <OnboardingGuide beansOn={beansOn(nodeProfile?.features)} community={otherDoorUrl ? communityName({ url: otherDoorUrl, alias: otherDoorAlias }) : undefined} />
+                            {loading && <ActivityIndicator style={{ marginTop: 12 }} color={colors.text.secondary} accessibilityLabel={t('Saving profile...')} />}
                             {error && <Text style={styles.error}>{error}</Text>}
-                            <Pressable
-                                style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                                disabled={loading}
-                                onPress={handleFinish}
-                                accessibilityRole="button"
-                                accessibilityLabel={loading ? t('Saving profile...') : t('Done')}
-                                accessibilityState={{ disabled: loading, busy: loading }}
-                            >
-                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('Done ✓')}</Text>}
-                            </Pressable>
                             <Pressable style={styles.backBtn} onPress={goBackStep} disabled={loading} accessibilityRole="button" accessibilityLabel={t('Back')}>
                                 <Text style={styles.backBtnText}>{t('← Back')}</Text>
                             </Pressable>
                         </>
                     )}
+
                 </View>
             </KeyboardAwareScrollView>
 

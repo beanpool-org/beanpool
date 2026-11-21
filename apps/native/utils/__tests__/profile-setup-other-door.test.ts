@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 /**
- * How BeanPool works, in profile setup, at another community's open door (slice S2, issue #2563): the real wizard
- * (app/profile-setup.tsx) gives the guide the community's name where the phone is on a community that is not the global
- * one and has Beans off, so its card says "<name> has no Beans", never "the global community". The harness is
- * profile-setup-area.test.ts's (react-dom in jsdom, React Native's host components as plain tags); the guide is a stub
- * that records what it was given (its own words are onboarding-components-words-render.test.ts's). Nothing is asked of any
- * node: the name is the phone's saved one, else the host.
+ * Profile setup at another community's open door, and every other join it ends (find-community, a community's card): no
+ * How it Works (DESIGN-onboarding-home-landing-fable.md §3.1 "deleted from the path, on the phone"; slice S5b, review of
+ * #3315). The photo, or the area where a community syncs by area, is the last step and its button is Done: the profile
+ * goes and the wizard is left for Home, whose WELCOME TO BEANPOOL! tile says what How it Works said. Until S5b, its Beans-off
+ * card named another community's open door (slice S2, issue #2563); the card went with the step. The harness is
+ * profile-setup-area.test.ts's (react-dom in jsdom, React Native's host components as plain tags).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: any) => children, KeyboardAwareScrollView: ({ children }: any) => children, KeyboardStickyView: ({ children }: any) => children }));
@@ -67,10 +67,6 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'uuid' }));
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
-const guide = vi.hoisted(() => ({ props: null as null | { beansOn?: boolean; community?: string } }));
-vi.mock('../../components/OnboardingGuide', () => ({
-    OnboardingGuide: (props: { beansOn?: boolean; community?: string }) => { guide.props = props; return createElement('div', { 'data-testid': 'guide' }); },
-}));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span') }));
 const prof = vi.hoisted(() => ({ value: null as any }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => prof.value }));
@@ -111,9 +107,9 @@ const fetched: string[] = [];
 
 beforeEach(() => {
     mem.store.clear();
-    guide.props = null;
     fetched.length = 0;
     nav.params = { name: 'Sally', redirect: '/(tabs)' };
+    nav.router.replace.mockClear();
     (globalThis as any).fetch = vi.fn(async (url: string) => { fetched.push(url); return { ok: false, status: 404, json: async () => ({}) }; });
 });
 afterEach(() => {
@@ -126,8 +122,8 @@ afterEach(() => {
 async function settle(rounds = 6) {
     for (let i = 0; i < rounds; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
 }
-/** The wizard on `anchor` with a community that says `features`, taken to its guide step (name given, so photo then guide). */
-async function toGuide(anchor: string, features: unknown) {
+/** The wizard on `anchor` with a community that says `features`; the door gave the name, so it opens at the photo. */
+async function openAt(anchor: string, features: unknown) {
     mem.store.set('beanpool_anchor_url', anchor);
     prof.value = { profile: 'global', features, checkedAt: new Date().toISOString() };
     host = document.createElement('div');
@@ -135,34 +131,27 @@ async function toGuide(anchor: string, features: unknown) {
     root = createRoot(host);
     await act(async () => { root!.render(createElement(ProfileSetupScreen as any) as unknown as Parameters<Root['render']>[0]); });
     await settle();
-    const next = Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Next →') as HTMLElement;
-    await act(async () => { next.click(); });
-    await settle();
-    expect(document.querySelector('[data-testid="guide"]')).not.toBeNull();
 }
+const text = () => document.body.textContent ?? '';
+const button = (label: string) => Array.from(document.querySelectorAll('button')).find(b => b.textContent === label || b.getAttribute('aria-label') === label) as HTMLElement | undefined;
 
-describe("profile setup's guide at another community's open door (issue #2563)", () => {
-    it('Beans off at a community that is not the global one: the guide is given its name (the host when none is saved)', async () => {
-        await toGuide(HALL, NO_BEANS);
-        expect(guide.props).toEqual({ beansOn: false, community: 'hall.example.org' });
-        // Nothing was asked of any node for it.
-        expect(fetched).toEqual([]);
-    });
-
-    it("the phone's saved name for the community, when it has one", async () => {
-        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: HALL, alias: 'Mullum Hall' }]));
-        await toGuide(HALL, NO_BEANS);
-        expect(guide.props).toEqual({ beansOn: false, community: 'Mullum Hall' });
-    });
-
-    it("the global community's own guide is unchanged: no name, so its card says what it said", async () => {
-        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: GLOBAL, alias: 'Global community' }]));
-        await toGuide(GLOBAL, NO_BEANS);
-        expect(guide.props).toEqual({ beansOn: false, community: undefined });
-    });
-
-    it('a community with Beans on: no name, the three cards about Beans as before', async () => {
-        await toGuide(HALL, { beans: true, invites: true });
-        expect(guide.props).toEqual({ beansOn: true, community: undefined });
-    });
+describe("profile setup's last step is Done, with no How it Works, at every door it ends (S5b)", () => {
+    for (const [where, anchor, features] of [
+        ["another community's open door, Beans off", HALL, NO_BEANS],
+        ['a community with Beans', HALL, { beans: true, invites: true }],
+        ['the global community', GLOBAL, NO_BEANS],
+    ] as const) {
+        it(`${where}: the photo's Done publishes the profile and leaves for Home; no guide, no card about Beans`, async () => {
+            mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: HALL, alias: 'Riverside Hall' }]));
+            await openAt(anchor, features);
+            expect(text()).toContain('Choose your look');
+            expect(text()).toContain('Step 2 of 2');
+            expect(button('Next →')).toBeUndefined();
+            await act(async () => { button('Done')!.click(); });
+            await settle();
+            expect(fetched).toEqual([`${anchor}/api/profile/update`]);
+            expect(nav.router.replace).toHaveBeenCalledWith('/(tabs)');
+            for (const gone of ['How BeanPool works', 'has no Beans', 'A place to meet', 'Energy Exchange']) expect(text()).not.toContain(gone);
+        });
+    }
 });

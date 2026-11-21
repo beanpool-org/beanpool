@@ -332,6 +332,22 @@ describe.each(LOOKS)('following a topic in %s (%s): the named line under the bel
         expect(byId(host, 'forum-follow-line')).toBeNull();
     });
 
+    // Review of #3339: the node refuses a reply in an archived section (forum.ts sectionRow.archived_at) and from a group's
+    // observer (assertWritesIn), though the topic itself is open; the topic's own read says so (canReply, sectionArchived).
+    for (const [why, over] of [
+        ['its section archived', { canReply: false, sectionArchived: true }],
+        ["a section this member only reads (a group's observer)", { canReply: false, sectionArchived: false }],
+    ] as const) {
+        it(`an open topic in ${why}: the follow saves but nothing offers to tell of replies that can never come`, async () => {
+            node.topic = { ...TOPIC, topic: { ...TOPIC.topic, follow: null, ...over } };
+            notifyAsk.offer = true;
+            const host = await render(set, ForumTopicScreen);
+            await follow(host, 'following');
+            expect(notifyAsk.offered).toEqual([]);
+            expect(byId(host, 'forum-follow-line')).toBeNull();
+        });
+    }
+
     it("the rule says no (a day already taken, the phone's no, allowed already): the follow saves and no line shows", async () => {
         unfollowed();
         const host = await render(set, ForumTopicScreen);
@@ -492,6 +508,36 @@ describe.each(LOOKS)('a topic in %s (%s)', (_name, set) => {
         expect(words(byId(host, 'forum-closed'))).toBe('This topic is closed, so it takes no new replies.');
         expect(byId(host, 'forum-reply-box')).toBeNull();
         expectReadable(host, set);
+    });
+
+    it("an open topic in an archived section says it is closed and takes no reply, as the node refuses one", async () => {
+        node.topic = { ...TOPIC, topic: { ...TOPIC.topic, canReply: false, sectionArchived: true } };
+        const host = await render(set, ForumTopicScreen);
+        expect(words(byId(host, 'forum-closed'))).toBe('This topic is closed, so it takes no new replies.');
+        expect(byId(host, 'forum-reply')).toBeNull();
+        expect(byId(host, 'forum-reads-only')).toBeNull();
+        await press(byId(host, 'forum-post-menu-2'));
+        expect(Array.from(byId(host, 'forum-menu').querySelectorAll('button')).map(words)).not.toContain('Reply');
+        expectReadable(host, set);
+    });
+
+    it("a group's section this member reads but doesn't write in: the node's own line, no reply box, no Reply", async () => {
+        node.topic = { ...TOPIC, topic: { ...TOPIC.topic, canReply: false, sectionArchived: false } };
+        const host = await render(set, ForumTopicScreen);
+        expect(words(byId(host, 'forum-reads-only'))).toBe('Only this group’s convenors and members write here. You can read it.');
+        expect(byId(host, 'forum-closed')).toBeNull();
+        expect(byId(host, 'forum-reply')).toBeNull();
+        await press(byId(host, 'forum-post-menu-2'));
+        expect(Array.from(byId(host, 'forum-menu').querySelectorAll('button')).map(words)).not.toContain('Reply');
+        expectReadable(host, set);
+    });
+
+    it('the node says a reply goes (canReply): the box, as before', async () => {
+        node.topic = { ...TOPIC, topic: { ...TOPIC.topic, canReply: true, sectionArchived: false } };
+        const host = await render(set, ForumTopicScreen);
+        expect(byId(host, 'forum-reply')).not.toBeNull();
+        expect(byId(host, 'forum-closed')).toBeNull();
+        expect(byId(host, 'forum-reads-only')).toBeNull();
     });
 
     it('with no connection, the kept topic draws as it was last read', async () => {

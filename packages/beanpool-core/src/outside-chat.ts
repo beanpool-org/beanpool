@@ -470,12 +470,17 @@ export type OutsideGateVerdict = 'line' | 'request' | 'change' | 'drop';
  * device has with them (null: none), whether that chat already holds a line of theirs, the member's door, and their blocks.
  * A block always wins; an open chat takes lines and changes to lines (an edit, a reaction, a delete: X6); a stranger gets
  * one line of words, only through an open door, and nothing at all once declined.
+ *
+ * `letIn` (let in once, slice S3b: DESIGN-no-switch-messaging-fable.md §3): the sender is someone the member let in, in a
+ * community this device holds, and never blocked there. Their first line, with no chat here yet, opens one, door open or
+ * not. A chat the member declined, or one already waiting as a request, is as it was: the member's own answer stands.
  */
 export function gateOutsideItem(input: {
     kind: string;
     chat: { state: OutsideChatState; theirLines: number } | null;
     doorOpen: boolean;
     blocked: boolean;
+    letIn?: boolean;
 }): OutsideGateVerdict {
     if (input.blocked) return 'drop';
     const { chat } = input;
@@ -484,5 +489,6 @@ export function gateOutsideItem(input: {
     if (input.kind !== 'dm-line') return 'drop';
     if (chat?.state === 'declined') return 'drop';
     if (chat?.state === 'request') return chat.theirLines === 0 ? 'request' : 'drop';
+    if (input.letIn === true) return 'line';
     return input.doorOpen ? 'request' : 'drop';
 }

@@ -454,6 +454,26 @@ export async function getBlockedPeople(): Promise<string[]> {
 }
 
 /**
+ * Every key of each person the account on this phone has blocked, now or before an unblock it still remembers (its changes:
+ * {@link CHANGES_MAX} drops the oldest unblocks first), as the community named their keys (`chains`). What "let in once"
+ * never accepts quietly (let-in.ts; Marty, 21 Nov 2026: someone unblocked is not let in quietly). Empty with no account on
+ * the phone; null when the stores can't be read, so nobody is let in on a guess.
+ */
+export async function getKeysOnceBlocked(): Promise<string[] | null> {
+    try {
+        const owner = await accountOnPhone();
+        if (!owner) return [];
+        const { list, chains, changes } = await serially(() => readBlocks(owner));
+        const keys = new Set<string>();
+        for (const key of [...list, ...Object.keys(changes.of)]) personKeys(key, chains).forEach(k => keys.add(k));
+        return [...keys];
+    } catch (e) {
+        console.error('[blocklist] Failed to read who was ever blocked', e);
+        return null;
+    }
+}
+
+/**
  * Blocks a user for the account on this phone, notifies server moderation (per Apple Guideline 1.2) in that account's
  * name, queues a report the node didn't take for retry, and dispatches a global event for immediate UI updates.
  * With no account on the phone, nothing is blocked. The block stands on the phone at once, as a change the community

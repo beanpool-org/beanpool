@@ -33,6 +33,22 @@ export async function outsideContext(community?: string | null): Promise<Outside
 }
 
 /**
+ * Let in once for one round (slice S3b): utils/let-in.ts letInFor, loaded at its first ask as db.ts is here. A read that
+ * fails lets nobody in: their line waits at the door as before.
+ */
+function letInOf(me: string): (key: string) => Promise<boolean> {
+    let ask: Promise<(key: string) => Promise<boolean>> | null = null;
+    return async (key) => {
+        try {
+            ask ??= import('./let-in').then((m) => m.letInFor(me));
+            return await (await ask)(key);
+        } catch {
+            return false;
+        }
+    };
+}
+
+/**
  * The context for `community`'s across chats (slice S4), and the address it holds in place when that is not the community
  * in use. No community, or the one in use however spelled: the community in use, as before (its store throws once the
  * phone has switched). Another community this phone saved, as a member (not a guest's look), at a plain address: that one,
@@ -46,11 +62,11 @@ async function contextFor(community?: string | null): Promise<{ ctx: OutsideMail
     const db = await import('./db');
     const file = community ? getDatabaseFilenameForNode(community) : null;
     if (!file || file === getDatabaseFilenameForNode(anchor)) {
-        return { ctx: { nodeUrl: anchor.replace(/\/+$/, ''), identity, store: db.outsideStore(anchor), isBlocked: isUserBlocked }, inPlace: null };
+        return { ctx: { nodeUrl: anchor.replace(/\/+$/, ''), identity, store: db.outsideStore(anchor), isBlocked: isUserBlocked, letIn: letInOf(identity.publicKey) }, inPlace: null };
     }
     const saved = (await getSavedNodes().catch(() => [])).find((n) => getDatabaseFilenameForNode(n.url) === file);
     if (!saved || !isPlainNodeAddress(saved.url) || await isGuestCopy(saved.url).catch(() => true)) return null;
-    return { ctx: { nodeUrl: saved.url.replace(/\/+$/, ''), identity, store: db.outsideStoreOf(saved.url), isBlocked: isUserBlocked }, inPlace: saved.url };
+    return { ctx: { nodeUrl: saved.url.replace(/\/+$/, ''), identity, store: db.outsideStoreOf(saved.url), isBlocked: isUserBlocked, letIn: letInOf(identity.publicKey) }, inPlace: saved.url };
 }
 
 /**

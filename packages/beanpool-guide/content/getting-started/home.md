@@ -16,7 +16,7 @@ In the web app, on a wide screen, the cards stand in two or three columns, in yo
 
 ## Welcome and the tour
 
-A new member's Home has its cards from the first second (see "Your cards", below). The first is **Welcome**, between **Needs you** and the rest (on the global community, **Find your community** stays above it). It says which community you are in, such as "You're in Riverside.", and who invited you, with **Say hello ›** to open a chat with them. An owner alone on a new community, whom nobody invited, sees "You're the first one here." instead, with **Invite someone ›** where they can invite. The phone and the web app draw it differently until the web app's is redrawn too.
+A new member's Home has its cards from the first second (see "Your cards", below). The first is **Welcome**, between **Needs you** and the rest (on the global community, **Find your community** stays above it). It says which community you are in, such as "You're in Riverside.". In the web app it also says who invited you, with **Say hello ›** to open a chat with them; an owner alone on a new community, whom nobody invited, sees "You're the first one here." instead, with **Invite someone ›** where they can invite. On the phone those lines are in your community's own welcome, under the tile (below). The phone and the web app draw it differently until the web app's is redrawn too.
 
 On the phone, **Welcome** is a green tile headed "Welcome to BeanPool!", and it is a newcomer's: it is there for your first 30 days at most.
 
@@ -24,6 +24,13 @@ On the phone, **Welcome** is a green tile headed "Welcome to BeanPool!", and it 
 - **Show me around** starts the tour (below). **Got it** puts the tile away.
 - After 7 days, if you haven't tapped either, the tile folds to one line, "Welcome to BeanPool ›", with **×**. Tap the line to open the tile again; **×** puts it away, as **Got it** does. 30 days after you joined it is gone, whether or not you tapped anything.
 - It comes once per phone: a second community you join on the same phone doesn't show it again.
+
+On the phone, under the tile, is your community's own welcome, headed "From" and the community's name, such as "From Riverside".
+
+- It holds a few lines the community's owners wrote for new members, as they wrote them: they are never translated. Under them, who invited you, with **Say hello ›**, or "You're the first one here." with **Invite someone ›**, then how many members the community has. Where the owners have written nothing yet, it shows those lines alone.
+- It shows in every community you join, the second one on the same phone too, for your first 30 days. **Got it** on the tile leaves it there: tap its **×** to put it away. That is kept on your account, so it does not come back on your other phones.
+- Once it has gone, **Your community** at the bottom of Home has a line, such as "Riverside's welcome ›": tap it to read the owners' words again.
+- An owner whose community has no welcome yet sees **Write your community's welcome ›** there. It opens the community's Settings, where the welcome is written under **Welcome for new members**.
 
 In the web app, **Welcome** is a card with those first lines, **Take the tour ›** and **Not now**. It goes when the tour is done or skipped, when you tap **Not now**, or seven days after you joined, whichever comes first.
 

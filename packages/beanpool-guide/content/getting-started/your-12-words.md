@@ -59,13 +59,13 @@ Your phone checks that the words belong to your account, the same check as **Che
 
 You can join the global community with 12 secret words alone, without a Google, Apple or Facebook account (see "Joining BeanPool"). If that made you a new account, your 12 words are your only way back in. No copy of your account is kept anywhere but on your phone, and nobody can reset them: not BeanPool, and not the community. If you lose them and your phone, the account is gone for good. (If you joined with the account you already had, a sign-in you linked in another community still brings it back there.)
 
-The app says so when you join, beside your words (**Keep a way back in**; in a web browser, **Safety Backup**). After you join, a card on **Home** says it again. On the phone it says **If this phone is lost, this is how you get back in.**; in the web app, **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything. On the phone:
+The app says so when you join, beside your words (**Keep a way back in**; in a web browser, **Safety Backup**). After you join, a card on **Home** says it again. On the phone it says **If this phone is lost, this is how you get back in.**; in the web app, **If this browser forgets your account, this is how you get back in.** It never stops you doing anything. On the phone:
 
 - **✕** puts the card away. It comes back once when you first have Beans, once 30 days after you joined, then every 90 days while you have something to lose here (see "When the phone reminds you" in "Getting your account back"). Between times it stays in **Settings**, under **Account Protection**.
 - **Show my 12 words** opens **Account Protection**, where you can see them again.
 - In **Account Protection**, **I still have my 12 words** puts the card away for good. **Add a sign-in** stays there.
 
-In the web app the card is headed **One way back**, with **See my 12 words** and **Add a sign-in**. **✕** puts it away: it comes back once after one of your posts has stayed up, and once when your first week is over. Tapping **See my 12 words** on the **Home** card shows them, and the card no longer comes back there. It stays at the top of **Settings** until you add a sign-in.
+In the web app the card is headed **Your way back in**, with **See my 12 words**, **I still have my 12 words** and, where your community takes one, **Add a sign-in**. **✕** puts it away, there and on your phone: it comes back on the same days as on the phone, but for the 90 days only Beans or an open deal count (the web app's **Home** doesn't know your listings or your role). **See my 12 words** shows them, and the card stays: tap **I still have my 12 words** once they are written down. It stays at the top of **Settings** until you do, or until you add a sign-in.
 
 An account made with 12 words also starts slower than one made with a sign-in, for its first week. See "Reporting a problem" for its limits, and why.
 

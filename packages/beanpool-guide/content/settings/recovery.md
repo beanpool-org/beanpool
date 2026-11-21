@@ -102,7 +102,9 @@ While your phone knows of no way back for your account, **Home** has a card, **Y
 - once 30 days after you joined;
 - after that, once every 90 days, but only while you have something to lose here: Beans (or Beans you owe), a listing that is up, an open deal, or a role in the community.
 
-While it is put away, the bell's list ends with **No way back in yet. Keep one ›**, which opens **Account Protection**. The card and the line stop once you keep a way back: you add a sign-in, you tap **I still have my 12 words**, or you tick **I have them written down** (below). Nothing is ever blocked while you have none. The web app's card has its own words and times for now (see "Your 12 words").
+While it is put away, the bell's list ends with **No way back in yet. Keep one ›**, which opens **Account Protection**. The card and the line stop once you keep a way back: you add a sign-in, you tap **I still have my 12 words**, or you tick **I have them written down** (below). Nothing is ever blocked while you have none.
+
+The web app's card comes back on the same days, in a browser's words: **If this browser forgets your account, this is how you get back in.**, and at the first Beans **You have 40 Beans here now. Keep a way back in, so they don't go if this browser forgets your account.** For the 90 days only Beans (or Beans you owe) or an open deal count there, as the web app's **Home** doesn't know your listings or your role, and its bell has no such line yet. A **✕** in either app puts the card away in both. In the web app, ticking the box on **Safety Backup** as you join, or tapping **I still have my 12 words**, keeps a way back; looking at your 12 words doesn't (see "Your 12 words").
 
 ## Where your account can be brought back from
 

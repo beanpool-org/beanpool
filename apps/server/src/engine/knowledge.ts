@@ -217,9 +217,15 @@ function pagePhotos(postId: string): PagePhoto[] {
         .all(postId) as PagePhoto[];
 }
 
-/** A photo's bytes as one key: its stored object's sha256, or the same of the bytes its row keeps (storage/image-columns.ts). */
+/**
+ * A photo's bytes as one key: its stored object's sha256, or the same of the bytes its row keeps (storage/image-columns.ts). A row
+ * that names neither (an object stored before its row kept a sha256) is its own picture, by its object's key, else by its slot:
+ * never one key shared by every such row, which would hand one picture's credit to another.
+ */
 function bytesKeyOf(p: PagePhoto): string {
-    return p.sha256 ?? prepareStorablePhoto(p.photo_data ?? '')?.sha256 ?? `row:${p.photo_data ?? ''}`;
+    if (p.sha256) return p.sha256;
+    if (p.photo_data) return prepareStorablePhoto(p.photo_data)?.sha256 ?? `row:${p.photo_data}`;
+    return p.storage_key ? `key:${p.storage_key}` : `slot:${p.order_num}`;
 }
 
 const PAGE_PHOTO_PATH = /^\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d{1,3})$/;

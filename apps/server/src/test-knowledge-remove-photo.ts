@@ -226,6 +226,15 @@ async function main(): Promise<void> {
         assert(answer?.photos?.length === 2 && answer.photos.every((u: string) => !page.photos.includes(u)), '3. the answer carries the page as it now is, every address new');
         row3 = { id: p.id, before, addressOf2: page.photos[1] };
     }
+    {
+        // The same on a page whose stored rows name no sha256 (an object stored before its row kept one): each is its own picture.
+        const p = freshPage();
+        db.prepare('UPDATE post_photos SET sha256 = NULL WHERE post_id = ?').run(p.id);
+        const page = await readPage(p.id);
+        const r = await edit(owen, p.id, { photos: [page.photos[0], page.photos[2]] });
+        assert(r.status === 200 && same(creditsOf(p.id).map(([n, f]) => [n, f]), [[1, C1.file], [2, C3.file]]),
+            `3. rows with no sha256: 📷 1 = picture 1's, 📷 2 = picture 3's, never one picture's credit on another (${JSON.stringify(creditsOf(p.id))})`);
+    }
 
     // ── 4. Keeps 2 3 ──────────────────────────────────────────────────────────────────────────
     console.log('── 4. keeps 2 3 ──');

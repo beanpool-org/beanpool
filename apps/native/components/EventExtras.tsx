@@ -265,8 +265,9 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState<number[]>([]);
     const [saving, setSaving] = useState(false);
-    // The phone's own answer, for the true line; null until read (the line reads as it always did until then).
-    const phone = useNotifyPhone();
+    // The phone's own answer, for the true line; null until read (the line reads as it always did until then). Read only
+    // while the box can show: for a member Going or Interested, on a community that keeps reminders.
+    const phone = useNotifyPhone(!!myRsvp && supported);
     const remindersOff = notifyRemindersOff(phone);
     const [turningOn, setTurningOn] = useState(false);
     const turnOn = async () => {

@@ -377,6 +377,13 @@ describe("the reminder's true line, in every state (slice N2b)", () => {
         expect(byId('event-reminders-off')?.textContent).toContain('⏰ Reminders need notifications on.');
     });
 
+    it('a member who has not answered: no reminder box, and the phone is not even read', async () => {
+        notif.getPermissionsAsync.mockClear();
+        await draw(null);
+        expect(byId('event-reminder-box')).toBeNull();
+        expect(notif.getPermissionsAsync).not.toHaveBeenCalled();
+    });
+
     it('the host has no reminder box, so no true line either', async () => {
         node.view = { ...EVENT, authorPublicKey: ME, author_pubkey: ME, eventRsvps: [] };
         await act(async () => { root.render(createElement(EventDetail, { post: { ...EVENT, authorPublicKey: ME, author_pubkey: ME } }) as any); });

@@ -32,12 +32,13 @@ const NOTHING_HERE: NotifyPhone = { available: false, granted: false, canAskAgai
  * What the phone itself says about notifications (utils/notification-permission.ts readOsNotificationPermission), for a true
  * line (slice N2b: an event's "Reminders need notifications on."): null until read, then read again on each return to the
  * app (back from the phone's settings) and after any Turn on or Tell me on this phone (notePhoneChanged). Never asks; a read
- * that fails is "nothing to turn on here". Loaded at the call, as useNotifyLine's rule is, so a screen never loads
- * expo-notifications as it opens.
+ * that fails is "nothing to turn on here". `wanted`: only while the line could be drawn (an event's reminder box is drawn only
+ * for a member Going or Interested), so a screen that draws none never loads expo-notifications; null while not wanted.
  */
-export function useNotifyPhone(): NotifyPhone | null {
+export function useNotifyPhone(wanted = true): NotifyPhone | null {
     const [phone, setPhone] = useState<NotifyPhone | null>(null);
     useEffect(() => {
+        if (!wanted) return;
         let live = true;
         const read = () => {
             void import('../utils/notification-permission')
@@ -54,8 +55,8 @@ export function useNotifyPhone(): NotifyPhone | null {
             // No app state here (a runner without it): the reads at the taps still come.
         }
         return () => { live = false; phoneReaders.delete(read); sub?.remove?.(); };
-    }, []);
-    return phone;
+    }, [wanted]);
+    return wanted ? phone : null;
 }
 
 export interface NotifyLineOffer {

@@ -32,6 +32,7 @@ import { ReportModal } from '../ReportModal';
 import { ForumPhotoAttach, ForumPhotos, ForumToldSheet, ForumWords } from './ForumBits';
 import { ForumLinkChips, ForumLinkSheet, LINK_WORDS, linkDoor, linksTaken, needDraftOf, type LinkPick } from './ForumLinks';
 import type { ComposerDraft } from '../../tools/builder';
+import { afterBlockWords } from '../../lib/blocked-here';
 
 export const TOPIC_WORDS = {
     back: word('Back to the forum'),
@@ -377,7 +378,8 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
             return [
                 [t(TOPIC_WORDS.blockSure, { name: name(post) }), null],
                 // Blocking the topic's own writer takes their topic away for this member: the list says why.
-                [t(TOPIC_WORDS.block, { name: name(post) }), () => void act(() => blockUser(post.writer.publicKey), t(TOPIC_WORDS.goneBlocked, { name: name(post) })), true],
+                // A web block holds in this community only: the confirmation says so (design S7 section 3.4, slice S7b).
+                [t(TOPIC_WORDS.block, { name: name(post) }), () => void (async () => act(() => blockUser(post.writer.publicKey), await afterBlockWords(t(TOPIC_WORDS.goneBlocked, { name: name(post) }))))(), true],
                 [t(TOPIC_WORDS.cancel), () => setMenu(null)],
             ];
         }

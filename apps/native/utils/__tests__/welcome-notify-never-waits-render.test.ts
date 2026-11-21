@@ -686,13 +686,14 @@ describe("back to the notifications screen from the owner's card: its answers wo
         // Before the tap the phone can ask; at the tap it won't show its pop-up (the Settings line, nothing recorded).
         os.read = async () => (atTap ? { status: 'denied', canAskAgain: false } : { status: 'undetermined', canAskAgain: true });
         await mount();
-        expect(q('notify-step-turn-on'), 'the screen').toBeTruthy();
+        // A claim resumes through more of the phone's own reads than an invite: wait for the screen, don't race it.
+        expect(await until(() => q('notify-step-turn-on') !== null, 3000), 'the screen').toBe(true);
         atTap = true;
         await tap('notify-step-turn-on');
-        expect(await until(() => alerts.buttons.some((b) => b.text === 'Not now')), 'the Settings line').toBe(true);
+        expect(await until(() => alerts.buttons.some((b) => b.text === 'Not now'), 3000), 'the Settings line').toBe(true);
         await act(async () => { alerts.buttons.find((b) => b.text === 'Not now')!.onPress!(); });
         await settle();
-        expect(await until(() => q('owner-card-title') !== null), "the owner's card").toBe(true);
+        expect(await until(() => q('owner-card-title') !== null, 3000), "the owner's card").toBe(true);
         expect(os.order, 'no pop-up asked').not.toContain('ask');
         const rec = await readNotificationPermissionRecord();
         expect([rec.laterAt, rec.phoneNoAt], 'nothing recorded').toEqual([undefined, undefined]);
@@ -703,9 +704,9 @@ describe("back to the notifications screen from the owner's card: its answers wo
         await act(async () => { back!.click(); });
         await settle();
         await tap('way-back-button');
-        expect(await until(() => q('notify-step-later') !== null), 'the screen again').toBe(true);
+        expect(await until(() => q('notify-step-later') !== null, 3000), 'the screen again').toBe(true);
         await tap('notify-step-later');
-        expect(await until(() => q('owner-card-title') !== null), "Later goes on to the owner's card").toBe(true);
+        expect(await until(() => q('owner-card-title') !== null, 3000), "Later goes on to the owner's card").toBe(true);
         expect(typeof (await readNotificationPermissionRecord()).laterAt, 'the Later recorded').toBe('number');
     });
 });

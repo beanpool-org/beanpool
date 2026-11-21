@@ -369,6 +369,13 @@ async function main(): Promise<void> {
         const wrong = Object.keys(want).filter((k) => got[k] !== want[k]);
         assert(wrong.length === 0, `2. writes, ${a.label}: ${wrong.length === 0 ? JSON.stringify(got) : wrong.map((k) => `${k} got ${got[k]} want ${want[k]}`).join('; ')}`);
     }
+    // The topic's own read says, to each reader, what their reply meets (canReply, review of #3339): the group's convenors and
+    // members may reply; its observers, the owners and the moderators read only.
+    for (const a of actors.filter((x) => x.who === 'writer' || x.who === 'reader' || x.who === 'observer' || x.who === 'staff')) {
+        const read = await call(a.id, 'GET', `/api/forum/topics/${T}`);
+        const want = expectedWrites(a).reply === '201';
+        assert(read.status === 200 && read.body?.topic?.canReply === want, `2. canReply, ${a.label}: ${read.body?.topic?.canReply} (want ${want})`);
+    }
     // Only members' votes count: the writer's and the convenor's, nobody else's.
     const tally = db.prepare('SELECT COUNT(*) FROM poll_votes WHERE post_id = ?').pluck().get(POLL) as number;
     const shown = feed(await call(gil, 'GET', `/api/marketplace/posts?id=${POLL}&audienceScope=group`))[0]?.totalVotes;

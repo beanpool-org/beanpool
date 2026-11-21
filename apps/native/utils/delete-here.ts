@@ -39,7 +39,7 @@ import { clearPendingProfileChange } from './pending-profile-sync';
 import { takeOffSavedList } from './nodes';
 import { addressSpelling, sameCommunityRecord } from './community-index';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
-import { disconnectFromVault, hasVault, vaultCopyKnown, VaultError } from './vault';
+import { disconnectFromVault, hasVault, vaultCopyKnown, vaultSignInCopyKnown, VaultError } from './vault';
 
 /** How long each community has to answer, as the phone's own membership check (NodeStatusContext). */
 export const MEMBERSHIP_TIMEOUT_MS = 8000;
@@ -254,6 +254,14 @@ export function lastCommunityLine(plan: Extract<DeletePlan, { kind: 'last' }>, h
  * nothing on the phone was wiped ({@link DeleteOutcome} 'vault-copy-stays'): above Try Again and Delete Anyway.
  */
 export function vaultCopyStaysLine(hereName: string, outcome: Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>): string {
+    // Only the admins' half is known (no sign-in's copy): it is no sign-in's, and no sign-in can bring the key back to remove it.
+    if (outcome.copyKnown && outcome.communityOnly) {
+        return `Your account at ${hereName} was deleted, but BeanPool's key vault still keeps half of a locked copy of your ` +
+            `key, the half for your community's admins: it couldn't be removed (${outcome.reason}). Only your key can remove ` +
+            'it, and your key is still on this phone, so you can try again.\n\n' +
+            'Delete Anyway takes your key off this phone and leaves that half at the vault. To remove it later, you would ' +
+            'need your key back and a community that has you, to reach Settings → Account Protection → Remove.';
+    }
     const copy = outcome.copyKnown
         ? "BeanPool's key vault still keeps a locked copy of your key, from a sign-in you linked"
         : "BeanPool's key vault may keep a locked copy of your key, if you linked Google, Apple or Facebook";
@@ -365,8 +373,10 @@ export type DeleteOutcome =
      * Deleted at the last community, but BeanPool's key vault did not confirm it removed its copies of the key
      * ({@link removeVaultCopies}): nothing on the phone was wiped, so the key can still sign the Disconnect. The member
      * chooses ({@link finishLastDelete}). `copyKnown`: the phone knows the vault keeps one (utils/vault.ts `vaultCopyKnown`).
+     * `communityOnly`: the copies it knows of are only the half kept for a community's admins, no sign-in's
+     * (`vaultCopyKnown` without `vaultSignInCopyKnown`), so the words name that half, not a sign-in.
      */
-    | { kind: 'vault-copy-stays'; reason: string; copyKnown: boolean };
+    | { kind: 'vault-copy-stays'; reason: string; copyKnown: boolean; communityOnly?: boolean };
 
 /** What the member chose when the vault did not remove its copy ({@link DeleteOutcome} 'vault-copy-stays'). */
 export type VaultCopyChoice = 'try-again' | 'delete-anyway';
@@ -418,8 +428,10 @@ async function wipeAtLast(identity: BeanPoolIdentity): Promise<DeleteOutcome> {
 /** The vault's copies go ({@link removeVaultCopies}), then the wipe; or, when they didn't, nothing is wiped. */
 async function removeVaultCopiesThenWipe(identity: BeanPoolIdentity): Promise<DeleteOutcome> {
     const failed = await removeVaultCopies(identity);
-    if (failed) return { kind: 'vault-copy-stays', reason: failed, copyKnown: await vaultCopyKnown(identity.publicKey) };
-    return wipeAtLast(identity);
+    if (!failed) return wipeAtLast(identity);
+    const copyKnown = await vaultCopyKnown(identity.publicKey);
+    const communityOnly = copyKnown && !(await vaultSignInCopyKnown(identity.publicKey));
+    return { kind: 'vault-copy-stays', reason: failed, copyKnown, communityOnly };
 }
 
 /**

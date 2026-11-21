@@ -178,19 +178,26 @@ export default function ForumTopicScreen() {
     const replies = page?.posts.filter((p) => p.number > 1) ?? [];
     const section = front?.sections.find((s) => s.id === topic?.sectionId);
     const open = !!topic && !topic.closed;
+    // Whether this member may reply here now: open, and the node's own word in the topic's read (its section not archived,
+    // theirs to write in: a group's observers, owners and moderators read only; review of #3339). The reply box, the line
+    // that says why there is none, and the offer to hear of replies all follow it.
+    const archived = !!topic?.sectionArchived || !!section?.archived;
+    const canReply = !!topic && open && !archived && topic.canReply !== false;
+    // Why no reply goes: the topic is closed or its section archived (the closed line), or this member only reads here.
+    const readsOnly = open && !archived && !canReply;
     const name = (p: { writer: ForumWriter }) => forumWriterLine(p.writer, t(TOPIC_WORDS.member));
 
     // The kept draft goes into the box once, when the box is drawn (an open topic), with its quote if that post is drawn then (a
     // quote of a post gone or blocked since is dropped; the words stay). Once only: never again over what the member types next.
     useEffect(() => {
-        if (!draft || !open || !composer.current) return;
+        if (!draft || !canReply || !composer.current) return;
         composer.current.setText(draft.words);
         setPhotos(draft.photos);
         const q = draft.quotes ? page?.posts.find((p) => p.number === draft.quotes && !p.removed) ?? null : null;
         if (q) setQuote(q);
         setDraft(null);
         draftRead.current = true;
-    }, [draft, open, page]);
+    }, [draft, canReply, page]);
 
     /** Up to 3 photos with the reply, each fitted within 800 px; past 3 the web's line. */
     async function attach() {
@@ -330,7 +337,7 @@ export default function ForumTopicScreen() {
             ];
         }
         const items: ForumMenuItem[] = [];
-        if (open && !post.removed && post.words) items.push([t(TOPIC_WORDS.reply), () => { setQuote(post); setMenu(null); composer.current?.focus(); }]);
+        if (canReply && !post.removed && post.words) items.push([t(TOPIC_WORDS.reply), () => { setQuote(post); setMenu(null); composer.current?.focus(); }]);
         if (post.words) items.push([t(TOPIC_WORDS.copy), () => { void Clipboard.setStringAsync(post.words).catch(() => {}); setMenu(null); }]);
         if (!mine && !post.removed) items.push([t(TOPIC_WORDS.report), () => closeMenuThen(() => setReporting(post))]);
         if (!mine) items.push([t(TOPIC_WORDS.block, { name: name(post) }), () => setMenu({ ...m, confirm: 'block' }), true]);
@@ -357,8 +364,9 @@ export default function ForumTopicScreen() {
                                 void act(async () => {
                                     await followForumTopic(topic.id, next);
                                     // Followed: the member's own act, the moment for "Hear when someone replies here."
-                                    // Never on a closed topic: it takes no replies (the node refuses them, forum.ts), so none can be heard.
-                                    if (next && open) void notify.offer({ kind: 'follow', align: 'end' });
+                                    // Never where no reply can go (a closed topic, an archived section, a section this member only reads):
+                                    // the node refuses them (forum.ts), so none can be heard.
+                                    if (next && canReply) void notify.offer({ kind: 'follow', align: 'end' });
                                 });
                             }} style={styles.iconBtn}>
                             <MaterialCommunityIcons name={topic.follow === 'muted' ? 'bell-off-outline' : following ? 'bell' : 'bell-outline'} size={22} color={following ? colors.accent.primary : colors.text.muted} />
@@ -411,11 +419,14 @@ export default function ForumTopicScreen() {
                     {page?.next != null && (
                         <Pressable accessibilityRole="button" onPress={() => void readThrough(page.next!, 0)} style={styles.quiet}><Text style={styles.quietText}>{t(TOPIC_WORDS.moreReplies)}</Text></Pressable>
                     )}
-                    {/* With no reply box (a closed topic), the line ends the posts; with one, it sits just above the box (below). */}
-                    {error && !(topic && open) && <Text style={styles.danger} accessibilityRole="alert">{error}</Text>}
-                    {topic && !open && <Text style={styles.italic} testID="forum-closed">{t(TOPIC_WORDS.closed)}</Text>}
+                    {/* With no reply box (a closed topic, an archived section, one this member only reads), the line ends the posts;
+                        with one, it sits just above the box (below). */}
+                    {error && !(topic && canReply) && <Text style={styles.danger} accessibilityRole="alert">{error}</Text>}
+                    {topic && !canReply && (readsOnly
+                        ? <Text style={styles.italic} testID="forum-reads-only">{t(TOPIC_WORDS.readsOnly)}</Text>
+                        : <Text style={styles.italic} testID="forum-closed">{t(TOPIC_WORDS.closed)}</Text>)}
                 </ScrollView>
-                {topic && open && (
+                {topic && canReply && (
                     <View testID="forum-reply">
                         {/* Why a send didn't go (no connection: the words wait in the box, kept as the draft), where the eye is: the
                             box is pinned at the foot, so a line at the end of a long topic's posts was never seen (F3 part 2 walk). */}

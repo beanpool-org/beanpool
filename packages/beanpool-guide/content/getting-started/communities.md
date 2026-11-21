@@ -28,10 +28,11 @@ You don't have to answer: joining never waits for it. Tap **Not now** and the ap
 
 ## Visiting a community's address
 
-A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member: its name, how many members it has and its town or area if the community shares them, and whether it **Takes requests to join** or **Takes new members by invite**. Nothing else: no members' names, no listings, no balances, never an exact place. The website's map links each community's card with **See** and its name.
+A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member: its name, how many members it has and its town or area if the community shares them, and whether it **Takes requests to join**, **Takes new members by invite**, or says **Anyone can join**. Nothing else: no members' names, no listings, no balances, never an exact place. The website's map links each community's card with **See** and its name.
 
 - **Ask to join**: write your name and a few words about yourself, and tap **Send**. That makes your account here, in this browser, and sends your request to this community: its members decide, and no invite is needed. The page then says when you asked and that your request arrived; it checks for an answer while it is open, and **Check again** asks now. When a member says yes, tap **Join** and the community's name: your account joins, you choose a photo, and you see your 12 words for the first time. Write them down. You can **Cancel my request**, and ask again after 24 hours. A request that is no longer open can be forgotten with **Forget this request**, which removes the account it made from this browser. On an Android phone with the BeanPool app, **Ask to join** opens the community's card in the app, and **or ask here in your browser** asks from the browser instead.
 - **I have an invite**: the form for your invite code.
+- **Join**: in place of **I have an invite**, where **Anyone can join**: the community's web app (its address followed by /app), whose first screen is the same as the app's (see "Joining BeanPool").
 - **Already a member**: the ways back into your account.
 - **Look around the global community**: where the community links to one.
 

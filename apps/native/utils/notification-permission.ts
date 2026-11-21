@@ -36,7 +36,7 @@ import {
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
 import { setNotificationChannels, type ChannelMaker } from './notification-channels';
 // services/push-notifications (which require()s expo-notifications as it loads) and ./identity are loaded inside the
-// functions that need them, never here: Home and How it Works import this file, and six screen suites that don't mock
+// functions that need them, never here: Home and the screens with a notifications line import this file, and six screen suites that don't mock
 // either failed to load when they were static (#2524 deciding review).
 
 async function getNotificationsModule(): Promise<typeof ExpoNotifications | null> {

@@ -35,6 +35,13 @@ export interface ForumTopic {
      * they may see, else a placeholder with its kind alone (@beanpool/core ForumLink). Drawn exactly as given, never filled in.
      */
     links?: ForumLink[];
+    /**
+     * In a topic's own read only, as the node answered it for this member (review of #3339): whether they may reply now (the
+     * topic open, its section not archived, theirs to write in: a group's observers read only), and whether its section is
+     * archived. Absent (a list row, or a copy kept from a read that carried neither): what the topic itself says.
+     */
+    canReply?: boolean;
+    sectionArchived?: boolean;
 }
 export interface ForumPost {
     id: string; topicId: string; number: number; writer: ForumWriter; words: string; quotes: number | null; lang: string | null;

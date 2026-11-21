@@ -357,7 +357,8 @@ export default function ForumTopicScreen() {
                                 void act(async () => {
                                     await followForumTopic(topic.id, next);
                                     // Followed: the member's own act, the moment for "Hear when someone replies here."
-                                    if (next) void notify.offer({ kind: 'follow', align: 'end' });
+                                    // Never on a closed topic: it takes no replies (the node refuses them, forum.ts), so none can be heard.
+                                    if (next && open) void notify.offer({ kind: 'follow', align: 'end' });
                                 });
                             }} style={styles.iconBtn}>
                             <MaterialCommunityIcons name={topic.follow === 'muted' ? 'bell-off-outline' : following ? 'bell' : 'bell-outline'} size={22} color={following ? colors.accent.primary : colors.text.muted} />

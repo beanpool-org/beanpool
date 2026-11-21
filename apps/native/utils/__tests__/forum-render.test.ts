@@ -323,6 +323,15 @@ describe.each(LOOKS)('following a topic in %s (%s): the named line under the bel
         expect(words(byId(host, 'notify-line-done'))).toBe("You'll hear when someone replies here.");
     });
 
+    it('a closed topic: the follow saves but nothing offers to tell of replies that can never come', async () => {
+        node.topic = { ...TOPIC, topic: { ...TOPIC.topic, follow: null, closed: '2026-11-20T00:00:00.000Z' } };
+        notifyAsk.offer = true;
+        const host = await render(set, ForumTopicScreen);
+        await follow(host, 'following');
+        expect(notifyAsk.offered).toEqual([]);
+        expect(byId(host, 'forum-follow-line')).toBeNull();
+    });
+
     it("the rule says no (a day already taken, the phone's no, allowed already): the follow saves and no line shows", async () => {
         unfollowed();
         const host = await render(set, ForumTopicScreen);

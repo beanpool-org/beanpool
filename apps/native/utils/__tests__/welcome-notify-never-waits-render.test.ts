@@ -672,3 +672,40 @@ describe('the way back hands over: no notifications screen where it is not due',
         expect((await readNotificationPermissionRecord()).joinAt).toBeUndefined();
     });
 });
+
+/**
+ * Entering the screen clears `answering` (review of #3335 at 319f8224, finding D; G4 survived): on a claim, a tap that
+ * records nothing (the phone won't show its pop-up, and "Not now" on the one Settings line) goes on to the owner's card. Its
+ * ← Back is the way back, whose Next hands over again, and the screen is due again (shown today, never answered). Without
+ * the reset both answers would do nothing there, and only ‹ would work.
+ */
+describe("back to the notifications screen from the owner's card: its answers work again", () => {
+    it("Turn on → the Settings line's Not now → the owner's card → ← Back → the way back's Next → the screen → Later → the owner's card", async () => {
+        phone.pending = { step: 'notify', flow: 'claim', anchorUrl: HERE, callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, communityName: 'Riverside' };
+        let atTap = false;
+        // Before the tap the phone can ask; at the tap it won't show its pop-up (the Settings line, nothing recorded).
+        os.read = async () => (atTap ? { status: 'denied', canAskAgain: false } : { status: 'undetermined', canAskAgain: true });
+        await mount();
+        expect(q('notify-step-turn-on'), 'the screen').toBeTruthy();
+        atTap = true;
+        await tap('notify-step-turn-on');
+        expect(await until(() => alerts.buttons.some((b) => b.text === 'Not now')), 'the Settings line').toBe(true);
+        await act(async () => { alerts.buttons.find((b) => b.text === 'Not now')!.onPress!(); });
+        await settle();
+        expect(await until(() => q('owner-card-title') !== null), "the owner's card").toBe(true);
+        expect(os.order, 'no pop-up asked').not.toContain('ask');
+        const rec = await readNotificationPermissionRecord();
+        expect([rec.laterAt, rec.phoneNoAt], 'nothing recorded').toEqual([undefined, undefined]);
+
+        atTap = false;
+        const back = host!.querySelector('[aria-label="Back"]') as HTMLElement | null;
+        expect(back, "the owner's card ← Back").toBeTruthy();
+        await act(async () => { back!.click(); });
+        await settle();
+        await tap('way-back-button');
+        expect(await until(() => q('notify-step-later') !== null), 'the screen again').toBe(true);
+        await tap('notify-step-later');
+        expect(await until(() => q('owner-card-title') !== null), "Later goes on to the owner's card").toBe(true);
+        expect(typeof (await readNotificationPermissionRecord()).laterAt, 'the Later recorded').toBe('number');
+    });
+});

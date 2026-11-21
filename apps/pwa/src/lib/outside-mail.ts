@@ -729,14 +729,17 @@ function watchStanding(check: () => unknown): () => void {
 
 /** Whether this community takes messages from other communities (its info's `features.outsideMessages`); null unread. */
 export async function outsideMessagesHere(): Promise<boolean | null> {
-    const info = await communityInfoOnce().catch(() => null);
-    return info ? (info.features as { outsideMessages?: unknown } | undefined)?.outsideMessages === true : null;
+    return (await switchesHere()).on;
 }
 
-/** Whether this community holds a first message as a request (its info's `features.dmRequests`, core requestsHereOf); false unread. */
-export async function requestsHereNow(): Promise<boolean> {
+/**
+ * The two switches a round reads, from this community's info in one read: whether it takes messages from other communities
+ * (`on`, null unread), and whether it holds a first message as a request (`requestsHere`, core requestsHereOf; false unread:
+ * slice S5, what a first line across from a member here meets).
+ */
+async function switchesHere(): Promise<{ on: boolean | null; requestsHere: boolean }> {
     const info = await communityInfoOnce().catch(() => null);
-    return requestsHereOf(info?.features);
+    return { on: info ? (info.features as { outsideMessages?: unknown } | undefined)?.outsideMessages === true : null, requestsHere: requestsHereOf(info?.features) };
 }
 
 let running: Promise<SyncOutcome | null> | null = null;
@@ -773,14 +776,13 @@ function roundWithDeadline(deadlineMs: number): Promise<SyncOutcome | null> {
             const found = await untilDeadline(outsideContext({ nodeUrl: here.nodeUrl, holds }), signal);
             if (!found) return null;
             const ctx = boundedBySignal({ ...found, signal });
-            const on = await untilDeadline(outsideMessagesHere(), signal);
+            // With it, in the same read, this community's own rule for a first line across from a member here (slice S5).
+            const { on, requestsHere } = await untilDeadline(switchesHere(), signal);
             if (on !== true) {
                 // Read, and off: my server would refuse my waiting lines (403) and no round runs to send them; they fail now, saying why.
                 if (on === false && await failUnsent(ctx, t("This community doesn't take messages from other communities.")) > 0 && holds()) ring();
                 return null;
             }
-            // This community's own rule for a first line across from a member here (slice S5): its `dmRequests` switch.
-            const requestsHere = await untilDeadline(requestsHereNow(), signal);
             const out = await syncOutsideMail({ ...ctx, requestsHere });
             if ((out.written || out.requests || out.ticks) && holds()) ring();
             return out;

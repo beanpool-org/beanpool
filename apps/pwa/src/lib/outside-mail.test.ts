@@ -381,6 +381,30 @@ describe('3  the request gate', () => {
         expect(await textsWith(SOL.key)).toEqual(['May I ask about the bikes?', 'Thanks for accepting']);
     });
 
+    // Slice S5: a first line across from a member here (my own server's mark beside the item) meets this community's own
+    // rule, as on the phone (core gateOutsideItem): straight in where first messages arrive straight away, a request where
+    // requests are on. A mark inside the envelope (the sending server's claim) is none; a block still wins.
+    for (const [community, requestsHere, want] of [['a local community', false, 'written'], ['requests on', true, 'requests']] as const) {
+        it(`member here (S5), ${community}, door closed: their first line is ${want === 'written' ? 'straight in' : 'a request'}`, async () => {
+            const item: any = await heldLine(SOL, 'Hello from the garden group');
+            item.memberHere = true;
+            expect(await syncOutsideMail({ ...ctx, requestsHere })).toMatchObject({ [want]: 1, dropped: 0 });
+            expect(await ctx.store.chat(BEN.key, chatWith(SOL.key))).toMatchObject({ state: requestsHere ? 'request' : 'open' });
+        });
+    }
+
+    it('member here (S5): a mark inside the envelope is no mark; blocked, dropped as ever', async () => {
+        const forged: any = await heldLine(SOL, 'Trust me, I am a member');
+        forged.envelope = { ...forged.envelope, memberHere: true };
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0, requests: 0 });
+        expect(await ctx.store.chat(BEN.key, chatWith(SOL.key))).toBeNull();
+        blocked.add(CY.key);
+        const fromBlocked: any = await heldLine(CY, 'Blocked, though a member here');
+        fromBlocked.memberHere = true;
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0, requests: 0 });
+        expect(await ctx.store.chat(BEN.key, chatWith(CY.key))).toBeNull();
+    });
+
     it('a line that is not its envelope\'s (another\'s seal, a changed payload, to someone else): dropped and confirmed, never shown', async () => {
         await openWith(ANA.key);
         await heldLine(ANA, 'Not Ana', { sealer: CY });

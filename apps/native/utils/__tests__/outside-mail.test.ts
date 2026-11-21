@@ -416,6 +416,60 @@ describe('4  the gate through a round', () => {
         expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0 });
     });
 
+    // Slice S5: a first line across from a member here (my own server's mark beside the item) meets this community's own
+    // rule, not the door: straight in where first messages arrive straight away, a request where requests are on.
+    const fromMember = async (from: { seed: string; key: string }, text: string, mark: 'server' | 'envelope' = 'server') => {
+        const item: any = await heldLine(from, text);
+        if (mark === 'server') item.memberHere = true;
+        else item.envelope = { ...item.envelope, memberHere: true };   // the sending server's own claim: never counted
+        return item;
+    };
+    for (const [community, requestsHere, want] of [['a local community', false, 'written'], ['requests on', true, 'requests']] as const) {
+        it(`member here (S5), ${community}, door closed: their first line is ${want === 'written' ? 'straight in' : 'a request'}`, async () => {
+            ctx.requestsHere = requestsHere;
+            const asked: string[] = [];
+            ctx.unbarred = async (k) => { asked.push(k); return true; };
+            await fromMember(SOL, 'Hello from the garden group');
+            expect(await syncOutsideMail(ctx)).toMatchObject({ [want]: 1, dropped: 0 });
+            expect(chatOf(SOL.key)).toMatchObject({ state: requestsHere ? 'request' : 'open' });
+            expect(asked).toEqual([SOL.key]);
+        });
+    }
+
+    it('member here (S5): a block anywhere, an unreadable block list, or no block check at all: the door, as a stranger', async () => {
+        ctx.unbarred = async (k) => k !== SOL.key;
+        await fromMember(SOL, 'Blocked in another community I hold');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0, requests: 0 });
+        delete ctx.unbarred;
+        await fromMember(CY, 'No block check given');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0, requests: 0 });
+        // Blocked on the phone's own list: dropped before anything is asked.
+        const asked: string[] = [];
+        ctx.unbarred = async (k) => { asked.push(k); return true; };
+        blocked.add(ANA.key);
+        await fromMember(ANA, 'Blocked here');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0 });
+        expect(asked).toEqual([]);
+        expect(lineRows()).toEqual([]);
+    });
+
+    it("member here (S5): a mark inside the envelope (the sending server's claim) is no mark: door closed, dropped", async () => {
+        ctx.unbarred = async () => true;
+        await fromMember(SOL, 'Trust me, I am a member', 'envelope');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0, requests: 0 });
+        expect(chatOf(SOL.key)).toBeUndefined();
+    });
+
+    it('member here (S5): a chat I declined stays declined', async () => {
+        ctx.unbarred = async () => true;
+        await setDoor(ctx.store, true);
+        await heldLine(SOL, 'First, as a stranger');
+        await syncOutsideMail(ctx);
+        await ctx.store.decide(BEN.key, relayConversationId(BEN.key, SOL.key), 'declined');
+        await fromMember(SOL, 'Now as a member here');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ dropped: 1, written: 0 });
+    });
+
     it('declined, then blocked: nothing more from them is kept', async () => {
         await setDoor(ctx.store, true);
         await heldLine(SOL, 'First');

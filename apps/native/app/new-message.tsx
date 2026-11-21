@@ -22,7 +22,7 @@ export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { useContactsRecord } from '../utils/use-contacts';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
-import { heldCommunityUrls, heldPeopleMatching, type HeldPerson } from '../utils/held-chats';
+import { heldCommunityList, heldPeopleMatching, type HeldPerson } from '../utils/held-chats';
 import { sameCommunity } from '../utils/push-pins';
 import { existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
 import { useNodeProfile } from '../utils/use-node-profile';
@@ -312,14 +312,15 @@ export default function NewMessageScreen() {
         try {
             // Message's one rule (slice S5 part 2, utils/message-anyone.ts): an existing chat with them wins (here, in place in
             // a held community, or across), else the community shared with them: the one in use, else where they were found.
-            const heldUrls = await heldCommunityUrls().catch(() => [] as string[]);
+            const heldList = await heldCommunityList().catch(() => [] as Array<{ url: string; name: string }>);
+            const heldUrls = heldList.map((h) => h.url);
             const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
             const where = held?.community ?? anchor;
             const path: MessagePath = where
                 ? await messagePathOnPhone(identity.publicKey, [{ community: where, key: pubkey, name: held?.callsign ?? null }], heldUrls).catch(() => ({ open: 'shared' as const, community: where, key: pubkey }))
                 : { open: 'nothing' };
             if (path.open === 'existing') {
-                router.replace(existingChatRoute(path.chat, anchor, () => held?.communityName ?? '') as any);
+                router.replace(existingChatRoute(path.chat, anchor, (c) => heldList.find((h) => sameCommunity(h.url, c))?.name ?? held?.communityName ?? '') as any);
                 return;
             }
             if (path.open === 'shared' && held && !(anchor && sameCommunity(path.community, anchor))) {

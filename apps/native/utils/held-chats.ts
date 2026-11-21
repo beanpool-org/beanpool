@@ -140,9 +140,9 @@ export async function heldLetIn(myPubkey: string): Promise<LetInRead | null> {
     }
 }
 
-/** The other communities this phone holds as a member, by address, in the order Chat lists them (Message's path rule: S5 part 2). */
-export async function heldCommunityUrls(): Promise<string[]> {
-    return (await heldCommunities()).map((c) => c.url);
+/** The other communities this phone holds as a member, by address and saved name, in the order Chat lists them (Message's path rule: S5 part 2). */
+export async function heldCommunityList(): Promise<Array<{ url: string; name: string }>> {
+    return (await heldCommunities()).map(({ url, name }) => ({ url, name }));
 }
 
 /** A person in another community this phone holds, found by New message's search (slice S5 part 2). */

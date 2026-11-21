@@ -1,7 +1,7 @@
 /**
  * The first screens in other languages at 320 px with 1.3× text, light and dark (translation slice S2; director
  * amendment 1 item 7): the welcome page on a local community, the guest lobby's Home on the worldwide one (HomePage
- * as a visitor sees it), and the 12-word restore screen (welcome → Restore existing identity → 🔑 Recover with 12
+ * as a visitor sees it), and the 12-word restore screen (welcome → I've used BeanPool before → 🔑 Recover with 12
  * Words: #1947 review B1, where a translated "Paste Words" ran off the edge), each opened with `?lang=` in the
  * pseudo-locale `xx` (every sentence accented and padded ~35 %), Russian, French and Simplified Chinese.
  *
@@ -68,7 +68,7 @@ const SCREENS = [
         // Each button found by the name a member reads in that language (the 🔑 is aria-hidden).
         open: async (page, lang) => {
             await page.waitForSelector('h2', { timeout: 15_000 });
-            await page.getByRole('button', { name: wordIn(lang, 'Restore existing identity'), exact: true }).click();
+            await page.getByTestId('front-door-used-before').click();
             await page.getByRole('button', { name: wordIn(lang, 'Recover with 12 Words'), exact: true }).click();
         },
     },

@@ -1,7 +1,9 @@
 /**
  * The web join's name box refuses an invite or a web address (Marty, 14 Nov 2026, card callsign-link-guard: a member's
- * invite link pasted into the name box became her name on her community). A pasted invite goes to the invite box, the name box is
- * left empty and one line says why; a web address is refused on Join with that line; nothing is sent to the node.
+ * invite link pasted into the name box became her name on her community). Since W1 the name box is on Your name, which has
+ * no invite box (as the phone's since #3317): a pasted invite becomes the invite (Your invite's box holds it, behind the
+ * pencil), the name box is left empty and the phone's one line says why; a web address is refused on Join with its line;
+ * nothing is sent to the node.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -32,9 +34,21 @@ function stubNode() {
     return { sent: () => calls.filter((c) => c.path.startsWith('/api/invite/')) };
 }
 
-const nameBox = () => screen.getByLabelText('Your Callsign (Name)') as HTMLInputElement;
-const inviteBox = () => screen.getByLabelText('Invite Code') as HTMLInputElement;
-const join = () => fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+const CODE = 'BP-7K3X-9M2W';
+const IT_IS_THE_INVITE = "That's an invite, not a name: it's your invite now.";
+const nameBox = () => screen.getByLabelText('What should we call you?') as HTMLInputElement;
+/** Your invite's box, behind Your name's pencil. */
+const inviteBox = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Change the invite' }));
+    return screen.getByLabelText('Invite link or code') as HTMLInputElement;
+};
+const join = () => fireEvent.click(screen.getByTestId('name-step-join'));
+/** Your name, opened from an invite link (the greeting's read of the code goes as it opens). */
+async function nameScreen() {
+    window.history.replaceState(null, '', `/app?invite=${CODE}`);
+    render(<WelcomePage onComplete={vi.fn()} />);
+    await screen.findByTestId('name-step');
+}
 
 beforeEach(() => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
@@ -50,45 +64,41 @@ afterEach(() => {
 describe('the web join\'s name box takes a name, never an invite or a link', () => {
     it('her invite link pasted into the name box goes to the invite box, whole, and the name box stays empty with one line', async () => {
         const node = stubNode();
-        render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
+        await nameScreen();
         // The box keeps 20 characters: the paste is read as it came, before the box cuts it.
         expect(nameBox()).toHaveAttribute('maxlength', '20');
         fireEvent.paste(nameBox(), { clipboardData: { getData: () => HER_LINK } });
 
-        expect(inviteBox().value).toBe('INV-K7Q2-BSXA');
         expect(nameBox().value).toBe('');
-        expect(screen.getByText(NAME_BOX_WORDS.inviteLink)).toBeInTheDocument();
+        expect(screen.getByText(IT_IS_THE_INVITE)).toBeInTheDocument();
         expect(node.sent().filter((c) => c.path === '/api/invite/redeem')).toHaveLength(0);
+        expect(inviteBox().value).toBe('INV-K7Q2-BSXA');
     });
 
     it('an invite code typed or dropped into the name box moves too', async () => {
         stubNode();
-        render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
+        await nameScreen();
         fireEvent.change(nameBox(), { target: { value: 'INV-K7Q2-BSXA' } });
-        expect(inviteBox().value).toBe('INV-K7Q2-BSXA');
         expect(nameBox().value).toBe('');
-        expect(screen.getByText(NAME_BOX_WORDS.inviteCode)).toBeInTheDocument();
+        expect(screen.getByText(IT_IS_THE_INVITE)).toBeInTheDocument();
+        expect(inviteBox().value).toBe('INV-K7Q2-BSXA');
     });
 
     it('a web address as the name is refused on Join with its line, and nothing is sent', async () => {
         const node = stubNode();
-        render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
-        fireEvent.change(inviteBox(), { target: { value: 'BP-7K3X-9M2W' } });
+        await nameScreen();
+        // Only the greeting's read so far.
+        const before = node.sent().length;
         fireEvent.change(nameBox(), { target: { value: 'riverside.org' } });
         join();
         expect(await screen.findByText(NAME_BOX_WORDS.webLink)).toBeInTheDocument();
         expect(nameBox().value).toBe('riverside.org');
-        expect(node.sent()).toHaveLength(0);
+        expect(node.sent()).toHaveLength(before);
     });
 
     it('a name with dots in it joins as before (the redeem is sent)', async () => {
         const node = stubNode();
-        render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
-        fireEvent.change(inviteBox(), { target: { value: 'BP-7K3X-9M2W' } });
+        await nameScreen();
         fireEvent.change(nameBox(), { target: { value: 'J.R. St.Kilda' } });
         join();
         await vi.waitFor(() => expect(node.sent().some((c) => c.path === '/api/invite/redeem' && c.body?.callsign === 'J.R. St.Kilda')).toBe(true));

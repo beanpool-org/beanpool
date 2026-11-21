@@ -73,7 +73,7 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, FORUM_PUSH_WORDS, askedPushOn, forumNoticesOn, forumPublicOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, signInsToRefresh, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, FORUM_PUSH_WORDS, NEW_EVENT_PUSH_WORDS, askedPushOn, forumNoticesOn, forumPublicOn, newEventPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, signInsToRefresh, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -659,6 +659,9 @@ export default function SettingsScreen() {
     // The Forum switch (slice F5; core forumNoticesOn): on until the member turns it off, shown only where the community
     // sends the forum's notices.
     const [notifForum, setNotifForum] = useState(true);
+    // "When someone posts a new event" (notifications NEb; core newEventPushOn): on until the member turns it off, shown only
+    // where the community sends that notice. Saved as `notify_new_events`, its own key alone, as each switch here is.
+    const [notifNewEvents, setNotifNewEvents] = useState(true);
     // "Requests to join" only where it changes something (core knockSwitchShown): not for an owner or admin, who is always
     // told, nor on a Known community, whose members are never told. Asked as the screen opens; a node that gave no answer
     // (offline, a timeout, a 5xx) is a role not known yet, so the switch waits (askNodeRole, never fetchMyNodeRole's "no role").
@@ -2192,6 +2195,7 @@ export default function SettingsScreen() {
                                     setNotifKnocks(prefs.notify_knocks === 'true');
                                     setNotifAsked(prefs.notify_asked !== 'false');
                                     setNotifForum(prefs.notify_forum !== 'false');
+                                    setNotifNewEvents(prefs.notify_new_events !== 'false');
                                 }
                                 if (identity.privateKey) setKnockSwitch(knockSwitchShown(nodeProfile?.features, (await askNodeRole(url, identity))?.role));
                             }
@@ -2784,6 +2788,21 @@ export default function SettingsScreen() {
                                         try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_asked: next } }); } } catch (e) { console.warn('[Prefs]', e); }
                                     }}>
                                         <View style={[styles.toggleThumb, notifAsked && styles.toggleThumbOn]} />
+                                    </Pressable>
+                                </View>
+                            )}
+                            {newEventPushOn(nodeProfile?.features) && (
+                                <View style={styles.menuBtn} testID="settings-notify-new-events">
+                                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📅</Text></View>
+                                    <View style={styles.menuTextBesideSwitch}>
+                                        <Text style={styles.menuText}>{t(NEW_EVENT_PUSH_WORDS.switchName)}</Text>
+                                        <Text style={styles.menuSub}>{t(NEW_EVENT_PUSH_WORDS.switchLine)}</Text>
+                                    </View>
+                                    <Pressable style={[styles.toggle, notifNewEvents && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t(NEW_EVENT_PUSH_WORDS.switchName)} accessibilityState={{ checked: notifNewEvents }} testID="settings-notify-new-events-toggle" onPress={async () => {
+                                        const next = !notifNewEvents; setNotifNewEvents(next);
+                                        try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_new_events: next } }); } } catch (e) { console.warn('[Prefs]', e); }
+                                    }}>
+                                        <View style={[styles.toggleThumb, notifNewEvents && styles.toggleThumbOn]} />
                                     </Pressable>
                                 </View>
                             )}

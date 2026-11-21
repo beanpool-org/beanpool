@@ -1112,7 +1112,7 @@ async function twoTabs(browser, root) {
         const w = await openContext(browser, node.origin, { installDismissed: true });
         contexts.push(w);
         await land(w.page, node.origin);
-        await w.page.getByRole('button', { name: 'Restore existing identity' }).waitFor({ timeout: 30_000 });
+        await w.page.getByTestId('front-door-used-before').waitFor({ timeout: 30_000 });
         const wAna = await openTab(w.context, node.origin);
         await putIdentity(wAna.page, node.origin, ana);
         await land(wAna.page, node.origin);
@@ -1122,7 +1122,7 @@ async function twoTabs(browser, root) {
         await wait(1_000);
         await node.ask({ op: 'resetLimits' });
         const restored = Date.now();
-        await w.page.getByRole('button', { name: 'Restore existing identity' }).click();
+        await w.page.getByTestId('front-door-used-before').click();
         await w.page.getByRole('button', { name: /Recover with 12 Words/ }).click();
         for (let i = 0; i < 12; i++) await w.page.getByLabel(`Recovery word ${i + 1}`, { exact: true }).fill(cal.words[i]);
         await w.page.getByRole('button', { name: 'Recover Identity' }).click();

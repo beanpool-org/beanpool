@@ -50,7 +50,7 @@ afterEach(() => {
 describe('the welcome page at a server with no owner yet', () => {
     it("shows the phone's no-owner card in the phone's order, and Claim opens this server's Settings", async () => {
         const asked = stubNode({ unclaimed: true, codeId: 'a1b2c3d4e5f60718', salt: 'ab'.repeat(16), communityName: 'Riverside Exchange', password: false });
-        render(<WelcomePage onComplete={vi.fn()} />);
+        render(<WelcomePage onComplete={vi.fn()} onAsked={vi.fn()} />);
         const card = await screen.findByTestId('no-owner-card');
         expect(asked).toContain('/api/local/claim');
         const heading = screen.getByRole('heading', { name: 'Riverside Exchange has no owner yet' });
@@ -68,26 +68,32 @@ describe('the welcome page at a server with no owner yet', () => {
         // The card's Ask to join, which nobody could answer, is not offered.
         expect(screen.queryByTestId('community-card')).toBeNull();
         expect(screen.queryByTestId('community-card-ask')).toBeNull();
+        expect(screen.queryByTestId('front-door-more')).toBeNull();
     });
 
-    it('a server with an owner shows its card as before, and no no-owner card', async () => {
-        stubNode({ unclaimed: false, password: false });
+    it('a server with an owner shows its front door as before, and no no-owner card', async () => {
+        const asked = stubNode({ unclaimed: false, password: false });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByTestId('community-card');
+        await screen.findByTestId('front-door');
+        await waitFor(() => expect(asked).toContain('/api/local/claim'));
+        await new Promise((r) => setTimeout(r, 0));
         expect(screen.queryByTestId('no-owner-card')).toBeNull();
     });
 
-    it('a standby, or a server too old to answer the claim route, shows its card as before', async () => {
-        stubNode({ unclaimed: false, standby: true, password: false });
+    it('a standby, or a server too old to answer the claim route, shows its front door as before', async () => {
+        const standby = stubNode({ unclaimed: false, standby: true, password: false });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByTestId('community-card');
+        await screen.findByTestId('front-door');
+        await waitFor(() => expect(standby).toContain('/api/local/claim'));
+        await new Promise((r) => setTimeout(r, 0));
         expect(screen.queryByTestId('no-owner-card')).toBeNull();
         cleanup();
 
         const asked = stubNode(404);
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByTestId('community-card');
+        await screen.findByTestId('front-door');
         await waitFor(() => expect(asked).toContain('/api/local/claim'));
+        await new Promise((r) => setTimeout(r, 0));
         expect(screen.queryByTestId('no-owner-card')).toBeNull();
     });
 });

@@ -347,6 +347,9 @@ test('GLOSSARY.csv invents nothing: every rendering is in a catalog of its langu
         text[lang] = fold(parts.join('\n'));
     }
     for (const t of terms) {
+        // A forbidden row's renderings are the ones ruled out, kept so words:check catches them coming back: they are meant
+        // to leave the catalogs (the web's join FAQ took the last "устойчивост~" with it, W1), not to be found in one.
+        if (t.flags.includes('forbidden')) continue;
         for (const [lang, forms] of Object.entries(t.renderings)) {
             for (const form of forms) {
                 assert.ok(text[lang].includes(fold(form.replace(/~$/, ''))), `"${form}" (${t.term}, ${lang}) is in no ${lang} catalog: the glossary does not invent a rendering`);

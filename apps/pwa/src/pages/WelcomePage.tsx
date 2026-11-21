@@ -107,10 +107,10 @@ function inviteHash(code: string): string {
 function keptAnotherName(asked: string, kept: string, earlier = false): string | null {
     const sent = asked.trim();
     if (!sent || kept === sent) return null;
-    if (earlier) return t('You joined as {name} on an earlier try. Tap ← Back to change it.', { name: kept });
+    if (earlier) return t('You joined as {name} on an earlier try. Tap ‹ to change it.', { name: kept });
     return sent.length > MAX_JOIN_CALLSIGN
-        ? t("You're {name} here: a name here keeps {max} characters. Tap ← Back to change it.", { name: kept, max: MAX_JOIN_CALLSIGN })
-        : t("You're {name} here: {asked} was taken. Tap ← Back to change it.", { name: kept, asked: sent });
+        ? t("You're {name} here: a name here keeps {max} characters. Tap ‹ to change it.", { name: kept, max: MAX_JOIN_CALLSIGN })
+        : t("You're {name} here: {asked} was taken. Tap ‹ to change it.", { name: kept, asked: sent });
 }
 
 /** A rename the node took, whose copy in this browser could not be written (handleRename). Read when it is shown, in the language then. */
@@ -2614,7 +2614,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                 </button>
                             </StepAction>
                             <button type="button" onClick={() => { setError(null); setJoinScreen('door'); }}
-                                className="block mx-auto mt-3 min-h-[44px] px-3 bg-transparent border-none text-sm text-text-secondary cursor-pointer">
+                                className="block mx-auto mt-3 min-h-[48px] px-3 bg-transparent border-none text-sm text-text-secondary cursor-pointer">
                                 {t('← Back')}
                             </button>
                         </form>

@@ -645,7 +645,7 @@ describe('← Back on the photo step changes the name on the same account (card 
             const saved = (await loadIdentity())!;
             expect(saved).toMatchObject({ publicKey: redeem.body.publicKey, callsign: 'Sam2', mnemonic: expect.any(Array) });
             expect(screen.getByText('Sam2')).toBeInTheDocument();
-            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Sam2 here: Sam was taken. Tap ← Back to change it.");
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Sam2 here: Sam was taken. Tap ‹ to change it.");
 
             fireEvent.click(screen.getByTestId('step-dots-back'));
             await waitFor(() => expect(nameField()).toHaveValue('Sam2'));
@@ -680,7 +680,7 @@ describe('← Back on the photo step changes the name on the same account (card 
             expect(node.state.members.get(key)).toBe('Rowan of the Valley');
             expect(await loadIdentity()).toMatchObject({ publicKey: key, callsign: 'Rowan of the Valley' });
             expect(screen.getByText('Rowan of the Valley')).toBeInTheDocument();
-            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Rowan of the Valley here: a name here keeps 20 characters. Tap ← Back to change it.");
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent("You're Rowan of the Valley here: a name here keeps 20 characters. Tap ‹ to change it.");
 
             fireEvent.click(screen.getByTestId('step-dots-back'));
             await waitFor(() => expect(nameField()).toHaveValue('Rowan of the Valley'));
@@ -706,7 +706,7 @@ describe('← Back on the photo step changes the name on the same account (card 
             expect(node.redeems().map((r) => [r.body.publicKey, r.body.callsign])).toEqual([[key, 'Sam'], [key, 'Samuel']]);
             expect(await loadIdentity()).toMatchObject({ publicKey: key, callsign: 'Sam2' });
             expect(screen.getByText('Sam2')).toBeInTheDocument();
-            expect(screen.getByTestId('joined-as-note')).toHaveTextContent('You joined as Sam2 on an earlier try. Tap ← Back to change it.');
+            expect(screen.getByTestId('joined-as-note')).toHaveTextContent('You joined as Sam2 on an earlier try. Tap ‹ to change it.');
         });
 
         it('an answer naming another key changes nothing here: this browser keeps the name it sent, with no note', async () => {

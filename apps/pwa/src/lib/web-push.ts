@@ -15,7 +15,7 @@
 import {
     markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyBrowserOutcome, notifyBrowserPhone, notifyBrowserPrompter, notifyJoinStep, notifyOutcomeEvent, t,
     verifyPushNotice, word, type NotifyAskEvent, type NotifyAskRecord, type NotifyAskSurface, type NotifyBrowser, type NotifyBrowserResult,
-    type NotifyJoinPath, type NotifyPrompter,
+    type NotifyJoinPath, type NotifyLineKind, type NotifyPhone, type NotifyPrompter,
 } from '@beanpool/core';
 import { getNodeApiUrl, sendSignedAt, signedFetchAt } from './api';
 import { refuseIfNodeTooOld } from './node-version-gate';
@@ -516,6 +516,31 @@ export async function turnOnFromAsk(identity: BeanPoolIdentity, lang: string, su
 /** "Later" on either: dated, never a no ({@link answerAsk}); on the once card it also puts the card away. */
 export function laterFromAsk(publicKey: string, surface: NotifyAskSurface): void {
     answerAsk(publicKey, surface, { type: 'later', surface });
+}
+
+// ── The named lines and the true lines (slice N5b) ─────────────────────────────────────────────────────────────
+
+/**
+ * This browser as core's rule reads a phone (notifyBrowserPhone), from what it already says and never asking: nothing to
+ * turn on where web push can't reach it; on where this account's notifications are on here; else it can ask unless the
+ * browser blocks the site. The true lines (an event's "⏰ Reminders need notifications on.", What are you into?'s promise)
+ * read this, as the phone's read its own answer.
+ */
+export function notifyPhoneHere(publicKey: string | null, env: PushEnv = pushEnv()): NotifyPhone {
+    return notifyBrowserPhone(notifyBrowserHere(publicKey, env));
+}
+
+/**
+ * A named line at the member's own act (DESIGN-notify-and-backup-asks-fable-amend2.md §6, §12.3 slice N5b; the phone's
+ * utils/notification-permission.ts offerNamedLine): whether it may show, by core's rule (notifyAsks `line`: each kind once
+ * for this account in this browser, one soft ask a day with one line still allowed on the day of the join's screen, never
+ * after the browser's no, never where web push can't reach it or this account's notifications are already on here), and,
+ * where it may, kept as shown, which spends its kind and the day. Nothing is asked of the browser.
+ */
+export function offerNamedLineHere(publicKey: string, kind: NotifyLineKind, env: PushEnv = pushEnv(), now: number = Date.now()): boolean {
+    if (!notifyAsks({ record: readNotifyAsk(publicKey), phone: notifyPhoneHere(publicKey, env), now, line: kind }).line) return false;
+    markNotifyAskHere(publicKey, { type: 'shown', surface: 'line', line: kind }, now);
+    return true;
 }
 
 /**

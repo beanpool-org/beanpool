@@ -35,6 +35,8 @@ Some browsers can't be told at all: an older iPhone, a private window, and a com
 
 **Turn off** stops them in that browser. Signing out does too, and so does blocking them in the browser.
 
+The web app also offers the same one-line lines as the phone, with the same words: under a message you send or one you read in a chat, under **Going** or **Interested** on an event, after a star on **What are you into?**, and after you follow a forum topic. Each shows only where your browser can be told and isn't yet, each kind once, never more than one a day. **Tell me** brings your browser's own question. An event's reminder says **Reminders need notifications on.** with **Turn on** while a reminder is still to come and your browser could be told but isn't; if your browser blocked notifications for your community's site, **Turn on** says how to allow them again. **What are you into?** says you'll be told when a neighbour asks only while your browser is turned on.
+
 Four alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, that an admin started moving your account to a new phone, that your community opened a vote about your account, and that an admin took down your reply on that vote. If you run your community's server, its alerts about the server always come through too.
 
 ## What an alert says

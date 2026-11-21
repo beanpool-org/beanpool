@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The components welcome draws that sweep B9 took (words slice S3), each whole and in every state, rendered for real
- * inside the real LanguageProvider in the pseudo-locale: How BeanPool works (OnboardingGuide, with Beans and without),
- * the working-style quiz (its intro, a question, its result), the account-protection panel (a vault build and a
+ * inside the real LanguageProvider in the pseudo-locale (How BeanPool works left the phone's path in slices S5 and S5b, and
+ * its component with it): the working-style quiz (its intro, a question, its result), the account-protection panel (a vault build and a
  * community build; covered by one and by two sign-ins, with Connect again and Disconnect; the 12 words; no words), the
  * sign-in sheet (connecting, linked, linked over another account's sign-in, not linked), the recovery kit's buttons (the
  * question before Save as PDF, and the failure) and the notes under the 12 words.
@@ -137,7 +137,6 @@ vi.mock('../words-on-screen', async (importOriginal) => {
 
 import { DEEP_RESONANCE_QUESTIONS, QUICK_SPARK_QUESTIONS, pseudoLocalise, setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
-import { OnboardingGuide } from '../../components/OnboardingGuide';
 import { ArchetypeQuizModal } from '../../components/ArchetypeQuizModal';
 import { KeeperProtectionPanel, SIGN_IN_ROW, VAULT_COPY_OPENERS } from '../../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
@@ -222,38 +221,6 @@ function rowsWrap(step: string, line: number) {
 /** Welcome's card at 320 dp: the scroll's 24 dp and the card's 24 dp a side. */
 const CARD_LINE = 320 - 2 * 24 - 2 * 24;
 const check = (step: string, line = CARD_LINE) => { wholly(step); buttonsFit(step, line); rowsWrap(step, line); };
-
-describe('How BeanPool works (OnboardingGuide)', () => {
-    it('with Beans: every card, its bold lead-ins inside their sentences', async () => {
-        const page = await mount(createElement(OnboardingGuide, { beansOn: true }));
-        expect(page.textContent).toContain(pseudoLocalise('🟢 {zero} This means you have given as much value to your community as you have received from it.').replace('{zero}', pseudoLocalise('The best place to be is zero (0 Beans).')));
-        check('the guide, with Beans');
-    });
-
-    it('without Beans: the one card in place of the three, and no Ledger tip', async () => {
-        const page = await mount(createElement(OnboardingGuide, { beansOn: false }));
-        expect(page.textContent).toContain(pseudoLocalise('🌍 A place to meet'));
-        expect(page.textContent).not.toContain(pseudoLocalise('Ledger'));
-        // The global community's card, naming it, as it was.
-        expect(page.textContent).toContain(pseudoLocalise('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.'));
-        check('the guide, without Beans');
-    });
-
-    it("without Beans at another community's open door: its name in the card, never the global community's (issue #2563)", async () => {
-        const page = await mount(createElement(OnboardingGuide, { beansOn: false, community: 'Riverbend' }));
-        expect(page.textContent).toContain(pseudoLocalise('🌍 A place to meet'));
-        expect(page.textContent).toContain(pseudoLocalise('{name} has no Beans: credit, the Commons and trading in Beans live in communities that use them, which you join with an invite from a member.').replace('{name}', 'Riverbend'));
-        expect(page.textContent).not.toContain(pseudoLocalise('The global community is for meeting people and finding a community near you.'));
-        expect(page.textContent).not.toContain(pseudoLocalise('Ledger'));
-        check("the guide, without Beans, at another community's door");
-    });
-
-    it('with Beans a community name changes nothing: the three cards about Beans, as before', async () => {
-        const page = await mount(createElement(OnboardingGuide, { beansOn: true, community: 'Riverbend' }));
-        expect(page.textContent).toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
-        expect(page.textContent).not.toContain('Riverbend');
-    });
-});
 
 describe('the working-style quiz (ArchetypeQuizModal)', () => {
     it('the intro, every Quick Spark question, and the result', async () => {

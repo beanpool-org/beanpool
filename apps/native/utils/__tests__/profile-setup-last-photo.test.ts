@@ -78,7 +78,6 @@ const PICK = 'bundled://bean-green';
 vi.mock('../../components/AvatarPickerSheet', () => ({
     AvatarPickerSheet: ({ onSelectImage }: { onSelectImage: (uri: string) => void }) => createElement('button', { 'data-testid': 'pick-photo', onClick: () => onSelectImage('bundled://bean-green') }, 'pick'),
 }));
-vi.mock('../../components/OnboardingGuide', () => ({ OnboardingGuide: () => createElement('div', { 'data-testid': 'guide' }) }));
 // Shows which picture it is given, so the preview and the offer's thumbnail can be told apart.
 vi.mock('../../components/MemberAvatar', () => ({
     MemberAvatar: ({ avatarUrl, size }: { avatarUrl?: string | null; size?: number }) => createElement('span', { 'data-avatar': avatarUrl ?? '', 'data-size': String(size ?? '') }),
@@ -192,11 +191,11 @@ describe('joining offers the last photo as a tickbox that starts off', () => {
         expect(previewPhoto()).toBe('');
         expect(box.querySelector('[data-size="40"]')!.getAttribute('data-avatar')).toBe(LAST_PHOTO);
         // Nothing is chosen yet, so the step cannot go on: the box did not tick itself.
-        expect(button('Next →')!.getAttribute('aria-disabled')).toBe('true');
+        expect(button('Done')!.getAttribute('aria-disabled')).toBe('true');
         expect(requests).toEqual([]);
         // Ticking it is the member's own act, and is what lets the step go on.
         await tick();
-        expect(button('Next →')!.getAttribute('aria-disabled')).toBeNull();
+        expect(button('Done')!.getAttribute('aria-disabled')).toBeNull();
     });
 
     it('names the community by its host when the phone keeps no name for it, and plainly when it does not know where the photo came from', async () => {
@@ -219,7 +218,6 @@ describe('joining offers the last photo as a tickbox that starts off', () => {
         await act(async () => { await new Promise(r => setTimeout(r, 450)); });
         await settle();
         await click('Next →');
-        await click('Next →');
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY }]);
         expect(JSON.stringify(published())).not.toContain(LAST_PHOTO);
@@ -230,7 +228,6 @@ describe('joining offers the last photo as a tickbox that starts off', () => {
         await click('Choose Photo or Avatar');
         await pickPhoto();
         expect(offerBox()!.getAttribute('aria-checked')).toBe('false');
-        await click('Next →');
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK }]);
         expect(calls.updateMemberProfile.map(c => c.data.avatar_url)).toEqual([PICK]);
@@ -242,7 +239,6 @@ describe('joining offers the last photo as a tickbox that starts off', () => {
         await tick();
         expect(offerBox()!.getAttribute('aria-checked')).toBe('true');
         expect(previewPhoto()).toBe(LAST_PHOTO);
-        await click('Next →');
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: LAST_PHOTO }]);
         expect(calls.updateMemberProfile.map(c => c.data.avatar_url)).toEqual([LAST_PHOTO]);
@@ -265,7 +261,6 @@ describe('joining offers the last photo as a tickbox that starts off', () => {
         await click('Change Photo or Avatar');
         await pickPhoto();
         expect(offerBox()!.getAttribute('aria-checked')).toBe('false');
-        await click('Next →');
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK }]);
     });

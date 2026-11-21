@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { t } from '@beanpool/core';
+import { NOTIFY_TRUE_WORDS, eventNoticesComing, notifyRemindersOff, notifyTurnOn, t, type EventReminderChoiceRead } from '@beanpool/core';
 import {
     getMyEvents, getNodeApiUrl, getNotificationPreferences, setEventReminder, type MarketplacePost,
 } from '../lib/api';
@@ -20,6 +20,10 @@ import {
     reminderOffsetLabel, type ShareableEvent,
 } from '../lib/event-extras';
 import { eventShareWhen } from '../lib/events';
+import { useLanguage } from '../lib/useLanguage';
+import { TELL_ME_WORDS, readNotifyAsk, turnOnFromAsk } from '../lib/web-push';
+import { noteBrowserChanged, useNotifyBrowser } from './NotifyLine';
+import { WEB_PUSH_ROW_WORDS } from './WebPushRow';
 import { Sentence } from './Sentence';
 import { useShare } from './SharePost';
 import { MenuChoices, useInFlowMenu } from './ShareMenu';
@@ -165,57 +169,122 @@ export function EventShareAndCalendar({ post, lead }: { post: MarketplacePost; l
     );
 }
 
+/** What the page holds of the member's reminder choice for this event (useEventReminderChoice). */
+export interface EventReminderChoice extends EventReminderChoiceRead {
+    /** This event's own choice saved (null: back to the default). */
+    setOffsets: (next: number[] | null) => void;
+}
+
+const CHOICE_UNREAD: EventReminderChoiceRead = { offsets: null, defaults: DEFAULT_REMINDER_OFFSETS, marketplaceOn: true, known: false };
+
+/**
+ * The member's reminder choice for an event they answered (the phone's EventExtras useEventReminderChoice): what this event
+ * is set to comes from `/api/events/mine`, because that is the one place the contract puts it; the member's default and
+ * their Marketplace switch from their preferences. A member who has just tapped Going may not be in the list yet; they read
+ * as "my default", which is exactly what the node will do for them until they choose otherwise.
+ *
+ * Held by the event page (components/EventCard.tsx EventDetail), which draws both the reminder box and the named line under
+ * the answer: each says only what the node will send by this choice (core eventNoticesComing), and a choice changed in the
+ * box changes both. Read again whenever the member answers after having none. `known` only once both reads have answered:
+ * offline, nothing is promised.
+ */
+export function useEventReminderChoice(postId: string, publicKey: string | null | undefined, answered: boolean): EventReminderChoice {
+    const [choice, setChoice] = useState<EventReminderChoiceRead>(CHOICE_UNREAD);
+    useEffect(() => {
+        if (!answered) {
+            // No answer: no choice of its own; the next answer starts again from the member's default.
+            setChoice(c => (!c.known && c.offsets === null ? c : CHOICE_UNREAD));
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            let mineRead = false;
+            let offsets: number[] | null = null;
+            try {
+                const mine = await getMyEvents();
+                const row = mine.find(r => r.postId === postId);
+                offsets = row ? parseReminderOffsets(row.reminderOffsets) : null;
+                mineRead = true;
+            } catch {
+                // Offline, or a node having a bad minute: leaves the line reading "your default", which is what the node
+                // would in fact do; but nothing is promised from it.
+            }
+            if (cancelled) return;
+            if (mineRead) setChoice(c => ({ ...c, offsets }));
+            if (!publicKey) return;
+            try {
+                const prefs = await getNotificationPreferences(publicKey);
+                if (cancelled) return;
+                setChoice(c => ({
+                    ...c,
+                    defaults: parseReminderOffsets(prefs?.[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS,
+                    // Settings' reading of the switch (pages/SettingsPage.tsx): on unless it says false, as text or a flag.
+                    marketplaceOn: String(prefs?.notify_marketplace) !== 'false',
+                    known: mineRead,
+                }));
+            } catch {
+                // Keep the documented default; it is right for everyone who has not changed it. Unknown, so nothing is promised.
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [answered, postId, publicKey]);
+    const setOffsets = useCallback((next: number[] | null) => setChoice(c => ({ ...c, offsets: next })), []);
+    return { ...choice, setOffsets };
+}
+
 interface ReminderProps {
     post: MarketplacePost;
     identity?: BeanPoolIdentity | null;
     /** Shown only to someone with an RSVP; the host gets no RSVP buttons, so they get no reminders either. */
     myRsvp: 'going' | 'interested' | null | undefined;
+    /** The member's choice for this event, held by the page (useEventReminderChoice); read here when no page holds it. */
+    choice?: EventReminderChoice;
 }
 
 /**
  * "Remind me": the choice that applies to this event, and a way to change it or hand it back to the
- * member's default.
+ * member's default (read by useEventReminderChoice, held by the page).
  *
- * What this event is set to comes from `/api/events/mine`, because that is the one place the contract puts
- * it; the member's default comes from their preferences, so the line can say which it is. A member who has just tapped Going may not be in the list yet; they read as "my default", which is
- * exactly what the node will do for them until they choose otherwise.
+ * While this browser can't tell the member (core notifyRemindersOff, read for the browser: web push reaches it and this
+ * account's notifications are not on here) and a reminder is still to come for them (core eventNoticesComing, the node's own
+ * rule: an event still on, a moment still ahead, their Marketplace switch on), the line is the true one instead
+ * (DESIGN-notify-and-backup-asks-fable-amend2.md §6, slice N5b, the phone's N2b): "⏰ Reminders need notifications on."
+ * [Turn on]. Not a soft ask but the state of something they asked for, so it shows every time, after a "Later" and after the
+ * browser's "no" alike. Its Turn on brings the browser's own prompt inside the tap (lib/web-push.ts turnOnFromAsk), or,
+ * where the browser blocks the site, says where only the browser can undo that. Never drawn where no reminder is coming, or
+ * where web push can't reach this browser: there turning notifications on would bring nothing, so the box is Remind me as
+ * it was, with its Change.
  */
-export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
-    const [defaults, setDefaults] = useState<number[]>(DEFAULT_REMINDER_OFFSETS);
-    const [offsets, setOffsets] = useState<number[] | null>(null);
+export function EventReminder({ post, identity, myRsvp, choice: given }: ReminderProps) {
+    const own = useEventReminderChoice(post.id, identity?.publicKey, !given && !!myRsvp);
+    const choice = given ?? own;
+    const { offsets, defaults, setOffsets } = choice;
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState<number[]>([]);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const loadMine = useCallback(async () => {
-        try {
-            const mine = await getMyEvents();
-            const row = mine.find(r => r.postId === post.id);
-            setOffsets(row ? parseReminderOffsets(row.reminderOffsets) : null);
-        } catch {
-            // Offline, or a node having a bad minute: leaves the line reading "your default", which is what the node
-            // would in fact do.
-        }
-    }, [post.id]);
-
-    useEffect(() => {
-        if (!myRsvp) return;
-        let cancelled = false;
-        (async () => { if (!cancelled) await loadMine(); })();
-        return () => { cancelled = true; };
-    }, [loadMine, myRsvp]);
-
-    useEffect(() => {
-        if (!identity?.publicKey || !myRsvp) return;
-        let cancelled = false;
-        getNotificationPreferences(identity.publicKey)
-            .then(prefs => {
-                if (!cancelled) setDefaults(parseReminderOffsets(prefs?.[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
-            })
-            .catch(() => { /* keep the documented default; it is right for everyone who has not changed it */ });
-        return () => { cancelled = true; };
-    }, [identity?.publicKey, myRsvp]);
+    // A reminder still to come by the node's own rule: only then can turning notifications on bring one.
+    const reminderComing = eventNoticesComing({ answer: myRsvp, event: post, choice, nowMs: Date.now() }).reminders.length > 0;
+    // The browser's own answer, read only while the true line could be drawn.
+    const browser = useNotifyBrowser(identity?.publicKey, !!myRsvp && reminderComing);
+    const remindersOff = reminderComing && notifyRemindersOff(browser);
+    const [lang] = useLanguage();
+    const [turningOn, setTurningOn] = useState(false);
+    const [said, setSaid] = useState<string | null>(null);
+    const turnOn = () => {
+        if (!identity || !browser || turningOn) return;
+        setSaid(null);
+        // The browser blocks this site: only its own settings undo that, so nothing is asked; the line says where.
+        if (notifyTurnOn(browser, readNotifyAsk(identity.publicKey)) === 'settings') { setSaid(t(TELL_ME_WORDS.blocked)); return; }
+        setTurningOn(true);
+        // The browser's prompt is the first thing this tap waits on; its answer kept as a named line's Tell me keeps it.
+        void turnOnFromAsk(identity, lang, 'line').then(r => {
+            setTurningOn(false);
+            if (r === 'blocked') setSaid(t(TELL_ME_WORDS.blocked));
+            else if (r === 'failed') setSaid(t(WEB_PUSH_ROW_WORDS.failed));
+            noteBrowserChanged();
+        });
+    };
 
     if (!myRsvp) return null;
 
@@ -239,6 +308,21 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
             setSaving(false);
         }
     };
+
+    if (remindersOff) {
+        return (
+            <div data-testid="event-reminder" className={`flex flex-col gap-2 ${PAGE_BOX}`}>
+                <div data-testid="event-reminders-off" className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                    <p dir="auto" className={`m-0 min-w-0 text-sm font-semibold break-words ${PAGE_INK.body}`}>{t(NOTIFY_TRUE_WORDS.reminders)}</p>
+                    <button type="button" data-testid="event-reminders-turn-on" onClick={turnOn} disabled={turningOn} aria-busy={turningOn}
+                        className={`break-words disabled:opacity-60 disabled:cursor-wait ${PAGE_BUTTON.quiet}`}>
+                        {t(WEB_PUSH_ROW_WORDS.turnOn)}
+                    </button>
+                </div>
+                {said && <p role="status" dir="auto" data-testid="event-reminders-said" className={`m-0 text-xs break-words ${PAGE_INK.secondary}`}>{said}</p>}
+            </div>
+        );
+    }
 
     return (
         <div data-testid="event-reminder" className={`flex flex-col gap-2 ${PAGE_BOX}`}>

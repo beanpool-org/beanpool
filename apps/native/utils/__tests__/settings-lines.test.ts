@@ -198,9 +198,9 @@ describe('Account Deletion\'s sentences, built again from the same plan', () => 
     });
 
     it('a vault copy not removed, a delete the phone could not finish, a delete refused, a plan not asked', () => {
-        for (const copyKnown of [true, false]) {
+        for (const [copyKnown, communityOnly] of [[true, false], [false, false], [true, true]] as const) {
             for (const reason of [...vaultCopyFailures(), 'the vault said no']) {
-                const outcome = { kind: 'vault-copy-stays' as const, reason, copyKnown };
+                const outcome = { kind: 'vault-copy-stays' as const, reason, copyKnown, communityOnly };
                 expect(vaultCopyStaysWords('Mullum', outcome)).toBe(vaultCopyStaysLine('Mullum', outcome));
                 expect(outsideBrackets(inXx(() => vaultCopyStaysWords('Mullum', outcome)), NAMES)).toBe('');
             }

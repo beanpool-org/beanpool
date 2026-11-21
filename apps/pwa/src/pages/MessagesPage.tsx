@@ -18,6 +18,7 @@ import {
 import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
+import { useNotifyLine, type NotifyLineOffer } from '../components/NotifyLine';
 import { OutsideChatRow, OutsideChatThread, OutsideRequestCard, outsideRoundNow } from '../components/OutsideChats';
 import { GuestChatRow, GuestChatThread, GuestInvitationCard, guestChatAsListed, useGuestChats } from '../components/GuestChats';
 import { guestRowsKnown } from '../lib/guest-chat-live';
@@ -694,6 +695,35 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         })), Date.now());
         return found ? { id: shownMessages[found.index].id, notSeen: found.notSeen } : null;
     }, [shownMessages, activeConv, loadedDmId, identity.publicKey, lineViews, requestMode]);
+    // The named line at the member's own moment in a DM (slice N5b, the phone's N2a; core's rule says whether: each kind once
+    // in this browser, one soft ask a day, never after the browser's no): "Hear when {name} answers." under my line just sent,
+    // "Hear when {name} writes again." under their newest line read here (a request accepted included). One per visit: another
+    // chat opened in its place is leaving, and the line goes for good. Never in a request, nor with someone blocked.
+    const [notifyChat, setNotifyChat] = useState<string | null>(null);
+    const notify = useNotifyLine(identity.publicKey, notifyChat === null || notifyChat === activeConv?.id, identity);
+    const namedFor = activeConv?.type === 'dm' && !(activeConv.participants || []).some(p => p !== identity.publicKey && isUserBlocked(p))
+        ? peerNameFor(activeConv) : null;
+    // The chat is kept only once its line is drawn: a line the rule refused leaves no chat behind, so the next chat can offer.
+    const offerNamedLine = (convId: string, offer: NotifyLineOffer) => {
+        void notify.offer(offer).then((ok) => { if (ok) setNotifyChat(convId); });
+    };
+    const namedLineUnder = (align?: 'start' | 'end') => (
+        <div data-testid="chat-notify-line" className={`flex flex-col max-w-[85%] min-w-0 ${align === 'end' ? 'self-end items-end' : 'self-start items-start'}`}>{notify.view}</div>
+    );
+    // The newest line the named line can hang under: a person's, never a node's notice, one shown as nobody's or a deleted one.
+    const newestLine = useMemo(() => {
+        if (!activeConv || activeConv.type !== 'dm' || loadedDmId !== activeConv.id) return null;
+        for (let i = shownMessages.length - 1; i >= 0; i--) {
+            const m = shownMessages[i];
+            if (m.type === 'system' || m.authorPubkey === 'SYSTEM' || dmLineIsUnattributed(lineViews?.get(m.id)) || isDeletedRow(m)) continue;
+            return { id: m.id, mine: m.authorPubkey === identity.publicKey };
+        }
+        return null;
+    }, [shownMessages, activeConv, loadedDmId, identity.publicKey, lineViews]);
+    useEffect(() => {
+        if (!activeConv || !namedFor || !newestLine || newestLine.mine || requestMode !== 'none') return;
+        offerNamedLine(activeConv.id, { kind: 'again', name: namedFor, anchor: newestLine.id });
+    }, [activeConv?.id, namedFor, newestLine?.id, requestMode]);
     // The listing each line is about, opened once per load (core chat-about.ts) and not on every redraw, which the member's
     // every keystroke is: a key derivation and a decrypt a card. Only a line whose words opened (checkDmThread gives a
     // deleted line, one that did not open and one not from this pair no format), and never a deleted one, as the phone's
@@ -1585,11 +1615,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // The listing it was about, with the words: or a Send from the composer would seal them without it, past repair.
             if (line.about && !chatAboutDrafts.get(conv.id)) chatAboutDrafts.set(conv.id, line.about);
         };
+        // Who the line under it names, taken as it was written (the chat in front then).
+        const named = conv.id === activeConv?.id ? namedFor : null;
         return async () => {
             try {
                 const answer = await sendLineNow(line, conv, mentionCandidates);
                 if (answer === 'refused') wordsBack();
-                else if (activeConvIdRef.current === conv.id) setChatRefusal(null);
+                else if (activeConvIdRef.current === conv.id) {
+                    setChatRefusal(null);
+                    // Taken, and the chat still in front: the moment for "Hear when {name} answers." under it (core's rule decides).
+                    if (named) offerNamedLine(conv.id, { kind: 'answer', name: named, anchor: line.id, align: 'end' });
+                }
                 return answer;
             } catch (err: any) {
                 const refused = isDmNotLocked(err) || nodeSaidNo(err);
@@ -3602,7 +3638,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         }}>
                             {notSeenWords(notSeenHere.notSeen, peerNameFor(activeConv))}
                         </div>
-                    )}</Fragment>)}
+                    )}{notify.view && notify.line?.anchor === msg.id && namedLineUnder(notify.line.align)}</Fragment>)}
                     {!chatSearch?.trim() && pendingHere.map(line => {
                         const failed = line.state === 'failed';
                         return (
@@ -3663,6 +3699,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         <span aria-hidden="true">◷ </span>{t('Sending…')}
                                     </div>
                                 )}
+                                {/* Taken while still drawn here (its row not yet read back): the named line under it. */}
+                                {notify.view && notify.line?.anchor === line.id && !shownMessages.some(m => m.id === line.id) && namedLineUnder(notify.line.align)}
                             </div>
                         );
                     })}

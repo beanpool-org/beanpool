@@ -252,6 +252,33 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
             /^Your account at Mullum was deleted, but BeanPool's key vault may keep a locked copy of your key, if you linked Google, Apple or Facebook: it couldn't be removed/);
     });
 
+    it("a phone that knows only the half kept for its community's admins is told about that half, never a sign-in", async () => {
+        // The vault's copy is the admins' half alone (vault.ts noteVaultCopy 'c': a community copy, no sign-in's). Review
+        // of #3330 r2: the line said "from a sign-in you linked", "locked to your sign-in", "with your 12 words or that
+        // sign-in", none of which is so for that half.
+        const net = network('stranger');
+        await kimsPhone(net);
+        mem.async.set(vaultCopyKnownStoreKey(kim.publicKey), 'c');
+        net.vault.unreachable = true;
+
+        const outcome = await deleteAccountHere(kim, await planDelete(kim.publicKey));
+
+        expect(outcome).toMatchObject({ kind: 'vault-copy-stays', copyKnown: true, communityOnly: true });
+        const line = vaultCopyStaysLine('Riverside', outcome as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>);
+        expect(line).toBe(
+            "Your account at Riverside was deleted, but BeanPool's key vault still keeps half of a locked copy of your key, the " +
+            "half for your community's admins: it couldn't be removed (it didn't answer: check your connection). Only your " +
+            'key can remove it, and your key is still on this phone, so you can try again.\n\n' +
+            'Delete Anyway takes your key off this phone and leaves that half at the vault. To remove it later, you would ' +
+            'need your key back and a community that has you, to reach Settings → Account Protection → Remove.');
+        expect(line).not.toMatch(/sign-in/);
+        // A sign-in's copy known ('1'): the sign-in's words, as before.
+        mem.async.set(vaultCopyKnownStoreKey(kim.publicKey), '1');
+        const signIn = await finishLastDelete(kim, 'try-again');
+        expect(signIn).toMatchObject({ kind: 'vault-copy-stays', copyKnown: true, communityOnly: false });
+        expect(vaultCopyStaysLine('Riverside', signIn as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>)).toMatch(/from a sign-in you linked/);
+    });
+
     it('the confirmation says the vault copy goes first', () => {
         expect(lastCommunityLine({ kind: 'last', here: MULLUM, hereName: 'Mullum' }, true)).toMatch(
             / If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first\.$/);

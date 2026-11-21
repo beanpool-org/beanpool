@@ -450,6 +450,106 @@ describe('the class: the line says only what the node will send (answer x the ev
     });
 });
 
+/**
+ * The class the deciding review on #3339 at 1b34fe01 found a third time (EventExtras.tsx:341: on a cancelled event a member
+ * who was Going, on a phone that can't notify, got "⏰ Reminders need notifications on." [Turn on], and Turn on brought the
+ * phone's pop-up for a reminder that can never come). The node tells no one anything about an event that is cancelled,
+ * removed, not active, hidden by reports, or ended (apps/server/src/engine/event-reminders.ts dueEventReminders; posts.ts
+ * updatePost refuses an edit then). One table, drawn for real: {the event's state} x {Going, Interested} x every line this
+ * slice draws on the page:
+ * - the true line, for a member who answered before (the review's case): only while the event is on;
+ * - the offer, for a member who answers here: only while the event is on (a closed event takes no new answer at all);
+ * - the promise, held while the page is open and the event moves on (cancelled, removed, hidden, paused, ended): it goes,
+ *   offered or after Tell me.
+ * Each row with a line is red without it; each row without one is red if any is drawn.
+ */
+describe("the class: the event's own state, on every line this slice draws (on, cancelled, removed, hidden, paused, ended)", () => {
+    const ENDED = startingIn(-5 * HOUR);
+    /** [the event's state, the fields the page holds it by, whether the page still takes a new answer] */
+    const STATES: Array<[string, Record<string, unknown>, boolean]> = [
+        ['on', {}, true],
+        ['cancelled by its host', { eventState: 'cancelled' }, false],
+        ['cancelled by its host (the cached row)', { event_state: 'cancelled' }, false],
+        ['removed', { status: 'cancelled', active: 0 }, false],
+        ['hidden by reports', { hiddenByReportsAt: '2026-11-20T00:00:00.000Z' }, true],
+        ['held by a moderator', { hidden_by_reports_at: '2026-11-20T00:00:00.000Z', removed_by_moderator_at: '2026-11-20T00:00:00.000Z' }, true],
+        ['paused', { status: 'paused', active: 1 }, true],
+        ['not active', { active: false }, true],
+        ['ended', { eventStartAt: ENDED.eventStartAt, eventEndAt: ENDED.eventEndAt }, false],
+    ];
+    const inState = (fields: Record<string, unknown>) => ({ ...EVENT, ...fields }) as typeof EVENT;
+    const ANSWERS = [['Going', WORDS.going], ['Interested', WORDS.interested]] as const;
+
+    for (const [state, fields, takesAnswer] of STATES) {
+        const on = state === 'on';
+        for (const [answer, words] of ANSWERS) {
+            it(`the true line: ${answer} before, × ${state}: ${on ? '"⏰ Reminders need notifications on." [Turn on]' : '"⏰ Remind me: …", and the phone is not even read'}`, async () => {
+                notif.getPermissionsAsync.mockClear();
+                await draw(answer.toLowerCase(), true, inState(fields));
+                expect(byId('event-reminder-box'), 'the reminder box (the answer can still be cleared)').toBeTruthy();
+                if (on) {
+                    expect(byId('event-reminders-off')?.textContent).toBe('⏰ Reminders need notifications on.Turn on');
+                    return;
+                }
+                expect(byId('event-reminders-off'), 'no reminder can come: no Turn on').toBeNull();
+                expect(byId('event-reminders-turn-on')).toBeNull();
+                expect(byId('event-reminder-box')?.textContent).toContain('⏰ Remind me:');
+                expect(notif.getPermissionsAsync).not.toHaveBeenCalled();
+                expect(notif.requestPermissionsAsync).not.toHaveBeenCalled();
+                expect(byId('notify-line')).toBeNull();
+            });
+
+            it(`the offer: ${answer} tapped here × ${state}: ${on ? `"${words.line}"` : 'no line, and the kind unspent'}`, async () => {
+                await draw(null, true, inState(fields));
+                await tap(buttonNamed(answer), answer);
+                if (on) {
+                    expect(byId('notify-line')?.textContent).toBe(`${words.line}Tell me`);
+                    expect(stored()).toMatchObject({ askKind: 'line', lines: [answer.toLowerCase()] });
+                    return;
+                }
+                expect(byId('notify-line'), 'nothing true to say: none offered').toBeNull();
+                expect(stored()?.lines ?? []).toEqual([]);
+                expect(byId('event-reminders-off')).toBeNull();
+                expect(notif.requestPermissionsAsync).not.toHaveBeenCalled();
+                // A closed event takes no new answer (the page's own rule); one hidden or paused here saves it, and still offers nothing.
+                expect(!!byId('event-reminder-box')).toBe(takesAnswer);
+            });
+
+            if (on) continue;
+            for (const told of [false, true]) {
+                it(`the promise held: ${answer} on an event that is on${told ? ', Tell me' : ''}, then it is ${state}: the line goes`, async () => {
+                    await draw(null, true, EVENT);
+                    await tap(buttonNamed(answer), answer);
+                    expect(byId('notify-line')?.textContent).toBe(`${words.line}Tell me`);
+                    if (told) {
+                        await tap(byId('notify-line-tell-me'), 'Tell me');
+                        expect(byId('notify-line-done')?.textContent).toBe(words.done);
+                    } else {
+                        expect(byId('event-reminders-off')?.textContent).toBe('⏰ Reminders need notifications on.Turn on');
+                    }
+                    try {
+                        if (state === 'ended') {
+                            // The page stays open past the end: only the clock moves.
+                            vi.useFakeTimers({ toFake: ['Date'] });
+                            vi.setSystemTime(Date.now() + 8 * DAY);
+                            await act(async () => { root.render(createElement(EventDetail, { post: EVENT, showing: true }) as any); });
+                        } else {
+                            // The event as the page holds it moves on (the node's view this visit carries none of these fields).
+                            await act(async () => { root.render(createElement(EventDetail, { post: inState(fields), showing: true }) as any); });
+                        }
+                        await settle();
+                        expect(byId('notify-line'), 'nothing is coming now: the promise goes').toBeNull();
+                        expect(byId('notify-line-done')).toBeNull();
+                        expect(byId('event-reminders-off')).toBeNull();
+                    } finally {
+                        vi.useRealTimers();
+                    }
+                });
+            }
+        }
+    }
+});
+
 describe("the reminder's true line, in every state (slice N2b)", () => {
     for (const [state, said, record, , off] of states()) {
         it(`Going × ${state}: ${off ? '"⏰ Reminders need notifications on." [Turn on]' : '"⏰ Remind me: …"'}`, async () => {

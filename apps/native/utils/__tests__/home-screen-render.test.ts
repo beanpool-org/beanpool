@@ -218,6 +218,7 @@ import { DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, HOME_STARTER_SET, START_CAR
 import { lightColors } from '../../constants/colors';
 import { QUIET_OPACITY } from '../../components/home/quiet';
 import { HOME_CARD_PADDING_DP } from '../../components/home/HomeParts';
+import { EDGE_DP } from '../arrange-drag';
 import { KNOCKS_STORE_KEY, NOTIFICATION_PERMISSION_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey, homeWelcomePartStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
@@ -2280,6 +2281,8 @@ describe('Arrange', () => {
             const BAND_DP = 48;
             const WELCOME_DP = 220;
             const TOP = 30;
+            /** Where a carried card stands on the screen: clear of both edges at the floor's 569 dp. */
+            const CARRY_TOP = 200;
             const view = { y: 0 };
             const scrollTo = async (y: number) => {
                 view.y = y;
@@ -2424,23 +2427,35 @@ describe('Arrange', () => {
                     });
 
                     it('a hold on Home carried on: the card stays under the finger, in its own place at the first move, and nothing is saved', async () => {
-                        const { el, anchor } = await landed();
-                        const order = cards();
-                        const posts = sent().length;
-                        const mark = hooks.scrollTo.mock.calls.length;
-                        // The band, 20 dp into the card, where the card stands on the screen.
-                        await hold(`card-band-${anchor}`, TOP + 20);
-                        expect(has('home-arrange-bar')).toBe(true);
-                        expect(has(`home-lifted-${anchor}`)).toBe(true);
-                        const tops = await frame();
-                        await follow(mark);
-                        expect(thing()).toBe(el);
-                        expect(tops.get(anchor)! - view.y).toBe(TOP);
-                        await move(TOP + 20);
-                        expect(cards()).toEqual(order);
-                        await release();
-                        expect(sent().length).toBe(posts);
-                        expect(cards()).toEqual(order);
+                        const { el, anchor, tops: landedAt } = await landed();
+                        // Held away from the screen's edges, as a still finger on a phone is: within EDGE_DP of an edge the
+                        // list scrolls by itself (its own rows). And no frame runs between the hold and the drop: the edge
+                        // scroll needs the screen's height, which nothing measures here (CI red at 02f0efc7: a frame came in
+                        // before the drop and the list scrolled under the finger).
+                        await scrollTo(Math.max(0, landedAt.get(anchor)! - CARRY_TOP));
+                        const at = (await frame()).get(anchor)! - view.y;
+                        expect(at).toBeGreaterThan(EDGE_DP);
+                        const frames = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(() => 0);
+                        try {
+                            const order = cards();
+                            const posts = sent().length;
+                            const mark = hooks.scrollTo.mock.calls.length;
+                            // The band, 20 dp into the card, where the card stands on the screen.
+                            await hold(`card-band-${anchor}`, at + 20);
+                            expect(has('home-arrange-bar')).toBe(true);
+                            expect(has(`home-lifted-${anchor}`)).toBe(true);
+                            const tops = await frame();
+                            await follow(mark);
+                            expect(thing()).toBe(el);
+                            expect(tops.get(anchor)! - view.y).toBe(at);
+                            await move(at + 20);
+                            expect(cards()).toEqual(order);
+                            await release();
+                            expect(sent().length).toBe(posts);
+                            expect(cards()).toEqual(order);
+                        } finally {
+                            frames.mockRestore();
+                        }
                     });
                 });
             }

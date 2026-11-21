@@ -1321,7 +1321,8 @@ export default function HomeScreen() {
                         onDismiss={at => changeLayout(dismissSafety(layoutRef.current, at))}
                         onUp={setSafetyUp}
                         // What there is to lose here, for the card's schedule (core way-back-schedule.ts, slice B1): the
-                        // balance in Home's answer (null without Your Beans), an open deal, a role in the community.
+                        // balance in Home's answer, an open deal, a role in the community. Your Beans and Your deals are
+                        // asked with this card whether or not they are on Home (core WAY_BACK_ASKS; review of #3341).
                         toLose={{ balance_c: answer.cards.beans?.balance_c ?? null, holds: (answer.cards.deals?.open ?? 0) > 0 || role === 'owner' || role === 'admin' || role === 'moderator' }}
                         onActionsAt={at => band.report('safety:actions', at)}
                         // It has no band on Home; in Arrange it gets one across the top of its own frame, and goes quiet under it.

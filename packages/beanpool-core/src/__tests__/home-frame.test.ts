@@ -3,7 +3,7 @@ import {
     HOME_CARD_TYPES, HOME_CATEGORY_HUES, HOME_CHAT_KIND_HUES, HOME_CHAT_ID_CHARS, HOME_CHAT_KINDS, HOME_CHAT_NAME_CHARS, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS,
     HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_DEFAULT_LIST, HOME_STARTER_SET, HOME_V1_CARD_IDS, addCard, cardSettings,
     cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeCardHue, homeColumns, moveCard, readChatSettings, readDecideSettings, readHomeLayout,
-    readSearchSettings, readToolsSettings, removeCard, setHomeColumns, translateV1, homeCardType, type HomeLayoutV2, type HomeNodeFacts,
+    readSearchSettings, readToolsSettings, removeCard, setHomeColumns, translateV1, homeCardType, WAY_BACK_ASKS, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
 import { t } from '../words.js';
 import { BRAND_COLOURS } from '../brand-colours.js';
@@ -261,6 +261,33 @@ describe('home frame §5.2 (3): cardsToAsk', () => {
         // A newcomer's Home is the default list (DESIGN-home-default-fable.md §2.2): the fixed two and every default card the node builds.
         // With Learn something local arriving after the list (slice K7), asked in its catalogue place until the list holds it.
         expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'learn', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
+    });
+
+    // Review of #3341: "Your way back in" comes back by the balance and an open deal (way-back-schedule.ts), so where it is
+    // asked Your Beans and Your deals are too, on the list or not; the node builds them, and the apps draw the list alone.
+    it('asks Your Beans and Your deals with "Your way back in", on the list or not; never without it; never a type the app says no to', () => {
+        const stamp = { 'new:learn': AT };
+        const table: Array<[string, string[], string[]]> = [
+            ['way back, neither on Home', ['safety', 'market'], ['needs', 'safety', 'deals', 'market', 'beans', 'community']],
+            ['way back, Your Beans on Home', ['safety', 'beans', 'market'], ['needs', 'safety', 'deals', 'market', 'beans', 'community']],
+            ['way back, Your deals on Home', ['deals', 'safety', 'market'], ['needs', 'safety', 'deals', 'market', 'beans', 'community']],
+            ['way back, both on Home', ['beans', 'market', 'deals', 'safety'], ['needs', 'safety', 'deals', 'market', 'beans', 'community']],
+            ['no way back, neither', ['market'], ['needs', 'market', 'community']],
+            ['no way back, Your Beans alone', ['market', 'beans'], ['needs', 'market', 'beans', 'community']],
+            ['no way back, Your deals alone', ['deals', 'market'], ['needs', 'deals', 'market', 'community']],
+        ];
+        for (const [name, types, asked] of table) expect([name, cardsToAsk(layout(types.map(one), stamp))]).toEqual([name, asked]);
+        expect(WAY_BACK_ASKS).toEqual(['beans', 'deals']);
+        // The address is the same whatever the order, and the same as when both cards are on Home: a return is still a 304.
+        expect(cardsToAsk(layout([one('market'), one('safety')], stamp))).toEqual(cardsToAsk(layout([one('safety'), one('deals'), one('beans'), one('market')], stamp)));
+        // The app says which types it asks (one it draws, on a node that shows it): Beans off, or the worldwide community with
+        // neither, asks neither; "Your way back in" left out that way brings nothing.
+        const l = layout([one('safety'), one('market')], stamp);
+        expect(cardsToAsk(l, [], (t) => t !== 'beans')).toEqual(['needs', 'safety', 'deals', 'market', 'community']);
+        expect(cardsToAsk(l, [], (t) => t !== 'beans' && t !== 'deals')).toEqual(['needs', 'safety', 'market', 'community']);
+        expect(cardsToAsk(l, [], (t) => t !== 'safety')).toEqual(['needs', 'market', 'community']);
+        // A pinned Find is still asked beside them.
+        expect(cardsToAsk(l, ['find'])).toEqual(['needs', 'safety', 'find', 'deals', 'market', 'beans', 'community']);
     });
 });
 

@@ -571,13 +571,14 @@ export interface WayBackOnHome {
     /** When the account joined this community (`me.joinedAt`): core's 30 days count from it. null when the answer doesn't say. */
     joinedAt: number | null;
     /**
-     * The balance now, whole hundredths, from Your Beans in this answer: core's first Beans, and something to lose. null where
-     * the answer has none (Beans off, the worldwide community, no Your Beans card).
+     * The balance now, whole hundredths, from Your Beans in this answer: core's first Beans, and something to lose. Asked with
+     * this card whether or not Your Beans is on Home (core `WAY_BACK_ASKS`, lib/home-layout.ts `cardsToAsk`; review of #3341).
+     * null where the answer has none (Beans off, the worldwide community).
      */
     balance_c: number | null;
     /**
-     * Something else to lose that Home's answer shows: an open deal. (The phone also counts a live listing and a role; Home's
-     * answer carries neither, and the card asks for nothing later.)
+     * Something else to lose that Home's answer shows: an open deal, from Your deals, asked with this card as Your Beans is.
+     * (The phone also counts a live listing and a role; Home's answer carries neither, and the card asks for nothing later.)
      */
     holds: boolean;
 }

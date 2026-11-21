@@ -21,9 +21,11 @@
  * recovery key and never reaches BeanPool's key vault, so on the web the 12 words (and a sign-in where the community takes
  * one) are the only way back.
  *
- * "Something to lose" is what Home's answer holds: a balance that isn't zero, or an open deal. Home's answer says nothing of
- * the member's live listings or role, and the card asks for nothing later (a card arriving late moved every card after it,
- * PR #2411), so on the web those two don't bring the 90-day return; the first Beans and the 30 days do.
+ * "Something to lose" is what Home's answer holds: a balance that isn't zero, or an open deal. Your Beans and Your deals are
+ * asked with this card whether or not the member keeps them on Home (core `WAY_BACK_ASKS`; review of #3341), so the first
+ * Beans and the 90 days come as on the phone whatever is on Home. Home's answer says nothing of the member's live listings
+ * or role, and the card asks for nothing later (a card arriving late moved every card after it, PR #2411), so on the web
+ * those two don't bring the 90-day return; a balance, an open deal and the 30 days do.
  *
  * Who it is for is the node's word, never a guess: its Home answer, read by lib/home-cards.ts `wayBackOf`
  * (DESIGN-home-default-fable.md §2.5): every member whose 12 words are the only way back (`me.wayBack`), however they

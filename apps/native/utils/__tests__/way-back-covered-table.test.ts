@@ -124,12 +124,13 @@ const STATES: Record<string, Before> = {
     "a sign-in's copy and an admins' half": { vault: 'signIn' },
 
     // ── A reminder the account already has, not done (round 2, finding 2): "Later" brings the card all the same ──
-    // An earlier invite join's, which started put away (startOneWayBackPutAway, and D2's word from Home).
-    "an earlier join's reminder, put away": { record: putAwayRecord(OPEN_URL, BEFORE) },
+    // An earlier invite join's two days ago, which started put away (startOneWayBackPutAway, and D2's word from Home): no
+    // return due yet, so only Later can bring the card.
+    "an earlier join's reminder, put away": { record: putAwayRecord(OPEN_URL, NOW - 2 * DAY) },
     // The same long ago, its week's return already seen and put away again.
     "an earlier join's reminder, put away long ago, its week's return used": { record: { ...putAwayRecord(OPEN_URL, BEFORE), dismissedAt: BEFORE + 10 * DAY, weekReturnUsed: true } },
-    // The 12-words door's own record (global or an open door), put away with its ✕.
-    "the 12-words door's own record, put away": { record: { url: OPEN_URL, joinedAt: BEFORE, dismissedAt: BEFORE + DAY } },
+    // The 12-words door's own record (global or an open door), joined three days ago and put away with its ✕ yesterday.
+    "the 12-words door's own record, put away": { record: { url: OPEN_URL, joinedAt: NOW - 3 * DAY, dismissedAt: NOW - DAY } },
 };
 
 async function seed(key: string, b: Before): Promise<void> {
@@ -302,7 +303,7 @@ describe('the words ticked on the step: kept by now, never a skip', () => {
     });
 });
 
-describe('"Later" over a record marked done: the card about the community just joined, moved by Home\'s word there', () => {
+describe('"Later" over a record marked done or put away: the card on the first landing, about the community just joined where it is the member\'s own', () => {
     it('the record is replaced by the member\'s own reminder, shown from the first landing', async () => {
         await seed(KEY, STATES['sign-in linked with no copy (noCopies)']);
         await walk('invite');

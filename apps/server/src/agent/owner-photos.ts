@@ -81,9 +81,17 @@ let fetchTimeoutMs = PHOTO_FETCH_TIMEOUT_MS;
  * For the suites: fetch through ssrfSafeFetch's own test hook with `resolve` (a local server stands in for a public host),
  * and give up sooner than 8 seconds. The hook refuses to run unless the process sets BEANPOOL_SSRF_TEST_HOOK=1, which
  * nothing in production does, so a call here outside a suite makes every fetch fail; the deadline can only be shortened.
+ * `port`: the stand-in's port, put on every address after all its checks, for a fixed https host this server builds itself
+ * (agent/commons-pictures.ts): a suite can't listen on 443.
  */
-export function __usePhotoFetchResolverForTests(resolve: HostResolver | null, timeoutMs = PHOTO_FETCH_TIMEOUT_MS): void {
-    fetcher = resolve ? (url, options) => __ssrfSafeFetchWithResolverForTests(url, options, resolve) : ssrfSafeFetch;
+export function __usePhotoFetchResolverForTests(resolve: HostResolver | null, timeoutMs = PHOTO_FETCH_TIMEOUT_MS, port?: number): void {
+    fetcher = resolve
+        ? (url, options) => {
+            const aimed = new URL(url);
+            if (port) aimed.port = String(port);
+            return __ssrfSafeFetchWithResolverForTests(aimed.toString(), options, resolve);
+        }
+        : ssrfSafeFetch;
     fetchTimeoutMs = Math.min(timeoutMs, PHOTO_FETCH_TIMEOUT_MS);
 }
 
@@ -93,6 +101,16 @@ function oneFetchAtATime<T>(work: () => Promise<T>): Promise<T> {
     const run = fetchQueue.then(work, work);
     fetchQueue = run.catch(() => undefined);
     return run;
+}
+
+/**
+ * One fetch through the safe fetch, in the same one-at-a-time line and under the same deadline as a photo's, and `read` of its
+ * answer inside that turn (agent/commons-pictures.ts: Commons' answer about a file, then its picture). It follows no redirect:
+ * the address is one this server built or checked for a fixed host. Throws what the safe fetch throws.
+ */
+export function fetchFixedHost<T>(url: URL, options: Pick<SsrfSafeFetchOptions, 'maxBytes' | 'allowedContentTypes' | 'headers'>,
+    read: (res: SsrfSafeResponse) => Promise<T>): Promise<T> {
+    return oneFetchAtATime(async () => read(await fetcher(url.toString(), { ...options, method: 'GET', timeoutMs: fetchTimeoutMs, maxRedirects: 0 })));
 }
 
 /** A value an assistant sent as a photo's address, when it is an http(s) URL with no user or password in it. */

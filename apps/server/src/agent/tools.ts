@@ -112,6 +112,8 @@ export interface AgentTool {
     write?: boolean;
     /** Takes something down (remove_post, remove_all_i_made, take_down, take_down_many): the MCP annotation says so. */
     destructive?: boolean;
+    /** Reaches a server outside this one (knowledge_draft asks Wikimedia Commons): the MCP annotation's openWorldHint says so. */
+    openWorld?: boolean;
     /**
      * A grant that does not have this tool but calls it by name (a tools list read before its member's role changed): why, in words.
      * Null, or left out: "There is no tool …".

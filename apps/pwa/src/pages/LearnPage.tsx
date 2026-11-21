@@ -28,7 +28,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
     KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, LOCAL_GUIDE_WORDS, formatCount, forumOn, isKnowledgeTopic,
-    knowledgeThankNote, knowledgeThankOffered, pinLive, t, tn, upperCase, type KnowledgeFront,
+    knowledgeThankNote, knowledgeThankOffered, ownKnowledgeSources, pinLive, t, tn, upperCase, type KnowledgeFront,
     type KnowledgeRow, type KnowledgeTopicPage,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -648,7 +648,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                     </section>
                 ) : (
                     <LearnForm use={editing.use}
-                        initial={{ title: opened.title, body: opened.description, topic: opened.category, place: opened.knowledge.place ?? '', sources: opened.knowledge.sources, freeTags: opened.freeTags ?? [] }}
+                        initial={{ title: opened.title, body: opened.description, topic: opened.category, place: opened.knowledge.place ?? '', sources: ownKnowledgeSources(opened.knowledge.sources), freeTags: opened.freeTags ?? [] }}
                         onSend={async (input) => {
                             if (fix) { await suggestLearnFix(opened, input); setFixSent(true); return; }
                             const answer = await editLearnPage(opened, input);

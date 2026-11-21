@@ -673,6 +673,9 @@ export const SUITES = [
     // one table of post x count x the worldwide forum reachable, unreachable or slow, the secret kept nowhere, no server asked.
     'test-knock-forum-links',
     'test-mcp-knowledge',
+    // Learn web pictures slice 2: the Commons door. The licence table pinned to Commons' real answers, the address, the fetch
+    // through a stand-in on 127.0.0.1, nothing showing early, which credit ends on which picture, the writes that must not hurt it.
+    'test-commons-pictures',
     'test-names-copy',
     'test-contact-copies',
     'test-community-welcome',

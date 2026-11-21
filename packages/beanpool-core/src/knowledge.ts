@@ -139,10 +139,66 @@ export const KNOWLEDGE_PLACE_LINE = word('Things worth knowing about your commun
 
 // ── On the wire ──────────────────────────────────────────────────────────────────────────
 
-/** One source: a plain link the member's browser opens, and what the page is. `label` empty: the app shows the host. */
+/**
+ * One source: a plain link the member's browser opens, and what the page is. `label` empty: the app shows the host.
+ *
+ * `photo` (pictures from Wikimedia Commons, DESIGN-learn-web-pictures-fable.md §6.3; Marty, 22 Nov 2026, "All six of Fable's
+ * picks"): a credit row the node wrote for the page's picture number `photo` (1 first), never typed by anyone: its label is
+ * {@link knowledgeCreditLabel}'s and its url the picture's own page on Commons. A page's sources read as its own rows, then its
+ * credit rows. Forms list and send the own rows only ({@link ownKnowledgeSources}); a row sent back with the mark, or a camera
+ * row pointing at one of the page's credited pictures, is dropped by the node and its own written again (Question 5).
+ */
 export interface KnowledgeSource {
     url: string;
     label: string;
+    photo?: number;
+}
+
+/** What a credit row's label starts with, and how the node knows one sent back by an app that draws it as a source. */
+export const KNOWLEDGE_CREDIT_MARK = '📷';
+
+/**
+ * What the node read about a picture from Wikimedia Commons, kept with it: on a draft for To check (`photoCredits`), and in its
+ * credit row on the page. Every text is plain, cleaned and capped by the node.
+ */
+export interface KnowledgePhotoCredit {
+    /** The picture's own page on Commons (https://commons.wikimedia.org/wiki/File:…). */
+    url: string;
+    /** Its file name on Commons, "File:…". */
+    file: string;
+    /** Who made it, as Commons gives it: plain text; '' when Commons names nobody and its licence needs no credit. */
+    maker: string;
+    /** The licence's own short name: "CC BY 4.0", "CC BY-SA 4.0", "CC0" or "Public domain". */
+    licence: string;
+    /** The licence's own page, or null for public domain. */
+    licenceUrl: string | null;
+    /** Commons' notes on other rights, as its codes ("personality", "trademarked"); [] for none. */
+    restrictions: string[];
+    /** When this server read it, an ISO instant. */
+    readAt: string;
+}
+
+/** A source row is the node's credit for a picture (it carries the mark). */
+export const isKnowledgeCreditRow = (s: { photo?: unknown }): boolean => s.photo !== undefined && s.photo !== null;
+
+/** A page's own sources, without the node's credit rows: what a form lists and sends. */
+export function ownKnowledgeSources<T extends { photo?: unknown }>(sources: readonly T[]): T[] {
+    return sources.filter((s) => !isKnowledgeCreditRow(s));
+}
+
+/**
+ * A credit row's label: "📷 {n} · {maker} · {licence}" (or "📷 {n} · {licence}" with no maker), at most
+ * KNOWLEDGE_LIMITS.sourceLabel characters, the maker cut short with "…" to fit. No words to translate: a camera, a name and a
+ * licence's own short name.
+ */
+export function knowledgeCreditLabel(n: number, maker: string, licence: string): string {
+    const head = `${KNOWLEDGE_CREDIT_MARK} ${n} · `;
+    const tail = ` · ${licence}`;
+    const name = Array.from(maker.replace(/\s+/g, ' ').trim());
+    if (name.length === 0) return Array.from(`${head}${licence}`).slice(0, KNOWLEDGE_LIMITS.sourceLabel).join('');
+    const room = KNOWLEDGE_LIMITS.sourceLabel - Array.from(head).length - Array.from(tail).length;
+    const fitted = name.length <= room ? name.join('') : `${name.slice(0, Math.max(0, room - 1)).join('').trimEnd()}…`;
+    return `${head}${fitted}${tail}`;
 }
 
 /**
@@ -453,6 +509,13 @@ export interface KnowledgeDraftWhole extends KnowledgeDraftToCheck {
     note: string | null;
     /** Its photos as data URLs, metadata stripped: the sender's own, at most 3. */
     photos: string[];
+    /**
+     * One for each of {@link photos}, in order: what the node read from Wikimedia Commons for that picture, or null for one
+     * uploaded (an assistant's draft, DESIGN-learn-web-pictures-fable.md §6.2). An upload byte for byte the same as one of the
+     * draft's Commons pictures is that picture, and carries its credit, as Approve gives it. A server before the Commons door
+     * doesn't send it.
+     */
+    photoCredits?: (KnowledgePhotoCredit | null)[];
     /**
      * Its own tags (free tags only, the Market's rule: core tags/free-tags.ts), each in its stored form; for a fix, the page's
      * tags with the member's put in if they changed them: what Approve writes. A server before Learn's tags doesn't send it.

@@ -20,15 +20,22 @@
  * pictures, a member's or ones an assistant uploaded, each show with Remove photo (and Keep this photo once removed) before
  * Approve. Approve sends back only the kept ones, so only those are published; "Edit first" opens on the kept ones. Nothing a
  * draft brings shows to members until this screen approves it.
+ *
+ * Pictures from Wikimedia Commons (DESIGN-learn-web-pictures-fable.md §6.2, §9 slice 2; Marty, 22 Nov 2026, "All six of Fable's
+ * picks"): under each, what the node read (`photoCredits`): "📷 maker · licence", "From Wikimedia Commons. Read by this server
+ * on {date}.", Commons' note on other rights when it has one, and "Open its page" (the file's page, a new tab). Under one an
+ * assistant uploaded: "Uploaded by the assistant. Keep it only if it is your own." Keep, Remove and Approve are unchanged: the
+ * app never sends a credit, the node keeps its own with each picture kept. The forms list the page's own sources only.
  */
 import { useEffect, useState } from 'react';
 import {
     KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_LIMITS, t, timeAgo, upperCase, type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgeFixPart,
-    type KnowledgePageWords, type KnowledgeRow,
+    type KnowledgePageWords, type KnowledgePhotoCredit, type KnowledgeRow,
 } from '@beanpool/core';
 import {
     approveLearnDraft, declineLearnDraft, getLearnDraft, getLearnToCheck, languageNameOf, learnRefusalText, safeSourceUrl, sourceHost, topicEmoji, topicLabel,
 } from '../lib/learn';
+import { shownLanguage } from '../lib/language';
 import { LearnForm } from './LearnForm';
 import { LearnRow } from './LearnRow';
 import { CHIP, PAGE_BOX, BOX_LABEL } from './market-card-shell';
@@ -66,6 +73,32 @@ const partLabel = (part: KnowledgeFixPart) => ({
     title: t('Title'), body: t('What to know'), topic: t('Topic'), place: t('Where', undefined, 'To check: the part of a page of Local knowledge that names its place'),
     sources: t('Sources'), lang: t('Language'),
 })[part];
+
+/** The site's own name, never translated (a name, not BeanPool's Commons). */
+const COMMONS = 'Wikimedia Commons';
+/** Commons' note on other rights, by its code: a person, a trademark, or any other it lists. */
+const commonsNote = (code: string) => (code === 'personality' ? t('{site} notes: shows a person.', { site: COMMONS })
+    : code === 'trademarked' ? t('{site} notes: shows a trademark.', { site: COMMONS }) : t('{site} notes: other rights may apply.', { site: COMMONS }));
+
+/** What the node read from Wikimedia Commons for one picture, under it in To check (§6.2). */
+function CommonsCredit({ credit }: { credit: KnowledgePhotoCredit }) {
+    const href = safeSourceUrl(credit.url);
+    const read = new Date(credit.readAt).toLocaleDateString(shownLanguage(), { day: 'numeric', month: 'short', year: 'numeric' });
+    const notes = [...new Set(credit.restrictions.map(commonsNote))];
+    return (
+        <div data-testid="learn-check-credit" className="flex flex-col gap-0.5 text-sm">
+            <p dir="auto" className="m-0 font-bold text-nature-900 dark:text-white break-words">{credit.maker ? `📷 ${credit.maker} · ${credit.licence}` : `📷 ${credit.licence}`}</p>
+            <p className={`m-0 text-xs ${MUTED}`}>{t('From {site}. Read by this server on {date}.', { site: COMMONS, date: read })}</p>
+            {notes.map((note) => <p key={note} data-testid="learn-check-credit-note" className="m-0 text-xs font-bold text-bp-ink-warning">{note}</p>)}
+            {href && (
+                <a data-testid="learn-check-credit-page" href={href} target="_blank" rel="noopener noreferrer"
+                    className="self-start inline-flex items-center gap-1 min-h-[44px] font-bold text-bp-ink-learn hover:underline">
+                    {t('Open its page')}<span aria-hidden="true">↗</span>
+                </a>
+            )}
+        </div>
+    );
+}
 
 /** A page's tags as the checker reads them: each with its `#`, or "None" where there are none. */
 const tagsText = (tags: readonly string[] | undefined) => (tags && tags.length > 0 ? tags.map((tag) => `#${tag}`).join(' ') : t('None'));
@@ -234,13 +267,16 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
             )}
             {d.photos.length > 0 && (
                 <section data-testid="learn-check-photos" className="flex flex-col gap-2">
-                    <p className={`m-0 text-xs ${MUTED}`}>{t('Approve adds only the photos you keep. Keep one only if it is the writer’s own, never a picture from the web.')}</p>
+                    <p className={`m-0 text-xs ${MUTED}`}>{t('Approve adds only the photos you keep. Keep one if it is the writer’s own, or if it shows who made it and its licence.')}</p>
                     {d.photos.map((src, i) => {
                         if (!shownPhoto(src)) return null;
                         const out = removed.includes(i);
+                        const credit = d.photoCredits?.[i] ?? null;
                         return (
                             <figure key={i} data-testid="learn-check-photo" data-kept={out ? 'false' : 'true'} className="m-0 flex flex-col gap-1">
                                 <img src={src} alt={t('Photo {n}', { n: i + 1 })} className={`w-full aspect-[4/3] object-cover rounded-xl ${out ? 'opacity-40' : ''}`} />
+                                {credit && <CommonsCredit credit={credit} />}
+                                {!credit && byAssistant && <p data-testid="learn-check-uploaded" className={`m-0 text-xs ${MUTED}`}>{t('Uploaded by the assistant. Keep it only if it is your own.')}</p>}
                                 {out && <p className={`m-0 text-xs ${MUTED}`}>{t('Left out: Approve won’t add it.')}</p>}
                                 <button type="button" data-testid="learn-check-photo-toggle" disabled={busy} onClick={() => toggle(i)} className={SMALL}>
                                     {out ? t('Keep this photo') : t('Remove photo')}

@@ -16,7 +16,7 @@
 import { useEffect, useState } from 'react';
 import {
     KNOWLEDGE_EMOJI, KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPICS, KNOWLEDGE_TOPIC_PAGE, compareKnowledge,
-    isKnowledgeTopic, knowledgeFeatureMode, knowledgeFirstLine, knowledgeTagsDiffer, knowledgeTopic, pinLive, t, type FeatureMode, type KnowledgeDraftMine,
+    isKnowledgeTopic, knowledgeFeatureMode, knowledgeFirstLine, knowledgeTagsDiffer, knowledgeTopic, ownKnowledgeSources, pinLive, t, type FeatureMode, type KnowledgeDraftMine,
     type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgeFields, type KnowledgeFront, type KnowledgeHelped, type KnowledgeRow,
     type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
 } from '@beanpool/core';
@@ -423,7 +423,8 @@ export function learnFixToSend(page: LearnPost, input: LearnInput): Record<strin
     if (now.body !== page.description.trim()) out.body = now.body;
     if (now.topic !== page.category) out.topic = now.topic;
     if ((now.place ?? '') !== (page.knowledge.place ?? '').trim()) out.place = now.place;
-    if (!sameSources(now.sources ?? [], page.knowledge.sources ?? [])) out.sources = now.sources;
+    // Against the page's own sources: the node's credit rows for its pictures are never in the form, never a change (DESIGN-learn-web-pictures §6.3).
+    if (!sameSources(now.sources ?? [], ownKnowledgeSources(page.knowledge.sources ?? []))) out.sources = now.sources;
     if (now.freeTags && knowledgeTagsDiffer(now.freeTags, page.freeTags)) out.freeTags = now.freeTags;
     return out;
 }

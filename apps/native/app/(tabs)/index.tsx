@@ -16,7 +16,7 @@ import {
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { twoParagraphs } from '../../utils/alert-words';
 import {
-    homeCardAway, notifyStep, offerHomeCard, offerOnceCard, onceCardLater, readNotificationPermissionRecord, readOsNotificationPermission, turnOnFromHomeCard, turnOnFromOnceCard, turnOnNotifications,
+    homeCardAway, notifyStep, offerHomeCard, offerOnceCard, onceCardLater, readNotificationPermissionRecord, readOsNotificationPermission, samePhoneAnswer, turnOnFromHomeCard, turnOnFromOnceCard, turnOnNotifications,
     type OsNotificationPermission,
 } from '../../utils/notification-permission';
 import { useScreenShowing } from '../../components/NotifyLine';
@@ -320,9 +320,10 @@ export default function HomeScreen() {
     }, []);
     /**
      * Home's card while something of the member's is live (slice N3), in the once card's slot: what is live while it is drawn,
-     * else null. Never with the once card or the way-back card: it is decided only once both have said they are not up.
+     * with the account it was decided for and the phone's answer then (`phone`), else null. Never with the once card or the
+     * way-back card: it is decided only once both have said they are not up.
      */
-    const [homeLive, setHomeLive] = useState<NotifyLive | null>(null);
+    const [homeLive, setHomeLive] = useState<{ key: string; live: NotifyLive; phone: OsNotificationPermission | null } | null>(null);
     const [homeBusy, setHomeBusy] = useState(false);
     /**
      * The landing the way-back card last said it settled on (OneWayBackCard `settleFor`, `onSettled`): its newest read finished
@@ -1663,14 +1664,25 @@ export default function HomeScreen() {
     // comes on its own few days, and this card may otherwise stay for weeks. What is live: Home's answer (open deals, events
     // answered) and the phone's own posts and chats; nothing new is asked of the node.
     const wayBackListed = list.some(c => c.type === 'safety');
-    const homeMay = onceMayNow && !!once && !once.up && !once.held && answerFresh && (!wayBackListed || wayBackSettledFor === landing) && !safetyUp;
+    // A definite no, which takes the slot at once, from a card already drawn too: the once card up or holding this landing,
+    // the way-back card up, no answer or account to decide on.
+    const homeBlocked = !onceMayNow || !once || once.up || once.held || safetyUp;
+    const homeMay = !homeBlocked && answerFresh && (!wayBackListed || wayBackSettledFor === landing);
+    // A card already drawn stays while a re-read of the same account is out (the app back while Home is in front, Home landed
+    // on again: review of #3348 at 4b9716b3), so the cards under it never jump up and back. It goes only on a definite answer:
+    // the no above, another account, the phone's answer changed (back from its settings with notifications on), or the fresh
+    // read's own decision (nothing live any more). A card not drawn yet still waits for `homeMay`.
+    const homeShown = homeLive && !homeBlocked && homeLive.key === identity?.publicKey && (homeMay || samePhoneAnswer(homeLive.phone, phone)) ? homeLive.live : null;
     const homeLiveAnswer = homeNotifyLive(answer);
     const homeLiveRef = useRef(homeLiveAnswer);
     homeLiveRef.current = homeLiveAnswer;
+    const phoneRef = useRef(phone);
+    phoneRef.current = phone;
     const homeLiveKey = `${homeLiveAnswer.deals ?? ''}|${(homeLiveAnswer.events ?? []).map(e => `${e.id}:${e.rsvp ?? ''}:${e.endsAt ?? e.startsAt}`).join(',')}`;
     useEffect(() => {
         const key = identityRef.current?.publicKey;
-        if (!homeMay || !key) { setHomeLive(null); return; }
+        if (!homeMay) return;
+        if (!key) { setHomeLive(null); return; }
         let current = true;
         void (async () => {
             const at = Date.now();
@@ -1678,10 +1690,14 @@ export default function HomeScreen() {
             const live = notifyLive({ ...homeLiveRef.current, listings, waitingAt, now: at });
             // `still`: withdrawn before it is drawn (the way-back card came up, a new landing, a newer decision), it takes no day.
             const shows = live !== null && current && await offerHomeCard({ live: true, wayBack: false, still: () => current });
-            if (current) setHomeLive(shows ? live : null);
+            // The phone's answer it was decided on: any change to it moves `notifyLanding`, so a decision still current had this one.
+            if (current) setHomeLive(shows && live ? { key, live, phone: phoneRef.current } : null);
         })().catch(() => { if (current) setHomeLive(null); });
         return () => { current = false; };
     }, [homeMay, notifyLanding, homeLiveKey]);
+    // Gone for good once nothing keeps it: the same answer coming back later never draws it again undecided.
+    const homeKept = homeShown !== null;
+    useEffect(() => { if (!homeMay && !homeKept) setHomeLive(null); }, [homeMay, homeKept]);
     // Leaving Arrange (Done, Back, leaving Home, whatever ends it): the bar goes from above the cards, and the way-back card's
     // band from its top, so a view scrolled down goes up by each that stood above the top of the screen, and the card the
     // member was looking at stays where it was (review of #3343). At the top of the list nothing is kept, as on opening. Read
@@ -1890,11 +1906,11 @@ export default function HomeScreen() {
                         />
                     )}
                     {/* Home's card while something of the member's is live (slice N3), in the once card's slot: never with it or with
-                        the way-back card (`homeMay`, read again here so a card that comes up hides it in the same frame). In Arrange it
-                        stays, quiet, as the once card does, so the cards under it keep their places. */}
-                    {homeMay && homeLive && answer && (
+                        the way-back card (`homeShown`, read again here so a card that comes up hides it in the same frame), and kept
+                        through a re-read. In Arrange it stays, quiet, as the once card does, so the cards under it keep their places. */}
+                    {homeShown && answer && (
                         <NotifyHomeCard
-                            words={notifyHomeWords(homeLive)}
+                            words={notifyHomeWords(homeShown)}
                             colors={colors}
                             busy={homeBusy}
                             onTurnOn={homeTurnOn}

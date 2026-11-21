@@ -115,6 +115,17 @@ export interface OsNotificationPermission {
 }
 
 /**
+ * Whether the phone says the same now as it did then (Home's card kept through a re-read, slice N3, review of #3348): any
+ * field changed is a new answer (back from the phone's settings with notifications on, its last pop-up gone). Null on
+ * either side: nothing read to compare, so nothing known to have changed.
+ */
+export function samePhoneAnswer(was: OsNotificationPermission | null, now: OsNotificationPermission | null): boolean {
+    if (!was || !now) return true;
+    return was.available === now.available && was.granted === now.granted && was.canAskAgain === now.canAskAgain
+        && was.cantAskNeedsRecord === now.cantAskNeedsRecord && was.saidNoOnce === now.saidNoOnce;
+}
+
+/**
  * Android 13 (API 33) and later, where the pop-up exists: Expo marks the permission asked before the pop-up opens, and
  * then reads "denied, can't ask again" for a pop-up closed with no answer as for a second "Don't allow" (amend3 §2).
  */

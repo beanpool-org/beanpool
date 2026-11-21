@@ -23,7 +23,7 @@
  */
 
 import { Fragment, useEffect, useState } from 'react';
-import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, upperCase, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
+import { copyCardLine, copyFromLine, eventCopyOf, eventNoticesComing, notifyEventLineWords, pinLive, t, upperCase, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getConversations, getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import { onConversationRead } from '../lib/conversation-read';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -33,7 +33,8 @@ import {
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
     eventChatEntryLabel, eventChatNewLines,
 } from '../lib/events';
-import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { EventReminder, EventShareAndCalendar, useEventReminderChoice } from './EventExtras';
+import { useNotifyLine } from './NotifyLine';
 import { EventNextDates } from './EventNextDates';
 import { EventCopyDoor } from './EventCopyDoor';
 import { ShowOnGlobalHostRow } from './ShowOnGlobalRow';
@@ -62,7 +63,9 @@ interface RsvpState {
     tap: (status: EventRsvpStatus) => void;
 }
 
-function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null | undefined, onChange?: (post: MarketplacePost) => void): RsvpState {
+/** `onSaved`: the answer the node took (null: taken back), the member's own act (the event page's named line, slice N5b). */
+function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null | undefined, onChange?: (post: MarketplacePost) => void,
+    onSaved?: (next: EventRsvpStatus | null) => void): RsvpState {
     const [livePost, setLivePost] = useState(post);
     const [busy, setBusy] = useState<EventRsvpStatus | 'none' | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -99,6 +102,7 @@ function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null |
                 setLivePost(updated);
                 onChange?.(updated);
             }
+            if (res?.post || res?.success) onSaved?.(next);
         } catch (e: any) {
             setError(e?.message || t('Could not save your RSVP.'));
         } finally {
@@ -790,8 +794,15 @@ function useEventChatNew(publicKey: string | null | undefined, postId: string): 
 }
 
 export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onOpenTag, onOpenFreeTag, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate, onChangeThisDateOnly }: EventDetailProps) {
-    const rsvp = useEventRsvp(post, identity, onChange);
+    // The named line a Going or an Interested may bring under the answer (slice N5b, the phone's N2b: core's rule decides,
+    // once per kind), offered once their reminder choice is read; leaving the page is its no.
+    const notify = useNotifyLine(identity?.publicKey, true, identity);
+    const [offerFor, setOfferFor] = useState<'going' | 'interested' | null>(null);
+    const rsvp = useEventRsvp(post, identity, onChange, (next) => setOfferFor(next === 'going' || next === 'interested' ? next : null));
     const p = rsvp.livePost;
+    // The member's reminder choice and Marketplace switch, read once they have an answer: the reminder box shows it, and the
+    // named line says only what the node will send by it (core eventNoticesComing).
+    const reminderChoice = useEventReminderChoice(p.id, identity?.publicKey, !!p.myRsvp);
     const [cancelling, setCancelling] = useState(false);
     const [cancelError, setCancelError] = useState<string | null>(null);
     const isHost = isEventHostView(p);
@@ -800,6 +811,20 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     // A member's copy, on the global community (@beanpool/core eventCopyOf): no author, no Going, no chat. The door instead.
     const copy = eventCopyOf(p);
     const isOwnCopy = !!copy && !!identity && p.authorPublicKey === identity.publicKey;
+    // The named line's words: what the node will still send for the answer as it is NOW (the day before only while that moment
+    // is ahead, a change only to Going, nothing with the Marketplace switch off, nothing for an event cancelled, removed, not
+    // active, hidden or ended). Going then Interested drops "hear if it changes"; nothing true to say draws no line, offers none.
+    const lineWords = !isHost && !copy
+        ? notifyEventLineWords(eventNoticesComing({ answer: p.myRsvp, event: p, choice: reminderChoice, nowMs: Date.now() }))
+        : null;
+    const hasLineWords = !!lineWords;
+    useEffect(() => {
+        if (!offerFor) return;
+        if (p.myRsvp !== offerFor) { setOfferFor(null); return; }
+        if (!reminderChoice.known) return;
+        setOfferFor(null);
+        if (hasLineWords) void notify.offer({ kind: offerFor });
+    }, [offerFor, p.myRsvp, reminderChoice.known, hasLineWords, notify.offer]);
     const going = (p.eventRsvps ?? []).filter(r => r.status === 'going');
     const interested = (p.eventRsvps ?? []).filter(r => r.status === 'interested');
     const hostName = p.authorCallsign || p.authorPublicKey.slice(0, 8);
@@ -961,6 +986,8 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
               */}
             <div data-testid="event-action" className={`flex flex-col gap-1.5 min-w-0 mb-1 ${hasPhoto ? 'md:col-start-2 md:row-start-2' : ''}`}>
                 {copy ? open && !isOwnCopy && <EventCopyDoor copy={copy} /> : <RsvpButtons rsvp={rsvp} page />}
+                {/* The named line under the answer, in the words true for the answer now; none while nothing is. */}
+                {!isHost && !copy && !!p.myRsvp && notify.draw(lineWords)}
                 {counts && (
                     <p data-testid="event-counts" className={`m-0 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
                         <span aria-hidden="true">👥 </span>{counts}
@@ -1040,7 +1067,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 />
 
                 {/* 10. Remind me, and the note for people who are going: boxes. The host has no RSVP, so no reminder (decision 2). */}
-                {!isHost && !copy && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} />}
+                {!isHost && !copy && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} choice={reminderChoice} />}
                 {p.eventPrivateNote ? (
                     <div data-testid="event-private-note" className={PAGE_BOX}>
                         <p className={BOX_LABEL.event}>{t('Note for people who are going')}</p>

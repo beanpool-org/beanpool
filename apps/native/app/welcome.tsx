@@ -107,7 +107,7 @@ import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
 import { StepBar } from '../components/welcome/StepDots';
 import { WayBackTile } from '../components/welcome/WayBackTile';
-import { afterWayBack, wayBackButton, wayBackKept, wayBackSkipped } from '../utils/join-steps';
+import { afterWayBack, doorKeepsSignInCopy, keptBeforeFor, wayBackButton, wayBackKept, wayBackSkipped } from '../utils/join-steps';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
 
 /** The community's answers that mean the code itself is dead: a held invite with one of these is forgotten. Not
@@ -794,7 +794,7 @@ export default function WelcomeScreen() {
         })();
         return () => { live = false; };
     }, [pendingKey]);
-    const keptBefore = !!keptFor?.kept && (pendingKey === null || keptFor.key === pendingKey);
+    const keptBefore = keptBeforeFor(keptFor, pendingKey);
     /** Only a sign-in whose copy is kept counts: one added with no copy is no way back (utils/join-steps.ts `wayBackKept`). */
     const signInKept = protection.state === 'covered';
     /** Kept before the step opens: the join goes past it, with one dot fewer. */
@@ -1632,9 +1632,10 @@ export default function WelcomeScreen() {
             await clearPendingOnboarding();
             await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
             // The 12-words reminder (DESIGN-home-default-fable.md §2.5). "Later" on the way back is true to its word (onboarding
-            // S4, design §3.1 E): Home's "Your way back in" card shows from the first landing. Only a way back kept (a sign-in's
-            // copy, the tick, a Yes after the kit, or one the phone already knew) starts it put away. A record already there (a
-            // Yes after the kit just now, or a 12-words join) is kept; a sign-in added ends it at Home.
+            // S4, design §3.1 E): Home's "Your way back in" card shows from the first landing, over a record marked done that the
+            // phone does not count as a way back (a sign-in added with no copy). Only a way back kept (a sign-in's copy, the tick,
+            // a Yes after the kit, or one the phone already knew) starts it put away. A record already running (a 12-words join's)
+            // is kept, and so is any record when a way back is kept (a Yes after the kit just now); a sign-in added ends it at Home.
             const joinedHere = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
             const startReminder = wayBackIsKept ? startOneWayBackPutAway : startOneWayBackShown;
             if (joinedHere) await startReminder(pendingIdentity.publicKey, joinedHere.replace(/\/+$/, '')).catch(() => undefined);
@@ -3248,11 +3249,15 @@ export default function WelcomeScreen() {
         const signInLine = globalDoorCopies === 'vault'
             ? t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
             : doorKeeper.signIn;
+        // The dots count the screens the way chosen leads to (review of #3330): a sign-in whose copy will be kept goes past the
+        // way back, as the account already on the phone does when it kept one; the 12 words, or a door that keeps no copies,
+        // show it. The join holds no copy yet: the photo's skip waits for the one that landed.
+        const doorSkipsWayBack = wayBackSkipped('global', wayBackKept({ signIn: doorKeepsSignInCopy(doorWay, globalDoorCopies), wordsTicked: false, before: keptBefore }));
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                        <StepBar step="name" flow={joinFlow} wayBack={!skipWayBack} busy={loading} />
+                        <StepBar step="name" flow="global" wayBack={!doorSkipsWayBack} busy={loading} />
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
 

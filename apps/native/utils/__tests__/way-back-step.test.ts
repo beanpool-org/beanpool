@@ -7,8 +7,9 @@
  *   "Let's go"; the dots one fewer where it is skipped, per path.
  * - "Later" is true to its word: Home's "Your way back in" card shows from the first landing (utils/one-way-back.ts
  *   startOneWayBackShown); a way back kept starts it put away, as before.
- * - What the phone already knew (utils/way-back-kept.ts): a vault copy, a sign-in the community said was added, the words
- *   noted as written down; "taken back" counts as not.
+ * - What the phone already knew (utils/way-back-kept.ts): a vault copy, the words noted as written down; "taken back" counts
+ *   as not, and so does a sign-in added with no copy (review of #3330). Every way it can be true or false, on every path, is
+ *   walked in way-back-covered-table.test.ts.
  * - welcome.tsx wires these: one place decides the skip, the button, the record and what follows the way back (N1j's hook).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -128,16 +129,24 @@ describe('"Later" brings Home\'s card from day one; a way back kept starts it pu
         expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000, false)).toBe('settings');
     });
 
-    it('a record already there stands: the 12-words door\'s own, or one a Yes after the kit finished', async () => {
+    it('a record already running stands: the 12-words door\'s own', async () => {
         await startOneWayBack(KEY, 'https://open.riverbend.example', JOINED);
         await startOneWayBackShown(KEY, URL, JOINED + 1);
         expect((await readOneWayBack(KEY))?.url).toBe('https://open.riverbend.example');
+    });
 
-        store.map.clear();
+    it('a Yes after the kit finished it: kept, so the end puts it away and the done record stands', async () => {
         store.map.set(oneWayBackStoreKey(KEY), JSON.stringify({ url: URL, joinedAt: JOINED, dismissedAt: JOINED, by: 'wayBack', done: 'checked' }));
-        await startOneWayBackShown(KEY, URL, JOINED + 1);
+        await startOneWayBackPutAway(KEY, URL, JOINED + 1);
         expect((await readOneWayBack(KEY))?.done).toBe('checked');
         expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000, false)).toBe('none');
+    });
+
+    it('Later over a record marked done (a sign-in added with no copy): the card about the community just joined, from the first landing', async () => {
+        store.map.set(oneWayBackStoreKey(KEY), JSON.stringify({ url: 'https://open.riverbend.example', joinedAt: JOINED - 30 * DAY, done: 'linked' }));
+        await startOneWayBackShown(KEY, URL, JOINED);
+        expect(await readOneWayBack(KEY)).toEqual({ url: URL, joinedAt: JOINED, by: 'wayBack' });
+        expect(oneWayBackPlace(await readOneWayBack(KEY), JOINED + 60_000, false)).toBe('card');
     });
 });
 
@@ -149,8 +158,11 @@ describe('what the phone already knew of the account: storage only, and only wha
         vault.kept = true;
         expect(await wayBackKeptBefore(KEY)).toBe(true);
     });
-    it('the community said a sign-in was added: kept', async () => {
+    it('a sign-in added (linked) with no copy, a failed copy, or the community\'s ordinary: not kept, so the step shows', async () => {
         store.map.set(oneWayBackStoreKey(KEY), JSON.stringify({ url: URL, joinedAt: JOINED, done: 'linked' }));
+        expect(await wayBackKeptBefore(KEY)).toBe(false);
+        // With its copy at the key vault, the vault counts it.
+        vault.kept = true;
         expect(await wayBackKeptBefore(KEY)).toBe(true);
     });
     it('"I still have my 12 words", or the words noted as written down: kept', async () => {
@@ -191,7 +203,15 @@ describe('welcome.tsx wires them in one place each', () => {
         const load = between('const [keptFor, setKeptFor] = useState<{ key: string; kept: boolean } | null>(null);', '}, [pendingKey]);');
         expect(load).toContain('const key = pendingKey ?? (await loadIdentity().catch(() => null))?.publicKey ?? null;');
         expect(load).toContain('const kept = await wayBackKeptBefore(key).catch(() => false);');
-        expect(welcome).toContain('const keptBefore = !!keptFor?.kept && (pendingKey === null || keptFor.key === pendingKey);');
+        expect(welcome).toContain('const keptBefore = keptBeforeFor(keptFor, pendingKey);');
+    });
+
+    it('the global door\'s name screen counts the screens the way chosen leads to (review of #3330)', () => {
+        const door = between("if (mode === 'globalJoin') {", '<View style={styles.card}>');
+        expect(door).toContain("const doorSkipsWayBack = wayBackSkipped('global', wayBackKept({ signIn: doorKeepsSignInCopy(doorWay, globalDoorCopies), wordsTicked: false, before: keptBefore }));");
+        expect(door).toContain('<StepBar step="name" flow="global" wayBack={!doorSkipsWayBack} busy={loading} />');
+        // Not the photo's skip: the join holds no copy yet on the door (its enrolment comes as the join lands).
+        expect(door).not.toContain('wayBack={!skipWayBack}');
     });
 
     it('the photo goes on to the way back, or past it to Home only where one is kept', () => {

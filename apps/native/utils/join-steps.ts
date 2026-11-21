@@ -14,6 +14,8 @@
  * and {@link afterWayBack} names it as the way back's next screen.
  */
 import type { OnboardingFlow } from './onboarding-state';
+import type { DoorWay } from './global-join';
+import type { SignInCopies } from './vault-config';
 
 export type JoinStep = 'name' | 'photo' | 'wayBack';
 
@@ -38,11 +40,30 @@ export function stepDot(steps: readonly JoinStep[], step: JoinStep): { at: numbe
  * - `signIn`: a sign-in's copy is kept (`protectionFrom(enrolment).state === 'covered'`). A sign-in added with no copy (the
  *   copy failed, or the community keeps none) is not a way back, and does not count;
  * - `wordsTicked`: the member's own "I've saved these words", or Yes after the recovery kit, on this screen;
- * - `before`: what the phone already knew of this account (utils/way-back-kept.ts): a copy at the key vault, a sign-in the
- *   community says was added, or the words noted as written down.
+ * - `before`: what the phone already knew of this account (utils/way-back-kept.ts): a copy at the key vault, or the words
+ *   noted as written down. A sign-in added earlier with no copy is not one.
  */
 export function wayBackKept(k: { signIn: boolean; wordsTicked: boolean; before: boolean }): boolean {
     return k.signIn || k.wordsTicked || k.before;
+}
+
+/**
+ * `before` for the account the join holds: what was read ({@link wayBackKept}'s `before`, utils/way-back-kept.ts) speaks only
+ * for the key it was read for. Before the join holds a key (Your name, the global door) it is the phone's own account, which
+ * the join then uses (one identity per device). Nothing read yet is "not known", which shows the step.
+ */
+export function keptBeforeFor(read: { key: string; kept: boolean } | null, joinKey: string | null): boolean {
+    return !!read?.kept && (joinKey === null || read.key === joinKey);
+}
+
+/**
+ * The global door's name screen, before the join lands: whether the way chosen will keep a sign-in's copy (a sign-in, where
+ * the global community's rule keeps copies). Its dots only, so they count the screens that way leads to: the skip itself is
+ * decided on the photo, from the copy that landed ({@link wayBackKept}'s `signIn`). A copy that fails there shows the way back,
+ * one dot more than the door drew: the safe way to be wrong (review of #3330).
+ */
+export function doorKeepsSignInCopy(way: DoorWay, copies: SignInCopies): boolean {
+    return way !== 'words' && copies !== 'none';
 }
 
 /**

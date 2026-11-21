@@ -33,7 +33,7 @@ import { leaveScreen } from '../../utils/leave-screen';
 import { useAfterDismiss } from '../../utils/screen-presented';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { FORUM_LIMITS, currentLanguage, forumSectionName, forumWriterLine, t, timeAgo } from '@beanpool/core';
+import { FORUM_LIMITS, currentLanguage, forumSectionName, forumWriterLine, t, timeAgo, type ForumFollow } from '@beanpool/core';
 import { useStyles, useTheme } from '../ThemeContext';
 import { Alert } from '../../utils/keyboard-alert';
 import { blockUser } from '../../utils/blocklist';
@@ -180,8 +180,10 @@ export default function ForumTopicScreen() {
     const open = !!topic && !topic.closed;
     // Whether this member may reply here now: open, and the node's own word in the topic's read (its section not archived,
     // theirs to write in: a group's observers, owners and moderators read only; review of #3339). The reply box, the line
-    // that says why there is none, and the offer to hear of replies all follow it.
-    const archived = !!topic?.sectionArchived || !!section?.archived;
+    // that says why there is none, and the offer to hear of replies all follow it. Archived is the topic read's word alone,
+    // never the front's section list: a kept front from before an unarchive would hide the box over the node's fresh answer
+    // until the fresh front landed (review of #3345).
+    const archived = !!topic?.sectionArchived;
     const canReply = !!topic && open && !archived && topic.canReply !== false;
     // Why no reply goes: the topic is closed or its section archived (the closed line), or this member only reads here.
     const readsOnly = open && !archived && !canReply;
@@ -268,6 +270,16 @@ export default function ForumTopicScreen() {
         await readThrough(0, lastOf(pageRef.current), goneWords);
     }
 
+    /**
+     * The member's follow saved (the bell, Mute), drawn from the save's own answer at once: the read again after it may
+     * fail, and the bell must never then show the topic as it was before the save (N2b notes, #3348).
+     */
+    async function saveFollow(id: string, to: ForumFollow | null): Promise<ForumFollow | null> {
+        const saved = await followForumTopic(id, to);
+        if (shown.current) setPage((p) => (p && p.topic.id === id ? { ...p, topic: { ...p.topic, follow: saved } } : p));
+        return saved;
+    }
+
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
 
     function postBody(post: ForumPost) {
@@ -304,7 +316,7 @@ export default function ForumTopicScreen() {
             if (!topic) return [];
             const items: ForumMenuItem[] = [[
                 topic.follow === 'muted' ? t(TOPIC_WORDS.unmute) : t(TOPIC_WORDS.mute),
-                () => void act(() => followForumTopic(topic.id, topic.follow === 'muted' ? null : 'muted')),
+                () => void act(() => saveFollow(topic.id, topic.follow === 'muted' ? null : 'muted')),
             ]];
             if (open && (topic.writer.publicKey === me || front?.moderator)) items.push([t(TOPIC_WORDS.close), () => void act(() => closeForumTopic(topic.id))]);
             // Only its writer links (the node refuses anyone else) and makes a Need of it (design §10.2, §10.4).
@@ -362,7 +374,7 @@ export default function ForumTopicScreen() {
                             onPress={() => {
                                 const next = following ? null : 'following';
                                 void act(async () => {
-                                    await followForumTopic(topic.id, next);
+                                    await saveFollow(topic.id, next);
                                     // Followed: the member's own act, the moment for "Hear when someone replies here."
                                     // Never where no reply can go (a closed topic, an archived section, a section this member only reads):
                                     // the node refuses them (forum.ts), so none can be heard.

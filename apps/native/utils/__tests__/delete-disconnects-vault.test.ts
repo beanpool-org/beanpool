@@ -279,10 +279,26 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
         expect(vaultCopyStaysLine('Riverside', signIn as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>)).toMatch(/from a sign-in you linked/);
     });
 
-    it('the confirmation says the vault copy goes first', () => {
-        expect(lastCommunityLine({ kind: 'last', here: MULLUM, hereName: 'Mullum' }, true)).toMatch(
-            / If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first\.$/);
-    });
+    // Review of #3345: the vault's delete takes every copy ('all'), the half kept for a community's admins too, and the
+    // confirmation said only "from a sign-in you linked". What the phone knows (vault.ts noteVaultCopy: '1' a sign-in's copy,
+    // 'c' the admins' half only, nothing stored) decides which copy it names first; each says the admins' half goes.
+    for (const [knows, stored, ending] of [
+        ["a sign-in's copy", '1', " If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first, and so is any half kept for your community's admins."],
+        ["only the admins' half", 'c', " If BeanPool's key vault keeps half of a locked copy of your key for your community's admins, or a copy from a sign-in you linked, it is removed first."],
+        ['nothing yet', null, " If BeanPool's key vault keeps half of a locked copy of your key for your community's admins, or a copy from a sign-in you linked, it is removed first."],
+    ] as const) {
+        it(`the confirmation says every vault copy goes first, the admins' half too (the phone knows ${knows})`, async () => {
+            const net = network('stranger');
+            await kimsPhone(net);
+            if (stored) mem.async.set(vaultCopyKnownStoreKey(kim.publicKey), stored);
+            else mem.async.delete(vaultCopyKnownStoreKey(kim.publicKey));
+            const plan = await planDelete(kim.publicKey);
+            expect(plan.kind).toBe('last');
+            const line = lastCommunityLine(plan as Extract<typeof plan, { kind: 'last' }>, true);
+            expect(line.endsWith(ending)).toBe(true);
+            expect(line).toMatch(/half kept for your community's admins|half of a locked copy of your key for your community's admins/);
+        });
+    }
 });
 
 describe('a delete that leaves the key on the phone, or a build without a vault, sends no Disconnect', () => {

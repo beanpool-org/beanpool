@@ -48,17 +48,21 @@ const post = (number: number, words: string) => ({
     editedAt: null, removed: null, photos: 0, hidden: false, linksOn: true,
 });
 
-let state: { topics: any[]; refuseFollow: boolean };
+let state: { topics: any[]; refuseFollow: boolean; failReadAfterSave: boolean; readFailsAfterSave: boolean };
 function standIn(c: Call): unknown {
     const p = c.path.split('?')[0];
     if (c.method === 'GET' && p === '/api/forum') return { sections: SECTIONS, public: false, told: true, moderator: false, firstLooksWaiting: null, firstTopicWaits: false, linksOn: true };
     if (c.method === 'GET' && p === '/api/forum/topics') return { topics: state.topics, next: null };
     const read = /^\/api\/forum\/topics\/(ft-\d)$/.exec(p);
-    if (c.method === 'GET' && read) return { topic: state.topics.find((x) => x.id === read[1]), posts: [post(1, 'Who has beans to swap?')], next: null, lastRead: 1 };
+    if (c.method === 'GET' && read) {
+        if (state.readFailsAfterSave) return Object.assign(new Error('Could not read this topic.'), { status: 503 });
+        return { topic: state.topics.find((x) => x.id === read[1]), posts: [post(1, 'Who has beans to swap?')], next: null, lastRead: 1 };
+    }
     const follow = /^\/api\/forum\/topics\/(ft-\d)\/follow$/.exec(p);
     if (c.method === 'POST' && follow) {
         if (state.refuseFollow) return Object.assign(new Error('Could not follow this topic.'), { status: 503 });
         state.topics = state.topics.map((x) => (x.id === follow[1] ? { ...x, follow: c.body.follow } : x));
+        if (state.failReadAfterSave) state.readFailsAfterSave = true;
         return { follow: c.body.follow };
     }
     if (c.method === 'POST' && /\/read$/.test(p)) return { lastRead: c.body.upTo };
@@ -79,7 +83,7 @@ async function openAndFollow(closed = false) {
 beforeEach(() => {
     forgetForum();
     node.answer = standIn;
-    state = { topics: [], refuseFollow: false };
+    state = { topics: [], refuseFollow: false, failReadAfterSave: false, readFailsAfterSave: false };
     localStorage.clear();
 });
 afterEach(() => {
@@ -142,6 +146,30 @@ describe('the line after the follow', () => {
         await screen.findByText('Could not follow this topic.');
         expect(screen.queryByTestId('notify-line')).toBeNull();
         expect(readNotifyAsk(ME).lines).toBeUndefined();
+    });
+
+    // N2b notes (#3348): the follow saved, then the topic read straight after fails: the bell and its line follow the save's
+    // own answer, never the topic as it read before the save. Mute is the same save.
+    it('the follow saved but the read after it fails: the bell shows it followed, and the line comes', async () => {
+        standBrowser('default', ME);
+        state.failReadAfterSave = true;
+        await openAndFollow();
+        expect(state.readFailsAfterSave).toBe(true);
+        expect(await screen.findByTestId('forum-follow-line')).toHaveTextContent(LINE);
+    });
+
+    it('Mute saved but the read after it fails: the menu offers Unmute', async () => {
+        state.topics = [topic('ft-1', 'Seed swap ideas'), topic('ft-2', 'Welcome: start here')];
+        state.failReadAfterSave = true;
+        render(<ForumPage me={ME} />);
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        await screen.findByTestId('forum-topic-title');
+        fireEvent.click(screen.getByTestId('forum-topic-menu'));
+        fireEvent.click(await screen.findByText('Mute this topic'));
+        await waitFor(() => expect(state.readFailsAfterSave).toBe(true));
+        await new Promise((r) => setTimeout(r, 0));
+        fireEvent.click(screen.getByTestId('forum-topic-menu'));
+        expect(await screen.findByText('Unmute this topic')).toBeInTheDocument();
     });
 
     it("Tell me: the browser's prompt once, at the tap; a no kept apart, the line gone without a word", async () => {

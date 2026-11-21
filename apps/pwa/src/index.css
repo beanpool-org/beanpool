@@ -498,6 +498,19 @@ html, body, #root {
   container-type: inline-size;
 }
 
+/* Home's Market picture tile (slice S8, pages/HomePage.tsx): OFFER/NEED on the photo's corner. The word grows with the
+   text size until it would no longer fit its photo, then holds at the photo's room (9.5% of the photo's width), so the
+   longest (Russian ПРЕДЛОЖЕНИЕ, 11 capitals) sits whole on the 110 px photo at 320 px and 130% text (review of #3322;
+   checked in every language by e2e/home-market-tiles-320.mjs). The first font-size is for a browser without container units. */
+.home-tile-photo {
+  container-type: inline-size;
+}
+
+.home-tile-chip {
+  font-size: 0.65rem;
+  font-size: min(0.65rem, 9.5cqw);
+}
+
 @container (min-width: 480px) {
   .home-tiles-grid {
     display: grid !important;

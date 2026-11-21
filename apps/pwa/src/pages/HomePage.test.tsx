@@ -5726,6 +5726,14 @@ describe("Home's Market card as picture tiles (slice S8, DESIGN-onboarding-home-
         expect(img?.getAttribute('src') ?? '').toContain('size=thumb2');
         expect(within(eggs).getByTestId('home-photo-slot')).toHaveTextContent('OFFER');
         expect(within(ladder).getByTestId('home-photo-slot')).toHaveTextContent('NEED');
+        // The chip is sized to its photo (index.css .home-tile-photo is its container, .home-tile-chip holds the word to the
+        // photo's room), on one line, 4 px in: ПРЕДЛОЖЕНИЕ ran 27.7 px past the photo at 320 px and 130% text (review of #3322).
+        const slot = within(eggs).getByTestId('home-photo-slot');
+        const chip = slot.querySelector(':scope > span[aria-hidden="true"]') as HTMLElement;
+        expect(slot.className).toMatch(/\bhome-tile-photo\b/);
+        expect(chip.className).toMatch(/\bhome-tile-chip\b/);
+        expect(chip.className).toMatch(/\bwhitespace-nowrap\b/);
+        expect(chip.className).not.toMatch(/\btext-\[[^\]]*\]/);
         expect(eggs).toHaveTextContent('Fresh eggs, a dozen');
         expect(eggs).toHaveTextContent('12 Beans');
         expect(eggs.textContent).not.toMatch(/Ʀ/);
@@ -5744,6 +5752,10 @@ describe("Home's Market card as picture tiles (slice S8, DESIGN-onboarding-home-
         const title = Array.from(tiles()[0].querySelectorAll('span[dir="auto"]'))[0] as HTMLElement;
         expect(title.className).toMatch(/\bline-clamp-2\b/);
         expect(title.className).toMatch(/\bbreak-words\b/);
+        // No display class beside the clamp: Tailwind writes .block (or .inline-block, .flex) after .line-clamp-2, and its
+        // display beat the clamp, so the title ran to 8 lines at 320 px (review of #3322). The drawn lines are measured in
+        // Chromium by e2e/home-market-tiles-320.mjs (the pwa_wide_pages check).
+        expect(title.className).not.toMatch(/(?:^|\s)(?:block|inline-block|inline|flex|inline-flex|grid|flow-root)(?:\s|$)/);
         expect(tiles()[0].getAttribute('aria-label')).toBe(`Offer, ${LONG.title}, 25 Beans`);
     });
 

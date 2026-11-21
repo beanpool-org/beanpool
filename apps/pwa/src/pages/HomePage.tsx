@@ -414,8 +414,9 @@ function MarketListingItem({
                 data-tile="picture"
                 className="w-full min-w-0 p-0 pb-1 text-left bg-transparent border-0 hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill"
             >
-                {/* The Market grid's own frame (core market-card-shell.ts photo.grid): 4:3, cropped towards the top third. */}
-                <div data-testid="home-photo-slot" className="relative w-full aspect-[4/3] rounded-xl overflow-hidden shrink-0 bg-bg-hover">
+                {/* The Market grid's own frame (core market-card-shell.ts photo.grid): 4:3, cropped towards the top third. The slot is
+                    the chip's container (index.css .home-tile-photo), so OFFER/NEED is sized to the photo it sits on. */}
+                <div data-testid="home-photo-slot" className="home-tile-photo relative w-full aspect-[4/3] rounded-xl overflow-hidden shrink-0 bg-bg-hover">
                     <ListPhoto
                         photo={photo}
                         alt=""
@@ -425,11 +426,16 @@ function MarketListingItem({
                         style={{ objectPosition: '50% 33%' }}
                         fallback={<CategoryTile category={item.category} size="grid" />}
                     />
-                    <span aria-hidden="true" className={`absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md text-[0.65rem] font-extrabold tracking-wide ${kind === 'NEED' ? 'bg-bp-chip-need-tint text-bp-chip-need-ink' : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'}`}>
+                    {/* OFFER or NEED, whole, on one line, inside the photo in every language at 320 px and 130% text: 4 px in and
+                        6 px of padding as the phone's chip (market-tile-styles.ts), its size from index.css .home-tile-chip, which
+                        holds it to the photo's room (review of #3322: ПРЕДЛОЖЕНИЕ ran 27.7 px past a 109.6 px photo). */}
+                    <span aria-hidden="true" className={`home-tile-chip absolute top-[4px] left-[4px] px-[6px] py-[2px] rounded-md whitespace-nowrap font-extrabold tracking-wide ${kind === 'NEED' ? 'bg-bp-chip-need-tint text-bp-chip-need-ink' : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'}`}>
                         {kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}
                     </span>
                 </div>
-                <span dir="auto" className="block mt-1.5 text-sm font-bold leading-snug break-words line-clamp-2 text-text-primary">
+                {/* No `block` beside line-clamp-2: Tailwind writes .block after .line-clamp-2, its display:block beats the clamp's
+                    -webkit-box and the title ran to 8 lines (review of #3322). line-clamp-2 sets its own display. */}
+                <span dir="auto" className="mt-1.5 text-sm font-bold leading-snug break-words line-clamp-2 text-text-primary">
                     {item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}
                 </span>
                 {(price || km) && (

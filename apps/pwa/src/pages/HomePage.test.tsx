@@ -54,7 +54,7 @@ import * as api from '../lib/api';
 import { readPricingGuide } from '../lib/starter-offers';
 import { HomePage, HOME_FAILED, HOME_HINT, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
 import { NodeTooOldError } from '../lib/node-version-gate';
-import { ARRANGE_WORDS, COMMUNITY_WELCOME_DISMISSED_KEY, DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, FIND_TOWN_SEARCH_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { ARRANGE_WORDS, COMMUNITY_WELCOME_DISMISSED_KEY, DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, FIND_TOWN_SEARCH_WORDS, TOUR_WORDS, WAY_BACK_ASKS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t, wayBackSchedule } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
 import { HOLD_MS } from '../components/HomeCard';
@@ -3932,6 +3932,67 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         } finally {
             seen.stop();
         }
+    });
+
+    // Review of #3341: the first Beans and the 90 days go by the balance and an open deal, which Home's answer carries in Your
+    // Beans and Your deals, and a member can take either off Home. They are asked with "Your way back in" whatever the list
+    // holds (core WAY_BACK_ASKS, lib/home-layout.ts cardsToAsk), and a read with no cards= has them built with it
+    // (routes/home-answer.ts withWayBackAsks, test-home 5b). So the web's card decides as core's schedule does with the
+    // member's real figures (the phone's rule), at a browser's first landing and the next, and a card taken off stays off.
+    // This node builds what a real one builds: the cards asked; with no cards=, the list and the fixed two, and Your Beans
+    // and Your deals where "Your way back in" is on the list.
+    it('"Your way back in" decides as core\'s schedule does with the real balance and deals, whatever is on Home: Your Beans and Your deals on Home or taken off × a balance or none × an open deal or none × day 10, 31 and 125, at a first landing and the next', async () => {
+        width = 1400;
+        const DAY = 86_400_000;
+        const KEY = `beanpool_one_way_back_${ME.publicKey}`;
+        const LINE = 'If this browser forgets your account, this is how you get back in.';
+        const FACT = "You have 40 Beans here now. Keep a way back in, so they don't go if this browser forgets your account.";
+        const DEAL = { open: 1, waiting: 0, waitingOnMe: null, items: [{ txId: 't9', postId: 'p9', title: 'Sourdough', with: 'Ben', waitsOnMe: false, at: AT }] };
+        const got: unknown[] = [];
+        const want: unknown[] = [];
+        for (const beansOnHome of [true, false]) for (const dealsOnHome of [true, false]) for (const balance_c of [0, 4000]) for (const open of [false, true]) for (const day of [10, 31, 125]) {
+            const name = `Your Beans ${beansOnHome ? 'on Home' : 'off'}, Your deals ${dealsOnHome ? 'on Home' : 'off'}, ${balance_c / 100} Beans, ${open ? 'a deal open' : 'no deal'}, day ${day}`;
+            const now = Date.now();
+            const joinedAt = now - day * DAY;
+            // This browser's record: none on days 10 and 31 (sign-up was the first showing: put away at the join); on day 125,
+            // put away at the 30 days' return, with Beans first seen here on day 20.
+            const here = day === 125 ? { beansAt: joinedAt + 20 * DAY, putAwayAt: joinedAt + 31 * DAY } : null;
+            localStorage.removeItem(KEY);
+            if (here) localStorage.setItem(KEY, JSON.stringify(here));
+            vi.stubGlobal('indexedDB', memoryIndexedDB());
+            resetHomeCacheForTest();
+            const list = v2(['safety', ...(beansOnHome ? ['beans'] : []), ...(dealsOnHome ? ['deals'] : []), 'market'], new Date(now - 60_000).toISOString());
+            const base = invited({ joinedAt: new Date(joinedAt).toISOString() });
+            const full = { ...base, cards: { ...base.cards, beans: { balance_c, room_c: 20000, tier: 'Resident', activated: balance_c > 0, frozen: false }, ...(open ? { deals: DEAL } : {}) } } as HomeAnswer;
+            const asks: Array<readonly string[] | null> = [];
+            vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
+                asks.push(params.cards ? [...params.cards] : null);
+                const built = params.cards ? [...params.cards]
+                    : ['needs', 'community', ...list.cards.map(c => c.id), ...(list.cards.some(c => c.type === 'safety') ? WAY_BACK_ASKS : [])];
+                return fresh({ ...full, layout: list as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => built.includes(id))) });
+            });
+            // The phone's rule: core's schedule with what the member really has, whatever Home holds.
+            const s = wayBackSchedule({ joinedAt, now, kept: false, putAwayAt: here?.putAwayAt ?? joinedAt, beansAt: here?.beansAt ?? (balance_c > 0 ? now : null), balance_c, holds: open });
+            const expected = { card: s.show ? (s.why === 'beans' ? FACT : LINE) : 'none', beansDrawn: beansOnHome, dealsDrawn: dealsOnHome && open };
+            for (const landing of ['first landing', 'next landing']) {
+                const reads = asks.length;
+                render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+                await screen.findByTestId('home-card-market');
+                await waitFor(() => expect(asks.length).toBeGreaterThan(reads));
+                await pause();
+                const card = screen.queryByTestId('one-way-back-landing');
+                got.push([name, landing, {
+                    card: card ? within(card).getByTestId('one-way-back-text').textContent : 'none',
+                    beansDrawn: !!screen.queryByTestId('home-card-beans'), dealsDrawn: !!screen.queryByTestId('home-card-deals'),
+                }]);
+                want.push([name, landing, expected]);
+                cleanup();
+            }
+            // A browser with no copy asks with no cards= (the node's own choice); the next landing names both cards.
+            got.push([name, 'asked', asks.map(a => a === null ? 'no cards=' : WAY_BACK_ASKS.every(id => a.includes(id)) ? 'Your Beans and Your deals by name' : a.join(','))]);
+            want.push([name, 'asked', ['no cards=', 'Your Beans and Your deals by name']]);
+        }
+        expect(got).toEqual(want);
     });
 
     it('"I still have my 12 words" on Home: kept on the account (words_kept), and the card and First steps\' line end at once', async () => {

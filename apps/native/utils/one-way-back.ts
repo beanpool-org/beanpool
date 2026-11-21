@@ -5,7 +5,10 @@
  *
  * - A plain card on the landing screen and in Settings until one of two things is done: the member says they checked
  *   they still have their 12 words, or they add a sign-in (utils/join-link.ts).
- * - Dismissible. It comes back once after their first post and once after a week, then stays in Settings only.
+ * - Dismissible. When it comes back is core's schedule (@beanpool/core way-back-schedule.ts, slice B1 of
+ *   DESIGN-notify-and-backup-asks-fable-amend2.md §12.3; Marty's pick 10, 21 Nov 2026): once at the first Beans, once 30
+ *   days after joining, then every 90 days while there is something to lose; between showings it lives in Settings and
+ *   in the bell's last line. A record from 1.4.7 keeps its old flags (`postReturnUsed`, `weekReturnUsed`): read as nothing.
  *
  * Kept on the phone per account ({@link oneWayBackStoreKey}): times and two flags, nothing secret. Kept when the account
  * leaves the phone, as its block list is: the same account restored here carries on where it was.
@@ -24,24 +27,22 @@
  * sign-in's copy is linked there), for a member who came by invite, the community's first owner, anyone. Their record is
  * marked `by: 'wayBack'`: only Home's word moves it (`/api/community/me`'s `rules` says how they joined, so its
  * `ordinary` is no sign-in added). Sign-up counts as the first showing, so it starts put away ({@link startOneWayBackPutAway},
- * at an invite sign-up, or from Home's word at its join date): day one is First steps' line only, then the card once
- * after the first post and once after a week, then Settings. Its card offers only what works for the member: "Add a
+ * at an invite sign-up, or from Home's word at its join date): day one is First steps' line only, then the card on core's
+ * schedule (above). Its card offers only what works for the member: "Add a
  * sign-in" only where the node takes one from them (Home's `cards.safety`, the 12-words door's rule,
  * routes/open-join.ts `linkState`), else "Show my 12 words" and "I still have my 12 words", which is kept on the account
  * (utils/words-kept.ts, `words_kept`) so the phone and the web agree.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { oneWayBackAskedStoreKey, oneWayBackStoreKey } from './storage-keys';
+import { oneWayBackAskedStoreKey, oneWayBackStoreKey, wordsWrittenDownStoreKey } from './storage-keys';
 import { signedGet } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
-
-export const ONE_WAY_BACK_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+import { wayBackBeansSeen, wayBackSchedule, type WayBackSchedule } from '@beanpool/core';
 
 export const ONE_WAY_BACK_TEXT = {
-    title: 'Your account has one way back',
-    body: 'Your account has one way back: your 12 words. Check you still have them, or add a sign-in.',
+    body: 'If this phone is lost, this is how you get back in.',
     addSignIn: 'Add a sign-in',
     checkWords: 'Show my 12 words',
     checked: 'I still have my 12 words',
@@ -57,10 +58,8 @@ export interface OneWayBack {
     done?: 'linked' | 'checked';
     /** The last time the card was put away. */
     dismissedAt?: number;
-    /** The return after the member's first post has been seen. */
-    postReturnUsed?: boolean;
-    /** The return after a week has been seen. */
-    weekReturnUsed?: boolean;
+    /** When this phone first saw a balance above zero on the account: the card comes back once for it (core `wayBackBeansSeen`). */
+    beansAt?: number;
     /**
      * `wayBack`: a reminder for a member whose words are their only way back however they joined (§2.5 above), moved by
      * Home's `me.wayBack` alone and started put away. Absent: the 12-words door's own record (global or an open door).
@@ -71,33 +70,62 @@ export interface OneWayBack {
 /** Where it shows now: the landing screen's card (and Settings), Settings only, or nowhere. */
 export type OneWayBackPlace = 'card' | 'settings' | 'none';
 
-/** Whether a return is waiting: after the first post, and after a week, each once. */
-function returnsWaiting(record: OneWayBack, now: number, hasPosted: boolean): { post: boolean; week: boolean } {
-    return {
-        post: hasPosted && !record.postReturnUsed,
-        week: now >= record.joinedAt + ONE_WAY_BACK_WEEK_MS && !record.weekReturnUsed,
-    };
+/**
+ * What the member has here beside the record, for core's schedule: the balance now (whole hundredths; null where it isn't
+ * known: Beans off, the worldwide community, no Your Beans card asked), something else to lose (a live listing, an open
+ * deal, a role), a way back kept that the record doesn't say (a sign-in's copy at the key vault, the words said written
+ * down), and the notifications card holding Home's one slot.
+ */
+export interface WayBackHolding {
+    balance_c?: number | null;
+    holds?: boolean;
+    kept?: boolean;
+    slotTaken?: boolean;
 }
 
-export function oneWayBackPlace(record: OneWayBack | null | undefined, now: number, hasPosted: boolean): OneWayBackPlace {
-    if (!record || record.done) return 'none';
-    if (record.dismissedAt === undefined) return 'card';
-    const waiting = returnsWaiting(record, now, hasPosted);
-    return waiting.post || waiting.week ? 'card' : 'settings';
+/** Core's schedule for this record, or null where there is no reminder (none, or done). */
+export function oneWayBackSchedule(record: OneWayBack | null | undefined, now: number, holding: WayBackHolding = {}): WayBackSchedule | null {
+    if (!record || record.done) return null;
+    return wayBackSchedule({
+        joinedAt: record.joinedAt, now, kept: !!holding.kept, putAwayAt: record.dismissedAt ?? null,
+        beansAt: record.beansAt ?? null, balance_c: holding.balance_c ?? null, holds: !!holding.holds, slotTaken: !!holding.slotTaken,
+    });
+}
+
+export function oneWayBackPlace(record: OneWayBack | null | undefined, now: number, holding: WayBackHolding = {}): OneWayBackPlace {
+    const schedule = oneWayBackSchedule(record, now, holding);
+    return !schedule ? 'none' : schedule.show ? 'card' : 'settings';
+}
+
+/** Put the card away: every return waiting now is answered by it (core's schedule counts from the last put-away). */
+export function dismissedOneWayBack(record: OneWayBack, now: number): OneWayBack {
+    return { ...record, dismissedAt: now };
 }
 
 /**
- * Put the card away. A return that is waiting is used by this: the card was up after the first post (or the week), so
- * it has come back for it. Two waiting at once are both used: it comes back once for them.
+ * The first Beans seen on the account: the record keeps when, once (core `wayBackBeansSeen`), so the card comes back for
+ * them. Nothing is written for a record that is done, or that already has its date, or while the balance isn't above zero.
  */
-export function dismissedOneWayBack(record: OneWayBack, now: number, hasPosted: boolean): OneWayBack {
-    const waiting = returnsWaiting(record, now, hasPosted);
-    return {
-        ...record,
-        dismissedAt: now,
-        ...(waiting.post ? { postReturnUsed: true } : {}),
-        ...(waiting.week ? { weekReturnUsed: true } : {}),
-    };
+export async function noteOneWayBackBeans(publicKey: string, balance_c: number | null | undefined, now: number = Date.now()): Promise<OneWayBack | null> {
+    const record = await readOneWayBack(publicKey);
+    if (!record || record.done || typeof record.beansAt === 'number') return record;
+    const seen = wayBackBeansSeen(null, balance_c, now);
+    if (seen === null) return record;
+    const noted: OneWayBack = { ...record, beansAt: seen };
+    await write(publicKey, noted);
+    return noted;
+}
+
+/**
+ * Whether the member said, in Ways back ("Where your account can be brought back from"), that the 12 words are written
+ * down: '1' only (utils/ways-back.ts `wordsWrittenDown` reads the same key, the one S4's way-back step counts as kept).
+ */
+export async function wordsSaidWrittenDown(publicKey: string): Promise<boolean> {
+    try {
+        return (await AsyncStorage.getItem(wordsWrittenDownStoreKey(publicKey))) === '1';
+    } catch {
+        return false;
+    }
 }
 
 export async function readOneWayBack(publicKey: string | null | undefined): Promise<OneWayBack | null> {
@@ -128,7 +156,8 @@ export async function startOneWayBack(publicKey: string, url: string, now: numbe
 
 /**
  * The record of a member whose words are their only way back, started put away (§2.5: sign-up counts as the first
- * showing): the card comes once after their first post and once a week after `joinedAt`, then lives in Settings.
+ * showing): the card then comes on core's schedule (the first Beans, 30 days after `joinedAt`, every 90 days while there
+ * is something to lose), and lives in Settings between.
  */
 export const putAwayRecord = (url: string, joinedAt: number): OneWayBack => ({ url, joinedAt, dismissedAt: joinedAt, by: 'wayBack' });
 
@@ -172,9 +201,9 @@ export async function startOneWayBackShown(publicKey: string, url: string, now: 
 }
 
 /** The card was put away (it comes back as {@link oneWayBackPlace} says). */
-export async function dismissOneWayBack(publicKey: string, hasPosted: boolean, now: number = Date.now()): Promise<void> {
+export async function dismissOneWayBack(publicKey: string, now: number = Date.now()): Promise<void> {
     const record = await readOneWayBack(publicKey);
-    if (record && !record.done) await write(publicKey, dismissedOneWayBack(record, now, hasPosted));
+    if (record && !record.done) await write(publicKey, dismissedOneWayBack(record, now));
 }
 
 /**
@@ -342,15 +371,15 @@ export function resetOneWayBackAsksForTests(): void {
 
 /**
  * The record with the account's own dismissal (Home's `home.layout` `dismissed.safety`, design §3.1), when it is newer
- * than the phone's: the card was put away on another phone or in the web app. It counts as put away then, and a return
- * that was waiting then counts as used (the first post's too, if the member has posted by now), so a dismissal anywhere
- * never brings the card back beyond the stated schedule.
+ * than the phone's: the card was put away on another phone or in the web app. It counts as put away then: every return
+ * whose moment came before it is answered (core's schedule), so a dismissal anywhere never brings the card back beyond
+ * the stated schedule, and the first Beans seen after it still bring it once.
  */
-export function withAccountDismissal(record: OneWayBack | null, dismissedIso: string | null | undefined, hasPosted: boolean): OneWayBack | null {
+export function withAccountDismissal(record: OneWayBack | null, dismissedIso: string | null | undefined): OneWayBack | null {
     if (!record || record.done || !dismissedIso) return record;
     const at = Date.parse(dismissedIso);
     if (!Number.isFinite(at) || (record.dismissedAt !== undefined && record.dismissedAt >= at)) return record;
-    return dismissedOneWayBack(record, at, hasPosted);
+    return dismissedOneWayBack(record, at);
 }
 
 /**

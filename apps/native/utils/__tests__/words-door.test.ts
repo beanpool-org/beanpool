@@ -84,7 +84,6 @@ import {
 import { startDoorWork, type DoorWorkRun } from '../door-work';
 import { LINK_MESSAGES, linkSignIn, linkedNotice, readLinkAnswer, type LinkRefusal } from '../join-link';
 import {
-    ONE_WAY_BACK_WEEK_MS,
     ONE_WAY_BACK_ASK_EVERY_MS,
     askOneWayBackStanding,
     oneWayBackAskNow,
@@ -502,7 +501,7 @@ describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s w
         expect(await readOneWayBack(member.publicKey)).toBeNull();
         const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: true, joinedAt: joined }, joined + 30 * HOUR);
         expect(record).toEqual({ url: GLOBAL, joinedAt: joined });
-        expect(oneWayBackPlace(record, joined + 30 * HOUR, false)).toBe('card');
+        expect(oneWayBackPlace(record, joined + 30 * HOUR)).toBe('card');
         // Kept, so putting it away holds on this phone too.
         expect(await readOneWayBack(member.publicKey)).toEqual({ url: GLOBAL, joinedAt: joined });
     });
@@ -511,11 +510,11 @@ describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s w
         const member = await draftIdentity();
         await startOneWayBack(member.publicKey, GLOBAL, joined);
         const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: false, joinedAt: null });
-        expect(oneWayBackPlace(record, joined + HOUR, false)).toBe('none');
+        expect(oneWayBackPlace(record, joined + HOUR)).toBe('none');
         expect((await readOneWayBack(member.publicKey))?.done).toBe('linked');
         // And a member who never joined by words, with no record: a done record, so the phone stops asking (re-review 3).
         const other = await draftIdentity();
-        expect(oneWayBackPlace(await oneWayBackFromNode(other.publicKey, GLOBAL, { words: false, joinedAt: null }), joined, false)).toBe('none');
+        expect(oneWayBackPlace(await oneWayBackFromNode(other.publicKey, GLOBAL, { words: false, joinedAt: null }), joined)).toBe('none');
         expect((await readOneWayBack(other.publicKey))?.done).toBe('linked');
     });
 
@@ -525,7 +524,7 @@ describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s w
         await finishOneWayBack(member.publicKey, 'linked');
         const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: true, joinedAt: joined });
         expect(record?.done).toBeUndefined();
-        expect(oneWayBackPlace(record, joined + HOUR, false)).toBe('card');
+        expect(oneWayBackPlace(record, joined + HOUR)).toBe('card');
         // "I still have my 12 words" stays the member's own while the node says 12 words: Settings keeps the sign-in
         // offered, quietly. A sign-in added later, anywhere, wins over it (re-review, finding 1).
         await finishOneWayBack(member.publicKey, 'checked');
@@ -585,42 +584,40 @@ describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s w
     });
 });
 
-describe('the "one way back" card (§2.5): until a sign-in is added or the words are checked; back once after the first post and once after a week', () => {
+describe('the "one way back" card (§2.5): until a sign-in is added or the words are checked; back on core\'s schedule (B1)', () => {
     const DAY = 24 * 60 * 60 * 1000;
     const start: OneWayBack = { url: GLOBAL, joinedAt: 0 };
 
-    it('shown from the join until it is put away; then Settings only', () => {
-        expect(oneWayBackPlace(start, DAY, false)).toBe('card');
-        const away = dismissedOneWayBack(start, DAY, false);
-        expect(oneWayBackPlace(away, 2 * DAY, false)).toBe('settings');
+    it('shown from the join until it is put away; then Settings', () => {
+        expect(oneWayBackPlace(start, DAY)).toBe('card');
+        const away = dismissedOneWayBack(start, DAY);
+        expect(oneWayBackPlace(away, 2 * DAY)).toBe('settings');
     });
 
-    it('back once after the first post, then away again', () => {
-        const away = dismissedOneWayBack(start, DAY, false);
-        expect(oneWayBackPlace(away, 2 * DAY, true)).toBe('card');
-        const again = dismissedOneWayBack(away, 2 * DAY, true);
-        expect(oneWayBackPlace(again, 3 * DAY, true)).toBe('settings');
+    it('a first post no longer brings it back: the first Beans do, once', () => {
+        const away = dismissedOneWayBack(start, DAY);
+        expect(oneWayBackPlace(away, 2 * DAY, { holds: true })).toBe('settings');
+        const beans: OneWayBack = { ...away, beansAt: 2 * DAY };
+        expect(oneWayBackPlace(beans, 2 * DAY, { balance_c: 500 })).toBe('card');
+        expect(oneWayBackPlace(dismissedOneWayBack(beans, 3 * DAY), 4 * DAY, { balance_c: 500 })).toBe('settings');
     });
 
-    it('back once after a week, then Settings only for good', () => {
-        let r = dismissedOneWayBack(start, DAY, false);
-        r = dismissedOneWayBack(r, 2 * DAY, true);
-        expect(oneWayBackPlace(r, ONE_WAY_BACK_WEEK_MS - 1, true)).toBe('settings');
-        expect(oneWayBackPlace(r, ONE_WAY_BACK_WEEK_MS, true)).toBe('card');
-        r = dismissedOneWayBack(r, ONE_WAY_BACK_WEEK_MS, true);
-        expect(oneWayBackPlace(r, 30 * DAY, true)).toBe('settings');
-        expect(oneWayBackPlace(r, 365 * DAY, true)).toBe('settings');
-    });
-
-    it('a post made while the card was up: its return is used by the first dismissal', () => {
-        const r = dismissedOneWayBack(start, DAY, true);
-        expect(oneWayBackPlace(r, 2 * DAY, true)).toBe('settings');
+    it('back at 30 days, then every 90 days while there is something to lose, and never ends for good while there is', () => {
+        let r = dismissedOneWayBack(start, DAY);
+        expect(oneWayBackPlace(r, 30 * DAY - 1)).toBe('settings');
+        expect(oneWayBackPlace(r, 30 * DAY)).toBe('card');
+        r = dismissedOneWayBack(r, 30 * DAY);
+        expect(oneWayBackPlace(r, 365 * DAY)).toBe('settings');
+        expect(oneWayBackPlace(r, 120 * DAY, { holds: true })).toBe('card');
+        r = dismissedOneWayBack(r, 120 * DAY);
+        expect(oneWayBackPlace(r, 209 * DAY, { holds: true })).toBe('settings');
+        expect(oneWayBackPlace(r, 210 * DAY, { holds: true })).toBe('card');
     });
 
     it('done (a sign-in added, or the words checked): never again, anywhere', async () => {
-        expect(oneWayBackPlace({ ...start, done: 'linked' }, 0, false)).toBe('none');
-        expect(oneWayBackPlace({ ...start, done: 'checked' }, 30 * DAY, true)).toBe('none');
-        expect(oneWayBackPlace(null, 0, false)).toBe('none');
+        expect(oneWayBackPlace({ ...start, done: 'linked' }, 0)).toBe('none');
+        expect(oneWayBackPlace({ ...start, done: 'checked' }, 30 * DAY, { holds: true })).toBe('none');
+        expect(oneWayBackPlace(null, 0)).toBe('none');
 
         const key = 'b'.repeat(64);
         await startOneWayBack(key, GLOBAL, 1000);
@@ -628,10 +625,10 @@ describe('the "one way back" card (§2.5): until a sign-in is added or the words
         // A second join (or a restart) never restarts it.
         await startOneWayBack(key, GLOBAL, 5000);
         expect((await readOneWayBack(key))?.joinedAt).toBe(1000);
-        await dismissOneWayBack(key, false, 2000);
+        await dismissOneWayBack(key, 2000);
         expect((await readOneWayBack(key))?.dismissedAt).toBe(2000);
         await finishOneWayBack(key, 'checked');
-        expect(oneWayBackPlace(await readOneWayBack(key), 30 * DAY, true)).toBe('none');
+        expect(oneWayBackPlace(await readOneWayBack(key), 30 * DAY, { holds: true })).toBe('none');
         // Per account: another key on the phone has none.
         expect(await readOneWayBack('c'.repeat(64))).toBeNull();
     });

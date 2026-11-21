@@ -133,7 +133,7 @@ async function nextInviteJoin(): Promise<{ step: 'skipped' | 'shown'; homeCard: 
     await (kept ? startOneWayBackPutAway : startOneWayBackShown)(kim.publicKey, JOINED, NOW);
     // Home's card (components/OneWayBackCard.tsx): where the record says, unless quiet on a sign-in's copy at the vault.
     const quiet = await vaultSignInCopyKnown(kim.publicKey);
-    const homeCard = oneWayBackPlace(await readOneWayBack(kim.publicKey), NOW + 60_000, false) === 'card' && !quiet;
+    const homeCard = oneWayBackPlace(await readOneWayBack(kim.publicKey), NOW + 60_000) === 'card' && !quiet;
     return { step: skipped ? 'skipped' : 'shown', homeCard };
 }
 

@@ -94,11 +94,21 @@ When your community changes its choice, you're told in a notice from the communi
 
 An older version of the app doesn't know your community's choice: it keeps putting new copies where it always did. Update the app to follow it.
 
+## When the phone reminds you
+
+While your phone knows of no way back for your account, **Home** has a card, **Your way back in**: **If this phone is lost, this is how you get back in.**, with **Add a sign-in** (where your community takes one), **I still have my 12 words** and **Show my 12 words**. Tap **✕** to put it away. On the phone it comes back:
+
+- once when you first have Beans, with how many: **You have 40 Beans here now. Keep a way back in, so they don't go with a lost phone.**
+- once 30 days after you joined;
+- after that, once every 90 days, but only while you have something to lose here: Beans (or Beans you owe), a listing that is up, an open deal, or a role in the community.
+
+While it is put away, the bell's list ends with **No way back in yet. Keep one ›**, which opens **Account Protection**. The card and the line stop once you keep a way back: you add a sign-in, you tap **I still have my 12 words**, or you tick **I have them written down** (below). Nothing is ever blocked while you have none. The web app's card has its own words and times for now (see "Your 12 words").
+
 ## Where your account can be brought back from
 
 In the phone app, open **Settings**, **Account Protection**, then **Where your account can be brought back from**. It lists every place a copy of your account is kept, as far as your phone can ask:
 
-- **Your 12 words**: whether this phone has them, and **I have them written down**, which you tick yourself. The app never checks it.
+- **Your 12 words**: whether this phone has them, and **I have them written down**, which you tick yourself. The app never checks it. Once it is ticked, **Your way back in** no longer comes back on **Home**.
 - **BeanPool's key vault**: each sign-in account it keeps a copy for, and **Kept since**, the day that copy was made. Linking the same account again makes a new copy, with a new day. If you linked more than one account of the same sign-in (two Google accounts, say), each copy is listed under that sign-in, and its **Remove** takes them all: the key vault removes a sign-in's copies together. If the vault is paused or doesn't answer, the screen says so and lists nothing there.
 - **Your communities' servers**: each community on this phone, and the sign-in accounts its server keeps a copy for, from before the key vault, from the web app, or as a community's first owner. Where you turned on **Your community's admins**, from this phone or another, its copy is listed there too, with **Kept since** (see "Your community's admins"). A community that doesn't answer is shown as not answering, and nothing there is listed.
 - Where the key vault and your community keep half each (see "Your community's admins"), the key vault's list shows **Half a copy for** that community, and that community's server shows the other half. They are one way back, so **Remove** on either takes both. Half a copy with no other half brings nobody back, and the screen says so.

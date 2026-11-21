@@ -212,7 +212,7 @@ describe('connect, see where the copies are, remove everything, and the way back
         expect(await vaultCopyKnowledge(member.publicKey)).toBe('none');
         const standing = { words: true, joinedAt: Date.now() - 60_000 };
         const record = await oneWayBackFromNode(member.publicKey, GLOBAL, standing, Date.now(), { vaultCopy: await vaultCopyKnown(member.publicKey) });
-        expect(oneWayBackPlace(record, Date.now(), false)).toBe('card');
+        expect(oneWayBackPlace(record, Date.now())).toBe('card');
     });
 
     it('the reverse: linking Google again makes a fresh copy, listed again since today', async () => {

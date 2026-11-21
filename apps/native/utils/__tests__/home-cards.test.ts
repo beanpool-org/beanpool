@@ -25,7 +25,7 @@ import {
 } from '../home-cards';
 import { crowdBellDelayMs } from '@beanpool/core';
 import { arrangeCards, cardLine } from '../home-cards';
-import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
+import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, type OneWayBack } from '../one-way-back';
 import { NEAR_COMMUNITY_KM, HOME_DEFAULT_LIST, HOME_STARTER_SET, TIPS_ALL_SEEN, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
 import { marketFilterFromLink } from '../market-filters';
@@ -703,35 +703,56 @@ describe('the safety card\'s schedule (two-doors §2.5) with the account\'s dism
     const joined = NOW - 2 * 24 * H;
     const record: OneWayBack = { url: 'https://global.beanpool.org', joinedAt: joined };
 
-    it('up until put away; back once after the first post and once after a week; then Settings only', () => {
-        expect(oneWayBackPlace(record, NOW, false)).toBe('card');
-        const away = dismissedOneWayBack(record, NOW, false);
-        expect(oneWayBackPlace(away, NOW + H, false)).toBe('settings');
-        expect(oneWayBackPlace(away, NOW + H, true)).toBe('card');
-        const afterPost = dismissedOneWayBack(away, NOW + 2 * H, true);
-        expect(oneWayBackPlace(afterPost, NOW + 3 * H, true)).toBe('settings');
-        expect(oneWayBackPlace(afterPost, joined + ONE_WAY_BACK_WEEK_MS, true)).toBe('card');
-        const afterWeek = dismissedOneWayBack(afterPost, joined + ONE_WAY_BACK_WEEK_MS, true);
-        expect(oneWayBackPlace(afterWeek, joined + 30 * ONE_WAY_BACK_WEEK_MS, true)).toBe('settings');
+    const DAY = 24 * H;
+    it('up until put away; back at the first Beans, at 30 days, then every 90 days while there is something to lose (B1)', () => {
+        expect(oneWayBackPlace(record, NOW)).toBe('card');
+        const away = dismissedOneWayBack(record, NOW);
+        expect(oneWayBackPlace(away, NOW + H)).toBe('settings');
+        // The first Beans seen after the ×: back, once.
+        const withBeans: OneWayBack = { ...away, beansAt: NOW + 2 * H };
+        expect(oneWayBackPlace(withBeans, NOW + 3 * H, { balance_c: 4000 })).toBe('card');
+        const afterBeans = dismissedOneWayBack(withBeans, NOW + 3 * H);
+        expect(oneWayBackPlace(afterBeans, NOW + 4 * H, { balance_c: 4000 })).toBe('settings');
+        // 30 days after joining: once more, with nothing to lose too.
+        expect(oneWayBackPlace(afterBeans, joined + 30 * DAY - 1)).toBe('settings');
+        expect(oneWayBackPlace(afterBeans, joined + 30 * DAY)).toBe('card');
+        const afterMonth = dismissedOneWayBack(afterBeans, joined + 30 * DAY);
+        // Then every 90 days, only while there is something to lose.
+        expect(oneWayBackPlace(afterMonth, joined + 120 * DAY)).toBe('settings');
+        expect(oneWayBackPlace(afterMonth, joined + 120 * DAY, { balance_c: 4000 })).toBe('card');
+        expect(oneWayBackPlace(afterMonth, joined + 120 * DAY, { holds: true })).toBe('card');
+        expect(oneWayBackPlace(afterMonth, joined + 120 * DAY - 1, { holds: true })).toBe('settings');
+        // Never while a way back is kept.
+        expect(oneWayBackPlace(record, NOW, { kept: true })).toBe('settings');
+        expect(oneWayBackPlace(afterMonth, joined + 400 * DAY, { kept: true, balance_c: 4000 })).toBe('settings');
     });
 
-    it('a dismissal on the account (another phone, the web app) puts it away here too, its waiting returns used', () => {
-        const fromAccount = withAccountDismissal(record, iso(NOW), true)!;
+    it('a 1.4.7 record (its first-post and week flags) reads on the new schedule, nothing rewritten', () => {
+        const old = { ...record, dismissedAt: joined + 8 * DAY, postReturnUsed: true, weekReturnUsed: true } as OneWayBack;
+        expect(oneWayBackPlace(old, joined + 9 * DAY)).toBe('settings');
+        expect(oneWayBackPlace(old, joined + 30 * DAY)).toBe('card');
+        expect(dismissedOneWayBack(old, joined + 30 * DAY)).toEqual({ ...old, dismissedAt: joined + 30 * DAY });
+    });
+
+    it('a dismissal on the account (another phone, the web app) puts it away here too; returns still to come stay to come', () => {
+        const fromAccount = withAccountDismissal(record, iso(NOW))!;
         expect(fromAccount.dismissedAt).toBe(NOW);
-        expect(fromAccount.postReturnUsed).toBe(true);
-        expect(oneWayBackPlace(fromAccount, NOW + H, true)).toBe('settings');
-        // The week's return is still to come (it wasn't due when it was put away).
-        expect(oneWayBackPlace(fromAccount, joined + ONE_WAY_BACK_WEEK_MS, true)).toBe('card');
+        expect(oneWayBackPlace(fromAccount, NOW + H, { balance_c: 4000 })).toBe('settings');
+        // The 30 days' return is still to come (it wasn't due when it was put away), and so are the first Beans after it.
+        expect(oneWayBackPlace(fromAccount, joined + 30 * DAY)).toBe('card');
+        expect(oneWayBackPlace({ ...fromAccount, beansAt: NOW + H }, NOW + 2 * H, { balance_c: 4000 })).toBe('card');
+        // Beans first seen before the account's dismissal: answered by it.
+        expect(oneWayBackPlace(withAccountDismissal({ ...record, beansAt: NOW - H }, iso(NOW)), NOW + H, { balance_c: 4000 })).toBe('settings');
     });
 
     it('the phone\'s own dismissal at the same moment or later wins; a done record is left alone; no date, nothing', () => {
-        const mine = dismissedOneWayBack(record, NOW, false);
-        expect(withAccountDismissal(mine, iso(NOW), true)).toBe(mine);
-        expect(withAccountDismissal(mine, iso(NOW - H), true)).toBe(mine);
+        const mine = dismissedOneWayBack(record, NOW);
+        expect(withAccountDismissal(mine, iso(NOW))).toBe(mine);
+        expect(withAccountDismissal(mine, iso(NOW - H))).toBe(mine);
         const done: OneWayBack = { ...record, done: 'checked' };
-        expect(withAccountDismissal(done, iso(NOW), true)).toBe(done);
-        expect(withAccountDismissal(record, null, true)).toBe(record);
-        expect(withAccountDismissal(record, 'not a date', true)).toBe(record);
+        expect(withAccountDismissal(done, iso(NOW))).toBe(done);
+        expect(withAccountDismissal(record, null)).toBe(record);
+        expect(withAccountDismissal(record, 'not a date')).toBe(record);
     });
 
     it('Home keeps the dismissal on the account at the card\'s own moment', () => {

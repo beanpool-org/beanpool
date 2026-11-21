@@ -30,8 +30,8 @@ vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: () => {} }
 
 import { setLanguage } from '@beanpool/core';
 import {
-    DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, VAULT_COPY_GOES_LINE, deleteFailedLine, deletePlanFailedLine,
-    deletedButLine, keepsKeyLine, lastCommunityLine, listNames, vaultCopyStaysLine, type DeletePlan, type KeptCommunity,
+    DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, deleteFailedLine, deletePlanFailedLine,
+    deletedButLine, keepsKeyLine, lastCommunityLine, listNames, vaultCopyGoesLine, vaultCopyStaysLine, type DeletePlan, type KeptCommunity,
 } from '../delete-here';
 import { PURGE_NOT_CONFIRMED, PURGE_NO_ANSWER } from '../node-post';
 import { NAMES_COPY, namesSignOutWords } from '../names-list';
@@ -190,10 +190,13 @@ describe('Account Deletion\'s sentences, built again from the same plan', () => 
     });
 
     it('the last community: the same English with this build\'s vault, and the vault\'s line after it when there is one', () => {
-        for (const words of [true, false]) {
-            expect(lastCommunityWords(LAST, words, hasVault())).toBe(lastCommunityLine(LAST, words));
-            expect(lastCommunityWords(LAST, words, true)).toBe(`${lastCommunityWords(LAST, words, false)} ${VAULT_COPY_GOES_LINE}`);
-            expect(outsideBrackets(inXx(() => lastCommunityWords(LAST, words, true)), NAMES)).toBe('');
+        // The vault's line by what the phone knows (review of #3345): a sign-in's copy known, or not (the admins' half named).
+        for (const plan of [LAST, { ...LAST, vaultSignIn: true as const }]) {
+            for (const words of [true, false]) {
+                expect(lastCommunityWords(plan, words, hasVault())).toBe(lastCommunityLine(plan, words));
+                expect(lastCommunityWords(plan, words, true)).toBe(`${lastCommunityWords(plan, words, false)} ${vaultCopyGoesLine(!!plan.vaultSignIn)}`);
+                expect(outsideBrackets(inXx(() => lastCommunityWords(plan, words, true)), NAMES)).toBe('');
+            }
         }
     });
 

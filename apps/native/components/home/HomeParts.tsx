@@ -22,6 +22,14 @@ export const HOME_THUMB_DP = 48;
 export const HOME_GUTTER_DP = 16;
 export const HOME_CARD_PADDING_DP = 14;
 
+/** A path from the node ("/api/…") made an address on it; a full address as it is. */
+export function onNode(nodeUrl: string | null, path: string | null | undefined): string | null {
+    if (!path) return null;
+    if (/^https?:\/\//i.test(path)) return path;
+    if (!nodeUrl || !path.startsWith('/')) return null;
+    return `${nodeUrl.replace(/\/+$/, '')}${path}`;
+}
+
 // ── The floating button's band (utils/fab-band.ts) ─────────────────────────────────────────────────────────────────
 
 /** Where Home's cards report their actions (window coordinates, dp), so "+ ADD POST" steps aside while it would cover one. */

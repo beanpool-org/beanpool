@@ -208,8 +208,9 @@ async function main() {
     const served = Object.keys(await readPrefs(alice)).sort();
     // notify_knocks: requests to join (front doors S1), served off by default. notify_asked: when a neighbour asks for
     // something the member starred (cold start N3, engine/asked-push.ts), served on by default. notify_forum: the Forum
-    // switch (slice F5, engine/forum-notices.ts), served on by default.
-    assert(served.join() === 'eventReminderOffsets,holiday_mode,notify_asked,notify_chat,notify_escrow,notify_forum,notify_knocks,notify_marketplace,notify_recovery,show_as_connection_in_common',
+    // switch (slice F5, engine/forum-notices.ts), served on by default. notify_new_events: when someone posts a new event
+    // (notifications NEa, engine/event-new-push.ts), served on by default.
+    assert(served.join() === 'eventReminderOffsets,holiday_mode,notify_asked,notify_chat,notify_escrow,notify_forum,notify_knocks,notify_marketplace,notify_new_events,notify_recovery,show_as_connection_in_common',
         `a key stored before the rule is not served back (${served.join()})`);
     assert(rowsOf(alice.pubKeyHex).includes('made_up_before'), '...and its row is left in place');
 

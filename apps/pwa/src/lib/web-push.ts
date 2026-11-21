@@ -191,7 +191,7 @@ export async function tellMeWhenTheyAnswer(origin: string, identity: BeanPoolIde
 }
 
 /**
- * The tap on Turn on (a member: the "Turn on notifications?" card, or Settings → Notifications' row; web push W2): the same
+ * The tap on Turn on (a member: the join's last screen or Home's once card, slice N5a, or Settings → Notifications' row; web push W2): the same
  * steps as Tell me, and the node keeps this browser as the member's, told every kind their phone is. Never throws.
  */
 export async function turnOnWebPush(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<TellMeResult> {

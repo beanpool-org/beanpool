@@ -36,7 +36,7 @@ async function getIntentLauncher(): Promise<typeof import('expo-intent-launcher'
     return _intentLauncher;
 }
 import { fetchMemberPreferences, fetchMyEvents, isRouteMissing, setEventReminder } from '../utils/db';
-import { eventShareWhen, isEventEnded } from '../utils/events';
+import { eventShareWhen } from '../utils/events';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink, eventNoticesComing,
     googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets, type EventReminderChoiceRead, type ShareableEvent,
@@ -318,13 +318,14 @@ interface ReminderProps {
  * member's default (read by useEventReminderChoice, held by the page).
  *
  * While this phone can't notify (core's notifyRemindersOff: it could have notifications and doesn't allow them) and a
- * reminder is still to come for this member (utils/event-extras.ts eventNoticesComing, the node's own rule: a moment still
- * ahead, their Marketplace switch on), the line is the true one instead (DESIGN-notify-and-backup-asks-fable-amend2.md §6,
+ * reminder is still to come for this member (utils/event-extras.ts eventNoticesComing, the node's own rule: an event still
+ * on, a moment still ahead, their Marketplace switch on), the line is the true one instead (DESIGN-notify-and-backup-asks-fable-amend2.md §6,
  * slice N2b): "⏰ Reminders need notifications on." [Turn on]. Not a soft ask but the state of something they asked for, so it
  * shows every time, after a "Later" and after the phone's "no" alike. Its Turn on is the shared one
  * (utils/notification-permission.ts turnOnNotifications): the phone's own pop-up where it can still show it, else the one
  * line before the phone's settings. The line goes once the phone allows them, and is never drawn where no reminder is coming
- * (an event today past its day-before moment, a choice of none, the Marketplace switch off): there turning notifications on
+ * (an event today past its day-before moment, a choice of none, the Marketplace switch off, an event cancelled, removed,
+ * hidden or ended, which the node reminds no one about): there turning notifications on
  * would bring nothing, so the box is Remind me as it was, with its Change.
  */
 export function EventReminder({ post, myRsvp, viewerPublicKey, choice }: ReminderProps) {
@@ -337,9 +338,8 @@ export function EventReminder({ post, myRsvp, viewerPublicKey, choice }: Reminde
     const [draft, setDraft] = useState<number[]>([]);
     const [saving, setSaving] = useState(false);
     // A reminder still to come by the node's own rule: only then can turning notifications on bring one.
-    const reminderComing = eventNoticesComing({
-        answer: myRsvp, startAt: post?.event_start_at ?? post?.eventStartAt, ended: isEventEnded(post), choice, nowMs: Date.now(),
-    }).reminders.length > 0;
+    // The event's own state goes in whole (cancelled, removed, not active, hidden, ended: utils/event-extras.ts eventStillOn).
+    const reminderComing = eventNoticesComing({ answer: myRsvp, event: post, choice, nowMs: Date.now() }).reminders.length > 0;
     // The phone's own answer, for the true line; null until read (the line reads as it always did until then). Read only
     // while the true line could be drawn: a reminder still to come for a member Going or Interested.
     const phone = useNotifyPhone(!!myRsvp && supported && reminderComing);

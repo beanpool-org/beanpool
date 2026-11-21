@@ -8,6 +8,8 @@
  * Nothing here touches a device module, so all of it is testable in the node runner.
  */
 
+import { eventStateOf, isEventEnded } from './events';
+
 /** Minutes before the start. The only values the node accepts (the shared contract). */
 export const REMINDER_OFFSETS = [10080, 1440, 120, 60, 30] as const;
 
@@ -131,21 +133,43 @@ export interface EventNoticesComing {
 const NOTHING_COMING: EventNoticesComing = { reminders: [], dayBefore: false, changes: false };
 
 /**
+ * Whether the node still tells anyone anything about this event, read from the event as the phone holds it (the cached row
+ * or the node's view, snake_case or camelCase). Its reminders go only for an event that is `active = 1 AND status = 'active'
+ * AND event_state != 'cancelled' AND hidden_by_reports_at IS NULL` (apps/server/src/engine/event-reminders.ts
+ * dueEventReminders); its change notices come only from an edit, which the node refuses once the event is cancelled, removed
+ * or ended (apps/server/src/engine/posts.ts updatePost), or from the cancellation itself, after which nothing more is sent.
+ * So: not cancelled by its host, not removed (status 'cancelled', active 0), not paused or otherwise not active, not hidden
+ * by reports or held by a moderator, and not ended. While hidden, a change is not promised either: nothing is said that the
+ * node may not send. A field the row doesn't carry reads as the node's default for it (active, status 'active').
+ */
+export function eventStillOn(event: any, nowMs: number): boolean {
+    if (!event) return false;
+    if (eventStateOf(event) === 'cancelled') return false;
+    if (event.active === 0 || event.active === false) return false;
+    if (event.status != null && event.status !== 'active') return false;
+    if (event.hiddenByReportsAt || event.hidden_by_reports_at) return false;
+    if (event.removedByModeratorAt || event.removed_by_moderator_at) return false;
+    return !isEventEnded(event, nowMs);
+}
+
+/**
  * What the node will still send a member for an event they answered, from now on: the reminders still to come
  * ({@link remindersToCome}); and a change of time or place or a cancellation, told to Going alone and never to Interested
- * (apps/server/src/engine/posts.ts notifyEventChange), until the event ends (no edit after). Nothing at all with no answer,
- * before the choice is read, or with the member's Marketplace switch off (the push dispatcher drops `notify_marketplace`
- * 'false'). The named line (@beanpool/core notifyEventLineWords) and the reminder's true line both read this.
+ * (apps/server/src/engine/posts.ts notifyEventChange). Nothing at all for an event the node no longer tells anyone about
+ * ({@link eventStillOn}: cancelled, removed, not active, hidden, ended), with no answer, before the choice is read, or with
+ * the member's Marketplace switch off (the push dispatcher drops `notify_marketplace` 'false'). It takes the event itself, so
+ * every caller reads its state the one way. The named line (@beanpool/core notifyEventLineWords), its offer, and the
+ * reminder's true line all read this.
  */
 export function eventNoticesComing(i: {
     answer: 'going' | 'interested' | null | undefined;
-    startAt: string | null | undefined;
-    ended: boolean;
+    event: any;
     choice: EventReminderChoiceRead;
     nowMs: number;
 }): EventNoticesComing {
-    if ((i.answer !== 'going' && i.answer !== 'interested') || i.ended || !i.choice.known || !i.choice.marketplaceOn) return NOTHING_COMING;
-    const reminders = remindersToCome(i.startAt, i.choice.offsets, i.choice.defaults, i.nowMs);
+    if ((i.answer !== 'going' && i.answer !== 'interested') || !i.choice.known || !i.choice.marketplaceOn) return NOTHING_COMING;
+    if (!eventStillOn(i.event, i.nowMs)) return NOTHING_COMING;
+    const reminders = remindersToCome(i.event?.event_start_at ?? i.event?.eventStartAt, i.choice.offsets, i.choice.defaults, i.nowMs);
     return { reminders, dayBefore: reminders.includes(1440), changes: i.answer === 'going' };
 }
 

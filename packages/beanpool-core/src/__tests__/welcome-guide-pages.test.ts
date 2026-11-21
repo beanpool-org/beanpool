@@ -152,7 +152,7 @@ describe("the guide's notifications page", () => {
         const notifications = flat('settings/notifications.md');
         expect(notifications).toContain(`While your phone doesn't allow notifications for BeanPool and a reminder is still to come, an event you are **Going** to or **Interested** in says`);
         expect(notifications).toContain(`says **${NOTIFY_TRUE_WORDS.reminders.replace(/^⏰ /, '')}** where its reminder would be, with **Turn on**. It says so every time, even after you said no`);
-        expect(notifications).toContain('Where no reminder is left to come, such as an event later today when your reminder is the day before, it shows your reminder choice as usual.');
+        expect(notifications).toContain('Where no reminder is left to come, such as an event later today when your reminder is the day before, or one that was cancelled, it shows your reminder choice as usual.');
         expect(notifications).toContain("**What are you into?** on **Home** says you'll be told when a neighbour asks only while your phone allows notifications.");
     });
 });

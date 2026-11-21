@@ -205,12 +205,11 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     const hostLetsIn = !!p.eventHostLetsIn;
     const waiting = hostLetsIn ? eventWaitingCount(rsvps) : 0;
     // The named line's words (slice N2b): what the node will still send for the answer as it is NOW, by its own rule (the day
-    // before only while that moment is ahead, a change only to Going, nothing with the Marketplace switch off). Going then
-    // Interested drops "hear if it changes"; a reminder of none drops the reminder; nothing true to say draws no line.
+    // before only while that moment is ahead, a change only to Going, nothing with the Marketplace switch off, nothing at all
+    // for an event cancelled, removed, not active, hidden or ended). Going then Interested drops "hear if it changes"; a
+    // reminder of none drops the reminder; nothing true to say draws no line, and offers none.
     const lineWords = !isHost && !copy
-        ? notifyEventLineWords(eventNoticesComing({
-            answer: counts.mine, startAt: p.event_start_at ?? p.eventStartAt, ended, choice: reminderChoice, nowMs: Date.now(),
-        }))
+        ? notifyEventLineWords(eventNoticesComing({ answer: counts.mine, event: p, choice: reminderChoice, nowMs: Date.now() }))
         : null;
     const hasLineWords = !!lineWords;
     // A Going or an Interested saved is offered the line once the choice is read, and only if it has something true to

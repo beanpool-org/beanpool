@@ -133,6 +133,11 @@ interface Conv { id: string; type: string; participants: string[] }
 let node: { convs: Conv[]; lines: Line[] } = { convs: [], lines: [] };
 let clock = Date.parse('2026-11-21T00:00:00.000Z');
 const tick = () => new Date((clock += 1000)).toISOString();
+// The phone stamps its own notices with Date.now(), the node's lines here come from `clock`: pin the phone's clock before
+// those lines (Date only; timers stay real), or the thread's order flips once the real date passes them (it did on
+// 21 Nov 2026 at 00:00 UTC: P1b's notice sorted after the planted line on every run).
+vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-20T12:00:00.000Z') });
+afterAll(() => vi.useRealTimers());
 let posts = 0;
 function answer(status: number, body: unknown) {
     const text = JSON.stringify(body);

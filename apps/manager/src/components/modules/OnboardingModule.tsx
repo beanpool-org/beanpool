@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { isOncePerPersonVariant } from '@beanpool/core';
+import { NOTIFY_CHOICE, NOTIFY_CHOICES, NOTIFY_SHOWN, isOncePerPersonVariant, oncePerPersonSubType, type NotifyChoice } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { fetchOnboardingFunnel, type FunnelRow } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
@@ -35,6 +35,16 @@ const COHORT: { event: string; label: string; hint: string }[] = [
 ];
 
 /**
+ * The join's notifications screen answered, one number per answer. Keyed by core's list of answers, so an answer added
+ * there does not type-check here until it has words.
+ */
+const NOTIFY_ANSWERS: Record<NotifyChoice, { label: string; hint: string }> = {
+    on: { label: 'Turned notifications on', hint: 'Tapped Turn on notifications, and the phone said yes' },
+    later: { label: 'Chose Later', hint: 'Not a no: they can still turn them on, and the app may ask again' },
+    no: { label: 'The phone said no', hint: "Tapped Turn on notifications, then said no to the phone's own question" },
+};
+
+/**
  * THE IN-APP STEPS — reported by members' own apps, and NOT linked to the cohort above.
  *
  * The node cannot tie these to the people who joined, and will not be able to: M2 gives the
@@ -42,12 +52,16 @@ const COHORT: { event: string; label: string; hint: string }[] = [
  * heading and their own date, rather than as rows in a funnel whose percentages would be
  * dividing one set of people by a different one.
  */
-const IN_APP: { event: string; label: string; hint: string }[] = [
+const IN_APP: { event: string; sub?: string; label: string; hint: string }[] = [
     { event: 'protection_shown', label: 'Saw the protection screen', hint: 'Step 3 drawn on their device' },
     { event: 'protection_choice', label: 'Chose how to be protected', hint: 'Step 3 answered — their words, or skip' },
     // From 1.4.8 the phone's join ends at the way-back step, Safety Backup (How it Works left the phone's join, slice S5 of
     // DESIGN-onboarding-home-landing-fable.md); the web app's join still ends at How it Works until its own slice.
     { event: 'guide_complete', label: 'Way back step done', hint: 'Phone: Safety Backup finished. Web: How it Works finished' },
+    // After the way back, the join's last screen on a phone that has to ask (DESIGN-notify-and-backup-asks-fable-amend2.md
+    // §4.4, slice N1c): drawn, then one row per answer. A row with `sub` adds up only that answer (once:<sub>).
+    { event: NOTIFY_SHOWN, label: 'Saw the notifications screen', hint: "In the join, after the way back; shown only on a phone that has to ask" },
+    ...NOTIFY_CHOICES.map(sub => ({ event: NOTIFY_CHOICE, sub, ...NOTIFY_ANSWERS[sub] })),
 ];
 
 const FAILURE_LABELS: Record<string, string> = {
@@ -155,7 +169,12 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
         const perPerson = rows.filter(r => isOncePerPersonVariant(r.variant));
         const perPersonDays = perPerson.map(r => r.day).sort();
         const countedSince = perPersonDays.length ? perPersonDays[0] : null;
-        const inApp = IN_APP.map(step => ({ ...step, count: tally(step.event, perPerson) }));
+        const inApp = IN_APP.map(step => ({
+            ...step,
+            count: step.sub === undefined
+                ? tally(step.event, perPerson)
+                : tally(step.event, perPerson.filter(r => oncePerPersonSubType(r.variant) === step.sub)),
+        }));
 
         // Worth naming out loud when it is there: an operator who sees a small number beside a
         // step wants to know whether it is a drop-off or an old build still double-reporting.
@@ -348,11 +367,16 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
                         )}
                         {view.inApp.map(step => (
                             <div
-                                key={step.event}
+                                key={step.sub ? `${step.event}:${step.sub}` : step.event}
                                 className="p-3 rounded-xl bg-nature-800/60 border border-nature-700 flex items-center gap-4"
                             >
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-bold text-white truncate">{step.label}</div>
+                                    {/*
+                                      Wraps rather than truncating: at 320 px and 1.3x text "Turned notifications on" and
+                                      "The phone said no" were cut to "Turned notifica…" and "The phone said…", and the
+                                      label is what tells those rows apart.
+                                    */}
+                                    <div className="text-sm font-bold text-white break-words">{step.label}</div>
                                     <div className="text-[10px] text-nature-500">{step.hint}</div>
                                 </div>
                                 <div className="text-right shrink-0">

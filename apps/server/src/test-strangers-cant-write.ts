@@ -96,7 +96,7 @@ const STRANGER_MAY: Record<string, May> = {
     'POST /api/local/admin/auth/pairing': { why: 'starting a Settings sign-in by QR: a pairing held in memory, which only a role-holder\'s phone approves', tables: [] },
     'POST /api/local/admin/auth/logout': { why: 'signing out a session the caller does not have: nothing to end', tables: [] },
     'POST /oauth/revoke': { why: 'an assistant\'s token revoke answers 200 to anything (RFC 7009 §2.2), revoking only a token it is sent', tables: [] },
-    'POST /api/funnel-event': { why: 'an onboarding step the phone counts (routes/community.ts): a key, not a membership, one of three allowlisted '
+    'POST /api/funnel-event': { why: 'an onboarding step the phone counts (routes/community.ts): a key, not a membership, one of five allowlisted '
         + 'steps into an anonymous count that keeps no key (M2)', tables: ['onboarding_funnel'] },
     'DELETE /api/web-push': { why: 'taking the signer\'s own browser off (routes/web-push.ts, its own row only, the same answer whether it had one): '
         + 'a key with no row has none, so nothing goes', tables: [] },

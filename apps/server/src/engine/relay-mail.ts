@@ -61,7 +61,7 @@ import { dispatchPushNotification, isNodeMember, readsAsMember } from '../state-
 import { clearChatMute, getChatMute, setChatMute } from './chat-mutes.js';
 import { hasBlocked } from './member-blocks.js';
 import { muteOf } from './auto-moderation.js';
-import { newRequestRefusal, nextLineWaitsOnRequest } from './dm-requests.js';
+import { newRequestRefusal, nextLineWaitsOnRequest, requestsOn } from './dm-requests.js';
 import { probationState } from './probation.js';
 import { isOwnNodeHome } from './node-key.js';
 import { GUEST_ITEM_KINDS, guestItemMaxChars, takeGuestItem, type GuestItemRefusal, type GuestItemTaken } from './group-guests.js';
@@ -699,16 +699,23 @@ export function forgetMailDevice(member: string, device: string, now = Date.now(
     return listed;
 }
 
-/** What waits for `member` that `device` has not confirmed, oldest first, MAIL_FETCH_PAGE at a time, and whether there is more. */
-export function heldMailFor(member: string, device: string): { items: HeldItem[]; more: boolean } {
+/**
+ * What waits for `member` that `device` has not confirmed, oldest first, MAIL_FETCH_PAGE at a time, and whether there is more.
+ * `dmRequests` (slice S5, PR #3347 review finding 2): this community's own switch, whether it holds a first message as a
+ * request (dm-requests.ts requestsOn), read here with each item's `memberHere` mark, in the same answer, so the rule a
+ * device applies to a marked line (core gateOutsideItem `requestsHere`, read by core requestsHereOfMail) is the one this
+ * server judged the mark under, never a profile the device kept from an earlier read.
+ */
+export function heldMailFor(member: string, device: string): { items: HeldItem[]; more: boolean; dmRequests: boolean } {
     const rows = db.prepare(`SELECT kind, envelope, payload, bytes, received_at FROM relay_mail m WHERE recipient = ?
                                AND NOT EXISTS (SELECT 1 FROM relay_mail_got g WHERE g.recipient = m.recipient AND g.item_id = m.item_id AND g.device = ?)
                              ORDER BY received_at, item_id LIMIT ?`).all(member, device, MAIL_FETCH_PAGE + 1) as Array<{
         kind: string; envelope: string; payload: string | null; bytes: number; received_at: number;
     }>;
     // Each sender asked once a page (slice S5): whether they are a member here who may write to this member now, by this
-    // server's own rules (fromMemberHere), all at one moment.
+    // server's own rules (fromMemberHere), all at one moment, and the switch their first line then meets with them.
     const now = Date.now();
+    const dmRequests = requestsOn();
     const members = new Map<string, boolean>();
     const memberHere = (key: string): boolean => {
         if (!members.has(key)) members.set(key, fromMemberHere(key, member, now));
@@ -720,6 +727,7 @@ export function heldMailFor(member: string, device: string): { items: HeldItem[]
             return { kind: r.kind, envelope, payload: r.payload, bytes: r.bytes, receivedAt: r.received_at, memberHere: memberHere(envelope.senderKey) };
         }),
         more: rows.length > MAIL_FETCH_PAGE,
+        dmRequests,
     };
 }
 

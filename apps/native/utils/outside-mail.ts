@@ -46,7 +46,7 @@
 import {
     ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, heldFromMemberHere, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId, openOutsideChange, openOutsideLine,
     outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies,
-    relayPayloadHash, sealOutsideChange, sealOutsideLine, nodeHomeOf, audienceOf, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
+    relayPayloadHash, requestsHereOfMail, sealOutsideChange, sealOutsideLine, nodeHomeOf, audienceOf, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { signAddressCardStatement, signRelayEnvelopeStatement } from './member-statements';
 import { signedGet, signedPost } from './node-post';
@@ -84,12 +84,6 @@ export interface OutsideMailContext {
     isBlocked: (key: string) => Promise<boolean>;
     /** Whether the member let this key in and never blocked it (utils/let-in.ts letInFor, slice S3b). Left out: nobody is. */
     letIn?: (key: string) => Promise<boolean>;
-    /**
-     * Whether THIS community (the one whose mailbox the round reads, `nodeUrl`) holds a first message as a request: its
-     * `dmRequests` switch, core requestsHereOf of its features (slice S5). What a first line across from a member here meets
-     * (core gateOutsideItem `memberHere`). Left out: a first message arrives straight away, as on a local community.
-     */
-    requestsHere?: boolean;
     /**
      * Whether no block bars this key anywhere (utils/let-in.ts unbarredFor, slice S5): a first line from a member here passes
      * the door only then. Left out: nobody is, and a member here meets the door as a stranger does.
@@ -563,6 +557,10 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         if (page === 0) await learnQuiet(ctx, answer?.quiet).catch((e) => console.warn('[OutsideMail] The quiet keys wait for the next round:', e?.message ?? e));
         if (answer?.outboxMore) continue;
         const held: any[] = Array.isArray(answer?.items) ? answer.items : [];
+        // This community's own rule for a first line across from a member here (slice S5): its `dmRequests` switch, as my
+        // server says it in this same answer, beside the marks it judged under that switch (PR #3347 review F2), never a
+        // profile this phone kept. Not said (a server from before it): requests on, the strict side (core requestsHereOfMail).
+        const requestsHere = requestsHereOfMail(answer);
         const done: string[] = [];
         let writeFailed = false;
         for (const h of held) {
@@ -593,7 +591,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     // From a member here (slice S5): my own server's mark beside the item, never the envelope's, for a first
                     // line with no chat here from someone no block bars anywhere; this community's own rule then decides.
                     memberHere: !chat && !blocked && env.kind === 'dm-line' && heldFromMemberHere(h) && !!ctx.unbarred && await ctx.unbarred(env.senderKey),
-                    requestsHere: ctx.requestsHere === true,
+                    requestsHere,
                 });
                 if (verdict === 'drop') { done.push(env.itemId); out.dropped++; continue; }
                 if (verdict === 'change') {

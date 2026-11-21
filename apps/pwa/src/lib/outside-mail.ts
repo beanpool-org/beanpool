@@ -44,7 +44,7 @@
 import {
     ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, audienceOf, gateOutsideItem, heldFromMemberHere, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId,
     nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId,
-    relayEnvelopeVerifies, relayPayloadHash, requestsHereOf, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
+    relayEnvelopeVerifies, relayPayloadHash, requestsHereOfMail, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
     type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { nodeAddress, signAddressCardFor, signedMailFetch, signRelayEnvelopeFor } from './api';
@@ -77,12 +77,6 @@ export interface OutsideMailContext {
     store: OutsideChatStore;
     /** Whether the account blocked this key. Throws when that can't be known: the item then waits, unconfirmed. */
     isBlocked: (key: string) => Promise<boolean>;
-    /**
-     * Whether this community holds a first message as a request: its `dmRequests` switch, core requestsHereOf of its info's
-     * features (slice S5). What a first line across from a member here meets (core gateOutsideItem `memberHere`). Left out:
-     * a first message arrives straight away, as on a local community.
-     */
-    requestsHere?: boolean;
     signal?: AbortSignal;
     /**
      * Whether this still acts for the account and the community it was made for ({@link outsideContext}): false once the
@@ -547,6 +541,10 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         if (page === 0) await learnQuiet(ctx, answer?.quiet).catch((e) => console.warn('[OutsideMail] The quiet keys wait for the next round:', e?.message ?? e));
         if (answer?.outboxMore) continue;
         const held: any[] = Array.isArray(answer?.items) ? answer.items : [];
+        // This community's own rule for a first line across from a member here (slice S5): its `dmRequests` switch, as my
+        // server says it in this same answer, beside the marks it judged under that switch (PR #3347 review F2), never the
+        // community's info read at page load. Not said (a server from before it): requests on, the strict side.
+        const requestsHere = requestsHereOfMail(answer);
         const done: string[] = [];
         let writeFailed = false;
         for (const h of held) {
@@ -571,7 +569,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     // From a member here (slice S5): my own server's mark beside the item, never the envelope's; this
                     // community's own rule then decides, as on the phone (core gateOutsideItem).
                     memberHere: heldFromMemberHere(h),
-                    requestsHere: ctx.requestsHere === true,
+                    requestsHere,
                 });
                 if (verdict === 'drop') { done.push(env.itemId); out.dropped++; continue; }
                 if (verdict === 'change') {
@@ -729,17 +727,8 @@ function watchStanding(check: () => unknown): () => void {
 
 /** Whether this community takes messages from other communities (its info's `features.outsideMessages`); null unread. */
 export async function outsideMessagesHere(): Promise<boolean | null> {
-    return (await switchesHere()).on;
-}
-
-/**
- * The two switches a round reads, from this community's info in one read: whether it takes messages from other communities
- * (`on`, null unread), and whether it holds a first message as a request (`requestsHere`, core requestsHereOf; false unread:
- * slice S5, what a first line across from a member here meets).
- */
-async function switchesHere(): Promise<{ on: boolean | null; requestsHere: boolean }> {
     const info = await communityInfoOnce().catch(() => null);
-    return { on: info ? (info.features as { outsideMessages?: unknown } | undefined)?.outsideMessages === true : null, requestsHere: requestsHereOf(info?.features) };
+    return info ? (info.features as { outsideMessages?: unknown } | undefined)?.outsideMessages === true : null;
 }
 
 let running: Promise<SyncOutcome | null> | null = null;
@@ -776,14 +765,15 @@ function roundWithDeadline(deadlineMs: number): Promise<SyncOutcome | null> {
             const found = await untilDeadline(outsideContext({ nodeUrl: here.nodeUrl, holds }), signal);
             if (!found) return null;
             const ctx = boundedBySignal({ ...found, signal });
-            // With it, in the same read, this community's own rule for a first line across from a member here (slice S5).
-            const { on, requestsHere } = await untilDeadline(switchesHere(), signal);
+            const on = await untilDeadline(outsideMessagesHere(), signal);
             if (on !== true) {
                 // Read, and off: my server would refuse my waiting lines (403) and no round runs to send them; they fail now, saying why.
                 if (on === false && await failUnsent(ctx, t("This community doesn't take messages from other communities.")) > 0 && holds()) ring();
                 return null;
             }
-            const out = await syncOutsideMail({ ...ctx, requestsHere });
+            // This community's own rule for a first line across from a member here (slice S5) comes in each page of mail,
+            // with the marks (syncOutsideMail): never from the info read once at page load.
+            const out = await syncOutsideMail(ctx);
             if ((out.written || out.requests || out.ticks) && holds()) ring();
             return out;
         } catch (e) {

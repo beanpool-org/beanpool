@@ -28,6 +28,10 @@
  *      the reporter as a first line they have not answered, and a request inside now): a stranger's, an answered one, a
  *      friend's, one never held here, and any where requests are off count for nothing, and their rows carry no request
  *      column, as before
+ *   7  the community's own rule beside the marks (PR #3347 review F2): GET /api/mail says `dmRequests`, this node's own
+ *      switch, in the same answer as the `memberHere` marks it judged under it {requests off, on, switched on between two
+ *      fetches of the same held line, switched off again, an empty mailbox}; always a boolean, and as the switch is at
+ *      that fetch, so a device never needs a profile it kept to know which rule a marked first line meets
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-mail-member-here.ts
  */
@@ -462,6 +466,45 @@ async function main(): Promise<void> {
         assert(complaints.length > 0 && complaints.every((u) => u === 'https://a.example/api/relay/complaint'),
             `6. every report across still tells the sender's home, and only it (${complaints.length} complaints)`);
         outbox.__useRelayTransportForTests(null);
+    }
+
+    // ── 7. The community's own rule beside the marks (PR #3347 review F2) ───────────────────────
+    console.log("\n7. dmRequests beside the marks: this node's own switch, at each fetch");
+    {
+        const { setSwitchOverride } = await import('./config/node-profile.js');
+        const page = async (who: Keys) => (await fetchMail(who)).body;
+        try {
+            const ben = member('Ben switch');
+            const fay = member('Fay switch');
+            setSwitchOverride('dmRequests', false);
+            const empty = await page(ben);
+            assert(empty?.dmRequests === false && Array.isArray(empty?.items) && empty.items.length === 0,
+                `7a. requests off, nothing held: the answer still says dmRequests false (got ${JSON.stringify(empty?.dmRequests)})`);
+            assert((await bring([await item(fay, ben.key)])).status === 202, "7. a fellow member's first line across brought");
+            const off = await page(ben);
+            const offItem = (off?.items ?? []).find((i: any) => i.envelope?.senderKey === fay.key);
+            assert(off?.dmRequests === false && offItem?.memberHere === true, `7b. requests off: dmRequests false beside memberHere true (got ${JSON.stringify(off?.dmRequests)}, ${JSON.stringify(offItem?.memberHere)})`);
+            // The switch moves after the device last read the community's profile: the next fetch of the same held line says so.
+            setSwitchOverride('dmRequests', true);
+            const on = await page(ben);
+            const onItem = (on?.items ?? []).find((i: any) => i.envelope?.senderKey === fay.key);
+            assert(on?.dmRequests === true && onItem?.memberHere === true,
+                `7c. switched on since: the same held line's answer says dmRequests true beside its mark (got ${JSON.stringify(on?.dmRequests)}, ${JSON.stringify(onItem?.memberHere)})`);
+            assert(mail.heldMailFor(ben.key, crypto.randomBytes(16).toString('hex')).dmRequests === true, '7c. heldMailFor says it as the route does');
+            setSwitchOverride('dmRequests', false);
+            const back = await page(ben);
+            assert(back?.dmRequests === false, `7d. switched off again: dmRequests false at the next fetch (got ${JSON.stringify(back?.dmRequests)})`);
+            setSwitchOverride('dmRequests', true);
+            const stranger = keys();
+            assert((await bring([await item(stranger, ben.key)])).status === 202, "7. a stranger's line brought");
+            const mixed = await page(ben);
+            assert(typeof mixed?.dmRequests === 'boolean' && mixed.dmRequests === true && (mixed.items ?? []).length === 2,
+                `7e. one answer, one switch, whoever the senders are (got ${JSON.stringify(mixed?.dmRequests)}, ${(mixed?.items ?? []).length} items)`);
+            assert(!('dmRequests' in ((mixed?.items ?? [])[0] ?? {})) && !('dmRequests' in (((mixed?.items ?? [])[0] ?? {}).envelope ?? {})),
+                '7e. said once beside the items, not inside an item or its envelope');
+        } finally {
+            setSwitchOverride('dmRequests', false);
+        }
     }
 
     console.log(`\n${passed}/${run} passed`);

@@ -13,7 +13,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
-import { requestsHereOf, t } from '@beanpool/core';
+import { t } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { blocksOwedAt, blockUser, isUserBlocked, syncBlocksAt } from './blocklist';
 import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn } from './node-profile';
@@ -272,8 +272,9 @@ function roundWithDeadline(deadlineMs: number, community?: string | null): Promi
                 }
                 return null;
             }
-            // This community's own rule for a first line across from a member here (slice S5): its `dmRequests` switch.
-            const out = await syncOutsideMail({ ...ctx, requestsHere: requestsHereOf(profile?.features), signal: controller.signal });
+            // This community's own rule for a first line across from a member here (slice S5) comes in each page of mail, with
+            // the marks (outside-mail.ts): never from this profile, which may be from before the switch moved.
+            const out = await syncOutsideMail({ ...ctx, signal: controller.signal });
             if (out.written || out.requests || out.ticks) DeviceEventEmitter.emit(OUTSIDE_CHATS_UPDATED);
             return out;
         } catch (e) {

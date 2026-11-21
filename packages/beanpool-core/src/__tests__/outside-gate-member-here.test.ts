@@ -1,14 +1,15 @@
 /**
  * The across gate, every case (slice S5 "Message anyone": scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "A
  * fellow member writing across", §6 row S5): a first line from another community, by who sent it, the member's door, the
- * receiving community's own rule, the blocks, and the two traps (a re-keyed sender, a "member here" mark forged by the
- * sending server). One table; each rule is shown to matter by a gate with that rule taken out, which gets rows wrong.
+ * receiving community's own rule (as the member's own server says it in the same mailbox answer as the mark: PR #3347
+ * review F2), the blocks, and the two traps (a re-keyed sender, a "member here" mark forged by the sending server). One
+ * table; each rule is shown to matter by a gate with that rule taken out, which gets rows wrong.
  */
 import { describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { gateOutsideItem, heldFromMemberHere, requestsHereOf, type OutsideGateVerdict } from '../outside-chat.js';
+import { gateOutsideItem, heldFromMemberHere, requestsHereOfMail, type OutsideGateVerdict } from '../outside-chat.js';
 import { readRelayEnvelope, relayPayloadHash, signRelayEnvelope } from '../relay-envelope.js';
 
 const seed = (name: string) => sha256(utf8ToBytes(`beanpool s5 gate vector: ${name}`));
@@ -18,7 +19,7 @@ const SENDER = seed('sender');
 
 const SENDERS = ['member here', 'let in elsewhere', 'wrote to before', 'stranger'] as const;
 const DOORS = ['open', 'closed'] as const;
-const COMMUNITIES = ['local', 'requests on', 'requests off'] as const;
+const COMMUNITIES = ['requests off (a local community)', 'requests on', 'not said (a server from before the switch was sent)'] as const;
 const BLOCKS = ['blocked here', 'blocked in another held community', 'none'] as const;
 const TRAPS = ['none', 're-keyed sender', 'forged member-here flag'] as const;
 type Sender = typeof SENDERS[number];
@@ -27,11 +28,14 @@ type Row = { sender: Sender; door: typeof DOORS[number]; community: typeof COMMU
 const rows: Row[] = SENDERS.flatMap((sender) => DOORS.flatMap((door) => COMMUNITIES.flatMap((community) =>
     BLOCKS.flatMap((block) => TRAPS.map((trap) => ({ sender, door, community, block, trap }))))));
 
-/** What each community's info says (its `features`): a local one says nothing of requests. */
-const FEATURES: Record<Row['community'], Record<string, unknown>> = {
-    local: { outsideMessages: true },
-    'requests on': { outsideMessages: true, dmRequests: true },
-    'requests off': { outsideMessages: true, dmRequests: false },
+/**
+ * What the member's own server says of its switch in the mailbox answer (GET /api/mail, engine/relay-mail.ts heldMailFor):
+ * `dmRequests` beside the items, read with their marks. A server from before it says nothing.
+ */
+const MAIL: Record<Row['community'], Record<string, unknown>> = {
+    'requests off (a local community)': { items: [], more: false, dmRequests: false },
+    'requests on': { items: [], more: false, dmRequests: true },
+    'not said (a server from before the switch was sent)': { items: [], more: false },
 };
 
 /** The design, in its own words, as the expected answer of each row. */
@@ -44,7 +48,8 @@ function expected(r: Row): OutsideGateVerdict {
     const who: Sender = r.trap === 're-keyed sender' && (r.sender === 'let in elsewhere' || r.sender === 'wrote to before') ? 'stranger' : r.sender;
     if (who === 'wrote to before') return 'line';                 // an open chat takes their lines
     if (who === 'let in elsewhere') return 'line';                // let in once: their first line opens a chat, door or not
-    if (who === 'member here') return r.community === 'requests on' ? 'request' : 'line';   // that community's own rule
+    // That community's own rule; not said, the strict side: a request.
+    if (who === 'member here') return r.community === 'requests off (a local community)' ? 'line' : 'request';
     return r.door === 'open' ? 'request' : 'drop';                // a total stranger: exactly as before
 }
 
@@ -89,7 +94,7 @@ function inputOf(r: Row, readMark: (held: Record<string, unknown>, raw: Record<s
         blocked,
         letIn: !chat && !blocked && r.sender === 'let in elsewhere' && !rekeyed,
         memberHere: !chat && !blocked && readMark(held, raw),
-        requestsHere: requestsHereOf(FEATURES[r.community]),
+        requestsHere: requestsHereOfMail(MAIL[r.community]),
     };
 }
 
@@ -132,7 +137,7 @@ describe('each rule matters: a gate without it gets rows wrong', () => {
 
 describe('the mark comes from the member\'s own server alone', () => {
     it('an envelope read keeps none of a sending server\'s extra fields', () => {
-        const { raw } = heldItemOf({ sender: 'stranger', door: 'closed', community: 'local', block: 'none', trap: 'forged member-here flag' });
+        const { raw } = heldItemOf({ sender: 'stranger', door: 'closed', community: 'requests off (a local community)', block: 'none', trap: 'forged member-here flag' });
         expect((raw.envelope as Record<string, unknown>).memberHere).toBe(true);
         expect(readRelayEnvelope(raw.envelope)).not.toHaveProperty('memberHere');
     });
@@ -142,9 +147,13 @@ describe('the mark comes from the member\'s own server alone', () => {
         }
         expect(heldFromMemberHere({ memberHere: true })).toBe(true);
     });
-    it("a community's rule is its dmRequests switch, true only when it says so", () => {
-        expect(requestsHereOf({ dmRequests: true })).toBe(true);
-        for (const f of [null, undefined, {}, { dmRequests: false }, { dmRequests: 'true' }, { dmRequests: 1 }]) expect(requestsHereOf(f)).toBe(false);
+    it("a community's rule is the dmRequests its own server's mailbox answer says: off only when it says false", () => {
+        expect(requestsHereOfMail({ items: [], dmRequests: false })).toBe(false);
+        // Not said (a server from before it), or said in any other way: requests on, the strict side.
+        for (const a of [null, undefined, 'dmRequests', {}, { items: [] }, { dmRequests: true }, { dmRequests: 'false' }, { dmRequests: 0 }, { dmRequests: null },
+            { items: [{ dmRequests: false }] }, { features: { dmRequests: false } }]) {
+            expect(requestsHereOfMail(a)).toBe(true);
+        }
     });
     it('a member here never changes an answer the member gave, nor what a request may take', () => {
         const base = { kind: 'dm-line', doorOpen: false, blocked: false, memberHere: true, requestsHere: false };

@@ -479,8 +479,9 @@ export type OutsideGateVerdict = 'line' | 'request' | 'change' | 'drop';
  * held the line, says its sender is a member there who may write to the member there now ({@link heldFromMemberHere}: by
  * that server's own rules, never the sending server's word). Their first line, with no chat here yet, then meets that community's own rule, not the
  * door: straight in where a first message arrives straight away, a request where `requestsHere` (the community's
- * `dmRequests` switch, {@link requestsHereOf}) holds first messages as requests. They could write to the member inside the
- * community anyway. A block still wins, and let in still opens the chat first. A total stranger is exactly as before.
+ * `dmRequests` switch, as that same server's answer says it beside the mark: {@link requestsHereOfMail}) holds first
+ * messages as requests. They could write to the member inside the community anyway. A block still wins, and let in still
+ * opens the chat first. A total stranger is exactly as before.
  */
 export function gateOutsideItem(input: {
     kind: string;
@@ -516,10 +517,12 @@ export function heldFromMemberHere(held: unknown): boolean {
 }
 
 /**
- * Whether a community holds a first message as a request (its info's `features.dmRequests`, PR #2392), from the features
- * it publishes: only `true` says so. Absent (a local community, a server from before it): a first message arrives straight
- * away. What a first line across from a member there meets ({@link gateOutsideItem} `requestsHere`).
+ * Whether the member's OWN server, in a GET /api/mail answer (engine/relay-mail.ts heldMailFor), says its community holds a
+ * first message as a request: its `dmRequests` beside the items, read at the same moment as their `memberHere` marks (PR
+ * #3347 review finding 2), so a device never judges a marked line by a switch it kept from an earlier read. What a first
+ * line across from a member there meets ({@link gateOutsideItem} `requestsHere`). Only `false` says a first message arrives
+ * straight away; anything else, a missing field (a server from before it) among it, reads as requests on: the strict side.
  */
-export function requestsHereOf(features: unknown): boolean {
-    return !!features && typeof features === 'object' && (features as { dmRequests?: unknown }).dmRequests === true;
+export function requestsHereOfMail(answer: unknown): boolean {
+    return !(!!answer && typeof answer === 'object' && (answer as { dmRequests?: unknown }).dmRequests === false);
 }

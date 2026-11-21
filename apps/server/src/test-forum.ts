@@ -191,12 +191,18 @@ async function main(): Promise<void> {
 
     // ── 5. Closed ─────────────────────────────────────────────────────────────────────────────────
     console.log('── 5. closed ──');
+    // The topic's own read says whether the reader may reply now (canReply, review of #3339); a list row never carries it.
+    const openRead = await topic(pat, tc);
+    assert(openRead.body?.topic?.canReply === true && openRead.body?.topic?.sectionArchived === false
+        && ((await topics(pat)).body?.topics as any[]).every((t) => !('canReply' in t) && !('sectionArchived' in t)),
+        `5. an open topic: canReply in its own read, in no list row (${show(openRead)})`);
     const notWriter = await call(pat, 'POST', `/api/forum/topics/${tc}/close`, {});
     assert(notWriter.status === 403 && notWriter.body?.code === 'not_yours', `5. Pat can't close Gus's topic (${show(notWriter)})`);
     const closed = await call(gus, 'POST', `/api/forum/topics/${tc}/close`, {});
     assert(closed.status === 200 && closed.body?.topic?.closed === 'writer', `5. Gus closes his own (${show(closed)})`);
     const late = await reply(pat, tc, { words: 'Too late?' });
     assert(late.status === 409 && late.body?.code === 'closed' && (await topic(sue, tc)).body?.topic?.replyCount === 0, `5. a closed topic refuses a reply (${show(late)})`);
+    assert((await topic(pat, tc)).body?.topic?.canReply === false && (await topic(pat, tc)).body?.topic?.sectionArchived === false, '5. a closed topic: canReply false');
     assert((await call(gus, 'POST', `/api/forum/topics/${tc}/close`, {})).body?.code === 'already_closed', '5. closed twice: already_closed');
     const byOwner = await call(owen, 'POST', `/api/forum/topics/${extra2}/close`, {});
     assert(byOwner.body?.topic?.closed === 'moderator', `5. an owner closes another's: by a moderator (${show(byOwner)})`);
@@ -287,6 +293,12 @@ async function main(): Promise<void> {
         && (staffFront.body?.sections as any[]).some((s) => s.name === 'Notices' && s.archived) && !titles(await topics(mel)).includes('Welcome: start here'),
         '8. archived: out of members\' lists, owners and admins still see it');
     assert((await reply(mel, notice.body?.topic?.id, { words: 'Again' })).body?.code === 'closed', '8. a topic in an archived section takes no reply');
+    // Open itself (not closed), but its section archived: its own read says no reply (review of #3339: forum.ts checks the
+    // section's archived_at too), so the apps draw no reply box.
+    const archivedRead = await topic(mel, notice.body?.topic?.id);
+    assert(archivedRead.status === 200 && archivedRead.body?.topic?.closed === null && archivedRead.body?.topic?.canReply === false
+        && archivedRead.body?.topic?.sectionArchived === true,
+        `8. a topic in an archived section: open, canReply false (${show(archivedRead)})`);
     const byId = [await topics(mel, `?section=${news.body?.section?.id}`), await topics(ada, `?section=${news.body?.section?.id}`)];
     assert(byId[0].status === 404 && byId[1].status === 200 && titles(byId[1]).includes('Welcome: start here'),
         `8. an archived section's list by its id: 404 to a member, there for an admin (${byId.map((r) => r.status).join()})`);

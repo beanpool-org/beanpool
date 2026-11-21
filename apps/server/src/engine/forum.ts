@@ -223,6 +223,15 @@ export interface ForumTopic {
      * In a topic's own read and the answers that end in one (a new topic, an edit, a pin...); never in a list row.
      */
     links?: ForumLink[];
+    /**
+     * Whether the reader may reply now, as replyInForum would take it: the topic open, its section not archived, and the
+     * reader writes in that section (a group's: its convenors and members; anyone else who reads it reads only). In a
+     * topic's own read only (forumTopic), never in a list row. The apps draw the reply box, its closed line and the offer to
+     * hear of replies from it (review of #3339).
+     */
+    canReply?: boolean;
+    /** Its section is archived, so it takes no replies though it isn't closed itself: in a topic's own read only, beside canReply. */
+    sectionArchived?: boolean;
 }
 export interface ForumPost {
     id: string; topicId: string; number: number; writer: ForumWriter; words: string; quotes: number | null; lang: string | null;
@@ -512,6 +521,16 @@ function visibleTopic(reader: string, id: string, opts: { hiddenOk?: boolean; an
 }
 
 /**
+ * What replyInForum checks of the topic and the reader's place in its section, before the words: open, its section not
+ * archived, and theirs to write in (assertWritesIn). `sectionArchived` says which no it is, for the words.
+ */
+function replyRuleOf(reader: string, topic: TopicRow): { canReply: boolean; sectionArchived: boolean } {
+    const section = sectionRow(topic.section_id);
+    const sectionArchived = !!section?.archived_at;
+    return { canReply: !topic.closed_at && !sectionArchived && (!section || sectionAccess(reader, section.group_id) === 'write'), sectionArchived };
+}
+
+/**
  * One topic and its posts in order, 30 at a time after post number `after`; posts by someone the reader blocked left out.
  * `lastRead`: the last post number the reader opened (slice F5), so an app opens a followed topic at its first unread reply.
  */
@@ -530,6 +549,7 @@ export function forumTopic(reader: string, id: string, after: number): { topic: 
         topic: {
             ...topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }, reader, writer),
             links: forumLinksOf(reader, t.id, t.writer_pubkey),
+            ...replyRuleOf(reader, t),
         },
         posts: postsOut(posts, reader, writer),
         next: more ? posts[posts.length - 1].number : null,

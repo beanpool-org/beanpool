@@ -168,7 +168,7 @@ import { getDatabaseFilenameForNode, markGuestNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 import { announceAccountOnPhone } from '../account-on-phone';
-import { blockUser, unblockUser, blockSyncsEndedForTests } from '../blocklist';
+import { blockUser, unblockUser, blockSyncsEndedForTests, _newBlockRunForTests } from '../blocklist';
 import { acceptLetIn, letInFor, _resetLetInForTests } from '../let-in';
 import { withPeopleAdded } from '../contacts-former';
 import { gateOutsideItem, emptyContactsList, DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
@@ -202,7 +202,20 @@ function person(): Person {
 
 /** `at`: the community whose node holds it, for Decline all (left out: every one, as the lists here are). */
 interface Conv { id: string; type: string; participants: string[]; request?: { from: string; state: string; at: string; acceptedByYou?: true }; at?: string }
-const node = { convs: [] as Conv[] };
+/**
+ * `blocks`: each community's block list for the account on the phone, by `${origin} ${key}` (routes/blocks.ts: every answer is
+ * the list as it stands). It lists every request all the same, as a node does in the minutes before it holds a block.
+ */
+const node = { convs: [] as Conv[], blocks: new Map<string, string[]>(), formerKeys: new Map<string, Record<string, string[]>>() };
+const blockListAt = (origin: string): string[] => {
+    const k = `${origin} ${h.me.publicKey}`;
+    if (!node.blocks.has(k)) node.blocks.set(k, []);
+    return node.blocks.get(k)!;
+};
+const blocksAnswer = (origin: string, extra: object = {}) => ({
+    success: true, ...extra, blocked: blockListAt(origin).map((publicKey) => ({ publicKey, blockedAt: '2026-11-21T00:00:00.000Z' })), max: 500,
+    formerKeys: node.formerKeys.get(`${origin} ${h.me.publicKey}`) ?? {},
+});
 interface Asked { method: string; url: string; body: string | undefined; headers: Record<string, string> }
 let asked: Asked[] = [];
 
@@ -258,7 +271,20 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     }
     if (u.pathname === '/api/members') return answer(200, []);
     if (u.pathname === '/api/reports') return answer(200, { success: true });
-    // No block list here: the phone's own block stands (blocklist.ts), the node is asked again tomorrow.
+    // The account's block list here (routes/blocks.ts), which the phone reads before a quiet accept (slice S7b).
+    if (u.pathname === '/api/blocks' && method === 'GET') return answer(200, blocksAnswer(u.origin));
+    if (u.pathname === '/api/blocks' && method === 'POST') {
+        const keys: string[] = Array.isArray(body.targetPubkeys) ? body.targetPubkeys : [body.targetPubkey];
+        const list = blockListAt(u.origin);
+        for (const k of keys) if (!list.includes(k)) list.push(k);
+        return answer(200, blocksAnswer(u.origin, { added: keys, ...(body.targetPubkey ? { person: [body.targetPubkey] } : { skipped: 0 }) }));
+    }
+    if (u.pathname === '/api/blocks/remove' && method === 'POST') {
+        const list = blockListAt(u.origin);
+        const at = list.indexOf(body.targetPubkey);
+        if (at >= 0) list.splice(at, 1);
+        return answer(200, blocksAnswer(u.origin, { removed: at >= 0, person: [body.targetPubkey] }));
+    }
     return answer(404, { error: 'not here' });
 });
 
@@ -277,6 +303,9 @@ async function phoneHoldingThree(): Promise<void> {
     db._resetDmPeerPinsForTests();
     db._resetChatsInPlaceForTests();
     _resetLetInForTests();
+    _newBlockRunForTests();
+    node.blocks.clear();
+    node.formerKeys.clear();
     h.dir = path.join(root, `phone-${++phoneN}`);
     fs.mkdirSync(h.dir);
     h.store.clear();
@@ -753,7 +782,7 @@ describe('let in once: who made the row x every source x where the request waits
         it(`across | ${made.source} | ${made.by}: ${made.how} -> ${letsIn ? 'their first line opens a chat, door closed' : 'their first line goes nowhere, door closed'}`, async () => {
             await phoneHoldingThree();
             made.put(C, them.publicKey);
-            const letIn = await letInFor(me.publicKey)(them.publicKey);
+            const letIn = await letInFor(me.publicKey, B)(them.publicKey);
             expect(letIn).toBe(letsIn);
             expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe(letsIn ? 'line' : 'drop');
         });
@@ -803,7 +832,7 @@ describe('let in once: the review\'s own case (#3319 at 3b80f0ee, F1): Ann Ignor
         expect(acceptPosts()).toEqual([]);
         expect([inB.request?.state, inC.request?.state]).toEqual(['pending', 'pending']);
         // Across: nobody let him in, so his first line meets her door, closed.
-        const letIn = await letInFor(me.publicKey)(sid);
+        const letIn = await letInFor(me.publicKey, B)(sid);
         expect(letIn).toBe(false);
         expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe('drop');
     });
@@ -864,7 +893,7 @@ describe('let in once: "Add people I\'ve chatted with and my friends" counts onl
             expect(offered.has(p.key), `offered | ${p.kind.name}`).toBe(p.kind.offered);
             expect(linked.has(p.key), `linked | ${p.kind.name}`).toBe(p.kind.offered);
             // Across, after the tap: let in exactly when the member took part.
-            expect(await letInFor(me.publicKey)(p.key), `let in across | ${p.kind.name}`).toBe(p.kind.offered);
+            expect(await letInFor(me.publicKey, B)(p.key), `let in across | ${p.kind.name}`).toBe(p.kind.offered);
         }
     });
 
@@ -897,7 +926,7 @@ describe('let in once: "Add people I\'ve chatted with and my friends" counts onl
         expect(got?.conversations.map((c: any) => c.id).sort()).toEqual([fromSid.id, fromKim.id].sort());
         // Across: neither is let in; their first line meets her closed door.
         for (const k of [sid, kim]) {
-            const letIn = await letInFor(me.publicKey)(k);
+            const letIn = await letInFor(me.publicKey, B)(k);
             expect(letIn).toBe(false);
             expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe('drop');
         }
@@ -997,8 +1026,8 @@ describe('let in once: the rest of the rule', () => {
         const accept = vi.fn(async () => ({ success: true }));
         SOURCES[2].put(C, them.publicKey);
         const c = { id: randomUUID(), from: them.publicKey, keys: [them.publicKey] };
-        expect([...await acceptLetIn(me.publicKey, [c], accept, async () => true)]).toEqual([c.id]);
-        expect([...await acceptLetIn(me.publicKey, [c], accept, async () => true)]).toEqual([]);
+        expect([...await acceptLetIn(me.publicKey, B, [c], accept, async () => true)]).toEqual([c.id]);
+        expect([...await acceptLetIn(me.publicKey, B, [c], accept, async () => true)]).toEqual([]);
         expect(accept).toHaveBeenCalledTimes(1);
     });
 
@@ -1006,24 +1035,24 @@ describe('let in once: the rest of the rule', () => {
         const accept = vi.fn().mockRejectedValueOnce(Object.assign(new Error('There is no message request for you in this chat.'), { code: 'request_not_found' })).mockResolvedValueOnce({ success: true });
         SOURCES[2].put(C, them.publicKey);
         const c = { id: randomUUID(), from: them.publicKey, keys: [them.publicKey] };
-        expect([...await acceptLetIn(me.publicKey, [c], accept, async () => true)]).toEqual([]);
-        expect([...await acceptLetIn(me.publicKey, [c], accept, async () => true)]).toEqual([c.id]);
+        expect([...await acceptLetIn(me.publicKey, B, [c], accept, async () => true)]).toEqual([]);
+        expect([...await acceptLetIn(me.publicKey, B, [c], accept, async () => true)]).toEqual([c.id]);
     });
 
     it('nothing is read when no request waits, and the contacts list opens only for someone no copy lets in', async () => {
-        expect([...await acceptLetIn(me.publicKey, [], async () => ({}), async () => true)]).toEqual([]);
+        expect([...await acceptLetIn(me.publicKey, B, [], async () => ({}), async () => true)]).toEqual([]);
         expect(h.letInReads).toBe(0);
         SOURCES[2].put(C, them.publicKey);
-        await acceptLetIn(me.publicKey, [{ id: randomUUID(), from: them.publicKey, keys: [them.publicKey] }], async () => ({}), async () => true);
+        await acceptLetIn(me.publicKey, B, [{ id: randomUUID(), from: them.publicKey, keys: [them.publicKey] }], async () => ({}), async () => true);
         expect(h.contactsOpened).toBe(0);
         const stranger = person();
-        await acceptLetIn(me.publicKey, [{ id: randomUUID(), from: stranger.publicKey, keys: [stranger.publicKey] }], async () => ({}), async () => true);
+        await acceptLetIn(me.publicKey, B, [{ id: randomUUID(), from: stranger.publicKey, keys: [stranger.publicKey] }], async () => ({}), async () => true);
         expect(h.contactsOpened).toBe(1);
     });
 
     it('a let-in read leaves no held handle open (Chat not in view)', async () => {
         SOURCES[2].put(C, them.publicKey);
-        await acceptLetIn(me.publicKey, [{ id: randomUUID(), from: them.publicKey, keys: [them.publicKey] }], async () => ({}), async () => true);
+        await acceptLetIn(me.publicKey, B, [{ id: randomUUID(), from: them.publicKey, keys: [them.publicKey] }], async () => ({}), async () => true);
         expect(db.heldCopyFiles()).toEqual([]);
     });
 
@@ -1052,7 +1081,7 @@ describe('let in once: the rest of the rule', () => {
         SOURCES[2].put(C, them.publicKey);
         SOURCES[2].put(C, now.publicKey);
         pinIn(A, { peer: now.publicKey, since: iso(), by: 'listing', former: [them.publicKey] });
-        const letIn = letInFor(me.publicKey);
+        const letIn = letInFor(me.publicKey, B);
         expect(await letIn(now.publicKey)).toBe(true);
         expect(await letIn(them.publicKey)).toBe(false);
     });
@@ -1093,7 +1122,7 @@ describe('let in once: the rest of the rule', () => {
         const here = await db.getLetInHere(me.publicKey);
         const t2 = performance.now();
         const stranger = person();
-        await acceptLetIn(me.publicKey, [{ id: randomUUID(), from: stranger.publicKey, keys: [stranger.publicKey] }], async () => ({}), async () => true);
+        await acceptLetIn(me.publicKey, B, [{ id: randomUUID(), from: stranger.publicKey, keys: [stranger.publicKey] }], async () => ({}), async () => true);
         const t3 = performance.now();
         console.log(`[let-in timing] one held copy of 500 chats: ${(t1 - t0).toFixed(1)} ms; the copy in use: ${(t2 - t1).toFixed(1)} ms; a whole check over three copies: ${(t3 - t2).toFixed(1)} ms`);
         // 250 chats with a line of mine, 100 friends (all among them), 167 paid.

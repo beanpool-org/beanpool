@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import * as api from '../lib/api';
 import { learnFrontOf, learnSearchOf, type LearnPost } from '../lib/learn';
 import type { BeanPoolIdentity } from '../lib/identity';
-import type { KnowledgeDraftMine, KnowledgeDraftToCheck, KnowledgeDraftWhole } from '@beanpool/core';
+import type { KnowledgeDraftMine, KnowledgeDraftToCheck, KnowledgeDraftWhole, KnowledgePhotoCredit } from '@beanpool/core';
 import { LearnPage, type LearnTarget } from './LearnPage';
 
 const info = vi.hoisted(() => ({ current: null as null | Record<string, unknown> }));
@@ -384,7 +384,10 @@ describe('an owner or admin', () => {
             await openOne(byAssistant());
             const photos = screen.getAllByTestId('learn-check-photo');
             expect(photos.map((p) => within(p).getByRole('img').getAttribute('src'))).toEqual([P1, P2]);
-            expect(screen.getByText('Approve adds only the photos you keep. Keep one only if it is the writer’s own, never a picture from the web.')).toBeInTheDocument();
+            // Slice 2 of DESIGN-learn-web-pictures-fable.md (§6.2): the line names the two kinds a checker may keep; the old "never a
+            // picture from the web" is gone, since a picture from Wikimedia Commons with its credit now may be kept.
+            expect(screen.getByText('Approve adds only the photos you keep. Keep one if it is the writer’s own, or if it shows who made it and its licence.')).toBeInTheDocument();
+            expect(screen.queryByText(/never a picture from the web/)).toBeNull();
             expect(toggles().map((b) => b.textContent)).toEqual(['Remove photo', 'Remove photo']);
             fireEvent.click(toggles()[0]);
             expect(photos[0]).toHaveAttribute('data-kept', 'false');
@@ -424,6 +427,57 @@ describe('an owner or admin', () => {
             expect(writes()[0].body.checkedSources).toBe(true);
         });
 
+        // Pictures from Wikimedia Commons (DESIGN-learn-web-pictures-fable.md §6.2, §9 slice 2 table G): under each, what the node
+        // read; under one the assistant uploaded, whose it must be. Keep, Remove and Approve send exactly what they sent before.
+        const CREDIT: KnowledgePhotoCredit = {
+            url: 'https://commons.wikimedia.org/wiki/File:Sanderling_Westkapelle_02.jpg', file: 'File:Sanderling Westkapelle 02.jpg', maker: 'Stephan Sprinz',
+            licence: 'CC BY 4.0', licenceUrl: 'https://creativecommons.org/licenses/by/4.0/', restrictions: [], readAt: '2026-11-21T09:00:00.000Z',
+        };
+        const withCommons = (restrictions: string[] = []) =>
+            whole('d5', { assistant: 'Claude', needsSourcesTicked: true, photos: [P1, P2], photoCredits: [null, { ...CREDIT, restrictions }] });
+
+        it('a Commons picture shows its credit, the day it was read and "Open its page" (its file page, a new tab); an upload says whose it must be', async () => {
+            await openOne(withCommons());
+            const [up, commons] = screen.getAllByTestId('learn-check-photo');
+            expect(within(up).getByTestId('learn-check-uploaded')).toHaveTextContent('Uploaded by the assistant. Keep it only if it is your own.');
+            expect(within(up).queryByTestId('learn-check-credit')).toBeNull();
+            const credit = within(commons).getByTestId('learn-check-credit');
+            expect(credit).toHaveTextContent('📷 Stephan Sprinz · CC BY 4.0');
+            expect(credit).toHaveTextContent(/From Wikimedia Commons\. Read by this server on .*2026\./);
+            const link = within(credit).getByTestId('learn-check-credit-page');
+            expect(link).toHaveTextContent('Open its page');
+            expect(link).toHaveAttribute('href', CREDIT.url);
+            expect(link).toHaveAttribute('target', '_blank');
+            expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+            expect(within(commons).queryByTestId('learn-check-uploaded')).toBeNull();
+            expect(within(commons).queryByTestId('learn-check-credit-note')).toBeNull();
+        });
+
+        it("Commons' note shows only when Commons has one", async () => {
+            await openOne(withCommons(['personality', 'trademarked', 'insignia']));
+            const notes = screen.getAllByTestId('learn-check-credit-note').map((n) => n.textContent);
+            expect(notes).toEqual(['Wikimedia Commons notes: shows a person.', 'Wikimedia Commons notes: shows a trademark.', 'Wikimedia Commons notes: other rights may apply.']);
+        });
+
+        it("a member's own photo carries neither line", async () => {
+            await openOne(whole('d6', { photos: [P1], photoCredits: [null] }));
+            expect(screen.queryByTestId('learn-check-uploaded')).toBeNull();
+            expect(screen.queryByTestId('learn-check-credit')).toBeNull();
+        });
+
+        for (const [what, doIt, sent] of [
+            ['Approve with both kept', () => {}, [P1, P2]],
+            ['the Commons one removed', (t: HTMLElement[]) => fireEvent.click(t[1]), [P1]],
+        ] as Array<[string, (t: HTMLElement[]) => void, string[]]>) {
+            it(`with a Commons picture, ${what}: sends what it sent before, never a credit`, async () => {
+                await openOne(withCommons());
+                doIt(toggles());
+                fireEvent.click(screen.getByTestId('learn-check-approve'));
+                await wait();
+                expect(writes()).toEqual([{ path: '/api/knowledge/drafts/d5/approve', body: { photos: sent, checkedSources: true } }]);
+            });
+        }
+
         it("a member's suggestion: the same Keep or Remove, and Approve sends the kept ones", async () => {
             await openOne(whole('d4', { photos: [P1] }));
             fireEvent.click(toggles()[0]);
@@ -431,6 +485,46 @@ describe('an owner or admin', () => {
             await wait();
             expect(writes()).toEqual([{ path: '/api/knowledge/drafts/d4/approve', body: { photos: [] } }]);
         });
+    });
+
+    // A page's credit rows (DESIGN-learn-web-pictures-fable.md §6.3): the node wrote them; the page shows them after its own sources,
+    // each a link; Edit and Suggest a fix list and send the page's own sources only.
+    describe("a page's credit rows for its pictures from Wikimedia Commons", () => {
+        const OWN = { url: 'https://council.example/tip', label: 'Council: the tip' };
+        const CREDITED = { url: 'https://commons.wikimedia.org/wiki/File:Sanderling_Westkapelle_02.jpg', label: '📷 1 · Stephan Sprinz · CC BY 4.0', photo: 1 };
+        const credited = () => ({ ...PAGE, knowledge: { ...PAGE.knowledge, sources: [OWN, CREDITED] } }) as LearnPost;
+
+        it('the page shows the 📷 row after its own sources, a link to the file page', async () => {
+            node.posts = [credited()];
+            await openLearn({ target: { kind: 'page', id: 'tip' } });
+            await wait();
+            const links = within(screen.getByTestId('learn-post-sources')).getAllByRole('link');
+            expect(links.map((a) => a.textContent?.replace('↗', '').trim())).toEqual([`${OWN.label}council.example`, `${CREDITED.label}commons.wikimedia.org`]);
+            expect(links[1]).toHaveAttribute('href', CREDITED.url);
+        });
+
+        for (const use of ['edit', 'fix'] as const) {
+            it(`${use === 'edit' ? 'Edit' : 'Suggest a fix'} lists the page's own sources only and sends only those`, async () => {
+                node.posts = [credited()];
+                node.role = use === 'edit' ? 'owner' : null;
+                await openLearn({ target: { kind: 'page', id: 'tip' } });
+                await wait();
+                fireEvent.click(screen.getByTestId(use === 'edit' ? 'learn-post-edit' : 'learn-post-fix'));
+                await wait();
+                expect(screen.getAllByTestId('learn-form-source')).toHaveLength(1);
+                if (use === 'fix') {
+                    fireEvent.change(screen.getByTestId('learn-form-note'), { target: { value: 'New hours' } });
+                    fireEvent.change(screen.getByTestId('learn-form-body'), { target: { value: 'Sort it first. Open till 4.' } });
+                }
+                fireEvent.click(screen.getByTestId('learn-form-send'));
+                await wait();
+                const body = writes()[0]?.body ?? {};
+                // Edit sends the whole form, its own sources only; a fix that left the sources alone sends none (the credit is no change).
+                if (use === 'edit') expect(body.sources).toEqual([OWN]);
+                else expect(body).not.toHaveProperty('sources');
+                expect(JSON.stringify(body)).not.toContain('📷');
+            });
+        }
     });
 
     it('"Not this one" needs a reason from the list; the few words go with it, and the writer is told', async () => {

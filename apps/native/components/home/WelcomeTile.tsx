@@ -34,18 +34,12 @@ export interface WelcomeTileProps {
     shape: 'full' | 'band';
     /** "You're in Riverside." (core welcomeFacts); none when the community's name isn't known. */
     place: string | null;
-    /** Whose invite brought them, until the community's own welcome carries the line (slice S7). */
-    inviter: string | null;
-    firstHere: boolean;
     lines: readonly WelcomeTileLine[];
     /** "Show me around", or "Pick up the tour at step 3 ›" for a tour part way. */
     tourLabel: string;
     colors: AppColors;
     onTour: () => void;
     onGotIt: () => void;
-    onSayHello: () => void;
-    /** Absent: the reader can't invite here, so "You're the first one here." stands alone. */
-    onInvite?: () => void;
 }
 
 export function WelcomeTile(props: WelcomeTileProps) {
@@ -81,16 +75,11 @@ export function WelcomeTile(props: WelcomeTileProps) {
     return <FullTile {...props} />;
 }
 
-function FullTile({ place, inviter, firstHere, lines, tourLabel, colors, onTour, onGotIt, onSayHello, onInvite }: WelcomeTileProps) {
+function FullTile({ place, lines, tourLabel, colors, onTour, onGotIt }: WelcomeTileProps) {
     const ground = colors.brand.fill;
     const deep = colors.brand.fillPressed;
     const on = colors.text.onBrand;
     const gold = colors.feedback.warning.solid;
-    const link = (text: string, onPress: () => void, testID: string, a11y?: string) => (
-        <Pressable onPress={onPress} style={welcomeTileStyles.link} accessibilityRole="button" accessibilityLabel={a11y ?? text} testID={testID}>
-            <Text style={[welcomeTileStyles.linkText, { color: on }]}>{text}</Text>
-        </Pressable>
-    );
     return (
         <View style={[welcomeTileStyles.tile, { backgroundColor: ground }]} testID="home-card-start" accessibilityLabel={t('Welcome to BeanPool')}>
             {/* The shapes, behind everything and out of the reader's way. */}
@@ -104,17 +93,7 @@ function FullTile({ place, inviter, firstHere, lines, tourLabel, colors, onTour,
             </View>
             <Text style={[welcomeTileStyles.title, { color: on }]} accessibilityRole="header" testID="home-welcome-title">{t(WELCOME_TILE_WORDS.title)}</Text>
             {!!place && <Text style={[welcomeTileStyles.place, { color: on }]} testID="home-start-words">{place}</Text>}
-            {firstHere ? (
-                <View style={welcomeTileStyles.row}>
-                    <Text style={[welcomeTileStyles.small, { color: on }]} testID="home-start-first">{t("You're the first one here.")}</Text>
-                    {onInvite && link(t('Invite someone ›'), onInvite, 'home-start-invite')}
-                </View>
-            ) : inviter ? (
-                <View style={welcomeTileStyles.row}>
-                    <Text style={[welcomeTileStyles.small, { color: on }]} testID="home-start-inviter">{t('{name} invited you.', { name: inviter })}</Text>
-                    {link(t('Say hello ›'), onSayHello, 'home-start-hello', t('Say hello to {name}', { name: inviter }))}
-                </View>
-            ) : null}
+            {/* Whose invite brought them, and "You're the first one here.", are the community's welcome card's (slice S7). */}
             <View style={welcomeTileStyles.facts}>
                 {lines.map((l, i) => (
                     <View key={i} style={welcomeTileStyles.fact} testID={`home-welcome-fact-${l.icon}`}>
@@ -193,10 +172,6 @@ export const welcomeTileStyles = StyleSheet.create({
     dot2: { position: 'absolute', width: 10, height: 10, top: 52, left: 88, borderRadius: 5 },
     title: { fontSize: 28, lineHeight: 30, fontWeight: '900', textTransform: 'uppercase' },
     place: { fontSize: 16, lineHeight: 22, fontWeight: '700', marginTop: 8 },
-    row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 },
-    small: { fontSize: 15, lineHeight: 21 },
-    link: { minHeight: TARGET, justifyContent: 'center' },
-    linkText: { fontSize: 15, fontWeight: '700', textDecorationLine: 'underline' },
     facts: { marginTop: 14, marginBottom: 16, rowGap: 12 },
     fact: { flexDirection: 'row', alignItems: 'flex-start', columnGap: 12 },
     badge: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },

@@ -8,11 +8,17 @@
  *                                                          items (group-invite, -leave, -line, -epoch to group:<id>) go to
  *                                                          its host (engine/group-guest-home.ts), and may carry `refused`
  *   GET  /api/mail?device=<id>&since=<ms>&sinceId=<itemId>
- *                                   a member here       → { items: HeldItem[], more, outbox: [{ itemId, kind, recipient,
- *                                                          recipientHome, state, at }], outboxMore }: what waits that THIS
+ *                                   a member here       → { items: HeldItem[], more, dmRequests, outbox: [{ itemId, kind,
+ *                                                          recipient, recipientHome, state, at }], outboxMore }: what waits that THIS
  *                                                          device has not confirmed (X2b), and the ticks after the last
  *                                                          one the device has (its `at` and `itemId`), 200 a page. `device`
- *                                                          is required (400 bad_device without it), and lists the device
+ *                                                          is required (400 bad_device without it), and lists the device.
+ *                                                          Each item's `memberHere` (slice S5): its sender is a member
+ *                                                          here who may write to them here now, by this server's own
+ *                                                          rules alone (engine/relay-mail.ts fromMemberHere); and
+ *                                                          `dmRequests` beside them: whether this community holds a
+ *                                                          first message as a request, read with the marks (#3347
+ *                                                          review F2), the rule a marked first line meets
  *   GET  /api/mail/blob/:itemId     a member here       → { itemId, payload } (a blob held for them)
  *   POST /api/mail/confirm          a member here       { ids: string[], device } → { confirmed }: this device has them;
  *                                                          an item goes once every device listed has it

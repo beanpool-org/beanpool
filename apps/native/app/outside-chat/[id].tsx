@@ -26,7 +26,7 @@ import {
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { enterChatInPlace, leaveChatInPlace } from '../../utils/db';
-import { OutsideMailError, outsideQuiet, reportOutsideLine, sendFromBox, sendOutsideChange, setOutsideQuiet } from '../../utils/outside-mail';
+import { OutsideMailError, heldReceiptsOn, outsideQuiet, reportOutsideLine, sendFromBox, sendOutsideChange, setOutsideQuiet } from '../../utils/outside-mail';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
 import { blockFromAcross, OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
@@ -92,6 +92,9 @@ export default function OutsideChatScreen() {
         setLines(c ? await ctx.store.lines(c.id).catch(() => []) : []);
         setChanges(c ? await ctx.store.changes(c.id).catch(() => []) : []);
         setQuiet(c ? await outsideQuiet(ctx.store, ctx.identity.publicKey, c.peerKey).catch(() => false) : false);
+        // Opened: a chat whose first line the member-here mark let in straight away lets its held receipts go (core
+        // outsideHeldReceipts); a request opened still holds them ("They will not know you saw this unless you accept").
+        if (c) await heldReceiptsOn(ctx, c.id, 'open').catch(() => null);
     }, [id, where]);
 
     useEffect(() => {
@@ -166,6 +169,7 @@ export default function OutsideChatScreen() {
         const ctx = await outsideContext(where);
         if (!ctx || !chat) return;
         await ctx.store.decide(ctx.identity.publicKey, chat.id, state);
+        await heldReceiptsOn(ctx, chat.id, state === 'open' ? 'accept' : 'decline').catch(() => null);
         if (state === 'declined') { router.back(); return; }
         await load();
     };
@@ -193,6 +197,7 @@ export default function OutsideChatScreen() {
                     // the one that holds and rings their lines (#3310 r3 review F1).
                     await blockFromAcross(where, chat.peerKey);
                     const ctx = await outsideContext(where);
+                    if (ctx) await heldReceiptsOn(ctx, chat.id, 'block').catch(() => null);
                     if (ctx) await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined');
                     router.back();
                 },
@@ -208,6 +213,7 @@ export default function OutsideChatScreen() {
         try {
             await reportOutsideLine(ctx, reporting.id, reason);
             await blockFromAcross(where, chat.peerKey);
+            await heldReceiptsOn(ctx, chat.id, 'block').catch(() => null);
             await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined');
             Alert.alert(t('Reported'), reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => { setReporting(null); router.back(); } }]);
         } catch (e) {

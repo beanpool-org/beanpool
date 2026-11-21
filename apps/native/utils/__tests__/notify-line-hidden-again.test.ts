@@ -170,8 +170,29 @@ describe('the named line is for one visit (useNotifyLine)', () => {
 // ---- The class: every place that draws a named line, how it is hidden while mounted, and its render row ----------------
 const APP = join(__dirname, '..', '..');
 const TESTS = join(APP, 'utils', '__tests__');
-type PlaceRow = { hiddenBy: 'focus' | 'visible'; test: string; row: string };
+/**
+ * `prop` (slice N2b): a component drawn inside one screen, told by that screen whether it is in front. `from` is the screen,
+ * which must hold `const <name> = useScreenShowing();` and hand that name to the component's `showing`.
+ */
+type PlaceRow = { hiddenBy: 'focus' | 'visible' | 'prop'; from?: string; test: string; row: string };
 const PLACES: Record<string, PlaceRow> = {
+    'components/EventDetail.tsx': {
+        hiddenBy: 'prop',
+        from: 'app/post/[id].tsx',
+        test: 'notify-n2b-event-render.test.ts',
+        row: 'a page covered by another screen loses its line for good (leaving is the no)',
+    },
+    'components/home/HomeCardBodies.tsx': {
+        hiddenBy: 'prop',
+        from: 'app/(tabs)/index.tsx',
+        test: 'notify-n2b-interests-render.test.ts',
+        row: 'Home covered by a screen opened from it, then shown again: the line is gone, and the next star brings none',
+    },
+    'app/forum/[id].tsx': {
+        hiddenBy: 'focus',
+        test: 'forum-render.test.ts',
+        row: 'a screen opened over the topic and back: the follow line is gone, and the bell asks nothing more',
+    },
     'components/MyDealsSheet.tsx': {
         hiddenBy: 'visible',
         test: 'my-deals-listing-line-render.test.ts',
@@ -231,7 +252,7 @@ describe('every place that draws a named line is hidden then shown again with no
     });
 
     for (const [file, p] of Object.entries(PLACES)) {
-        it(`${file}: hidden by its ${p.hiddenBy === 'focus' ? 'focus (useScreenShowing)' : 'visible'}, and its row in ${p.test}`, () => {
+        it(`${file}: hidden by its ${p.hiddenBy === 'focus' ? 'focus (useScreenShowing)' : p.hiddenBy === 'prop' ? `screen's focus (${p.from})` : 'visible'}, and its row in ${p.test}`, () => {
             const text = readFileSync(join(APP, file), 'utf8');
             const calls = callsIn(text);
             expect(calls).toHaveLength(1);
@@ -242,6 +263,13 @@ describe('every place that draws a named line is hidden then shown again with no
             if (p.hiddenBy === 'focus') {
                 const name = args[1];
                 expect(text).toMatch(new RegExp(`const ${name} = useScreenShowing\\(\\);`));
+            } else if (p.hiddenBy === 'prop') {
+                // The component takes `showing` and hands it on; its screen holds the focus and passes it, never a plain true.
+                expect(args[1]).toBe('showing');
+                const screen = readFileSync(join(APP, p.from!), 'utf8');
+                const held = /const (\w+) = useScreenShowing\(\);/.exec(screen);
+                expect(held, `${p.from} holds useScreenShowing`).toBeTruthy();
+                expect(screen).toContain(`showing={${held![1]}}`);
             } else {
                 expect(args[1]).toMatch(/\bvisible\b/);
             }

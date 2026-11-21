@@ -21,7 +21,7 @@ import {
     lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
 } from '../../utils/db';
 import { PerItemFields } from '../../components/PerItemFields';
-import { chatMoment, noteNotifyMoment } from '../../components/NotifyLine';
+import { chatMoment, noteNotifyMoment, useScreenShowing } from '../../components/NotifyLine';
 import { PerItemTakeUp } from '../../components/PerItemTakeUp';
 import {
     carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
@@ -222,6 +222,8 @@ function confirmWorkedLabel(priceType: string | null | undefined): string {
 
 function PostDetailModal() {
     const insets = useSafeAreaInsets();
+    // Whether this screen is the one in front: an event's named line goes when the page is covered (slice N2b).
+    const inFront = useScreenShowing();
     const { theme, colors } = useTheme();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -1013,7 +1015,7 @@ function PostDetailModal() {
 
     // Events have their own screen: no price, no escrow, RSVP instead of accept (docs/events-on-the-map.md §3).
     if (post.type === 'event') {
-        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} pinsOn={pinsOn} />;
+        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} pinsOn={pinsOn} showing={inFront} />;
     }
     // A poll's page (slice C1, DESIGN-card-style-box-fable.md §2): the Market's compact row opens it. The page is the poll's
     // own card, as the web's is (MarketplacePage setSelectedPost), under this screen's Back: its answers, its Close Poll and its

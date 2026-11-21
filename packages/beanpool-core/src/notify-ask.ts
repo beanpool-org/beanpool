@@ -17,6 +17,7 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
 import { localDay } from './home-tips.js';
+import { t } from './words.js';
 
 const DAY_MS = 86_400_000;
 
@@ -188,6 +189,28 @@ export function notifyAsks(i: NotifyAskInput): NotifyAsks {
     const fact = notifyTurnOn(p) !== 'none' && !!i.waited && since(r.factAt) >= NOTIFY_FACT_DAYS * DAY_MS && free;
 
     return { join, once, line, home, fact, firstSteps: once ? null : notifyFirstStepsLine(r, p), bell: notifyTurnOn(p) !== 'none' };
+}
+
+/**
+ * The named lines at the member's own acts (amend2 §12.3 slice N2a; the first design §4.2, amend1 §4.3), each kind shown
+ * once on a phone (the record's `lines`): a first message sent ('answer'), a first message read or a request accepted
+ * ('again'), a first listing ('listing'), a first offer or request on someone's listing ('offer'), an ask to join ('join').
+ * One line with one button and no "Not now": leaving the screen is the no.
+ */
+export const NOTIFY_LINE_KINDS = ['answer', 'again', 'listing', 'offer', 'join'] as const;
+export type NotifyLineKind = typeof NOTIFY_LINE_KINDS[number];
+
+/**
+ * A named line's words: the offer, and what it says once the phone allows notifications. `name` is the person (answer,
+ * again, offer) or the community (join) they wait on; without one, or for a first listing, "someone".
+ */
+export function notifyLineWords(kind: NotifyLineKind, name?: string | null): { line: string; done: string; button: string } {
+    const who = kind === 'listing' ? '' : (name ?? '').trim();
+    const button = t('Tell me');
+    if (!who) return { line: t('Hear when someone answers.'), done: t("You'll hear when someone answers."), button };
+    if (kind === 'again') return { line: t('Hear when {name} writes again.', { name: who }), done: t("You'll hear when {name} writes again.", { name: who }), button };
+    if (kind === 'offer') return { line: t('Hear when {name} says yes.', { name: who }), done: t("You'll hear when {name} says yes.", { name: who }), button };
+    return { line: t('Hear when {name} answers.', { name: who }), done: t("You'll hear when {name} answers.", { name: who }), button };
 }
 
 export type NotifyAskEvent =

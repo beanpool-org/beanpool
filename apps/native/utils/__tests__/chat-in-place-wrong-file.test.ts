@@ -112,7 +112,6 @@ vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => {}) }));
 // The route's check (held-chats.ts) imports Chat's blocklist read, which loads react-native: nobody is blocked here.
 vi.mock('../blocklist', () => ({ getBlockedUsers: vi.fn(async () => []) }));
 vi.mock('../crypto', async (orig) => ({

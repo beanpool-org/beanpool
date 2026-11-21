@@ -113,7 +113,16 @@ vi.mock('../typed-place', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => 'bundled://fox') }));
 vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => ({ kind: 'claimed' })) }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => 'unanswered') }));
+// No named line on these screens here (slice N2a draws it in its own suites): the rule answers no, unless a row says yes.
+vi.mock('../notification-permission', () => ({ offerNamedLine: vi.fn(async () => false) }));
+// The screen in front, or a screen opened over it: useFocusEffect never runs here (above), so the screen's focus as the
+// named line reads it (components/NotifyLine.tsx useScreenShowing; its own wiring is notify-line-hidden-again.test.ts's).
+const screenFocus = vi.hoisted(() => ({ inFront: true, listeners: new Set<() => void>() }));
+vi.mock('../../components/NotifyLine', async (importOriginal) => {
+    const { useSyncExternalStore } = await import('react');
+    const subscribe = (l: () => void) => { screenFocus.listeners.add(l); return () => { screenFocus.listeners.delete(l); }; };
+    return { ...(await importOriginal<Record<string, unknown>>()), useScreenShowing: () => useSyncExternalStore(subscribe, () => screenFocus.inFront) };
+});
 // The registrations a remembered knock runs (web push W4), never the phone's push service itself here.
 const push = vi.hoisted(() => ({ registerAfterKnock: vi.fn(async (_community: string) => {}) }));
 vi.mock('../../services/push-notifications', () => push);
@@ -121,6 +130,7 @@ vi.mock('../../components/AddressSearch', () => ({ AddressSearch: () => null }))
 
 import FindCommunityScreen from '../../app/find-community';
 import { KNOCK_MESSAGES } from '../knock';
+import { offerNamedLine } from '../notification-permission';
 
 const RIVERSIDE = 'https://riverside.example.org';
 const DRAFT = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: '', createdAt: '2026-10-29T00:00:00.000Z', mnemonic: Array(12).fill('word') };
@@ -141,6 +151,8 @@ beforeEach(() => {
     keys.knockKeyForThisPhone.mockImplementation(async (held: any) => held ?? { identity: DRAFT, createdHere: true });
     keys.commitKnockKey.mockImplementation(async (key: any, callsign: string) => ({ ...key.identity, callsign }));
     phoneKey.reads = []; phoneKey.stored = null; phoneKey.written = []; phoneKey.draft = { ...DRAFT };
+    screenFocus.inFront = true;
+    vi.mocked(offerNamedLine).mockClear();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -265,6 +277,24 @@ describe('Find a community with no account on the phone', () => {
         // The app is given the phone's account as it is stored: not renamed, and not the draft.
         expect(who.setIdentity).toHaveBeenCalledWith(KIM);
         expect(host.textContent).not.toContain('This phone holds a different BeanPool account');
+    });
+
+    // Fix round of #3332's deciding review: this screen stays mounted under one opened over it (a community's card), so the
+    // named line is for one visit (the class: notify-line-hidden-again.test.ts).
+    it('asked here, then a screen opened over Find a community and back: the named line is gone', async () => {
+        vi.mocked(offerNamedLine).mockResolvedValueOnce(true);
+        await openFormAndSend();
+        expect(knocks.sendKnock).toHaveBeenCalledTimes(1);
+        expect(byId('notify-line')?.textContent).toContain('Hear when riverside.example.org answers.');
+        await act(async () => { screenFocus.inFront = false; screenFocus.listeners.forEach((l) => l()); });
+        await settle();
+        expect(byId('notify-line')).toBeNull();
+        await act(async () => { screenFocus.inFront = true; screenFocus.listeners.forEach((l) => l()); });
+        await settle();
+        expect(host.textContent).toContain(KNOCK_MESSAGES.waiting);
+        expect(byId('notify-line')).toBeNull();
+        expect(byId('notify-line-done')).toBeNull();
+        expect(vi.mocked(offerNamedLine).mock.calls.map((c) => c[0])).toEqual(['join']);
     });
 
     it('an account that changes between Send\'s two reads is refused and said: nothing is written, nothing is sent', async () => {

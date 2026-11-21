@@ -68,7 +68,7 @@ function card(over: { set?: string; busy?: boolean; global?: boolean } = {}) {
     document.body.appendChild(host);
     root = createRoot(host);
     const words = notifyOnceWords({ global: !!over.global, community: 'Riverside' });
-    act(() => { root!.render(createElement(NotifyAskCard, { words, colors, busy: !!over.busy, onTurnOn, onLater })); });
+    act(() => { root!.render(createElement(NotifyAskCard, { words, colors, busy: !!over.busy, onTurnOn, onLater }) as unknown as Parameters<Root['render']>[0]); });
     return { onTurnOn, onLater, colors };
 }
 

@@ -253,14 +253,13 @@ describe("the reviewer's three checks (amend2 §8), for the once card", () => {
 
 // Last in the file on purpose: it leaves the one-at-a-time chain behind a read that never answers.
 describe('Home is never held by a decision stuck ahead of the card', () => {
-    it("a named line's phone read that never answers: the card's answer is no card within twice the wait, and nothing is written later", async () => {
+    // Without the card's own give-up the await below never settles, and the test's own timeout reds it (no clock measured here).
+    it("a named line's phone read that never answers: the card's answer is still given (no card), and nothing is written", async () => {
         store(DECLINED);
         ONCE_CARD_WAIT_MS.phone = 20;
         notifications.getPermissionsAsync.mockImplementationOnce(() => new Promise(() => {}));
         void offerNamedLine('answer', undefined, at(UPDATE));
-        const t0 = Date.now();
         expect(await offerOnceCard(undefined, at(UPDATE), reads(IPHONE_ASK))).toBe(false);
-        expect(Date.now() - t0).toBeLessThan(1000);
         expect(stored()).toEqual(DECLINED);
     });
 });

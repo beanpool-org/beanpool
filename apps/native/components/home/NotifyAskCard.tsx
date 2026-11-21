@@ -27,35 +27,35 @@ export function NotifyAskCard({ words, colors, busy, onTurnOn, onLater }: {
     onTurnOn: () => void;
     onLater: () => void;
 }) {
-    const s = notifyAskCardStyles;
     return (
         <HomeCard id="notify-once" caption={words.band} colors={colors} hue="sky" testID="home-notify-once">
-            <Text style={[s.title, { color: colors.text.heading }]} accessibilityRole="header" testID="notify-once-title">{words.title}</Text>
-            <Text style={[s.body, { color: colors.text.body }]}>
-                {words.never} <Text style={[s.strong, { color: colors.text.heading }]}>{words.only}</Text>
+            <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header" testID="notify-once-title">{words.title}</Text>
+            <Text style={[styles.body, { color: colors.text.body }]}>
+                {words.never} <Text style={[styles.strong, { color: colors.text.heading }]}>{words.only}</Text>
             </Text>
-            <Text style={[s.arrives, { color: colors.text.secondary }]} testID="notify-once-arrives">{words.arrives} {words.ads}</Text>
+            <Text style={[styles.arrives, { color: colors.text.secondary }]} testID="notify-once-arrives">{words.arrives} {words.ads}</Text>
             <FabAware id="notify-once:buttons">
                 <Pressable
-                    style={[s.turnOn, { backgroundColor: colors.action.cta }, busy && s.waiting]}
+                    style={[styles.turnOn, { backgroundColor: colors.action.cta }, busy && styles.waiting]}
                     onPress={onTurnOn}
                     disabled={busy}
                     accessibilityRole="button"
                     testID="notify-once-turn-on"
                 >
-                    {busy ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={[s.turnOnText, { color: colors.text.onBrand }]}>{words.turnOn}</Text>}
+                    {busy ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={[styles.turnOnText, { color: colors.text.onBrand }]}>{words.turnOn}</Text>}
                 </Pressable>
-                <Text style={[s.confirm, { color: colors.text.secondary }]}>{words.confirm}</Text>
-                <Pressable style={[s.later, busy && s.waiting]} onPress={onLater} disabled={busy} accessibilityRole="button" testID="notify-once-later">
-                    <Text style={[s.laterText, { color: colors.text.heading }]}>{words.later}</Text>
+                <Text style={[styles.confirm, { color: colors.text.secondary }]}>{words.confirm}</Text>
+                <Pressable style={[styles.later, busy && styles.waiting]} onPress={onLater} disabled={busy} accessibilityRole="button" testID="notify-once-later">
+                    <Text style={[styles.laterText, { color: colors.text.heading }]}>{words.later}</Text>
                 </Pressable>
             </FabAware>
         </HomeCard>
     );
 }
 
-/** The card's own styles, without colour (each colour is a token, set where it is drawn): read by home-layout-320.test.ts. */
-export const notifyAskCardStyles = StyleSheet.create({
+// The card's own styles, without colour (each colour is a token, set where it is drawn). Named `styles`, so the contrast
+// scanner (utils/button-contrast.ts) follows it and measures Turn on's words on its fill.
+const styles = StyleSheet.create({
     title: { fontSize: 16, fontWeight: '800', lineHeight: 22, marginTop: 4, marginBottom: 6 },
     body: { fontSize: 14, lineHeight: 20, marginBottom: 6 },
     strong: { fontWeight: '700' },
@@ -69,3 +69,6 @@ export const notifyAskCardStyles = StyleSheet.create({
     laterText: { fontSize: 15, fontWeight: '700', textAlign: 'center' },
     waiting: { opacity: 0.4 },
 });
+
+/** The same table, read by home-layout-320.test.ts and the card's render test. */
+export const notifyAskCardStyles = styles;

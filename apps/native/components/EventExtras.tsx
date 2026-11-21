@@ -233,7 +233,7 @@ export function EventShareAndCalendar({ post }: { post: any }) {
 
 /** What the page holds of the member's reminder choice for this event (useEventReminderChoice). */
 export interface EventReminderChoice extends EventReminderChoiceRead {
-    /** The community keeps reminders: a 404 from either read takes the whole box away. */
+    /** The community keeps reminders: a 404 from `/api/events/mine` or from a save takes the whole box away. */
     supported: boolean;
     /** This event's own choice saved (null: back to the default). */
     setOffsets: (next: number[] | null) => void;
@@ -246,7 +246,7 @@ const CHOICE_UNREAD = { supported: true, offsets: null, defaults: DEFAULT_REMIND
 /**
  * The member's reminder choice for an event they answered: what this event is set to comes from `/api/events/mine`, because
  * that is the one place the contract puts it; the member's default and their Marketplace switch from their preferences. A
- * 404 from either takes the reminder box away. A member who has just tapped Going may not be in the list yet; they read as
+ * 404 from the first takes the reminder box away. A member who has just tapped Going may not be in the list yet; they read as
  * "my default", which is exactly what the node will do for them (a new answer starts with no choice of its own).
  *
  * Held by the event page (components/EventDetail.tsx), which draws both the reminder box and the named line under the
@@ -287,8 +287,8 @@ export function useEventReminderChoice(postId: string, viewerPublicKey: string |
                 setChoice((c) => ({
                     ...c,
                     defaults: parseReminderOffsets(prefs?.[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS,
-                    // Settings' reading of the switch (app/(tabs)/settings.tsx): on unless it says 'false'.
-                    marketplaceOn: prefs?.notify_marketplace !== 'false',
+                    // Settings' reading of the switch (app/(tabs)/settings.tsx): on unless it says false.
+                    marketplaceOn: String(prefs?.notify_marketplace) !== 'false',
                     known: mineRead,
                 }));
             } catch {

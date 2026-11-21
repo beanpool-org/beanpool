@@ -134,10 +134,13 @@ describe("the guide's notifications page", () => {
         expect(notifications).toContain("The same kind of line shows once after your first listing, a request on someone's listing, a request to join, a message you read, **Going** or **Interested** on an event, a star on **What are you into?**, or following a forum topic, never more than one a day.");
     });
 
-    // Slice N2b: the reminder's true line, every time while the phone can't notify, and the interests note without its promise.
+    // Slice N2b: the reminder's true line, every time while the phone can't notify and a reminder is still to come (the fix
+    // round: never where none is left, apps/native/utils/event-extras.ts eventNoticesComing), and the interests note without its promise.
     it('says an event reminds no one while the phone does not allow notifications, in the words the phone draws', () => {
         const notifications = flat('settings/notifications.md');
+        expect(notifications).toContain(`While your phone doesn't allow notifications for BeanPool and a reminder is still to come, an event you are **Going** to or **Interested** in says`);
         expect(notifications).toContain(`says **${NOTIFY_TRUE_WORDS.reminders.replace(/^⏰ /, '')}** where its reminder would be, with **Turn on**. It says so every time, even after you said no`);
+        expect(notifications).toContain('Where no reminder is left to come, such as an event later today when your reminder is the day before, it shows your reminder choice as usual.');
         expect(notifications).toContain("**What are you into?** on **Home** says you'll be told when a neighbour asks only while your phone allows notifications.");
     });
 });

@@ -25,7 +25,8 @@ describe('the phone photo step with no picture picked', () => {
         expect(noPicture.slice(0, noPicture.indexOf('return;'))).toContain('await toWayBack();');
         // toWayBack: the way back, unless one is kept already (utils/join-steps.ts wayBackSkipped); never a stop either way.
         const to = SRC.slice(SRC.indexOf('async function toWayBack() {'), SRC.indexOf('async function handleCompleteProfile()'));
-        expect(to).toContain('if (skipWayBack) return handleConfirmSeed();');
+        // Past a kept way back: what follows it (slice N1j: the notifications screen where it shows, else Home).
+        expect(to).toContain('if (skipWayBack) return handOverFromWayBack();');
         expect(to).toContain("setMode('seedBackup');");
     });
 

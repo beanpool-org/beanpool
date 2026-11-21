@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { joinSteps, stepDot } from '../join-steps';
 
 const root = path.join(__dirname, '..', '..');
 const welcome = fs.readFileSync(path.join(root, 'app/welcome.tsx'), 'utf8');
@@ -69,6 +70,11 @@ describe('the join steps\' main button is in a footer that stays on screen', () 
         expect(inFooter.indexOf('onPress={onTurnOn}')).toBeLessThan(inFooter.indexOf('onPress={onLater}'));
         expect(src.slice(0, scrollEnd)).not.toMatch(/onPress=\{on(TurnOn|Later)\}/);
         expect(src).toMatch(/later: \{ minHeight: 48,/);
+        // Its bar is the join's last dot: 4 of 4 on an invite or a door, 3 of 3 on a claim (utils/join-steps.ts).
+        expect(src).toMatch(/<StepBar step="notify" flow=\{flow\} wayBack=\{wayBack\} notify busy=\{busy\}/);
+        expect(stepDot(joinSteps('invite', { notify: true }), 'notify')).toEqual({ at: 4, of: 4 });
+        expect(stepDot(joinSteps('global', { notify: true }), 'notify')).toEqual({ at: 4, of: 4 });
+        expect(stepDot(joinSteps('claim', { notify: true }), 'notify')).toEqual({ at: 3, of: 3 });
     });
 
     it('the invite step keeps its fields clear of the footer while typing', () => {

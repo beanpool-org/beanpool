@@ -35,10 +35,12 @@ describe('joining: the Safety Backup step', () => {
         const next = slice(s, '<Pressable', label);
         const nextBlock = s.slice(s.lastIndexOf('<Pressable', s.indexOf(label)), s.indexOf(label));
         expect(nextBlock).toContain('disabled={loading}');
-        // How it Works left the path (S5): a claim goes on to the owner's card, every other join to Home (afterWayBack).
-        expect(nextBlock).toContain("if (next === 'ownerCard') {");
-        expect(nextBlock).toContain("setMode('ownerCard')");
-        expect(nextBlock).toContain('void handleConfirmSeed();');
+        // How it Works left the path (S5). Since slice N1j the button hands over in one place (handOverFromWayBack): the
+        // notifications screen where this phone shows it, then a claim's owner's card, every other join Home (afterTheAsk).
+        expect(nextBlock).toContain('void handOverFromWayBack();');
+        const after = slice(read('app/welcome.tsx'), 'function afterTheAsk() {', '\n    }\n');
+        expect(after).toContain("setMode('ownerCard')");
+        expect(after).toContain('void handleConfirmSeed();');
         expect(nextBlock).not.toMatch(/kit|Kit/);
         expect(nextBlock).not.toContain('seedConfirmed &&');
         expect(next.length).toBeGreaterThan(0);
@@ -89,7 +91,7 @@ describe('every entry to the kit records a Yes the same way', () => {
     // phone was still "not kept" on the account, and the reminder ran on every device.
     it('the tick "I\'ve saved these words", carried past Next, records it on the account the same way, and only when ticked', () => {
         const welcome = slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'ownerCard' && pendingIdentity)");
-        const next = slice(welcome, "recordOnboardingEvent('protection_choice'", "if (next === 'ownerCard') {");
+        const next = slice(welcome, "recordOnboardingEvent('protection_choice'", 'void handOverFromWayBack();');
         const ticked = slice(next, 'if (seedConfirmed) {', '}');
         expect(ticked).toContain("AsyncStorage.getItem('beanpool_anchor_url')");
         expect(ticked).toContain('keepWords(u, who)');

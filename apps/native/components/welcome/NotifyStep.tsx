@@ -72,7 +72,7 @@ export function NotifyStep({ words, flow, wayBack, busy, onBack, onTurnOn, onLat
             </ScrollView>
             <StepFooter testID="step-footer-notify">
                 <Pressable
-                    style={[styles.turnOn, { backgroundColor: busy ? colors.border.strong : colors.action.cta }]}
+                    style={[styles.turnOn, { backgroundColor: colors.action.cta }, busy && styles.waiting]}
                     onPress={onTurnOn}
                     disabled={busy}
                     accessibilityRole="button"

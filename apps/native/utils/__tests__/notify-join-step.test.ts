@@ -28,7 +28,7 @@ const calls = vi.hoisted(() => ({ order: [] as string[] }));
 const notifications = vi.hoisted(() => ({
     getPermissionsAsync: vi.fn(async () => ({ status: 'undetermined', canAskAgain: true })),
     requestPermissionsAsync: vi.fn(async () => ({ status: 'granted', canAskAgain: true })),
-    setNotificationChannelAsync: vi.fn(async () => null),
+    setNotificationChannelAsync: vi.fn(async (_id: string, _channel?: unknown): Promise<null> => null),
     AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1, NONE: 0 },
 }));
 vi.mock('expo-notifications', () => ({ default: notifications, ...notifications }));

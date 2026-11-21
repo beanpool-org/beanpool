@@ -224,8 +224,8 @@ describe('the join\'s last screen, at 320 dp with 1.3x text', () => {
 
 // ── Every language, and the pseudo one, at 320 dp with 1.3x text ─────────────────────────────────────────────────────
 const FONT_SCALE = 1.3;
-const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
-const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
+const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\ufe0f\u200c\u200d]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
 const widthOf = (text: string, size: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * size * FONT_SCALE, 0);
 const widest = (text: string) => text.split(/[\s~]+/).flatMap((w) => (CJK.test(w) ? Array.from(w) : [w])).reduce((a, w) => (widthOf(w, 1) > widthOf(a, 1) ? w : a), '');
 /** The card's line: 320 less the scroll's 24 and the card's 24 a side; the foot's: less its 24 a side and the button's 16. */

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView, ItemTakeUpIn, AddressListFields } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, FORUM_PUSH_PREF, isLang, standingLines, type Lang } from '@beanpool/core';
+import { notifyReachCount, type NotifyReach, type NotifyReachRow } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -2435,8 +2436,11 @@ export function getAdminMembersPage(after: [string, string] | null, limit: numbe
  * The counts the admins' screens show where they listed every member to count them (/admin/data's `counts`): members not
  * pruned, of them the community's own accounts (treasuries), those who came in through the open door ('open:<provider>'),
  * the owners among them, and their phones' platforms as the list's rows give them (each push token's platform, or unknown).
+ * `notify` is the owner's count on the Members page (notifications N6): members a phone can notify, of how many, by
+ * core's rule (notifyReachCount: the community's own accounts, visitors and retired duplicates are not members there).
+ * A count only: it names nobody.
  */
-export function getAdminMemberCounts(): { members: number; treasuries: number; doorMembers: number; owners: number; platforms: Record<string, number> } {
+export function getAdminMemberCounts(): { members: number; treasuries: number; doorMembers: number; owners: number; platforms: Record<string, number>; notify: NotifyReach } {
     const r = db.prepare(`SELECT COUNT(*) AS members,
             COALESCE(SUM(CASE WHEN is_treasury = 1 THEN 1 ELSE 0 END), 0) AS treasuries,
             COALESCE(SUM(CASE WHEN invited_by LIKE 'open:%' THEN 1 ELSE 0 END), 0) AS doorMembers
@@ -2444,16 +2448,34 @@ export function getAdminMemberCounts(): { members: number; treasuries: number; d
     const live = new Set(db.prepare("SELECT public_key FROM members WHERE status != 'pruned'").pluck().all() as string[]);
     const owners = listNodeRoles().filter(role => role.role === 'owner' && live.has(role.member_pubkey)).length;
     const platformOf = new Map<string, string>();
+    // Every token's platform, for the owner's count: a member counts as a phone when any one of theirs is a phone's.
+    const tokenPlatformsOf = new Map<string, Array<string | null>>();
     for (const row of db.prepare('SELECT public_key, platform FROM push_tokens').all() as Array<{ public_key: string; platform: string | null }>) {
         if (row.public_key && row.platform) platformOf.set(row.public_key, row.platform.toLowerCase());
+        if (row.public_key) {
+            const held = tokenPlatformsOf.get(row.public_key);
+            if (held) held.push(row.platform);
+            else tokenPlatformsOf.set(row.public_key, [row.platform]);
+        }
     }
+    const reachRows = db.prepare(`SELECT m.public_key, m.status, m.is_treasury, m.is_visitor, r.member_pubkey IS NOT NULL AS retired
+        FROM members m LEFT JOIN retired_accounts r ON r.member_pubkey = m.public_key WHERE m.status != 'pruned'`).all() as
+        Array<{ public_key: string; status: string | null; is_treasury: number | null; is_visitor: number | null; retired: number }>;
+    const notify = notifyReachCount(reachRows.map((row): NotifyReachRow => ({
+        accountId: row.public_key,
+        status: row.status,
+        isTreasury: row.is_treasury === 1,
+        isVisitor: row.is_visitor === 1,
+        retired: row.retired === 1,
+        tokenPlatforms: tokenPlatformsOf.get(row.public_key) ?? [],
+    })));
     const platforms: Record<string, number> = { ios: 0, android: 0, web: 0, unknown: 0 };
     for (const key of live) {
         const p = platformOf.get(key) || 'unknown';
         const bucket = p === 'ios' || p === 'android' ? p : p === 'web' || p === 'pwa' ? 'web' : 'unknown';
         platforms[bucket]++;
     }
-    return { ...r, owners, platforms };
+    return { ...r, owners, platforms, notify };
 }
 
 // Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member

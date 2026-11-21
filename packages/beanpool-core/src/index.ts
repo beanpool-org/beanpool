@@ -55,6 +55,8 @@ export * from './beans-sign.js';
 export * from './address-reach.js';
 export * from './android-on-node-words.js';
 export * from './first-trade-words.js';
+// The owner's count on the Members page (notifications N6): members a phone can notify, of how many; a count, never names.
+export * from './notify-reach.js';
 export * from './need-answer-words.js';
 export * from './listing-price.js';
 export * from './post-type-lines.js';

@@ -441,6 +441,13 @@ export function notifyJoinChoice(o: NotifyJoinOutcome): 'on' | 'later' | 'no' {
 /** Whose join it is, for the screen's third line: a community's member, the global community's, or the owner of a claim. */
 export type NotifyJoinKind = 'community' | 'global' | 'owner';
 
+/**
+ * Who shows the pop-up a tap on "Turn on notifications" brings, for the line under the button: the phone (the phone app),
+ * the browser (the web app, slice N5a), or nobody, where the browser already allows this site and asks nothing more (then
+ * no line: nothing is promised that won't come).
+ */
+export type NotifyPrompter = 'phone' | 'browser' | 'none';
+
 export interface NotifyJoinWords {
     title: string;
     /** The reason no other app can give, in two sentences, the second the stronger. */
@@ -450,7 +457,7 @@ export interface NotifyJoinWords {
     arrives: string;
     ads: string;
     turnOn: string;
-    /** Under the main button: the phone's own pop-up follows, so it is no surprise. */
+    /** Under the main button: the phone's (or browser's) own pop-up follows, so it is no surprise. Empty where none follows. */
     confirm: string;
     later: string;
 }
@@ -461,7 +468,7 @@ export interface NotifyJoinWords {
  * invited; "Never ads." (a push is one of a fixed list of sentences, never free text). Never "Nothing else.": votes,
  * reviews, group invites and account-safety notices come too.
  */
-export function notifyJoinWords(o: { kind: NotifyJoinKind; community?: string | null; inviter?: string | null }): NotifyJoinWords {
+export function notifyJoinWords(o: { kind: NotifyJoinKind; community?: string | null; inviter?: string | null; prompter?: NotifyPrompter }): NotifyJoinWords {
     const community = (o.community ?? '').trim();
     const inviter = (o.inviter ?? '').trim();
     const arrives = o.kind === 'owner'
@@ -478,7 +485,66 @@ export function notifyJoinWords(o: { kind: NotifyJoinKind; community?: string | 
         arrives,
         ads: t('Never ads.'),
         turnOn: t('Turn on notifications'),
-        confirm: t('Your phone will ask you to confirm.'),
+        confirm: o.prompter === 'none' ? '' : o.prompter === 'browser' ? t('Your browser will ask you to confirm.') : t('Your phone will ask you to confirm.'),
         later: t('Later'),
     };
+}
+
+/**
+ * A browser, read for the rule (slice N5a; amend2 §10: the web's join gets the same last screen where the browser can
+ * deliver). Nothing here asks the browser: each is read from what it already says.
+ *
+ * - `push`: web push can reach this browser at all: a computer's browser, a phone's, BeanPool opened from an iPhone's
+ *   Home Screen. Not Safari on an iPhone outside the Home Screen, a private window, a page over http, a browser with no
+ *   push (apps/pwa lib/web-push.ts pushPlace).
+ * - `permission`: the browser's own `Notification.permission` ('default', 'granted', 'denied'; null with no Notification).
+ * - `on`: this account's notifications are on in this browser: the browser allows them and the community holds this
+ *   browser as the member's (a Tell me from the waiting page is not that: only a tap on Turn on is).
+ */
+export interface NotifyBrowser {
+    push: boolean;
+    permission: string | null;
+    on: boolean;
+}
+
+/**
+ * A browser as the rule's phone: no push, nothing to turn on and nothing drawn; this account's notifications on here, it
+ * allows; else it can still ask unless the browser blocks this site ('denied', which only the browser's own settings undo,
+ * as an iPhone's Don't Allow). A browser that allows the site while this account's notifications are off here is one that
+ * can still ask: Turn on then asks it nothing more (its prompter is 'none') and makes this account's subscription.
+ * Browsers say 'default' after a prompt closed with no answer: still able to ask, never a no.
+ */
+export function notifyBrowserPhone(b: NotifyBrowser): NotifyPhone {
+    if (!b.push) return { available: false, granted: false, canAskAgain: false };
+    return { available: true, granted: b.on, canAskAgain: b.permission !== 'denied' };
+}
+
+/** Who shows a pop-up at the web's Turn on: the browser, unless it already allows this site (it asks nothing then). */
+export function notifyBrowserPrompter(b: NotifyBrowser): NotifyPrompter {
+    return b.permission === 'granted' ? 'none' : 'browser';
+}
+
+/**
+ * What a tap on the web's Turn on ended in (apps/pwa lib/web-push.ts turnOnWebPush): this account's notifications on
+ * ('ok'), the browser blocked them ('blocked'), its prompt closed with no answer ('dismissed': browsers report 'default'
+ * then), no push here ('cannot'), or the browser allowed them and the community did not take the subscription ('failed').
+ */
+export type NotifyBrowserResult = 'ok' | 'blocked' | 'dismissed' | 'cannot' | 'failed';
+
+/**
+ * What that answer records and counts, as the phone's: 'granted' (on; counted 'on'), 'declined' (the browser's no;
+ * recorded apart with its date, counted 'no'), 'unanswered' (a "Later", never a no; counted 'later'). Null for 'failed':
+ * nothing is on yet, so nothing is recorded or counted, and the screen says so with its buttons still there.
+ */
+export function notifyBrowserOutcome(r: NotifyBrowserResult): Exclude<NotifyJoinOutcome, 'settings' | 'later'> | null {
+    if (r === 'ok') return 'granted';
+    if (r === 'blocked') return 'declined';
+    return r === 'failed' ? null : 'unanswered';
+}
+
+/** The record's event for a way off a soft ask: the browser's or phone's yes, its no, or a "Later" (on `surface`). */
+export function notifyOutcomeEvent(o: NotifyJoinOutcome, surface: NotifyAskSurface): NotifyAskEvent {
+    if (o === 'granted') return { type: 'granted' };
+    if (o === 'declined' || o === 'settings') return { type: 'phone-no' };
+    return { type: 'later', surface };
 }

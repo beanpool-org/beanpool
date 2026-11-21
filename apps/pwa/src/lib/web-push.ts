@@ -12,8 +12,12 @@
  * exists ({@link pushPlace}): an iPhone outside the Home Screen, a browser with no push, a private window, a page reached
  * over http, notifications blocked. The waiting page's own 5-minute check and the 30-day invite carry the yes either way.
  */
-import { t, verifyPushNotice, word } from '@beanpool/core';
-import { sendSignedAt, signedFetchAt } from './api';
+import {
+    markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyBrowserOutcome, notifyBrowserPhone, notifyBrowserPrompter, notifyJoinStep, notifyOutcomeEvent, t,
+    verifyPushNotice, word, type NotifyAskEvent, type NotifyAskRecord, type NotifyAskSurface, type NotifyBrowser, type NotifyBrowserResult,
+    type NotifyJoinPath, type NotifyPrompter,
+} from '@beanpool/core';
+import { getNodeApiUrl, sendSignedAt, signedFetchAt } from './api';
 import { refuseIfNodeTooOld } from './node-version-gate';
 import type { BeanPoolIdentity } from './identity';
 import { APP_STORE_URL, PLAY_URL } from './peek';
@@ -42,14 +46,6 @@ export const TELL_ME_WORDS = {
 } as const;
 
 export const FORGED_NOTICE_LINE = TELL_ME_WORDS.forged;
-
-/** The phone's "Turn on notifications?" words, word for word (apps/native utils/notification-permission.ts), for a member's tap. */
-export const NOTIFICATION_CARD_WORDS = {
-    title: word('Turn on notifications?'),
-    body: word('So you hear when someone answers you, messages you, or asks to join. Nothing else.'),
-    turnOn: word('Turn on'),
-    notNow: word('Not now'),
-} as const;
 
 /** Where this browser stands for push, by feature tests in the design's order (§2.4). */
 export type PushPlace =
@@ -430,6 +426,83 @@ export function webPushOrigin(nodeApiUrl: string): string | null {
     } catch {
         return null;
     }
+}
+
+// ── The soft ask: the join's last screen and Home's once card (slice N5a) ──────────────────────────────────────────
+
+/**
+ * This account's notifications asks and answers in this browser (scratch/fable-design/DESIGN-notify-and-backup-asks-fable-amend2.md
+ * §6, §7, §10; slice N5a): core's NotifyAskRecord, the phone's record (apps/native utils/notification-permission.ts) kept
+ * here for each key, so another account in this browser starts its own. A new key has none: an empty record.
+ */
+const NOTIFY_ASK_KEY = 'beanpool_notify_ask';
+
+export function readNotifyAsk(publicKey: string): NotifyAskRecord {
+    try {
+        return notifyAskRecordFrom(JSON.parse(localStorage.getItem(`${NOTIFY_ASK_KEY}:${publicKey}`) ?? 'null'));
+    } catch {
+        return {};
+    }
+}
+
+/** One event into this account's record here (core's markNotifyAsk), keeping the rest. Storage off: not kept. */
+export function markNotifyAskHere(publicKey: string, e: NotifyAskEvent, now: number = Date.now()): void {
+    try {
+        localStorage.setItem(`${NOTIFY_ASK_KEY}:${publicKey}`, JSON.stringify(markNotifyAsk(readNotifyAsk(publicKey), e, now)));
+    } catch { /* not kept: the rule reads an older record */ }
+}
+
+/**
+ * This browser for core's rule (notifyBrowserPhone), read from what it already says and never asking: web push here at
+ * all (at the community the app talks to, by feature tests: {@link pushPlace}), its permission, and whether this
+ * account's notifications are on here ({@link webPushState}).
+ */
+export function notifyBrowserHere(publicKey: string | null, env: PushEnv = pushEnv()): NotifyBrowser {
+    const origin = webPushOrigin(getNodeApiUrl());
+    const place = pushPlace(env);
+    return {
+        push: !!origin && (place.kind === 'ok' || place.kind === 'blocked'),
+        permission: env.permission,
+        on: !!publicKey && webPushState(origin, publicKey, env) === 'on',
+    };
+}
+
+/** Who will ask at Turn on here: the browser, or nobody where it already allows this site (core's notifyBrowserPrompter). */
+export function notifyPrompterHere(publicKey: string | null, env: PushEnv = pushEnv()): NotifyPrompter {
+    return notifyBrowserPrompter(notifyBrowserHere(publicKey, env));
+}
+
+/**
+ * Whether the join's last screen shows in this browser now (core's notifyJoinStep): only where web push can reach it, the
+ * browser can still ask, and this account's notifications are not on here. `publicKey` null (no account yet, for the
+ * dots): a new account's empty record.
+ */
+export function notifyJoinDueHere(path: NotifyJoinPath, publicKey: string | null, env: PushEnv = pushEnv(), now: number = Date.now()): boolean {
+    return notifyJoinStep(path, { record: publicKey ? readNotifyAsk(publicKey) : {}, phone: notifyBrowserPhone(notifyBrowserHere(publicKey, env)), now });
+}
+
+/** Whether Home's once card shows for this account here now (core's notifyAsks `once`, the phone's N1h rule). */
+export function notifyOnceDueHere(publicKey: string, env: PushEnv = pushEnv(), now: number = Date.now()): boolean {
+    return notifyAsks({ record: readNotifyAsk(publicKey), phone: notifyBrowserPhone(notifyBrowserHere(publicKey, env)), now }).once;
+}
+
+/**
+ * "Turn on notifications" on the join's last screen or Home's once card: {@link turnOnWebPush} (the browser's own prompt,
+ * only inside this tap: nothing is awaited before it), and its answer kept as core says (notifyBrowserOutcome): a yes; the
+ * browser's no, apart and dated; a prompt closed with no answer (browsers say 'default' then) as a "Later", never a no. A
+ * subscription the community didn't take keeps nothing: the caller says so and keeps its buttons. Never throws.
+ */
+export async function turnOnFromAsk(identity: BeanPoolIdentity, lang: string, surface: NotifyAskSurface, env: PushEnv = pushEnv()): Promise<NotifyBrowserResult> {
+    const origin = webPushOrigin(getNodeApiUrl());
+    const r: NotifyBrowserResult = origin ? await turnOnWebPush(origin, identity, lang, env).then(a => (a.ok ? 'ok' : a.reason)) : 'cannot';
+    const outcome = notifyBrowserOutcome(r);
+    if (outcome) markNotifyAskHere(identity.publicKey, notifyOutcomeEvent(outcome, surface));
+    return r;
+}
+
+/** "Later" on either: dated, never a no; on the once card it also puts the card away. */
+export function laterFromAsk(publicKey: string, surface: NotifyAskSurface): void {
+    markNotifyAskHere(publicKey, { type: 'later', surface });
 }
 
 /**

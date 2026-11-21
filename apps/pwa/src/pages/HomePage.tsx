@@ -112,7 +112,10 @@ import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-li
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { ForumVisitorHome } from '../components/forum/ForumVisitorHome';
 import { LINK_WORDS } from '../components/forum/ForumLinks';
-import { FORUM_VISITOR_WORDS } from '@beanpool/core';
+import { FORUM_VISITOR_WORDS, notifyJoinWords } from '@beanpool/core';
+import { NotifyAsk } from '../components/NotifyAsk';
+import { useNotifyOnce } from '../lib/use-web-push-member';
+import { notifyPrompterHere } from '../lib/web-push';
 import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, liftedStyle, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
 import { LearnHomeBody } from '../components/LearnHomeBody';
 import { ArrangeStrip, type StripRow } from '../components/ArrangeStrip';
@@ -1313,6 +1316,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const cacheKey = useMemo(() => homeCacheKey(publicKey), [publicKey, landing]);
 
     const [answer, setAnswer] = useState<HomeAnswer | null>(null);
+    // The join's notifications ask, once, for a member already in (slice N5a): first, and the way-back card waits for the
+    // next landing (never both on one screen).
+    const notifyOnce = useNotifyOnce(identity ?? null, publicKey, currentLanguage(), !!answer);
     // The layout drawn: this browser's copy, or the newcomer's list drawn for an unknown (empty version-1) account list.
     const [layout, setLayout] = useState<HomeLayoutV2 | null>(null);
     const [status, setStatus] = useState<'loading' | 'ready' | 'offline' | 'failed' | 'signed-out'>('loading');
@@ -2835,7 +2841,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 // and its schedule's counts are all read from this answer (lib/home-cards.ts wayBackOf), never a request
                 // later, so the card is in its cell at the first paint or not at all (arriving late in the order, it moved
                 // every card after it to another cell).
-                return identity && (
+                return identity && !notifyOnce.landed && (
                     <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} onDrawn={setSafetyDrawn}
                         home={{ ...wayBackOf(a, wordsKeptHere), global: a.profile === 'global' }} onKept={keepWords}
                         keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => {
@@ -3609,6 +3615,13 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>
                 )}
                 {visitor?.joinCard}
+                {notifyOnce.open && (
+                    // The join's words (core's, the phone's card): this community by name, the global community's own line.
+                    <div className="max-w-xl">
+                        <NotifyAsk form="card" busy={notifyOnce.busy} failed={notifyOnce.failed} onTurnOn={notifyOnce.turnOn} onLater={notifyOnce.later}
+                            words={notifyJoinWords({ kind: a.profile === 'global' ? 'global' : 'community', community: a.profile === 'global' ? null : a.cards.community?.name, prompter: notifyPrompterHere(publicKey) })} />
+                    </div>
+                )}
                 {startOpen && <StartCommunityScreen demandLine={circleDemandLine((answer?.cards?.find as HomeFind | undefined)?.demand)} onClose={() => setStartOpen(false)} />}
                 {saveNote && (
                     <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">

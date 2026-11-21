@@ -91,6 +91,23 @@ export const ASKED_PUSH_WORDS = {
     switchLine: word("At most once a day, and only for what you've starred"),
 } as const;
 
+/**
+ * Whether the community a member is in tells them when someone posts a new event (`event.new`, new-event-push.ts): only
+ * where its features say `newEventPush` (a server from before slice NEa says nothing, sends no such push and takes no
+ * `notify_new_events`). Settings → Notifications shows its switch only here (slice NEb).
+ */
+export function newEventPushOn(features: object | null | undefined): boolean {
+    return (features as { newEventPush?: unknown } | null | undefined)?.newEventPush === true;
+}
+
+/** The words both apps show for the `event.new` push's switch in Settings → Notifications (slice NEb). */
+export const NEW_EVENT_PUSH_WORDS = {
+    /** The switch's name (and its label for a screen reader). */
+    switchName: word('When someone posts a new event'),
+    /** …and its line. */
+    switchLine: word('At most once a day, and only for events open to everyone here'),
+} as const;
+
 /** Where the app goes for a notice whose details it can't fetch: the tab its kind belongs to. */
 export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings' | 'people';
 
@@ -139,6 +156,10 @@ export const PUSH_NOTICE_KINDS = {
     'review.new': { body: word('You have a new review.'), tab: 'market' },
     'event.reminder': { body: word("An event you're going to starts soon."), tab: 'market' },
     'event.update': { body: word("There is news about an event you're going to."), tab: 'market' },
+    // To the members of a local community when someone posts an event for all of them (server engine/event-new-push.ts;
+    // notifications amend2 slice NEa): at most one a day each, under its own switch. It names nothing; its details open the
+    // event.
+    'event.new': { body: word('There is a new event in your community.'), tab: 'market' },
     'community.notice': { body: word('Your community has a notice for you.'), tab: 'home' },
     'community.near': { body: word('A community has started near you.'), tab: 'home' },
     // To the people a place circle holds, as it forms or takes them in, and when one of them says they're starting one

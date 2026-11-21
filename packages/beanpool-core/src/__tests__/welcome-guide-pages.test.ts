@@ -3,7 +3,7 @@
  * fable.md made of the phone's join and Home: the join's three steps with Safety Backup last (How it Works stays in a web
  * browser until the web's own slice), the WELCOME TO BEANPOOL! tile with Show me around and Got it, its band after 7 days
  * and its end at 30, First steps above the Market, and no notifications card in the join (review of #3315, inline comment
- * on welcome.tsx). The English pages; their 24 language versions follow by their source-hash (packages/beanpool-guide/README.md §6).
+ * on welcome.tsx), and since slice W2 the web app's tile and community welcome. The English pages; their 24 language versions follow by their source-hash (packages/beanpool-guide/README.md §6).
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -47,11 +47,14 @@ describe("the guide's joining page: the phone's three steps", () => {
 describe("the guide's Home page: the tile, its band, its end, the order", () => {
     const home = flat('getting-started/home.md');
 
-    it("the phone's tile: Show me around and Got it, folded after 7 days, gone at 30; the web keeps Take the tour and Not now", () => {
+    it("the tile on both apps (the web since W2): Show me around and Got it, folded after 7 days, gone at 30; no Take the tour or Not now", () => {
         expect(home).toContain(`**${WELCOME_TILE_WORDS.tour}** starts the tour (below). **${WELCOME_TILE_WORDS.gotIt}** puts the tile away.`);
-        expect(home).toContain('After 7 days, if you haven\'t tapped either, the tile folds to one line, "Welcome to BeanPool ›"');
+        expect(home).toContain(`After 7 days, if you haven't tapped either, the tile folds to one line, "${WELCOME_TILE_WORDS.band}"`);
         expect(home).toContain('30 days after you joined it is gone, whether or not you tapped anything.');
-        expect(home).toContain('In the web app, **Welcome** is a card with those first lines, **Take the tour ›** and **Not now**.');
+        // The web app's old card and its words are gone from the page (DESIGN-onboarding-home-landing-fable.md §5, slice W2).
+        expect(home).not.toContain('In the web app, **Welcome** is a card with those first lines, **Take the tour ›** and **Not now**.');
+        expect(home).not.toContain('**Take the tour ›**');
+        expect(home).not.toMatch(/\*\*Not now\*\*/);
         // The phone's Welcome no longer goes at seven days or by Not now: said for the web app only.
         expect(home).not.toContain('It says which community you are in, such as "You\'re in Riverside.", and who invited you, with **Say hello ›** to open a chat with them. An owner alone on a new community, whom nobody invited, sees "You\'re the first one here." instead, with **Invite someone ›** where they can invite. **Welcome** goes when');
         expect(home).not.toContain('**Welcome** has **Not now** instead.');
@@ -71,19 +74,22 @@ describe("the guide's notifications page", () => {
     });
 });
 
-// Slice S7: the community's own welcome under the phone's tile, in the words the app draws (core's COMMUNITY_WELCOME_CARD_WORDS).
-describe("the guide's Home page: the community's own welcome on the phone (S7)", () => {
+// Slice S7: the community's own welcome under the phone's tile, in the words the app draws (core's COMMUNITY_WELCOME_CARD_WORDS);
+// since slice W2 the web app's too, beside the tile on a wide screen.
+describe("the guide's Home page: the community's own welcome on both apps (S7, W2)", () => {
     const home = flat('getting-started/home.md');
 
     it('under the tile: the owners\' words never translated, the inviter\'s line, its ×, 30 days, and the line to read it again', () => {
-        expect(home).toContain('On the phone, under the tile, is your community\'s own welcome, headed "From" and the community\'s name, such as "From Riverside".');
+        expect(home).toContain('Under the tile is your community\'s own welcome, headed "From" and the community\'s name, such as "From Riverside".');
+        expect(home).toContain('In the web app, on a wide screen, it stands beside the tile instead, and the two run across the whole width.');
         expect(t(COMMUNITY_WELCOME_CARD_WORDS.caption, { community: 'Riverside' })).toBe('From Riverside');
         expect(home).toContain('as they wrote them: they are never translated.');
         expect(home).toContain('**Got it** on the tile leaves it there: tap its **×** to put it away.');
         expect(home).toContain(`such as "${t(COMMUNITY_WELCOME_CARD_WORDS.again, { community: 'Riverside' })}"`);
         expect(home).toContain(`sees **${t(COMMUNITY_WELCOME_CARD_WORDS.write)}** there.`);
-        // Whose invite brought you moved from the phone's tile to it; the web app's card keeps the line until its own slice.
-        expect(home).toContain('In the web app it also says who invited you, with **Say hello ›** to open a chat with them;');
-        expect(home).toContain('On the phone those lines are in your community\'s own welcome, under the tile (below).');
+        // Whose invite brought you moved from the tile to it, the phone's at S7 and the web app's at W2.
+        expect(home).not.toContain('In the web app it also says who invited you, with **Say hello ›** to open a chat with them;');
+        expect(home).toContain('Who invited you is in your community\'s own welcome, under the tile (below).');
+        expect(home).toContain('with **Say hello ›** to open a chat with them, or, for an owner alone on a new community whom nobody invited, "You\'re the first one here." with **Invite someone ›** where they can invite');
     });
 });

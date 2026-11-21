@@ -94,6 +94,10 @@ describe("the guide's pages on joining in a browser: the web's front door and do
         }
     });
 
+    it("Home's once card on the web: a join left unanswered meets it; an answer or Settings' Turn off ends it (N5a, review of d2a4734f)", () => {
+        expect(webApp).toContain("A join left on that step without an answer (the tab closed, or the page reloaded) meets the card instead. Once you answer the card, or turn notifications off in **Settings**, it doesn't come back.");
+    });
+
     it("the front door's buttons, the same on the phone and the web", () => {
         expect(joining).toContain("The first screen has three buttons, in the phone app and in the web app (the community's address followed by /app; the address alone shows the community's card");
         expect(joining).toContain('In a web browser, an invite link opens straight at your name.');

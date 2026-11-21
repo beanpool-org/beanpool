@@ -108,7 +108,7 @@ describe("the once card closed for good (review of d2a4734f: it came back after 
     const OFF_HERE = notifyBrowserPhone({ push: true, permission: 'granted', on: false });
     const once = (record: NotifyAskRecord, at: number) => notifyAsks({ record, phone: OFF_HERE, now: at }).once;
 
-    it("a yes on the card, then Turn off in Settings: no card on any later landing [closesOnce on 'granted']", () => {
+    it("a yes on the card, then off here (the browser still allows the site): no card on any later landing [closesOnce on 'granted']", () => {
         let r = markNotifyAsk<NotifyAskRecord>({}, { type: 'shown', surface: 'once' }, NOW);
         r = markNotifyAsk(r, notifyOutcomeEvent('granted', 'once'), NOW + 60_000);
         for (const at of [NOW + 3_600_000, NOW + DAY, NOW + 6 * DAY]) expect(once(r, at)).toBe(false);

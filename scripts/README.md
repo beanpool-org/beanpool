@@ -145,3 +145,13 @@ A utility script to automatically increment versions across all workspace `packa
    git push && git push --tags
    ```
 
+
+---
+
+## 🧱 5. Schema Drift Check (`deploy/schema-drift.mjs`)
+
+A read-only check to run before every deploy. It lists the tables a node's database already holds in a shape the new build's `schema.sql` won't give it, because `CREATE TABLE IF NOT EXISTS` never changes a table that is already there. It prints one line per table: `OK`, `DRIFT-EMPTY-LOCAL`, `DRIFT-HAS-ROWS` or `DRIFT-REPLICATED`. Exit `0` means every table is OK. How to run it inside a node's container, and what to do with each line: [docs/schema-drift-check.md](../docs/schema-drift-check.md).
+
+```bash
+node scripts/deploy/schema-drift.mjs --db ./state.db
+```

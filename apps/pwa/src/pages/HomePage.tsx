@@ -371,6 +371,7 @@ function MarketListingItem({
     beansOn,
     isVisitor,
     wide,
+    picture = false,
     onNavigate,
     nextImageLoading,
 }: {
@@ -379,6 +380,8 @@ function MarketListingItem({
     beansOn: boolean;
     isVisitor: boolean;
     wide: boolean;
+    /** The Market card's picture tile (slice S8): at every width, the photo at 4:3. A saved search's card keeps `wide`. */
+    picture?: boolean;
     onNavigate: (page: string, id?: string) => void;
     nextImageLoading: () => 'eager' | 'lazy';
 }) {
@@ -402,6 +405,54 @@ function MarketListingItem({
         each ? each.label : price,
         km ? t('{km} away', { km }) : null,
     ].filter(Boolean).join(', ');
+
+    if (picture) {
+        // "New in the Market" as picture tiles (DESIGN-onboarding-home-landing-fable.md §4.1 item 5, §4.4, slice S8), as the
+        // phone draws them (components/home/MarketTiles.tsx): the photo at 4:3 with OFFER or NEED on its corner, the title in
+        // two lines, the price in the brand's ink. No photo, or one that will not load: the category's tile, never a broken
+        // picture. The whole tile is one button that opens the listing (small-cards-open-the-item).
+        return (
+            <button
+                type="button"
+                onClick={() => onNavigate('marketplace', item.id)}
+                aria-label={label}
+                data-testid={testId}
+                data-tile="picture"
+                className="w-full min-w-0 p-0 pb-1 text-left bg-transparent border-0 hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill"
+            >
+                {/* The Market grid's own frame (core market-card-shell.ts photo.grid): 4:3, cropped towards the top third. The slot is
+                    the chip's container (index.css .home-tile-photo), so OFFER/NEED is sized to the photo it sits on. */}
+                <div data-testid="home-photo-slot" className="home-tile-photo relative w-full aspect-[4/3] rounded-xl overflow-hidden shrink-0 bg-bg-hover">
+                    <ListPhoto
+                        photo={photo}
+                        alt=""
+                        loading={photo ? nextImageLoading() : undefined}
+                        decoding="async"
+                        className="w-full h-full object-cover bg-bg-hover"
+                        style={{ objectPosition: '50% 33%' }}
+                        fallback={<CategoryTile category={item.category} size="grid" />}
+                    />
+                    {/* OFFER or NEED, whole, on one line, inside the photo in every language at 320 px and 130% text: 4 px in and
+                        6 px of padding as the phone's chip (market-tile-styles.ts), its size from index.css .home-tile-chip, which
+                        holds it to the photo's room (review of #3322: ПРЕДЛОЖЕНИЕ ran 27.7 px past a 109.6 px photo). */}
+                    <span aria-hidden="true" className={`home-tile-chip absolute top-[4px] left-[4px] px-[6px] py-[2px] rounded-md whitespace-nowrap font-extrabold tracking-wide ${kind === 'NEED' ? 'bg-bp-chip-need-tint text-bp-chip-need-ink' : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'}`}>
+                        {kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}
+                    </span>
+                </div>
+                {/* No `block` beside line-clamp-2: Tailwind writes .block after .line-clamp-2, its display:block beats the clamp's
+                    -webkit-box and the title ran to 8 lines (review of #3322). line-clamp-2 sets its own display. */}
+                <span dir="auto" className="mt-1.5 text-sm font-bold leading-snug break-words line-clamp-2 text-text-primary">
+                    {item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}
+                </span>
+                {(price || km) && (
+                    <span className={`block mt-0.5 text-xs break-words ${beansOn && price ? 'font-bold text-bp-ink-brand' : 'text-text-secondary'}`}>
+                        {[price, km].filter(Boolean).join(' · ')}
+                    </span>
+                )}
+                {eachLine}
+            </button>
+        );
+    }
 
     if (wide) {
         return (
@@ -497,10 +548,11 @@ function MarketBody({
 
     return (
         <div>
+            {/* Picture tiles two a row at every width (slice S8): the node sends four at most (three to a visitor). */}
             <div
                 data-testid="home-market-items"
-                data-layout={wide ? 'tiles' : 'rows'}
-                className={wide ? 'home-tiles-grid grid grid-cols-2 gap-3' : 'flex flex-col'}
+                data-layout="tiles"
+                className="grid grid-cols-2 gap-x-3 gap-y-3"
             >
                 {items.map(item => (
                     <MarketListingItem
@@ -510,6 +562,7 @@ function MarketBody({
                         beansOn={beansOn}
                         isVisitor={isVisitor}
                         wide={wide}
+                        picture
                         onNavigate={onNavigate}
                         nextImageLoading={nextImageLoading}
                     />

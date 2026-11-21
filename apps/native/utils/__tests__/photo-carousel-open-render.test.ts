@@ -129,6 +129,7 @@ describe('the small cards gain no press from this (memory small-cards-open-the-i
         'components/ListPhoto.tsx',
         'components/EventCard.tsx',
         'components/home/HomeCardBodies.tsx',
+        'components/home/MarketTiles.tsx',
         'components/ListingCopyLine.tsx',
     ])('%s neither imports the carousel nor the photo viewer', (file) => {
         const src = source(file);

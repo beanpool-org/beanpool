@@ -6,7 +6,7 @@
  * dark among them), on the sheet's card: the words and the link readable (4.5:1), the row wrapping at 320 dp with 1.3x
  * text, a 44 dp target, one button that reads its own words, and a tap that opens Account Protection and closes the sheet.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -40,6 +40,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('../vault', () => ({ vaultSignInCopyKnown: vi.fn(async () => mem.vault) }));
 vi.mock('../node-post', () => ({ signedGet: vi.fn() }));
+// The line's answer, watched: the real schedule, wrapped so a draw can wait until the line has asked it. Made when the line
+// first imports the module (as the sheet opens), never at the top of this file, so the first row still pays the cold load.
+const spied = vi.hoisted(() => ({ schedule: undefined as undefined | Mock }));
+vi.mock('../one-way-back', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../one-way-back')>();
+    spied.schedule = vi.fn(real.oneWayBackSchedule);
+    return { ...real, oneWayBackSchedule: spied.schedule };
+});
 
 const { WayBackBellLine } = await import('../../components/WayBackBellLine');
 const { oneWayBackStoreKey, wordsWrittenDownStoreKey } = await import('../storage-keys');
@@ -64,12 +72,26 @@ afterEach(() => {
     host = null;
     setLanguage('en');
 });
-async function draw(node: ReactNode) {
+/** How many times the line has asked the schedule, and what it answered last. */
+const asked = () => spied.schedule?.mock.calls.length ?? 0;
+const lastAnswer = () => spied.schedule?.mock.results.at(-1)?.value as { bell?: boolean } | null | undefined;
+const WAIT = { timeout: 4_000, interval: 5 };
+/**
+ * Draws, then waits on the outcome, never on a count of ticks: the line loads the record and the key vault as the sheet
+ * opens (two imports, however long a cold load takes), so a draw waits until the line has asked the schedule for THIS
+ * draw, then until the sheet shows that answer (the line, or none). A row that expects no line is measured after the read,
+ * never before it; a read that fails never answers, and the wait says so. `reads: false` where no read should start.
+ */
+async function draw(node: ReactNode, { reads = true } = {}) {
+    const before = asked();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
     await act(async () => { root!.render(node as Parameters<Root['render']>[0]); });
-    for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    if (!reads) return;
+    await act(async () => { await vi.waitFor(() => expect(asked()).toBeGreaterThan(before), WAIT); });
+    const answer = !!lastAnswer()?.bell;
+    await vi.waitFor(() => expect(line() !== null).toBe(answer), WAIT);
 }
 const styleOf = (e: Element | null) => JSON.parse(e?.getAttribute('data-style') ?? '{}') as Record<string, any>;
 const line = () => host?.querySelector('[data-testid="bell-way-back"]') ?? null;
@@ -107,8 +129,11 @@ describe('when the line is there', () => {
         act(() => root?.unmount());
         host?.remove();
         record({ dismissedAt: NOW - 86_400_000 });
-        await draw(createElement(WayBackBellLine, { publicKey: null, colors: COLOUR_SETS.light }));
+        const before = asked();
+        await draw(createElement(WayBackBellLine, { publicKey: null, colors: COLOUR_SETS.light }), { reads: false });
         expect(line()).toBeNull();
+        // Nothing because nothing is read with no account (the effect says so as it runs), not because a read hadn't finished.
+        expect(asked()).toBe(before);
     });
 });
 

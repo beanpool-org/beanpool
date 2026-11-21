@@ -640,7 +640,7 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
     it('Go Back from the way back, then Join again: the tick off, both tiles back, no word on screen', async () => {
         await mount('en');
         await enterInvite('BP-ABCD-1234', 'en');
-        await type('Community name or address (e.g. riverside)', 'mullum', 'en');
+        await type('Community name or address (e.g. riverside)', 'riverside', 'en');
         await type('Your name or nickname', 'Sally', 'en');
         await press('Join', 'en');
         await press('Skip for now', 'en');

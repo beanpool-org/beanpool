@@ -511,7 +511,9 @@ export interface KnowledgeDraftWhole extends KnowledgeDraftToCheck {
     photos: string[];
     /**
      * One for each of {@link photos}, in order: what the node read from Wikimedia Commons for that picture, or null for one
-     * uploaded (an assistant's draft, DESIGN-learn-web-pictures-fable.md §6.2). A server before the Commons door doesn't send it.
+     * uploaded (an assistant's draft, DESIGN-learn-web-pictures-fable.md §6.2). An upload byte for byte the same as one of the
+     * draft's Commons pictures is that picture, and carries its credit, as Approve gives it. A server before the Commons door
+     * doesn't send it.
      */
     photoCredits?: (KnowledgePhotoCredit | null)[];
     /**

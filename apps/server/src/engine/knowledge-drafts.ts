@@ -695,7 +695,8 @@ function creditsByBytes(own: readonly string[], credits: ReadonlyMap<number, Kno
 /**
  * Each kept picture's credit at its place on the page (DESIGN-learn-web-pictures-fable.md §9 slice 2 item 4): a kept picture is
  * matched to the draft's own by its bytes as read, and a credit the node read for any of the draft's pictures with those bytes
- * follows it (creditsByBytes); a picture the checker added has none. Only what the node stored: the app never sends a credit.
+ * follows it (creditsByBytes); a picture the checker added has none, unless it is byte for byte one of the draft's. Only what the
+ * node stored: the app never sends a credit.
  */
 function creditsFollow(r: DraftRow, photos: readonly string[]): { photo: number; credit: KnowledgePhotoCredit }[] {
     const credits = creditsByBytes(draftPhotoData(r.id), creditsOf(r.sources));

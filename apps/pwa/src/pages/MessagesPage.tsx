@@ -703,9 +703,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const notify = useNotifyLine(identity.publicKey, notifyChat === null || notifyChat === activeConv?.id, identity);
     const namedFor = activeConv?.type === 'dm' && !(activeConv.participants || []).some(p => p !== identity.publicKey && isUserBlocked(p))
         ? peerNameFor(activeConv) : null;
+    // The chat is kept only once its line is drawn: a line the rule refused leaves no chat behind, so the next chat can offer.
     const offerNamedLine = (convId: string, offer: NotifyLineOffer) => {
-        setNotifyChat(convId);
-        void notify.offer(offer);
+        void notify.offer(offer).then((ok) => { if (ok) setNotifyChat(convId); });
     };
     const namedLineUnder = (align?: 'start' | 'end') => (
         <div data-testid="chat-notify-line" className={`flex flex-col max-w-[85%] min-w-0 ${align === 'end' ? 'self-end items-end' : 'self-start items-start'}`}>{notify.view}</div>

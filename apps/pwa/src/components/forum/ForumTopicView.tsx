@@ -258,9 +258,10 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
                                 // Followed: the member's own act, the moment for "Hear when someone replies here." Never on a
                                 // closed topic: it takes no replies (the node refuses them, forum.ts), so none can be heard.
                                 // The forum's own canReply flag (sweep-8) is not on main yet: this reads the topic's closed state.
+                                // The topic is kept only once its line is drawn: a refused offer leaves none behind.
                                 if (next && open) {
-                                    setFollowedOn(topic.id);
-                                    void notify.offer({ kind: 'follow', align: 'end' });
+                                    const on = topic.id;
+                                    void notify.offer({ kind: 'follow', align: 'end' }).then((ok) => { if (ok) setFollowedOn(on); });
                                 }
                             });
                         }}

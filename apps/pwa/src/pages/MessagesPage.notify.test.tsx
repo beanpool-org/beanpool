@@ -173,6 +173,27 @@ describe('never in a request, nor with someone blocked; one per visit', () => {
         expect(readNotifyAsk(ME).lines).toBeUndefined();
     });
 
+    it("a line the rule refused in one chat leaves nothing behind: the next chat's first send still offers its own line", async () => {
+        standBrowser('default', ME);
+        // 'again' is spent here: his line in conv-1 offers nothing; then conv-2, where my first line may still bring 'answer'.
+        keepRecord(ME, 'kind spent', 'again');
+        const view = await open([dm('conv-1'), dm('conv-2')], { 'conv-1': [line('m-bob', 'conv-1', BOB, 'Want some sourdough?')], 'conv-2': [] }, 'conv-1', 'Want some sourdough?');
+        await act(async () => {});
+        expect(screen.queryByTestId('chat-notify-line')).toBeNull();
+        view.rerender(<MessagesPage identity={me} openConversationId="conv-2" />);
+        await waitFor(() => expect(screen.queryByText('Want some sourdough?')).toBeNull());
+        await screen.findByPlaceholderText('Message...');
+        await act(async () => {});
+        vi.mocked(sendMessageApi).mockImplementation(async () => {
+            stand.messages['conv-2'] = [line('msg-mine-1', 'conv-2', ME, 'Hello again')];
+            return { success: true, message: stand.messages['conv-2'][0] } as any;
+        });
+        const composer = screen.getByPlaceholderText('Message...');
+        fireEvent.change(composer, { target: { value: 'Hello again' } });
+        fireEvent.keyDown(composer, { key: 'Enter' });
+        expect(await screen.findByTestId('chat-notify-line')).toHaveTextContent(ANSWER);
+    });
+
     it("opened on his line, then I write: the one line stays his (one per visit), never a second", async () => {
         standBrowser('default', ME);
         await open([dm('conv-1')], { 'conv-1': [line('m-bob', 'conv-1', BOB, 'Want some sourdough?')] }, 'conv-1');

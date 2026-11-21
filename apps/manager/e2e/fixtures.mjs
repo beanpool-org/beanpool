@@ -801,6 +801,11 @@ const FUNNEL_ROWS = (() => {
     rows.push({ day: day(2), event: 'protection_choice', variant: 'once:words', count: 4 });
     rows.push({ day: day(3), event: 'protection_choice', variant: 'once:skip', count: 1 });
     rows.push({ day: day(3), event: 'guide_complete', variant: 'once', count: 4 });
+    // The join's notifications screen (slice N1c): drawn, and each of its three answers, once per person.
+    rows.push({ day: day(3), event: 'notify_shown', variant: 'once', count: 3 });
+    rows.push({ day: day(3), event: 'notify_choice', variant: 'once:on', count: 1 });
+    rows.push({ day: day(4), event: 'notify_choice', variant: 'once:later', count: 1 });
+    rows.push({ day: day(4), event: 'notify_choice', variant: 'once:no', count: 1 });
     // Older rows from builds that counted every showing. A node really does hold these beside the
     // new ones, and the screen has to leave them out and say so rather than adding them in.
     rows.push({ day: day(0), event: 'protection_shown', variant: 'A', count: 2 });

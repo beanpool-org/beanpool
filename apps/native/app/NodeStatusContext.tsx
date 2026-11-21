@@ -86,6 +86,13 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
                     })
                     .catch(() => {});
             }
+            // A member here (one let in, brought back by a vote, or switched back onto the phone): no wait after an earlier
+            // "no member" answer holds the phone's blocks back from here, and they go now if any are owed (blocklist.ts).
+            if (result === 'member') {
+                void import('../utils/blocklist')
+                    .then(({ blocksAtMember }) => blocksAtMember(identity.publicKey, url))
+                    .catch(() => {});
+            }
             // No member here, so this community keeps no block list for the key (a removed account's went with it): the
             // phone counts none of its blocks as on it, and sends them again once the key is a member here (blocklist.ts).
             if (result === 'closed' || result === 'stranger') {

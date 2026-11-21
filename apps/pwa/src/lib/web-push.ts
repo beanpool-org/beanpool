@@ -494,7 +494,7 @@ export function notifyOnceDueHere(publicKey: string, env: PushEnv = pushEnv(), n
  */
 export async function turnOnFromAsk(identity: BeanPoolIdentity, lang: string, surface: NotifyAskSurface, env: PushEnv = pushEnv()): Promise<NotifyBrowserResult> {
     const origin = webPushOrigin(getNodeApiUrl());
-    const r: NotifyBrowserResult = origin ? await turnOnWebPush(origin, identity, lang, env).then(a => (a.ok ? 'ok' : a.reason)) : 'cannot';
+    const r: NotifyBrowserResult = origin ? await turnOnWebPush(origin, identity, lang, env).then((a): NotifyBrowserResult => (a.ok ? 'ok' : a.reason)) : 'cannot';
     const outcome = notifyBrowserOutcome(r);
     if (outcome) markNotifyAskHere(identity.publicKey, notifyOutcomeEvent(outcome, surface));
     return r;

@@ -120,7 +120,7 @@ describe('the front door', () => {
         window.history.replaceState(null, '', '/app?door=invite');
         render(<WelcomePage onComplete={vi.fn()} />);
         expect(await screen.findByTestId('your-invite')).toBeInTheDocument();
-        expect(screen.getByLabelText('Invite link or code')).toHaveFocus();
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Invite link or code')));
         expect(window.location.search).toBe('');
     });
 });

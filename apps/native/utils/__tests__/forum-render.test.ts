@@ -143,6 +143,8 @@ vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck:
 vi.mock('../../components/ReportMessageSheet', () => ({ ReportMessageSheet: () => null }));
 
 const ME = 'm'.repeat(64);
+const MUTE = 'Mute this topic';
+const UNMUTE = 'Unmute this topic';
 const ANA = 'a'.repeat(64);
 // No connection: what utils/forum.ts throws with no answer (forumRefusal), no words of its own, so the screen says its line. `refused`:
 // the node's sentence, as forumRefusal hands it on.
@@ -348,6 +350,35 @@ describe.each(LOOKS)('following a topic in %s (%s): the named line under the bel
         });
     }
 
+    // N2b notes (#3348): the follow saved, then the read again fails (no connection): the bell and its line follow the save's
+    // own answer, never the topic as it read before the save. Mute is the same save.
+    it('the follow saved but the read after it fails: the bell shows it followed, and the line comes', async () => {
+        unfollowed();
+        notifyAsk.offer = true;
+        const host = await render(set, ForumTopicScreen);
+        expect(byId(host, 'forum-follow').getAttribute('aria-selected')).toBe('false');
+        const forum = await import('../forum');
+        vi.mocked(forum.followForumTopic).mockImplementationOnce(async () => { node.offline = true; return 'following'; });
+        await press(byId(host, 'forum-follow'));
+        await act(async () => {});
+        await act(async () => {});
+        expect(vi.mocked(forum.getForumTopic).mock.results.length).toBeGreaterThan(1);
+        expect(byId(host, 'forum-follow').getAttribute('aria-selected')).toBe('true');
+        expect(words(byId(byId(host, 'forum-follow-line'), 'notify-line'))).toContain('Hear when someone replies here.');
+    });
+
+    it('Mute saved but the read after it fails: the bell shows it muted', async () => {
+        unfollowed();
+        const host = await render(set, ForumTopicScreen);
+        const forum = await import('../forum');
+        vi.mocked(forum.followForumTopic).mockImplementationOnce(async () => { node.offline = true; return 'muted'; });
+        await press(byId(host, 'forum-topic-menu'));
+        await press(Array.from(byId(host, 'forum-menu').querySelectorAll('button')).find((b) => words(b) === MUTE)!);
+        await act(async () => {});
+        await press(byId(host, 'forum-topic-menu'));
+        expect(Array.from(byId(host, 'forum-menu').querySelectorAll('button')).map(words)).toContain(UNMUTE);
+    });
+
     it("the rule says no (a day already taken, the phone's no, allowed already): the follow saves and no line shows", async () => {
         unfollowed();
         const host = await render(set, ForumTopicScreen);
@@ -538,6 +569,18 @@ describe.each(LOOKS)('a topic in %s (%s)', (_name, set) => {
         expect(byId(host, 'forum-reply')).not.toBeNull();
         expect(byId(host, 'forum-closed')).toBeNull();
         expect(byId(host, 'forum-reads-only')).toBeNull();
+    });
+
+    // Review of #3345: the topic's own read decides archived, never the front's section list. A front kept from before the section
+    // was unarchived must not hide the box over the node's fresh answer while the fresh front is still on its way.
+    it('a kept front from before an unarchive, the fresh front still out: the topic read says a reply goes, so the box shows', async () => {
+        node.kept = { front: { ...FRONT, sections: SECTIONS.map((x) => (x.id === 'skills' ? { ...x, archived: true } : x)) }, list: null, topic: null };
+        node.topic = { ...TOPIC, topic: { ...TOPIC.topic, canReply: true, sectionArchived: false } };
+        const forum = await import('../forum');
+        vi.mocked(forum.getForumFront).mockImplementationOnce(() => new Promise(() => { /* still on its way */ }));
+        const host = await render(set, ForumTopicScreen);
+        expect(byId(host, 'forum-reply')).not.toBeNull();
+        expect(byId(host, 'forum-closed')).toBeNull();
     });
 
     it('with no connection, the kept topic draws as it was last read', async () => {

@@ -62,6 +62,7 @@ delete process.env.PUBLIC_IP;
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import nodeHttps from 'node:https';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { localFetch } from './keepalive-test-fetch.js';
@@ -1182,25 +1183,43 @@ async function main(): Promise<void> {
         const listedNow = async () => ((await info()).addresses ?? []) as string[];
         assert(show([...await listedNow()].sort()) === show([NAMED, OLD, DOMAIN].sort()), `(10) from 9: the name, the old name and the domain are listed (${show(await listedNow())})`);
 
-        /** A request as it reaches `host` through this server's own proxy (a tunnel, a reverse proxy): X-Forwarded-Host. */
-        const reaching = (host: string) => ({ 'X-Forwarded-Host': host });
+        /**
+         * A request as it reaches `host` through a tunnel or a proxy: the Host header it carries (cloudflared keeps the
+         * visitor's), never X-Forwarded-Host, which is believed from no one (forwarded-host.ts). fetch can't send a Host of
+         * our choosing, so this is https.request on a socket of its own.
+         */
+        const atHost = (host: string, route: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}) =>
+            new Promise<{ status: number; json: any }>((resolve, reject) => {
+                const req = nodeHttps.request(base + route, {
+                    method: init.method ?? 'GET', agent: false, rejectUnauthorized: false,
+                    headers: { ...init.headers, Host: host, ...(init.body !== undefined ? { 'Content-Length': String(Buffer.byteLength(init.body)) } : {}) },
+                }, (res) => {
+                    let text = '';
+                    res.setEncoding('utf8');
+                    res.on('data', (d) => { text += d; });
+                    res.on('end', () => {
+                        let json: any = null;
+                        try { json = JSON.parse(text); } catch { /* not JSON */ }
+                        resolve({ status: res.statusCode ?? 0, json });
+                    });
+                });
+                req.setTimeout(30_000, () => req.destroy(new Error('timed out')));
+                req.on('error', reject);
+                req.end(init.body);
+            });
         const getAt = async (host: string, route: string) => {
             resetGatewayRateLimit();
-            const res = await localFetch(base + route, { headers: reaching(host) });
-            return { status: res.status, json: await res.json().catch(() => null) as any };
+            return atHost(host, route);
         };
         const formAt = async (host: string, route: string, fields: Record<string, string>) => {
             resetGatewayRateLimit();
-            const res = await localFetch(base + route, {
-                method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...reaching(host) }, body: new URLSearchParams(fields).toString(),
-            });
-            return { status: res.status, json: await res.json().catch(() => null) as any };
+            return atHost(host, route, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields).toString() });
         };
         const mcpAt = async (host: string, access: string) => {
             resetGatewayRateLimit();
-            const res = await localFetch(`${base}/mcp`, {
+            const res = await atHost(host, '/mcp', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${access}`, Origin: `https://${host}`, ...reaching(host) },
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${access}`, Origin: `https://${host}` },
                 body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
             });
             return res.status;

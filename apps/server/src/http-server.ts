@@ -23,6 +23,7 @@ import { getKoaApp, getUpgradeHandler } from './https-server.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { acmeChallengeMiddleware } from './services/acme/challenge.js';
 import { plainHttpGate, plainUpgradeAllowed } from './plain-http-gate.js';
+import { useOwnHostAndScheme } from './forwarded-host.js';
 import { HALL_PATH, serveHallPage } from './routes/lights-out.js';
 import QRCode from 'qrcode';
 import { ANDROID_ON_NODE_WORDS } from '@beanpool/core';
@@ -46,6 +47,8 @@ export function _setPlainConnectionHookForTests(fn: ((socket: import('node:net')
  */
 export async function startHttpServer(port: number): Promise<number> {
     const app = new Koa();
+    // The same host and scheme rule as the HTTPS app (forwarded-host.ts): the trust page names the Host the request carried.
+    useOwnHostAndScheme(app);
     const router = new Router();
 
     // Cache compiled callback handler for delegating HTTP requests to HTTPS Koa app

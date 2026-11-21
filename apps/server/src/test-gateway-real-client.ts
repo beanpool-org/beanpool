@@ -86,20 +86,22 @@ function part1Resolver() {
     assert(resolveClientIp('162.158.1.1', { 'x-forwarded-for': '203.0.113.51' }) === '162.158.1.1',
         'a Cloudflare edge peer: X-Forwarded-For alone is NOT believed (Cloudflare passes client entries through)');
 
-    // The subnets of this machine's own private interfaces (in a container: the docker networks).
+    // The subnets of this machine's own private interfaces (in a container: the docker networks, the bridge gateway and
+    // every neighbour on beanpool-shared among them) are NOT proxies: Docker's port proxy hands an IPv6 visitor on from
+    // the gateway (security inventory 17 Nov 2026, risk 5). Until then this test said the opposite.
     const own = Object.values(os.networkInterfaces()).flat()
         .find(i => i && !i.internal && i.family === 'IPv4' && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(i.address));
     if (own) {
-        assert(isTrustedProxy(own.address), `a peer on this machine's own private subnet (${own.cidr}) is a trusted proxy`);
+        assert(!isTrustedProxy(own.address), `a peer on this machine's own private subnet (${own.cidr}) is not a trusted proxy`);
+        assert(resolveClientIp(own.address, spoof) === own.address, 'and its CF-Connecting-IP / X-Forwarded-For are ignored');
     } else {
         console.log('  (no private interface on this machine; own-subnet trust not exercised)');
     }
-    assert(!isTrustedProxy('10.255.255.254') || !!own?.cidr?.startsWith('10.'),
-        'a private address NOT on one of our subnets is not trusted');
+    assert(!isTrustedProxy('10.255.255.254'), 'a private address NOT on one of our subnets is not trusted');
 
     setTrustConfigForTests({ extra: ['198.51.100.0/24'] });
     assert(resolveClientIp('198.51.100.7', spoof) === '203.0.113.50', 'TRUSTED_PROXIES adds a proxy range');
-    setTrustConfigForTests({ loopback: false, localSubnets: false });
+    setTrustConfigForTests({ loopback: false });
     assert(resolveClientIp('127.0.0.1', spoof) === '127.0.0.1', 'with loopback untrusted, its headers are ignored');
     setTrustConfigForTests(undefined);
 }
@@ -117,7 +119,7 @@ async function part2Http() {
     const limited = { ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: true, maxRequestsPerMinute: LIMIT } };
     const unlimited = { ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: false, maxRequestsPerMinute: LIMIT } };
     const fresh = (trust?: Parameters<typeof setTrustConfigForTests>[0]) => { setTrustConfigForTests(trust); resetGatewayRateLimit(); };
-    const TRUST_NOBODY = { loopback: false, localSubnets: false, cloudflare: false };
+    const TRUST_NOBODY = { loopback: false, cloudflare: false };
     const PROBE = '/api/gateway-limit-probe';
 
     console.log('\n— gateway limiter, tunnel mode —');

@@ -22,7 +22,7 @@
  *  10. #1881 review: nothing sent on to an address nobody approved, nor after a No (finding 3); a client a grant holds
  *      keeps the standard redirect. Registrations write nothing into the assistants' ring and their refusals are budgeted;
  *      the connect and reuse lines are AUTH SECURITY lines (finding 4). At most 10 waiting per address, an IPv6 /64 one;
- *      full, the oldest unopened makes room (5). X-Forwarded-Host only from our own proxy (6). Switch off → 404 for
+ *      full, the oldest unopened makes room (5). X-Forwarded-Host from no one, our own proxy included (6). Switch off → 404 for
  *      every verb (7). Two refreshes at once: the strict rule holds (8).
  *  11. Lifetimes and pins (finding 9): a code 60 s, access 1 h, 30 days idle, 5 a member, the role re-read at the token,
  *      refresh with another client's id, framing headers, a forged revoke, no fragment or credentials in a redirect, an
@@ -593,15 +593,19 @@ async function main(): Promise<void> {
         assert(twelfth.status === 429 && twelfth.body?.error === 'temporarily_unavailable' && otherAddress.status === 201,
             `…its 10 all opened: its next → 429, and another address still registers (${show(twelfth)}; ${otherAddress.status})`);
 
-        // Finding 6: no public address: X-Forwarded-Host is believed only from our own proxy.
-        setTrustConfigForTests({ loopback: false, localSubnets: false });
+        // Finding 6: no public address: X-Forwarded-Host from a peer that isn't our proxy is not believed (nor, since the forwarded-host
+        // lane, from our own proxy: below).
+        setTrustConfigForTests({ loopback: false });
         const asForged = await call('GET', '/.well-known/oauth-authorization-server', { headers: { 'X-Forwarded-Host': 'evil.example' } });
         const prmForged = await call('GET', '/.well-known/oauth-protected-resource/mcp', { headers: { 'X-Forwarded-Host': 'evil.example' } });
         setTrustConfigForTests(undefined);
         assert(asForged.body?.issuer === BASE && prmForged.body?.resource === `${BASE}/mcp` && JSON.stringify(prmForged.body?.authorization_servers) === JSON.stringify([BASE]),
             `X-Forwarded-Host from a peer that isn't our proxy moves nothing: the issuer is the host reached (${asForged.body?.issuer}, ${prmForged.body?.resource})`);
+        // From our own proxy too (loopback: the tunnel in this container): Cloudflare passes a visitor's X-Forwarded-Host on
+        // untouched, so it is believed from no one; the host the member reached is the Host header the tunnel keeps
+        // (forwarded-host.ts; test-forwarded-host.ts sends that Host, which fetch can't).
         const asProxied = await call('GET', '/.well-known/oauth-authorization-server', { headers: { 'X-Forwarded-Host': 'town.example' } });
-        assert(asProxied.body?.issuer === 'https://town.example', `…from our own proxy it names the host the member reached (${asProxied.body?.issuer})`);
+        assert(asProxied.body?.issuer === BASE, `…nor from our own proxy: the issuer is still the host reached (${asProxied.body?.issuer})`);
 
         // Finding 7: the switch off → 404 for every verb on every OAuth path, OPTIONS included.
         updateLocalConfig({ aiAssistantsAllowed: false });

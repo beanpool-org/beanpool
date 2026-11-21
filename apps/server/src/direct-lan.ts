@@ -23,8 +23,8 @@
  * Fail closed: a source Node can't read, a Host that is missing, not a single value or can't be parsed, is not the LAN.
  * Anything else is "not here": each caller answers as it does for a request that isn't from the room.
  */
-import fs from 'node:fs';
 import net from 'node:net';
+import { defaultGateways } from './default-gateways.js';
 import { isBeanPoolName, isLocalNetworkHost, normalizeAddress } from './engine/own-addresses.js';
 
 /** A socket's remote address as Node gives it, IPv4-mapped IPv6 unwrapped; '' for none. */
@@ -57,27 +57,8 @@ export const PROXY_HEADERS = [
     'x-client-ip', 'x-original-forwarded-for', 'forwarded', 'via',
 ] as const;
 
-let gatewaysForTests: string[] | null = null;
-/** Tests only: this machine's default gateways (null: read them from /proc/net/route again). */
-export function _setDefaultGatewaysForTests(list: string[] | null): void { gatewaysForTests = list; cached = null; }
-
-let cached: { at: number; list: Set<string> } | null = null;
-/** The IPv4 default gateways of this machine's routes (/proc/net/route, Linux; none elsewhere), re-read every 5 minutes. */
-export function defaultGateways(now = Date.now()): Set<string> {
-    if (gatewaysForTests) return new Set(gatewaysForTests);
-    if (cached && now - cached.at < 5 * 60_000) return cached.list;
-    const list = new Set<string>();
-    try {
-        for (const line of fs.readFileSync('/proc/net/route', 'utf8').split('\n').slice(1)) {
-            const [, destination, gateway] = line.trim().split(/\s+/);
-            if (destination !== '00000000' || !gateway || !/^[0-9A-Fa-f]{8}$/.test(gateway) || gateway === '00000000') continue;
-            const n = parseInt(gateway, 16); // little-endian
-            list.add([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff].join('.'));
-        }
-    } catch { /* not Linux, or no routes to read: no gateway to leave out */ }
-    cached = { at: now, list };
-    return list;
-}
+// This machine's default gateways (Docker's bridge gateway in a container): default-gateways.ts, which client-ip.ts reads too.
+export { defaultGateways, _setDefaultGatewaysForTests } from './default-gateways.js';
 
 export interface LanRequest {
     /** req.socket.remoteAddress. */

@@ -9,31 +9,33 @@
  * app, an API answer, a cookie or a live-updates socket in cleartext. The redirect goes to the same host when it is one
  * of this community's addresses, else to its main one.
  *
- * Which requests came through a tunnel is read from the socket first. A header counts only from a private-range source,
- * never from a public one (cf-connecting-ip from anyone was only ever cosmetic):
+ * Which requests came through a tunnel is read from the socket first. A header counts only from a proxy this server trusts
+ * (client-ip.ts isTrustedProxy, the one rule the client's address is read by too), never from any other source, private
+ * or public: Docker's port proxy hands an IPv6 visitor from the internet on from the bridge gateway, and a neighbour on
+ * beanpool-shared is on a private range (security inventory 17 Nov 2026, risk 5).
  *   - loopback (127.0.0.0/8, ::1, ::ffff:127.x): cloudflared run by this server as its child, in the same container,
  *     dials LOOPBACK_ORIGIN (tunnel-connector.ts); so do the registrar's name watch and anything else inside the container.
  *     A connection from outside the container never has a loopback source: the container has its own network namespace.
- *   - a host-level tunnel: our fleet's hosts run cloudflared on the host, not in the container (docs/secrets-rotation-runbook.md;
- *     every ingress is localhost:<published port>). Docker's port proxy hands those connections on from the bridge
- *     gateway (172.16.0.0/12 and the like), never from loopback, so the loopback rule alone would send that tunnel's
- *     requests round a 301 loop on a fleet node that gained a certificate. Its requests name a beanpool.org host, which
- *     a browser only ever reaches through Cloudflare, where TLS for that name ends; so a request from a private-range
- *     source that names a beanpool.org host is let through as well.
+ *   - a host-level tunnel: cloudflared on the host dials localhost:<published port>, and Docker's port proxy hands that on
+ *     from the bridge gateway, never from loopback. With the ports published on 127.0.0.1 and TRUSTED_PROXIES=docker-host
+ *     the gateway is trusted, and its requests that name a beanpool.org host (which a browser only ever reaches through
+ *     Cloudflare, where TLS for that name ends) are let through; else that tunnel is sent round a 301 loop on a node that
+ *     holds a certificate of its own.
  *   - a web server or proxy of the operator's own in front (the operator manual, "Behind a web server or proxy of your
- *     own"), on the host or on a Docker network, that holds the certificate and passes requests on to this port: it too
- *     arrives from a private range, naming the community's own domain. Where it says the visitor's request came over
- *     https (X-Forwarded-Proto: https, or Forwarded: proto=https: Caddy and Traefik send it by themselves, nginx when told
- *     to), it is let through, else it would be sent round the same loop once this server got a certificate of its own.
- * A private-range source that names any other host and says nothing of https (a LAN member, another stack on
- * beanpool-shared, an IPv6 visitor that Docker's proxy hands on from the gateway) is redirected. A public source is always
- * redirected, whatever host or header it sends: what lets a private-range source through is a claim about the leg before
- * it, which only a machine of the operator's own makes.
+ *     own"), listed in TRUSTED_PROXIES (or docker-host, on the same machine), that holds the certificate and passes
+ *     requests on to this port. Where it says the visitor's request came over https (X-Forwarded-Proto: https, or
+ *     Forwarded: proto=https: Caddy and Traefik send it by themselves, nginx when told to), it is let through, else it
+ *     would be sent round the same loop once this server got a certificate of its own.
+ * Any other source is redirected, whatever host or header it sends (the hall's own exemption apart, which takes no
+ * header at all: hallMayReach): what lets a request through is a claim about the leg before it, which only a proxy the
+ * operator named makes.
  */
 
 import type Koa from 'koa';
 import { configuredAddresses, isBeanPoolName, isLoopbackHost, normalizeAddress, primaryAddress } from './engine/own-addresses.js';
-import { isDirectLanRequest, isLoopbackSource, isPrivateSource } from './direct-lan.js';
+import { isDirectLanRequest, isLoopbackSource } from './direct-lan.js';
+import { isTrustedProxy } from './client-ip.js';
+import { saysHttpsBefore } from './forwarded-host.js';
 import { lightsOutOn } from './services/lights-out.js';
 import { holdsOwnCertificate, servedHosts, servesCaCertificateFor } from './services/tls.js';
 import { acmeTargets } from './services/acme/schedule.js';
@@ -93,26 +95,22 @@ export function hallMayReach(req: PlainRequest): boolean {
     return lightsOutOn() || hallPathWhileOff(req.path);
 }
 
-/** Whether a proxy's headers say the request before it came over https: the first hop's X-Forwarded-Proto or proto=. */
-export function saysHttpsBefore(req: Pick<PlainRequest, 'forwardedProto' | 'forwarded'>): boolean {
-    const xfp = (req.forwardedProto ?? '').split(',')[0].trim().toLowerCase();
-    if (xfp === 'https') return true;
-    const first = (req.forwarded ?? '').split(',')[0];
-    return /(?:^|;)\s*proto\s*=\s*"?https"?\s*(?:;|$)/i.test(first);
-}
+// Whether a proxy's headers say the request before it came over https: one rule with Koa's ctx.protocol (forwarded-host.ts).
+export { saysHttpsBefore };
 
 /**
  * Whether the plain listener answers this request as it always has (the tunnel's delegation, the trust page, the
- * CF_RECORD_NAME redirect): on a node with no certificate of its own; from loopback; from a private-range source naming a
- * beanpool.org host (a host-level tunnel) or saying the request came over https before it (a proxy of the operator's own);
- * from the hall Wi-Fi as lights-out allows (hallMayReach). Everything else gets the redirect.
+ * CF_RECORD_NAME redirect): on a node with no certificate of its own; from loopback; from a proxy this server trusts
+ * (isTrustedProxy) naming a beanpool.org host (a host-level tunnel) or saying the request came over https before it (a
+ * proxy of the operator's own); from the hall Wi-Fi as lights-out allows (hallMayReach). Everything else gets the redirect.
  */
 export function plainHttpAnswersAsBefore(req: PlainRequest): boolean {
     if (isLoopbackSource(req.remoteAddress)) return true;
     if (!holdsOwnCertificate(certifiedHosts)) return true;
-    if (!isPrivateSource(req.remoteAddress)) return false;
+    if (hallMayReach(req)) return true;
+    if (!isTrustedProxy(req.remoteAddress)) return false;
     const host = req.host ? normalizeAddress(req.host) : null;
-    return (!!host && isBeanPoolName(host)) || saysHttpsBefore(req) || hallMayReach(req);
+    return (!!host && isBeanPoolName(host)) || saysHttpsBefore(req);
 }
 
 /**

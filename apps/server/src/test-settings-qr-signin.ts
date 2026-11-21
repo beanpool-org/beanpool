@@ -468,7 +468,7 @@ async function main() {
         const fromLoopback = await signedLookup(local.body.pairingId, owner, {});
         assert(local.status === 200 && fromLoopback.status === 200 && fromLoopback.body.sameNetwork === false,
             `a computer and a phone that both reach the node as its local proxy (no forwarding header) are not told "same network" (${fromLoopback.body?.sameNetwork})`);
-        setTrustConfigForTests({ loopback: false, localSubnets: false });
+        setTrustConfigForTests({ loopback: false });
         try {
             const proxied = await call('POST', '/api/local/admin/auth/pairing', { body: {}, headers: { 'x-forwarded-for': '203.0.113.66' } });
             const look = await signedLookup(proxied.body.pairingId, owner, { 'x-forwarded-for': '192.0.2.9' });

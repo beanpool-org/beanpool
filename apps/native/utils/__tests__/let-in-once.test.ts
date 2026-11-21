@@ -168,7 +168,7 @@ import { getDatabaseFilenameForNode, markGuestNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 import { announceAccountOnPhone } from '../account-on-phone';
-import { blockUser, unblockUser, blockSyncsEndedForTests, _newBlockRunForTests } from '../blocklist';
+import { blockUser, unblockUser, blockSyncsEndedForTests, blockListReadThisRun, followRekeyedBlocks, withoutBlockedPeople, _newBlockRunForTests } from '../blocklist';
 import { acceptLetIn, letInFor, _resetLetInForTests } from '../let-in';
 import { withPeopleAdded } from '../contacts-former';
 import { gateOutsideItem, emptyContactsList, DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
@@ -207,6 +207,8 @@ interface Conv { id: string; type: string; participants: string[]; request?: { f
  * the list as it stands). It lists every request all the same, as a node does in the minutes before it holds a block.
  */
 const node = { convs: [] as Conv[], blocks: new Map<string, string[]>(), formerKeys: new Map<string, Record<string, string[]>>() };
+/** A community whose read of the block list fails (503) for now (slice S7b): null, none. */
+let blocksDown: string | null = null;
 const blockListAt = (origin: string): string[] => {
     const k = `${origin} ${h.me.publicKey}`;
     if (!node.blocks.has(k)) node.blocks.set(k, []);
@@ -272,7 +274,7 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     if (u.pathname === '/api/members') return answer(200, []);
     if (u.pathname === '/api/reports') return answer(200, { success: true });
     // The account's block list here (routes/blocks.ts), which the phone reads before a quiet accept (slice S7b).
-    if (u.pathname === '/api/blocks' && method === 'GET') return answer(200, blocksAnswer(u.origin));
+    if (u.pathname === '/api/blocks' && method === 'GET') return blocksDown === u.origin ? answer(503, { error: 'Try again later' }) : answer(200, blocksAnswer(u.origin));
     if (u.pathname === '/api/blocks' && method === 'POST') {
         const keys: string[] = Array.isArray(body.targetPubkeys) ? body.targetPubkeys : [body.targetPubkey];
         const list = blockListAt(u.origin);
@@ -306,6 +308,7 @@ async function phoneHoldingThree(): Promise<void> {
     _newBlockRunForTests();
     node.blocks.clear();
     node.formerKeys.clear();
+    blocksDown = null;
     h.dir = path.join(root, `phone-${++phoneN}`);
     fs.mkdirSync(h.dir);
     h.store.clear();
@@ -1129,5 +1132,360 @@ describe('let in once: the rest of the rule', () => {
         expect(held?.letIn.length).toBeGreaterThanOrEqual(250);
         expect(here?.letIn.length).toBeGreaterThanOrEqual(250);
         // Measured and logged for the PR, never held to a fixed bound here (a shared Mac's load would make it flaky).
+    });
+});
+
+// ── Block first, everywhere (slice S7b) ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Block first, everywhere (slice S7b, DESIGN-s7-blocks-verified-everywhere-fable.md §2.4; Marty 21 Nov 2026, "all four of
+ * Fable's picks": question 2, a block made in the web app or on another device stops the quiet Accept and hides the request
+ * card, nothing more; question 4, someone unblocked is not let in quietly). The phone reads each held community's own list
+ * back (blocklist.ts followRekeyedBlocks, and at a community's first request read of a run), keeps the keys on it this phone
+ * didn't put there for this check alone, and one pure blockedAnywhere decides.
+ *
+ * One table (close the class): what holds {nobody blocked them; blocked here, on this phone; blocked on this phone from a card
+ * "In C"; blocked in the web app at the community that judges; blocked in the web app at another held community; blocked,
+ * then unblocked later; blocked in the web app at C and re-keyed there, asking by the key the re-key replaced; another account
+ * on this phone blocked them, on it and in the web app everywhere} x where it is judged {the request card here, in the
+ * community in use; the card in place, in another held community; the quiet Accept there; the first line across; "Add people
+ * I've chatted with"}. A card shows exactly when nobody this account knows of blocks them; they are accepted, let in or
+ * offered exactly when, besides, they were never blocked here and unblocked later.
+ */
+const blockedInWebAppAt = (origin: string, key: string, formers?: string[]): void => {
+    blockListAt(origin).push(key);
+    if (formers) node.formerKeys.set(`${origin} ${h.me.publicKey}`, { [key]: formers });
+};
+/** The round's read of every held community's own list, as at app start and each return (blocklist.ts followRekeyedBlocks). */
+const roundReadsLists = async (): Promise<void> => {
+    await followRekeyedBlocks();
+    await blockSyncsEndedForTests();
+    await settle();
+};
+/** Whom the tap on Add offers, as contacts.tsx addPeople asks: db.ts getChattedWithMembers, then blocklist.ts withoutBlockedPeople. */
+const offeredByAdd = async (): Promise<string[]> => {
+    const chats = await db.getChattedWithMembers(me.publicKey);
+    return (await withoutBlockedPeople(me.publicKey, chats.map((p) => ({ key: p.publicKey, callsign: p.callsign, keys: p.keys })))).map((p) => p.key);
+};
+/** The member's line to `key` in `community`'s copy: let in once lets them in (LET_IN_SQL's `dm` row). */
+const memberWroteIn = (community: string, key: string) => intoCopy(community, (s) => { dmIn(s, key, null, me.publicKey); });
+
+interface Holds { name: string; blocked: boolean; once?: true; before: (judgedAt: string) => Promise<void> }
+const HOLDS: Holds[] = [
+    { name: 'nobody blocked them', blocked: false, before: roundReadsLists },
+    { name: 'blocked here, on this phone', blocked: true, before: async () => { await blockUser(them.publicKey); await blockSyncsEndedForTests(); } },
+    {
+        name: 'blocked on this phone from a card "In C", another held community', blocked: true,
+        before: async () => { await blockUser(them.publicKey, me.publicKey, 'User Blocked by Member', undefined, C); await blockSyncsEndedForTests(); },
+    },
+    { name: 'blocked in the web app at the community that judges', blocked: true, before: async (at) => { blockedInWebAppAt(at, them.publicKey); await roundReadsLists(); } },
+    { name: 'blocked in the web app at another held community', blocked: true, before: async () => { blockedInWebAppAt(C, them.publicKey); await roundReadsLists(); } },
+    {
+        name: 'blocked, then unblocked later, on this phone', blocked: false, once: true,
+        before: async () => {
+            await blockUser(them.publicKey);
+            await blockSyncsEndedForTests();
+            await unblockUser(them.publicKey);
+            await blockSyncsEndedForTests();
+            await roundReadsLists();
+        },
+    },
+    {
+        // C moved the block to their new key (engine/member-blocks.ts moveBlocks) and names the old one; A and B never heard.
+        name: 'blocked in the web app at C, then re-keyed there; asks by the key the re-key replaced', blocked: true,
+        before: async () => { blockedInWebAppAt(C, person().publicKey, [them.publicKey]); await roundReadsLists(); },
+    },
+    {
+        name: 'another account on this phone blocked them, on it and in the web app everywhere', blocked: false,
+        before: async () => {
+            const other = person();
+            h.me = { ...other };
+            announceAccountOnPhone(other.publicKey);
+            await blockUser(them.publicKey);
+            await blockSyncsEndedForTests();
+            for (const c of [A, B, C]) blockedInWebAppAt(c, them.publicKey);
+            await roundReadsLists();
+            h.me = { ...me };
+            announceAccountOnPhone(me.publicKey);
+            await roundReadsLists();
+        },
+    },
+];
+
+interface Judged { name: string; at: string; card?: true; yes: string; no: string; put?: () => void; judge: (req: Conv) => Promise<boolean> }
+const JUDGED: Judged[] = [
+    {
+        name: 'the request card here (B, the community in use; nobody let them in)', at: B, card: true, yes: 'shown', no: 'hidden',
+        judge: async (req) => {
+            await db.syncMessages(me.publicKey);
+            await settle();
+            expect(acceptPosts()).toEqual([]);
+            return ((await db.getMessageRequests(me.publicKey))?.conversations ?? []).some((c: any) => c.id === req.id);
+        },
+    },
+    {
+        name: 'the request card in place (A; nobody let them in)', at: A, card: true, yes: 'shown', no: 'hidden',
+        judge: async (req) => {
+            const got = await db.requestsInPlace(me.publicKey, A);
+            await settle();
+            expect(acceptPosts()).toEqual([]);
+            return (got?.conversations ?? []).some((c: any) => c.id === req.id);
+        },
+    },
+    {
+        name: 'the quiet Accept (A, read in place; the member wrote to them in C)', at: A, yes: 'accepted quietly', no: 'a card or none, never accepted',
+        put: () => memberWroteIn(C, them.publicKey),
+        judge: async (req) => {
+            await db.requestsInPlace(me.publicKey, A);
+            await settle();
+            const accepted = acceptPosts().some((p) => p.id === req.id && p.origin === A);
+            expect(req.request?.state).toBe(accepted ? 'accepted' : 'pending');
+            return accepted;
+        },
+    },
+    {
+        name: 'the first line across (B\'s mailbox, the door closed; the member wrote to them in C)', at: B, yes: 'opens a chat', no: 'goes nowhere',
+        put: () => memberWroteIn(C, them.publicKey),
+        judge: async () => {
+            const letIn = await letInFor(me.publicKey, B)(them.publicKey);
+            expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe(letIn ? 'line' : 'drop');
+            return letIn;
+        },
+    },
+    {
+        name: '"Add people I\'ve chatted with" (B: a chat the member wrote in, and their card)', at: B, yes: 'offered', no: 'not offered',
+        put: () => intoCopy(B, (s) => { cardIn(s, them.publicKey, 'them'); dmIn(s, them.publicKey, null, me.publicKey); }),
+        judge: async () => (await offeredByAdd()).includes(them.publicKey),
+    },
+];
+
+describe('block first, everywhere (slice S7b): what holds x where it is judged', () => {
+    for (const holds of HOLDS) {
+        for (const judged of JUDGED) {
+            const yes = !holds.blocked && (judged.card || !holds.once);
+            it(`${holds.name} | ${judged.name} -> ${yes ? judged.yes : judged.no}`, async () => {
+                await phoneHoldingThree();
+                judged.put?.();
+                await holds.before(judged.at);
+                const req = waitingRequest(them.publicKey, judged.at);
+                node.convs.push(req);
+                asked = [];
+                expect(await judged.judge(req)).toBe(yes);
+            });
+        }
+    }
+});
+
+/**
+ * The design's quiet-Accept table (S7 design §4, S7b): where the block is {on this phone's list; on the request's community's
+ * own list only, as the web app made it; on none; unblocked earlier, on this phone} x which key it names {the sender's; a
+ * former key in the pin of that request's chat; the key that pin has on offer} x that community's list {read this run already;
+ * not read yet, so read at the request's own read; the read fails} x where the request waits {A read in place; B the
+ * community in use}. The member wrote to them in C. Oracle: the accept POSTs sent and the card drawn: accepted (one POST, no
+ * card) only on none with the list read; hidden (no POST, no card) when a block is known; else an ordinary card.
+ */
+type Outcome = 'accepted' | 'card' | 'hidden';
+interface ReadState { name: string; fails?: true; before: (at: string) => Promise<void> }
+const READS: ReadState[] = [
+    { name: 'its list read this run already', before: roundReadsLists },
+    { name: 'its list not read yet (read at the request\'s own read)', before: async () => {} },
+    { name: 'its list\'s read fails', fails: true, before: async (at) => { blocksDown = at; } },
+];
+interface KeyIs { name: string; inQuestion?: true; key: () => string; pin?: (k: string) => object }
+const KEY_IS: KeyIs[] = [
+    { name: 'the sender\'s key', key: () => them.publicKey },
+    { name: 'a former key in the pin of that request\'s chat', key: () => person().publicKey, pin: (k) => ({ peer: them.publicKey, since: iso(), by: 'listing', former: [k] }) },
+    // A chat waiting over a key on offer lets nobody in (#3319 review F1), so this column is never accepted.
+    { name: 'the key on offer in that pin', inQuestion: true, key: () => person().publicKey, pin: (k) => ({ peer: them.publicKey, since: iso(), by: 'member', offered: { peer: k, at: iso() } }) },
+];
+interface OnList { name: string; put: (at: string, key: string) => Promise<void>; outcome: (r: ReadState, k: KeyIs) => Outcome }
+const ON_LIST: OnList[] = [
+    { name: 'on this phone\'s list', put: async (_at, k) => { await blockUser(k); await blockSyncsEndedForTests(); }, outcome: () => 'hidden' },
+    { name: 'on the request\'s community\'s own list only (the web app)', put: async (at, k) => { blockedInWebAppAt(at, k); }, outcome: (r) => (r.fails ? 'card' : 'hidden') },
+    { name: 'on none', put: async () => {}, outcome: (r, k) => (r.fails || k.inQuestion ? 'card' : 'accepted') },
+    {
+        name: 'unblocked earlier, on this phone', outcome: () => 'card',
+        put: async (_at, k) => { await blockUser(k); await blockSyncsEndedForTests(); await unblockUser(k); await blockSyncsEndedForTests(); },
+    },
+];
+interface Waits { name: string; at: string; read: () => Promise<string[]> }
+const WAITS: Waits[] = [
+    { name: 'in A, read in place', at: A, read: async () => ((await db.requestsInPlace(me.publicKey, A))?.conversations ?? []).map((c: any) => c.id) },
+    {
+        name: 'in B, the community in use', at: B,
+        read: async () => {
+            await db.syncMessages(me.publicKey);
+            await settle();
+            return ((await db.getMessageRequests(me.publicKey))?.conversations ?? []).map((c: any) => c.id);
+        },
+    },
+];
+
+describe('block first, everywhere (slice S7b): the design\'s table, through the quiet Accept and the card', () => {
+    for (const waits of WAITS) {
+        for (const onList of ON_LIST) {
+            for (const keyIs of KEY_IS) {
+                for (const read of READS) {
+                    const outcome = onList.outcome(read, keyIs);
+                    it(`${waits.name} | ${onList.name} | ${keyIs.name} | ${read.name} -> ${outcome}`, async () => {
+                        await phoneHoldingThree();
+                        memberWroteIn(C, them.publicKey);
+                        const key = keyIs.key();
+                        const req = waitingRequest(them.publicKey, waits.at);
+                        if (keyIs.pin) {
+                            h.store.set(dmPeerPinsStoreKey(me.publicKey, FILE[waits.at]), JSON.stringify({ pins: { [req.id]: keyIs.pin(key) } }));
+                            db._resetDmPeerPinsForTests();
+                        }
+                        await onList.put(waits.at, key);
+                        await read.before(waits.at);
+                        node.convs.push(req);
+                        asked = [];
+                        const cards = await waits.read();
+                        await settle();
+                        const posts = acceptPosts().filter((p) => p.id === req.id);
+                        expect(posts).toEqual(outcome === 'accepted' ? [{ origin: waits.at, id: req.id }] : []);
+                        expect(req.request?.state).toBe(outcome === 'accepted' ? 'accepted' : 'pending');
+                        expect(cards.includes(req.id), 'its card drawn').toBe(outcome === 'card');
+                    });
+                }
+            }
+        }
+    }
+});
+
+describe('block first, everywhere (slice S7b): the rest', () => {
+    beforeEach(async () => { await phoneHoldingThree(); });
+
+    it('a key seen on a community\'s own list is never shown, spread to another community, or sent again', async () => {
+        const seen = person().publicKey;
+        const mine = person().publicKey;
+        blockedInWebAppAt(C, seen);
+        await roundReadsLists();
+        await blockUser(mine);
+        await blockSyncsEndedForTests();
+        await unblockUser(mine);
+        await blockSyncsEndedForTests();
+        await roundReadsLists();
+        const blockBodies = asked.filter((a) => a.method === 'POST' && new URL(a.url).pathname.startsWith('/api/blocks')).map((a) => a.body ?? '');
+        expect(blockBodies.length).toBeGreaterThan(0);
+        for (const body of blockBodies) expect(body).not.toContain(seen);
+        const { getBlockedUsers, getBlockedPeople } = await import('../blocklist');
+        expect(await getBlockedUsers()).not.toContain(seen);
+        expect(await getBlockedPeople()).not.toContain(seen);
+        // It still holds where it is judged: their request in A is no card.
+        const req = waitingRequest(seen, A);
+        node.convs.push(req);
+        expect((await db.requestsInPlace(me.publicKey, A))?.conversations.map((c: any) => c.id)).toEqual([]);
+    });
+
+    it('a block the web app takes off is lifted at the next read of that list: their card shows again, and once read they are let in', async () => {
+        memberWroteIn(C, them.publicKey);
+        blockedInWebAppAt(A, them.publicKey);
+        await roundReadsLists();
+        const req = waitingRequest(them.publicKey, A);
+        node.convs.push(req);
+        expect((await db.requestsInPlace(me.publicKey, A))?.conversations.map((c: any) => c.id)).toEqual([]);
+        blockListAt(A).splice(0);
+        await roundReadsLists();
+        asked = [];
+        await db.requestsInPlace(me.publicKey, A);
+        await settle();
+        expect(acceptPosts()).toEqual([{ origin: A, id: req.id }]);
+    });
+
+    it('no quiet Accept before that community\'s list is read: one read, before the accept, and once a run', async () => {
+        memberWroteIn(C, them.publicKey);
+        const first = waitingRequest(them.publicKey, A);
+        node.convs.push(first);
+        asked = [];
+        await db.requestsInPlace(me.publicKey, A);
+        await settle();
+        const steps = asked.filter((a) => new URL(a.url).origin === A).map((a) => `${a.method} ${new URL(a.url).pathname}`);
+        const readAt = steps.indexOf('GET /api/blocks');
+        expect(readAt).toBeGreaterThanOrEqual(0);
+        expect(steps.indexOf('POST /api/messages/request')).toBeGreaterThan(readAt);
+        const second = waitingRequest(them.publicKey, A);
+        node.convs.push(second);
+        asked = [];
+        await db.requestsInPlace(me.publicKey, A);
+        await settle();
+        expect(acceptPosts()).toEqual([{ origin: A, id: second.id }]);
+        expect(asked.filter((a) => new URL(a.url).pathname === '/api/blocks')).toEqual([]);
+    });
+
+    it('a list read counts for the account it was read for alone: after a switch, the other account\'s first ask reads it again (here that read fails)', async () => {
+        memberWroteIn(C, them.publicKey);
+        await roundReadsLists();
+        const other = person();
+        h.me = { ...other };
+        announceAccountOnPhone(other.publicKey);
+        blocksDown = A;
+        asked = [];
+        expect(await blockListReadThisRun(other.publicKey, A)).toBe(false);
+        expect(asked.filter((a) => a.url === `${A}/api/blocks`)).toHaveLength(1);
+        expect(await letInFor(other.publicKey, A)(them.publicKey)).toBe(false);
+        h.me = { ...me };
+        announceAccountOnPhone(me.publicKey);
+        asked = [];
+        expect(await blockListReadThisRun(me.publicKey, A)).toBe(true);
+        expect(asked).toEqual([]);
+        expect(await letInFor(me.publicKey, A)(them.publicKey)).toBe(true);
+    });
+
+    it('across: no first line opens a chat while the mailbox community\'s own list can\'t be read this run; once it can, it does', async () => {
+        memberWroteIn(C, them.publicKey);
+        blocksDown = B;
+        expect(await letInFor(me.publicKey, B)(them.publicKey)).toBe(false);
+        blocksDown = null;
+        expect(await letInFor(me.publicKey, B)(them.publicKey)).toBe(true);
+    });
+});
+
+/**
+ * "Add people I've chatted with" takes the key let in once takes from a chat (#3319 final review, R3-F1, probe Q6): its pin's,
+ * else its one other person, nobody when its rows name several (db.ts letInOfRows). Before, it linked every other key in the
+ * chat's rows, and each such contact was let in everywhere.
+ */
+describe('block first, everywhere (slice S7b): Add takes the let-in\'s key (#3319 R3-F1)', () => {
+    beforeEach(async () => { await phoneHoldingThree(); });
+
+    const chatNamingTwo = (pin: 'none' | 'new'): { fresh: string; stale: string } => {
+        const fresh = person().publicKey;
+        const stale = person().publicKey;
+        let id = '';
+        intoCopy(B, (s) => {
+            cardIn(s, fresh, 'new');
+            cardIn(s, stale, 'old');
+            id = dmIn(s, fresh, null, me.publicKey);
+            s.prepare('INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(id, stale);
+        });
+        if (pin === 'new') {
+            h.store.set(dmPeerPinsStoreKey(me.publicKey, FILE[B]), JSON.stringify({ pins: { [id]: { peer: fresh, since: iso(), by: 'listing', former: [stale] } } }));
+            db._resetDmPeerPinsForTests();
+        }
+        return { fresh, stale };
+    };
+
+    it('a chat the member wrote in, no pin on this phone, its rows naming two other keys: neither is offered, and after Add neither is let in', async () => {
+        const { fresh, stale } = chatNamingTwo('none');
+        expect([await letInFor(me.publicKey, B)(fresh), await letInFor(me.publicKey, B)(stale)]).toEqual([false, false]);
+        const offered = await offeredByAdd();
+        expect(offered).toEqual([]);
+        h.contacts = withPeopleAdded(emptyContactsList(), offered.map((key) => ({ key, callsign: 'them' })), me.publicKey, B).contacts as any;
+        _resetLetInForTests();
+        expect([await letInFor(me.publicKey, B)(fresh), await letInFor(me.publicKey, B)(stale)]).toEqual([false, false]);
+    });
+
+    it('the same chat pinned to the new key: only the new key is offered, never the one pinned before it', async () => {
+        const { fresh, stale } = chatNamingTwo('new');
+        expect(await offeredByAdd()).toEqual([fresh]);
+        expect((await db.getChattedWithMembers(me.publicKey)).find((p) => p.publicKey === fresh)?.keys.sort()).toEqual([fresh, stale].sort());
+    });
+
+    it('blocked on this phone under the key a re-key replaced: the chat pinned to their new key names it, so they are not offered', async () => {
+        const { stale } = chatNamingTwo('new');
+        await blockUser(stale);
+        await blockSyncsEndedForTests();
+        expect(await offeredByAdd()).toEqual([]);
     });
 });

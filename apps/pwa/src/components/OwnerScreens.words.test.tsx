@@ -225,7 +225,8 @@ describe('the recovery kit (RecoveryKitButton) and "one way back" (OneWayBackCar
             },
         } as unknown as api.HomeRead);
         render(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} result={{ kind: 'linked', provider: 'google', recoveryStored: true }} />);
-        expect(await screen.findByTestId('one-way-back-text')).toHaveTextContent(xx('Your account has one way back: your 12 words. Check you still have them, or add a sign-in.'));
+        // Core's one sentence in a browser's words (way-back-schedule.ts WAY_BACK_WORDS.lineBrowser, slice B2).
+        expect(await screen.findByTestId('one-way-back-text')).toHaveTextContent(xx('If this browser forgets your account, this is how you get back in.'));
         expect(screen.getByTestId('link-result').textContent).toBe(xx('{provider} is added. Signing in with it also brings this account back, and your new-account limits are now the usual ones.').replace('{provider}', 'Google'));
         allThroughWords(['Google']);
     });

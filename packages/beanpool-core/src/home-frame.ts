@@ -943,23 +943,37 @@ export function compareForAsk(a: Pick<HomeCardInstance, 'id' | 'type'>, b: Pick<
 }
 
 /**
+ * What "Your way back in" goes by besides its own word (way-back-schedule.ts): the balance, from Your Beans, and an open
+ * deal, from Your deals. Both can be taken off Home, so they are asked with it whether the list holds them or not (review
+ * of #3341): the node builds a card asked by its type's id whatever the saved list says (apps/server routes/home-answer.ts
+ * `BUILT_WHEN_ASKED`), and the apps draw only the list, so the card comes back on the same days on the phone and the web
+ * whatever the member keeps on Home.
+ */
+export const WAY_BACK_ASKS: readonly string[] = ['beans', 'deals'];
+
+/**
  * The instance ids to ask the node for (`cards=`), in catalogue order then id, so the same set is the same address
  * whatever the member's order and a repeat read can be a 304: the fixed two, every instance in the list whose type this
  * build knows and the node builds (`asks: 'node'`) and whose settings give it something to build (`asksWith`: a chat
  * card with no chat picked is not), and any `pinned` type (asked for whatever the list says). An unknown type is never
  * asked: this build couldn't draw its body. A card that arrives ({@link arrivingCards}) is asked as one in the list is.
+ * Where "Your way back in" is asked, so are the cards it goes by ({@link WAY_BACK_ASKS}), on the list or not.
+ *
+ * `shows`: whether the app asks a type at all (one it draws, on a node that shows it); a type it says no to is never asked,
+ * and "Your way back in" left out that way brings nothing with it.
  */
-export function cardsToAsk(layout: HomeLayoutV2 | null, pinned: readonly string[] = []): string[] {
+export function cardsToAsk(layout: HomeLayoutV2 | null, pinned: readonly string[] = [], shows: (type: string) => boolean = () => true): string[] {
     const cards = homeCardsWithArrivals(layout);
     const want = new Map<string, Pick<HomeCardInstance, 'id' | 'type'>>();
     const add = (c: Pick<HomeCardInstance, 'id' | 'type' | 'settings'>) => {
         const t = TYPES.get(c.type);
-        if (t?.asks !== 'node' || want.has(c.id)) return;
+        if (t?.asks !== 'node' || want.has(c.id) || !shows(c.type)) return;
         if (t.asksWith && !t.asksWith(t.readSettings ? t.readSettings(c.settings) : {})) return;
         want.set(c.id, c);
     };
     for (const id of HOME_FIXED_TYPES) add({ id, type: id });
     for (const id of pinned) add({ id, type: id });
     for (const c of cards) add(c);
+    if ([...want.values()].some((c) => c.type === 'safety')) for (const id of WAY_BACK_ASKS) add({ id, type: id });
     return [...want.values()].sort(compareForAsk).map((c) => c.id);
 }

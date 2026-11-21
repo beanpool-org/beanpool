@@ -249,11 +249,19 @@ describe('the layout (§4)', () => {
         cards: { events, market: market(2), beans: { balance_c: 100, room_c: 100, tier: 'Resident', activated: true, frozen: false }, community: { name: 'M', members: 9 } },
     });
 
-    it('a card not in the list is never drawn, nor asked for; `needs` and `community` are always there and can\'t be removed', () => {
+    it('a card not in the list is never drawn, nor asked for (but what "Your way back in" goes by); `needs` and `community` are always there and can\'t be removed', () => {
         const l = layout({ hidden: ['market', 'beans'] });
         expect(draw(full, l, ctx({ interests: ['food'] }))).toEqual(['events', 'community']);
         expect(cardsToAsk(l)).not.toContain('market');
-        expect(cardsToAsk(l)).not.toContain('beans');
+        // Review of #3341: "Your way back in" comes back by the balance and an open deal (core way-back-schedule.ts), so with it
+        // on Home, Your Beans and Your deals are asked though the list lacks them (core WAY_BACK_ASKS), and still never drawn.
+        expect(cardsToAsk(l)).toContain('beans');
+        const noWayBack = layout({ hidden: ['market', 'beans', 'safety'] });
+        expect(cardsToAsk(noWayBack)).not.toContain('market');
+        expect(cardsToAsk(noWayBack)).not.toContain('beans');
+        const noneOfThem = layout({ hidden: ['market', 'beans', 'deals'] });
+        expect(cardsToAsk(noneOfThem)).toEqual(expect.arrayContaining(['safety', 'beans', 'deals']));
+        expect(draw({ ...full, cards: { ...full.cards, deals: { open: 1, waiting: 0, waitingOnMe: null } } }, noneOfThem, ctx({ interests: ['food'] }))).toEqual(['events', 'community']);
         expect(removeCard(null, 'needs', NOW)).toBeNull();
         expect(removeCard(null, 'community', NOW)).toBeNull();
         // A version-1 layout reads as the member's order with the hidden cards left out, and never lists the fixed two.

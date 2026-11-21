@@ -1,30 +1,44 @@
 /**
- * "Your account has one way back" (two-doors design §2.5, slice S5): a member who joined with 12 words alone has no other
- * way back to their account, by their own choice. The web app says so plainly, and offers a sign-in as a second way,
- * without ever making either a gate:
+ * "Your way back in" (two-doors design §2.5; DESIGN-notify-and-backup-asks-fable.md §5.2, amend2 slice B2): a member whose
+ * 12 words are the only way back to their account is told so plainly, and offered a sign-in as a second way where one
+ * works, without ever making either a gate. The same card as the phone's (apps/native/components/OneWayBackCard.tsx), from
+ * the same rule (@beanpool/core way-back-schedule.ts), in a browser's words:
  *
- *   - on the landing screen, a plain card (not a dot) until they have looked at their 12 words from it or added a
- *     sign-in. It can be put away; it comes back once after their next post that stays up, and once when their first
- *     week is over, then lives in Settings only;
- *   - in Settings, the same card for as long as the account has no sign-in and the words aren't said to be kept, with
- *     the sign-ins to add where they work.
+ *   - one sentence on every card, "If this browser forgets your account, this is how you get back in." (core
+ *     `WAY_BACK_WORDS.lineBrowser`: a browser loses an account to its saved data being cleared, Safari's after a week
+ *     without a visit, a sign-out or a lost device; "this phone is lost" would not be true here), and at the first Beans
+ *     the fact: "You have 40 Beans here now. Keep a way back in, so they don't go if this browser forgets your account.";
+ *   - on the landing screen, while core's schedule says so: from the first landing after a join here that ended with no way
+ *     back kept (Safety Backup's Next with its tick not ticked, the web's "Later"), until it is put away; then once at the
+ *     first Beans, once 30 days after joining, then every 90 days while there is something to lose. ✕ puts it away, here
+ *     and on the account (`onPutAway`, Home keeps it in `home.layout` `dismissed.safety`), and a put-away on the phone or
+ *     another browser counts here too (`accountPutAwayAt`), as the phone reads the web's;
+ *   - in Settings, the same card for as long as the account has no way back kept, with the sign-ins to add where they work.
+ *
+ * Kept, as on the phone: a sign-in's copy linked here (Home's `me.wayBack` covered), or "I still have my 12 words" said on
+ * any device or after the kit (the account's `words_kept`, or the join's tick). Looking at the 12 words is not keeping them:
+ * "See my 12 words" opens them, and the card stays on its schedule, as the phone's "Show my 12 words" does. The web keeps no
+ * recovery key and never reaches BeanPool's key vault, so on the web the 12 words (and a sign-in where the community takes
+ * one) are the only way back.
+ *
+ * "Something to lose" is what Home's answer holds: a balance that isn't zero, or an open deal. Your Beans and Your deals are
+ * asked with this card whether or not the member keeps them on Home (core `WAY_BACK_ASKS`; review of #3341), so the first
+ * Beans and the 90 days come as on the phone whatever is on Home. Home's answer says nothing of the member's live listings
+ * or role, and the card asks for nothing later (a card arriving late moved every card after it, PR #2411), so on the web
+ * those two don't bring the 90-day return; a balance, an open deal and the 30 days do.
  *
  * Who it is for is the node's word, never a guess: its Home answer, read by lib/home-cards.ts `wayBackOf`
  * (DESIGN-home-default-fable.md §2.5): every member whose 12 words are the only way back (`me.wayBack`), however they
- * joined, until they say they still have them, with the counts its schedule goes by. On Home it is passed as `home`, so
- * the card's first paint is what it settles on: nothing drawn and pulled, nothing popped in late (the jump PR #2411
- * fixed); Home is told whether the card is drawn (`onDrawn`). In Settings the card asks for the same answer itself
- * (`GET /api/home?cards=safety`, {@link useWayBackWord}), so a member who came by invite and whose words are their only
- * way back has the reminder there too once Home's two returns are over, as on the phone. Nothing is drawn while it has
+ * joined, until they say they still have them. On Home it is passed as `home`, so the card's first paint is what it settles
+ * on: nothing drawn and pulled, nothing popped in late; Home is told whether the card is drawn (`onDrawn`). In Settings the
+ * card asks for the same answer itself (`GET /api/home?cards=safety`, {@link useWayBackWord}). Nothing is drawn while it has
  * not answered, or offline.
  *
  * What it offers is only what works for that member: "Add a sign-in" only where the node's link route takes them (the
- * 12-words door's own, `cards.safety`; anyone else is refused with 404 invite_only or 409 not_words_member), and "one
- * way back" only where it is true (the worldwide community; on a local one an admin can set a member up again with a new
- * key, recovery model point 3), on Home and in Settings alike, as the phone says it. Sign-up counts as the first showing
- * for everyone but the 12-words door's own: their schedule starts as put away, so on day one First steps' line says it,
- * and the card comes once after a post and once when the first week is over. "I still have my 12 words" is kept on the
- * account (`onKept`), as Yes after the kit is, from the card on Home and in Settings; in Settings a member the node still
+ * 12-words door's own, `cards.safety`; anyone else is refused with 404 invite_only or 409 not_words_member). Sign-up counts
+ * as the first showing for a member this browser has no record of (joined on another device, or brought back here), but
+ * the 12-words door's own: their schedule starts as put away at the join, as the phone's does after a restore. "I still have
+ * my 12 words" is kept on the account (`onKept`), from the card on Home and in Settings; in Settings a member the node still
  * takes a sign-in from is then offered one quietly, with no warning, as the phone's Settings does.
  *
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
@@ -33,22 +47,18 @@
  * words say so rather than promise a copy or a way back.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { t, word } from '@beanpool/core';
+import { t, word, wayBackBeansSeen, wayBackLine, wayBackSchedule, type WayBackSchedule } from '@beanpool/core';
 import { getHome } from '../lib/api';
-import { wayBackOf, type HomeAnswer, type WayBackOnHome } from '../lib/home-cards';
+import { beansAmount, wayBackOf, type HomeAnswer, type WayBackOnHome } from '../lib/home-cards';
 import { hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
 import { NONCE_FRESH_MS, offeredProviders, providerLabel, type JoinNonce } from '../lib/web-join';
 import { leaveForLink, linkResultMessage, requestLinkNonce, type LinkResult } from '../lib/link-signin';
+import { wordsKeptOwed } from '../lib/words-kept';
 import { keyLineWords } from './key-lines';
 import { saidWords, type Said } from './WebJoin';
 
-/** The card's words, marked here and translated where they are shown. */
+/** The card's own words, marked here and translated where they are shown. Its sentence is core's (`WAY_BACK_WORDS`). */
 export const ONE_WAY_BACK_WORDS = {
-    line: word('Your account has one way back: your 12 words. Check you still have them, or add a sign-in.'),
-    /** Where an admin can set a member up again (a local community), and a sign-in can be added (§2.5). */
-    lineLocal: word('Your 12 words are how you get back in. Check you still have them, or add a sign-in.'),
-    /** Where no sign-in can be added for this member (§2.5's short form). */
-    lineShort: word('Your 12 words are how you get back in. Check you still have them.'),
     /** The say-so, kept on the account (DESIGN-home-default-fable.md §2.5). */
     kept: word('I still have my 12 words'),
     /** Why a sign-in, for an account that has only its 12 words: what it is, and who can open the copy it keeps. */
@@ -57,18 +67,9 @@ export const ONE_WAY_BACK_WORDS = {
     whyNoCopies: word("A sign-in with Google, Apple or Facebook only lifts the limits on new 12-words accounts. We keep only a scrambled reference to it, never your email or name from there. This community keeps no copies of members' accounts, so your 12 words are your way back."),
 } as const;
 
-export const ONE_WAY_BACK = ONE_WAY_BACK_WORDS.line;
-export const ADD_SIGN_IN_WHY = ONE_WAY_BACK_WORDS.why;
-
-interface Standing {
-    words: boolean;
-    keptPosts: number;
-    weekOverAt: number | null;
-}
-
 /** What the card goes by: Home's own answer, read by lib/home-cards.ts `wayBackOf`, and where it is. */
 export interface WayBackWord extends WayBackOnHome {
-    /** The worldwide community, where no admin can set a member up again: the one place "one way back" is true (§2.5). */
+    /** The worldwide community. */
     global: boolean;
     /**
      * The words are said to be kept, but the node still takes a sign-in from this member (the 12-words door's own, while
@@ -104,105 +105,73 @@ export function useWayBackWord(publicKey: string, refreshKey?: unknown, ask = tr
     return found;
 }
 
-// ---------- the landing card's schedule, kept in this browser for this account ----------
+// ---------- the landing card's schedule: core's rule, with what this browser keeps beside it ----------
 
 /**
- * Two returns, each independent of the other (design §2.5, the guide page): once after a post has stayed up since it
- * was first put away, and once when the first week is over. ✕ marks every return that is due at that moment as shown,
- * so it always puts the card away until the next one is due.
+ * What this browser keeps for the card, per account, under the key it always had (`beanpool_one_way_back_<key>`): times
+ * only, nothing secret. When it next shows is core's (way-back-schedule.ts), never worked out here.
+ * A record from before (its `dismissed`, post and week flags, `checked`) has none of these and is read as no record: the
+ * card then starts as a member this browser never saw would (below), and the next write keeps only these.
  */
-interface Schedule {
-    /** It has been put away at least once. */
-    dismissed: boolean;
-    /** Posts that had stayed up when it was first put away. */
-    keptPostsAtDismissal: number;
-    /** The return after a post that stayed up has been shown and put away. */
-    postReturnShown: boolean;
-    /** The return when the first week is over has been shown and put away (or was due when it was put away). */
-    weekReturnShown: boolean;
-    /** They looked at their 12 words from the card: it is done on the landing screen. */
-    checked: boolean;
-    /** When it was first put away, if the node's counts weren't known then: they settle it when they come (null once settled). */
-    awayBeforeCounts: number | null;
+export interface WayBackHere {
+    /** The join in this browser ended with no way back kept (the web's "Later"): the card is up from the first landing. */
+    shownFrom?: number;
+    /** The last ✕ here. */
+    putAwayAt?: number;
+    /** When this browser first saw a balance above zero on the account: the card comes back once for it (core `wayBackBeansSeen`). */
+    beansAt?: number;
 }
 
-const scheduleKey = (publicKey: string) => `beanpool_one_way_back_${publicKey}`;
-const NEW_SCHEDULE: Schedule = { dismissed: false, keptPostsAtDismissal: 0, postReturnShown: false, weekReturnShown: false, checked: false, awayBeforeCounts: null };
+const hereKey = (publicKey: string) => `beanpool_one_way_back_${publicKey}`;
+const time = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 
-/**
- * The record in this browser, or a new one: shown at once, or (`startsAway`) put away at sign-up with no post up then,
- * so its two returns are what bring it (§2.5 "sign-up counts as the first showing").
- */
-export function readSchedule(publicKey: string, startsAway = false): Schedule {
+/** This browser's record for the account; empty when there is none, it can't be read, or it is from before. */
+export function readWayBackHere(publicKey: string): WayBackHere {
     try {
-        const v = JSON.parse(localStorage.getItem(scheduleKey(publicKey)) || 'null');
+        const v = JSON.parse(localStorage.getItem(hereKey(publicKey)) || 'null');
         if (v && typeof v === 'object') {
-            return {
-                dismissed: v.dismissed === true,
-                keptPostsAtDismissal: Number(v.keptPostsAtDismissal) || 0,
-                postReturnShown: v.postReturnShown === true,
-                weekReturnShown: v.weekReturnShown === true,
-                checked: v.checked === true,
-                awayBeforeCounts: typeof v.awayBeforeCounts === 'number' && Number.isFinite(v.awayBeforeCounts) ? v.awayBeforeCounts : null,
-            };
+            const here: WayBackHere = {};
+            const shownFrom = time(v.shownFrom);
+            const putAwayAt = time(v.putAwayAt);
+            const beansAt = time(v.beansAt);
+            if (shownFrom !== undefined) here.shownFrom = shownFrom;
+            if (putAwayAt !== undefined) here.putAwayAt = putAwayAt;
+            if (beansAt !== undefined) here.beansAt = beansAt;
+            return here;
         }
     } catch { /* private window, or not ours */ }
-    return startsAway ? { ...NEW_SCHEDULE, dismissed: true } : { ...NEW_SCHEDULE };
+    return {};
 }
 
-function writeSchedule(publicKey: string, s: Schedule): void {
-    try { localStorage.setItem(scheduleKey(publicKey), JSON.stringify(s)); } catch { /* private window: shown again next time */ }
-}
-
-function postReturnDue(s: Schedule, standing: Standing): boolean {
-    return s.dismissed && !s.postReturnShown && standing.keptPosts > s.keptPostsAtDismissal;
-}
-
-function weekReturnDue(s: Schedule, standing: Standing, now: number): boolean {
-    return !s.weekReturnShown && standing.weekOverAt !== null && now >= standing.weekOverAt;
+function writeWayBackHere(publicKey: string, here: WayBackHere): void {
+    try { localStorage.setItem(hereKey(publicKey), JSON.stringify(here)); } catch { /* private window: as if never written */ }
 }
 
 /**
- * Whether the landing screen shows the card now: until it is first put away; then once after a post that stayed up
- * since, and once when the first week is over, in whichever order they come; then never (Settings keeps it).
+ * The web's join ended on Safety Backup with no way back kept (its tick not ticked; pages/WelcomePage.tsx): as after the
+ * phone's "Later", Home's card is up from the first landing until it is put away or a way back is kept. A record already
+ * here is kept as it is.
  */
-export function landingDue(s: Schedule, standing: Standing | null, now: number = Date.now()): boolean {
-    if (s.checked) return false;
-    if (!s.dismissed) return true;
-    // Put away before the counts came: nothing was due at that moment, and they settle it (settleAway) when they come.
-    if (s.awayBeforeCounts !== null) return false;
-    // A return goes by the node's counts: none until it has answered.
-    return !!standing && (postReturnDue(s, standing) || weekReturnDue(s, standing, now));
-}
-
-/** ✕: put away until the next return is due. Every return due now counts as shown. */
-export function putAway(s: Schedule, standing: Standing, now: number = Date.now()): Schedule {
-    const postDue = postReturnDue(s, standing);
-    const weekDue = weekReturnDue(s, standing, now);
-    return {
-        ...s,
-        dismissed: true,
-        keptPostsAtDismissal: s.dismissed ? s.keptPostsAtDismissal : standing.keptPosts,
-        postReturnShown: s.postReturnShown || postDue,
-        weekReturnShown: s.weekReturnShown || weekDue,
-    };
+export function startWayBackShown(publicKey: string, now: number = Date.now()): void {
+    const here = readWayBackHere(publicKey);
+    if (here.shownFrom !== undefined || here.putAwayAt !== undefined) return;
+    writeWayBackHere(publicKey, { ...here, shownFrom: now });
 }
 
 /**
- * ✕ before the node's counts were known: put away now, with no count yet (the card is only drawn then when it was never
- * put away, so this is always the first time).
+ * Core's schedule for this member here: Home's word (`home`), this browser's record, and the account's own put-away (the
+ * phone's ✕ or another browser's, `home.layout` `dismissed.safety`), whichever is later. With no showing or put-away known,
+ * sign-up was its first showing for all but the 12-words door's own (`startsAway`): put away at the join.
  */
-export function putAwayBeforeCounts(s: Schedule, now: number = Date.now()): Schedule {
-    return { ...s, dismissed: true, awayBeforeCounts: now };
-}
-
-/**
- * The counts that came after such a ✕: the posts up now are the ones it was put away with, and a week that was over at
- * the ✕ counts as shown, as {@link putAway} would have had it. Anything else is left as it is.
- */
-export function settleAway(s: Schedule, standing: Standing): Schedule {
-    if (s.awayBeforeCounts === null) return s;
-    return putAway({ ...s, dismissed: false, awayBeforeCounts: null }, standing, s.awayBeforeCounts);
+export function wayBackScheduleHere(home: WayBackOnHome, here: WayBackHere, accountPutAwayAt: string | null | undefined, now: number): WayBackSchedule {
+    const account = accountPutAwayAt ? Date.parse(accountPutAwayAt) : NaN;
+    const known = [here.putAwayAt, Number.isFinite(account) ? account : undefined].filter((v): v is number => v !== undefined);
+    const joinedAt = home.joinedAt ?? here.shownFrom ?? now;
+    const putAwayAt = known.length ? Math.max(...known) : here.shownFrom === undefined && home.startsAway ? joinedAt : null;
+    return wayBackSchedule({
+        joinedAt, now, kept: false, putAwayAt,
+        beansAt: wayBackBeansSeen(here.beansAt, home.balance_c, now), balance_c: home.balance_c, holds: home.holds,
+    });
 }
 
 // ---------- adding a sign-in ----------
@@ -331,11 +300,12 @@ export function AddSignIn({ identity, label, navigate, origin, onLeaving, autoSt
     );
 }
 
+
 // ---------- the card ----------
 
 interface CardProps {
     identity: BeanPoolIdentity;
-    /** The landing screen (can be put away, on its schedule) or Settings (kept while the account has no sign-in). */
+    /** The landing screen (can be put away, on core's schedule) or Settings (kept while the account has no way back kept). */
     placement: 'landing' | 'settings';
     /** Open the 12 words (Settings → Recovery Phrase). */
     onSeeWords?: () => void;
@@ -348,8 +318,8 @@ interface CardProps {
     /** What the card stands in (Home's cell, with its "…"): drawn only with the card, so a card with nothing to say takes no place. */
     frame?: (card: ReactNode) => ReactNode;
     /**
-     * Home's own answer, read by lib/home-cards.ts `wayBackOf`: who the card is for, what works for them, and the counts
-     * its schedule goes by. Given, it is the one word, at the first paint and after, and nothing is asked. Not given
+     * Home's own answer, read by lib/home-cards.ts `wayBackOf`: who the card is for, what works for them, and what its
+     * schedule goes by. Given, it is the one word, at the first paint and after, and nothing is asked. Not given
      * (Settings), the card asks for the same answer itself ({@link useWayBackWord}).
      */
     home?: WayBackWord;
@@ -359,42 +329,52 @@ interface CardProps {
     onDrawn?: (drawn: boolean) => void;
     /** This community keeps no copies of members' accounts (its rule `none`, from the page's /api/community/info). */
     keepsNoCopies?: boolean;
+    /** The account's own put-away of the card (`home.layout` `dismissed.safety`): the phone's ✕, another browser's, or this one's. */
+    accountPutAwayAt?: string | null;
+    /** ✕, at the moment this browser keeps too: Home keeps it on the account (lib/home-layout.ts dismissSafety), as the phone does. */
+    onPutAway?: (at: number) => void;
 }
 
-export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, home, onKept, onDrawn, keepsNoCopies = false }: CardProps) {
+export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, home, onKept, onDrawn, keepsNoCopies = false, accountPutAwayAt, onPutAway }: CardProps) {
     const asked = useWayBackWord(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`, !home);
     const wayBack = home ?? asked;
-    const standing: Standing | null = wayBack ? { words: wayBack.forThem, keptPosts: wayBack.keptPosts, weekOverAt: wayBack.weekOverAt } : null;
-    const startsAway = !!wayBack?.startsAway;
     // Said here just now: the card is done at once, before any answer says so.
     const [keptNow, setKeptNow] = useState(false);
-    const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey, startsAway));
-    useEffect(() => { setSchedule(readSchedule(identity.publicKey, startsAway)); }, [identity.publicKey, startsAway]);
+    const [here, setHere] = useState(() => readWayBackHere(identity.publicKey));
+    useEffect(() => { setHere(readWayBackHere(identity.publicKey)); }, [identity.publicKey]);
     // A sign-in that just came back: its result is the first thing read on the page that opened for it.
     const resultRef = useRef<HTMLParagraphElement | null>(null);
     useEffect(() => { if (result) resultRef.current?.scrollIntoView?.({ block: 'center' }); }, [result]);
 
-    const forThem = !!standing?.words && !keptNow;
-    // Only what works for this member (§2.5): a sign-in where the node's link route takes them; "one way back" only on the
-    // worldwide community, where no admin can set them up again (the phone's rule too, components/OneWayBackCard.tsx).
+    // A way back kept ends it: the node's word (`forThem`), said here just now, or said here and still owed to the node
+    // (lib/words-kept.ts sends it again at the next landing), so a say-so the node didn't hear yet never brings it back.
+    const forThem = !!wayBack?.forThem && !keptNow && !wordsKeptOwed(identity.publicKey);
+    // Only what works for this member (§2.5): a sign-in where the node's link route takes them.
     const signIn = !!wayBack?.canAddSignIn;
-    const oneWayBack = !!wayBack?.global && signIn;
-    const shown = forThem && (placement === 'settings' || landingDue(schedule, standing));
+    // Core's schedule, on the landing screen: whether it is up now, and why (the first Beans bring their own sentence).
+    const schedule = forThem && placement === 'landing' && wayBack ? wayBackScheduleHere(wayBack, here, accountPutAwayAt, Date.now()) : null;
+    const shown = forThem && (placement === 'settings' || !!schedule?.show);
     // Settings, once the words are said to be kept: a sign-in still offered, quietly, where the node takes one.
     const quietOffer = placement === 'settings' && !shown && (keptNow ? signIn : !!wayBack?.quietSignIn);
 
-    function update(next: Schedule) {
-        setSchedule(next);
-        writeSchedule(identity.publicKey, next);
+    function update(next: WayBackHere) {
+        setHere(next);
+        writeWayBackHere(identity.publicKey, next);
     }
 
-    // A ✕ before the node's counts were known, on this visit or an earlier one: settled once they are.
+    // The first Beans seen here (a balance above zero in Home's answer): kept once, so the card comes back for them. The
+    // schedule above already counts them on this paint (core wayBackBeansSeen), so nothing pops in when this lands.
+    const balance = wayBack?.balance_c ?? null;
+    const firstBeans = placement === 'landing' && forThem && here.beansAt === undefined && balance !== null && balance > 0;
     useEffect(() => {
-        if (standing && schedule.awayBeforeCounts !== null) update(settleAway(schedule, standing));
-    }, [standing, schedule]);
+        if (firstBeans) update({ ...readWayBackHere(identity.publicKey), beansAt: Date.now() });
+    }, [firstBeans, identity.publicKey]);
 
     useLayoutEffect(() => { onDrawn?.(shown); }, [shown]);
     useLayoutEffect(() => () => { onDrawn?.(false); }, []);
+
+    // One sentence on every card, in a browser's words (core way-back-schedule.ts); at the first Beans, the fact with the amount.
+    const line = wayBackLine(schedule?.why ?? null, balance !== null && balance > 0 ? beansAmount(balance) : null, 'browser');
 
     return (
         <>
@@ -411,28 +391,33 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                     className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-amber-300 dark:border-amber-700 p-4 mb-3 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                         <h2 id={`one-way-back-title-${placement}`} className="font-bold text-base text-nature-900 dark:text-white m-0 min-w-0 break-words">
-                            <span aria-hidden="true">🔑 </span>{oneWayBack ? t('One way back') : t('Your way back in')}
+                            <span aria-hidden="true">🔑 </span>{t('Your way back in')}
                         </h2>
                         {placement === 'landing' && (
                             <button type="button" aria-label={t('Hide this for now')}
-                                onClick={() => update(standing ? putAway(schedule, standing) : putAwayBeforeCounts(schedule))}
-                                className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                onClick={() => {
+                                    // One moment for this browser and the account (Home keeps it in `home.layout`).
+                                    const at = Date.now();
+                                    update({ ...here, putAwayAt: at });
+                                    onPutAway?.(at);
+                                }}
+                                className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 dark:text-nature-300 hover:text-nature-600 dark:hover:text-nature-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
                             </button>
                         )}
                     </div>
-                    <p data-testid="one-way-back-text" className="text-sm text-nature-700 dark:text-nature-200 mt-1 mb-3 leading-relaxed break-words">{oneWayBack ? t(ONE_WAY_BACK_WORDS.line) : signIn ? t(ONE_WAY_BACK_WORDS.lineLocal) : t(ONE_WAY_BACK_WORDS.lineShort)}</p>
+                    <p data-testid="one-way-back-text" className="text-sm text-nature-700 dark:text-nature-200 mt-1 mb-3 leading-relaxed break-words">{line}</p>
                     <div className="space-y-2">
                         {onSeeWords && hasMnemonic(identity) && (
-                            <button type="button" data-testid="one-way-back-words"
-                                onClick={() => { if (placement === 'landing') update({ ...schedule, checked: true }); onSeeWords(); }}
+                            // Looking at them is not keeping them: the card stays on its schedule, as the phone's "Show my 12 words".
+                            <button type="button" data-testid="one-way-back-words" onClick={() => onSeeWords()}
                                 className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-none cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
                                 {t('See my 12 words')}
                             </button>
                         )}
                         {onKept && (
                             <button type="button" data-testid="one-way-back-kept"
-                                onClick={() => { if (placement === 'landing') update({ ...schedule, checked: true }); setKeptNow(true); onKept(); }}
+                                onClick={() => { setKeptNow(true); onKept(); }}
                                 className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 {t(ONE_WAY_BACK_WORDS.kept)}
                             </button>

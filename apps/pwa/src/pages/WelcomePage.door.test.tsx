@@ -14,6 +14,7 @@ import { generateMnemonic } from '../lib/mnemonic';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { loadPendingLink } from '../lib/link-signin';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { readWayBackHere } from '../components/OneWayBack';
 import { oncePerPersonVariant } from '@beanpool/core';
 
 type Handler = (body: any, path: string) => Response;
@@ -527,6 +528,8 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         expect(calls.filter((c) => c.path === '/api/funnel-event' && c.body?.event === 'protection_choice').map((c) => c.body.variant))
             .toEqual([oncePerPersonVariant('words')]);
         expect(localStorage.getItem(seedViewedKey(identity.publicKey))).toBe('true');
+        // The words kept: no "Later" for Home's way-back card to show after (slice B2).
+        expect(readWayBackHere(identity.publicKey)).toEqual({});
     });
 
     it("the way back's Next still goes in without the sign-in: nothing is lost by changing their mind", async () => {
@@ -544,10 +547,15 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         await screen.findByTestId('backup-words-only');
         fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
         await screen.findByTestId('add-sign-in-google');
+        const before = Date.now();
         fireEvent.click(screen.getByTestId('backup-next'));
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
         expect(calls.find((c) => c.path === '/api/profile/update')?.body.avatar).toBe('bundled://bean-green');
         expect(loadPendingLink()).toBeNull();
+        // Next with the tick not ticked is the web's "Later": Home's way-back card is up from the first landing, as after the
+        // phone's Later (slice B2), and nothing is said kept.
+        expect(readWayBackHere(identity.publicKey).shownFrom).toBeGreaterThanOrEqual(before);
+        expect(calls.some((c) => c.path === '/api/members/preferences')).toBe(false);
     });
 });
 

@@ -528,7 +528,9 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
  * address and a repeat read can be a 304; the fixed two, every instance in the list the node builds, and a pinned card
  * whatever the list says. A type this build doesn't know is never asked. With an answer in hand, a type this node
  * doesn't show ({@link cardOnNode}) is never asked either (review of #1699, finding 5); Find your community is asked as
- * before, so a local member's address stays what their first read's was.
+ * before, so a local member's address stays what their first read's was. Where "Your way back in" is asked, Your Beans and
+ * Your deals are too, on the list or not (core `WAY_BACK_ASKS`): its schedule goes by the balance and an open deal, so it
+ * keeps the phone's days whatever the member keeps on Home (review of #3341). Home draws only the list.
  */
 export function cardsToAsk(
     layout: HomeLayoutV2 | null, pinned: readonly string[] = [], answer?: Pick<FrameAnswer, 'profile' | 'features' | 'cards' | 'me'> | null,
@@ -536,11 +538,7 @@ export function cardsToAsk(
     // A Home never saved is the default list (DESIGN-home-default-fable.md §2.2), asked in the one first read. Before the node
     // has answered, the app can't tell which of them it shows: the node builds none it doesn't (routes/home-answer.ts
     // `shownHere`), and once an answer is in hand only those it shows are asked (review of #1699, finding 5).
-    const base = layout ?? defaultHomeLayout();
-    return frameCardsToAsk(base, pinned).filter(id => {
-        const type = base.cards.find(l => l.id === id)?.type ?? id;
-        return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));
-    });
+    return frameCardsToAsk(layout ?? defaultHomeLayout(), pinned, type => HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer)));
 }
 
 // ── The columns on a wide screen (DESIGN-home-wide-and-content-fable.md D1, slice W2) ─────────────────────────────

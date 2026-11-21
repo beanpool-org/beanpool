@@ -73,7 +73,7 @@ import {
     FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
     canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings,
     listOf, moveCard, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, removeCard, removedLine, LEARN_OPENS, isArrivingCard, keepCard,
-    resetLayout, undoResetLayout, RESET_DONE_LINE, sameList, settleHeights, dismissWelcomeFrom, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
+    resetLayout, undoResetLayout, RESET_DONE_LINE, sameList, settleHeights, dismissSafety, dismissWelcomeFrom, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
 import { useArrangeDrag, type HeldPress } from '../lib/arrange-drag';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
@@ -2835,15 +2835,19 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     </HomeCard>
                 );
             case 'safety':
-                // The 12-words card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
+                // The 12-words card, on core's schedule (way-back-schedule.ts, slice B2) with its own ✕ (components/OneWayBack.tsx).
                 // Its "…" (Arrange · Remove) sits over the card's own ✕. The cell comes with the card: put away
-                // or checked, it has nothing to say and takes no cell (PR #2411 review). Who it is for, what works for them
-                // and its schedule's counts are all read from this answer (lib/home-cards.ts wayBackOf), never a request
+                // or kept, it has nothing to say and takes no cell (PR #2411 review). Who it is for, what works for them
+                // and what its schedule goes by are all read from this answer (lib/home-cards.ts wayBackOf), never a request
                 // later, so the card is in its cell at the first paint or not at all (arriving late in the order, it moved
-                // every card after it to another cell).
+                // every card after it to another cell). Its ✕ is kept on the account too, and the account's put-away (the
+                // phone's ✕, another browser's) counts here, as the phone reads ours. Never on one screen with the notifications
+                // once card (slice N5a): on a landing that card is drawn, this one waits for the next.
                 return identity && !notifyOnce.landed && (
                     <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} onDrawn={setSafetyDrawn}
                         home={{ ...wayBackOf(a, wordsKeptHere), global: a.profile === 'global' }} onKept={keepWords}
+                        accountPutAwayAt={layout?.dismissed?.safety ?? null}
+                        onPutAway={(at) => { changeLayout(current => dismissSafety(current, at)); }}
                         keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => {
                             const band = inArrange ? arrangeBandFor(card) : undefined;
                             return (

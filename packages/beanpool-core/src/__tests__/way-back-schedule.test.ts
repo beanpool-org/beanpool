@@ -130,10 +130,24 @@ describe('the words', () => {
         expect(wayBackLine('beans', null)).toBe('If this phone is lost, this is how you get back in.');
     });
 
+    // Slice B2: the web app draws the same card from the same rule, in a browser's words (a browser loses an account to its
+    // saved data being cleared, not to a lost phone). The phone's words are the default, so the phone's calls are unchanged.
+    it('in a browser: the same two sentences, true for a browser; never "this phone"', () => {
+        expect(wayBackLine('first', null, 'browser')).toBe('If this browser forgets your account, this is how you get back in.');
+        expect(wayBackLine('month', '40 Beans', 'browser')).toBe('If this browser forgets your account, this is how you get back in.');
+        expect(wayBackLine('every', null, 'browser')).toBe('If this browser forgets your account, this is how you get back in.');
+        expect(wayBackLine('beans', '40 Beans', 'browser')).toBe("You have 40 Beans here now. Keep a way back in, so they don't go if this browser forgets your account.");
+        expect(wayBackLine('beans', null, 'browser')).toBe('If this browser forgets your account, this is how you get back in.');
+        expect(wayBackLine('first', null, 'phone')).toBe(wayBackLine('first', null));
+        for (const why of ['first', 'beans', 'month', 'every', null] as const) expect(wayBackLine(why, '40 Beans', 'browser')).not.toMatch(/phone/);
+    });
+
     it('every word comes through t(): nothing outside the pseudo-locale\'s brackets', () => {
         setLanguage(PSEUDO_LANG);
         expect(wayBackLine('first', null)).toBe(pseudoLocalise(WAY_BACK_WORDS.line));
         expect(wayBackLine('beans', '40 Beans').replace(/\[[^\]]*\]/g, '').replace('40 Beans', '')).not.toMatch(/[A-Za-z]/);
+        expect(wayBackLine('first', null, 'browser')).toBe(pseudoLocalise(WAY_BACK_WORDS.lineBrowser));
+        expect(wayBackLine('beans', '40 Beans', 'browser').replace(/\[[^\]]*\]/g, '').replace('40 Beans', '')).not.toMatch(/[A-Za-z]/);
     });
 
     const catalog = (lang: string): Catalog => JSON.parse(readFileSync(new URL(`../../words/${lang}.json`, import.meta.url), 'utf8')) as Catalog;

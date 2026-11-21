@@ -90,6 +90,11 @@ const nav = vi.hoisted(() => ({
     blur: null as null | (() => void),
     params: {} as Record<string, string>,
     router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), setParams: vi.fn() },
+    /**
+     * Every focus effect mounted now, with what it handed back when it last ran: `nav.focus` is only the last one registered,
+     * so a whole new landing (every effect left, then run again, as the navigator does) goes through these.
+     */
+    all: new Set<{ cb: () => void | (() => void); leave: null | (() => void) }>(),
 }));
 vi.mock('expo-router', () => ({
     router: nav.router,
@@ -100,7 +105,9 @@ vi.mock('expo-router', () => ({
             nav.focus = cb;
             const leave = cb();
             nav.blur = typeof leave === 'function' ? leave : null;
-            return leave ?? undefined;
+            const entry = { cb, leave: nav.blur };
+            nav.all.add(entry);
+            return () => { nav.all.delete(entry); entry.leave?.(); };
         }, [cb]);
     },
 }));
@@ -151,16 +158,27 @@ vi.mock('../../components/PageTitle', () => ({
     useTabRetapScrollTop: () => {},
 }));
 /** The way-back card's stand-in: `due` makes it up, drawn as a card (a test's own `onUp(true)` does the same without drawing it). */
-const safety = vi.hoisted(() => ({ props: null as any, due: false }));
+const safety = vi.hoisted(() => ({ props: null as any, due: false, beans: false, hold: null as Promise<void> | null }));
 // A found old phone's card (key-replaced.ts): drawn only once the node said this key was replaced; its own tests are
 // group-history-after-rekey.test.ts and e2e/locked-history-320.mjs.
 vi.mock('../../components/KeyMovedCard', () => ({ KeyMovedCard: () => null }));
 vi.mock('../../components/OneWayBackCard', () => ({
-    // Up only when a test says so (props.onUp(true)); in Arrange it draws the band Home hands it, as the real card does.
+    // Up only when a test says so (`due`, or props.onUp(true)), or with `beans` once the answer Home hands it has Beans (core's
+    // first-Beans return); in Arrange it draws the band Home hands it, as the real card does. As the real card, it says it
+    // settled on Home's landing (`settleFor`) once its read on that landing's answer has ended (`hold`: held till the test
+    // lets it go), after `onUp` (its own tests: one-way-back-card.test.ts, "the card's word to Home").
     OneWayBackCard: (props: any) => {
         safety.props = props;
-        useEffect(() => { props.onUp?.(safety.due); }, []);
-        return safety.due ? createElement('div', { 'data-testid': 'one-way-back' }, props.band ?? null) : (props.band ?? null);
+        const due = safety.due || (safety.beans && (props.toLose?.balance_c ?? 0) > 0);
+        useEffect(() => { props.onUp?.(due); }, [due]);
+        useEffect(() => {
+            if (props.settleFor == null) return;
+            let live = true;
+            const landing = props.settleFor;
+            void (safety.hold ?? Promise.resolve()).then(() => { if (live) props.onSettled?.(landing); });
+            return () => { live = false; };
+        }, [props.settleFor, due]);
+        return due ? createElement('div', { 'data-testid': 'one-way-back' }, props.band ?? null) : (props.band ?? null);
     },
 }));
 vi.mock('../../components/NewPostTypeSheet', () => ({ NewPostTypeSheet: ({ visible }: { visible: boolean }) => (visible ? createElement('div', { 'data-testid': 'post-type-sheet' }) : null) }));
@@ -189,6 +207,8 @@ const dmStarts = vi.hoisted(() => [] as string[][]);
 vi.mock('../db', () => ({
     getMarketplaceTransactions: vi.fn(async () => []), getUnreadByConversation: vi.fn(async () => []),
     createConversationApi: vi.fn(async (_type: string, participants: string[]) => { dmStarts.push(participants); return { id: 'dm-with-inviter' }; }),
+    // What Home's notifications card reads from the phone itself (slice N3): the member's own posts, the lines of theirs that wait.
+    getMyPosts: vi.fn(async () => []), getMyLinesWaiting: vi.fn(async () => []),
 }));
 // The sheet of starter drafts (slice O2): the community's price guide it reads as it opens, and the composer door a row calls.
 // Their own tests: tools-template.test.ts (the door), starter-offers.test.ts (the guide read).
@@ -300,6 +320,8 @@ beforeEach(async () => {
     phoneSays.now = null;
     phoneSays.asked = 0;
     safety.due = false;
+    safety.beans = false;
+    safety.hold = null;
     resetHomeStoreForTests();
     nav.params = {};
     hooks.handlers.clear();
@@ -813,7 +835,15 @@ describe('What are you into?: the named line at a star (slice N2b)', () => {
         await settle(6);
     };
     const lineEl = () => document.querySelector('[data-testid="notify-line"]');
-    const asksPush = () => { node.answer = { ...localMember(), features: { ...localMember().features, askedPush: true } as HomeAnswer['features'] }; };
+    /**
+     * Nothing of the member's live (no event they answered; no posts or waiting lines on this phone): Home's card while something
+     * is live (slice N3) is not theirs either, so it takes no day at the landing. Going to an event, it would take it, and one
+     * soft ask a day would leave the star no line that day (the slot's rules: "Home's card while something is live" below).
+     */
+    const nothingLive = (a: HomeAnswer): HomeAnswer => ({
+        ...a, cards: { ...a.cards, events: a.cards.events && { ...a.cards.events, items: a.cards.events.items.map(e => ({ ...e, rsvp: null })) } },
+    });
+    const asksPush = () => { node.answer = nothingLive({ ...localMember(), features: { ...localMember().features, askedPush: true } as HomeAnswer['features'] }); };
     /**
      * A member who met the join's screen on this phone a month ago and said Later: the phone never asked, and Home's once card
      * is not theirs (slice N1h), so the landing takes no day. With an empty record the once card would take it, and one soft
@@ -863,6 +893,7 @@ describe('What are you into?: the named line at a star (slice N2b)', () => {
     }
 
     it('a community that sends no such push (global, Beans off): no line, and the rule is not asked', async () => {
+        node.answer = nothingLive(localMember());
         phoneSays.now = { status: 'undetermined', canAskAgain: true };
         const kept = JSON.stringify(joinedHere());
         mem.store.set(RECORD_KEY, kept);
@@ -962,6 +993,160 @@ describe("Home's once card (slice N1h)", () => {
             expect(phoneSays.asked).toBe(0);
         });
     }
+});
+
+// Slice N3, deciding review of #3348: Home's card while something of the member's is live (home-notify-live), in the once
+// card's slot (index.tsx `homeMay`). Decided only once the once card is decided and neither up nor held on this landing, this
+// landing's own answer of Home is in (never the one kept from before), and the way-back card has settled on that answer and is
+// not up; one card at a time, and never one drawn for a moment and then gone. Each row says whether it is drawn and whether
+// the day's one soft ask went to it (the record's askKind 'home' today). The fixture's member is going to the Repair café.
+describe("Home's card while something is live (slice N3): the slot's rules, row by row", () => {
+    const RECORD_KEY = NOTIFICATION_PERMISSION_STORE_KEY;
+    const DAY = 86_400_000;
+    /** The join's screen met long ago: no once card, so core's rule for the Home card is what is read. */
+    const JOINED = { state: 'unanswered', updatedAt: 0, joinAt: Date.now() - 60 * DAY };
+    /** 1.4.7's "Not now" on this phone: the once card comes, and on each landing for 7 days. */
+    const DECLINED_147 = { state: 'declined', updatedAt: Date.now() - 20 * DAY };
+    const homeCard = () => document.querySelector('[data-testid="home-notify-live"]');
+    const onceCard = () => document.querySelector('[data-testid="home-notify-once"]');
+    const dayTaken = () => {
+        const r = JSON.parse(mem.store.get(RECORD_KEY) ?? '{}');
+        return r.askKind === 'home' && r.askDay === localDay(new Date());
+    };
+    /** Home in front again: every focus effect left, then run again (a whole new landing, the once card's too). */
+    const landAgain = async () => {
+        await act(async () => {
+            const effects = [...nav.all];
+            for (const e of effects) e.leave?.();
+            for (const e of effects) { const leave = e.cb(); e.leave = typeof leave === 'function' ? leave : null; }
+        });
+        await settle();
+    };
+    /** The app back in front while Home stays (no navigation, so the once card's landing goes on): each AppState listener since `from`. */
+    const appBack = async (from: number) => {
+        const calls = vi.mocked(AppState.addEventListener).mock.calls.slice(from) as unknown as [string, (s: string) => void][];
+        await act(async () => { for (const [event, listener] of calls) if (event === 'change') listener('active'); });
+        await settle();
+    };
+
+    /**
+     * - way-back card: `up` (due on its own days), `down` (not due: up only if the first Beans arrive), `undecided` (its read
+     *   never ends), `unlisted` (not on this Home: no card to wait for).
+     * - once card: `up` (its first landing), `held` (up on this landing, then its record moves on and the app comes back: the
+     *   same landing), `decided` (the join's screen met: no once card).
+     * - answer: `fresh` (the node answers at once), `firstBeans` (the answer kept from before has no Beans and is drawn first;
+     *   the node's answer, held, brings the first Beans).
+     * - superseded: the member lands again while the way-back card's read is out, and the replaced read's word comes late.
+     */
+    type WayBack = 'up' | 'down' | 'undecided' | 'unlisted';
+    type Once = 'up' | 'held' | 'decided';
+    type Answer = 'fresh' | 'firstBeans';
+    const rows: [WayBack, Once, Answer, boolean][] = [];
+    for (const w of ['up', 'down', 'undecided', 'unlisted'] as const) {
+        for (const o of ['up', 'held', 'decided'] as const) {
+            for (const a of ['fresh', 'firstBeans'] as const) for (const s of [false, true]) rows.push([w, o, a, s]);
+        }
+    }
+    /** What the row ends with: drawn (and the day its) only where the slot is free and the once card lets it. */
+    function expected(w: WayBack, o: Once, a: Answer, superseded: boolean): boolean {
+        const wayBackUp = w === 'up' || (w === 'down' && a === 'firstBeans');
+        const slotFree = !wayBackUp && w !== 'undecided';
+        // A held once card waits for the next landing: the superseded rows land again, where the record no longer has it.
+        const onceLets = o === 'decided' || (o === 'held' && superseded);
+        return slotFree && onceLets;
+    }
+
+    for (const [w, o, a, superseded] of rows) {
+        const drawn = expected(w, o, a, superseded);
+        it(`way-back ${w}, once card ${o}, answer ${a}${superseded ? ', a replaced read' : ''}: ${drawn ? 'drawn, the day its' : 'not drawn, the day free'}`, async () => {
+            phoneSays.now = { status: 'undetermined', canAskAgain: true };
+            mem.store.set(RECORD_KEY, JSON.stringify(o === 'decided' ? JOINED : DECLINED_147));
+            safety.props = null;
+            safety.due = w === 'up';
+            safety.beans = a === 'firstBeans';
+            let wayBackGo = () => {};
+            if (w === 'undecided' || superseded) safety.hold = new Promise<void>((r) => { if (w !== 'undecided') wayBackGo = r; });
+            if (w === 'unlisted') {
+                const layout = { ...node.answer.layout!, cards: node.answer.layout!.cards.filter(c => c.type !== 'safety') };
+                node.answer = { ...node.answer, layout };
+                mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(layout));
+            }
+            let answerGo = () => {};
+            if (a === 'firstBeans') {
+                mem.store.set(homeAnswerStoreKey(who.identity.publicKey, NODE), JSON.stringify({
+                    url: NODE, publicKey: who.identity.publicKey, asked: 'needs,safety,steps,deals,enterprise,events,market,decide,groups,joined,pulse,beans,notices,community',
+                    etag: 'W/"home-x"', answer: node.answer, at: Date.now() - 60_000,
+                }));
+                node.answer = { ...node.answer, cards: { ...node.answer.cards, beans: { ...node.answer.cards.beans!, balance_c: 4000 } } };
+                node.homeGate = new Promise<void>((r) => { answerGo = r; });
+            }
+            const listeners = vi.mocked(AppState.addEventListener).mock.calls.length;
+            await render();
+            if (a === 'firstBeans') {
+                // The kept answer is drawn; the landing's own is out: nothing is decided on the kept one.
+                expect(cards()).toContain('community');
+                expect(homeCard()).toBeNull();
+                expect(dayTaken()).toBe(false);
+                await act(async () => { answerGo(); });
+                await settle();
+            }
+            if (w === 'unlisted') expect(safety.props).toBeNull();
+            if (o === 'held') {
+                // Up on this landing; its record moves on (no once card by core's rule now) and the app comes back while Home
+                // stays in front: still the once card's landing, which it holds through.
+                expect(onceCard()).not.toBeNull();
+                mem.store.set(RECORD_KEY, JSON.stringify(JOINED));
+                await appBack(listeners);
+                expect(onceCard()).toBeNull();
+                expect(homeCard()).toBeNull();
+                expect(dayTaken()).toBe(false);
+            }
+            if (superseded) {
+                await landAgain();
+                if (w !== 'unlisted') {
+                    // The read the new landing replaced says it settled, late, for the landing before: it decides nothing.
+                    const now = safety.props?.settleFor;
+                    if (typeof now === 'number') await act(async () => { safety.props.onSettled(now - 1); });
+                    await settle(4);
+                    expect(homeCard()).toBeNull();
+                    expect(dayTaken()).toBe(false);
+                }
+                await act(async () => { wayBackGo(); });
+                await settle();
+            }
+            expect(!!homeCard()).toBe(drawn);
+            expect(dayTaken()).toBe(drawn);
+            if (drawn) expect(document.querySelector('[data-testid="notify-home-fact"]')?.textContent).toBe("You're going to Repair café.");
+            expect(phoneSays.asked).toBe(0);
+        });
+    }
+
+    it('× puts it away (30 days, counted), never a Later; Turn on is the phone\'s own pop-up, only at that tap', async () => {
+        phoneSays.now = { status: 'undetermined', canAskAgain: true };
+        mem.store.set(RECORD_KEY, JSON.stringify(JOINED));
+        await render();
+        expect(homeCard()).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="notify-home-away"]') as HTMLElement).click(); });
+        await settle(6);
+        expect(homeCard()).toBeNull();
+        const kept = JSON.parse(mem.store.get(RECORD_KEY)!);
+        expect(kept).toMatchObject({ homeAways: 1, homeAwayAt: expect.any(Number) });
+        expect(kept.laterAt).toBeUndefined();
+        // Not back on the next landing.
+        await landAgain();
+        expect(homeCard()).toBeNull();
+
+        act(() => root?.unmount());
+        host?.remove();
+        mem.store.set(RECORD_KEY, JSON.stringify(JOINED));
+        await render();
+        expect(phoneSays.asked).toBe(0);
+        await act(async () => { (document.querySelector('[data-testid="notify-home-turn-on"]') as HTMLElement).click(); });
+        await settle(6);
+        expect(phoneSays.asked).toBe(1);
+        expect(JSON.parse(mem.store.get(RECORD_KEY)!)).toMatchObject({ state: 'granted' });
+        expect(homeCard()).toBeNull();
+    });
 });
 
 describe('the cached answer, the 304, and states that never block', () => {

@@ -252,3 +252,80 @@ function notifyAskChange(r: NotifyAskRecord, e: NotifyAskEvent, now: number): No
             return { phoneNoAt: now };
     }
 }
+
+/**
+ * The join's last screen (amend2 §4, slice N1j): the join's one soft ask, after the way back and straight before Home (on a
+ * claim, before the owner's card). Its words, whether it shows, and what an answer counts, one place for both apps.
+ *
+ * Which way a join came in by: an invite, another community's open door, the global community's door, a claim; a restore
+ * passes no join and never meets the screen (Home's once card is its one soft ask, slice N1h).
+ */
+export type NotifyJoinPath = 'invite' | 'door' | 'global' | 'claim' | 'restore';
+
+/**
+ * Whether the join's last screen shows: on a join, where {@link notifyAsks} allows the join's ask (the phone has to ask and
+ * still can, the day is free or this screen is its unanswered ask; Android 8 to 12 already allows, so never there). Read
+ * before the join's steps for their dots, and again as the way back hands over, so a phone that answered in between goes
+ * straight on.
+ */
+export function notifyJoinStep(path: NotifyJoinPath, i: Pick<NotifyAskInput, 'record' | 'phone' | 'now'>): boolean {
+    return path !== 'restore' && notifyAsks({ record: i.record, phone: i.phone, now: i.now }).join;
+}
+
+/** How the join's screen was left: the phone's answer to "Turn on notifications" (the phone app's TurnOnResult), or "Later". */
+export type NotifyJoinOutcome = 'granted' | 'declined' | 'settings' | 'unanswered' | 'later';
+
+/**
+ * What the owner's Onboarding panel counts for an answer (N1c's sub-types, onboarding-funnel.ts NOTIFY_CHOICES): the phone
+ * allowed ('on'); the phone said no, at its pop-up or already in its settings ('no'); "Later", or the phone's pop-up closed
+ * with no answer, which leaves its question unspent ('later').
+ */
+export function notifyJoinChoice(o: NotifyJoinOutcome): 'on' | 'later' | 'no' {
+    if (o === 'granted') return 'on';
+    return o === 'declined' || o === 'settings' ? 'no' : 'later';
+}
+
+/** Whose join it is, for the screen's third line: a community's member, the global community's, or the owner of a claim. */
+export type NotifyJoinKind = 'community' | 'global' | 'owner';
+
+export interface NotifyJoinWords {
+    title: string;
+    /** The reason no other app can give, in two sentences, the second the stronger. */
+    never: string;
+    only: string;
+    /** What arrives, then the promise "Never ads." after it in the same paragraph. */
+    arrives: string;
+    ads: string;
+    turnOn: string;
+    /** Under the main button: the phone's own pop-up follows, so it is no surprise. */
+    confirm: string;
+    later: string;
+}
+
+/**
+ * The screen's words (amend2 §4.1): "Hear from {community}"; "BeanPool never emails or texts you." "Notifications are the
+ * only way it can reach you." (true: nothing of BeanPool sends email or SMS); what arrives, by name where the join knows who
+ * invited; "Never ads." (a push is one of a fixed list of sentences, never free text). Never "Nothing else.": votes,
+ * reviews, group invites and account-safety notices come too.
+ */
+export function notifyJoinWords(o: { kind: NotifyJoinKind; community?: string | null; inviter?: string | null }): NotifyJoinWords {
+    const community = (o.community ?? '').trim();
+    const inviter = (o.inviter ?? '').trim();
+    const arrives = o.kind === 'owner'
+        ? t('When someone asks to join, a member writes, or your server needs you.')
+        : o.kind === 'global'
+            ? t('When someone writes to you, or a community answers your request to join.')
+            : inviter
+                ? t("When {name} writes, someone answers you, or an event you're going to changes.", { name: inviter })
+                : t("When a neighbour writes, someone answers you, or an event you're going to changes.");
+    return {
+        title: community ? t('Hear from {community}', { community }) : t('Hear from your community'),
+        never: t('BeanPool never emails or texts you.'),
+        only: t('Notifications are the only way it can reach you.'),
+        arrives,
+        ads: t('Never ads.'),
+        turnOn: t('Turn on notifications'),
+        confirm: t('Your phone will ask you to confirm.'),
+        later: t('Later'),
+    };
+}

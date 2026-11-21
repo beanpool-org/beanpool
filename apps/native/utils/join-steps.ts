@@ -9,19 +9,21 @@
  * - The way back is left out where it is skipped ({@link wayBackSkipped}, slice S4): a sign-in already keeps a copy, or the
  *   member already said the words are kept. Then the join is two dots.
  *
- * Kept as a list, not a count, so a later step adds itself in one place: the notifications screen (slice N1j of
- * DESIGN-notify-and-backup-asks-fable-amend2.md §12) goes after the way back on phones that must ask, as the fourth dot,
- * and {@link afterWayBack} names it as the way back's next screen.
+ * - The notifications screen (slice N1j of DESIGN-notify-and-backup-asks-fable-amend2.md §4, §12.3) is the last step, after
+ *   the way back, only on a phone that must ask and still can (core's `notifyJoinStep`: an iPhone, Android 13 and later;
+ *   never Android 8 to 12, which allows them without asking). Then the join is four dots, the front door still none (Marty's
+ *   walk, 21 Nov: five screens, four dots); a claim three. {@link afterWayBack} names it as the way back's next screen.
  */
 import type { OnboardingFlow } from './onboarding-state';
 import type { DoorWay } from './global-join';
 import type { SignInCopies } from './vault-config';
 
-export type JoinStep = 'name' | 'photo' | 'wayBack';
+export type JoinStep = 'name' | 'photo' | 'wayBack' | 'notify';
 
-export function joinSteps(flow: OnboardingFlow, opts: { wayBack?: boolean } = {}): JoinStep[] {
+export function joinSteps(flow: OnboardingFlow, opts: { wayBack?: boolean; notify?: boolean } = {}): JoinStep[] {
     const steps: JoinStep[] = flow === 'claim' ? ['photo', 'wayBack'] : ['name', 'photo', 'wayBack'];
-    return opts.wayBack === false ? steps.filter((s) => s !== 'wayBack') : steps;
+    const shown = opts.wayBack === false ? steps.filter((s) => s !== 'wayBack') : steps;
+    return opts.notify ? [...shown, 'notify'] : shown;
 }
 
 /**
@@ -75,9 +77,17 @@ export function wayBackSkipped(flow: OnboardingFlow, keptAlready: boolean): bool
     return flow !== 'claim' && keptAlready;
 }
 
-/** The screen after the way back: the owner's card on a claim, else Home. N1j adds the notifications screen here. */
-export type AfterWayBack = 'ownerCard' | 'home';
-export function afterWayBack(flow: OnboardingFlow): AfterWayBack {
+/**
+ * The screen after the way back (or after the photo, where the way back is skipped): the notifications screen where it shows
+ * (`notify`, core's `notifyJoinStep`), else {@link afterNotify}'s.
+ */
+export type AfterWayBack = 'notify' | 'ownerCard' | 'home';
+export function afterWayBack(flow: OnboardingFlow, notify = false): AfterWayBack {
+    return notify ? 'notify' : afterNotify(flow);
+}
+
+/** The screen after the notifications screen, whatever its answer: the owner's card on a claim (it stays last), else Home. */
+export function afterNotify(flow: OnboardingFlow): 'ownerCard' | 'home' {
     return flow === 'claim' ? 'ownerCard' : 'home';
 }
 

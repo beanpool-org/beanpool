@@ -21,9 +21,12 @@
  * - No pop-up of ours at a first post, message or ask to join (slice N2a): a named line at the member's own act instead
  *   ("Hear when Asha answers." [Tell me], components/NotifyLine.tsx), one line with no "Not now", by core's rule
  *   (`offerNamedLine` below). Only its Tell me brings the phone's pop-up.
+ * - The join's last screen (slice N1j, utils/notify-join-step.ts, components/welcome/NotifyStep.tsx) is the join's one
+ *   soft ask: "Turn on notifications" brings the phone's pop-up through {@link turnOnNotifications}; "Later" is
+ *   {@link notificationsLater}, never a no. Nothing else in the join raises a permission.
  * - A restore asks nothing by itself: the once card on Home (slice N1h) is to be its one soft ask.
  */
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type * as ExpoNotifications from 'expo-notifications';
 import {
@@ -31,6 +34,7 @@ import {
     type NotifyAskEvent, type NotifyAskRecord, type NotifyAskSurface, type NotifyLineKind,
 } from '@beanpool/core';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
+import { setNotificationChannels, type ChannelMaker } from './notification-channels';
 // services/push-notifications (which require()s expo-notifications as it loads) and ./identity are loaded inside the
 // functions that need them, never here: Home and How it Works import this file, and six screen suites that don't mock
 // either failed to load when they were static (#2524 deciding review).
@@ -197,6 +201,9 @@ export async function turnOnNotifications(
     if (way === 'ask') {
         try {
             const notif = await getNotificationsModule();
+            // Android's channels first (slice N1j, amend2 §4.2): Android 13's pop-up shows only once the app has a channel,
+            // and a new phone has none before its first token. A channel that can't be made never stops the ask.
+            if (notif) await setNotificationChannels(notif as unknown as ChannelMaker, Platform?.OS === 'android').catch(() => undefined);
             if (notif?.requestPermissionsAsync) status = (await notif.requestPermissionsAsync()).status;
         } catch {
             // No answer

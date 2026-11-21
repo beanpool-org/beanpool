@@ -75,15 +75,17 @@ export function welcomeInstructions(f: WelcomeFacts): string {
             + ' Tag a post from the library first (tags, ids from tags_search); free_tags are only for what the library lacks; never write tags into a description.'
         : '';
     // Local knowledge K6: its own sentence, so the list of what it can do (and every welcome pinned word for word) stays as it was.
-    // Its pictures (DESIGN-learn-web-pictures-fable.md §6.6 "Now", slice 1; Marty, 22 Nov 2026): only an assistant that posts can
-    // upload one (agent/knowledge.ts, the door's rule), and only the member's own, with the reason a web picture is refused.
+    // Its pictures (DESIGN-learn-web-pictures-fable.md §6.6, slice 2; Marty, 22 Nov 2026): only an assistant that posts can bring
+    // one (agent/knowledge.ts, the doors' rule): the member's own, or one from Wikimedia Commons whose licence this server reads,
+    // with the reason any other web picture is refused.
     const draftPictures = f.canPost
-        ? `bring only pictures ${f.callsign} took or owns (never one found on the web: it belongs to someone else, and this community would be the one publishing it)`
+        ? `bring only pictures ${f.callsign} took or owns, or one from Wikimedia Commons by its file page, whose licence this server reads itself `
+            + '(never any other picture found on the web: it belongs to someone else, and this community would be the one publishing it)'
         : 'bring no pictures';
     const knowledge = f.canDraftKnowledge
         ? ' You can also draft Local knowledge for an owner or admin to check; a draft shows to nobody until a person approves it in the app '
             + '(Learn, To check), with its sources beside it: say you drafted it, never that it is published. Find things out with your own web '
-            + `search (this server reaches no other server), write in your own words with 1 to 5 sources, ${draftPictures}, and write nothing about private people.`
+            + `search (this server reaches no other server but Wikimedia Commons, for a picture you name), write in your own words with 1 to 5 sources, ${draftPictures}, and write nothing about private people.`
         : '';
     return [
         `You are connected to "${f.community}", a BeanPool community server at ${f.url}, acting for ${f.callsign}, who is an ${f.role} there. `
@@ -212,13 +214,15 @@ export const PROMPTS: PromptDef[] = [
         arguments: [{ name: 'subject', description: 'what to find out about, e.g. how recycling works at the tip', required: true }],
         offered: (f) => f.canDraftKnowledge === true,
         body: (a, f) => `Find out about ${arg(a, 'subject', 'what I tell you', 120)} for ${f.community} from public pages, with your own web search: `
-            + "this server reaches no other server. Check knowledge_list first so you don't repeat what is there. Write it short, in your own "
-            + 'words, the answer first; quote at most one sentence, in quotation marks. Give 1 to 5 sources. Nothing about private people. '
-            // Its pictures (DESIGN-learn-web-pictures-fable.md §6.6 "Now", slice 1): the rule, why, and the two ways that work.
+            + "this server reaches no other server but Wikimedia Commons, for a picture you name. Check knowledge_list first so you don't repeat what "
+            + 'is there. Write it short, in your own words, the answer first; quote at most one sentence, in quotation marks. Give 1 to 5 sources. '
+            + 'Nothing about private people. '
+            // Its pictures (DESIGN-learn-web-pictures-fable.md §6.6, slice 2): the rule, why, and the three ways that work.
             + 'File it with knowledge_draft and tell me it is waiting for me in the app. A picture only if I give you one I took or own: '
-            + 'upload it with photo_upload_link and add its photoId. Never a picture found on the web, from stock sites or search results: it '
-            + 'belongs to someone else, and this community would be the one publishing it, so the server takes none. Without one, the page shows '
-            + "its topic's picture, and whoever checks it sees each picture first and can add their own in Edit first.",
+            + 'upload it with photo_upload_link and add its photoId. Or one from Wikimedia Commons: give its file page in commons_pictures, and '
+            + 'this server reads its licence and maker itself and takes it only under an open licence. Never any other picture found on the web, '
+            + 'from stock sites or search results: it belongs to someone else, and this community would be the one publishing it. Without one, '
+            + "the page shows its topic's picture, and whoever checks it sees each picture first and can add their own in Edit first.",
     },
     {
         name: 'check-old-knowledge',

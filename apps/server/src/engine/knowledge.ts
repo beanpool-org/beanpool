@@ -21,8 +21,10 @@
 import {
     KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPIC_PAGE, KNOWLEDGE_TOPICS, KNOWLEDGE_UNCHECKED_ROWS, LANGS, LEARN_HOME_NEW_DAYS,
     LEARN_HOME_ROWS, PULSE_KNOWLEDGE_DAYS, PULSE_KNOWLEDGE_ID_PREFIX, PULSE_KNOWLEDGE_MAX_PAGES, PULSE_KNOWLEDGE_ROWS, PULSE_KNOWLEDGE_SOURCE,
-    compareKnowledge, freeTagsOf, isKnowledgeTopic, knowledgeFirstLine, knowledgeTopic, knowledgeUncheckedForAYear, pinLive, storedFreeTags, word, wordsFor,
-    type HomeLearnRow, type KnowledgeFront, type KnowledgeHelped, type KnowledgeRow, type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
+    KNOWLEDGE_CREDIT_MARK, compareKnowledge, freeTagsOf, isKnowledgeCreditRow, isKnowledgeTopic, knowledgeCreditLabel, knowledgeFirstLine, knowledgeTopic,
+    knowledgeUncheckedForAYear, pinLive, storedFreeTags, word, wordsFor,
+    type HomeLearnRow, type KnowledgeFront, type KnowledgeHelped, type KnowledgePhotoCredit, type KnowledgeRow, type KnowledgeSearch, type KnowledgeSource,
+    type KnowledgeTopicPage,
     type PulseKnowledgeCard, type PulseKnowledgePost,
 } from '@beanpool/core';
 import { getPosts, type MarketplacePost } from '@beanpool/engine';
@@ -141,8 +143,68 @@ function cleanFreeTags(raw: unknown, kept: readonly string[]): string[] {
     }
 }
 
-/** The form's fields, cleaned, or a refusal in the words the form shows (§3.3). `keptTags`: the page's own (cleanFreeTags). */
-export function cleanKnowledgeInput(raw: KnowledgeInput, keptTags: readonly string[] = []): CleanKnowledge {
+// ── Credit rows (DESIGN-learn-web-pictures-fable.md §6.3; Marty, 22 Nov 2026, "All six of Fable's picks") ──────────────────
+//
+// A picture from Wikimedia Commons keeps its credit inside the stored sources list (a draft's `sources`, a page's
+// `knowledge_sources`), as a row the node marks with the picture's number: no table, no column, so a standby's copy, the page
+// read and phones already out carry it as they carry a source. The list has two kinds of row and only the node writes the
+// marked kind: publishKnowledge and rewriteKnowledge (a page's only writers) put the credit rows back after the own rows, and
+// cleanKnowledgeInput drops one sent in (the standing rule, Question 5).
+
+/** A credit row as the node keeps it: a source whose label is the credit, marked with its picture's number, and what was read. */
+export interface CreditRow extends KnowledgeSource { photo: number; credit: KnowledgePhotoCredit }
+
+/** A stored list of sources, read tolerantly and split: the own rows (url and label only) and the node's credit rows. */
+export function storedSources(raw: string | null | undefined): { own: KnowledgeSource[]; credits: CreditRow[] } {
+    let list: unknown[] = [];
+    try {
+        const v = raw ? JSON.parse(raw) : [];
+        list = Array.isArray(v) ? v : [];
+    } catch {
+        list = [];
+    }
+    const own: KnowledgeSource[] = [];
+    const credits: CreditRow[] = [];
+    for (const s of list as Record<string, unknown>[]) {
+        if (!s || typeof s !== 'object' || typeof s.url !== 'string') continue;
+        if (!isKnowledgeCreditRow(s)) own.push({ url: s.url, label: typeof s.label === 'string' ? s.label : '' });
+        else if (Number.isInteger(s.photo) && (s.photo as number) >= 1 && s.credit && typeof s.credit === 'object') credits.push(s as unknown as CreditRow);
+    }
+    return { own, credits };
+}
+
+/** The node's credit row for picture `photo` (1 first) on a draft or a page. */
+export function creditRowOf(photo: number, credit: KnowledgePhotoCredit): CreditRow {
+    return { url: credit.url, label: knowledgeCreditLabel(photo, credit.maker, credit.licence), photo, credit };
+}
+
+/** What a draft or a page stores: its own rows, then the credit rows in picture order; null for none. */
+export function storedSourcesJson(own: readonly KnowledgeSource[], credits: readonly CreditRow[]): string | null {
+    const all = [...own.map((s) => ({ url: s.url, label: s.label })), ...[...credits].sort((a, b) => a.photo - b.photo)];
+    return all.length > 0 ? JSON.stringify(all) : null;
+}
+
+/**
+ * The standing rule (Question 5): a row sent in that carries the picture mark, or that points at one of the page's credited
+ * pictures and starts with the camera mark (a 1.4.7 phone's form sends every row it draws back as label and link), is the
+ * node's to write, never a person's. It is dropped before the limit is counted and before any other check of the row.
+ */
+function sentCredit(s: unknown, credited: ReadonlySet<string>): boolean {
+    if (!s || typeof s !== 'object') return false;
+    const item = s as { url?: unknown; label?: unknown; photo?: unknown };
+    if (isKnowledgeCreditRow(item)) return true;
+    if (typeof item.label !== 'string' || !item.label.trim().startsWith(KNOWLEDGE_CREDIT_MARK) || typeof item.url !== 'string') return false;
+    const url = item.url.trim();
+    let href = url;
+    try { href = new URL(url).href; } catch { /* compared as sent */ }
+    return credited.has(url) || credited.has(href);
+}
+
+/**
+ * The form's fields, cleaned, or a refusal in the words the form shows (§3.3). `keptTags`: the page's own (cleanFreeTags).
+ * `credited`: the page's (or the draft's) credit rows, whose sent-back copies the standing rule drops (sentCredit).
+ */
+export function cleanKnowledgeInput(raw: KnowledgeInput, keptTags: readonly string[] = [], credited: readonly { url: string }[] = []): CleanKnowledge {
     const title = oneLine(raw.title, KNOWLEDGE_LIMITS.title);
     if (!title) throw new KnowledgeRefusal(400, 'no_title', KNOWLEDGE_WORDS.noTitle);
     if (charCount(title) > KNOWLEDGE_LIMITS.title) throw tooLong(tr('Keep the title to {n} characters.', { n: KNOWLEDGE_LIMITS.title }));
@@ -155,7 +217,8 @@ export function cleanKnowledgeInput(raw: KnowledgeInput, keptTags: readonly stri
     if (raw.sources !== undefined && raw.sources !== null && !Array.isArray(raw.sources)) {
         throw new KnowledgeRefusal(400, 'bad_request', 'sources is a list of { url, label }');
     }
-    const list = (raw.sources as unknown[] | undefined) ?? [];
+    const creditUrls = new Set(credited.map((c) => c.url));
+    const list = ((raw.sources as unknown[] | undefined) ?? []).filter((s) => !sentCredit(s, creditUrls));
     if (list.length > KNOWLEDGE_LIMITS.sources) throw new KnowledgeRefusal(400, 'too_many_sources', tr('At most {n} links.', { n: KNOWLEDGE_LIMITS.sources }));
     const sources = list.map((s): KnowledgeSource => {
         const item = (s && typeof s === 'object' ? s : {}) as { url?: unknown; label?: unknown };
@@ -252,11 +315,12 @@ export function publishKnowledge(
     broadcast: BroadcastFn,
     checker: string,
     raw: KnowledgeInput & { photos?: unknown },
-    opts: { writer?: string; createdVia?: string; now?: number; photosPaidFor?: boolean } = {},
+    opts: { writer?: string; createdVia?: string; now?: number; photosPaidFor?: boolean; credits?: readonly { photo: number; credit: KnowledgePhotoCredit }[] } = {},
 ): MarketplacePost {
     assertChecker(checker);
     assertNotMuted(checker);
-    const k = cleanKnowledgeInput(raw);
+    const credits = (opts.credits ?? []).map((c) => creditRowOf(c.photo, c.credit));
+    const k = cleanKnowledgeInput(raw, [], credits);
     if (raw.photos !== undefined && raw.photos !== null && (!Array.isArray(raw.photos) || raw.photos.some((p) => typeof p !== 'string'))) {
         throw new KnowledgeRefusal(400, 'bad_photos', KNOWLEDGE_WORDS.photos);
     }
@@ -265,7 +329,8 @@ export function publishKnowledge(
     const writer = opts.writer ?? checker;
     const at = new Date(opts.now ?? Date.now()).toISOString();
     const post = createPost(broadcast, 'knowledge', k.topic, k.title, k.body, 0, 'fixed', writer, undefined, undefined, photos, false, undefined, false, {
-        knowledge: { sources: k.sources.length > 0 ? JSON.stringify(k.sources) : null, place: k.place, lang: k.lang, checkedAt: at, keywords: knowledgeKeywords(k) },
+        // The node's credit rows after the page's own, each for a picture it has (approveKnowledgeDraft gives them; a form never does).
+        knowledge: { sources: storedSourcesJson(k.sources, credits.filter((c) => c.photo <= photos.length)), place: k.place, lang: k.lang, checkedAt: at, keywords: knowledgeKeywords(k) },
         // Its tags and their words in search_keywords, by createPost's own rule for a listing's (knowledgeSearchKeywords).
         ...(k.freeTags.length > 0 ? { freeTags: k.freeTags } : {}),
         beforeWrite: () => assertMayPostToday(writer),
@@ -287,7 +352,8 @@ export function editKnowledge(broadcast: BroadcastFn, checker: string, postId: u
     assertNotMuted(checker);
     const row = showingRow(postId);
     const own = freeTagsOf(row.free_tags);
-    return rewriteKnowledge(broadcast, checker, row.id, cleanKnowledgeInput({ ...raw, freeTags: raw.freeTags === undefined ? own : raw.freeTags }, own), now);
+    const k = cleanKnowledgeInput({ ...raw, freeTags: raw.freeTags === undefined ? own : raw.freeTags }, own, storedSources(row.knowledge_sources).credits);
+    return rewriteKnowledge(broadcast, checker, row.id, k, now);
 }
 
 /**
@@ -296,11 +362,14 @@ export function editKnowledge(broadcast: BroadcastFn, checker: string, postId: u
  */
 export function rewriteKnowledge(broadcast: BroadcastFn, checker: string, postId: string, k: CleanKnowledge, now = Date.now()): MarketplacePost {
     const at = new Date(now).toISOString();
+    // The page's credit rows stay as the node wrote them, after the own rows: an edit or a fix never loses or changes one.
+    const stored = db.prepare('SELECT knowledge_sources FROM posts WHERE id = ?').get(postId) as { knowledge_sources: string | null } | undefined;
+    const { credits } = storedSources(stored?.knowledge_sources);
     db.prepare(`UPDATE posts SET title = ?, description = ?, category = ?, search_keywords = ?, free_tags = ?,
                     knowledge_sources = ?, knowledge_place = ?, knowledge_lang = ?, knowledge_checked_at = ?,
                     knowledge_outdated_at = NULL, knowledge_outdated_note = NULL, updated_at = ?
                  WHERE id = ?`)
-        .run(k.title, k.body, k.topic, knowledgeSearchKeywords(k), storedFreeTags(k.freeTags), k.sources.length > 0 ? JSON.stringify(k.sources) : null,
+        .run(k.title, k.body, k.topic, knowledgeSearchKeywords(k), storedFreeTags(k.freeTags), storedSourcesJson(k.sources.filter((x) => !isKnowledgeCreditRow(x)), credits),
             k.place, k.lang, at, at, postId);
     bumpPostsVersion();
     ring(broadcast, postId, at);

@@ -66,7 +66,7 @@ import crypto from 'node:crypto';
 import {
     KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_DRAFT_LIMITS, KNOWLEDGE_FIX_PARTS, KNOWLEDGE_LIMITS, freeTagsOf, knowledgeAnswerNotice, storedFreeTags, word, wordsFor,
     type KnowledgeDeclineReason, type KnowledgeDraftKind, type KnowledgeDraftMine, type KnowledgeDraftToCheck, type KnowledgeDraftWhole,
-    type KnowledgeFixPart, type KnowledgePageWords, type KnowledgeSource,
+    type KnowledgeFixPart, type KnowledgePageWords, type KnowledgePhotoCredit, type KnowledgeSource,
 } from '@beanpool/core';
 import { getMember, validatePostPhotos, type MarketplacePost } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
@@ -82,8 +82,8 @@ import { photoRefusalError, photosRefusal } from './avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { keepNotice } from './kept-notices.js';
 import {
-    KNOWLEDGE_WORDS, KnowledgeRefusal, checksKnowledge, cleanKnowledgeInput, pageShowingTo, publishKnowledge, recountKnowledgeHelped, rewriteKnowledge,
-    showingKnowledgeRow, type CleanKnowledge, type KnowledgeInput, type ShowingKnowledgeRow,
+    KNOWLEDGE_WORDS, KnowledgeRefusal, checksKnowledge, cleanKnowledgeInput, creditRowOf, pageShowingTo, publishKnowledge, recountKnowledgeHelped, rewriteKnowledge,
+    showingKnowledgeRow, storedSources, storedSourcesJson, type CleanKnowledge, type KnowledgeInput, type ShowingKnowledgeRow,
 } from './knowledge.js';
 import { logger } from '../logger.js';
 import { FORUM_LEARN_WORDS, linkLearnPage, turnableAnswer } from './forum-learn.js';
@@ -149,13 +149,17 @@ function assistantGrantOf(via: string): string | null {
     return via.startsWith('assistant:') ? via.slice('assistant:'.length) : null;
 }
 
+/**
+ * A draft's or a page's OWN sources, never the node's credit rows for its pictures (engine/knowledge.ts storedSources): what
+ * To check, Approve, a fix's compare and the forms work with. The credit rows follow their pictures (creditsOf).
+ */
 function sourcesOf(raw: string | null): KnowledgeSource[] {
-    try {
-        const list = raw ? JSON.parse(raw) : [];
-        return Array.isArray(list) ? list.filter((s): s is KnowledgeSource => !!s && typeof s.url === 'string').map((s) => ({ url: s.url, label: typeof s.label === 'string' ? s.label : '' })) : [];
-    } catch {
-        return [];
-    }
+    return storedSources(raw).own;
+}
+
+/** A draft's credits, by its picture's number (1 first): what the node read from Wikimedia Commons for each. */
+function creditsOf(raw: string | null): Map<number, KnowledgePhotoCredit> {
+    return new Map(storedSources(raw).credits.map((c) => [c.photo, c.credit]));
 }
 
 /** A suggestion as its member reads it. Never a taken-back one: those are listed nowhere. */
@@ -289,7 +293,7 @@ function suggestKnowledgeFix(member: string, raw: KnowledgeInput & { photos?: un
         lang: pick(raw.lang, own.lang),
         freeTags: pick(raw.freeTags, own.freeTags),
         tags: raw.tags,
-    }, shows.freeTags);
+    }, shows.freeTags, storedSources(row.knowledge_sources).credits);
     // What the member changed: each part that differs from the page as it shows, with the page's own words then. A part sent
     // as the page has it (the app may send the form whole) is no change.
     const base: Partial<Record<FixPart, unknown>> = {};
@@ -437,33 +441,51 @@ export function assistantKnowledgeCounts(grantId: string, now = Date.now()): { w
  */
 export function fileAssistantKnowledgeDraft(
     grant: { id: string; member: string; name: string },
-    raw: KnowledgeInput & { about?: unknown; photos?: unknown },
+    raw: KnowledgeInput & { about?: unknown; photos?: unknown; credits?: readonly { photo: number; credit: KnowledgePhotoCredit }[] },
     now = Date.now(),
 ): { id: string; waiting: number; today: number; photos: number } {
+    const credits = (raw.credits ?? []).map((c) => creditRowOf(c.photo, c.credit));
+    const k = checkAssistantKnowledgeDraft(grant.id, raw, now, credits);
+    const photos = draftPhotos(raw.photos);
+    const id = crypto.randomUUID();
+    const via = viaOf(grant.id);
+    db.transaction(() => {
+        assertAssistantDraftRoom(grant.id, now);
+        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, assistant_name, title, body, topic, place, sources, lang, free_tags, about, state, created_at)
+                    VALUES (?, 'new', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
+            .run(id, grant.member, via, cleanMemberText(grant.name, 60) || null, k.title, k.body, k.topic, k.place,
+                // Its own sources, then the node's credit for each picture from Wikimedia Commons, keyed to its place in the draft.
+                storedSourcesJson(k.sources, credits.filter((c) => c.photo <= photos.length)), k.lang, storedFreeTags(k.freeTags), raw.about, iso(now));
+        const photo = db.prepare('INSERT INTO knowledge_draft_photos (draft_id, order_num, photo_data, bytes) VALUES (?, ?, ?, ?)');
+        photos.forEach((p, i) => photo.run(id, i, p, incomingPhotosBytes([p])));
+    })();
+    return { id, ...assistantKnowledgeCounts(grant.id, now), photos: photos.length };
+}
+
+/**
+ * Everything fileAssistantKnowledgeDraft refuses before it writes, without writing: the store, Learn, what it is about, a
+ * source, the words and the limits. agent/knowledge.ts asks this before it asks Wikimedia Commons for anything, so a draft
+ * that would be refused costs no fetch. The words cleaned.
+ */
+export function checkAssistantKnowledgeDraft(grantId: string, raw: KnowledgeInput & { about?: unknown }, now = Date.now(), credited: readonly { url: string }[] = []): CleanKnowledge {
     assertPlainTablesWritable();
     assertFeatureOn('knowledge');
     if (typeof raw.about !== 'string' || !(KNOWLEDGE_ABOUT as readonly string[]).includes(raw.about)) {
         throw new KnowledgeRefusal(400, 'not_about', ASSISTANT_DRAFT_WORDS.notAbout);
     }
     if (!Array.isArray(raw.sources) || raw.sources.length === 0) throw new KnowledgeRefusal(400, 'no_source', ASSISTANT_DRAFT_WORDS.noSource);
-    const k = cleanKnowledgeInput(raw);
-    const photos = draftPhotos(raw.photos);
-    const id = crypto.randomUUID();
-    const via = viaOf(grant.id);
-    db.transaction(() => {
-        const counts = assistantKnowledgeCounts(grant.id, now);
-        if (counts.waiting >= ASSISTANT_KNOWLEDGE_LIMITS.waiting) throw new KnowledgeRefusal(429, 'too_many_waiting', ASSISTANT_DRAFT_WORDS.waiting);
-        if (counts.today >= ASSISTANT_KNOWLEDGE_LIMITS.perDay) throw new KnowledgeRefusal(429, 'sent_enough_today', ASSISTANT_DRAFT_WORDS.perDay);
-        const all = (db.prepare(`SELECT COUNT(*) AS n FROM knowledge_drafts WHERE via LIKE 'assistant:%' AND state = 'waiting'`).get() as { n: number }).n;
-        if (all >= ASSISTANT_KNOWLEDGE_LIMITS.allWaiting) throw new KnowledgeRefusal(429, 'assistants_waiting', ASSISTANT_DRAFT_WORDS.allWaiting);
-        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, assistant_name, title, body, topic, place, sources, lang, free_tags, about, state, created_at)
-                    VALUES (?, 'new', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
-            .run(id, grant.member, via, cleanMemberText(grant.name, 60) || null, k.title, k.body, k.topic, k.place,
-                JSON.stringify(k.sources), k.lang, storedFreeTags(k.freeTags), raw.about, iso(now));
-        const photo = db.prepare('INSERT INTO knowledge_draft_photos (draft_id, order_num, photo_data, bytes) VALUES (?, ?, ?, ?)');
-        photos.forEach((p, i) => photo.run(id, i, p, incomingPhotosBytes([p])));
-    })();
-    return { id, ...assistantKnowledgeCounts(grant.id, now), photos: photos.length };
+    const k = cleanKnowledgeInput(raw, [], credited);
+    assertAssistantDraftRoom(grantId, now);
+    return k;
+}
+
+/** An assistant's room for one more draft: 10 waiting and 20 in 24 hours for it, 30 waiting from all assistants. */
+function assertAssistantDraftRoom(grantId: string, now: number): void {
+    const counts = assistantKnowledgeCounts(grantId, now);
+    if (counts.waiting >= ASSISTANT_KNOWLEDGE_LIMITS.waiting) throw new KnowledgeRefusal(429, 'too_many_waiting', ASSISTANT_DRAFT_WORDS.waiting);
+    if (counts.today >= ASSISTANT_KNOWLEDGE_LIMITS.perDay) throw new KnowledgeRefusal(429, 'sent_enough_today', ASSISTANT_DRAFT_WORDS.perDay);
+    const all = (db.prepare(`SELECT COUNT(*) AS n FROM knowledge_drafts WHERE via LIKE 'assistant:%' AND state = 'waiting'`).get() as { n: number }).n;
+    if (all >= ASSISTANT_KNOWLEDGE_LIMITS.allWaiting) throw new KnowledgeRefusal(429, 'assistants_waiting', ASSISTANT_DRAFT_WORDS.allWaiting);
 }
 
 /** One of an assistant's own drafts as it reads it back (§6 my_knowledge_drafts): never who answered, never their words. */
@@ -572,6 +594,8 @@ export function knowledgeDraftWhole(id: unknown): KnowledgeDraftWhole | null {
     const words = fix?.suggested ?? draftWordsOf(r);
     const changed = r.kind === 'fix' ? (fix?.changed ?? changedPartsOf(r)) : null;
     const pageChanged = r.kind === 'fix' ? (fix?.pageChanged ?? []) : null;
+    const photos = draftPhotoData(r.id);
+    const credits = creditsOf(r.sources);
     return {
         ...toCheckOf(r),
         title: words.title,
@@ -582,7 +606,9 @@ export function knowledgeDraftWhole(id: unknown): KnowledgeDraftWhole | null {
         lang: words.lang,
         about: r.about,
         note: r.note,
-        photos: draftPhotoData(r.id),
+        photos,
+        // What the node read from Wikimedia Commons for each picture, null for one uploaded: To check shows it under the picture.
+        photoCredits: photos.map((_, i) => credits.get(i + 1) ?? null),
         needsSourcesTicked: assistantGrantOf(r.via) !== null,
         post: pageWordsOf(page),
         changed: changed && wordParts(changed),
@@ -648,6 +674,20 @@ function assistantDraftPhotos(draftId: string, sent: unknown): string[] {
     if (added.length === 0) return kept;
     const checked = draftPhotos(added);
     return kept.map((p) => (own.includes(p) ? p : checked[added.indexOf(p)]));
+}
+
+/**
+ * Each kept picture's credit at its place on the page (DESIGN-learn-web-pictures-fable.md §9 slice 2 item 4): a kept picture is
+ * matched to the draft's own by its bytes as read, and its credit, if the node read one, follows it; a picture the checker added
+ * has none. Only what the node stored: the app never sends a credit.
+ */
+function creditsFollow(r: DraftRow, photos: readonly string[]): { photo: number; credit: KnowledgePhotoCredit }[] {
+    const own = draftPhotoData(r.id);
+    const credits = creditsOf(r.sources);
+    return photos.flatMap((p, j) => {
+        const credit = credits.get(own.indexOf(p) + 1);
+        return credit ? [{ photo: j + 1, credit }] : [];
+    });
 }
 
 /** The page's fields at approval: each one the request sends ("Edit first"), the suggestion's own for the rest. */
@@ -722,9 +762,10 @@ export function approveKnowledgeDraft(
         if (grant !== null && raw.checkedSources !== true) throw new KnowledgeRefusal(400, 'sources_not_checked', DRAFT_WORDS.tickSources);
         if (r.kind === 'fix') return approveFix(broadcast, checker, r, raw, now);
         if (grant === null && !inStanding(r.member_pubkey)) throw new KnowledgeRefusal(409, 'writer_paused', DRAFT_WORDS.writerPaused);
-        const post = publishKnowledge(broadcast, checker, { ...approvedFields(r, raw), photos: grant === null ? keptPhotos(r.id, raw.photos) : assistantDraftPhotos(r.id, raw.photos) }, {
+        const photos = grant === null ? keptPhotos(r.id, raw.photos) : assistantDraftPhotos(r.id, raw.photos);
+        const post = publishKnowledge(broadcast, checker, { ...approvedFields(r, raw), photos }, {
             writer: grant === null ? r.member_pubkey : checker,
-            ...(grant === null ? { photosPaidFor: true } : { createdVia: `assistant-draft:${grant}` }),
+            ...(grant === null ? { photosPaidFor: true } : { createdVia: `assistant-draft:${grant}`, credits: creditsFollow(r, photos) }),
             now,
         });
         const answered = db.prepare(`UPDATE knowledge_drafts SET state = 'approved', answered_at = ?, answered_by = ?, result_post_id = ?
@@ -761,7 +802,8 @@ function approveFix(broadcast: BroadcastFn, checker: string, r: DraftRow, raw: K
     const edited: KnowledgeInput = {};
     for (const part of FIX_PARTS) if (raw[part] !== undefined) edited[part] = raw[part];
     // The page's own tags pass as stored, as on an owner's or admin's edit (engine/knowledge.ts cleanFreeTags).
-    const post = rewriteKnowledge(broadcast, checker, page.id, cleanKnowledgeInput({ ...fix.suggested, ...edited, tags: raw.tags }, partsOf(page).freeTags), now);
+    const post = rewriteKnowledge(broadcast, checker, page.id,
+        cleanKnowledgeInput({ ...fix.suggested, ...edited, tags: raw.tags }, partsOf(page).freeTags, storedSources(page.knowledge_sources).credits), now);
     const answered = db.prepare(`UPDATE knowledge_drafts SET state = 'approved', answered_at = ?, answered_by = ?, result_post_id = ?
                                  WHERE id = ? AND state = 'waiting'`).run(iso(now), checker, page.id, r.id).changes;
     if (answered !== 1) throw new Error('a suggestion was answered twice');

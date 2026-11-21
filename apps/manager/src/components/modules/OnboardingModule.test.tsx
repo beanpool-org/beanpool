@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NOTIFY_CHOICES } from '@beanpool/core';
 import { OnboardingModule } from './OnboardingModule';
 import * as nodeClient from '../../lib/node-client';
 import type { NodeProfile } from '../../lib/profiles';
@@ -179,6 +180,98 @@ describe('OnboardingModule', () => {
         expect(screen.getByText(/Counted once per person since/i)).toHaveTextContent('2026-09-10');
         // 56 + 9 older reports, named rather than silently dropped.
         expect(screen.getByText(/older reports are left out/i)).toHaveTextContent('65');
+    });
+
+    /**
+     * The join's notifications screen (slice N1c, DESIGN-notify-and-backup-asks-fable-amend2.md §4.4): four numbers,
+     * shown, turned on, later, the phone said no. Counts only. ONE table over every kind of stored row: each row is
+     * drawn alone, and all four numbers are read, so a row that lands in the wrong number, or in none, is red.
+     */
+    describe("the join's notifications screen: four numbers", () => {
+        const NOTIFY_LABELS = {
+            shown: 'Saw the notifications screen',
+            on: 'Turned notifications on',
+            later: 'Chose Later',
+            no: 'The phone said no',
+        } as const;
+        type Lands = keyof typeof NOTIFY_LABELS | null;
+
+        const TABLE: [label: string, event: string, variant: string, lands: Lands][] = [
+            ['the screen drawn, once per person', 'notify_shown', 'once', 'shown'],
+            ['turned on: the phone said yes', 'notify_choice', 'once:on', 'on'],
+            ['later', 'notify_choice', 'once:later', 'later'],
+            ['the phone said no', 'notify_choice', 'once:no', 'no'],
+            ['the screen drawn, not per person', 'notify_shown', '', null],
+            ['an answer, not per person', 'notify_choice', 'on', null],
+            ['an answer with no answer in it', 'notify_choice', 'once', null],
+            ['an answer that is not one of the three', 'notify_choice', 'once:yes', null],
+            ["another step's answer that reads like one", 'protection_choice', 'once:no', null],
+            ["another step's answer", 'protection_choice', 'once:skip', null],
+            ['the way back step done', 'guide_complete', 'once', null],
+            ['a join', 'member_created', '', null],
+        ];
+
+        const countIn = (label: string) =>
+            (screen.getByText(label).closest('div.p-3') as HTMLElement).querySelector('.text-lg')?.textContent;
+
+        it.each(TABLE)('%s', async (_label, event, variant, lands) => {
+            vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+                days: 30,
+                rows: [{ day: '2026-11-22', event, variant, count: 3 }],
+            });
+
+            renderModule();
+
+            await screen.findByText(NOTIFY_LABELS.shown);
+            for (const [key, label] of Object.entries(NOTIFY_LABELS)) {
+                expect([label, countIn(label)]).toEqual([label, key === lands ? '3' : '0']);
+            }
+        });
+
+        it('the table lands in each of the four numbers, and core has exactly the three answers it labels', () => {
+            for (const key of Object.keys(NOTIFY_LABELS)) expect(TABLE.some(r => r[3] === key)).toBe(true);
+            expect([...NOTIFY_CHOICES]).toEqual(['on', 'later', 'no']);
+        });
+
+        it('adds each answer up across days, apart from the others, under the steps before it', async () => {
+            vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+                days: 30,
+                rows: [
+                    { day: '2026-11-22', event: 'guide_complete', variant: 'once', count: 12 },
+                    { day: '2026-11-22', event: 'notify_shown', variant: 'once', count: 6 },
+                    { day: '2026-11-23', event: 'notify_shown', variant: 'once', count: 4 },
+                    { day: '2026-11-22', event: 'notify_choice', variant: 'once:on', count: 3 },
+                    { day: '2026-11-23', event: 'notify_choice', variant: 'once:on', count: 2 },
+                    { day: '2026-11-23', event: 'notify_choice', variant: 'once:later', count: 4 },
+                    { day: '2026-11-23', event: 'notify_choice', variant: 'once:no', count: 1 },
+                ],
+            });
+
+            renderModule();
+
+            await screen.findByText(NOTIFY_LABELS.shown);
+            expect(countIn(NOTIFY_LABELS.shown)).toBe('10');
+            expect(countIn(NOTIFY_LABELS.on)).toBe('5');
+            expect(countIn(NOTIFY_LABELS.later)).toBe('4');
+            expect(countIn(NOTIFY_LABELS.no)).toBe('1');
+            expect(countIn('Way back step done')).toBe('12');
+
+            // In the steps inside the app, after the way back, in the join's order; counted people, never who.
+            const section = screen.getByRole('region', { name: 'Steps inside the app' });
+            const order = within(section).getAllByText(/^(Way back step done|Saw the notifications screen|Turned notifications on|Chose Later|The phone said no)$/)
+                .map(el => el.textContent);
+            expect(order).toEqual(['Way back step done', ...Object.values(NOTIFY_LABELS)]);
+            expect(within(section).getByText(NOTIFY_LABELS.no).closest('div.p-3')).toHaveTextContent(
+                "Tapped Turn on notifications, then said no to the phone's own question",
+            );
+            expect(within(section).getByText(NOTIFY_LABELS.later).closest('div.p-3')).toHaveTextContent(
+                'Not a no: they can still turn them on, and the app may ask again',
+            );
+            expect(within(section).getByText(NOTIFY_LABELS.shown).closest('div.p-3')).toHaveTextContent(
+                'In the join, after the way back; shown only on a phone that has to ask',
+            );
+            expect(screen.getByText(/Counted once per person since/i)).toHaveTextContent('2026-11-22');
+        });
     });
 
     it('keeps codes as their own box, counted as attempts rather than people', async () => {

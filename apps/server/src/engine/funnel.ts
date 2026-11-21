@@ -38,14 +38,19 @@ export type CountedEvent =
     | 'avatar_published'    // step 2 done — first avatar only, not later edits
     | 'protection_shown'    // step 3 drawn
     | 'protection_choice'   // step 3 answered — sub-type is sso|words|skip
-    | 'guide_complete';     // step 4 done
+    | 'guide_complete'      // step 4 done
+    | 'notify_shown'        // the join's notifications screen drawn (its last screen, on a phone
+                            // that has to ask; amend2 §4.4)
+    | 'notify_choice';      // ...and answered — sub-type is on|later|no
 
-// The three above are reported by the phone and the PWA, and since this change each client
-// reports each of them at most ONCE per identity per node: those rows carry a variant of
-// `once` or `once:<sub-type>` (see @beanpool/core's onboarding-funnel helpers). Rows without
-// that marker are the older one-per-showing counts, which cannot be corrected after the
-// fact — the node never kept the per-person trail that would let it — and which the
-// operator's screen therefore ignores rather than silently mixing in.
+// The five above from protection_shown are reported by members' apps (@beanpool/core
+// CLIENT_FUNNEL_EVENTS), and since the per-person change each client reports each of them at
+// most ONCE per identity per node: those rows carry a variant of `once` or `once:<sub-type>`
+// (see @beanpool/core's onboarding-funnel helpers). Rows without that marker are the older
+// one-per-showing counts, which cannot be corrected after the fact — the node never kept the
+// per-person trail that would let it — and which the operator's screen therefore ignores
+// rather than silently mixing in. The two notification steps never had an older form, so the
+// server takes them only per person (core's clientFunnelReport).
 
 /** Steps computed from tables that already hold the answer. */
 export type DerivedEvent =

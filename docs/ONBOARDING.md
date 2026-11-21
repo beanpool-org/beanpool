@@ -951,6 +951,8 @@ Explicitly **not** Supabase. The Supabase edge function in [directory-publisher.
 | 4 | `protection_shown` (+ variant `A`/`B`/`C`) | New — signed client event |
 | 5 | `protection_choice` (+ variant `sso`/`words`/`skip`) | New — signed client event |
 | 6 | `guide_complete` (step 4) | New — signed client event |
+| 6a | `notify_shown` (the join's notifications screen, its last on a phone that has to ask; variant `once` only) | Signed client event, once per person (notifications amend2 §4.4, slice N1c) |
+| 6b | `notify_choice` (+ variant `once:on` / `once:later` / `once:no`, nothing else) | Signed client event, once per person (same) |
 | 7 | `activated` (first connection, post or trade) | **Server — already visible** |
 
 Four of the seven need no new instrumentation whatsoever — the node already has that data and just isn't counting it. Only steps 4–6 need client events, and those are precisely the steps this redesign changes, so they're where the numbers matter most. Recording the step-3 variant is what makes it possible to tell whether State B users (2 keepers) behave differently from State A users.

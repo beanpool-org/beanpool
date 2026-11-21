@@ -55,6 +55,20 @@ TaskManager.defineTask(TASK_NAME, async () => {
             console.warn('[Pillar] Mail from other communities waits for the next round:', e);
         }
 
+        // A block or an unblock some community this phone holds hasn't heard yet (offline at the tap, a round cut off: slice
+        // S7a, utils/blocklist.ts syncOwedBlocks): sent in what is left of the window, as the mail is. Nothing owed, nothing
+        // sent.
+        try {
+            const [{ backgroundMailBudget }, { syncOwedBlocks }] = await Promise.all([
+                import('../utils/outside-chat-live'),
+                import('../utils/blocklist'),
+            ]);
+            const budget = backgroundMailBudget(Date.now() - wokeAt);
+            if (budget > 0) await syncOwedBlocks(budget);
+        } catch (e) {
+            console.warn('[Pillar] Blocks still owed wait for the next round:', e);
+        }
+
         if (result.success || result.deltaCount > 0) {
             // Tell the OS we got new data (improves wake-up frequency)
             return BackgroundFetch.BackgroundFetchResult.NewData;

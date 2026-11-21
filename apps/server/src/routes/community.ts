@@ -80,7 +80,7 @@ import { FriendRefusal } from '../engine/social.js';
 import { getAddedYou } from '../engine/friends-added-you.js';
 import { isPoint, nearestPeople, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
-import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
+import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage, clientFunnelReport } from '@beanpool/core';
 import { HIDDEN_AUTHOR, ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
@@ -338,9 +338,10 @@ router.get('/api/local/community-info', async (ctx) => {
 /**
  * Record one onboarding step the server cannot see for itself.
  *
- * Steps 3 and 4 happen entirely on the device — a screen drawn, a choice made, a guide
- * finished — and leave no row behind. If they are not counted as they happen they are gone,
- * which is why they are the only client-reported events in the funnel.
+ * Steps 3 and 4, and the join's notifications screen after them, happen entirely on the
+ * device — a screen drawn, a choice made, a way back kept — and leave no row behind. If they
+ * are not counted as they happen they are gone, which is why they are the only
+ * client-reported events in the funnel.
  *
  * NOT under `/api/local/`, and that placement is the authentication. Everything below
  * `/api/local/` is bypassed by the global requireSignature middleware; a POST to
@@ -348,33 +349,32 @@ router.get('/api/local/community-info', async (ctx) => {
  * method+path+timestamp+nonce+body, checked for freshness and single-use nonce, so a
  * request cannot be replayed to move them twice. It asks for a key, not a membership: the
  * count keeps no key (M2) and only the phone knows a step was its first, so a key with no
- * row here may count a step too, one of the three allowlisted below, and nothing else
- * (test-strangers-cant-write lists it as a write a stranger may make, with that reason).
+ * row here may count a step too, one of the five allowlisted in @beanpool/core
+ * (CLIENT_FUNNEL_EVENTS), and nothing else (test-strangers-cant-write lists it as a write a
+ * stranger may make, with that reason).
  *
  * The caller's public key is checked by that middleware and then deliberately dropped: the
  * counter table has no column for it (M2). Knowing four people abandoned the protection
  * screen is the point; knowing which four is not.
  */
-const CLIENT_FUNNEL_EVENTS = ['protection_shown', 'protection_choice', 'guide_complete'] as const;
-
 router.post('/api/funnel-event', async (ctx) => {
     if (!rateLimit(ctx, 'funnel-event')) return;
     const { event, variant } = (ctx as any).requestBody || {};
 
-    // Allowlisted rather than passed through. The counted events include the invite
-    // outcomes, which the server records itself from what actually happened — accepting
-    // those from a client would let a member post their own "invite_failed" and quietly
-    // rewrite this node's rejection rate.
-    if (!CLIENT_FUNNEL_EVENTS.includes(event)) {
+    // Allowlisted rather than passed through (core's clientFunnelReport). The counted events
+    // include the invite outcomes, which the server records itself from what actually happened —
+    // accepting those from a client would let a member post their own "invite_failed" and quietly
+    // rewrite this node's rejection rate. The variant is bounded because it becomes part of a
+    // primary key, and the notification steps take only their per-person forms (once, once:on,
+    // once:later, once:no), so every row they make is one of the owner's four numbers.
+    const report = clientFunnelReport(event, variant);
+    if (!report) {
         ctx.status = 400;
         ctx.body = { error: 'Unknown onboarding event' };
         return;
     }
 
-    // Bounded because it becomes part of a primary key, and an unbounded string there is an
-    // unbounded number of rows.
-    const safeVariant = typeof variant === 'string' ? variant.slice(0, 16) : '';
-    recordFunnelEvent(event, safeVariant);
+    recordFunnelEvent(report.event, report.variant);
     ctx.body = { success: true };
 });
 

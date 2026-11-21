@@ -61,7 +61,7 @@ const PHONE_STEPS = [
 /** In a web browser, worded as the web app's restore screens are, whichever door the community has. */
 const WEB_STEPS = [
     word('Open your community’s address (written above) in a web browser.'),
-    word('Click “Already have BeanPool?”. If the page asks for an invite code instead, click “🔑 Restore Existing Identity →” at the bottom of the page.'),
+    word("Click “Already have BeanPool?”. If the page shows “I've used BeanPool before” instead, click that."),
     word('Click “Use my 12 words” or “🔑 Recover with 12 Words”, whichever the page shows.'),
     word('Type your 12 words in order, one in each box.'),
     word('Click “Recover Identity”. Your name and picture come back once you’re in.'),

@@ -11,7 +11,7 @@ related: your-12-words, leaving-or-deleting, communities, faq, key-changed
 Your account's key is not in your phone's backups. A new phone needs your 12 words or a sign-in account you linked, even an iPhone restored from a backup of your old one.
 
 - Install BeanPool and open it.
-- On the first screen, tap **I've used BeanPool before**. (In the web app, the first screen asks **Used BeanPool before?**: tap **I'm Already a Member →**.)
+- On the first screen, tap **I've used BeanPool before**. In a web browser, tap the same button, or **Already have BeanPool?** where the page shows that instead.
 - Choose **Recover with Social** or **Recover with 12 Words**.
 - Can't bring your account back? **Start a new account instead**, under the choices, makes a new account. Your old account stays as it is, and the two can never be joined into one. In the web app it is under the same choices.
 - Still using BeanPool in a web browser? Choose **Scan from a browser** instead and scan the code the browser shows: see "Putting your web account on a phone" in the web app page.
@@ -206,7 +206,7 @@ Either way:
 Without your 12 words and without a linked sign-in account, an admin of your community can move your account to a new phone, with your Beans, your name and your history. Go and see them in person: they check it's you first.
 
 - The admin makes a re-key code on their screen. If your old phone still has the app, it gets a notice that an admin started moving your account.
-- On your new phone, open BeanPool, tap **I've used BeanPool before**, then **An admin gave me a re-key code**. Scan the QR on the admin's screen, or type the code (it starts RK-) and your community's name. In a browser, the QR's link opens the same screen; or open your community's web app, tap **I'm Already a Member →**, then **An admin gave me a re-key code**, and type the code.
+- On your new phone, open BeanPool, tap **I've used BeanPool before**, then **An admin gave me a re-key code**. Scan the QR on the admin's screen, or type the code (it starts RK-) and your community's name. In a browser, the QR's link opens the same screen; or open your community's web app, tap **I've used BeanPool before** (or **Already have BeanPool?**, where the page shows it instead), then **An admin gave me a re-key code**, and type the code.
 - Your phone shows a two-digit number, and under it the address of the community it asked. Show both to the admin: they type the number on their screen. The number makes sure it's your phone they bind, and not someone who saw the code. **Not now** leaves the number: your phone keeps its place, and the same code shows the same number again.
 - If the new phone had no BeanPool account, it then shows the 12 words of your **new** key. Write them down: your old words no longer work, and your old phone stops working for good. A phone that already had an account (for another community) keeps that account's 12 words, and they now bring this account back too.
 - If you had linked a sign-in account, your phone asks you to link it again in Account Protection: the one you had protected your old key, so it was removed.

@@ -55,7 +55,8 @@ describe("a yes to this browser's request", () => {
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} knockYes={YES} onBackToRequest={vi.fn()} />);
         // Straight to the photo: nothing typed, no new key.
-        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
         const redeems = calls.filter(c => c.path === '/api/invite/redeem');
         expect(redeems).toHaveLength(1);
         expect(redeems[0].body).toMatchObject({ code: YES.invite, publicKey: held.publicKey, callsign: 'Sam' });
@@ -65,7 +66,7 @@ describe("a yes to this browser's request", () => {
         expect(await knockWaitingKey()).toBeNull();
         expect((await loadIdentity())?.publicKey).toBe(held.publicKey);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(screen.getByTestId('photo-step-next'));
         const words = await screen.findByTestId('backup-words');
         for (const w of held.mnemonic!) expect(words.textContent).toContain(w);
         expect(onComplete).not.toHaveBeenCalled();
@@ -80,7 +81,7 @@ describe("a yes to this browser's request", () => {
         expect(document.body.textContent).not.toContain('This invite was made for another key.');
         // A refusal says the same again, so it offers no Try again: Back to my request is the way on.
         expect(screen.queryByTestId('knock-join-retry')).toBeNull();
-        expect(screen.queryByTitle('Green Bean')).toBeNull();
+        expect(screen.queryByText('Choose your look')).toBeNull();
         expect((await loadIdentity())?.publicKey).toBe(held.publicKey);
         expect(isKnockKey(held)).toBe(true);
         await waitFor(() => expect(screen.getByTestId('knock-join-back')).not.toBeDisabled());
@@ -98,7 +99,8 @@ describe("a yes to this browser's request", () => {
         render(<WelcomePage onComplete={vi.fn()} knockYes={YES} onBackToRequest={vi.fn()} />);
         expect((await screen.findByTestId('knock-join-error')).textContent).toBe("Can't reach the community right now. Try again in a minute.");
         fireEvent.click(screen.getByTestId('knock-join-retry'));
-        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(await screen.findByTestId('photo-step-choose'));
+        fireEvent.click(screen.getByTitle('Green Bean'));
         const redeems = calls.filter(c => c.path === '/api/invite/redeem');
         expect(redeems.map(r => r.body.callsign)).toEqual(['Sam', 'Sam']);
         expect(redeems.map(r => r.body.publicKey)).toEqual([held.publicKey, held.publicKey]);
@@ -110,8 +112,10 @@ describe("a yes to this browser's request", () => {
     it('12 words refused while waiting: the held screen says the request waits and goes back to it, never "Open {name}" (review 4508428601)', async () => {
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} onBackToRequest={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
-        fireEvent.click(screen.getByRole('button', { name: 'Restore existing identity' }));
+        // From the waiting page's I have an invite: Your invite (W1), ← Back to the front door, then the ways back.
+        await screen.findByTestId('your-invite');
+        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        fireEvent.click(await screen.findByTestId('front-door-used-before'));
         fireEvent.click(await screen.findByRole('button', { name: 'Recover with 12 Words' }));
         fireEvent.change(await screen.findByLabelText('Recovery word 1'), { target: { value: generateMnemonic().join(' ') } });
         fireEvent.click(screen.getByRole('button', { name: 'Recover Identity' }));
@@ -130,11 +134,13 @@ describe("a yes to this browser's request", () => {
 
     it('I have an invite while waiting: the invite form joins with the same key, never a second one', async () => {
         render(<WelcomePage onComplete={vi.fn()} onBackToRequest={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
-        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: 'BP-7K3X-9M2W' } });
-        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Sam R' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
-        await screen.findByTitle('Green Bean');
+        // The waiting page's I have an invite opens on Your invite (W1), then Your name.
+        await screen.findByTestId('your-invite');
+        fireEvent.change(screen.getByLabelText('Invite link or code'), { target: { value: 'BP-7K3X-9M2W' } });
+        fireEvent.click(screen.getByTestId('your-invite-next'));
+        fireEvent.change(await screen.findByLabelText('What should we call you?'), { target: { value: 'Sam R' } });
+        fireEvent.click(screen.getByTestId('name-step-join'));
+        await screen.findByText('Choose your look');
         const [r] = calls.filter(c => c.path === '/api/invite/redeem');
         expect(r.body.publicKey).toBe(held.publicKey);
         expect((await loadIdentity())?.publicKey).toBe(held.publicKey);

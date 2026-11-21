@@ -1,13 +1,16 @@
 /**
  * WelcomePage's join step in a known community (DESIGN-balance-rule-fable.md §2, §5): the rule in the community's own
  * numbers, from the public route, with nothing to tick and no consent sent. A plain community or an older node shows
- * nothing and joins as before. The node is a stubbed fetch.
+ * nothing and joins as before. The node is a stubbed fetch. Since W1 the join step is Your name, after the front door and
+ * Your invite; the FAQ that said where a rule would be left the web's join with the rest of the long page (the phone has
+ * none): the rule itself is stated here, on Your name, where it applies.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { inviteThenName, typeName } from './welcome-join.test-support';
 
 type Call = { path: string };
 
@@ -37,11 +40,10 @@ function stubNode(rule: unknown) {
 }
 
 async function fillIn() {
-    await screen.findByText(/Join with Invite Code/);
-    fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: CODE } });
-    fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Rowan' } });
+    await inviteThenName(CODE);
+    typeName('Rowan');
 }
-const join = () => fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+const join = () => fireEvent.click(screen.getByTestId('name-step-join'));
 
 beforeEach(() => {
     window.history.replaceState({}, '', '/welcome');
@@ -51,19 +53,6 @@ beforeEach(() => {
     Object.defineProperty(window, 'indexedDB', { value: memoryIndexedDB(), configurable: true });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-
-describe('"Is my data private?"', () => {
-    const ANSWER = "Your balance and your trades are private. If your community has a rule on when the admins can see a balance, it's under How this community works.";
-
-    it.each([['a known community', KNOWN], ['a plain community', { known: false }], ['an older node', 404]])('says private, and where a rule would be, in %s', async (_name, rule) => {
-        stubNode(rule);
-        render(<WelcomePage onComplete={() => {}} />);
-        fireEvent.click(await screen.findByRole('button', { name: /Is my data private\?/ }));
-        const answer = await screen.findByText(/Your identity is an Ed25519 key/);
-        expect(answer.textContent).toContain(ANSWER);
-        expect(answer.textContent).not.toMatch(/trades are not/);
-    });
-});
 
 describe('the join step', () => {
     it('states the rule in the community\'s numbers, with nothing to tick', async () => {

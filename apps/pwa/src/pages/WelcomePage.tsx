@@ -27,19 +27,21 @@ import {
 import { validateMnemonic } from '../lib/mnemonic';
 
 import {
-    redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile,
+    checkInvite, redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile,
     recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
     getCommunityCard, getCommunityInfo, signedFetchWithKey, nodeAddress, nodeHasNoOwner, type CommunityInfo,
 } from '../lib/api';
 import { keepWordsOnAccount } from '../lib/words-kept';
-import { CommunityCardPanel } from '../components/CommunityCardPanel';
 import { NoOwnerCard } from '../components/NoOwnerCard';
-import { takeWelcomeDoor } from '../lib/community-card';
-import { inviteHeading, ownCommunityAddress } from '../lib/join-names';
+import { askDoor, lookAroundUrl, onAndroid, takeWelcomeDoor } from '../lib/community-card';
+import { ownCommunityAddress } from '../lib/join-names';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
 import { fetchKnownRule } from '../lib/known-rule';
-import { LookAroundGlobal } from '../components/MembersOnlyListings';
+import { GLOBAL_COMMUNITY_URL } from '../components/MembersOnlyListings';
+import { FrontDoor, type MoreWay } from '../components/FrontDoor';
+import { StepDots } from '../components/StepDots';
+import { AskHere } from '../components/AskHere';
 import { WebRestore } from '../components/WebRestore';
 import { WebRekey } from '../components/WebRekey';
 import { rekeyCodeFromSearch } from '../lib/web-rekey';
@@ -52,7 +54,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { AVATAR_PICTURE, communityCardName, createPairingSession, currentLanguage, decryptPairingPayload, inviteForInviteBox, joinRuleLines, lowercaseRecoveryWords, nodeOrigin, notANameLine, photoStepNote, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
+import { AVATAR_PICTURE, COMMUNITY_CARD_WORDS, communityCardName, createPairingSession, currentLanguage, decryptPairingPayload, inviteForInviteBox, joinRuleLines, joinStepList, lowercaseRecoveryWords, nodeOrigin, notANameLine, postRulesFor, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
@@ -105,41 +107,16 @@ function inviteHash(code: string): string {
 function keptAnotherName(asked: string, kept: string, earlier = false): string | null {
     const sent = asked.trim();
     if (!sent || kept === sent) return null;
-    if (earlier) return t('You joined as {name} on an earlier try. Tap ← Back to change it.', { name: kept });
+    if (earlier) return t('You joined as {name} on an earlier try. Tap ‹ to change it.', { name: kept });
     return sent.length > MAX_JOIN_CALLSIGN
-        ? t("You're {name} here: a name here keeps {max} characters. Tap ← Back to change it.", { name: kept, max: MAX_JOIN_CALLSIGN })
-        : t("You're {name} here: {asked} was taken. Tap ← Back to change it.", { name: kept, asked: sent });
+        ? t("You're {name} here: a name here keeps {max} characters. Tap ‹ to change it.", { name: kept, max: MAX_JOIN_CALLSIGN })
+        : t("You're {name} here: {asked} was taken. Tap ‹ to change it.", { name: kept, asked: sent });
 }
 
 /** A rename the node took, whose copy in this browser could not be written (handleRename). Read when it is shown, in the language then. */
 const RENAME_NOT_KEPT = () => t("Your new name is saved on the community, but this browser couldn't keep it. Try again.");
 
-// ===================== FAQ DATA =====================
-
-const FAQ_ITEMS = [
-    {
-        q: word('What is BeanPool?'),
-        a: word('BeanPool is a mutual credit marketplace for local communities. Members can post offers and needs, trade using community credits, and build local economic resilience — all without banks or corporations.'),
-    },
-    {
-        q: word('How do I get an invite?'),
-        a: word('Ask an existing community member to generate an invite code for you. They can share it as a link, QR code, or text. Each invite code works once.'),
-    },
-    {
-        q: word('Is my data private?'),
-        a: word("Your identity is an Ed25519 key made on your device. Your posts are shared within your community. Your balance and your trades are private. If your community has a rule on when the admins can see a balance, it's under How this community works. Your key leaves your device only as a locked copy, if you join with a sign-in or link one, or when you copy your account to another device of yours. The locked copy is so that sign-in can bring your account back. The people who run your community's server can open that copy. Your 12 words are the way back that needs nobody."),
-    },
-    {
-        q: word('What are community credits?'),
-        a: word('Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.'),
-    },
-    {
-        q: word('Can I use this on my phone?'),
-        a: word('Yes! On a phone, get the app from Google Play, the App Store, or beanpool.org/android. On a computer, open the app link in Chrome or Edge and choose Install in the address bar or the menu; in Safari on a Mac, choose File, then Add to Dock.'),
-    },
-];
-
-// ===================== BUNDLED AVATARS & STEPPER =====================
+// ===================== BUNDLED AVATARS =====================
 
 const BUNDLED_AVATARS = [
     { id: 'bean-green',   label: word('Green Bean') },
@@ -153,102 +130,6 @@ const BUNDLED_AVATARS = [
     { id: 'fire',         label: word('Fire') },
     { id: 'crystal',      label: word('Crystal') },
 ];
-
-/**
- * Four equal columns that may shrink, with labels that wrap. The old row gave each step a fixed
- * 4.5rem with unwrappable labels — 18rem plus connectors, which at 1.3x text pushed the first
- * screen a new member sees out to 376px on a 320px phone.
- *
- * Five on a community that syncs listings by area (`area`, the node's `features.nearbyListings`): Your Area after Your
- * Photo. `step` names the same step either way (3 is Safety Backup, 4 How it Works), and `'area'` is the new one.
- *
- * Below 360px the columns are too narrow for whole words: at 320px and 130% text, inside this page's two 2rem paddings,
- * five columns are 29px and four 36px, which broke "Phot/o" and "Back/up" (deciding review of #1766, N5). There each
- * column keeps only its dot, and the current step is named whole under them.
- */
-export function OnboardingStepper({ step, firstLabel, area = false, backup = true }: { step: 1 | 2 | 3 | 4 | 'area'; firstLabel?: string; area?: boolean; backup?: boolean }) {
-    const first = firstLabel ?? t('Your Name');
-    // `backup` false: an account restored here that joins after a yes (slice Y0) has no Safety Backup step, its words
-    // being the ones it came back with.
-    const steps = [first, t('Your Photo'), ...(area ? [t('Your Area')] : []), ...(backup ? [t('Safety Backup')] : []), t('How it Works')];
-    const position = step === 'area' ? 3 : (area && step >= 3 ? step + 1 : step) - (!backup && step === 4 ? 1 : 0);
-    return (
-        <div style={{ marginBottom: '1.5rem', width: '100%' }}>
-        <div data-testid="onboarding-stepper" style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
-            columnGap: '2px',
-            width: '100%',
-        }}>
-            {steps.map((label, i) => {
-                const stepNum = i + 1;
-                const isActive = stepNum === position;
-                const isCompleted = stepNum < position;
-                return (
-                    <div key={i} style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        position: 'relative',
-                        minWidth: 0,
-                    }}>
-                        {i > 0 && (
-                            // Connector from the previous step's dot to this one's, 4px clear of each.
-                            <div aria-hidden="true" style={{
-                                position: 'absolute',
-                                top: '5px',
-                                right: 'calc(50% + 10px)',
-                                width: 'calc(100% - 18px)',
-                                height: '2px',
-                                backgroundColor: isCompleted || isActive ? '#22c55e' : '#e5e7eb',
-                            }} />
-                        )}
-                        <div style={{
-                            width: '12px',
-                            height: '12px',
-                            borderRadius: '6px',
-                            backgroundColor: isCompleted ? '#22c55e' : isActive ? 'var(--bp-ink-info)' : '#d1d5db',
-                            marginBottom: '6px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.3s',
-                        }}>
-                            {isCompleted && (
-                                <span style={{ color: '#fff', fontSize: '8px', fontWeight: '800' }}>✓</span>
-                            )}
-                        </div>
-                        <span className="max-[359px]:hidden" style={{
-                            fontSize: '10px',
-                            lineHeight: 1.2,
-                            color: isActive ? 'var(--text-primary)' : '#6b7280',
-                            fontWeight: isActive ? '700' : '500',
-                            transition: 'color 0.3s',
-                            whiteSpace: 'normal',
-                            overflowWrap: 'anywhere',
-                            textAlign: 'center',
-                            maxWidth: '100%',
-                        }}>
-                            {label}
-                        </span>
-                    </div>
-                );
-            })}
-        </div>
-        <p data-testid="onboarding-stepper-current" className="hidden max-[359px]:block" style={{
-            margin: '6px 0 0',
-            fontSize: '12px',
-            lineHeight: 1.3,
-            fontWeight: 700,
-            textAlign: 'center',
-            color: 'var(--text-primary)',
-        }}>
-            {/* The space stays outside the span: a line too narrow for both breaks before the dot, never inside the count (review N10). */}
-            {steps[position - 1]}{' '}<span style={{ fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('· Step {step} of {total}', { step: position, total: steps.length })}</span>
-        </p>
-        </div>
-    );
-}
 
 /** Over the global lobby (G9b), on the screens a node with its door shut shows: back to the listings. */
 function BackToListings({ onBack }: { onBack: () => void }) {
@@ -280,47 +161,6 @@ function doorOf(info: CommunityInfo | null | undefined): Door {
  * data" ask are given, together. Both never fail (recordOnboardingEvent and askPersistentStorage swallow errors).
  */
 const LEAVE_WAIT_MS = 5_000;
-
-/**
- * How it works where the node has Beans off (`features.beans` false: the worldwide community). Rehearsal 14 Oct 2026,
- * B3: the step sold a credit line to -2000 Beans, the Commons fee, the Trust Wallet and Ledger sends, none of which exist
- * there, in a 350 px scroll box about 140 px wide at 320 px with 130 % text. This says what is on, in a few short lines
- * that fit the step without a box of their own. Marked with word() and translated by t() where shown: the worldwide
- * community is where strangers land (#1947 confirmation N-A). A title keeps its full stop, so a language picks its own.
- */
-export const HOW_IT_WORKS_WITHOUT_BEANS = {
-    intro: word('Here is what you can do here.'),
-    things: [
-        { icon: '📦', title: word('Offers and needs.'), line: word('List what you can give, ask for what you need, and find people near you. You agree the details between you.') },
-        { icon: '📅', title: word('Events.'), line: word("See what's on near you, and say you're going.") },
-        { icon: '👥', title: word('Groups.'), line: word('Find people around a place or an interest, and talk together.') },
-        { icon: '💬', title: word('Messages.'), line: word('Tap Message on any post to talk with the person who posted it.') },
-    ],
-    local: word('A local community adds its own Beans and a shared Commons. You will see those marked 🏘️ Local community.'),
-    words: word('Your 12 words are always in Settings → Recovery Phrase.'),
-} as const;
-
-function HowItWorksWithoutBeans() {
-    const copy = HOW_IT_WORKS_WITHOUT_BEANS;
-    return (
-        <div data-testid="how-it-works-no-beans" className="text-left mb-6 space-y-3">
-            <ul className="m-0 p-0 list-none space-y-3">
-                {copy.things.map((thing) => (
-                    <li key={thing.title} className="flex gap-2 items-start">
-                        <span aria-hidden="true" className="shrink-0 text-lg leading-6">{thing.icon}</span>
-                        <p className="m-0 min-w-0 break-words text-sm leading-relaxed text-nature-900 dark:text-nature-100">
-                            <strong className="text-nature-950 dark:text-oat-50">{t(thing.title)}</strong> {t(thing.line)}
-                        </p>
-                    </li>
-                ))}
-            </ul>
-            <p className="m-0 pt-3 border-t border-nature-200 dark:border-nature-700 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">
-                {t(copy.local)}
-            </p>
-            <p className="m-0 break-words text-sm leading-relaxed text-nature-800 dark:text-nature-200">📝 <>{t(copy.words)}</></p>
-        </div>
-    );
-}
 
 /**
  * The 12 words stay English in every language: the account key is derived from those exact words (design amendment 1;
@@ -417,10 +257,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     const [copyNotSaid, setCopyNotSaid] = useState(false);
     // Joined with 12 words alone: the account has one way back, and the Safety Backup step says so (two-doors §2.5).
     const [joinedByWords, setJoinedByWords] = useState(false);
-    // That member chose "Add a sign-in as a second way back" at Safety Backup: offered at the end of the tour, and the page
+    // That member chose "Add a sign-in as a second way back" at Safety Backup: its providers open right there, and the page
     // leaves for the provider only once the steps every new member has are finished (the photo on the node, the browser
     // asked to keep the key), because the page does not come back to them (App opens the member's app on the return).
-    const [addSignInAfterTour, setAddSignInAfterTour] = useState(false);
+    const [addingSignIn, setAddingSignIn] = useState(false);
     // The end of onboarding ran (finishOnboarding): a second run, after a sign-in that didn't start, does not repeat it.
     const onboardingFinished = useRef(false);
     // A key restored here (phone or 12 words) that is not a member of this open community yet: it joins as it is. Also
@@ -718,18 +558,44 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     // a reload loses pendingIdentity, and the root then routes on the stored identity rather
     // than re-entering the wizard. If a resume path is ever added, this needs persisting too.
     const [inviteRedeemed, setInviteRedeemed] = useState(false);
-    const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
     // From the lobby's "Already have BeanPool?" on a node whose door is shut: the ways back, not the invite form.
     /**
      * "An admin gave me a re-key code" (components/WebRekey.tsx, #1768): open with the code a dashboard's QR put in the
      * address (`/?rekey=RK-…`), or '' from the restore options. Null: closed.
      */
     const [rekeyCode, setRekeyCode] = useState<string | null>(() => (typeof window !== 'undefined' ? rekeyCodeFromSearch(window.location.search) : null));
-    const [showNewUser, setShowNewUser] = useState(() => start !== 'restore' && welcomeDoor !== 'signin');
+    /**
+     * The join's first screens (design §5, slice W1), as the phone's: the front door; Your invite (only when the address
+     * brought none: a plain box and Next); Your name, greeted by the invite. An invite in the address (`?invite=`) opens
+     * on Your name; the card's `?door=invite` on Your invite.
+     */
+    const [joinScreen, setJoinScreen] = useState<'door' | 'invite' | 'name'>(() => (inviteCode ? 'name' : welcomeDoor === 'invite' || onBackToRequest ? 'invite' : 'door'));
     const [showMemberOptions, setShowMemberOptions] = useState(() => start === 'restore' || welcomeDoor === 'signin');
-    const [openFaq, setOpenFaq] = useState<number | null>(null);
+    // More ways in › Ask a community to join: this community's request form (components/AskHere.tsx), open from the start
+    // at the card's own `?door=ask`.
+    const [asking, setAsking] = useState(() => welcomeDoor === 'ask');
+    // Your name's greeting band, from the invite check the join makes (core's words, the phone's band): who invited, to
+    // which community, for the code it was asked about. Not heard yet, no answer, or a code this community does not take:
+    // "You're invited". The check always carries this community's name, whatever the code (routes/community.ts
+    // /api/invite/check), and on the web it goes to the page's own community, not the one the invite names (the phone asks
+    // that one), so only a valid answer names it: another community's invite pasted here is never greeted with this
+    // community's name (deciding review on #3333, 7c25e192).
+    const [greeting, setGreeting] = useState<{ code: string; community: string | null; inviter: string | null } | null>(null);
+    useEffect(() => {
+        const code = normaliseInviteCode(inviteCode);
+        if (joinScreen !== 'name' || !code) return;
+        let cancelled = false;
+        void checkInvite(code).then((check) => {
+            if (!cancelled && check) setGreeting(check.valid
+                ? { code, community: check.communityName || null, inviter: check.inviterCallsign || null }
+                : { code, community: null, inviter: null });
+        });
+        return () => { cancelled = true; };
+    }, [joinScreen, inviteCode]);
 
     const [showAvatarSetup, setShowAvatarSetup] = useState(false);
+    // Your photo's Choose a picture: the camera, the gallery and the avatars, open (Marty's walk, 21 Nov: photo or avatar).
+    const [choosingPicture, setChoosingPicture] = useState(false);
     // Back from the photo step to the name, on the account the invite made (backFromPhotoStep), and the names offered
     // there for one another member has.
     const [renaming, setRenaming] = useState(false);
@@ -911,11 +777,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     // showed those states is gone with it — so it was recording one constant forever.
     const protectionShownRef = useRef(false);
     useEffect(() => {
-        const onBackupStep = hasMnemonic(pendingIdentity) && !showAvatarSetup && !showAreaStep && !showOnboardingGuide;
+        const onBackupStep = hasMnemonic(pendingIdentity) && !showAvatarSetup && !showAreaStep;
         if (!onBackupStep || protectionShownRef.current) return;
         protectionShownRef.current = true;
         recordOnboardingEvent('protection_shown');
-    }, [pendingIdentity, showAvatarSetup, showAreaStep, showOnboardingGuide]);
+    }, [pendingIdentity, showAvatarSetup, showAreaStep]);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const avatarCropper = usePictureCrop();
 
@@ -954,8 +820,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
      */
     /**
      * The name box given an invite (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted there became
-     * her name): the invite goes to the invite box, as if pasted there, the name box is left empty, and the one line says
-     * why. Read from a paste before the box's 20 characters cut it. False when `text` holds no invite.
+     * her name): the invite is used as if it came in Your invite's box (its code, and the community it names; the greeting
+     * band changes to it), the name box is left empty, and the one line says why. The name screen has no invite box (W1, as
+     * the phone's since #3317), so the line is the phone's own. Read from a paste before the box's 20 characters cut it.
+     * False when `text` holds no invite.
      */
     function inviteFromNameBox(text: string): boolean {
         const moved = inviteForInviteBox(text);
@@ -963,8 +831,18 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         invitePasted.current = inviteNamesAnotherCommunity(moved, '') !== null ? moved : null;
         setInviteCode(formatInviteCode(moved));
         setCallsign('');
-        setError(notANameLine(moved));
+        setError(t("That's an invite, not a name: it's your invite now."));
         return true;
+    }
+
+    /** Your invite's Next: the name screen, once the box holds a code. */
+    function inviteNext() {
+        if (!normaliseInviteCode(inviteCode)) {
+            setError(t('An invite code is required to join this node.'));
+            return;
+        }
+        setError(null);
+        setJoinScreen('name');
     }
 
     async function handleCreate(knockInvite?: string) {
@@ -1023,7 +901,6 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             // Pre-flight the invite BEFORE creating an identity — a dud code
             // should fail here, not after the seed ceremony. A null result
             // (older node) fails open; redeem stays the definitive check.
-            const { checkInvite } = await import('../lib/api');
             const check = await checkInvite(trimmedCode);
             // "Used" on a retry may mean used by the key an earlier try sent: the node took it and the answer was lost.
             // The redeem answers a member's key before it looks at the code as used, so that retry goes on to it and
@@ -1311,9 +1188,50 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             .catch(() => setError(t('Failed to load image.')));
     };
 
+    // protection_choice went out from this step: counted once (lib/api.ts holds it to once per person per node only after
+    // its answer, so two leaves close together could both send it).
+    const wordsChoiceCounted = useRef(false);
+
+    /**
+     * The member's answer at Safety Backup, kept as they leave the step, with the tick as it stands then: by Next, or by a
+     * provider chosen under "Add a sign-in", which opens beside the tick box and leaves the page (deciding review on
+     * #3333, 7c25e192: a tick made after the providers opened was lost, and the choice was counted stale or twice).
+     * A member who ticked "I've written them down" has done the thing Settings' banner nags about: without this,
+     * finishing onboarding correctly still greets them with "you haven't saved your recovery phrase yet", a warning that
+     * is not true, which is how warnings stop being read. Only on the tick: skipping leaves it showing. And on the
+     * account (it exists by this step): the phone and the web agree that the words are kept, and Home reminds them of
+     * nothing (§2.5).
+     */
+    function keepWordsChoice() {
+        if (!pendingIdentity) return;
+        if (!wordsChoiceCounted.current) {
+            wordsChoiceCounted.current = true;
+            recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+        }
+        if (!seedConfirmed) return;
+        try { localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true'); } catch { /* storage off: Settings asks once */ }
+        keepWordsOnAccount(pendingIdentity.publicKey, 'Welcome');
+    }
+
     async function handleSeedConfirmed() {
         if (!pendingIdentity) return;
         if (await finishOnboarding()) onComplete(pendingIdentity);
+    }
+
+    /**
+     * The join's end, from its last step's button: the way back's Next, or for an account that came back with its 12 words
+     * (no way back to keep) the photo's or Your area's. How it Works left the join (design §3.1); a step after the way back
+     * (the web's notifications step, N5a) hangs off this one place.
+     */
+    async function finishJoin() {
+        await handleSeedConfirmed();
+    }
+
+    /** Your area saved or skipped: the way back, or the join's end where there is none. */
+    function afterArea() {
+        setError(null);
+        if (wordsKnown) void finishJoin();
+        else setShowAreaStep(false);
     }
 
     /**
@@ -1622,6 +1540,41 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     // in full on the open door, that join's resend would be refused because of the kept key, and never hand back.
     const joinSettleOnly = !webJoinForDoor || sentInvite !== 'none';
     const waitMinutes = Math.round(INVITE_SEND_CAN_LAND_MS / 60_000);
+    // The dots this join shows (core join-steps.ts, the phone's rule): Your area only where the community syncs by area, the
+    // way back not for an account that came back with its 12 words. The front door and Your invite have none.
+    const joinSteps = joinStepList({ area: byArea, wayBack: !wordsKnown });
+    // The front door's "No invite? Look around": the lobby's listings where the page opened over them, else the global
+    // community this community names on its card (none where it names none), else, at a node too old to send a card, the
+    // global community as its old "No invite?" box linked it. Nothing while the card is on its way.
+    const card = communityCard && communityCard !== 'loading' ? communityCard : null;
+    const globalFromCard = card ? lookAroundUrl(card) : null;
+    const lookAround = onBack ? { onClick: onBack }
+        : globalFromCard ? { href: globalFromCard }
+        : localCommunity && communityCard === null ? { href: GLOBAL_COMMUNITY_URL }
+        : null;
+    // More ways in ›: this community's Ask to join, where it takes requests and the page can wait on one (App's `onAsked`);
+    // never at a server nobody has claimed, where nobody could answer it (its no-owner card stands there instead).
+    const askName = card && card.joining === 'requests' && onAsked && !noOwner ? communityCardName(card, { t }) : null;
+    // On an Android phone's browser, Ask to join goes to the app first, where the member's account may already be: its
+    // card screen, falling back to this community's own ask door, which opens the form here (askDoor,
+    // DESIGN-shared-listing-door-fable.md §2.3, as the card this page drew before W1 did and PeekPage's still does). The
+    // form here is second, in the card's words: "or ask here in your browser" (deciding review on #3333, 7c25e192).
+    const askApp = askName && card ? askDoor(card, onAndroid())?.href ?? null : null;
+    const askHere = () => { setError(null); setAsking(true); };
+    const moreWays: MoreWay[] = !askName ? []
+        : askApp ? [
+            { label: t('Ask a community to join'), testId: 'welcome-ask-to-join-app', href: askApp },
+            { label: t(COMMUNITY_CARD_WORDS.askInBrowser), testId: 'welcome-ask-to-join', onClick: askHere },
+        ]
+        : [{ label: t('Ask a community to join'), testId: 'welcome-ask-to-join', onClick: askHere }];
+    // Your name's band names the community only for the code its check was asked about.
+    const greet = greeting && greeting.community && greeting.code === normaliseInviteCode(inviteCode) ? greeting : null;
+    const backToRequest = onBackToRequest ? (
+        <button type="button" data-testid="welcome-back-to-request" onClick={onBackToRequest}
+            className="block w-full min-h-[48px] px-4 py-3 mb-4 rounded-xl text-base font-bold bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer">
+            {t('← Back to my request')}
+        </button>
+    ) : null;
 
     return (
         // 2rem around the page and inside the card, 1rem each below 360 px: at 320 px with 130 % text the two 2rem paddings
@@ -1771,7 +1724,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                            The name alone: the invite is spent, and no way off leads to another account from here. Next
                            goes back to the photo, with the same name or a new one. */
                         <>
-                            <OnboardingStepper area={byArea} step={1} backup={!wordsKnown} />
+                            <StepDots steps={joinSteps} step="name" />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                                 {t('✏️ Your name')}
                             </h3>
@@ -1784,7 +1737,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                 fontSize: '0.85rem', fontWeight: 600,
                                 color: 'var(--text-secondary)', marginBottom: '0.5rem',
                             }}>
-                                {t('Your Callsign (Name)')}
+                                {t('What should we call you?')}
                             </label>
                             <input
                                 id="callsign"
@@ -1848,443 +1801,126 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                             </StepAction>
                         </>
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
-                        /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
+                        /* ===== YOUR PHOTO (onboarding S3 on the web, W1): Choose your look, one Choose a picture that holds a
+                           photo or an avatar (Marty's walk, 21 Nov), Skip for now until one is chosen. ===== */
                         <>
-                            <OnboardingStepper area={byArea} step={2} backup={!wordsKnown} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
-                            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                {t('📸 Choose your look')}
+                            {/* ‹ after an invite: back to the name, on the same account (backFromPhotoStep). Not after the open
+                                door, whose name is settled with its sign-in: that step has no going back to. */}
+                            <StepDots steps={joinSteps} step="photo" busy={loading} onBack={joinedByDoor ? undefined : backFromPhotoStep} />
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem' }}>
+                                {t('Choose your look')}
                             </h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                                {t('Pick a profile picture so your community knows you.')}
-                            </p>
                             {joinedAsNote && (
                                 <p role="status" data-testid="joined-as-note" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                     {joinedAsNote}
                                 </p>
                             )}
 
-                            {/* Circular Preview */}
-                            <div style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                marginBottom: '1.5rem',
-                            }}>
+                            <div className="flex flex-col items-center mb-5">
                                 {pendingAvatar ? (
-                                    <img
-                                        src={resolveAvatarUrl(pendingAvatar) || ''}
-                                        alt={t('Avatar Preview')}
-                                        style={{
-                                            width: '96px',
-                                            height: '96px',
-                                            borderRadius: '48px',
-                                            border: '3px solid var(--bp-ink-info)',
-                                            objectFit: 'cover',
-                                        }}
-                                    />
+                                    <img src={resolveAvatarUrl(pendingAvatar) || ''} alt={t('Avatar Preview')}
+                                        className="w-24 h-24 rounded-full object-cover border-[3px] border-solid border-bp-ink-brand" />
                                 ) : (
                                     <MemberAvatar avatarUrl={null} pubkey={pendingIdentity.publicKey} callsign={pendingIdentity.callsign} size={96} alt="" />
                                 )}
-                                <span style={{ fontSize: '1rem', fontWeight: 700, marginTop: '0.5rem' }}>
-                                    {pendingIdentity.callsign}
-                                </span>
+                                <span dir="auto" className="mt-2 text-base font-bold break-words">{pendingIdentity.callsign}</span>
                             </div>
 
-                            {/* Camera and Gallery Buttons */}
-                            <div style={{
-                                display: 'flex',
-                                gap: '0.75rem',
-                                marginBottom: '1.5rem',
-                            }}>
-                                <button
-                                    onClick={() => cameraInputRef.current?.click()}
-                                    disabled={loading}
-                                    style={{
-                                        flex: 1,
-                                        padding: '0.75rem',
-                                        borderRadius: '12px',
-                                        border: '1px solid var(--border-primary, #334155)',
-                                        background: 'var(--bg-secondary, #1e293b)',
-                                        color: 'var(--text-primary)',
-                                        fontSize: '0.9rem',
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        gap: '0.25rem',
-                                    }}
-                                >
-                                    <span style={{ fontSize: '1.5rem' }}>📸</span>
-                                    {t('Camera')}
-                                </button>
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={loading}
-                                    style={{
-                                        flex: 1,
-                                        padding: '0.75rem',
-                                        borderRadius: '12px',
-                                        border: '1px solid var(--border-primary, #334155)',
-                                        background: 'var(--bg-secondary, #1e293b)',
-                                        color: 'var(--text-primary)',
-                                        fontSize: '0.9rem',
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        gap: '0.25rem',
-                                    }}
-                                >
-                                    <span style={{ fontSize: '1.5rem' }}>🖼️</span>
-                                    {t('Gallery')}
-                                </button>
-                            </div>
-
-                            {/* Hidden inputs */}
-                            <input
-                                type="file"
-                                accept="image/*"
-                                capture="user"
-                                ref={cameraInputRef}
-                                style={{ display: 'none' }}
-                                onChange={handleAvatarFileChange}
-                            />
-                            <input
-                                type="file"
-                                accept="image/*"
-                                ref={fileInputRef}
-                                style={{ display: 'none' }}
-                                onChange={handleAvatarFileChange}
-                            />
-                            {avatarCropper.dialog}
-
-                            <h4 style={{
-                                fontSize: '0.85rem',
-                                fontWeight: 600,
-                                color: 'var(--text-secondary)',
-                                textAlign: 'left',
-                                marginBottom: '0.75rem',
-                            }}>
-                                {t('Or choose an avatar:')}
-                            </h4>
-
-                            {/* Horizontal scroll grid of BUNDLED_AVATARS */}
-                            <div style={{
-                                display: 'flex',
-                                gap: '0.75rem',
-                                overflowX: 'auto',
-                                padding: '0.5rem 0.25rem',
-                                marginBottom: '1.5rem',
-                                backgroundColor: 'var(--bg-secondary, #1e293b)',
-                                borderRadius: '12px',
-                                border: '1px solid var(--border-primary, #334155)',
-                            }} className="custom-scrollbar">
-                                {BUNDLED_AVATARS.map((avatar) => {
-                                    const isSelected = pendingAvatar === `bundled://${avatar.id}`;
-                                    const resolvedUrl = resolveAvatarUrl(`bundled://${avatar.id}`) || '';
-                                    const label = t(avatar.label);
-                                    return (
-                                        <button
-                                            key={avatar.id}
-                                            onClick={() => { avatarCropper.cancel(); setPendingAvatar(`bundled://${avatar.id}`); }}
-                                            style={{
-                                                flexShrink: 0,
-                                                width: '56px',
-                                                height: '56px',
-                                                borderRadius: '28px',
-                                                border: isSelected ? '3px solid var(--bp-ink-info)' : '2px solid transparent',
-                                                padding: 0,
-                                                overflow: 'hidden',
-                                                cursor: 'pointer',
-                                                background: 'none',
-                                                transition: 'all 0.2s',
-                                                transform: isSelected ? 'scale(1.05)' : 'none',
-                                            }}
-                                            title={label}
-                                        >
-                                            <img
-                                                src={resolvedUrl}
-                                                alt={label}
-                                                style={{
-                                                    width: '100%',
-                                                    height: '100%',
-                                                    objectFit: 'cover',
-                                                }}
-                                            />
+                            <button type="button" data-testid="photo-step-choose" onClick={() => setChoosingPicture((open) => !open)} aria-expanded={choosingPicture} disabled={loading}
+                                className="block w-full min-h-[48px] px-4 py-3 mb-4 rounded-xl border border-border-primary bg-transparent text-text-primary text-base font-bold break-words cursor-pointer disabled:opacity-60">
+                                {t('Choose a picture')}
+                            </button>
+                            {choosingPicture && (
+                                <div data-testid="photo-step-picker" className="mb-4">
+                                    <div className="flex gap-3 mb-4">
+                                        <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={loading}
+                                            className="flex-1 min-h-[48px] p-3 rounded-xl border border-border-primary bg-bg-card text-text-primary text-sm font-semibold break-words cursor-pointer">
+                                            <span aria-hidden="true" className="block text-2xl">📸</span>{t('Camera')}
                                         </button>
-                                    );
-                                })}
-                            </div>
+                                        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={loading}
+                                            className="flex-1 min-h-[48px] p-3 rounded-xl border border-border-primary bg-bg-card text-text-primary text-sm font-semibold break-words cursor-pointer">
+                                            <span aria-hidden="true" className="block text-2xl">🖼️</span>{t('Gallery')}
+                                        </button>
+                                    </div>
+                                    <h4 className="m-0 mb-2 text-sm font-semibold text-left text-text-secondary">{t('Or choose an avatar:')}</h4>
+                                    <div className="flex gap-3 overflow-x-auto p-2 rounded-xl border border-border-primary bg-bg-card custom-scrollbar">
+                                        {BUNDLED_AVATARS.map((avatar) => {
+                                            const isSelected = pendingAvatar === `bundled://${avatar.id}`;
+                                            const label = t(avatar.label);
+                                            return (
+                                                <button key={avatar.id} type="button" title={label} aria-pressed={isSelected}
+                                                    onClick={() => { avatarCropper.cancel(); setPendingAvatar(`bundled://${avatar.id}`); }}
+                                                    className={`shrink-0 w-14 h-14 rounded-full p-0 overflow-hidden bg-transparent cursor-pointer border-solid ${isSelected ? 'border-[3px] border-bp-ink-brand' : 'border-2 border-transparent'}`}>
+                                                    <img src={resolveAvatarUrl(`bundled://${avatar.id}`) || ''} alt={label} className="w-full h-full object-cover" />
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                            <input type="file" accept="image/*" capture="user" ref={cameraInputRef} style={{ display: 'none' }} onChange={handleAvatarFileChange} />
+                            <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleAvatarFileChange} />
+                            {avatarCropper.dialog}
 
                             {loading && (
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>
                                     {t('Processing photo...')}
                                 </p>
                             )}
-
                             {error && (
                                 <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>
                                     {error}
                                 </p>
                             )}
 
-                            {/* No picture yet: Next still works (rehearsal 14 Oct S9, never a gate), and this says whether
-                                the node asks for one before a first post (core postRulesFor). */}
-                            {!pendingAvatar && (
-                                <p data-testid="photo-step-note" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-                                    {photoStepNote(!beansOff)}
+                            {/* Only where the community asks for a picture before a first post (core postRulesFor): elsewhere
+                                "Skip for now" says it is optional. Never a gate (rehearsal 14 Oct S9). */}
+                            {!pendingAvatar && postRulesFor(!beansOff).profilePhoto && (
+                                <p data-testid="photo-step-note" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    {t('This community asks for a picture before you post.')}
                                 </p>
                             )}
 
                             <StepAction>
                                 <button
+                                    type="button"
+                                    data-testid="photo-step-next"
                                     onClick={() => {
-                                        setShowAvatarSetup(false);
-                                        if (byArea) setShowAreaStep(true);
-                                        else if (wordsKnown) setShowOnboardingGuide(true);
                                         setError(null);
+                                        if (byArea) { setShowAvatarSetup(false); setShowAreaStep(true); }
+                                        // No way back to keep (an account that came back with its 12 words): the join ends here.
+                                        else if (wordsKnown) void finishJoin();
+                                        else setShowAvatarSetup(false);
                                     }}
                                     disabled={loading}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.85rem',
-                                        borderRadius: '10px',
-                                        border: 'none',
-                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
-                                        // White on the blue (and on the grey while it sends).
-                                        color: 'var(--bp-info-on)',
-                                        fontSize: '1rem',
-                                        fontWeight: 600,
-                                        cursor: loading ? 'not-allowed' : 'pointer',
-                                        fontFamily: 'inherit',
-                                        transition: 'background 0.2s',
-                                    }}
+                                    className="block w-full min-h-[48px] px-4 py-3 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-base font-bold break-words cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                    {t('Next →')}
+                                    {pendingAvatar ? t('Next') : t('Skip for now')}
                                 </button>
                             </StepAction>
-
-                            {/* After an invite: back to the name, on the same account (backFromPhotoStep). Not after the
-                                open door, whose name is settled with its sign-in: that step has no going back to. */}
-                            {!joinedByDoor && (
-                            <button
-                                onClick={backFromPhotoStep}
-                                disabled={loading}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: 'var(--text-muted)',
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer',
-                                    marginTop: '1rem',
-                                    fontFamily: 'inherit',
-                                }}
-                            >
-                                {t('← Back')}
-                            </button>
-                            )}
                         </>
                     ) : hasMnemonic(pendingIdentity) && showAreaStep ? (
-                        /* ===== YOUR AREA (a community that syncs by area) ===== */
+                        /* ===== YOUR AREA (a community that syncs by area; the phone has no such step) ===== */
                         <>
-                            <OnboardingStepper step="area" area backup={!wordsKnown} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
+                            <StepDots steps={joinSteps} step="area" busy={loading} onBack={() => { setShowAreaStep(false); setShowAvatarSetup(true); setError(null); }} />
                             <AreaStep
                                 send={senderForKey(pendingIdentity.privateKey, pendingIdentity.publicKey)}
                                 limits={nearbyLimits}
-                                onSaved={(_area, placeName) => { rememberAreaPlace(placeName); setShowAreaStep(false); if (wordsKnown) setShowOnboardingGuide(true); setError(null); }}
-                                onSkip={() => { setShowAreaStep(false); if (wordsKnown) setShowOnboardingGuide(true); setError(null); }}
+                                onSaved={(_area, placeName) => { rememberAreaPlace(placeName); afterArea(); }}
+                                onSkip={afterArea}
                             />
-                            <button
-                                type="button"
-                                onClick={() => { setShowAreaStep(false); setShowAvatarSetup(true); }}
-                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '0.5rem', minHeight: '44px', fontFamily: 'inherit' }}
-                            >
-                                {t('← Back')}
-                            </button>
-                        </>
-                    ) : hasMnemonic(pendingIdentity) && showOnboardingGuide ? (
-                        /* ===== ONBOARDING GUIDE (Step 4) ===== */
-                        <>
-                            <OnboardingStepper area={byArea} step={4} backup={!wordsKnown} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
-                            {/* In the Safety Backup step's place for an account restored here (slice Y0): one line. */}
-                            {wordsKnown && (
-                                <p data-testid="tour-words-kept" className="m-0 mb-3 text-sm text-text-primary break-words">
-                                    {t('Your 12 words stay the same: the ones you came back with.')}
-                                </p>
-                            )}
-                            <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">{t('🫘 Welcome to BeanPool')}</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: beansOff ? '1rem' : '1.5rem', lineHeight: 1.5 }}>
-                                {beansOff ? t(HOW_IT_WORKS_WITHOUT_BEANS.intro) : t("Let's look at how this community economy works.")}
-                            </p>
-
-                            {beansOff ? <HowItWorksWithoutBeans /> : (
-                            <div className="text-left space-y-4 mb-6" style={{ maxHeight: '350px', overflowY: 'auto', paddingRight: '0.5rem', textAlign: 'left' }}>
-                                {/* Card 1: Energy Exchange */}
-                                {/* A whole sentence beside an emoji or a bold one sits in a fragment of its own: words:check reads a t() beside text as a fragment. */}
-                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50">
-                                    <h4 className="font-bold text-sm mb-1 text-nature-950 dark:text-oat-50">{t('⚡ Energy Exchange Marketplace')}</h4>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        {t('BeanPool runs on cooperation, not accumulation. The goal is to keep energy flowing.')}
-                                    </p>
-                                    <div className="mt-3 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 text-xs leading-normal">
-                                        🟢 <strong>{t('The best place to be is zero (0 Beans).')}</strong> <>{t('This means you have given as much value to your community as you have received from it.')}</>
-                                    </div>
-                                    <div className="mt-3 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs leading-normal">
-                                        🫘 <strong>{t('Contributions First.')}</strong> <>{t('In a community with Beans, to keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.')}</>
-                                    </div>
-                                </div>
-
-                                {/* Card 2: The Ledger Rules */}
-                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-4">
-                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">{t('🪙 The Mutual Credit Ledger')}</h4>
-
-                                    <div className="flex gap-3 items-start">
-                                        <span className="text-lg leading-none">🤝</span>
-                                        <div>
-                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">{t('Trust-Backed Credit')}</h5>
-                                            <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                {t('Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.')}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
-                                        <span className="text-lg leading-none">🌾</span>
-                                        <div>
-                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">{t('Community Commons Pool')}</h5>
-                                            <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                {t('Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.')}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
-                                        <span className="text-lg leading-none">⏱️</span>
-                                        <div>
-                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">{t('Reference Rate')}</h5>
-                                            <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                {t('40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.')}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Card 3: Safe Handshake Held in Trust */}
-                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50">
-                                    <h4 className="font-bold text-sm mb-1 text-nature-950 dark:text-oat-50">{t('🔒 Held in Trust')}</h4>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        {t('To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.')}
-                                    </p>
-                                </div>
-
-                                {/*
-                                  Card 4: how you get back in.
-
-                                  The design doc's wording describes Phase B — an account
-                                  split into pieces held by your phone, your hub and whoever
-                                  invited you. None of that exists yet, and printing it now
-                                  would tell a brand new member they are protected by keepers
-                                  they do not have: exactly the false all-clear this redesign
-                                  is meant to remove. It says what is true today, and gets
-                                  the keeper wording in Phase B when the keepers are real.
-                                */}
-                                <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 space-y-2">
-                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">{t('🔑 Your 12 Words Are Everything')}</h4>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        {t('Your 12 words are your primary key to your account across devices.')}
-                                        {signInRecovery
-                                            ? <> {t('Signing in with {provider} also brings it back.', { provider: providerLabel(signInRecovery) })}</>
-                                            : <> <span>{t('Nobody can reset them: not us, not this community.')}</span></>}
-                                    </p>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        ⚠️ <strong>{t('Browser storage can be wiped without warning.')}</strong> <>{t('Safari clears site data after 7 days of inactivity, so keeping your 12 words safe ensures seamless access.')}</>
-                                    </p>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        📝 <BoldWords text={t('Find them any time under **Settings → Recovery Phrase**.')} /> <>{t("Write them down on paper — it's the only backup that can't be wiped.")}</>
-                                    </p>
-                                </div>
-
-                                {/* Card 5: Where to Start */}
-                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-2">
-                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">{t('🚀 Where to Start?')}</h4>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        📍 <BoldWords text={t('Explore the **Map** to find offers (green) and needs (orange) near you.')} />
-                                    </p>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        💬 <BoldWords text={t('Tap **Message** on any post to chat securely (E2E encrypted) with neighbors.')} />
-                                    </p>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        ➕ <BoldWords text={t('Click **Post** to list what you need or what you can offer to the community.')} />
-                                    </p>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        💳 <BoldWords text={t('Use the **Ledger** tab to send credits to neighbors instantly.')} />
-                                    </p>
-                                </div>
-                            </div>
-                            )}
-
                             {error && (
-                                <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                                <p role="alert" style={{ color: '#ef4444', fontSize: '0.85rem', margin: '1rem 0 0' }}>
                                     {error}
                                 </p>
                             )}
-
-                            <StepAction>
-                                <button
-                                    onClick={handleSeedConfirmed}
-                                    disabled={loading}
-                                    style={{
-                                        width: '100%', padding: '0.85rem', borderRadius: '10px',
-                                        border: 'none',
-                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-info-fill)',
-                                        color: 'var(--bp-info-on)', fontSize: '1rem',
-                                        fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-                                        fontFamily: 'inherit', transition: 'background 0.2s',
-                                    }}
-                                >
-                                    {loading ? t('Entering...') : t("Let's Begin! 🚀")}
-                                </button>
-                            </StepAction>
-
-                            {/* Chosen at Safety Backup: the sign-in, now that nothing of onboarding is left to lose. The
-                                page leaves only once finishOnboarding has saved the photo and asked to keep the key. */}
-                            {addSignInAfterTour && joinedByWords && !signInRecovery && pendingIdentity && (
-                                <section data-testid="tour-add-sign-in" aria-labelledby="tour-add-sign-in-title" style={{ marginTop: '1rem', textAlign: 'left' }}>
-                                    <h4 id="tour-add-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                        {keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
-                                    </h4>
-                                    <AddSignIn
-                                        identity={pendingIdentity}
-                                        label={keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
-                                        autoStart
-                                        onLeaving={() => finishOnboarding({ leaving: true })}
-                                        keepsNoCopies={keepsNoCopies}
-                                    />
-                                </section>
-                            )}
-
-                            <button
-                                onClick={() => {
-                                    setShowOnboardingGuide(false);
-                                    // No backup step to go back to: the step before it (the area, or the photo).
-                                    if (wordsKnown) { if (byArea) setShowAreaStep(true); else setShowAvatarSetup(true); }
-                                    setError(null);
-                                }}
-                                style={{
-                                    background: 'none', border: 'none',
-                                    color: 'var(--text-muted)', fontSize: '0.85rem',
-                                    cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
-                                }}
-                            >
-                                {wordsKnown ? t('← Back') : t('← Back to Backup')}
-                            </button>
                         </>
                     ) : hasMnemonic(pendingIdentity) ? (
                         /* ===== SAFETY BACKUP (Step 3) ===== */
                         <>
-                            <OnboardingStepper area={byArea} step={3} firstLabel={joinedByDoor && !joinedByWords ? t('Sign in', undefined, 'onboarding step name') : undefined} />
+                            {/* ‹ to the step before: Your area where the community syncs by area, else the photo. */}
+                            <StepDots steps={joinSteps} step="wayBack" busy={loading}
+                                onBack={() => { setAddingSignIn(false); if (byArea) setShowAreaStep(true); else setShowAvatarSetup(true); setError(null); }} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>{t('🔑 Your Safety Backup')}</h3>
                             {joinedByWords && !signInRecovery ? (
                                 /* Joined with 12 words alone (two-doors design §2.5): said first and plainly, never a gate.
@@ -2405,22 +2041,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                             */}
                             <StepAction>
                                 <button
+                                    data-testid="backup-next"
                                     onClick={() => {
-                                        setAddSignInAfterTour(false);
-                                        recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
-                                        // A member who ticked "I've written them down" has done the thing
-                                        // Settings' banner nags about. Without this, finishing onboarding
-                                        // correctly still greets them with "you haven't saved your recovery
-                                        // phrase yet" — a warning that is not true, which is how warnings
-                                        // stop being read. Only on confirm: skipping leaves it showing.
-                                        if (seedConfirmed && pendingIdentity) {
-                                            localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
-                                            // And on the account (the account exists by this step): the phone and the web
-                                            // agree that the words are kept, and Home reminds them of nothing (§2.5).
-                                            keepWordsOnAccount(pendingIdentity.publicKey, 'Welcome');
-                                        }
-                                        setShowOnboardingGuide(true);
+                                        setAddingSignIn(false);
+                                        keepWordsChoice();
                                         setError(null);
+                                        // The last step: How it Works left the join (design §3.1), so this goes in.
+                                        void finishJoin();
                                     }}
                                     disabled={loading}
                                     style={{
@@ -2432,52 +2059,50 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                         fontFamily: 'inherit', transition: 'background 0.2s',
                                     }}
                                 >
-                                    {t('Next →')}
+                                    {loading ? t('Entering...') : t('Next →')}
                                 </button>
                             </StepAction>
 
                             {/* One secondary action for an account with one way back (two-doors design §2.5): a sign-in
-                                as a second. Chosen here, it is offered at the end of the tour, and the page leaves for the
-                                provider only after the steps every new member has are finished: the photo is on the node
-                                and the browser asked to keep the key before the page goes (it does not come back here;
-                                App.tsx finishes the link on the return and opens Settings with the result). Skipping it
-                                changes nothing. */}
+                                as a second. Chosen here, its providers open right here, and the page leaves for the provider
+                                only after the steps every new member has are finished: the photo is on the node and the
+                                browser asked to keep the key before the page goes (it does not come back here; App.tsx
+                                finishes the link on the return and opens Settings with the result). Skipping it changes
+                                nothing. The web's way back (slice B2) redraws this step. */}
                             {joinedByWords && !signInRecovery && pendingIdentity && (
                                 <div data-testid="backup-add-sign-in" style={{ marginTop: '0.75rem', textAlign: 'left' }}>
-                                    <button
-                                        type="button"
-                                        disabled={loading}
-                                        onClick={() => {
-                                            recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
-                                            if (seedConfirmed) localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
-                                            setAddSignInAfterTour(true);
-                                            setShowOnboardingGuide(true);
-                                            setError(null);
-                                        }}
-                                        className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                                    >
-                                        {keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
-                                    </button>
-                                    <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">
-                                        {t("You'll choose it after a quick look at how things work here.")}
-                                    </p>
+                                    {addingSignIn ? (
+                                        <section data-testid="tour-add-sign-in" aria-labelledby="backup-add-sign-in-title">
+                                            <h4 id="backup-add-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                                {keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
+                                            </h4>
+                                            <AddSignIn
+                                                identity={pendingIdentity}
+                                                label={keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
+                                                autoStart
+                                                // The tick box stays live beside the providers: the choice is the one
+                                                // the member leaves with (deciding review on #3333, 7c25e192).
+                                                onLeaving={() => { keepWordsChoice(); return finishOnboarding({ leaving: true }); }}
+                                                keepsNoCopies={keepsNoCopies}
+                                            />
+                                        </section>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            disabled={loading}
+                                            onClick={() => {
+                                                // Only opens the providers: the words choice is kept as the member leaves
+                                                // the step (keepWordsChoice), by Next or by a provider.
+                                                setAddingSignIn(true);
+                                                setError(null);
+                                            }}
+                                            className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                        >
+                                            {keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
+                                        </button>
+                                    )}
                                 </div>
                             )}
-
-                            <button
-                                onClick={() => {
-                                    setShowAvatarSetup(true);
-                                    setError(null);
-                                }}
-                                disabled={loading}
-                                style={{
-                                    background: 'none', border: 'none',
-                                    color: 'var(--text-muted)', fontSize: '0.85rem',
-                                    cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
-                                }}
-                            >
-                                {t('← Back to Photo')}
-                            </button>
                         </>
                     ) : showRecovery ? (
                         /* ===== RECOVERY FROM 12 WORDS ===== */
@@ -2956,56 +2581,44 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                 </button>
                             )}
                         </div>
-                    ) : showNewUser ? (
-                        /* ===== NEW USER SIGNUP + FAQs ===== */
+                    ) : !showMemberOptions && asking && askName && onAsked ? (
+                        /* ===== MORE WAYS IN › ASK A COMMUNITY TO JOIN: this community's own request form ===== */
                         <>
-                            {onBackToRequest && (
-                                <button type="button" data-testid="welcome-back-to-request" onClick={onBackToRequest}
-                                    className="block w-full min-h-[48px] px-4 py-3 mb-4 rounded-xl text-base font-bold bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer">
-                                    {t('← Back to my request')}
-                                </button>
-                            )}
-                            {noOwner ? (
+                            <AskHere name={askName} onAsked={onAsked} onClose={() => setAsking(false)} testId="welcome-ask" />
+                            {onBack && <BackToListings onBack={onBack} />}
+                        </>
+                    ) : !showMemberOptions && joinScreen === 'door' ? (
+                        /* ===== THE FRONT DOOR (design §5, slice W1): the phone's first screen, in its words and order ===== */
+                        <>
+                            {backToRequest}
+                            {noOwner && (
                                 <NoOwnerCard
                                     name={communityCard && communityCard !== 'loading' ? communityCardName(communityCard, { t }) : ownCommunityAddress()}
                                     origin={nodeAddress()}
                                 />
-                            ) : localCommunity && communityCard && communityCard !== 'loading' && (
-                                <CommunityCardPanel
-                                    card={communityCard}
-                                    compact={welcomeDoor === 'invite' || !!onBackToRequest}
-                                    ask={onAsked ? { onAsked, open: welcomeDoor === 'ask' } : undefined}
-                                    onSignIn={() => { setShowNewUser(false); setShowMemberOptions(true); setError(null); }}
-                                />
                             )}
-                            <OnboardingStepper area={byArea} step={1} />
-                            <h3 dir="auto" data-testid="welcome-invite-heading" style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', overflowWrap: 'anywhere' }}>
-                                {/* The form says which community the code is for (join names N1), by the card the page read (a local
-                                    community's, drawn above it; a self-hoster's that takes new members by invite, read for this). A node
-                                    with no card (or none yet), and the app's own global, keep the form's own heading. */}
-                                {communityCard && communityCard !== 'loading'
-                                    ? inviteHeading(communityCardName(communityCard, { t }))
-                                    : t('🎟️ Join with Invite Code')}
-                            </h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-                                {t('Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.')}
-                            </p>
-                            {privatePreview && (
-                                <p role="note" data-testid="welcome-private-preview" style={{
-                                    color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, margin: '-0.5rem 0 1.25rem',
-                                    padding: '0.75rem', borderRadius: '10px', background: 'rgba(37, 99, 235, 0.08)',
-                                    border: '1px solid rgba(37, 99, 235, 0.25)', overflowWrap: 'anywhere',
-                                }}>
-                                    {keyLineWords(PRIVATE_PREVIEW_MESSAGE)}
-                                </p>
-                            )}
-
-                            <label htmlFor="inviteCode" style={{
-                                display: 'block', textAlign: 'left',
-                                fontSize: '0.85rem', fontWeight: 600,
-                                color: 'var(--text-secondary)', marginBottom: '0.5rem',
-                            }}>
-                                {t('Invite Code')}
+                            <FrontDoor
+                                onInvite={() => { setError(null); setJoinScreen('invite'); }}
+                                lookAround={lookAround}
+                                onUsedBefore={() => { setError(null); setShowMemberOptions(true); }}
+                                more={moreWays}
+                            >
+                                {privatePreview && (
+                                    <p role="note" data-testid="welcome-private-preview" className="m-0 mb-3 p-3 rounded-xl text-sm leading-normal text-left break-words text-text-secondary border border-border-primary bg-bg-card">
+                                        {keyLineWords(PRIVATE_PREVIEW_MESSAGE)}
+                                    </p>
+                                )}
+                            </FrontDoor>
+                            {/* Over the lobby, No invite? Look around is the way back to its listings. */}
+                        </>
+                    ) : !showMemberOptions && joinScreen === 'invite' ? (
+                        /* ===== YOUR INVITE: only when the address brought none (design §5: a plain box and Next, no paste
+                           button: a page reading the clipboard raises the browser's prompt, and its own paste works here) ===== */
+                        <form data-testid="your-invite" className="text-left" onSubmit={(e) => { e.preventDefault(); inviteNext(); }}>
+                            {backToRequest}
+                            <h3 className="m-0 mb-4 text-xl font-bold text-text-primary break-words">{t('Your invite')}</h3>
+                            <label htmlFor="inviteCode" className="block mb-2 text-sm font-semibold text-text-secondary break-words">
+                                {t('Invite link or code')}
                             </label>
                             <input
                                 id="inviteCode"
@@ -3017,26 +2630,51 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     // is the latest input: any edit after it (select all and type) is a code the paste never spoke for.
                                     invitePasted.current = inviteNamesAnotherCommunity(e.target.value, '') !== null ? e.target.value : null;
                                     setInviteCode(formatInviteCode(e.target.value));
+                                    if (error) setError(null);
                                 }}
                                 placeholder={t('e.g. BP-7K3X-9M2W')}
                                 maxLength={800}
-                                disabled={loading}
-                                autoFocus={welcomeDoor === 'invite'}
-                                style={{
-                                    ...inputStyle,
-                                    fontFamily: 'monospace',
-                                    letterSpacing: '1px',
-                                    textAlign: 'center',
-                                    fontSize: '1.1rem',
-                                }}
+                                autoFocus
+                                autoComplete="off"
+                                style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '1px', textAlign: 'center', fontSize: '1.1rem' }}
                             />
+                            {error && <p role="alert" data-testid="your-invite-note" style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', overflowWrap: 'anywhere' }}>{error}</p>}
+                            <p className="m-0 mb-4 text-sm text-text-secondary break-words">{t('Have the link? Tap it again.')}</p>
+                            <StepAction>
+                                <button type="submit" data-testid="your-invite-next"
+                                    className="block w-full min-h-[48px] px-4 py-3 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-base font-bold break-words cursor-pointer">
+                                    {t('Next →')}
+                                </button>
+                            </StepAction>
+                            <button type="button" onClick={() => { setError(null); setJoinScreen('door'); }}
+                                className="block mx-auto mt-3 min-h-[48px] px-3 bg-transparent border-none text-sm text-text-secondary cursor-pointer">
+                                {t('← Back')}
+                            </button>
+                        </form>
+                    ) : !showMemberOptions ? (
+                        /* ===== YOUR NAME (design §3.1 C on the web): greeted by the invite, a name, Join ===== */
+                        <div data-testid="name-step" className="text-left">
+                            {backToRequest}
+                            {/* ‹ is the front door. It waits while Join is out: its answer decides where the member goes. */}
+                            <StepDots steps={joinSteps} step="name" busy={loading} onBack={() => { setError(null); setJoinScreen('door'); }} />
+                            <div data-testid="invite-greeting" className="flex items-center gap-2 mb-4 py-3.5 pl-4 pr-1 rounded-2xl bg-bp-commit-fill text-bp-commit-on">
+                                <h3 dir="auto" className="flex-1 min-w-0 m-0 text-[17px] leading-normal font-semibold break-words">
+                                    {greet?.inviter
+                                        ? <Sentence text={t('{inviter} invited you to {community}')} parts={{ inviter: <span>{greet.inviter}</span>, community: <strong className="text-[22px] font-extrabold">{greet.community}</strong> }} />
+                                        : greet
+                                            ? <Sentence text={t("You're invited to {community}")} parts={{ community: <strong className="text-[22px] font-extrabold">{greet.community}</strong> }} />
+                                            : t("You're invited")}
+                                </h3>
+                                {/* The pencil: Your invite, to change it. Never while Join is out. */}
+                                <button type="button" onClick={() => { setError(null); setJoinScreen('invite'); }} disabled={loading}
+                                    aria-label={t('Change the invite')} data-testid="invite-greeting-change"
+                                    className="w-12 h-12 shrink-0 flex items-center justify-center rounded-full bg-transparent border-none text-bp-commit-on text-xl cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <span aria-hidden="true">✎</span>
+                                </button>
+                            </div>
 
-                            <label htmlFor="callsign" style={{
-                                display: 'block', textAlign: 'left',
-                                fontSize: '0.85rem', fontWeight: 600,
-                                color: 'var(--text-secondary)', marginBottom: '0.5rem',
-                            }}>
-                                {t('Your Callsign (Name)')}
+                            <label htmlFor="callsign" className="block mb-2 text-base font-semibold text-text-primary break-words">
+                                {t('What should we call you?')}
                             </label>
                             <input
                                 id="callsign"
@@ -3044,12 +2682,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                 value={callsign}
                                 onChange={(e) => { if (!inviteFromNameBox(e.target.value)) setCallsign(e.target.value); }}
                                 onPaste={(e) => { if (inviteFromNameBox(e.clipboardData.getData('text'))) e.preventDefault(); }}
-                                placeholder={t('e.g. Alice')}
+                                placeholder={t('Your name or nickname')}
                                 maxLength={MAX_JOIN_CALLSIGN}
                                 disabled={loading}
+                                autoFocus
+                                autoComplete="nickname"
                                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                                style={inputStyle}
+                                style={{ ...inputStyle, marginBottom: '0.35rem' }}
                             />
+                            <p className="m-0 mb-4 text-sm text-text-secondary break-words">{t('You can change it later.')}</p>
 
                             {joinRule && (
                                 <div data-testid="join-rule" style={{ textAlign: 'left', marginBottom: '1rem', overflowWrap: 'anywhere' }}>
@@ -3063,296 +2704,116 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                             )}
 
                             {error && (
-                                <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                                <p role="alert" style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', overflowWrap: 'anywhere' }}>
                                     {error}
                                 </p>
                             )}
 
                             <StepAction>
-                                <button
-                                    onClick={() => void handleCreate()}
-                                    disabled={loading}
-                                    style={{
-                                        width: '100%', padding: '0.85rem', borderRadius: '10px',
-                                        border: 'none',
-                                        background: loading ? 'var(--bp-neutral-fill)' : 'var(--bp-commit-fill)',
-                                        color: 'var(--bp-commit-on)', fontSize: '1rem',
-                                        fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
-                                        fontFamily: 'inherit', transition: 'background 0.2s',
-                                        marginBottom: '1rem',
-                                    }}
-                                >
-                                    {loading ? t('Creating...') : t('Create Identity & Join →')}
+                                <button type="button" onClick={() => void handleCreate()} disabled={loading} data-testid="name-step-join"
+                                    className="block w-full min-h-[48px] px-4 py-3 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-base font-bold break-words cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
+                                    {loading ? t('Joining…') : t('Join')}
                                 </button>
                             </StepAction>
+                        </div>
+                    ) : (
+                        /* ===== THE WAYS BACK: the front door's I've used BeanPool before ===== */
+                        <>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                                {t('Sign in to your account')}
+                            </h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                                {t('Choose how to restore your identity on this device:')}
+                            </p>
+                            {/* A global member whose request here was answered yes (slice Y1): their account is at global's
+                                address, which this page can't read. The Join on global's yes brings it here. A page that
+                                asked global's page itself was judged unsafe: see DESIGN-global-yes-join-fable.md, Y1's PR. */}
+                            {localCommunity && (
+                                <p data-testid="member-asked-from-global" className="m-0 mb-4 text-sm text-text-primary break-words" style={{ lineHeight: 1.5 }}>
+                                    {t('Already asked from global? Go back there and tap Join.')}
+                                </p>
+                            )}
 
-                            {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28). Its card above
-                                says the same with its own doors (front doors S15); this is for a node too old to send one. ===== */}
-                            {localCommunity && communityCard === null && (
-                                <div data-testid="welcome-no-invite" style={{
-                                    marginTop: '0.5rem', padding: '1rem', borderRadius: '12px', textAlign: 'center',
-                                    background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',
-                                }}>
-                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0 0 0.65rem', lineHeight: 1.5, overflowWrap: 'anywhere' }}>
-                                        {t("No invite? This community's listings are for its members. Look around the global community, where anyone can join, and ask a community near you to let you in from there.")}
-                                    </p>
-                                    <LookAroundGlobal compact />
+                            {error && (
+                                <div
+                                    role="alert"
+                                    aria-live="assertive"
+                                    className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300 p-2.5 rounded-xl text-xs mb-4 text-center leading-relaxed font-medium"
+                                >
+                                    <span aria-hidden="true">⚠️ </span>{error}
                                 </div>
                             )}
 
-                            {/* ===== FAQs ===== */}
-                            <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-primary, #333)', paddingTop: '1.25rem' }}>
-                                <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>
-                                    {t('❓ Frequently Asked Questions')}
-                                </h4>
-                                {FAQ_ITEMS.map((faq, i) => (
-                                    <div
-                                        key={i}
-                                        style={{
-                                            borderTop: i > 0 ? '1px solid var(--border-primary, #222)' : 'none',
-                                            padding: '0.65rem 0',
-                                        }}
-                                    >
-                                        <div
-                                            role="button"
-                                            tabIndex={0}
-                                            aria-expanded={openFaq === i}
-                                            onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenFaq(openFaq === i ? null : i); } }}
-                                            className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
-                                            style={{
-                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                                cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
-                                                color: 'var(--text-primary)',
-                                                textAlign: 'left',
-                                            }}
-                                        >
-                                            {t(faq.q)}
-                                            <span style={{
-                                                fontSize: '0.7rem', color: 'var(--text-muted)',
-                                                transition: 'transform 0.2s',
-                                                transform: openFaq === i ? 'rotate(90deg)' : 'none',
-                                                flexShrink: 0, marginLeft: '0.5rem',
-                                            }}>▶</span>
-                                        </div>
-                                        {openFaq === i && (
-                                            <p style={{
-                                                fontSize: '0.78rem', color: 'var(--text-muted)',
-                                                lineHeight: 1.5, marginTop: '0.4rem', textAlign: 'left',
-                                            }}>
-                                                {t(faq.a)}
-                                            </p>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
+                            <button
+                                onClick={handleStartQrPairing}
+                                disabled={loading}
+                                className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 active:scale-[0.98] dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                            >
+                                <span aria-hidden="true">📲</span> {t('Link with Mobile App (Scan QR)')}
+                                <span className="text-[10px] font-extrabold bg-bp-commit-fill text-bp-commit-on px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
+                                    {t('FASTEST')}
+                                </span>
+                            </button>
 
-                            {/* ===== RESTORE IDENTITY ACTION FOR RETURNING USERS (#98) ===== */}
-                            <div style={{
-                                marginTop: '1.25rem',
-                                padding: '1rem',
-                                borderRadius: '12px',
-                                background: 'rgba(59, 130, 246, 0.08)',
-                                border: '1px solid rgba(59, 130, 246, 0.25)',
-                                textAlign: 'center',
-                            }}>
-                                <p style={{
-                                    color: 'var(--text-secondary)',
-                                    fontSize: '0.85rem',
-                                    margin: '0 0 0.65rem',
-                                    fontWeight: 500,
-                                }}>
-                                    {t('Already a member or switching devices?')}
+                            {/* The sign-in restore at a community with an invite door too (recovery S1): the community finds the
+                                account from the sign-in, so it needs no open door, as the phone's "Recover with Social Sign-In".
+                                Not where the community keeps no copies of accounts: a sign-in there could bring nothing back. */}
+                            {!keepsNoCopies && (
+                                <button
+                                    data-testid="member-restore-signin"
+                                    onClick={() => { setSignInRestore({ provider: null }); setError(null); }}
+                                    disabled={loading}
+                                    style={{ borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                                    className="w-full rounded-2xl border active:scale-[0.98] font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                                >
+                                    <span aria-hidden="true">🌐</span> {t('Recover with Social Sign-In')}
+                                </button>
+                            )}
+
+                            <button
+                                onClick={() => { setShowRecovery(true); setError(null); }}
+                                disabled={loading}
+                                className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 active:scale-[0.98] dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+                            >
+                                <span aria-hidden="true">🔑</span> {t('Recover with 12 Words')}
+                            </button>
+
+                            <button
+                                onClick={() => { setRekeyCode(''); setError(null); }}
+                                disabled={loading}
+                                className="w-full rounded-2xl border border-sky-500/40 bg-sky-50/90 hover:bg-sky-100/90 active:scale-[0.98] dark:bg-sky-950/40 dark:hover:bg-sky-900/50 text-sky-900 dark:text-sky-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                            >
+                                <span aria-hidden="true">🪪</span> {t('An admin gave me a re-key code')}
+                            </button>
+
+                            {/* Never a dead end: a person who can't get back in may start new, told plainly that it makes a new
+                                account. The tap only opens the new-member page; a join there makes it (as the phone's). */}
+                            <div data-testid="start-new-instead" className="mt-4 p-3.5 rounded-2xl text-center" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                                <p className="m-0 mb-2 text-sm text-text-primary break-words" style={{ lineHeight: 1.5 }}>
+                                    {t("Can't bring your account back? You can start again, but that makes a new account. Your old account stays as it is, and the two can never be joined into one.")}
                                 </p>
                                 <button
-                                    onClick={() => {
-                                        setShowNewUser(false);
-                                        setShowMemberOptions(true);
-                                        setError(null);
-                                    }}
-                                    aria-label={t('Restore existing identity')}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem 1rem',
-                                        borderRadius: '10px',
-                                        border: '1px solid var(--bp-ink-info)',
-                                        background: 'transparent',
-                                        color: 'var(--bp-ink-info)',
-                                        fontSize: '0.9rem',
-                                        fontWeight: 700,
-                                        cursor: 'pointer',
-                                        fontFamily: 'inherit',
-                                        transition: 'background 0.2s, transform 0.15s',
-                                    }}
-                                    onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-                                    onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                    type="button"
+                                    data-testid="start-new-instead-button"
+                                    onClick={() => { setShowMemberOptions(false); setJoinScreen('invite'); setError(null); }}
+                                    disabled={loading}
+                                    aria-label={t('Start a new account instead')}
+                                    className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-bp-ink-info bg-transparent text-bp-ink-info font-bold text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {t('🔑 Restore Existing Identity →')}
+                                    {t('Start a new account instead →')}
                                 </button>
                             </div>
 
                             <button
-                                onClick={() => { setShowNewUser(false); setShowMemberOptions(false); setError(null); }}
+                                onClick={() => { setShowMemberOptions(false); setJoinScreen('door'); setError(null); }}
                                 style={{
                                     background: 'none', border: 'none',
-                                    color: 'var(--text-muted)', fontSize: '0.8rem',
+                                    color: 'var(--text-muted)', fontSize: '0.85rem',
                                     cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
                                 }}
                             >
-                                {t('← Back to Home')}
+                                {t('← Back')}
                             </button>
-                            {onBack && <BackToListings onBack={onBack} />}
-                        </>
-                    ) : (
-                        /* ===== MAIN WELCOME — two simple choices ===== */
-                        <>
-                            {!showMemberOptions ? (
-                                /* DEFAULT: Two clear choices, under the question the phone asks first too (Marty, 12 Nov idea 2:
-                                   someone who lost a phone brings their account back instead of making a second one). */
-                                <>
-                                    <h2 data-testid="used-before" className="m-0 mb-4 text-xl font-bold text-text-primary break-words">
-                                        {t('Used BeanPool before?')}
-                                    </h2>
-                                    <button
-                                        data-testid="used-before-returning"
-                                        onClick={() => setShowMemberOptions(true)}
-                                        style={{
-                                            width: '100%', padding: '1.1rem 1rem', borderRadius: '14px',
-                                            border: 'none',
-                                            background: 'linear-gradient(135deg, var(--bp-info-fill), var(--bp-info-hover))',
-                                            color: 'var(--bp-info-on)', fontSize: '1.1rem', fontWeight: 700,
-                                            cursor: 'pointer', fontFamily: 'inherit',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-                                            marginBottom: '1rem',
-                                            boxShadow: '0 4px 14px rgba(37,99,235,0.35)',
-                                            transition: 'transform 0.15s',
-                                        }}
-                                        onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-                                        onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                    >
-                                        {t("I'm Already a Member →")}
-                                    </button>
-
-                                    <button
-                                        data-testid="used-before-new"
-                                        onClick={() => setShowNewUser(true)}
-                                        style={{
-                                            width: '100%', padding: '0.9rem 1rem', borderRadius: '14px',
-                                            border: '1px solid var(--border-primary, #333)',
-                                            background: 'transparent',
-                                            color: 'var(--text-muted)', fontSize: '0.95rem', fontWeight: 500,
-                                            cursor: 'pointer', fontFamily: 'inherit',
-                                            transition: 'transform 0.15s',
-                                        }}
-                                        onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-                                        onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                    >
-                                        {t("I'm New Here")}
-                                    </button>
-                                </>
-                            ) : (
-                                /* MEMBER SUB-OPTIONS */
-                                <>
-                                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                                        {t('Sign in to your account')}
-                                    </h3>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-                                        {t('Choose how to restore your identity on this device:')}
-                                    </p>
-                                    {/* A global member whose request here was answered yes (slice Y1): their account is at global's
-                                        address, which this page can't read. The Join on global's yes brings it here. A page that
-                                        asked global's page itself was judged unsafe: see DESIGN-global-yes-join-fable.md, Y1's PR. */}
-                                    {localCommunity && (
-                                        <p data-testid="member-asked-from-global" className="m-0 mb-4 text-sm text-text-primary break-words" style={{ lineHeight: 1.5 }}>
-                                            {t('Already asked from global? Go back there and tap Join.')}
-                                        </p>
-                                    )}
-
-                                    {error && (
-                                        <div
-                                            role="alert"
-                                            aria-live="assertive"
-                                            className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300 p-2.5 rounded-xl text-xs mb-4 text-center leading-relaxed font-medium"
-                                        >
-                                            <span aria-hidden="true">⚠️ </span>{error}
-                                        </div>
-                                    )}
-
-                                    <button
-                                        onClick={handleStartQrPairing}
-                                        disabled={loading}
-                                        className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 active:scale-[0.98] dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                                    >
-                                        <span aria-hidden="true">📲</span> {t('Link with Mobile App (Scan QR)')}
-                                        <span className="text-[10px] font-extrabold bg-bp-commit-fill text-bp-commit-on px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
-                                            {t('FASTEST')}
-                                        </span>
-                                    </button>
-
-                                    {/* The sign-in restore at a community with an invite door too (recovery S1): the community finds the
-                                        account from the sign-in, so it needs no open door, as the phone's "Recover with Social Sign-In".
-                                        Not where the community keeps no copies of accounts: a sign-in there could bring nothing back. */}
-                                    {!keepsNoCopies && (
-                                        <button
-                                            data-testid="member-restore-signin"
-                                            onClick={() => { setSignInRestore({ provider: null }); setError(null); }}
-                                            disabled={loading}
-                                            style={{ borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                                            className="w-full rounded-2xl border active:scale-[0.98] font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                                        >
-                                            <span aria-hidden="true">🌐</span> {t('Recover with Social Sign-In')}
-                                        </button>
-                                    )}
-
-                                    <button
-                                        onClick={() => { setShowRecovery(true); setError(null); }}
-                                        disabled={loading}
-                                        className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 active:scale-[0.98] dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
-                                    >
-                                        <span aria-hidden="true">🔑</span> {t('Recover with 12 Words')}
-                                    </button>
-
-                                    <button
-                                        onClick={() => { setRekeyCode(''); setError(null); }}
-                                        disabled={loading}
-                                        className="w-full rounded-2xl border border-sky-500/40 bg-sky-50/90 hover:bg-sky-100/90 active:scale-[0.98] dark:bg-sky-950/40 dark:hover:bg-sky-900/50 text-sky-900 dark:text-sky-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
-                                    >
-                                        <span aria-hidden="true">🪪</span> {t('An admin gave me a re-key code')}
-                                    </button>
-
-                                    {/* Never a dead end: a person who can't get back in may start new, told plainly that it makes a new
-                                        account. The tap only opens the new-member page; a join there makes it (as the phone's). */}
-                                    <div data-testid="start-new-instead" className="mt-4 p-3.5 rounded-2xl text-center" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
-                                        <p className="m-0 mb-2 text-sm text-text-primary break-words" style={{ lineHeight: 1.5 }}>
-                                            {t("Can't bring your account back? You can start again, but that makes a new account. Your old account stays as it is, and the two can never be joined into one.")}
-                                        </p>
-                                        <button
-                                            type="button"
-                                            data-testid="start-new-instead-button"
-                                            onClick={() => { setShowMemberOptions(false); setShowNewUser(true); setError(null); }}
-                                            disabled={loading}
-                                            aria-label={t('Start a new account instead')}
-                                            className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-bp-ink-info bg-transparent text-bp-ink-info font-bold text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {t('Start a new account instead →')}
-                                        </button>
-                                    </div>
-
-                                    <button
-                                        onClick={() => setShowMemberOptions(false)}
-                                        style={{
-                                            background: 'none', border: 'none',
-                                            color: 'var(--text-muted)', fontSize: '0.85rem',
-                                            cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
-                                        }}
-                                    >
-                                        {t('← Back')}
-                                    </button>
-                                </>
-                            )}
                             {onBack && <BackToListings onBack={onBack} />}
                         </>
                     )}

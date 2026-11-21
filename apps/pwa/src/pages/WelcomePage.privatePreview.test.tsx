@@ -57,7 +57,8 @@ describe('private preview', () => {
         stubNode(PREVIEW);
         render(<WelcomePage onComplete={vi.fn()} />);
         expect((await screen.findByTestId('welcome-private-preview')).textContent).toBe(SENTENCE);
-        expect(screen.getByText(/Join with Invite Code/)).toBeTruthy();
+        // The front door (W1), whose invite is the only way in here.
+        expect(screen.getByTestId('front-door-invite')).toBeTruthy();
         expect(screen.queryByTestId('join-screen-lobby')).toBeNull();
     });
 
@@ -71,7 +72,7 @@ describe('private preview', () => {
     it('no sentence on a node that is not in a preview', async () => {
         stubNode({ ...PREVIEW, profile: 'local', features: { openJoin: false } });
         render(<WelcomePage onComplete={vi.fn()} />);
-        await screen.findByText(/Join with Invite Code/);
+        await screen.findByTestId('front-door');
         expect(screen.queryByTestId('welcome-private-preview')).toBeNull();
     });
 

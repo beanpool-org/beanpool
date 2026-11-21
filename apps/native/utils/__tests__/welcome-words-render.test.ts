@@ -722,7 +722,8 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
             if (rule === 'none') {
                 expect(has('Add a sign-in'), 'what it adds, said plainly').toBe(true);
                 expect(has('Link a sign-in'), 'never called a way back').toBe(false);
-                expect(host!.querySelector('[data-testid="no-copies-row"]'), 'the step says the community keeps none').toBeTruthy();
+                // No row saying "no sign-in can be linked here" beside a button that adds one (it lifts the limits only).
+                expect(host!.querySelector('[data-testid="no-copies-row"]')).toBeNull();
             } else {
                 expect(has('Link a sign-in'), 'a way back where a copy is kept').toBe(true);
                 expect(has('Add a sign-in'), 'one button for it').toBe(false);
@@ -799,6 +800,19 @@ describe('the way back: skipped where one is kept, and an honest Later (S4), in 
         expect(landing.identity, 'in the app').toBe(SALLY);
         expect(landing.reminder, "Home's card starts put away: a way back is kept").toBe('putAway');
     });
+
+    // Your name counts the same screens as Your photo: before the join holds the account, the one already on the phone (which
+    // the invite joins with) is read. Nothing kept there: three dots.
+    for (const kept of [true, false]) {
+        it(`an invite link, the phone's account ${kept ? 'with' : 'without'} a way back already: Your name shows ${kept ? 'two' : 'three'} dots`, async () => {
+            landing.keptBefore = kept;
+            phone.stored = SALLY;
+            params.now = { invite: 'https://riverside.example/?invite=BP-ABCD-1234' };
+            await mount('xx');
+            expect(host!.textContent).toContain(pseudoLocalise('What should we call you?'));
+            expect(spoken()).toContain(kept ? stepOf(1, 2) : stepOf(1, 3));
+        });
+    }
 
     it("an invite join with the phone's own account, its words already noted as kept: two dots, and past the way back", async () => {
         landing.keptBefore = true;

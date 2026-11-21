@@ -186,8 +186,12 @@ describe('welcome.tsx wires them in one place each', () => {
         expect(welcome).toContain("const signInKept = protection.state === 'covered';");
         expect(welcome).toContain('const skipWayBack = wayBackSkipped(joinFlow, wayBackKept({ signIn: signInKept, wordsTicked: false, before: keptBefore }));');
         expect(welcome).toContain('const wayBackIsKept = wayBackKept({ signIn: signInKept, wordsTicked: seedConfirmed, before: keptBefore });');
-        // Read from storage for the account the join holds, false until read and for a new one: never a guess that skips.
-        expect(between('const [keptBefore, setKeptBefore] = useState(false);', '}, [pendingKey]);')).toMatch(/setKeptBefore\(false\);\s*if \(!pendingKey\) return;/);
+        // Read from storage for the account the join holds (or, on Your name, the account already on the phone), kept with the
+        // key it was read for: false until read, for a new account, and for any other account. Never a guess that skips.
+        const load = between('const [keptFor, setKeptFor] = useState<{ key: string; kept: boolean } | null>(null);', '}, [pendingKey]);');
+        expect(load).toContain('const key = pendingKey ?? (await loadIdentity().catch(() => null))?.publicKey ?? null;');
+        expect(load).toContain('const kept = await wayBackKeptBefore(key).catch(() => false);');
+        expect(welcome).toContain('const keptBefore = !!keptFor?.kept && (pendingKey === null || keptFor.key === pendingKey);');
     });
 
     it('the photo goes on to the way back, or past it to Home only where one is kept', () => {
@@ -224,7 +228,7 @@ describe('welcome.tsx wires them in one place each', () => {
         expect(panel).toBeGreaterThan(-1);
         expect(words).toBeGreaterThan(tile);
         // The panel only once opened, kept, or where the community keeps none (its row says why no sign-in is offered).
-        expect(s).toContain("{backupCopiesAt === 'none' || signInKept || signInOpen || Platform.OS === 'web' ? (");
+        expect(s).toContain("{wordsMember && backupCopiesAt === 'none' ? null : backupCopiesAt === 'none' || signInKept || signInOpen || Platform.OS === 'web' ? (");
         expect(s).toContain('waysBack={!signInKept}');
         // The sentence Marty approved, 21 Nov; "your account goes too" is not true where an admin can set a member up again.
         expect(s).toContain("t('If this phone is lost, this is how you get back in.')");

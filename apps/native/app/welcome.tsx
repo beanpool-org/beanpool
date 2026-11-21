@@ -777,17 +777,24 @@ export default function WelcomeScreen() {
      * The way back (DESIGN-onboarding-home-landing-fable.md §3.1 E, slice S4). `signInOpen`: "Link a sign-in" was tapped, so
      * the vault's sentences and the Protect buttons are drawn in its place. `keptBefore`: what the phone already knew of this
      * account (utils/way-back-kept.ts), read from storage only; false until read, and for a new account, so the step shows.
+     * Read for the account the join holds, or before it holds one (Your name) for the account already on the phone, which an
+     * invite or the global door then joins with (one identity per device): the name screen's dots count the same screens as
+     * the photo's. Kept with the key it was read for, so a reading never speaks for another account.
      */
     const [signInOpen, setSignInOpen] = useState(false);
-    const [keptBefore, setKeptBefore] = useState(false);
+    const [keptFor, setKeptFor] = useState<{ key: string; kept: boolean } | null>(null);
     const pendingKey = pendingIdentity?.publicKey ?? null;
     useEffect(() => {
-        setKeptBefore(false);
-        if (!pendingKey) return;
         let live = true;
-        wayBackKeptBefore(pendingKey).then((k) => { if (live) setKeptBefore(k); }).catch(() => {});
+        void (async () => {
+            const key = pendingKey ?? (await loadIdentity().catch(() => null))?.publicKey ?? null;
+            if (!key) return;
+            const kept = await wayBackKeptBefore(key).catch(() => false);
+            if (live) setKeptFor({ key, kept });
+        })();
         return () => { live = false; };
     }, [pendingKey]);
+    const keptBefore = !!keptFor?.kept && (pendingKey === null || keptFor.key === pendingKey);
     /** Only a sign-in whose copy is kept counts: one added with no copy is no way back (utils/join-steps.ts `wayBackKept`). */
     const signInKept = protection.state === 'covered';
     /** Kept before the step opens: the join goes past it, with one dot fewer. */
@@ -2685,8 +2692,9 @@ export default function WelcomeScreen() {
                             sees: the vault's sentences as signed off on 27 Oct (SIGN_IN_ROW), "Who can open it ›", then Protect
                             with. `waysBack` draws that row alone, never "your 12 words are your primary recovery" again. Where
                             the community keeps no copies (VR2), its row in the tile's place (NO_COPIES_ROW: why no sign-in can be
-                            linked here), and the 12-words tile alone under it. */}
-                        {backupCopiesAt === 'none' || signInKept || signInOpen || Platform.OS === 'web' ? (
+                            linked here), and the 12-words tile alone under it; in by 12 words there, nothing in its place, since
+                            the quiet "Add a sign-in" below still adds one (for the limits, not as a way back). */}
+                        {wordsMember && backupCopiesAt === 'none' ? null : backupCopiesAt === 'none' || signInKept || signInOpen || Platform.OS === 'web' ? (
                             <KeeperProtectionPanel
                                 protection={protection}
                                 hasWords={hasWords}

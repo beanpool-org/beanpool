@@ -697,6 +697,50 @@ describe("the forum's table, made by its hook from the spec in components/forum/
     });
 });
 
+// Home's Market tiles (slice S8): one static StyleSheet.create table in components/home/market-tile-styles.ts (a file of its own so
+// the 320dp layout check reads it without the screen), imported by name and renamed (`marketTileStyles as tiles`). The scanner
+// follows the import into that table, so the tiles are measured and add nothing to the unread count.
+describe("Home's Market tiles, a table imported by name from components/home/market-tile-styles.ts, are read there", () => {
+    const FILE_T = 'components/home/MarketTiles.tsx';
+    const MODULE = 'components/home/market-tile-styles.ts';
+    const SCREEN = `
+        import { marketTileStyles as tiles } from './market-tile-styles';
+        export function MarketTile() {
+            return <View style={tiles.photo}><View style={[tiles.chip]}><Text style={tiles.chipText}>OFFER</Text></View></View>;
+        }`;
+    const tileModule = (ink: string) => `
+        import { StyleSheet } from 'react-native';
+        export const marketTileStyles = StyleSheet.create({
+            photo: { aspectRatio: 4 / 3, overflow: 'hidden' },
+            chip: { position: 'absolute', top: 4, left: 4, backgroundColor: '#065f46' },
+            chipText: { fontSize: 10, color: ${ink} },
+        });`;
+
+    it('reads the chip and its words from the module, in both themes, with nothing left unread', () => {
+        const r = scanSource(FILE_T, SCREEN, [], { [MODULE]: tileModule("'#ffffff'") });
+        expect(r.stats.unreadTables.size).toBe(0);
+        expect(r.stats.opaqueStyles).toBe(0);
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1 });
+        expect(r.findings).toEqual([]);
+    });
+
+    it('sees a pair under the bar in the module (the following can fail), named where it is written', () => {
+        const r = scanSource(FILE_T, SCREEN, [], { [MODULE]: tileModule("'#0f766e'") });
+        expect(r.findings.length).toBeGreaterThan(0);
+        expect(r.findings[0].words).toMatchObject({ expr: "'#0f766e'", in: MODULE });
+        expect(r.findings[0].file).toBe(FILE_T);
+    });
+
+    it('without the module, or imported from a module it does not follow, the tiles are still unread', () => {
+        // Each of the three style expressions, in each of Classic's two sets.
+        expect(scanSource(FILE_T, SCREEN).stats.opaqueStyles).toBe(6);
+        const elsewhere = SCREEN.replace('./market-tile-styles', './other-tile-styles');
+        const r = scanSource(FILE_T, elsewhere, [], { 'components/home/other-tile-styles.ts': tileModule("'#ffffff'") });
+        expect(r.stats.opaqueStyles).toBe(6);
+        expect(r.stats.checked).toEqual({ light: 0, dark: 0 });
+    });
+});
+
 // The style box's chips and tones (5 Nov 2026): a `<CardChip role=...>` is a ground and its words inside a component the scanner
 // cannot see into, and `shell.tones.<role>.bg` / `.fg` is a plain object the module builds, not a StyleSheet table. Both are
 // read from the module's `chipTones(colors)`, in the theme being measured, so a chip or a card that reads them is measured.

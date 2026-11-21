@@ -1,0 +1,90 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>encode</title>
+<script type="module">
+// Throwaway spike (docs/spikes/firefox-voice-aac.md): encode 3 minutes of a voice-like signal to AAC-LC in .m4a (24 kHz mono,
+// 32 kbps, the phone's format) with Mediabunny + @mediabunny/aac-encoder, served from /vendor/ (SPIKE_VENDOR). Nothing is
+// played: the signal is made in memory; the fake-microphone check feeds a gain of 0 and the profile's volume is 0.
+const out = { ua: navigator.userAgent, steps: [] };
+const t0 = performance.now();
+const mark = (s) => out.steps.push([s, Math.round(performance.now() - t0)]);
+try {
+    const mb = await import('/vendor/spike-bundle.mjs');
+    mark('bundle imported');
+    out.nativeAac = await mb.canEncodeAudio('aac', { numberOfChannels: 1, sampleRate: 24000, bitrate: 32000 });
+    if (!out.nativeAac) mb.registerAacEncoder();
+    out.withWasmAac = await mb.canEncodeAudio('aac', { numberOfChannels: 1, sampleRate: 24000, bitrate: 32000 });
+    mark('encoder registered');
+
+    const RATE = 24000, SECONDS = Number(new URLSearchParams(location.search).get('s') ?? 180);
+    // A voice-like signal: a wandering 110-160 Hz pitch with formant-weighted harmonics, syllables at ~4 a second, pauses, noise.
+    const pcm = new Float32Array(RATE * SECONDS);
+    let phase = 0;
+    for (let i = 0; i < pcm.length; i++) {
+        const t = i / RATE;
+        const f0 = 135 + 25 * Math.sin(2 * Math.PI * 0.3 * t) + 8 * Math.sin(2 * Math.PI * 5 * t);
+        phase += (2 * Math.PI * f0) / RATE;
+        let v = 0;
+        for (let h = 1; h <= 20; h++) {
+            const f = h * f0, w = Math.exp(-((f - 700) ** 2) / 2e5) + 0.6 * Math.exp(-((f - 1200) ** 2) / 3e5) + 0.3 * Math.exp(-((f - 2500) ** 2) / 5e5);
+            v += (w / h) * Math.sin(h * phase);
+        }
+        const syllable = Math.max(0, Math.sin(2 * Math.PI * 4 * t)) ** 2;
+        const pause = (t % 7) > 5.8 ? 0 : 1;
+        pcm[i] = 0.5 * (v * syllable * pause + 0.01 * (Math.random() * 2 - 1));
+    }
+    mark('signal made');
+
+    const target = new mb.BufferTarget();
+    const output = new mb.Output({ format: new mb.Mp4OutputFormat({ fastStart: 'in-memory' }), target });
+    const source = new mb.AudioSampleSource({ codec: 'aac', bitrate: 32000 });
+    output.addAudioTrack(source);
+    await output.start();
+    mark('output started');
+    // 100 ms at a time, as a recorder hands it over.
+    const STEP = RATE / 10;
+    let firstAdd = null;
+    for (let i = 0; i < pcm.length; i += STEP) {
+        const data = pcm.subarray(i, Math.min(pcm.length, i + STEP));
+        const sample = new mb.AudioSample({ data, format: 'f32', numberOfChannels: 1, sampleRate: RATE, timestamp: i / RATE });
+        await source.add(sample);
+        sample.close();
+        if (firstAdd === null) { firstAdd = true; mark('first 100 ms added (encoder loaded)'); }
+    }
+    mark('all samples added');
+    source.close();
+    await output.finalize();
+    mark('finalized');
+    const bytes = new Uint8Array(target.buffer);
+    out.bytes = bytes.length;
+    out.head = Array.from(bytes.subarray(0, 12)).map((b) => b.toString(16).padStart(2, '0')).join(' ');
+    await fetch(`/file/voice-firefox-${SECONDS}s.m4a`, { method: 'POST', body: bytes });
+    mark('uploaded');
+} catch (e) {
+    out.error = `${e?.name}: ${e?.message}\n${e?.stack}`;
+}
+
+// The microphone path the slice would use: a 24 kHz AudioContext fed by getUserMedia (Firefox's fake device here).
+try {
+    out.mic = await new Promise(async (resolve, reject) => {
+        setTimeout(() => resolve('timeout'), 6000);
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+        const ctx = new AudioContext({ sampleRate: 24000 });
+        const src = ctx.createMediaStreamSource(stream);
+        const code = `class C extends AudioWorkletProcessor { constructor() { super(); this.n = 0; this.peak = 0; }
+            process(inputs) { const ch = inputs[0] && inputs[0][0]; if (ch) { this.n += ch.length; for (const v of ch) this.peak = Math.max(this.peak, Math.abs(v)); }
+            if (this.n >= 24000 && !this.sent) { this.sent = true; this.port.postMessage({ n: this.n, peak: this.peak }); } return true; } }
+            registerProcessor('c', C);`;
+        await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+        const node = new AudioWorkletNode(ctx, 'c');
+        const mute = ctx.createGain();
+        mute.gain.value = 0;
+        src.connect(node).connect(mute).connect(ctx.destination);
+        const started = performance.now();
+        node.port.onmessage = (e) => { resolve({ contextRate: ctx.sampleRate, framesSeen: e.data.n, peak: e.data.peak, ms: Math.round(performance.now() - started) }); stream.getTracks().forEach((t) => t.stop()); ctx.close(); };
+    });
+} catch (e) {
+    out.mic = `${e?.name}: ${e?.message}`;
+}
+await fetch('/result', { method: 'POST', body: JSON.stringify(out) });
+</script>

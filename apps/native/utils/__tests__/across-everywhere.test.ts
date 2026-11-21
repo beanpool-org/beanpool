@@ -101,7 +101,6 @@ vi.mock('expo-crypto', async () => {
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => {}) }));
 vi.mock('../blocklist', () => ({
     getBlockedUsers: vi.fn(async () => [...h.blocked]),
     isUserBlocked: vi.fn(async (key: string) => h.blocked.has(key)),

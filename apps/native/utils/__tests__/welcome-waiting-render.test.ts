@@ -235,10 +235,11 @@ vi.mock('../knock-key', () => ({
         return identity;
     },
 }));
-vi.mock('../notification-permission', async (importOriginal) => {
-    const real = await importOriginal<typeof import('../notification-permission')>();
-    return { ...real, askNotificationPermissionOnAction: async () => {} };
-});
+// No named line on these screens here (slice N2a draws it in its own suites): the rule answers no.
+vi.mock('../notification-permission', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../notification-permission')>()),
+    offerNamedLine: vi.fn(async () => false),
+}));
 const door = vi.hoisted(() => ({
     check: { ok: true, profile: { features: {} } } as any,
     answer: null as any,

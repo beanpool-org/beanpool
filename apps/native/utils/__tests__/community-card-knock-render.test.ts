@@ -130,7 +130,8 @@ vi.mock('../crypto', () => ({
     buildSignedHeaders: async (_m: string, _u: string, _b: string, _priv: string, publicKey: string) => ({ 'X-Test-Signed': '1', 'X-Test-Key': publicKey }),
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => 'bundled://phone-wide' }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: async () => {} }));
+// No named line on these screens here (slice N2a draws it in its own suites): the rule answers no.
+vi.mock('../notification-permission', () => ({ offerNamedLine: vi.fn(async () => false) }));
 // The registrations a remembered knock runs (web push W4: a waiting phone's token goes to the community it asked).
 const pushRuns = vi.hoisted(() => ({ count: 0, asked: [] as string[] }));
 vi.mock('../../services/push-notifications', () => ({ registerAfterKnock: async (community: string) => { pushRuns.count++; pushRuns.asked.push(community); } }));

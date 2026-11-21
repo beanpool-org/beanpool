@@ -113,7 +113,8 @@ vi.mock('../typed-place', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => 'bundled://fox') }));
 vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => ({ kind: 'claimed' })) }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => 'unanswered') }));
+// No named line on these screens here (slice N2a draws it in its own suites): the rule answers no.
+vi.mock('../notification-permission', () => ({ offerNamedLine: vi.fn(async () => false) }));
 // The registrations a remembered knock runs (web push W4), never the phone's push service itself here.
 const push = vi.hoisted(() => ({ registerAfterKnock: vi.fn(async (_community: string) => {}) }));
 vi.mock('../../services/push-notifications', () => push);

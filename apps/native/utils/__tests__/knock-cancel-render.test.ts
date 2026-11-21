@@ -100,7 +100,8 @@ vi.mock('../typed-place', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => null) }));
 vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => ({ kind: 'claimed' })) }));
 vi.mock('../../components/AddressSearch', () => ({ AddressSearch: () => null }));
-vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => 'unanswered') }));
+// No named line on these screens here (slice N2a draws it in its own suites): the rule answers no.
+vi.mock('../notification-permission', () => ({ offerNamedLine: vi.fn(async () => false) }));
 
 import { getPublicKey } from '@noble/ed25519';
 import { bytesToHex } from '../crypto';

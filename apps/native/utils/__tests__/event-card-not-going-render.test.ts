@@ -64,7 +64,7 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
 // The quiet row's Share, as a button where the page draws it (the real one is EventExtras', with its sheet): the page's order is what is read.
-vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => createElement('div', { role: 'button', 'aria-label': 'Share this event' }, '🔗 Share') }));
+vi.mock('../../components/EventExtras', () => ({ useEventReminderChoice: () => ({ supported: true, offsets: null, defaults: [1440], marketplaceOn: true, known: false, setOffsets: () => {}, setUnsupported: () => {} }), EventReminder: () => null, EventShareAndCalendar: () => createElement('div', { role: 'button', 'aria-label': 'Share this event' }, '🔗 Share') }));
 
 import { EventCard } from '../../components/EventCard';
 import { EventDetail } from '../../components/EventDetail';

@@ -21,7 +21,7 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
 import { localDay } from './home-tips.js';
-import { t } from './words.js';
+import { t, word } from './words.js';
 
 const DAY_MS = 86_400_000;
 
@@ -288,24 +288,83 @@ export function notifyAsks(i: NotifyAskInput): NotifyAsks {
 /**
  * The named lines at the member's own acts (amend2 §12.3 slice N2a; the first design §4.2, amend1 §4.3), each kind shown
  * once on a phone (the record's `lines`): a first message sent ('answer'), a first message read or a request accepted
- * ('again'), a first listing ('listing'), a first offer or request on someone's listing ('offer'), an ask to join ('join').
- * One line with one button and no "Not now": leaving the screen is the no.
+ * ('again'), a first listing ('listing'), a first offer or request on someone's listing ('offer'), an ask to join ('join');
+ * and (slice N2b) Going on an event ('going'), Interested on one ('interested'), a starred interest where the community
+ * tells members when a neighbour asks ('star'), a forum topic followed ('follow'). One line with one button and no "Not
+ * now": leaving the screen is the no.
  */
-export const NOTIFY_LINE_KINDS = ['answer', 'again', 'listing', 'offer', 'join'] as const;
+export const NOTIFY_LINE_KINDS = ['answer', 'again', 'listing', 'offer', 'join', 'going', 'interested', 'star', 'follow'] as const;
 export type NotifyLineKind = typeof NOTIFY_LINE_KINDS[number];
 
 /**
  * A named line's words: the offer, and what it says once the phone allows notifications. `name` is the person (answer,
- * again, offer) or the community (join) they wait on; without one, or for a first listing, "someone".
+ * again, offer) or the community (join) they wait on; without one, or for a first listing, "someone". The event, interest
+ * and forum lines name nobody; Interested gets the reminder only, as a change to an event is told to Going alone.
  */
 export function notifyLineWords(kind: NotifyLineKind, name?: string | null): { line: string; done: string; button: string } {
-    const who = kind === 'listing' ? '' : (name ?? '').trim();
     const button = t('Tell me');
+    switch (kind) {
+        case 'going': return { line: t('Get a reminder the day before, and hear if it changes.'), done: t("You'll get a reminder the day before, and hear if it changes."), button };
+        case 'interested': return { line: t('Get a reminder the day before.'), done: t("You'll get a reminder the day before."), button };
+        case 'star': return { line: t('Hear when a neighbour asks for one of these.'), done: t("You'll hear when a neighbour asks for one of these."), button };
+        case 'follow': return { line: t('Hear when someone replies here.'), done: t("You'll hear when someone replies here."), button };
+        default: break;
+    }
+    const who = kind === 'listing' ? '' : (name ?? '').trim();
     if (!who) return { line: t('Hear when someone answers.'), done: t("You'll hear when someone answers."), button };
     if (kind === 'again') return { line: t('Hear when {name} writes again.', { name: who }), done: t("You'll hear when {name} writes again.", { name: who }), button };
     if (kind === 'offer') return { line: t('Hear when {name} says yes.', { name: who }), done: t("You'll hear when {name} says yes.", { name: who }), button };
     return { line: t('Hear when {name} answers.', { name: who }), done: t("You'll hear when {name} answers.", { name: who }), button };
 }
+
+/**
+ * What the node will still tell a member of an event they answered, read by its own rule (the phone's
+ * apps/native/utils/event-extras.ts eventNoticesComing): `dayBefore`, the reminder the day before is still to come for them;
+ * `changes`, a change of time or place or a cancellation will be told to them (Going only, apps/server/src/engine/posts.ts).
+ */
+export interface NotifyEventComing {
+    dayBefore: boolean;
+    changes: boolean;
+}
+
+/**
+ * The named line under an answer to an event (slice N2b), saying only what will come: the reminder the day before only while
+ * it is still to come, a change only where one is told (Going). Neither: null, and no line is offered or drawn. The words
+ * follow what is true now, not the answer that brought the line: Going then Interested drops the change, and a reminder
+ * choice changed to none drops the reminder.
+ */
+export function notifyEventLineWords(coming: NotifyEventComing): { line: string; done: string; button: string } | null {
+    if (coming.dayBefore && coming.changes) return notifyLineWords('going');
+    if (coming.dayBefore) return notifyLineWords('interested');
+    if (coming.changes) return { line: t('Hear if it changes.'), done: t("You'll hear if it changes."), button: t('Tell me') };
+    return null;
+}
+
+/**
+ * The two true lines (amend1 §4.3, amend2 §6, slice N2b). Neither is a soft ask: each is the true state of something the
+ * member asked for, so it shows in every state of the record, after a "Later" and after the phone's "no" alike, and never
+ * takes the day. `phone` null: not read yet; neither says anything new then, and nothing is promised.
+ *
+ * - An event's reminder ({@link notifyRemindersOff}): while this phone can't notify and notifications can be had here,
+ *   "⏰ Remind me: a day before" becomes "⏰ Reminders need notifications on." [Turn on]. Its Turn on is
+ *   {@link notifyTurnOn}'s: the phone's pop-up where it can still show it, else the one line before the phone's settings.
+ * - What are you into?'s note ({@link notifyInterestsPromise}): "we'll tell you when a neighbour asks for it" only where the
+ *   community sends that push and this phone allows notifications. Off, the note says the rest and promises nothing.
+ */
+export function notifyRemindersOff(p: NotifyPhone | null | undefined): boolean {
+    // Whether there is anything to turn on is the phone's alone; the record only chooses the pop-up or the settings line.
+    return !!p && notifyTurnOn(p, {}) !== 'none';
+}
+
+/** Whether What are you into?'s note may say "we'll tell you when a neighbour asks for it" (see {@link notifyRemindersOff}). */
+export function notifyInterestsPromise(askedPush: boolean, p: NotifyPhone | null | undefined): boolean {
+    return askedPush && !!p && p.available && p.granted;
+}
+
+/** The reminder's true line, in place of "⏰ Remind me: …" while this phone can't notify ({@link notifyRemindersOff}). */
+export const NOTIFY_TRUE_WORDS = {
+    reminders: word('⏰ Reminders need notifications on.'),
+} as const;
 
 export type NotifyAskEvent =
     /** A soft ask was drawn (a named line with its kind). */

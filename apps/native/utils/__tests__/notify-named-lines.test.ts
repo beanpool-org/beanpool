@@ -52,6 +52,11 @@ const MOMENTS: Record<NotifyLineKind, string> = {
     listing: 'a first listing',
     offer: 'a first offer or request on a listing',
     join: 'an ask to join',
+    // Slice N2b: the same rule at Going, Interested, a star and a followed topic (notify-n2b-lines-render.test.ts draws them).
+    going: 'Going on an event',
+    interested: 'Interested in an event',
+    star: 'a starred interest',
+    follow: 'a forum topic followed',
 };
 
 /** [state, what the phone says, what this phone's record holds (as stored), shown?] */

@@ -70,7 +70,7 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElem
 vi.mock('../../components/EventCard', () => ({ EVENT_ACCENT: '#0a7' }));
 const copies = vi.hoisted(() => [] as any[]);
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: (p: any) => { if (p.prefill) copies.push(p.prefill); return null; } }));
-vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
+vi.mock('../../components/EventExtras', () => ({ useEventReminderChoice: () => ({ supported: true, offsets: null, defaults: [1440], marketplaceOn: true, known: false, setOffsets: () => {}, setUnsupported: () => {} }), EventReminder: () => null, EventShareAndCalendar: () => null }));
 
 import { setLanguage } from '@beanpool/core';
 import { EventDetail } from '../../components/EventDetail';

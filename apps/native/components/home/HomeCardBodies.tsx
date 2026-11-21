@@ -18,7 +18,8 @@ import {
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeNeedItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
 import { LEARN_HOME_WORDS, learnFigureCount } from '@beanpool/core';
-import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, eventCopyOf, formatCount, inviteAskNoticeHere, isHundredths, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, eventCopyOf, formatCount, inviteAskNoticeHere, isHundredths, notifyInterestsPromise, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type NotifyPhone, type SkyToday, type TipsView } from '@beanpool/core';
+import { useNotifyLine } from '../NotifyLine';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles, onNode } from './HomeParts';
@@ -115,15 +116,31 @@ export function StepsBody({ lines, left, count, note, colors, onStep }: {
     );
 }
 
+/** The phone's answer once a Tell me on this card was allowed (the note's promise is true from that moment). */
+const ALLOWED_HERE: NotifyPhone = { available: true, granted: true, canAskAgain: true };
+
 /**
  * What are you into? `askedPush`: the community tells a member when a neighbour asks for something they starred (core
- * askedPushOn, cold start N3), and the note says so there and nowhere else.
+ * askedPushOn, cold start N3). The note says so only there, and only while this phone allows notifications (`phone`, the
+ * phone's own answer; core notifyInterestsPromise, slice N2b's true line): off, or not read yet, it promises nothing.
+ * Where the community sends that push, a star brings one named line under the chips, "Hear when a neighbour asks for one of
+ * these." [Tell me], by core's rule (once on a phone, one soft ask a day, never after the phone's no); `showing` is whether
+ * Home is the screen in front, as leaving is the line's no.
  */
-export function InterestsBody({ interests, colors, onToggle, askedPush = false }: { interests: readonly string[]; colors: AppColors; onToggle: (id: string) => void; askedPush?: boolean }) {
+export function InterestsBody({ interests, colors, onToggle, askedPush = false, phone = null, showing = true }: {
+    interests: readonly string[]; colors: AppColors; onToggle: (id: string) => void; askedPush?: boolean; phone?: NotifyPhone | null; showing?: boolean;
+}) {
     const s = homeStyles(colors);
+    const notify = useNotifyLine(null, showing);
+    const promise = notifyInterestsPromise(askedPush, notify.line?.state === 'done' ? ALLOWED_HERE : phone);
+    const toggle = (id: string) => {
+        const starring = !interests.includes(id);
+        onToggle(id);
+        if (starring && askedPush) void notify.offer({ kind: 'star' });
+    };
     return (
         <>
-            <Text style={s.note} testID="home-interests-note">{askedPush ? t(ASKED_PUSH_WORDS.interestsNote) : t('Tap a few. What you star comes first here and in the Market.')}</Text>
+            <Text style={s.note} testID="home-interests-note">{promise ? t(ASKED_PUSH_WORDS.interestsNote) : t('Tap a few. What you star comes first here and in the Market.')}</Text>
             <FabAware id="interests:chips" style={s.chips}>
                 {POST_CATEGORIES.map(c => {
                     const on = interests.includes(c.id);
@@ -131,7 +148,7 @@ export function InterestsBody({ interests, colors, onToggle, askedPush = false }
                     return (
                         <Pressable
                             key={c.id}
-                            onPress={() => onToggle(c.id)}
+                            onPress={() => toggle(c.id)}
                             style={({ pressed }) => [s.chip, on && s.chipOn, pressed && !on && s.pressed]}
                             accessibilityRole="button"
                             accessibilityState={{ selected: on }}
@@ -143,6 +160,7 @@ export function InterestsBody({ interests, colors, onToggle, askedPush = false }
                     );
                 })}
             </FabAware>
+            {notify.view}
         </>
     );
 }

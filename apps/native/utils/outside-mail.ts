@@ -44,7 +44,7 @@
  * by itself), so the caller's deadline (outside-chat-live.ts) ends a stalled request, and the round with it.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId, openOutsideChange, openOutsideLine,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, heldFromMemberHere, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId, openOutsideChange, openOutsideLine,
     outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies,
     relayPayloadHash, sealOutsideChange, sealOutsideLine, nodeHomeOf, audienceOf, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
@@ -84,6 +84,17 @@ export interface OutsideMailContext {
     isBlocked: (key: string) => Promise<boolean>;
     /** Whether the member let this key in and never blocked it (utils/let-in.ts letInFor, slice S3b). Left out: nobody is. */
     letIn?: (key: string) => Promise<boolean>;
+    /**
+     * Whether THIS community (the one whose mailbox the round reads, `nodeUrl`) holds a first message as a request: its
+     * `dmRequests` switch, core requestsHereOf of its features (slice S5). What a first line across from a member here meets
+     * (core gateOutsideItem `memberHere`). Left out: a first message arrives straight away, as on a local community.
+     */
+    requestsHere?: boolean;
+    /**
+     * Whether no block bars this key anywhere (utils/let-in.ts unbarredFor, slice S5): a first line from a member here passes
+     * the door only then. Left out: nobody is, and a member here meets the door as a stranger does.
+     */
+    unbarred?: (key: string) => Promise<boolean>;
     /** The caller's deadline: every request made with this context is aborted with it. */
     signal?: AbortSignal;
 }
@@ -579,6 +590,10 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     blocked,
                     // Let in once (slice S3b): asked only for a first line with no chat here, from someone not blocked.
                     letIn: !chat && !blocked && env.kind === 'dm-line' && !!ctx.letIn && await ctx.letIn(env.senderKey),
+                    // From a member here (slice S5): my own server's mark beside the item, never the envelope's, for a first
+                    // line with no chat here from someone no block bars anywhere; this community's own rule then decides.
+                    memberHere: !chat && !blocked && env.kind === 'dm-line' && heldFromMemberHere(h) && !!ctx.unbarred && await ctx.unbarred(env.senderKey),
+                    requestsHere: ctx.requestsHere === true,
                 });
                 if (verdict === 'drop') { done.push(env.itemId); out.dropped++; continue; }
                 if (verdict === 'change') {

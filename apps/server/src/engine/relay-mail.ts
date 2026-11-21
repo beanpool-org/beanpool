@@ -562,6 +562,23 @@ export interface HeldItem {
     payload: string | null;
     bytes: number;
     receivedAt: number;
+    /**
+     * "From a member here" (slice S5, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §3 "A fellow member writing
+     * across"): its sender's key is a member of this community now, by this server's own member list ({@link fromMemberHere}),
+     * never by anything the sending server said. The recipient's device then applies this community's own rule to a first
+     * line (@beanpool/core gateOutsideItem `memberHere`). Said as each item is handed over, never stored.
+     */
+    memberHere: boolean;
+}
+
+/**
+ * Whether `senderKey` is a member here now who reads as one (engine/members.ts readsAsMember): not a visitor's row, not a
+ * closed account, not suspended or paused, and not the old key of a member being re-keyed or one a re-key replaced. Asked
+ * of this server's own member list at the moment a device fetches, so a member suspended, gone or re-keyed since their line
+ * was held is no longer "a member here" (slice S5).
+ */
+export function fromMemberHere(senderKey: string): boolean {
+    return /^[0-9a-f]{64}$/.test(senderKey) && isNodeMember(senderKey) && readsAsMember(senderKey);
 }
 
 type HeldRow = { sender_key: string; item_id: string; kind: string; recipient: string };
@@ -647,10 +664,17 @@ export function heldMailFor(member: string, device: string): { items: HeldItem[]
                              ORDER BY received_at, item_id LIMIT ?`).all(member, device, MAIL_FETCH_PAGE + 1) as Array<{
         kind: string; envelope: string; payload: string | null; bytes: number; received_at: number;
     }>;
+    // Each sender asked once a page (slice S5): whether they are a member here now, by this server's own list.
+    const members = new Map<string, boolean>();
+    const memberHere = (key: string): boolean => {
+        if (!members.has(key)) members.set(key, fromMemberHere(key));
+        return members.get(key)!;
+    };
     return {
-        items: rows.slice(0, MAIL_FETCH_PAGE).map((r) => ({
-            kind: r.kind, envelope: JSON.parse(r.envelope) as RelayEnvelope, payload: r.payload, bytes: r.bytes, receivedAt: r.received_at,
-        })),
+        items: rows.slice(0, MAIL_FETCH_PAGE).map((r) => {
+            const envelope = JSON.parse(r.envelope) as RelayEnvelope;
+            return { kind: r.kind, envelope, payload: r.payload, bytes: r.bytes, receivedAt: r.received_at, memberHere: memberHere(envelope.senderKey) };
+        }),
         more: rows.length > MAIL_FETCH_PAGE,
     };
 }

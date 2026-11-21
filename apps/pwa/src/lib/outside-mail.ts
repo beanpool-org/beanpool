@@ -42,9 +42,9 @@
  * whenever it was kept for another address, so this browser never signs as a community it no longer talks to.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, audienceOf, gateOutsideItem, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, audienceOf, gateOutsideItem, heldFromMemberHere, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId,
     nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId,
-    relayEnvelopeVerifies, relayPayloadHash, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
+    relayEnvelopeVerifies, relayPayloadHash, requestsHereOf, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
     type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { nodeAddress, signAddressCardFor, signedMailFetch, signRelayEnvelopeFor } from './api';
@@ -77,6 +77,12 @@ export interface OutsideMailContext {
     store: OutsideChatStore;
     /** Whether the account blocked this key. Throws when that can't be known: the item then waits, unconfirmed. */
     isBlocked: (key: string) => Promise<boolean>;
+    /**
+     * Whether this community holds a first message as a request: its `dmRequests` switch, core requestsHereOf of its info's
+     * features (slice S5). What a first line across from a member here meets (core gateOutsideItem `memberHere`). Left out:
+     * a first message arrives straight away, as on a local community.
+     */
+    requestsHere?: boolean;
     signal?: AbortSignal;
     /**
      * Whether this still acts for the account and the community it was made for ({@link outsideContext}): false once the
@@ -562,6 +568,10 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     chat: chat ? { state: chat.state, theirLines: await ctx.store.theirLines(me, chatId, env.senderKey) } : null,
                     doorOpen: open,
                     blocked: await ctx.isBlocked(env.senderKey),
+                    // From a member here (slice S5): my own server's mark beside the item, never the envelope's; this
+                    // community's own rule then decides, as on the phone (core gateOutsideItem).
+                    memberHere: heldFromMemberHere(h),
+                    requestsHere: ctx.requestsHere === true,
                 });
                 if (verdict === 'drop') { done.push(env.itemId); out.dropped++; continue; }
                 if (verdict === 'change') {
@@ -723,6 +733,12 @@ export async function outsideMessagesHere(): Promise<boolean | null> {
     return info ? (info.features as { outsideMessages?: unknown } | undefined)?.outsideMessages === true : null;
 }
 
+/** Whether this community holds a first message as a request (its info's `features.dmRequests`, core requestsHereOf); false unread. */
+export async function requestsHereNow(): Promise<boolean> {
+    const info = await communityInfoOnce().catch(() => null);
+    return requestsHereOf(info?.features);
+}
+
 let running: Promise<SyncOutcome | null> | null = null;
 
 /**
@@ -763,7 +779,9 @@ function roundWithDeadline(deadlineMs: number): Promise<SyncOutcome | null> {
                 if (on === false && await failUnsent(ctx, t("This community doesn't take messages from other communities.")) > 0 && holds()) ring();
                 return null;
             }
-            const out = await syncOutsideMail(ctx);
+            // This community's own rule for a first line across from a member here (slice S5): its `dmRequests` switch.
+            const requestsHere = await untilDeadline(requestsHereNow(), signal);
+            const out = await syncOutsideMail({ ...ctx, requestsHere });
             if ((out.written || out.requests || out.ticks) && holds()) ring();
             return out;
         } catch (e) {

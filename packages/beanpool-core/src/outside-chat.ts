@@ -474,6 +474,13 @@ export type OutsideGateVerdict = 'line' | 'request' | 'change' | 'drop';
  * `letIn` (let in once, slice S3b: DESIGN-no-switch-messaging-fable.md §3): the sender is someone the member let in, in a
  * community this device holds, and never blocked there. Their first line, with no chat here yet, opens one, door open or
  * not. A chat the member declined, or one already waiting as a request, is as it was: the member's own answer stands.
+ *
+ * `memberHere` (slice S5, same design §3 "A fellow member writing across"): the member's own server, the one whose mailbox
+ * held the line, says its sender is a member there now ({@link heldFromMemberHere}: from that server's own member list,
+ * never the sending server's word). Their first line, with no chat here yet, then meets that community's own rule, not the
+ * door: straight in where a first message arrives straight away, a request where `requestsHere` (the community's
+ * `dmRequests` switch, {@link requestsHereOf}) holds first messages as requests. They could write to the member inside the
+ * community anyway. A block still wins, and let in still opens the chat first. A total stranger is exactly as before.
  */
 export function gateOutsideItem(input: {
     kind: string;
@@ -481,6 +488,8 @@ export function gateOutsideItem(input: {
     doorOpen: boolean;
     blocked: boolean;
     letIn?: boolean;
+    memberHere?: boolean;
+    requestsHere?: boolean;
 }): OutsideGateVerdict {
     if (input.blocked) return 'drop';
     const { chat } = input;
@@ -490,5 +499,25 @@ export function gateOutsideItem(input: {
     if (chat?.state === 'declined') return 'drop';
     if (chat?.state === 'request') return chat.theirLines === 0 ? 'request' : 'drop';
     if (input.letIn === true) return 'line';
+    if (input.memberHere === true) return input.requestsHere === true ? 'request' : 'line';
     return input.doorOpen ? 'request' : 'drop';
+}
+
+/**
+ * Whether a held item, as the member's OWN server answered it (GET /api/mail: engine/relay-mail.ts heldMailFor), says its
+ * sender is a member of that community now (slice S5). Only the server's own mark beside the item counts, and only `true`:
+ * the envelope and the sealed payload come from the sending server and the sender, and neither carries it (core
+ * readRelayEnvelope keeps only an envelope's own fields), so no other server can claim it for anyone.
+ */
+export function heldFromMemberHere(held: unknown): boolean {
+    return !!held && typeof held === 'object' && (held as { memberHere?: unknown }).memberHere === true;
+}
+
+/**
+ * Whether a community holds a first message as a request (its info's `features.dmRequests`, PR #2392), from the features
+ * it publishes: only `true` says so. Absent (a local community, a server from before it): a first message arrives straight
+ * away. What a first line across from a member there meets ({@link gateOutsideItem} `requestsHere`).
+ */
+export function requestsHereOf(features: unknown): boolean {
+    return !!features && typeof features === 'object' && (features as { dmRequests?: unknown }).dmRequests === true;
 }

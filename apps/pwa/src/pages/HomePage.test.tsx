@@ -54,10 +54,11 @@ import * as api from '../lib/api';
 import { readPricingGuide } from '../lib/starter-offers';
 import { HomePage, HOME_FAILED, HOME_HINT, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
 import { NodeTooOldError } from '../lib/node-version-gate';
-import { ARRANGE_WORDS, COMMUNITY_WELCOME_DISMISSED_KEY, DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, FIND_TOWN_SEARCH_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { ARRANGE_WORDS, COMMUNITY_WELCOME_DISMISSED_KEY, DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, FIND_TOWN_SEARCH_WORDS, TOUR_WORDS, WAY_BACK_ASKS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t, wayBackSchedule } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
 import { HOLD_MS } from '../components/HomeCard';
+import { startWayBackShown } from '../components/OneWayBack';
 import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, readCachedHome, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
@@ -3788,11 +3789,13 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
     // where it left one holding only its "…" (445 × 28 px, PR #2411 review).
     const SAFETY = { needs: NEEDS, safety: { words: true as const, signInLinked: false as const } };
     const wordsOnly = () => vi.mocked(api.getCommunityMe).mockImplementation(async () => ({ probation: { rules: 'words', keptPosts: 0, ageEndsAt: null } }) as never);
+    /** This browser's record of the card (components/OneWayBack.tsx WayBackHere): put away just now, after its Beans (the answer's 12) were seen. */
+    const putAwayHere = () => localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ beansAt: Date.now() - 86_400_000, putAwayAt: Date.now() }));
 
-    it('"Your way back in" with nothing to show (the 12 words already checked from it) takes no cell, in one, two and three columns', async () => {
+    it('"Your way back in" with nothing to show (put away in this browser, after its Beans were seen) takes no cell, in one, two and three columns', async () => {
         wordsOnly();
         for (const w of [360, 800, 1400]) {
-            localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+            putAwayHere();
             await landAt(w, SAFETY);
             await pause();
             // Home's answer alone decides (slice D3): `/me` is never asked on Home.
@@ -3816,9 +3819,35 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(span('safety')).toBe('');
         expect(within(cell).getByTestId('home-card-menu')).toBeInTheDocument();
         expect(cardIds().slice(0, 3)).toEqual(['needs', 'safety', 'tips']);
+        const before = Date.now();
         fireEvent.click(within(card).getByRole('button', { name: 'Hide this for now' }));
         expect(screen.queryByTestId('home-card-safety')).toBeNull();
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
+        // Kept on the account too (slice B2), as the phone's ✕ is, so the phone and every browser count it.
+        const safetyAway = () => (savedLayouts().at(-1)?.dismissed as Record<string, string> | undefined)?.safety;
+        await waitFor(() => expect(safetyAway()).toBeTruthy());
+        expect(Date.parse(safetyAway()!)).toBeGreaterThanOrEqual(before);
+    });
+
+    // Slice B2: the phone's ✕ is kept on the account (`home.layout` `dismissed.safety`); the web reads it as its own, so a
+    // card put away on the phone isn't asked again here before its next return (the first Beans, 30 days, 90 days).
+    it('"Your way back in" put away on the phone (the account\'s layout) is not on the web\'s Home; the first Beans seen after it bring it back', async () => {
+        wordsOnly();
+        width = 1400;
+        const layout = { ...EVERY_CARD, dismissed: { safety: new Date(Date.now() - 60_000).toISOString() }, updatedAt: new Date(Date.now() - 60_000).toISOString() };
+        // Beans seen here before that put-away: answered by it.
+        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ beansAt: Date.now() - 86_400_000 }));
+        nodeV2(answer({}, SAFETY), layout as never);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await pause();
+        expect(screen.queryByTestId('home-card-safety')).toBeNull();
+        cleanup();
+        // No Beans seen here yet: the first sight of them, after the phone's put-away, brings it once, with how many.
+        localStorage.removeItem(`beanpool_one_way_back_${ME.publicKey}`);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('one-way-back-landing');
+        expect(within(card).getByTestId('one-way-back-text')).toHaveTextContent("You have 12 Beans here now. Keep a way back in, so they don't go if this browser forgets your account.");
     });
 
     // Slice D3 (DESIGN-home-default-fable.md §2.5): the card is for every member whose 12 words are the only way back
@@ -3842,16 +3871,19 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         return { events, stop: () => watch.disconnect() };
     };
 
-    it('"Your way back in" for an invited member with no sign-in, past their first week: drawn at the first paint, offering only what works, and nothing moves', async () => {
+    /** The same member with no Beans yet (a balance of nothing): no first-Beans return to bring the card. */
+    const noBeans = (a: HomeAnswer): HomeAnswer => ({ ...a, cards: { ...a.cards, beans: { balance_c: 0, room_c: 20000, tier: 'Resident', activated: false, frozen: false } } });
+
+    it('"Your way back in" for an invited member with no sign-in, 30 days on (core\'s schedule): drawn at the first paint in its one sentence, offering only what works, and nothing moves', async () => {
         const seen = watchSafety();
         try {
             width = 1400;
-            nodeV2(invited({ joinedAt: '2026-01-01T00:00:00.000Z' }), null);
+            nodeV2(noBeans(invited({ joinedAt: '2026-01-01T00:00:00.000Z' })), null);
             render(<HomePage identity={ME} onNavigate={vi.fn()} />);
             const card = await screen.findByTestId('one-way-back-landing');
             const atFirstPaint = cardIds();
             expect(atFirstPaint.slice(0, 2)).toEqual(['needs', 'safety']);
-            expect(within(card).getByTestId('one-way-back-text')).toHaveTextContent('Your 12 words are how you get back in. Check you still have them.');
+            expect(within(card).getByTestId('one-way-back-text')).toHaveTextContent('If this browser forgets your account, this is how you get back in.');
             expect(within(card).queryByTestId('add-sign-in')).toBeNull();
             expect(card.textContent).not.toContain('one way back');
             await pause();
@@ -3863,13 +3895,13 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         }
     });
 
-    it('"Your way back in" for an invited member on day one: not on Home (sign-up was its first showing), First steps\' line says it', async () => {
+    it('"Your way back in" for an invited member on day one, joined on another device: not on Home (sign-up was its first showing), First steps\' line says it', async () => {
         const seen = watchSafety();
         try {
             width = 1400;
             const joined = new Date(Date.now() - 60_000).toISOString();
             const steps = { joinedAt: joined, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null, words: false };
-            nodeV2({ ...invited({ joinedAt: joined }), cards: { ...invited({ joinedAt: joined }).cards, steps } } as HomeAnswer, null);
+            nodeV2(noBeans({ ...invited({ joinedAt: joined }), cards: { ...invited({ joinedAt: joined }).cards, steps } } as HomeAnswer), null);
             render(<HomePage identity={ME} onNavigate={vi.fn()} />);
             const stepsCard = await screen.findByTestId('home-card-steps');
             await pause();
@@ -3880,6 +3912,87 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         } finally {
             seen.stop();
         }
+    });
+
+    // Slice B2: the web's join ending on Safety Backup with its tick not ticked is the web's "Later" (pages/WelcomePage.tsx
+    // startWayBackShown), and as after the phone's Later the card is up from the first landing, at the first paint.
+    it('"Your way back in" on the first landing after a join here that kept no way back: drawn at the first paint, the one sentence', async () => {
+        const seen = watchSafety();
+        try {
+            width = 1400;
+            const joined = new Date(Date.now() - 60_000).toISOString();
+            startWayBackShown(ME.publicKey, Date.now() - 30_000);
+            nodeV2(noBeans(invited({ joinedAt: joined })), null);
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            const card = await screen.findByTestId('one-way-back-landing');
+            expect(cardIds().slice(0, 2)).toEqual(['needs', 'safety']);
+            expect(within(card).getByTestId('one-way-back-text')).toHaveTextContent('If this browser forgets your account, this is how you get back in.');
+            await pause();
+            expect(seen.events).toEqual(['added']);
+        } finally {
+            seen.stop();
+        }
+    });
+
+    // Review of #3341: the first Beans and the 90 days go by the balance and an open deal, which Home's answer carries in Your
+    // Beans and Your deals, and a member can take either off Home. They are asked with "Your way back in" whatever the list
+    // holds (core WAY_BACK_ASKS, lib/home-layout.ts cardsToAsk), and a read with no cards= has them built with it
+    // (routes/home-answer.ts withWayBackAsks, test-home 5b). So the web's card decides as core's schedule does with the
+    // member's real figures (the phone's rule), at a browser's first landing and the next, and a card taken off stays off.
+    // This node builds what a real one builds: the cards asked; with no cards=, the list and the fixed two, and Your Beans
+    // and Your deals where "Your way back in" is on the list.
+    it('"Your way back in" decides as core\'s schedule does with the real balance and deals, whatever is on Home: Your Beans and Your deals on Home or taken off × a balance or none × an open deal or none × day 10, 31 and 125, at a first landing and the next', async () => {
+        width = 1400;
+        const DAY = 86_400_000;
+        const KEY = `beanpool_one_way_back_${ME.publicKey}`;
+        const LINE = 'If this browser forgets your account, this is how you get back in.';
+        const FACT = "You have 40 Beans here now. Keep a way back in, so they don't go if this browser forgets your account.";
+        const DEAL = { open: 1, waiting: 0, waitingOnMe: null, items: [{ txId: 't9', postId: 'p9', title: 'Sourdough', with: 'Ben', waitsOnMe: false, at: AT }] };
+        const got: unknown[] = [];
+        const want: unknown[] = [];
+        for (const beansOnHome of [true, false]) for (const dealsOnHome of [true, false]) for (const balance_c of [0, 4000]) for (const open of [false, true]) for (const day of [10, 31, 125]) {
+            const name = `Your Beans ${beansOnHome ? 'on Home' : 'off'}, Your deals ${dealsOnHome ? 'on Home' : 'off'}, ${balance_c / 100} Beans, ${open ? 'a deal open' : 'no deal'}, day ${day}`;
+            const now = Date.now();
+            const joinedAt = now - day * DAY;
+            // This browser's record: none on days 10 and 31 (sign-up was the first showing: put away at the join); on day 125,
+            // put away at the 30 days' return, with Beans first seen here on day 20.
+            const here = day === 125 ? { beansAt: joinedAt + 20 * DAY, putAwayAt: joinedAt + 31 * DAY } : null;
+            localStorage.removeItem(KEY);
+            if (here) localStorage.setItem(KEY, JSON.stringify(here));
+            vi.stubGlobal('indexedDB', memoryIndexedDB());
+            resetHomeCacheForTest();
+            const list = v2(['safety', ...(beansOnHome ? ['beans'] : []), ...(dealsOnHome ? ['deals'] : []), 'market'], new Date(now - 60_000).toISOString());
+            const base = invited({ joinedAt: new Date(joinedAt).toISOString() });
+            const full = { ...base, cards: { ...base.cards, beans: { balance_c, room_c: 20000, tier: 'Resident', activated: balance_c > 0, frozen: false }, ...(open ? { deals: DEAL } : {}) } } as HomeAnswer;
+            const asks: Array<readonly string[] | null> = [];
+            vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
+                asks.push(params.cards ? [...params.cards] : null);
+                const built = params.cards ? [...params.cards]
+                    : ['needs', 'community', ...list.cards.map(c => c.id), ...(list.cards.some(c => c.type === 'safety') ? WAY_BACK_ASKS : [])];
+                return fresh({ ...full, layout: list as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => built.includes(id))) });
+            });
+            // The phone's rule: core's schedule with what the member really has, whatever Home holds.
+            const s = wayBackSchedule({ joinedAt, now, kept: false, putAwayAt: here?.putAwayAt ?? joinedAt, beansAt: here?.beansAt ?? (balance_c > 0 ? now : null), balance_c, holds: open });
+            const expected = { card: s.show ? (s.why === 'beans' ? FACT : LINE) : 'none', beansDrawn: beansOnHome, dealsDrawn: dealsOnHome && open };
+            for (const landing of ['first landing', 'next landing']) {
+                const reads = asks.length;
+                render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+                await screen.findByTestId('home-card-market');
+                await waitFor(() => expect(asks.length).toBeGreaterThan(reads));
+                await pause();
+                const card = screen.queryByTestId('one-way-back-landing');
+                got.push([name, landing, {
+                    card: card ? within(card).getByTestId('one-way-back-text').textContent : 'none',
+                    beansDrawn: !!screen.queryByTestId('home-card-beans'), dealsDrawn: !!screen.queryByTestId('home-card-deals'),
+                }]);
+                want.push([name, landing, expected]);
+                cleanup();
+            }
+            // A browser with no copy asks with no cards= (the node's own choice); the next landing names both cards.
+            got.push([name, 'asked', asks.map(a => a === null ? 'no cards=' : WAY_BACK_ASKS.every(id => a.includes(id)) ? 'Your Beans and Your deals by name' : a.join(','))]);
+            want.push([name, 'asked', ['no cards=', 'Your Beans and Your deals by name']]);
+        }
+        expect(got).toEqual(want);
     });
 
     it('"I still have my 12 words" on Home: kept on the account (words_kept), and the card and First steps\' line end at once', async () => {
@@ -3981,7 +4094,7 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
     // waits in the strip and keeps its slot in the saved list (DESIGN-home-arrange-in-place-fable.md §2.4).
     it('"Your way back in" with nothing to show waits in the strip in Arrange, says so, and the card above it moves past the next drawn card, leaving the strip\'s slot where it is', async () => {
         wordsOnly();
-        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+        putAwayHere();
         width = 1400;
         nodeV2(answer({}, SAFETY), v2(['market', 'safety', 'events', 'pulse']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -4197,8 +4310,9 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
         const steps = { joinedAt: joined, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null, words: false };
         const base = answer({ layout: null }, { steps } as HomeAnswer['cards']);
         const { tour: _t, ...me } = base.me!;
-        // Invited by Ana, so the community's welcome has something to say and stands beside the tile (W2).
-        const newcomer = { ...base, cards: { ...answer().cards, ...base.cards }, me: { ...me, joinedAt: joined, wayBack: 'words', invitedBy: { key: 'ana-key', name: 'Ana' } } } as HomeAnswer;
+        // Invited by Ana, so the community's welcome has something to say and stands beside the tile (W2). A minute in, no Beans
+        // yet: Beans seen would bring the 12-words card back at once, with how many (core way-back-schedule.ts, slice B2).
+        const newcomer = { ...base, cards: { ...answer().cards, ...base.cards, beans: { balance_c: 0, room_c: 20000, tier: 'Resident', activated: false, frozen: false } }, me: { ...me, joinedAt: joined, wayBack: 'words', invitedBy: { key: 'ana-key', name: 'Ana' } } } as HomeAnswer;
         for (const [w, cols] of [[360, 1], [800, 2], [1400, 3]] as const) {
             width = w;
             heights = { 'home-card-start': 120, 'home-card-market': 200, 'home-card-steps': 160, 'home-card-events': 100, 'home-card-beans': 80, 'home-card-tips': 90, 'home-card-community': 90 };
@@ -4348,7 +4462,7 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
     });
 
     it('safety card when not drawn is skipped by packing and leaves no gap', async () => {
-        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ beansAt: Date.now() - 86_400_000, putAwayAt: Date.now() }));
         await landWithHeights(800, {
             'home-card-needs': 100,
             'home-card-safety': 180,

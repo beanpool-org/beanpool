@@ -751,6 +751,31 @@ async function main(): Promise<void> {
         const askedBeans = (await get('/api/home?cards=needs,beans', erin)).body?.cards?.beans;
         assert(savedOdd.status === 200 && !!listed && JSON.stringify(listed) === JSON.stringify(askedBeans) && !('q' in listed),
             `a 'beans' id stored with another type is the Beans card both ways (${JSON.stringify(listed)?.slice(0, 120)} / ${JSON.stringify(askedBeans)?.slice(0, 120)})`);
+        // Review of #3341: "Your way back in" comes back by the balance and an open deal (core way-back-schedule.ts). The apps
+        // ask Your Beans and Your deals with it, on the list or not (core cardsToAsk, WAY_BACK_ASKS), and the web app counts a
+        // read with no cards= as built for that same set; so with no cards=, a list holding it has both built too.
+        const listOfTypes = (types: string[], agoMs: number) => ({ v: 2, cards: types.map(t => ({ id: t, type: t })), dismissed: {}, updatedAt: new Date(Date.now() - agoMs).toISOString() });
+        const plainRead = async (types: string[], agoMs: number) => {
+            const saved = await postJson('/api/members/preferences', erin, { publicKey: erin.pk, preferences: { 'home.layout': listOfTypes(types, agoMs) } });
+            const b0 = builds();
+            const read = await get('/api/home', erin);
+            const b1 = builds();
+            return { saved: saved.status, read, beans: (b1.beans ?? 0) - (b0.beans ?? 0), deals: (b1.deals ?? 0) - (b0.deals ?? 0) };
+        };
+        const wayBack = await plainRead(['safety', 'market'], 8_000);
+        assert(wayBack.saved === 200 && wayBack.read.status === 200 && wayBack.beans === 1 && wayBack.deals === 1
+            && typeof wayBack.read.body?.cards?.beans?.balance_c === 'number',
+            `with no cards=, a list holding "Your way back in" but neither Your Beans nor Your deals has both built (beans +${wayBack.beans}, deals +${wayBack.deals}; ${cardsOf(wayBack.read).join(',')})`);
+        assert(JSON.stringify(wayBack.read.body?.layout?.cards?.map((c: { id: string }) => c.id)) === '["safety","market"]',
+            `and the list in the answer is hers as saved: the apps draw that alone (${JSON.stringify(wayBack.read.body?.layout?.cards)})`);
+        const noWayBack = await plainRead(['market'], 6_000);
+        assert(noWayBack.saved === 200 && noWayBack.read.status === 200 && noWayBack.beans === 0 && noWayBack.deals === 0 && noWayBack.read.body?.cards?.beans === undefined,
+            `a list without it still builds neither (beans +${noWayBack.beans}, deals +${noWayBack.deals}; ${cardsOf(noWayBack.read).join(',')})`);
+        const b0 = builds();
+        const askedSafety = await get('/api/home?cards=needs,safety', erin);
+        const b1 = builds();
+        assert(askedSafety.status === 200 && (b1.beans ?? 0) === (b0.beans ?? 0) && (b1.deals ?? 0) === (b0.deals ?? 0),
+            `asked by cards=, the node builds what is asked and no more: the apps name Your Beans and Your deals themselves (${cardsOf(askedSafety).join(',')})`);
     }
 
     // ── 5c. a saved search is the Market's own search ───────────────────────────────────────────────────────────

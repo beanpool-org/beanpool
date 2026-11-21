@@ -46,7 +46,7 @@ import { WebRestore } from '../components/WebRestore';
 import { WebRekey } from '../components/WebRekey';
 import { rekeyCodeFromSearch } from '../lib/web-rekey';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
-import { AddSignIn } from '../components/OneWayBack';
+import { AddSignIn, startWayBackShown } from '../components/OneWayBack';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, PRIVATE_PREVIEW_MESSAGE, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { privatePreviewOn } from '../lib/visitor-lobby';
 import { nodeNameFor, withNodeName } from '../lib/member-name';
@@ -1200,7 +1200,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
      * finishing onboarding correctly still greets them with "you haven't saved your recovery phrase yet", a warning that
      * is not true, which is how warnings stop being read. Only on the tick: skipping leaves it showing. And on the
      * account (it exists by this step): the phone and the web agree that the words are kept, and Home reminds them of
-     * nothing (§2.5).
+     * nothing (§2.5). Left with no tick, the web's "Later": Home's "Your way back in" is up from the first landing, as after
+     * the phone's Later (components/OneWayBack.tsx startWayBackShown, slice B2).
      */
     function keepWordsChoice() {
         if (!pendingIdentity) return;
@@ -1208,7 +1209,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             wordsChoiceCounted.current = true;
             recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
         }
-        if (!seedConfirmed) return;
+        if (!seedConfirmed) {
+            startWayBackShown(pendingIdentity.publicKey);
+            return;
+        }
         try { localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true'); } catch { /* storage off: Settings asks once */ }
         keepWordsOnAccount(pendingIdentity.publicKey, 'Welcome');
     }

@@ -73,7 +73,7 @@ An account made with 12 words also starts slower than one made with a sign-in, f
 
 You can add a sign-in later, from any phone or browser where you are in your account, not only the one you joined on. On a phone you restored your account onto with your 12 words, open the global community in the app: the community says your account has only its 12 words, and the card and **Add a sign-in** appear (it can take a moment). You can't add one while your account is suspended, or if the community has closed your account (the app says so, and nothing changes). It becomes a second way back, and it lifts the 12-words limits at once.
 
-If BeanPool's key vault already keeps a copy of your account, that copy is a way back too. The app then doesn't show the one-way-back card. **Add a sign-in** is still offered, quietly, in **Account Protection** in **Settings**, because it lifts the 12-words limits.
+If BeanPool's key vault already keeps a copy of your account for a sign-in, that copy is a way back too. The app then doesn't show the one-way-back card. **Add a sign-in** is still offered, quietly, in **Account Protection** in **Settings**, because it lifts the 12-words limits.
 
 - Tap **Add a sign-in**: on the card, or in **Settings** under **Account Protection**. When you join, **Keep a way back in** offers it as **Link a sign-in** (in a web browser, **Safety Backup**'s button says **Add a sign-in as a second way back**).
 - Tap **Continue with Google**, **Continue with Facebook** or, on an iPhone, **Continue with Apple**, and sign in once. The app may ask for your phone's lock first.

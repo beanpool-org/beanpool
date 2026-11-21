@@ -22,7 +22,7 @@ import { DOOR_WORK_MESSAGES, passDoorCheck, workPastCheck } from '../utils/door-
 import { useDoorCheck } from '../components/DoorCheckSheet';
 import { DoorChoices, DoorWorkProgress } from '../components/WordsDoor';
 import { startOneWayBack } from '../utils/one-way-back';
-import { vaultCopyKnown } from '../utils/vault';
+import { vaultSignInCopyKnown } from '../utils/vault';
 import { ACCOUNT_DOOR_MESSAGES, accountKeyForDoor, finishJoinFromAccount, rememberAccountClosed } from '../utils/global-join-existing';
 import { commitOpenDoorKey, finishOpenDoorJoin, openDoorKeyForThisPhone, openDoorKeyIsNew, releaseOpenDoorKey } from '../utils/open-door-key';
 import { doorJoinOut, getPendingOnboarding } from '../utils/onboarding-state';
@@ -563,9 +563,10 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                     ...(door.global ? {} : { at: { url: doorUrl, name: knownName } }),
                 });
                 doorWork.stop();
-                // In by 12 words: unless the key vault already keeps a copy of this key (a way back in every community),
-                // the account has one way back here, and the card says so (utils/one-way-back.ts).
-                if (joined && joinedBy === 'words' && !(await vaultCopyKnown(account.identity.publicKey))) {
+                // In by 12 words: unless the key vault already keeps a sign-in's copy of this key (a way back in every
+                // community; a community's half there is not one), the account has one way back here, and the card says so
+                // (utils/one-way-back.ts).
+                if (joined && joinedBy === 'words' && !(await vaultSignInCopyKnown(account.identity.publicKey))) {
                     await startOneWayBack(account.identity.publicKey, doorUrl);
                 }
             } catch {

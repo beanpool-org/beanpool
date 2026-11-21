@@ -146,14 +146,28 @@ export async function startOneWayBackPutAway(publicKey: string, url: string, now
  * "Later" is true to its word, so Home's card shows from the first landing until a way back is kept or the card is put
  * away. A member's own reminder (`by: 'wayBack'`, about the community just joined, moved by Home's word there), not put away.
  *
- * One already running is kept: the 12-words door's own record, written as that join landed, or a reminder already on its
- * schedule. One marked done is not: "Later" is reached only when the phone knows of no way back kept (utils/way-back-kept.ts),
- * and `done` says no more than that a sign-in was added somewhere, with no copy too, or that the words were noted and then
- * taken back. Kept, it would hide the card the member was just promised (review of #3330).
+ * Whatever record the account already has, the card shows on the first landing (review of #3330, round 2):
+ * - one showing now (not put away) is kept as it is: the 12-words door's own record, written as that join landed, or a
+ *   reminder already up;
+ * - the 12-words door's own record, put away with its ✕: brought back up, still the door's (its community, its asks, its
+ *   returns already used);
+ * - a member's reminder put away (an earlier join's, which started put away, or one put away on Home): started again about
+ *   the community just joined, where Home's word moves it;
+ * - one marked done: started again too. "Later" is reached only when the phone knows of no way back kept (utils/way-back-
+ *   kept.ts), and `done` says no more than that a sign-in was added somewhere, with no copy too, or that the words were
+ *   noted and then taken back. Kept, it would hide the card the member was just promised (review of #3330).
  */
 export async function startOneWayBackShown(publicKey: string, url: string, now: number = Date.now()): Promise<void> {
     const record = await readOneWayBack(publicKey);
-    if (record && !record.done) return;
+    if (record && !record.done) {
+        if (record.dismissedAt === undefined) return;
+        if (record.by !== 'wayBack') {
+            const shown: OneWayBack = { ...record };
+            delete shown.dismissedAt;
+            await write(publicKey, shown);
+            return;
+        }
+    }
     await write(publicKey, { url, joinedAt: now, by: 'wayBack' });
 }
 
@@ -223,7 +237,8 @@ export async function askOneWayBackStanding(
  * - the node says 12 words and this phone has no record (the account restored here): started, unless the key vault
  *   keeps a copy of the key (`vaultCopy`), which is a way back in every community: then nothing is written, and the
  *   card offers a sign-in quietly in Settings only (join-global.tsx skips the card for the same reason). `vaultCopy` is
- *   what the phone knows (vault.ts `vaultCopyKnown`): a deposit and a status read keep it, and so does a removal
+ *   what the phone knows of a sign-in's copy there (vault.ts `vaultSignInCopyKnown`; a community's half is not one): a
+ *   deposit and a status read keep it, and so does a removal
  *   (vault rethink VR1: Remove everything records "none", and the list read after removing one copy says what is left),
  *   so once the last vault copy is removed the card is back where a 12-words account with no copy has it;
  * - the phone thought a sign-in was added and the node says not: opened again;

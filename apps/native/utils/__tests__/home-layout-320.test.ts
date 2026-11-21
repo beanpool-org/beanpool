@@ -37,6 +37,8 @@ import { FAB_BAND_DP } from '../fab-band';
 import { chatCardStyles } from '../../components/home/chat-parts';
 import { marketTileStyles } from '../../components/home/market-tile-styles';
 import { CHAT_CARD_WORDS } from '../home-chat';
+import { notifyAskCardStyles } from '../../components/home/NotifyAskCard';
+import { notifyOnceWords } from '@beanpool/core';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
 const CARD_NAMES = HOME_CARD_TYPES.flatMap(t => (t.globalName ? [t.name, t.globalName] : [t.name]));
@@ -831,6 +833,56 @@ describe('First steps as a tick list at 320dp × 1.3 (S5)', () => {
         for (const line of [t('Keep your 12 words safe'), t('Hear when someone answers you'), t('Post your first Offer')]) {
             expect(longestWord(line, num(s.rowLine.fontSize)), line).toBeLessThanOrEqual(CARD_INNER - tick - HOME_TARGET_DP);
         }
+    });
+});
+
+// Home's once card (slice N1h; DESIGN-notify-and-backup-asks-fable-amend2.md §7, mockup state 5): the join's ask once, for a
+// member already in, in Home's own card frame with a sky band, above the cards. The model is this file's (glyph widths at
+// 1.3x); the drawn card, every language and every colour set are utils/__tests__/notify-once-card-render.test.ts.
+describe("Home's once card at 320dp × 1.3 (N1h)", () => {
+    const n = notifyAskCardStyles as unknown as Record<string, Record<string, unknown>>;
+    const w = notifyOnceWords({ global: false, community: 'Upper Riverside Valley Neighbours' });
+
+    it('its band\'s word fits in capitals at the caption\'s cap, with no "…" or × beside it (its two answers are its ways off)', () => {
+        const caption = longestWord(w.band.toUpperCase(), num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) });
+        expect(caption).toBeLessThan(CARD_INNER);
+        const src = read('components/home/NotifyAskCard.tsx');
+        expect(src).toContain('<HomeCard id="notify-once"');
+        expect(src).not.toMatch(/onMenu=|onHold=|✕/);
+    });
+
+    it('every line keeps its longest word in the card, a long community name wraps under the title, and nothing is cut', () => {
+        for (const [text, size] of [
+            [w.title, n.title.fontSize], [`${w.never} ${w.only}`, n.body.fontSize], [`${w.arrives} ${w.ads}`, n.arrives.fontSize], [w.confirm, n.confirm.fontSize],
+        ] as Array<[string, number]>) expect(longestWord(text, size), text).toBeLessThanOrEqual(CARD_INNER);
+        expect(read('components/home/NotifyAskCard.tsx')).not.toMatch(/numberOfLines/);
+    });
+
+    it('Turn on notifications and Later are each a whole row and a 48 dp target; their words wrap inside, never shrink', () => {
+        expect(num(n.turnOn.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(num(n.later.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(longestWord(w.turnOn, num(n.turnOnText.fontSize))).toBeLessThanOrEqual(CARD_INNER - 2 * num(n.turnOn.paddingHorizontal));
+        expect(longestWord(w.later, num(n.laterText.fontSize))).toBeLessThanOrEqual(CARD_INNER - 2 * num(n.later.paddingHorizontal));
+        // The floating "+ ADD POST" steps aside for both.
+        expect(read('components/home/NotifyAskCard.tsx')).toMatch(/<FabAware id="notify-once:buttons">/);
+    });
+
+    it('its words read at 4.5:1 or more on the card, its band\'s on the sky tint and Turn on\'s on the call to action, in light and dark', () => {
+        for (const c of [lightColors, darkColors]) {
+            for (const ink of [c.text.heading, c.text.body, c.text.secondary]) expect(contrastRatio(ink, c.surface.card)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(c.card.sky.ink, c.card.sky.tint)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(c.text.onBrand, c.action.cta)).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+
+    it('Home draws it at the top, above the cards (their places stay as Arrange measures them), never in Arrange, and the way-back card waits', () => {
+        const home = read('app/(tabs)/index.tsx');
+        const at = home.indexOf('<NotifyAskCard');
+        expect(at).toBeGreaterThan(-1);
+        expect(at).toBeLessThan(home.indexOf('<Animated.View onLayout={e => { listY.current'));
+        expect(home.slice(at - 200, at)).toContain('onceMayNow && once?.up && !arrangeOn && answer && (');
+        const safety = home.slice(home.indexOf("case 'safety':"), home.indexOf('<OneWayBackCard'));
+        expect(safety).toContain('if (wayBackHeld) return null;');
     });
 });
 

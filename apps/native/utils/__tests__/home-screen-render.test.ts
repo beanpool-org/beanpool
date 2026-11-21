@@ -806,12 +806,19 @@ describe('What are you into?: the named line at a star (slice N2b)', () => {
     };
     const lineEl = () => document.querySelector('[data-testid="notify-line"]');
     const asksPush = () => { node.answer = { ...localMember(), features: { ...localMember().features, askedPush: true } as HomeAnswer['features'] }; };
+    /**
+     * A member who met the join's screen on this phone a month ago and said Later: the phone never asked, and Home's once card
+     * is not theirs (slice N1h), so the landing takes no day. With an empty record the once card would take it, and one soft
+     * ask a day leaves the star no line that day (notify-once-card.test.ts pins that).
+     */
+    const joinedHere = () => ({ state: 'unanswered', updatedAt: 0, joinAt: Date.now() - 30 * 86_400_000, laterAt: Date.now() - 30 * 86_400_000 });
 
     for (const dark of [false, true]) {
         it(`${dark ? 'dark' : 'light'}: never asked, a star brings the line under the chips; Tell me brings the phone's pop-up, says so, and the note promises the push`, async () => {
             scheme.dark = dark;
             asksPush();
             phoneSays.now = { status: 'undetermined', canAskAgain: true };
+            mem.store.set(RECORD_KEY, JSON.stringify(joinedHere()));
             await render();
             expect(lineEl()).toBeNull();
             await tapChip('labour');
@@ -849,10 +856,13 @@ describe('What are you into?: the named line at a star (slice N2b)', () => {
 
     it('a community that sends no such push (global, Beans off): no line, and the rule is not asked', async () => {
         phoneSays.now = { status: 'undetermined', canAskAgain: true };
+        const kept = JSON.stringify(joinedHere());
+        mem.store.set(RECORD_KEY, kept);
         await render();
         await tapChip('labour');
         expect(lineEl()).toBeNull();
-        expect(mem.store.get(RECORD_KEY)).toBeUndefined();
+        // Nothing written: the record is as it was before the landing and the star.
+        expect(mem.store.get(RECORD_KEY)).toBe(kept);
     });
 
     it('taking a star off is no moment: no line, though the rule would allow one by then', async () => {
@@ -871,6 +881,79 @@ describe('What are you into?: the named line at a star (slice N2b)', () => {
         expect(lineEl()).toBeNull();
         expect(JSON.parse(mem.store.get(RECORD_KEY)!)).toEqual({ state: 'unanswered', updatedAt: 0 });
     });
+});
+
+// Slice N1h (DESIGN-notify-and-backup-asks-fable-amend2.md §7): a member already in (1.4.7's "Not now" on this phone) meets the
+// join's ask once, as a card at the top of Home, through the real utils/notification-permission.ts and core's rule.
+describe("Home's once card (slice N1h)", () => {
+    afterEach(() => { scheme.dark = false; });
+    const RECORD_KEY = NOTIFICATION_PERMISSION_STORE_KEY;
+    const DECLINED_147 = { state: 'declined', updatedAt: Date.now() - 20 * 86_400_000 };
+    const onceCard = () => document.querySelector('[data-testid="home-notify-once"]');
+    const press = async (id: string) => {
+        await act(async () => { (document.querySelector(`[data-testid="${id}"]`) as HTMLElement).click(); });
+        await settle(6);
+    };
+    const hearLine = () => document.body.textContent!.includes('Hear when someone answers you');
+
+    for (const dark of [false, true]) {
+        it(`${dark ? 'dark' : 'light'}: the card at the top with the join's words; First steps' line and the way-back card wait; Later puts it away, not a no`, async () => {
+            scheme.dark = dark;
+            phoneSays.now = { status: 'undetermined', canAskAgain: true };
+            mem.store.set(RECORD_KEY, JSON.stringify(DECLINED_147));
+            safety.props = null;
+            await render();
+            expect(onceCard()).not.toBeNull();
+            expect(document.querySelector('[data-testid="notify-once-title"]')?.textContent).toBe(`Hear from ${localMember().cards.community!.name}`);
+            expect(document.querySelector('[data-testid="notify-once-arrives"]')?.textContent).toBe("When a neighbour writes, someone answers you, or an event you're going to changes. Never ads.");
+            // Above every card.
+            const first = document.querySelector('[data-testid^="home-card-"]')!;
+            expect(!!(onceCard()!.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+            // Never with the way-back card, and First steps' own line waits while it is up.
+            expect(safety.props).toBeNull();
+            expect(hearLine()).toBe(false);
+            expect(JSON.parse(mem.store.get(RECORD_KEY)!)).toMatchObject({ askKind: 'once', onceAt: expect.any(Number) });
+            await press('notify-once-later');
+            expect(onceCard()).toBeNull();
+            expect(phoneSays.asked).toBe(0);
+            const kept = JSON.parse(mem.store.get(RECORD_KEY)!);
+            expect(kept).toMatchObject({ onceClosedAt: expect.any(Number), laterAt: expect.any(Number) });
+            expect(kept.phoneNoAt).toBeUndefined();
+            // Not a no: First steps' line is back; the way-back card takes the next landing, not this one.
+            expect(hearLine()).toBe(true);
+            expect(safety.props).toBeNull();
+        });
+    }
+
+    it('Turn on notifications brings the phone\'s own pop-up (only that tap), and its yes takes the card away', async () => {
+        phoneSays.now = { status: 'undetermined', canAskAgain: true };
+        mem.store.set(RECORD_KEY, JSON.stringify(DECLINED_147));
+        await render();
+        expect(phoneSays.asked).toBe(0);
+        await press('notify-once-turn-on');
+        await settle(6);
+        expect(phoneSays.asked).toBe(1);
+        expect(onceCard()).toBeNull();
+        expect(JSON.parse(mem.store.get(RECORD_KEY)!)).toMatchObject({ state: 'granted' });
+    });
+
+    for (const [state, says, record] of [
+        ["the phone said no (an iPhone's Don't Allow)", { status: 'denied', canAskAgain: false }, DECLINED_147],
+        ['allowed already (or Android 8 to 12)', { status: 'granted', canAskAgain: true }, DECLINED_147],
+        ["the join's screen was shown on this phone", { status: 'undetermined', canAskAgain: true }, { state: 'unanswered', updatedAt: 0, joinAt: Date.now() - 86_400_000, laterAt: Date.now() - 86_400_000 }],
+        ['put away with Later before', { status: 'undetermined', canAskAgain: true }, { ...DECLINED_147, onceAt: Date.now() - 2 * 86_400_000, onceClosedAt: Date.now() - 2 * 86_400_000, laterAt: Date.now() - 2 * 86_400_000 }],
+        ['8 days untouched: folded into First steps', { status: 'undetermined', canAskAgain: true }, { ...DECLINED_147, onceAt: Date.now() - 8 * 86_400_000 }],
+    ] as const) {
+        it(`${state}: no card, and the way-back card is not held`, async () => {
+            phoneSays.now = says;
+            mem.store.set(RECORD_KEY, JSON.stringify(record));
+            safety.props = null;
+            await render();
+            expect(onceCard()).toBeNull();
+            expect(safety.props).not.toBeNull();
+            expect(phoneSays.asked).toBe(0);
+        });
+    }
 });
 
 describe('the cached answer, the 304, and states that never block', () => {

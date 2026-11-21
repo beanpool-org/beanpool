@@ -499,10 +499,11 @@ export async function turnOnFromOnceCard(
  * that doesn't say what it allows within {@link ONCE_CARD_WAIT_MS} gets no card that landing.
  *
  * Written only where the showing changes the record, as the once card's: a later landing on the day it was marked writes
- * nothing, so it can never put back a record read before an answer was kept.
+ * nothing, so it can never put back a record read before an answer was kept. `still`: whether Home still wants it, asked
+ * last before the mark; a showing withdrawn by then (the way-back card came up, a newer landing) takes no day (review of #3348).
  */
 export function offerHomeCard(
-    o: { live: boolean; wayBack: boolean },
+    o: { live: boolean; wayBack: boolean; still?: () => boolean },
     storage: StorageLike = AsyncStorage,
     now: () => number = Date.now,
     readOs: () => Promise<OsNotificationPermission> = readOsNotificationPermission,
@@ -515,6 +516,7 @@ export function offerHomeCard(
         const record = await readNotificationPermissionRecord(storage);
         const at = now();
         if (!notifyAsks({ record, phone, now: at, live: o.live, wayBack: o.wayBack }).home) return false;
+        if (o.still && !o.still()) return false;
         const shown = markNotifyAsk(record, { type: 'shown', surface: 'home' }, at);
         const marked = record.askDay === shown.askDay && record.askKind === 'home';
         if (!marked && !gaveUp) await writeNotificationPermissionRecord(shown, storage);

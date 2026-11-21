@@ -91,6 +91,20 @@ describe("Home's card while something is live, on the phone", () => {
         });
     }
 
+    // Review of #3348: Home withdrew the showing while it was being decided (the way-back card came up on the fresh answer, a
+    // newer landing): asked last, before the mark, so the day stays free for another ask.
+    it('withdrawn before the mark (`still` says no by then): not shown, nothing written, the day free', async () => {
+        store(JOINED);
+        const before = mem.get(NOTIFICATION_PERMISSION_STORE_KEY);
+        let wanted = true;
+        const slowPhone = async () => { wanted = false; return ASK; };
+        expect(await offerHomeCard({ live: true, wayBack: false, still: () => wanted }, undefined, at(NOW), slowPhone)).toBe(false);
+        expect(mem.get(NOTIFICATION_PERMISSION_STORE_KEY)).toBe(before);
+        // Still wanted: shown and marked, as without `still`.
+        expect(await offerHomeCard({ live: true, wayBack: false, still: () => true }, undefined, at(NOW), reads(ASK))).toBe(true);
+        expect(stored()).toMatchObject({ askDay: localDay(new Date(NOW)), askKind: 'home' });
+    });
+
     it('× puts it away 30 days, counted; the third is for good (a "Later" is never written by it)', async () => {
         store(JOINED);
         await homeCardAway();

@@ -845,6 +845,18 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         // Left (the focus effect's cleanup): nothing is read or asked, and one still on its way stops at the next step below
         // (#3305 review). In place, db.ts refuses that community's copy from the leave on as well (leaveChatInPlace).
         if (!inViewRef.current) return;
+        // The fact line (slice N3): how long the oldest line unread here waited, read once on this screen from the phone's own
+        // copy, before the thread is read and marked read below, so the named line's effect (after the first read) already
+        // knows. Here, above the key check, which stays straight before the thread's read. Nothing read: no fact line, and
+        // the thread reads as always.
+        if (waitedRef.current === undefined && identity?.publicKey) {
+            try {
+                waitedRef.current = notifyWaitedDays(await oldestUnreadAt(id as string, identity.publicKey, at), Date.now());
+            } catch {
+                waitedRef.current = null;
+            }
+            if (!inViewRef.current) return;
+        }
         // The key check first (DESIGN-dm-key-signal-model §7 S1): it applies the resting rule, so a person not marked
         // verified has already moved to the new key when the thread is read, and no frame shows the paused box or the
         // "Sent from the new key" line for them. Unreadable pins: the banner stays as it was (undefined), and a send says why
@@ -852,16 +864,6 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         const change = await getDmKeyChange(id as string, at).catch(() => undefined);
         // Read after the check, so it sees the pin as the resting rule left it. Reads only; unreadable pins keep what showed.
         const codeInfo = await getDmKeyCodeInfo(id as string, at).catch(() => undefined);
-        // The fact line (slice N3): how long the oldest line unread here waited, read once on this screen, before the thread
-        // is read and marked read below, so the named line's effect (after the first read) already knows.
-        // Nothing read: no fact line, and the thread reads as always.
-        if (waitedRef.current === undefined && identity?.publicKey) {
-            try {
-                waitedRef.current = notifyWaitedDays(await oldestUnreadAt(id as string, identity.publicKey, at), Date.now());
-            } catch {
-                waitedRef.current = null;
-            }
-        }
         let data: any[];
         try {
             data = await getMessages(id as string, { limit: msgLimitRef.current, notices: true, community: at });

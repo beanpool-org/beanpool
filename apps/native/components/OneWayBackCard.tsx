@@ -88,14 +88,17 @@ export interface OneWayBackActionsAt {
  *   `GET /api/community/me` when it is about the community the card is about, so a landing costs Home's one request.
  * - `accountDismissedAt`: the account's dismissal (`home.layout` `dismissed.safety`), from another phone or the web app.
  * - `onDismiss(at)`: the card was put away at `at` (the same moment the phone's record keeps), for Home to keep on the
- *   account. `onUp`: whether the card is drawn now, so Home's "…" moves count only the cards on screen. `onSettled`: its read
- *   on this visit has finished and `onUp` has said what it found, so Home's notifications card (slice N3), which waits
- *   while this one is up, is never drawn for a moment and then gives way.
+ *   account. `onUp`: whether the card is drawn now, so Home's "…" moves count only the cards on screen.
+ * - `settleFor` and `onSettled`: Home's landing whose own answer of Home this card now has (null while that answer is not
+ *   in). `onSettled(landing)` once the card's newest read has finished on that answer and `onUp` has said what it found;
+ *   `onSettled(null)` as a read starts. A read a newer one replaced says nothing. Home's notifications card (slice N3),
+ *   which waits while this one is up, is decided only on that word, so it is never drawn for a moment and then gives way
+ *   (review of #3348).
  * - `toLose`: what the member has here, from Home's answer: the balance (whole hundredths; null where Beans are off or no
  *   Your Beans card was asked) and something else to lose (an open deal, a role). A live listing is read here, from the
  *   phone's own posts.
  */
-export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp, onSettled, band, toLose }: {
+export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp, settleFor = null, onSettled, band, toLose }: {
     place: 'landing' | 'settings';
     colors?: AppColors;
     onActionsAt?: (at: OneWayBackActionsAt | null) => void;
@@ -103,7 +106,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     accountDismissedAt?: string | null;
     onDismiss?: (at: number) => void;
     onUp?: (up: boolean) => void;
-    onSettled?: () => void;
+    settleFor?: number | null;
+    onSettled?: (landing: number | null) => void;
     toLose?: { balance_c: number | null; holds: boolean } | null;
     /**
      * Home in Arrange: the band this card has only there (its caption and ↑ ↓, across the top of its frame). With a band the
@@ -117,8 +121,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     const [writtenDown, setWrittenDown] = useState(false);
     const [linking, setLinking] = useState(false);
     const [vaultCopy, setVaultCopy] = useState(false);
-    /** Counts the reads finished on this card (each visit's), for `onSettled`. */
-    const [settled, setSettled] = useState(0);
+    /** The newest read that finished while it was still the newest (`latest`), for `onSettled`: equal to `latest` = no read out. */
+    const [finished, setFinished] = useState(0);
     const s = styles(colors);
 
     const latest = useRef(0);
@@ -145,8 +149,9 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         setTimeout(measureActions, 300);
     }, [measureActions]);
 
-    const refresh = useCallback(async (askNode: 'kept' | 'now' = 'kept') => {
-        const call = ++latest.current;
+    const reportSettled = useRef(onSettled);
+    reportSettled.current = onSettled;
+    const readFor = useCallback(async (call: number, askNode: 'kept' | 'now') => {
         const key = identity?.publicKey;
         const [stored, vault, paper] = await Promise.all([
             readOneWayBack(key),
@@ -212,6 +217,17 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         if (!standing || call !== latest.current) return;
         await show(await oneWayBackFromNode(key, where, standing, now, { vaultCopy: vault }));
     }, [identity]);
+    // Every read, whoever starts it (a landing, Home's answer, a tap here): Home hears it is deciding again, and that it has
+    // decided only when the newest read ends; one a newer read replaced decides nothing (review of #3348).
+    const refresh = useCallback(async (askNode: 'kept' | 'now' = 'kept') => {
+        const call = ++latest.current;
+        reportSettled.current?.(null);
+        try {
+            await readFor(call, askNode);
+        } finally {
+            if (call === latest.current) setFinished(call);
+        }
+    }, [readFor]);
 
     // The community the record is about, where it isn't the global community (a door anyone can join, joined with 12
     // words: app/join-open-door.tsx), named as the door screens name it: its saved name, else its host. The sheet says it
@@ -232,7 +248,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         return () => { live = false; };
     }, [recordUrl]);
 
-    useFocusEffect(useCallback(() => { void refresh().catch(() => undefined).finally(() => setSettled(n => n + 1)); }, [refresh]));
+    useFocusEffect(useCallback(() => { void refresh().catch(() => undefined); }, [refresh]));
     // Home's answer arrived with the community's word, or the account's dismissal changed: read again. `kept` too: a
     // say-so made on another device lands while `words` stays true, and ends the card on this visit (review of #3113).
     const wordKey = homeWord ? `${homeWord.url}|${homeWord.standing.words}|${!!homeWord.standing.kept}` : '';
@@ -260,10 +276,9 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     const reportUp = useRef(onUp);
     reportUp.current = onUp;
     useEffect(() => { reportUp.current?.(up && !(quiet && place !== 'settings')); }, [up, quiet, place]);
-    // After `onUp` in the same commit (effects run in order), so Home hears whether this card is up no later than that it settled.
-    const reportSettled = useRef(onSettled);
-    reportSettled.current = onSettled;
-    useEffect(() => { if (settled > 0) reportSettled.current?.(); }, [settled]);
+    // Settled on Home's landing: no read out, on that landing's answer. After the read Home's answer starts (above) and after
+    // `onUp` in the same commit (effects run in order), so Home never hears "settled" before "up" or while a read is out.
+    useEffect(() => { if (settleFor !== null && finished === latest.current) reportSettled.current?.(settleFor); }, [settleFor, finished]);
     useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
 
     if (!identity || !record || !up) return null;

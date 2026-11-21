@@ -325,11 +325,13 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         Alert.alert(t(manifest.name), t(manifest.line));
     }, [manifest]);
 
+    // The phone's pop-up through the app's one door (utils/notification-permission.ts turnOnNotifications), so its answer is
+    // kept as every other ask's is: a "Don't allow" here is the phone's no everywhere, and a pop-up closed with no answer a
+    // "Later" (amend3 §5, review of #3335 finding 5). Loaded at the tap, as expo-notifications was.
     const allowNotifications = useCallback(async () => {
         try {
-            const n = require('expo-notifications');
-            const { status } = await n.requestPermissionsAsync();
-            setNotificationsAllowed(status === 'granted');
+            const { turnOnNotifications } = await import('../../utils/notification-permission');
+            setNotificationsAllowed((await turnOnNotifications()) === 'granted');
         } catch {
             setNotificationsAllowed(null);
         }

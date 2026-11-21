@@ -13,7 +13,7 @@ import { openNoticeIn } from '../utils/push-notice-switch';
 import { countNotice, watchNoticeCounts } from '../utils/notice-counts';
 import { keepsOtherCommunities, noticesAfterSync, roundWhileOpen, showUnreadSum, type PhoneNotices } from '../utils/other-communities-unread';
 import type { LocalNotice } from '../utils/sync-notices';
-import { notificationChannels } from '../utils/notification-channels';
+import { setNotificationChannels, type ChannelMaker } from '../utils/notification-channels';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 import { toolReminderRoute } from '../tools/reminders';
@@ -240,14 +240,10 @@ async function phonePushToken(ask: boolean): Promise<string | null> {
     await SecureStore.setItemAsync(PUSH_TOKEN_STORE_KEY, token, KEY_ITEM_OPTIONS);
 
     try {
-        // Set up Android notification channel
-        if (Platform.OS === 'android') {
-            // Named in the member's language (utils/notification-channels.ts): set again with each token, so a language
-            // change renames them in the phone's settings too.
-            for (const { id, importance, ...channel } of notificationChannels()) {
-                await Notifications.setNotificationChannelAsync(id, { ...channel, importance: Notifications.AndroidImportance[importance] });
-            }
-        }
+        // Android's notification channels, named in the member's language (utils/notification-channels.ts): set again with
+        // each token, so a language change renames them in the phone's settings too. Also made before the phone's pop-up
+        // (utils/notification-permission.ts `turnOnNotifications`), which Android 13 shows only once a channel exists.
+        await setNotificationChannels(Notifications as unknown as ChannelMaker, Platform.OS === 'android');
     } catch (e) {
         // The token is had: the registration goes all the same.
         console.warn('[Push] Could not set up the notification channels', e);

@@ -25,9 +25,11 @@ describe("the guide's joining page: the phone's three steps", () => {
         // Slice S3: the labelled bar became dots and ‹ (components/welcome/StepDots.tsx); the steps and their order are the same.
         // Slice S4: the way back is titled "Keep a way back in" on the phone (no screen says "Safety Backup" there any more),
         // skipped where a way back is already kept, and its ‹ is said as it is built (the Go back? question after an invite).
-        expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo and **Keep a way back in**, the last step.');
+        // Slice N1j (amend2 §4, Marty 21 Nov): the notifications step is last on an iPhone and Android 13+, never on Android 8-12.
+        expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo, **Keep a way back in** and, on an iPhone or on Android 13 and later, **Hear from** your community, the last step. Android 8 to 12 has notifications on from the start, so it has no notifications step, and three dots.');
+        expect(joining).not.toContain('one dot each for your name, your photo and **Keep a way back in**, the last step.');
         // Round 2 of the review of #3330: a claim is never skipped; a sign-in's copy at the vault counts, an admins' copy never.
-        expect(joining).toContain("a sign-in's copy at BeanPool's key vault, or your 12 words already noted as written down), an invite or the global community's join has no way-back step, and two dots. A claim always shows it.");
+        expect(joining).toContain("a sign-in's copy at BeanPool's key vault, or your 12 words already noted as written down), an invite or the global community's join has no way-back step, and one dot fewer. A claim always shows it.");
         expect(joining).toContain("**Your community's admins**, in **Account Protection**, doesn't count here either: the step and the card still show.");
         expect(joining).not.toContain('there is no way-back step, and two dots.');
         // ‹ keeps the account and its words (join-after-lost-answer.test.ts: the same key after Go Back), never a new account.
@@ -44,13 +46,23 @@ describe("the guide's joining page: the phone's three steps", () => {
         expect(joining).not.toContain('The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.');
         // Slice W1 (#3333): the web's join has the same dots (apps/pwa/src/components/StepDots.tsx, core join-steps.ts) and
         // How it Works left it, so the step the page kept "in a web browser only" until then is gone.
-        expect(joining).toContain('A web browser shows the same dots and **‹**, with **Safety Backup** last there too');
+        expect(joining).toContain('A web browser shows the same dots and **‹**, with **Safety Backup** last there, as it has no notifications step');
         expect(joining).not.toContain('**How it Works**');
     });
 
-    it("the join asks nothing about notifications: no How it Works card, First steps' line instead", () => {
+    // Slice N1j (amend2 §4, §6; Marty, 21 Nov: "a soft ask (which opens the hard ask) in the onboard"): the join's last step
+    // asks, with a Later that is not final; no How it Works card; the old pop-up at the first message is gone (N2a).
+    it("the join's last step asks about notifications, with a Later that is not final; First steps' line after it", () => {
         expect(joining).not.toMatch(/How it Works:\*\* a short tour\. At the end, a card asks \*\*Turn on notifications\?\*\*/);
         expect(joining).toContain('**First steps** on **Home** has **Hear when someone answers you**');
+        expect(joining).toContain('**BeanPool never emails or texts you. Notifications are the only way it can reach you.**');
+        expect(joining).toContain("**Turn on notifications** brings your phone's own question; **Your phone will ask you to confirm.** says so under it. **Later** carries on and is not final");
+        // Review of #3335, finding 4: the photo step's camera asks too, so the page says notifications, not "anything".
+        expect(joining).toContain('This is the only step of joining that asks about notifications.');
+        expect(joining).not.toContain('This is the only step of joining that asks your phone for anything.');
+        // Amend3 §1: a closed pop-up is a Later.
+        expect(joining).toContain('Closing your phone\'s question without answering it is the same as **Later**.');
+        expect(joining).not.toContain('Joining asks nothing about notifications');
         // Slice N2a (#3332): no pop-up at the first message or request to join; a named line's Tell me, as notifications.md says.
         expect(joining).not.toContain('or once when you send your first message or request to join');
         expect(joining).toContain('or **Tell me** on a one-line offer such as **Hear when Asha answers.** under your first message.');

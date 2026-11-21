@@ -66,7 +66,7 @@ import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
-import { KeeperProtectionPanel, NO_COPIES_ROW } from '../components/KeeperProtectionPanel';
+import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { RecoveryKitButtons } from '../components/RecoveryKitButtons';
@@ -2631,8 +2631,6 @@ export default function WelcomeScreen() {
             void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
         };
         const hasWords = hasMnemonic(pendingIdentity);
-        // A sign-in is a way back here unless the community keeps no copies (VR2) or this is the web, which can't hold one.
-        const signInWayBack = Platform.OS !== 'web' && backupCopiesAt !== 'none';
         // In by 12 words, the sign-in is linked through the door's own sheet (utils/join-link.ts), or a claim's at its
         // community; everyone else reads the vault's sentences in place first.
         const openSignIn = () => {
@@ -2650,10 +2648,7 @@ export default function WelcomeScreen() {
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <StepBar step="wayBack" flow={joinFlow} busy={loading} onBack={handleSeedBackPress} />
                     <View style={styles.card}>
-                        {/* Where the community keeps no copies, the 12 words are the way back here, under that row's title. */}
-                        <Text style={styles.title} accessibilityRole="header" testID="way-back-title">
-                            {backupCopiesAt === 'none' ? t(NO_COPIES_ROW.title) : t('Keep a way back in')}
-                        </Text>
+                        <Text style={styles.title} accessibilityRole="header" testID="way-back-title">{t('Keep a way back in')}</Text>
                         {/* True everywhere, and not a threat (DESIGN-notify-and-backup-asks-fable.md §5.1; Marty, 21 Nov): where an
                             admin can set a member up again, "your account goes" would not be. */}
                         <Text style={styles.subtitle}>{t('If this phone is lost, this is how you get back in.')}</Text>
@@ -2688,8 +2683,10 @@ export default function WelcomeScreen() {
 
                         {/* Tile one: Link a sign-in. Opened (or a sign-in's copy already kept), the panel every sign-in member
                             sees: the vault's sentences as signed off on 27 Oct (SIGN_IN_ROW), "Who can open it ›", then Protect
-                            with. `waysBack` draws that row alone, never "your 12 words are your primary recovery" again. */}
-                        {signInWayBack && (signInKept || signInOpen ? (
+                            with. `waysBack` draws that row alone, never "your 12 words are your primary recovery" again. Where
+                            the community keeps no copies (VR2), its row in the tile's place (NO_COPIES_ROW: why no sign-in can be
+                            linked here), and the 12-words tile alone under it. */}
+                        {backupCopiesAt === 'none' || signInKept || signInOpen || Platform.OS === 'web' ? (
                             <KeeperProtectionPanel
                                 protection={protection}
                                 hasWords={hasWords}
@@ -2698,11 +2695,11 @@ export default function WelcomeScreen() {
                                 copyAt={joinFlow === 'claim' ? 'community' : undefined}
                                 copiesAt={backupCopiesAt}
                                 communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
-                                onProtectSso={(prov, listCommunities) => {
+                                onProtectSso={Platform.OS !== 'web' ? (prov, listCommunities) => {
                                     if (prov) setSsoProvider(prov);
                                     setSsoListCommunities(listCommunities);
                                     setShowSsoSheet(true);
-                                }}
+                                } : undefined}
                                 listCommunitiesFor={pendingIdentity?.publicKey}
                                 listShown={listTickShown}
                                 onListShown={setListTickShown}
@@ -2714,7 +2711,7 @@ export default function WelcomeScreen() {
                                 onPress={openSignIn}
                                 testID="way-back-sign-in"
                             />
-                        ))}
+                        )}
 
                         <SsoEnrolSheet
                             visible={showSsoSheet}
@@ -2749,7 +2746,7 @@ export default function WelcomeScreen() {
                           account's, so they are drawn only once the tile's tap has passed the phone's lock
                           (handleShowPendingWords).
                         */}
-                        {!hasWords ? (backupCopiesAt === 'none' && <Text style={styles.subtitle}>{t(NO_COPIES_ROW.noWords)}</Text>) : !(pendingWordsAreNew ? revealWords : !!pendingWords) ? (
+                        {!hasWords ? null : !(pendingWordsAreNew ? revealWords : !!pendingWords) ? (
                             <WayBackTile
                                 title={t('Write down 12 words')}
                                 line={t('On paper, kept safe')}

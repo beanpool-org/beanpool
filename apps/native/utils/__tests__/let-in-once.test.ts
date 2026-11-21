@@ -167,7 +167,8 @@ import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { blockUser, unblockUser, blockSyncsEndedForTests } from '../blocklist';
 import { acceptLetIn, letInFor, _resetLetInForTests } from '../let-in';
-import { gateOutsideItem, DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
+import { withPeopleAdded } from '../contacts-former';
+import { gateOutsideItem, emptyContactsList, DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
 
 const realLoad = (Module as any)._load;
 (Module as any)._load = function (request: string, ...rest: any[]) {
@@ -802,6 +803,101 @@ describe('let in once: the review\'s own case (#3319 at 3b80f0ee, F1): Ann Ignor
         const letIn = await letInFor(me.publicKey)(sid);
         expect(letIn).toBe(false);
         expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe('drop');
+    });
+});
+
+/**
+ * "Add people I've chatted with and my friends" (contacts.tsx addPeople: db.ts getChattedWithMembers, then contacts-former.ts
+ * withPeopleAdded) links each person it counts by hand, and a linked contact is let in on every community the phone holds. So
+ * it counts a chat only by the test let in once reads (#3319 review at 1697ff89, R2-F1; Marty 21 Nov 2026: "chatted with"
+ * counts only chats where the member wrote or accepted themselves). One table {the member wrote a line; from another of their
+ * devices; accepted their request themselves} x {only they wrote, requests off; someone took up the member's Offer alone;
+ * they wrote, the member Ignored, then a trade accepted it; a notice from the node's inbox in the member's name; a request
+ * waiting for the member}: offered exactly for the member's own. Then the review's probe, end to end.
+ */
+interface ChatKind { name: string; offered: boolean; put: (s: DatabaseSync, k: string) => void }
+/** A trade's chat as the node opens it (messaging.ts ensureTransactionConversation, asNode): no request, on the Offer. */
+function tradeChatIn(s: DatabaseSync, buyer: string, request: object | null): string {
+    const offer = listingIn(s, me.publicKey, 'offer');
+    const id = dmIn(s, buyer, request, buyer);
+    s.prepare('UPDATE conversations SET post_id = ? WHERE id = ?').run(offer, id);
+    lineIn(s, id, 'SYSTEM', 'system');
+    dealIn(s, { buyer, seller: me.publicKey, status: 'pending', post: offer });
+    return id;
+}
+const CHAT_KINDS: ChatKind[] = [
+    { name: 'the member wrote a line', offered: true, put: (s, k) => { dmIn(s, k, null, me.publicKey); } },
+    { name: 'the member sent a photo from another of their devices', offered: true, put: (s, k) => { lineIn(s, dmIn(s, k, null, k), me.publicKey, 'image'); } },
+    { name: 'the member accepted their request themselves (acceptedByYou)', offered: true, put: (s, k) => { dmIn(s, k, { from: k, state: 'accepted', at: iso(), acceptedByYou: true }, k); } },
+    { name: 'only they wrote, requests off, never answered', offered: false, put: (s, k) => { dmIn(s, k, null, k); } },
+    { name: 'they took up the member\'s Offer alone: the trade\'s chat, their line and the node\'s', offered: false, put: (s, k) => { tradeChatIn(s, k, null); } },
+    { name: 'they wrote, the member Ignored, then a trade accepted it', offered: false, put: (s, k) => { tradeChatIn(s, k, { from: k, state: 'accepted', at: iso() }); } },
+    { name: 'a notice from the node\'s inbox in the member\'s name, its only line', offered: false, put: (s, k) => { lineIn(s, dmIn(s, k, null, null), me.publicKey, 'text', ADMINS_NOTICE); } },
+    { name: 'a request waiting for the member', offered: false, put: (s, k) => { dmIn(s, k, { from: k, state: 'pending', at: iso() }, k); } },
+];
+/** A member's card in a copy, as its sync keeps it: "Add people I've chatted with" names only people the copy has a card for. */
+const cardIn = (s: DatabaseSync, key: string, callsign: string) => s.prepare('INSERT INTO members (public_key, callsign) VALUES (?, ?)').run(key, callsign);
+/** The tap on Add, as contacts.tsx addPeople makes it: the people it counts, linked by hand to the community in use. */
+async function addPeopleIveChattedWith(): Promise<string[]> {
+    const chats = await db.getChattedWithMembers(me.publicKey);
+    const list = withPeopleAdded(emptyContactsList(), chats.map((p) => ({ key: String(p.publicKey), callsign: String(p.callsign) })), me.publicKey, B);
+    h.contacts = list.contacts as any;
+    return list.contacts.flatMap((c) => c.links.map((l) => l.key));
+}
+
+describe('let in once: "Add people I\'ve chatted with and my friends" counts only chats the member took part in (#3319 review at 1697ff89, R2-F1)', () => {
+    it('one table: offered, and linked, exactly for a chat the member wrote in or accepted themselves', async () => {
+        await phoneHoldingThree();
+        const people = CHAT_KINDS.map((kind) => ({ kind, key: person().publicKey }));
+        intoCopy(B, (s) => {
+            for (const [i, p] of people.entries()) {
+                cardIn(s, p.key, `person${i}`);
+                p.kind.put(s, p.key);
+            }
+        });
+        const offered = new Set((await db.getChattedWithMembers(me.publicKey)).map((p) => p.publicKey));
+        const linked = new Set(await addPeopleIveChattedWith());
+        for (const p of people) {
+            expect(offered.has(p.key), `offered | ${p.kind.name}`).toBe(p.kind.offered);
+            expect(linked.has(p.key), `linked | ${p.kind.name}`).toBe(p.kind.offered);
+            // Across, after the tap: let in exactly when the member took part.
+            expect(await letInFor(me.publicKey)(p.key), `let in across | ${p.kind.name}`).toBe(p.kind.offered);
+        }
+    });
+
+    it('the review\'s probe: Sid\'s take-up of the member\'s Offer and Kim\'s unanswered requests-off chat are not offered, and after Add neither is let in anywhere', async () => {
+        await phoneHoldingThree();
+        const sid = person().publicKey;
+        const kim = person().publicKey;
+        const tom = person().publicKey;
+        intoCopy(B, (s) => {
+            cardIn(s, sid, 'sid');
+            cardIn(s, kim, 'kim');
+            cardIn(s, tom, 'tom');
+            // Sid takes up Ann's Offer alone: the node opens the trade's chat, no request, his line and the escrow's note.
+            tradeChatIn(s, sid, null);
+            // Requests are off here: Kim's line arrived straight away, and Ann never answered.
+            dmIn(s, kim, null, kim);
+            // Control: Ann wrote to Tom.
+            dmIn(s, tom, null, me.publicKey);
+        });
+        expect((await db.getChattedWithMembers(me.publicKey)).map((p) => p.publicKey)).toEqual([tom]);
+        expect(await addPeopleIveChattedWith()).toEqual([tom]);
+        // Their requests in another community she holds, read in place: Sid's and Kim's are cards; Tom's is accepted for her.
+        const [fromSid, fromKim, fromTom] = [sid, kim, tom].map((from) => waitingRequest(from, A));
+        node.convs.push(fromSid, fromKim, fromTom);
+        asked = [];
+        const got = await db.requestsInPlace(me.publicKey, A);
+        await settle();
+        expect(acceptPosts()).toEqual([{ origin: A, id: fromTom.id }]);
+        expect([fromSid, fromKim, fromTom].map((r) => r.request?.state)).toEqual(['pending', 'pending', 'accepted']);
+        expect(got?.conversations.map((c: any) => c.id).sort()).toEqual([fromSid.id, fromKim.id].sort());
+        // Across: neither is let in; their first line meets her closed door.
+        for (const k of [sid, kim]) {
+            const letIn = await letInFor(me.publicKey)(k);
+            expect(letIn).toBe(false);
+            expect(gateOutsideItem({ kind: 'dm-line', chat: null, doorOpen: false, blocked: false, letIn })).toBe('drop');
+        }
     });
 });
 

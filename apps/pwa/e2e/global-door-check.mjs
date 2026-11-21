@@ -215,11 +215,13 @@ async function wordsJoinThenLink(browser, origin, node, seen) {
         await page.getByTestId('join-words').click();
         await page.getByText(/Choose your look/).waitFor({ timeout: 30_000 });
         await scaleText(page);
-        const bar = await page.getByTestId('onboarding-stepper').innerText();
-        if (/Sign in/.test(bar)) throw new Failure(`a 12-words member's steps bar says "${bar.replace(/\s+/g, ' ')}"`);
+        // The dots (W1): the 12-words door stands in for Your name; the photo is the second of three.
+        const bar = await page.getByTestId('step-dots-steps').textContent();
+        if (bar !== 'Step 2 of 3') throw new Failure(`a 12-words member's step bar says "${bar}"`);
         await noSideScroll(page, 'photo step');
+        await page.getByTestId('photo-step-choose').click();
         await page.getByTitle('Green Bean').click();
-        await page.getByRole('button', { name: 'Next →' }).click();
+        await page.getByTestId('photo-step-next').click();
         await page.getByText('Your Safety Backup').waitFor();
         const panel = await page.getByTestId('backup-words-only').innerText();
         if (!/These 12 words are your account\. Nobody can reset them: not us, not this community\. If you lose them and this device, the account is gone for good\./i.test(panel.replace(/\s+/g, ' '))) {
@@ -239,15 +241,14 @@ async function wordsJoinThenLink(browser, origin, node, seen) {
         }
         console.log('  ✓ a 12-words join, end to end: the node has Wren as open:words, with a words row; no provider visited');
 
-        // 2. A sign-in added from Safety Backup: chosen there, offered at the end of the tour, and the page leaves only
-        // once the photo is on the node and the browser was asked to keep its data.
+        // 2. A sign-in added from Safety Backup: its providers open right there (How it Works left the join, W1), and the
+        // page leaves only once the photo is on the node and the browser was asked to keep its data.
         seen.nextSub = 'google-sub-wren';
         await page.getByTestId('backup-add-sign-in').getByRole('button', { name: 'Add a sign-in as a second way back' }).click();
-        await page.getByRole('button', { name: "Let's Begin! 🚀" }).waitFor({ timeout: 20_000 });
         await page.getByTestId('add-sign-in-google').waitFor({ timeout: 20_000 });
         await scaleText(page);
-        await noSideScroll(page, 'the tour, with the sign-in to add');
-        await shot(page, '2-tour-add-sign-in');
+        await noSideScroll(page, 'the way back, with the sign-in to add');
+        await shot(page, '2-way-back-add-sign-in');
         await page.getByTestId('add-sign-in-google').click();
         await page.getByTestId('link-result').waitFor({ timeout: 30_000 });
         await scaleText(page);
@@ -426,11 +427,11 @@ async function seeWordsThenSettings(browser, origin, node, seen) {
         await toTheDoors(page, origin, 'Sage');
         await page.getByTestId('join-words').click();
         await page.getByText(/Choose your look/).waitFor({ timeout: 60_000 });
+        await page.getByTestId('photo-step-choose').click();
         await page.getByTitle('Green Bean').click();
-        await page.getByRole('button', { name: 'Next →' }).click();
+        await page.getByTestId('photo-step-next').click();
         await page.getByText('Your Safety Backup').waitFor();
         await page.getByRole('button', { name: 'Next →' }).click();
-        await page.getByRole('button', { name: "Let's Begin! 🚀" }).click();
         await page.getByTestId('one-way-back-words').waitFor({ timeout: 30_000 });
         await scaleText(page);
         await page.getByTestId('one-way-back-words').click();

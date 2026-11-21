@@ -33,7 +33,7 @@ import { Alert, AppState, Linking, Platform, TurboModuleRegistry, type TurboModu
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type * as ExpoNotifications from 'expo-notifications';
 import {
-    t, word, markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFirstStepsLine, notifyOutcomeEvent, notifyPopUpAnswer, notifyTurnOn,
+    t, word, markNotifyAsk, notifyAskRecordFrom, notifyAsks, notifyFactWords, notifyFirstStepsLine, notifyOutcomeEvent, notifyPopUpAnswer, notifyTurnOn,
     type NotifyAskEvent, type NotifyAskRecord, type NotifyAskSurface, type NotifyLineKind, type NotifyPopUpRead,
 } from '@beanpool/core';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
@@ -112,6 +112,19 @@ export interface OsNotificationPermission {
      * the phone has said "Don't allow" one time and its last pop-up is still to come. Left out where the read fails.
      */
     saidNoOnce?: boolean;
+}
+
+/**
+ * Whether the phone says the same now as it did then (Home's card kept through a re-read, slice N3, review of #3348): any
+ * field changed is a new answer (back from the phone's settings with notifications on, its last pop-up gone). Null on
+ * either side: nothing read to compare, so nothing known to have changed; so too Android's own flag where one read of it
+ * failed (`saidNoOnce` left out): a read that could not say is no new answer.
+ */
+export function samePhoneAnswer(was: OsNotificationPermission | null, now: OsNotificationPermission | null): boolean {
+    if (!was || !now) return true;
+    const flag = was.saidNoOnce === undefined || now.saidNoOnce === undefined || was.saidNoOnce === now.saidNoOnce;
+    return was.available === now.available && was.granted === now.granted && was.canAskAgain === now.canAskAgain
+        && was.cantAskNeedsRecord === now.cantAskNeedsRecord && flag;
 }
 
 /**
@@ -390,6 +403,29 @@ export function offerNamedLine(kind: NotifyLineKind, storage: StorageLike = Asyn
     return decided;
 }
 
+/**
+ * The fact line over something that waited `days` (a day or more) for the member (slice N3; the first design §4.4, amend1
+ * §4.3): whether it may show now, by core's rule (`notifyAsks` `fact`: at most once in 30 days, one soft ask a day, also
+ * after a "Later" and after the phone's no), and if it may, marked shown now and its words: "This waited 2 days for you."
+ * with "Tell me next time ›", or "Turn on ›" where a tap opens the one line before the phone's settings. Null: no line.
+ * Never asks, never throws; one decision at a time with the other soft asks.
+ */
+export function offerFactLine(days: number, storage: StorageLike = AsyncStorage, now: () => number = Date.now): Promise<{ line: string; link: string } | null> {
+    const decided = offering.then(async () => {
+        if (!(days >= 1)) return null;
+        const record = await readNotificationPermissionRecord(storage);
+        const phone = await readOsNotificationPermission();
+        const at = now();
+        if (!notifyAsks({ record, phone, now: at, waited: true }).fact) return null;
+        const words = notifyFactWords(days, phone, record);
+        if (!words) return null;
+        await writeNotificationPermissionRecord(markNotifyAsk(record, { type: 'shown', surface: 'fact' }, at), storage);
+        return words;
+    }).catch(() => null);
+    offering = decided;
+    return decided;
+}
+
 /** How long Home waits on the phone's own read before it decides the once card without it (ms): no card that landing. */
 export const ONCE_CARD_WAIT_MS = { phone: 4000 };
 
@@ -465,6 +501,64 @@ export async function turnOnFromOnceCard(
     const answer = result === 'granted' || result === 'declined' ? result : 'later';
     await markNotificationAsk(notifyOutcomeEvent(answer, 'once'), storage).catch(() => undefined);
     return result;
+}
+
+/**
+ * Home's card while something of the member's is live (slice N3; the first design §4.3): whether it shows on this landing, by
+ * core's rule (`notifyAsks` `home`: a phone that has to ask and still can, not within 7 days of a "Later", not 30 days after
+ * its ×, never after the third, never with the once card or the way-back card, one soft ask a day), and if it does, marked
+ * shown now, so it takes the day. `live`: core's `notifyLive` found something; `wayBack`: Home's way-back card is up. One
+ * decision at a time with the named lines and the once card. Never asks, never shows anything itself, never throws; a phone
+ * that doesn't say what it allows within {@link ONCE_CARD_WAIT_MS} gets no card that landing.
+ *
+ * Written only where the showing changes the record, as the once card's: a later landing on the day it was marked writes
+ * nothing, so it can never put back a record read before an answer was kept. `still`: whether Home still wants it, asked
+ * last before the mark; a showing withdrawn by then (the way-back card came up, a newer landing) takes no day (review of #3348).
+ */
+export function offerHomeCard(
+    o: { live: boolean; wayBack: boolean; still?: () => boolean },
+    storage: StorageLike = AsyncStorage,
+    now: () => number = Date.now,
+    readOs: () => Promise<OsNotificationPermission> = readOsNotificationPermission,
+): Promise<boolean> {
+    let gaveUp = false;
+    const decided = offering.then(async () => {
+        if (gaveUp || !o.live) return false;
+        const phone = await readWithin(readOs);
+        if (!phone || gaveUp) return false;
+        const record = await readNotificationPermissionRecord(storage);
+        const at = now();
+        if (!notifyAsks({ record, phone, now: at, live: o.live, wayBack: o.wayBack }).home) return false;
+        if (o.still && !o.still()) return false;
+        const shown = markNotifyAsk(record, { type: 'shown', surface: 'home' }, at);
+        const marked = record.askDay === shown.askDay && record.askKind === 'home';
+        if (!marked && !gaveUp) await writeNotificationPermissionRecord(shown, storage);
+        return !gaveUp;
+    }).catch(() => false);
+    offering = decided;
+    return new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => { gaveUp = true; resolve(false); }, 2 * ONCE_CARD_WAIT_MS.phone);
+        void decided.then((v) => { clearTimeout(timer); resolve(v); });
+    });
+}
+
+/** × on Home's card: away for 30 days, and for good at the third (core's rule). Not a no: the named lines go on. Never throws. */
+export function homeCardAway(storage: StorageLike = AsyncStorage): Promise<void> {
+    return markNotificationAsk({ type: 'away' }, storage).catch(() => undefined);
+}
+
+/**
+ * Turn on on Home's card while something is live (slice N3): the phone's own pop-up through the one door
+ * ({@link turnOnNotifications}), which keeps its answer as at every other tap (a yes, the phone's no, or a pop-up closed with no
+ * answer as a "Later", so no Home card for 7 days); where the phone can't ask again, the one line before its settings.
+ * Never throws: no answer to read is 'unanswered'.
+ */
+export async function turnOnFromHomeCard(publicKey?: string | null, storage: StorageLike = AsyncStorage, options: TurnOnOptions = {}): Promise<TurnOnResult> {
+    try {
+        return await turnOnNotifications(publicKey, storage, options);
+    } catch {
+        return 'unanswered';
+    }
 }
 
 /** "Later" on Home's once card: put away for good, recorded with its date, never a no (First steps' line is back). */

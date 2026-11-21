@@ -28,9 +28,14 @@ export interface NotifyLineOffer {
     anchor?: string | null;
     /** Under the member's own line ('end'), or anyone else's ('start', the default). */
     align?: 'start' | 'end';
+    /**
+     * The fact line in its place (slice N3; amend1 §4.3: "If it waited a day or more, the fact line shows instead; never
+     * both"): how many days what is under it waited for the member. Offered by core's `fact` rule, not the kind's.
+     */
+    fact?: number | null;
 }
 
-type Shown = NotifyLineOffer & { state: 'offer' | 'busy' | 'done' };
+type Shown = NotifyLineOffer & { state: 'offer' | 'busy' | 'done'; words?: NotifyLineText };
 
 /**
  * A moment that happens on one screen and is answered on the next: a listing posted (its line is on Your deals), a request
@@ -97,13 +102,20 @@ export function useNotifyLine(publicKey: string | null | undefined, showing: boo
         taken.current = true;
         const askedIn = visit.current;
         let ok = false;
+        let words: NotifyLineText | undefined;
         try {
-            ok = await (await import('../utils/notification-permission')).offerNamedLine(next.kind);
+            const permission = await import('../utils/notification-permission');
+            if (next.fact) {
+                // "This waited 2 days for you." with its link for the button; once on, the kind's own "You'll hear …".
+                const fact = await permission.offerFactLine(next.fact);
+                if (fact) words = { line: fact.line, button: fact.link, done: notifyLineWords(next.kind, next.name).done };
+                ok = !!fact;
+            } else ok = await permission.offerNamedLine(next.kind);
         } catch {
             ok = false;
         }
         if (!ok) taken.current = false;
-        else if (mounted.current && showingNow.current && visit.current === askedIn) setShown({ ...next, state: 'offer' });
+        else if (mounted.current && showingNow.current && visit.current === askedIn) setShown({ ...next, words, state: 'offer' });
         return ok;
     }, []);
 
@@ -129,7 +141,7 @@ export function useNotifyLine(publicKey: string | null | undefined, showing: boo
     const draw = (words?: NotifyLineText | null) => (line && words !== null
         ? <NotifyLine kind={line.kind} name={line.name} state={line.state} onTellMe={tellMe} align={line.align} words={words} />
         : null);
-    const view = draw();
+    const view = draw(line?.words);
     return { line, offer, view, draw };
 }
 

@@ -79,6 +79,7 @@ import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { ONE_WAY_BACK_TEXT, finishOneWayBack, readOneWayBack, startOneWayBack, startOneWayBackPutAway } from '../one-way-back';
 import { draftIdentity } from '../identity';
 import { wordsWrittenDownStoreKey } from '../storage-keys';
+import { vaultSignInCopyKnown } from '../vault';
 
 const GLOBAL = 'https://global.beanpool.org';
 const OTHER = 'https://mullum.beanpool.org';
@@ -511,5 +512,96 @@ describe('an invite sign-up that carried on: no card on day one, then the first 
         expect(kept).toEqual([{ words_kept: true }]);
         expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ done: 'checked' });
         expect(warning()).toBe(false);
+    });
+});
+
+// Review of #3348, finding 1: Home's notifications card waits for this card's word that it settled, on Home's landing. The word
+// comes only once the card's NEWEST read has ended on that landing's own answer of Home, after `onUp` has said what it found;
+// a read a newer one replaced says nothing, and each read that starts says "deciding again" (null).
+describe("the card's word to Home: settled on the landing's own answer, after its newest read (review of #3348)", () => {
+    const SIGNED_UP = Date.parse('2026-10-02T08:00:00Z');
+    const homeWord = { url: OTHER, standing: { words: true, joinedAt: SIGNED_UP, door: false, kept: false } };
+    /** What the card said to Home, in order: `up:true|false` (onUp) and `settled:<landing>|null` (onSettled). */
+    const said: string[] = [];
+    function draw(balance_c: number, settleFor: number | null) {
+        const el = createElement(OneWayBackCard, {
+            place: 'landing', homeWord, toLose: { balance_c, holds: false }, settleFor,
+            onUp: (up: boolean) => said.push(`up:${up}`), onSettled: (n: number | null) => said.push(`settled:${n}`),
+        });
+        return act(async () => { root!.render(el as unknown as Parameters<Root['render']>[0]); });
+    }
+    /** A read of the card held until the test lets it go: the vault's answer is one of the reads it waits on together. */
+    function holdNextRead(): () => void {
+        let go!: () => void;
+        const gate = new Promise<void>((r) => { go = r; });
+        vi.mocked(vaultSignInCopyKnown).mockImplementationOnce(async () => { await gate; return false; });
+        return go;
+    }
+    const settledAt = (n: number) => said.indexOf(`settled:${n}`);
+    const landingsSettled = () => said.filter(w => w.startsWith('settled:') && w !== 'settled:null');
+
+    beforeEach(async () => {
+        said.length = 0;
+        mem.anchor = OTHER;
+        // An invite sign-up two hours in: the card is put away until the first Beans (core's schedule).
+        await startOneWayBackPutAway(who.identity.publicKey, OTHER, SIGNED_UP);
+        vi.setSystemTime(SIGNED_UP + 2 * 3600_000);
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+    });
+
+    it('no landing answer yet (settleFor null): its read ends and it says nothing settled', async () => {
+        await draw(0, null);
+        await settle();
+        expect(said).toContain('up:false');
+        expect(landingsSettled()).toEqual([]);
+    });
+
+    it("first Beans arrive in the landing's own answer, in the same frame as the landing: up first, settled after, never settled while down", async () => {
+        await draw(0, null);
+        await settle();
+        said.length = 0;
+        // Home's answer with the first Beans and the landing's end, together (the card reads again for the Beans).
+        await draw(4000, 1);
+        await settle();
+        expect(said).toContain('up:true');
+        expect(settledAt(1)).toBeGreaterThan(said.indexOf('up:true'));
+        expect(said.slice(0, settledAt(1))).toContain('settled:null');
+    });
+
+    it('a read a newer one replaced says nothing; only the newest read, when it ends, settles the landing', async () => {
+        const first = holdNextRead();
+        await draw(0, 1);
+        await settle();
+        expect(settledAt(1)).toBe(-1);
+        // Home's answer brings the first Beans while the landing's read is out: a second read starts and is held too.
+        const second = holdNextRead();
+        await draw(4000, 1);
+        await settle();
+        // The first read ends: replaced, it decides nothing.
+        first();
+        await settle();
+        expect(settledAt(1)).toBe(-1);
+        expect(said).not.toContain('up:true');
+        // The newest read ends: up, then settled.
+        second();
+        await settle();
+        expect(said).toContain('up:true');
+        expect(settledAt(1)).toBeGreaterThan(said.indexOf('up:true'));
+    });
+
+    it("a landing it settled on, then a new one: it settles the new one only once that landing's answer is in", async () => {
+        await draw(0, 1);
+        await settle();
+        expect(settledAt(1)).toBeGreaterThan(-1);
+        said.length = 0;
+        // Home lands again: its answer is not in yet (null), then it is (2).
+        await draw(0, null);
+        await settle();
+        expect(landingsSettled()).toEqual([]);
+        await draw(0, 2);
+        await settle();
+        expect(said).toEqual(['settled:2']);
     });
 });

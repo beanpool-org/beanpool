@@ -71,8 +71,12 @@ export interface KeptCommunity {
 export type DeletePlan =
     /** Other communities keep the key: the delete leaves this one and the phone moves to `next`. */
     | { kind: 'this-one'; here: string; hereName: string; keeps: KeptCommunity[]; next: KeptCommunity }
-    /** The member's last community on this phone: the delete wipes the phone. */
-    | { kind: 'last'; here: string; hereName: string };
+    /**
+     * The member's last community on this phone: the delete wipes the phone. `vaultSignIn`: in a build with BeanPool's key
+     * vault, the phone knows the vault keeps a sign-in's copy of the key (utils/vault.ts `vaultSignInCopyKnown`), which
+     * decides how the confirmation names what the vault's delete removes ({@link vaultCopyGoesLine}). Absent: not known.
+     */
+    | { kind: 'last'; here: string; hereName: string; vaultSignIn?: true };
 
 /**
  * GET /api/community/membership/<key> at `community`, signed by the key as every probe is (membership-probe.ts): a
@@ -163,7 +167,9 @@ export async function planDelete(
     const hereAddress = communityAddress(here);
     const hereName = communityName(saved.find((n) => communityAddress(n.url) === hereAddress) ?? { url: here });
     const keeps = await otherCommunitiesKeeping(here, publicKey, storage, timeoutMs);
-    if (keeps.length === 0) return { kind: 'last', here, hereName };
+    if (keeps.length === 0) {
+        return hasVault() && await vaultSignInCopyKnown(publicKey) ? { kind: 'last', here, hereName, vaultSignIn: true } : { kind: 'last', here, hereName };
+    }
     // A community that said the key is a member before one that couldn't be asked.
     const next = keeps.find((c) => c.membership === 'member') ?? keeps[0];
     return { kind: 'this-one', here, hereName, keeps, next };
@@ -236,8 +242,17 @@ export const NO_OTHER_COMMUNITY_LINE =
 export const SIGN_OUT_FROM_SETTINGS_LINE =
     'To take BeanPool off this phone altogether, switch, then use Settings → Account Deletion & Sign Out → Sign Out (Device Only).';
 
-/** In a build with BeanPool's key vault, under {@link lastCommunityLine}: the key's copies there go first. */
-export const VAULT_COPY_GOES_LINE = "If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first.";
+/**
+ * In a build with BeanPool's key vault, under {@link lastCommunityLine}: the key's copies there go first, every one of them
+ * ({@link removeVaultCopies}: `disconnectFromVault(.., 'all')`), the half kept for a community's admins too (review of
+ * #3345). `signInCopyKnown` (the plan's `vaultSignIn`, utils/vault.ts `vaultSignInCopyKnown`) decides which copy is named
+ * first: a sign-in's where the phone knows of one; otherwise the admins' half, which is all a phone may know of.
+ */
+export function vaultCopyGoesLine(signInCopyKnown: boolean): string {
+    return signInCopyKnown
+        ? "If BeanPool's key vault keeps a locked copy of your key, from a sign-in you linked, it is removed first, and so is any half kept for your community's admins."
+        : "If BeanPool's key vault keeps half of a locked copy of your key for your community's admins, or a copy from a sign-in you linked, it is removed first.";
+}
 
 /** The last community on the phone: the key goes too. */
 export function lastCommunityLine(plan: Extract<DeletePlan, { kind: 'last' }>, hasWords: boolean): string {
@@ -246,7 +261,7 @@ export function lastCommunityLine(plan: Extract<DeletePlan, { kind: 'last' }>, h
           'words go too. Only go ahead if you have written your 12 words down: they are the way back into any other ' +
           'community you belong to.'
         : `${plan.hereName} is the last community on this phone where you are a member, so this phone's key goes too.`;
-    return hasVault() ? `${line} ${VAULT_COPY_GOES_LINE}` : line;
+    return hasVault() ? `${line} ${vaultCopyGoesLine(!!plan.vaultSignIn)}` : line;
 }
 
 /**

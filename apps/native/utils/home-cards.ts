@@ -32,6 +32,7 @@ import {
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
     FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeShape, type WelcomeShape, welcomeFacts as coreWelcomeFacts, type WelcomeFacts,
     readerMayInvite, arrivingCards, keepArrivedCard, learnHomeLines, type HomeLearnCard, type LearnHomeOpens,
+    COMMUNITY_WELCOME_DISMISSED_KEY,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -276,6 +277,11 @@ export interface HomeCards {
         joined7d?: number | null; eventsSoon?: number | null; commonsPot_c?: number | null;
         /** The pages Learn shows this member, from 1 (slice K7): absent at 0, where Learn is off, and from an older node. */
         knowledge?: number;
+        /**
+         * The owners' welcome for new members (onboarding S6, drawn by S7's card, core `communityWelcomeCard`), as they wrote
+         * it: to a member only, null where they wrote none, absent from a server from before it. Never translated.
+         */
+        welcome?: string | null;
     };
 }
 
@@ -708,6 +714,16 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
     return { ...l, dismissed: { ...l.dismissed, safety: at(now) }, updatedAt: at(now) };
 }
 
+/**
+ * The community's welcome was put away by its × (DESIGN-onboarding-home-landing-fable.md §4.3, slice S7): when, in the same
+ * `dismissed` map, under core's {@link COMMUNITY_WELCOME_DISMISSED_KEY}, so every device of the account follows. A Home never
+ * saved keeps the default list it was drawing (Welcome included): nothing else on it changes.
+ */
+export function dismissCommunityWelcome(layout: HomeLayout | null, now: number): HomeLayout {
+    const l = layout ?? defaultHomeLayout();
+    return { ...l, dismissed: { ...l.dismissed, [COMMUNITY_WELCOME_DISMISSED_KEY]: at(now) }, updatedAt: at(now) };
+}
+
 // Lines kept here and shown through t() where they are drawn (app/(tabs)/index.tsx, components/home).
 /** The one-time hint (§1.3). */
 export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom. Hold a card to drag it, or use the arrows.');
@@ -1023,7 +1039,7 @@ export interface StepLine {
  * The two lines First steps ends with on both nodes (DESIGN-home-default-fable.md §2.4, §2.9), each only where it applies:
  * "Keep your 12 words safe" while the node says the words are the only way back (`steps.words` false, or true once kept),
  * and "Hear when someone answers you" on a phone that has to ask (`notify`, utils/notification-permission.ts
- * `notifyStep`: null on Android 8 to 12, after a Not now, or where notifications can't load).
+ * `notifyStep`: null on Android 8 to 12, after the phone's no, or where notifications can't load; it stays through a Later).
  */
 function lastLines(steps: NonNullable<HomeCards['steps']>, notify: boolean | null | undefined): StepLine[] {
     const lines: StepLine[] = [];

@@ -345,10 +345,11 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
         // The front door's line on the colour block (17), and the name screen's greeting (17; the community's name, at 22, is its own).
         'Trade skills, goods and favours with your neighbours.': 17,
         '{inviter} invited you to {community}': 17, "You're invited to {community}": 17, "You're invited": 17,
-        // The join card's helper lines (fieldHint, callsignHelper, callsignTip 13).
+        // The join card's helper lines (fieldHint, callsignHelper 13).
         "Required — the community node you're joining. Ask whoever invited you if you're unsure.": 13,
-        'This is your display name — how the community sees you, e.g. Sarah. You can change it later.': 13,
-        '💡 Tip: adding your suburb helps locals find you!': 13,
+        'You can change it later.': 13,
+        // Your photo's title (styles.title 20).
+        'Choose your look': 20,
         // The recover link under an "already used" invite (13, bold).
         '🔑 Recover an existing account with seed phrase →': 13,
         // The terms line (tosText 12; its two links inherit it).
@@ -357,11 +358,10 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     // The home screen's column (homeContent padding 24 a side): the title's line, wider than the join card's.
     const HOME_LINE = FLOOR - 2 * 24;
     const LINE_OF: Record<string, number> = { 'Welcome to BeanPool': HOME_LINE };
-    // The onboarding stepper (welcome.tsx stepperStyles): three equal thirds (How it Works left the path, S5) of the row inside the scroll's 24dp and the
-    // row's 8dp padding, less two 12dp connectors with 2dp margins; labels at 11, up to three lines, shrinking to 0.7.
-    // Every real language holds in two; the third line is for the pseudo-locale's +35%.
-    const STEPS = ['Your Name', 'Your Photo', 'Safety Backup'];
-    const STEP_WIDTH = (FLOOR - 2 * 24 - 2 * 8 - 2 * (12 + 2 * 2)) / 3;
+    // The step bar (components/welcome/StepDots.tsx, slice S3): ‹ and a same-width spacer of 48 each side, the dots between,
+    // no words. The most a join will have is four (N1j adds the notifications screen's), 12 dp each with 10 dp gaps.
+    const stepDotsSource = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/StepDots.tsx'), 'utf8');
+    const DOTS_ROW = FLOOR - 2 * 24 - 2 * 48;
     const ALL_LANGS: UiLang[] = ['xx', ...fs.readdirSync(NATIVE_WORDS).filter((f) => /^[A-Za-z-]+\.json$/.test(f)).map((f) => f.slice(0, -5) as UiLang)];
     /**
      * The source with what is not on a phone's card taken out: every call that hands its words to one of the phone's own
@@ -405,26 +405,21 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
         expect(doorsSource).toMatch(/quietBtnText: \{[^}]*textAlign: 'center'/);
     });
 
-    it('the stepper\'s three labels are through t(), in three equal thirds, up to three centred lines at 0.7', () => {
-        // How it Works left the path (slice S5, DESIGN-onboarding-home-landing-fable.md §3.1): three steps, not four.
-        expect(source).toContain("const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup')];");
-        expect(source).not.toContain("t('How it Works')");
-        expect(source).toMatch(/stepperStyles\.labelActive\]\} numberOfLines=\{3\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>\{label\}/);
-        expect(source).toMatch(/stepItem: \{\s*alignItems: 'center',\s*flex: 1,/);
-        expect(source).toMatch(/ {4}label: \{[^}]*textAlign: 'center'/);
-        expect(source).toMatch(/ {4}line: \{\s*width: 12,/);
-        expect(STEP_WIDTH).toBeCloseTo(224 / 3, 5);
+    it('the step bar draws dots and no words: a screen reader hears "Step n of total"; four dots fit at 320 dp', () => {
+        // The labelled stepper of old (Your Name, Your Photo, Safety Backup) went with slice S3: dots fit any number of steps.
+        expect(source).not.toContain("t('Your Name')");
+        expect(source).not.toContain("t('Safety Backup')");
+        expect(source).not.toContain('OnboardingStepper');
+        expect(stepDotsSource.match(/<Text\b/g) ?? []).toEqual([]);
+        expect(stepDotsSource).toContain("accessibilityLabel={t('Step {n} of {total}', { n: dot.at, total: dot.of })}");
+        expect(stepDotsSource).toMatch(/dot: \{ width: 12, height: 12, borderRadius: 6, borderWidth: 2 \}/);
+        expect(stepDotsSource).toMatch(/dots: \{[^}]*gap: 10/);
+        expect(4 * 12 + 3 * 10).toBeLessThanOrEqual(DOTS_ROW);
     });
 
     for (const lang of ALL_LANGS) {
         // Generous 60s timeout under CI load (default vitest timeout is 30s) so it doesn't flake on slow or heavily loaded runners (#2282).
-        it(`${lang}: each stepper label fits its lines at its smallest with no word cut, and no word of a front door button or any sentence is wider than its line`, () => {
-            for (const key of STEPS) {
-                const label = inLang(lang, key);
-                expect(typeof label, `${key} has a ${lang} translation`).toBe('string');
-                expect(widthOf(label, 11) * 0.7, `"${label}" in ${lang}`).toBeLessThanOrEqual((lang === 'xx' ? 3 : 2) * STEP_WIDTH);
-                expect(widthOf(widestPiece(label), 11) * 0.7, `a word of "${label}" in ${lang}`).toBeLessThanOrEqual(STEP_WIDTH);
-            }
+        it(`${lang}: no word of a front door button or any sentence is wider than its line`, () => {
             for (const [key, size] of Object.entries(DOOR_BUTTONS)) {
                 const label = inLang(lang, key);
                 expect(typeof label, `${key} has a ${lang} translation`).toBe('string');

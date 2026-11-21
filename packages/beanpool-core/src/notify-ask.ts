@@ -9,7 +9,9 @@
  * - "Later" and the phone's "no" are kept apart, each with its date. "Later" is never final.
  * - The phone says whether it can still ask (`canAskAgain`); nothing WE said ("Later", an old "Not now") ever overrides
  *   it. On Android 13 and later (`cantAskNeedsRecord`, amend3) "can't ask again" also reads back after a pop-up closed
- *   with no answer, so there it is the phone's no only beside an answer the phone itself gave at one of our taps.
+ *   with no answer, so there it is the phone's no only beside an answer the phone itself gave at one of our taps. Where
+ *   the phone also reads Android's own "one no" flag (`saidNoOnce`, amend4), that flag says whether the phone has said
+ *   no once, whatever the record holds, and before and after a tap it says which pop-up was answered and how.
  * - One soft ask a day across the join's screen, the once card, the named lines, the Home card and the fact line. The
  *   join's screen is its day's, with one named line still allowed that day. First steps' line and the bell's line are
  *   standing lines, not asks, and are never counted.
@@ -78,6 +80,14 @@ export interface NotifyPhone {
      * apart. Absent (an iPhone, Android 8 to 12, a browser): the flag alone is the phone's answer.
      */
     cantAskNeedsRecord?: boolean;
+    /**
+     * Android 13 and later: Android's own "should show a reason" flag for notifications, read live by the phone's reader
+     * (amend4 §3). On once the phone has said "Don't allow" one time and its last pop-up is still to come; off when it
+     * was never asked, said no twice, had a pop-up closed with no answer, or allows them. Absent where it can't be read
+     * (no screen in front, a failed call; an iPhone, Android 8 to 12, a browser): amend3's rule stands for that read. It
+     * counts only beside `cantAskNeedsRecord`.
+     */
+    saidNoOnce?: boolean;
 }
 
 export interface NotifyAskInput {
@@ -138,23 +148,35 @@ function phoneAnswerOnRecord(r: NotifyAskRecord): boolean {
     return typeof r.phoneNoAt === 'number' || r.state === 'granted';
 }
 
+/** Android's own "one no" flag where the phone read it beside the Android 13+ mark; else undefined, and amend3 stands (amend4 §3.4). */
+function androidSaidNoOnce(p: Pick<NotifyPhone, 'cantAskNeedsRecord' | 'saidNoOnce'>): boolean | undefined {
+    return p.cantAskNeedsRecord && typeof p.saidNoOnce === 'boolean' ? p.saidNoOnce : undefined;
+}
+
 /**
- * Whether the phone's pop-up can still come (amend3 §3.2). The phone's own flag, except where its "can't ask again" needs
+ * Whether the phone's pop-up can still come (amend3 §3.2, amend4 §3.1). The phone's own flag, except where its "can't ask again" needs
  * the record (`cantAskNeedsRecord`, Android 13+): there it is final only beside an answer the phone gave and this phone
  * recorded, a "Don't allow" (said twice, the second final) or a yes now switched off. With neither on record it is "no
  * answer on file" (a pop-up closed with no answer, the app closed with it up, a phone restored from a backup): it can ask.
+ * Where Android's own flag was read (amend4 §3.1) it replaces Expo's "can ask again", which reads the same for "never asked"
+ * and "said no once": on, the last pop-up is still to come, whatever the record holds; off, the same record rule.
  */
 export function notifyCanAskAgain(r: NotifyAskRecord, p: NotifyPhone): boolean {
+    const saidNoOnce = androidSaidNoOnce(p);
+    if (saidNoOnce !== undefined) return saidNoOnce || !phoneAnswerOnRecord(r);
     if (p.canAskAgain) return true;
     return !!p.cantAskNeedsRecord && !phoneAnswerOnRecord(r);
 }
 
 /**
  * The phone said no: at its pop-up (recorded), or it won't show the pop-up again ({@link notifyCanAskAgain}, which on
- * Android 13+ needs the record). Never while it allows them. Nothing we said (a "Later", an old "Not now") counts.
+ * Android 13+ needs the record). Never while it allows them. Nothing we said (a "Later", an old "Not now") counts. On Android 13+ with its
+ * own flag read (amend4 §3.1), the flag on is the phone's no, said once, whatever is on record: an old `declined` that held
+ * it, or a write that was lost.
  */
 export function notifyPhoneSaidNo(r: NotifyAskRecord, p: NotifyPhone): boolean {
     if (!p.available || p.granted) return false;
+    if (androidSaidNoOnce(p)) return true;
     return typeof r.phoneNoAt === 'number' || !notifyCanAskAgain(r, p);
 }
 
@@ -168,7 +190,10 @@ export function notifyTurnOn(p: NotifyPhone, r: NotifyAskRecord): 'ask' | 'setti
     return notifyCanAskAgain(r, p) ? 'ask' : 'settings';
 }
 
-/** What the phone's pop-up read back at a tap: Expo's `requestPermissionsAsync` status and its own "can ask again". */
+/**
+ * What the phone's pop-up read back at a tap: Expo's `requestPermissionsAsync` status and its own "can ask again". On
+ * Android 13+ that "can ask again" is Android's own flag as it stands after the ask (Expo has marked it asked by then).
+ */
 export interface NotifyPopUpRead {
     status: string;
     canAskAgain: boolean;
@@ -186,11 +211,21 @@ export interface NotifyPopUpRead {
  *   second pop-up closed with no answer ('none': the first no stands). "denied, can't ask again" is the second "Don't
  *   allow" where an answer of the phone's is on record ('phone-no', now final), else a pop-up closed with no answer
  *   (swiped, backed out of, tapped outside): 'later', never a no.
+ * - Android 13+ with its own flag read just before the ask (`saidNoOnce`, amend4 §3.2): the flag before beside the flag
+ *   after decides, and the record is not asked. Off then on: a first "Don't allow" ('phone-no'). On then off: the final
+ *   "Don't allow" ('phone-no'). On then on: the last pop-up closed with no answer ('none': the phone's one no stands).
+ *   Off then off: a pop-up closed with no answer ('later'), or one that never came, which only the phone can tell (amend4
+ *   §3.3, utils/notification-permission.ts on the phone).
  */
-export function notifyPopUpAnswer(r: NotifyAskRecord, p: Pick<NotifyPhone, 'cantAskNeedsRecord'>, read: NotifyPopUpRead): 'granted' | 'phone-no' | 'later' | 'none' {
+export function notifyPopUpAnswer(r: NotifyAskRecord, p: Pick<NotifyPhone, 'cantAskNeedsRecord' | 'saidNoOnce'>, read: NotifyPopUpRead): 'granted' | 'phone-no' | 'later' | 'none' {
     if (read.status === 'granted') return 'granted';
     if (read.status !== 'denied') return 'later';
     if (!p.cantAskNeedsRecord) return 'phone-no';
+    const before = androidSaidNoOnce(p);
+    if (before !== undefined) {
+        if (before !== read.canAskAgain) return 'phone-no';
+        return before ? 'none' : 'later';
+    }
     if (read.canAskAgain) return typeof r.phoneNoAt === 'number' ? 'none' : 'phone-no';
     return phoneAnswerOnRecord(r) ? 'phone-no' : 'later';
 }

@@ -548,7 +548,7 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
     });
 
     it("a spent invite: the app only for the phone's established key, on only for this join's, told otherwise", () => {
-        const spent = slice(handleCreate(), 'if (check && !check.valid) {', 'setInviterName(');
+        const spent = slice(handleCreate(), 'if (check && !check.valid) {', 'const nameCheck = new AbortController();');
         inOrder(spent, [
             "if (spent === 'enterApp' && storedIdentity) {",
             'await clearPendingOnboarding();',
@@ -622,19 +622,26 @@ describe('welcome.tsx: "Your Name" is not left while Next is out', () => {
         expect(welcome()).toContain('const nextOutRef = useRef(false);');
     });
 
-    it('Back to Home, Restore Existing Identity, the Recover link and the greeting\'s pencil are disabled while it is out, and do nothing if tapped', () => {
+    it('‹ (Back to Home), the Recover link and the greeting\'s pencil are disabled while it is out, and do nothing if tapped', () => {
         const s = createStep();
-        expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, goBack\)\}\s*disabled=\{loading\}\s*accessibilityRole="button"\s*accessibilityLabel=\{t\('Back to Home'\)\}/);
-        expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, \(\) => \{ setMode\('member'\); setError\(null\); \}\)\}\s*disabled=\{loading\}/);
+        // ‹ on the step bar (slice S3, components/welcome/StepDots.tsx) in place of the card's "← Back to Home": through the gate,
+        // disabled and faded while Join is out (the bar's backDisabled is the screen's `loading`).
+        expect(s).toContain("<StepBar step=\"name\" flow={joinFlow} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />");
+        const dots = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/StepDots.tsx'), 'utf8');
+        expect(dots).toContain('return <StepDots dot={dot} onBack={onBack} backLabel={backLabel} backDisabled={busy} />;');
+        expect(dots).toMatch(/style=\{\[styles\.back, backDisabled && styles\.backDisabled\]\}\s*onPress=\{onBack\}\s*disabled=\{backDisabled\}/);
+        expect(dots).toMatch(/backDisabled: \{ opacity: 0\.4 \}/);
         expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, \(\) => \{\s*setError\(null\);\s*setMode\('recover'\);\s*\}\)\}\s*disabled=\{loading\}/);
-        // No other way off the step: every change of step on it goes through that gate.
+        // No other way off the step: every change of step on it goes through that gate. The restore box left the step (S3): the
+        // ways back are the front door's third button.
         expect(s).not.toContain('onPress={goBack}');
-        expect(s.match(/setMode\(/g)).toHaveLength(2);
+        expect(s).not.toContain("setMode('member')");
+        expect(s.match(/setMode\(/g)).toHaveLength(1);
         // The pencil on the greeting (onboarding §3.1 C) back to Your invite: through the same gate, faded and disabled too.
         expect(s).toMatch(/onPress=\{\(\) => leaveUnlessNextIsOut\(nextOutRef, \(\) => \{ setInviteDraft\(inviteCode\); setInviteCode\(''\); setInviteNote\(null\); setError\(null\); \}\)\}\s*disabled=\{loading\}/);
-        expect(s.match(/leaveUnlessNextIsOut\(nextOutRef, /g)).toHaveLength(4);
+        expect(s.match(/leaveUnlessNextIsOut\(nextOutRef, /g)).toHaveLength(3);
         // Drawn faded as well as disabled.
-        expect(s.match(/loading && styles\.closedWhileNextIsOut/g)).toHaveLength(3);
+        expect(s.match(/loading && styles\.closedWhileNextIsOut/g)).toHaveLength(1);
     });
 
     it('the redeem is bounded, so the step can always be left again', () => {

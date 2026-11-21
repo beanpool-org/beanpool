@@ -237,6 +237,69 @@ describe('MembersModule Component', () => {
     });
 });
 
+// Notifications N6: the owner's count beside the totals, as the node counted it (counts.notify); a count, never names.
+describe("MembersModule: the owner's count", () => {
+    const base = {
+        members: [
+            { publicKey: 'pk-alice-12345678', name: 'Alice Smith', tier: 'Steward', platform: 'ios' },
+            { pubkey: 'pk-bob-87654321', name: 'Bob Jones', tier: 'Resident', platform: 'unknown' },
+        ],
+        profiles: [
+            { publicKey: 'pk-alice-12345678', name: 'Alice Smith' },
+            { pubkey: 'pk-bob-87654321', name: 'Bob Jones' },
+        ],
+        posts: [],
+        health: { healthScore: 98, flags: [] },
+        reports: [],
+    };
+    const counts = (notify?: unknown) => ({
+        members: 84, treasuries: 1, doorMembers: 0, owners: 1, platforms: { ios: 30, android: 31, web: 0, unknown: 23 },
+        ...(notify === undefined ? {} : { notify }),
+    });
+    const show = (notify?: unknown) => render(
+        <MembersModule nodeData={{ ...base, counts: counts(notify) as any }} nodeDataLoading={false} onRefresh={vi.fn()} />,
+    );
+
+    it.each([
+        [{ phones: 61, members: 84 }, 'Members a phone can notify: 61 of 84',
+            "The other 23 use the web only, haven't turned notifications on, or said no. The server can't tell which."],
+        [{ phones: 83, members: 84 }, 'Members a phone can notify: 83 of 84',
+            "The other 1 uses the web only, hasn't turned notifications on, or said no. The server can't tell which."],
+        [{ phones: 84, members: 84 }, 'Members a phone can notify: 84 of 84', null],
+    ])('%j: the headline, and the second line only when some are not phones', (notify, headline, others) => {
+        show(notify);
+        const box = screen.getByTestId('notify-reach');
+        expect(box.querySelectorAll('p')[0]).toHaveTextContent(headline);
+        if (others) expect(box.querySelectorAll('p')[1]).toHaveTextContent(others);
+        else expect(box.querySelectorAll('p')).toHaveLength(1);
+    });
+
+    it('names nobody: no member of the roster is in the line, and the roster keeps its phone chip', () => {
+        show({ phones: 1, members: 2 });
+        const box = screen.getByTestId('notify-reach');
+        expect(box).not.toHaveTextContent(/Alice|Bob|pk-/);
+        expect(screen.getByTitle('Device Platform: IOS')).toBeInTheDocument();
+    });
+
+    it('a node from before the count sends none: no line, and the screen does not count the rows it holds itself', () => {
+        show();
+        expect(screen.queryByTestId('notify-reach')).not.toBeInTheDocument();
+        expect(screen.queryByText(/a phone can notify/i)).not.toBeInTheDocument();
+    });
+
+    it.each([
+        [{ phones: 85, members: 84 }],
+        [{ phones: -1, members: 84 }],
+        [{ phones: '61', members: 84 }],
+        [{ phones: 61 }],
+        [null],
+        ['61 of 84'],
+    ])('an answer that is not a count (%j) shows nothing rather than a wrong figure', (notify) => {
+        show(notify);
+        expect(screen.queryByTestId('notify-reach')).not.toBeInTheDocument();
+    });
+});
+
 describe('MembersModule seed offer', () => {
     afterEach(() => { vi.restoreAllMocks(); });
 

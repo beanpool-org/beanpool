@@ -553,7 +553,7 @@ describe('2. a yes, joined with one tap', () => {
         expect(host!.textContent).toContain('Riverside said yes. Join now.');
         await press('Join Riverside');
         // Your Photo, the wizard's second step.
-        expect(host!.textContent).toContain('Your Photo');
+        expect(host!.textContent).toContain('Choose your look');
         expect(byId('welcome-waiting')).toBeNull();
         expect(store.map.get('beanpool_anchor_url')).toBe(RIVERSIDE);
         const last = phone.records.at(-1);
@@ -612,7 +612,7 @@ describe('5. Restore over the waiting key', () => {
 describe('6. an invite link on a waiting phone, handed here by the root layout', () => {
     const field = (label: string) => all('input').find((i) => i.getAttribute('aria-label') === label) as HTMLInputElement | undefined;
 
-    it('the invite step, filled; Next joins with this key and lands on Your Photo; the words are new; the mark and the request go', async () => {
+    it('the invite step, filled; Join joins with this key and lands on Your Photo; the words are new; the mark and the request go', async () => {
         params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
         await mount();
         expect(byId('welcome-waiting')).toBeNull();
@@ -622,8 +622,8 @@ describe('6. an invite link on a waiting phone, handed here by the root layout',
         expect(field('Community name or node address')?.value).toBe(RIVERSIDE);
         // The account's name, as Join with an invite fills it.
         expect(field('Your name or nickname')?.value).toBe('River Kid');
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(store.map.get('beanpool_anchor_url')).toBe(RIVERSIDE);
         expect(phone.records.at(-1)).toMatchObject({ step: 'profileSetup', inviteCode: 'INV-ABCD-EFGH', anchorUrl: RIVERSIDE, callsign: 'River Kid', redeemed: true, newKey: KNOCKER.publicKey });
         expect(knocking.mark).toBeNull();
@@ -634,7 +634,7 @@ describe('6. an invite link on a waiting phone, handed here by the root layout',
         params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
         phone.redeemFails = 'This invite has expired.';
         await mount();
-        await press('Next');
+        await press('Join');
         expect(host!.textContent).toContain('This invite has expired.');
         expect(store.map.has('beanpool_anchor_url')).toBe(false);
         expect(phone.records.some((r) => r.step === 'profileSetup')).toBe(false);
@@ -872,7 +872,7 @@ describe('9. a visitor with no account, from a copy of a listing on global: the 
         expect(host!.textContent).toContain('Riverside said yes. Join now.');
         expect(await takeListingAfterJoin(RIVERSIDE)).toBeNull();
         await press('Join Riverside');
-        expect(host!.textContent).toContain('Your Photo');
+        expect(host!.textContent).toContain('Choose your look');
         expect(store.map.get('beanpool_anchor_url')).toBe(RIVERSIDE);
         expect(kept()).toEqual({ 'riverside.example.org': { id: POST, at: expect.any(Number), joined: true } });
 
@@ -888,7 +888,7 @@ describe('9. a visitor with no account, from a copy of a listing on global: the 
         const { handKnockYesToWelcome } = await import('../waiting-to-join');
         handKnockYesToWelcome({ url: RIVERSIDE, invite: 'INV-ABCD-EFGH', name: 'Riverside' }, ids.VISITOR.publicKey);
         await mount();
-        expect(host!.textContent).toContain('Your Photo');
+        expect(host!.textContent).toContain('Choose your look');
         expect(await takeListingAfterJoin(RIVERSIDE)).toBe(`/post/${POST}?cameFor=1`);
     });
 
@@ -901,8 +901,8 @@ describe('9. a visitor with no account, from a copy of a listing on global: the 
         // A friend's invite link, which the root layout hands to welcome's invite step.
         params.now = { invite: 'INV-WXYZ-0001', server: RIVERSIDE, t: '1' };
         await mount();
-        await press('Next');
-        expect(host!.textContent).toContain('Your Photo');
+        await press('Join');
+        expect(host!.textContent).toContain('Choose your look');
         expect(store.map.get('beanpool_anchor_url')).toBe(RIVERSIDE);
         expect(kept()).toEqual({ 'riverside.example.org': { id: POST, at: expect.any(Number) } });
         expect(await takeListingAfterJoin(RIVERSIDE)).toBeNull();

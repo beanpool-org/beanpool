@@ -55,6 +55,8 @@ export * from './beans-sign.js';
 export * from './address-reach.js';
 export * from './android-on-node-words.js';
 export * from './first-trade-words.js';
+// The owner's count on the Members page (notifications N6): members a phone can notify, of how many; a count, never names.
+export * from './notify-reach.js';
 export * from './need-answer-words.js';
 export * from './listing-price.js';
 export * from './post-type-lines.js';
@@ -156,6 +158,8 @@ export * from './chat-list-order.js';
 export * from './chat-links.js';
 export * from './tour.js';
 export * from './first-steps.js';
+// When notifications may be raised, and what a phone keeps of the answers (DESIGN-notify-and-backup-asks-fable-amend2.md, slice N1).
+export * from './notify-ask.js';
 export * from './home-welcome.js';
 export * from './community-welcome.js';
 export * from './help-map.js';

@@ -1487,12 +1487,12 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
         // back (the rows above get a live code back from the held store, whatever ‹ did). A dead code is not taken from the
         // clipboard again, and Your invite says why in its community's words; any other is kept in hand by ‹ itself.
         const LINK = `${RIVERSIDE}/?invite=${CODE}`;
-        type Source = 'clipboard' | 'typed';
+        type Source = 'copied' | 'typed';
         /** The invite's name screen, from a copied link read at "I have an invite", or the link typed in Your invite's box. */
         async function arriveFrom(source: Source) {
             smallPhone(false);
             await mount();
-            if (source === 'clipboard') { clip.has = true; clip.text = LINK; }
+            if (source === 'copied') { clip.has = true; clip.text = LINK; }
             await press('I have an invite');
             if (source === 'typed') {
                 await type('Invite link or code', LINK);
@@ -1515,12 +1515,12 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
             await press('Join');
             expect(text()).toContain(ROWS.find(([r]) => r === reason)![1]);
         }
-        const FROM_THE_PHONE = (['clipboard', 'typed'] as const).flatMap((source) =>
+        const FROM_THE_PHONE = (['copied', 'typed'] as const).flatMap((source) =>
             BACK_THEN_TAP.flatMap(([reason, dead]) => (['early', 'at Join'] as const).map((when) => [source, reason, when, dead] as const)));
-        it.each(FROM_THE_PHONE)('a code from the %s, refused %s (%s), nothing held: ‹ and "I have an invite" never bring a dead one back, and keep any other in hand', async (source, reason, when, dead) => {
+        it.each(FROM_THE_PHONE)('a code %s, refused %s (%s), nothing held: ‹ and "I have an invite" never bring a dead one back, and keep any other in hand', async (source, reason, when, dead) => {
             await refusedFrom(source, reason, when);
             // Copied over since, with words that are no invite: only the hand the code is in can keep it.
-            if (source === 'clipboard' && !dead) clip.text = 'see you at the market';
+            if (source === 'copied' && !dead) clip.text = 'see you at the market';
             await press('Back to Home');
             expect(byId('front-door')).toBeTruthy();
             const readsBefore = clip.reads;
@@ -1532,9 +1532,9 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
                 expect(byId('invite-refused')).toBeNull();
                 // The dead link is still copied: not taken again, and the step says why. Nothing copied: nothing to say.
                 const note = byId('your-invite-note')?.textContent ?? null;
-                if (source === 'clipboard') expect(note).toContain(ROWS.find(([r]) => r === reason)![1]);
+                if (source === 'copied') expect(note).toContain(ROWS.find(([r]) => r === reason)![1]);
                 else expect(note).toBeNull();
-                if (source === 'clipboard') expect(field('Invite link or code')?.value).toBe('');
+                if (source === 'copied') expect(field('Invite link or code')?.value).toBe('');
             } else {
                 // The same code, in hand all along.
                 await press('Change the invite');
@@ -1544,7 +1544,7 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
         });
 
         it('the dead link still copied, then a fresh one copied over it: "I have an invite" reads it and greets', async () => {
-            await refusedFrom('clipboard', 'expired', 'early');
+            await refusedFrom('copied', 'expired', 'early');
             await press('Back to Home');
             await press('I have an invite');
             expect(byId('your-invite-note')?.textContent).toContain('This invite has expired');

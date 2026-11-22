@@ -24,10 +24,10 @@ import { memoryIndexedDB, type MemoryIndexedDB } from './memory-indexeddb';
 
 let me: { publicKey: string; privateKey: string } | null = null;
 /** Run at each read of the account: the check's own is the first, the request's signing the second. */
-let onIdentity: (nth: number) => void = () => {};
+let onIdentity: (nth: number) => unknown = () => {};
 let identityReads = 0;
 vi.mock('./identity', () => ({
-    loadIdentity: vi.fn(async () => { identityReads += 1; onIdentity(identityReads); return me; }),
+    loadIdentity: vi.fn(async () => { identityReads += 1; await onIdentity(identityReads); return me; }),
 }));
 
 import { editMessageApi, getConversationMessages, getEnterpriseThread, getEventChat, getGroupChat, postEnterpriseThreadMessage, postEventChatMessage, sendMessageApi } from './api';
@@ -161,6 +161,8 @@ interface Mark {
     id?: string;
     /** Refused only once the store's time is up. */
     waits?: boolean;
+    /** Refused with no wait for the store, which doesn't answer. */
+    atOnce?: boolean;
     /** The store answers from here on: an honest "never" then goes. */
     heals?: boolean;
 }
@@ -210,7 +212,7 @@ const MARKS: Mark[] = [
     { name: 'read timed out: the store never opens', sent: false, says: 'unread', waits: true, heals: true, arrange: () => { faults.open = 'never'; } },
     { name: 'read timed out: the index row', sent: false, says: 'unread', waits: true, heals: true, arrange: () => { faults.get = never(indexRow); } },
     { name: "read timed out: the chat's own row", sent: false, says: 'unread', waits: true, heals: true, arrange: () => { faults.get = never(rowKey()); } },
-    { name: 'read timed out, but seen locked in this page', sent: false, says: 'locked', arrange: async () => { await ring().noteLocked(); faults.open = 'never'; resetGroupChatLockStoreForTest(); } },
+    { name: 'read timed out, but seen locked in this page', sent: false, says: 'locked', atOnce: true, arrange: async () => { await ring().noteLocked(); faults.open = 'never'; resetGroupChatLockStoreForTest(); } },
     // not the mark, and no readable line's either
     { name: 'a DM this browser knows', sent: false, says: GROUP_CHAT_IS_DM_TEXT, arrange: () => rememberDmConversations([ID]) },
     { name: 'a DM this browser knows, by its id in capitals', sent: false, says: GROUP_CHAT_IS_DM_TEXT, id: ID.toUpperCase(), arrange: () => rememberDmConversations([ID]) },
@@ -245,6 +247,14 @@ async function outcomeOf(send: () => Promise<unknown>, waits?: boolean): Promise
     return out;
 }
 
+/** What came of a send with the store never answering, its time not let run. */
+async function withoutTheStore(send: () => Promise<unknown>): Promise<unknown> {
+    vi.useFakeTimers();
+    const settled = send().then(() => 'went', (e) => e);
+    await vi.advanceTimersByTimeAsync(1);
+    return Promise.race([settled, Promise.resolve('waiting')]);
+}
+
 describe('every readable path x what this browser knows of the lock', () => {
     it('the table is whole: six paths, forty-one marks, and six of those marks let the words go', () => {
         expect([PATHS.length, MARKS.length, MARKS.filter((m) => m.sent).length]).toEqual([6, 41, 6]);
@@ -255,7 +265,7 @@ describe('every readable path x what this browser knows of the lock', () => {
             it(`${p.name} | ${m.name} | ${m.sent ? 'sent readable' : 'nothing sent'}`, async () => {
                 await m.arrange();
                 posts = [];
-                const out = await outcomeOf(() => p.send(m.id ?? ID), m.waits);
+                const out = m.atOnce ? await withoutTheStore(() => p.send(m.id ?? ID)) : await outcomeOf(() => p.send(m.id ?? ID), m.waits);
                 if (m.sent) {
                     expect(out).toBe('went');
                     expect(wordsWent()).toHaveLength(1);
@@ -304,6 +314,16 @@ describe('what lands while a readable line is on its way stops it', () => {
         }
     }
 
+    for (const p of PATHS) {
+        it(`${p.name} | another tab's mark, read by this page's ring | as the request is signed`, async () => {
+            // No answer of this page's: the ring alone knows, once it reads what the other tab wrote.
+            onIdentity = async (nth) => { if (nth === 2) { await store.markLocked(rowKey()); expect(await ring().seenLocked()).toBe(true); } };
+            const out = await outcomeOf(() => p.send(ID));
+            expect(posts).toEqual([]);
+            expect((out as Error).message).toBe(p.sentence);
+        });
+    }
+
     it('a Force Clear & Re-Sync on the way stops nothing: the account stays, and the lock rows with it', async () => {
         onIdentity = (nth) => { if (nth === 2) endAccountEpoch('cleared'); };
         for (const p of PATHS) {
@@ -327,6 +347,14 @@ describe('what the check never stops', () => {
     it('an edit that names no chat is readable to nobody', async () => {
         await expect(editMessageApi('line-1', ana.publicKey, B64, 'plaintext-v1')).rejects.toBeInstanceOf(GroupChatKeyError);
         expect(posts).toEqual([]);
+    });
+
+    it("a record that couldn't be read marks nothing: once it reads, the chat was never locked", async () => {
+        faults.get = fails(rowKey());
+        expect(await groupChatSendPlan(ring(), unlocked)).toEqual({ kind: 'seal' });
+        faults = {};
+        expect(await store.load(rowKey())).toEqual({ highest: 0, locked: false });
+        expect(await groupChatSendPlan(ring(), unlocked)).toEqual({ kind: 'readable' });
     });
 
     it('a group line sealed under its key is never a readable one: it goes by the keyring', async () => {

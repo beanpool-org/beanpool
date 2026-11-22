@@ -61,6 +61,8 @@ vi.mock('../lib/api', async (importOriginal) => ({
 }));
 
 let posts: { path: string; body: string }[] = [];
+/** The lines the group's chat route serves. */
+let chatLines: unknown[] = [];
 /** The group's chat answer, held back until let go (null: at once). */
 let chatAnswerHeld: Promise<void> | null = null;
 
@@ -97,7 +99,7 @@ beforeEach(() => {
     localStorage.clear();
     resetPendingChatLinesForTest();
     mem = memoryIndexedDB();
-    readsFail = false; commitsFail = false; chatLocked = false; nodeType = 'group_thread'; posts = []; chatAnswerHeld = null;
+    readsFail = false; commitsFail = false; chatLocked = false; nodeType = 'group_thread'; posts = []; chatAnswerHeld = null; chatLines = [mine];
     onIdentity = () => {};
     vi.stubGlobal('indexedDB', browserStorage());
     vi.stubGlobal('alert', vi.fn());
@@ -107,7 +109,7 @@ beforeEach(() => {
         if (url.startsWith(`/api/groups/${G}/chat`)) {
             const at = chatLocked;
             if (chatAnswerHeld) await chatAnswerHeld;
-            return json({ conversation: conv(), messages: [mine], canPost: true, ...(at ? { encryption: { current: node.current(), stale: false, fromEpoch: 1 } } : {}) });
+            return json({ conversation: conv(), messages: chatLines, canPost: true, ...(at ? { encryption: { current: node.current(), stale: false, fromEpoch: 1 } } : {}) });
         }
         if (url.startsWith(`/api/marketplace/posts/${G}/chat`)) return json(eventView());
         if (url.startsWith(`/api/messages/${G}`)) return json({ conversation: conv(), messages: [mine] });
@@ -141,11 +143,12 @@ async function write(box: HTMLTextAreaElement) {
 }
 const ACTIONS = ['line', 'edit'] as const;
 
-const HAPPENED: { name: string; sent: boolean; then: () => unknown }[] = [
+/** `seals`: a group's new line then goes, sealed as the group's: this tab learns of the lock, it doesn't only refuse. */
+const HAPPENED: { name: string; sent: boolean; seals?: boolean; then: () => unknown }[] = [
     { name: 'nothing', sent: true, then: () => {} },
-    { name: 'another tab marked it locked', sent: false, then: () => store.markLocked(`${ana.publicKey}/${G}`) },
+    { name: 'another tab marked it locked', sent: false, seals: true, then: () => store.markLocked(`${ana.publicKey}/${G}`) },
     { name: 'another tab held a key of it', sent: false, then: () => store.raiseHighest(`${ana.publicKey}/${G}`, 1) },
-    { name: 'seen locked here, the mark refused', sent: false, then: async () => { commitsFail = true; await groupKeyring(node.as(ana.publicKey), ana, G, store).noteLocked(); } },
+    { name: 'seen locked here, the mark refused', sent: false, seals: true, then: async () => { commitsFail = true; await groupKeyring(node.as(ana.publicKey), ana, G, store).noteLocked(); } },
     { name: 'the record stopped reading', sent: false, then: () => { readsFail = true; resetGroupChatLockStoreForTest(); } },
     { name: 'answered locked as the request is signed', sent: false, then: () => { let n = 0; onIdentity = () => { n += 1; if (n >= 2) noteAnsweredLocked(G); }; } },
 ];
@@ -174,6 +177,7 @@ describe('a chat open on screen, then something of a lock, then the words', () =
                     expect(window.alert).not.toHaveBeenCalled();
                     // Sealed as the group's, or refused with the words kept where they were written.
                     const sealed = node.calls.some((c) => c.method === 'POST' && c.body?.nonce?.startsWith('group-xc20p-v1:'));
+                    expect(sealed).toBe(!!h.seals && action === 'line' && kind !== 'event_thread');
                     if (!sealed) expect(box.value).toBe(WORDS);
                 });
             }
@@ -282,11 +286,13 @@ describe('a locked answer is kept as seen', () => {
         expect((await store.load(`${ana.publicKey}/${G}`)).locked).toBe(true);
     });
 
-    it('never for a DM the node calls a group\'s: no mark, and it stays a DM', async () => {
-        localStorage.setItem('beanpool_dm_conversations_seen', JSON.stringify([G]));
+    it('never for a DM the node calls a locked group (its line is a DM\'s): no mark, which would keep it a group here', async () => {
         chatLocked = true;
+        chatLines = [{ ...mine, ciphertext: 'AAAA', nonce: 'x25519-xc20p-v2:AAAA' }];
         render(<MessagesPage identity={me} openConversationId={G} />);
-        await settle(400);
+        await waitFor(() => expect(JSON.parse(localStorage.getItem('beanpool_dm_conversations_seen') ?? '[]')).toEqual([G]), { timeout: 5000 });
+        await settle();
         expect(await store.load(`${ana.publicKey}/${G}`)).toEqual({ highest: 0, locked: false });
+        expect(screen.queryByTestId('group-chat-notice')).toBeNull();
     });
 });

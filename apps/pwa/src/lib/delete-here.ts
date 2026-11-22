@@ -218,10 +218,16 @@ export function webLastCommunityLine(hasWords: boolean): string {
           'keep their own copy.';
 }
 
-/** Under {@link webLastCommunityLine}: a copy at BeanPool's key vault, which only the phone app makes, stays. */
+/**
+ * Under {@link webLastCommunityLine}: a copy at BeanPool's key vault, which only the phone app makes, stays. It is removed in
+ * the phone app's "Where your account can be brought back from", whose list asks the vault whatever the community's rule
+ * (apps/native/utils/delete-here.ts VAULT_COPIES_REMOVE_PATH, review of #3369): Account Protection's Disconnect reaches the
+ * vault's copy only at a community whose rule is the vault's. Each step is the phone's own word for it.
+ */
 export const WEB_VAULT_COPY_LINE =
     "If the phone app put a copy of your key in BeanPool's key vault, when you linked a sign-in there, deleting here " +
-    "doesn't remove it. Remove it in the phone app first: Settings → Account Protection → Disconnect.";
+    "doesn't remove it. Remove it in the phone app first: Settings → Account Protection → Where your account can be " +
+    'brought back from → Remove.';
 
 /** The node did not delete the account: nothing in this browser changed. */
 export function webDeleteFailedLine(reason: string): string {

@@ -2274,6 +2274,93 @@ describe('a block reaches every community this phone holds (slice S7a)', () => {
         }
     });
 
+    describe("an across chat's round brings its community in line with the latest change, an unblock as much as a block (blocksOwedAt; triage 23 Nov item 43)", () => {
+        /** What utils/outside-chat-live.ts does at the start of each round of a community's across mail, in place. */
+        const acrossRound = async (app: App, community: string) => {
+            if (await app.blocksOwedAt(community)) await app.syncBlocksAt(community);
+            await app.blockSyncsEndedForTests();
+        };
+        type Step = 'block' | 'block in place' | 'unblock';
+        type Out = 'none' | 'in use' | 'held' | 'both';
+        const OUT_OF: Record<Out, string[]> = { none: [], 'in use': [IN_USE], held: [HELD], both: [IN_USE, HELD] };
+        const tap = async (app: App, step: Step) => {
+            if (step === 'block') await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam');
+            else if (step === 'block in place') await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam', undefined, HELD);
+            else expect(await app.unblockUser(HARASSER)).toBe(true);
+        };
+        const ORDERS: Step[][] = [
+            ['block', 'unblock'], ['block in place', 'unblock'],
+            ['block', 'unblock', 'block'], ['block in place', 'unblock', 'block'],
+            ['block', 'unblock', 'block in place'], ['block in place', 'unblock', 'block in place'],
+        ];
+        const OUTS = Object.keys(OUT_OF) as Out[];
+        /** Every way of choosing which communities are out of reach at each of `n` taps. */
+        const outsOf = (n: number): Out[][] => (n === 0 ? [[]] : outsOf(n - 1).flatMap((rest) => OUTS.map((o) => [o, ...rest])));
+
+        it('the source: each round of an across chat in place sends what blocksOwedAt says is owed there, as this table does', async () => {
+            const { readFileSync } = await import('node:fs');
+            const { join } = await import('node:path');
+            const live = readFileSync(join(__dirname, '..', 'outside-chat-live.ts'), 'utf8');
+            expect(live).toContain('if (await blocksOwedAt(owedAt)) await syncBlocksAt(owedAt);');
+        });
+
+        it('blocked at both, then unblocked while the carrying community was out: its next round takes the block off there', async () => {
+            const app = await phoneHolding(['in use', 'held and reachable']);
+            await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam', undefined, HELD);
+            await app.blockSyncsEndedForTests();
+            expect(listOf(HELD, ana.publicKey)).toEqual(['H']);
+            net.down.add(HELD);
+            expect(await app.unblockUser(HARASSER)).toBe(true);
+            await app.blockSyncsEndedForTests();
+            net.down.delete(HELD);
+            expect(listOf(IN_USE, ana.publicKey)).toEqual([]);
+            expect(await app.blocksOwedAt(HELD)).toBe(true);
+            const from = net.sent.length;
+            await acrossRound(app, HELD);
+            expect(heard(HELD, from)).toEqual(['unblock H']);
+            // That community alone, signed by the account that unblocked.
+            expect(net.sent.slice(from).map((s) => s.url.slice(0, s.url.indexOf('/api/')))).toEqual([HELD]);
+            expect(net.sent.slice(from).every((s) => s.signedBy === ana.publicKey)).toBe(true);
+            expect(listOf(HELD, ana.publicKey)).toEqual([]);
+            // Nothing is owed there now, and the next round sends nothing.
+            expect(await app.blocksOwedAt(HELD)).toBe(false);
+            const after = net.sent.length;
+            await acrossRound(app, HELD);
+            expect(net.sent.slice(after)).toEqual([]);
+        });
+
+        it('every order of block, unblock and block, with either, both or neither community out at each tap: one round of each community\'s across chat leaves its list as the member\'s latest change says, and nothing owed after', async () => {
+            const wrong: string[] = [];
+            let runs = 0;
+            for (const order of ORDERS) {
+                for (const outs of outsOf(order.length)) {
+                    runs++;
+                    const app = await phoneHolding(['in use', 'held and reachable']);
+                    for (const [i, step] of order.entries()) {
+                        net.down.clear();
+                        OUT_OF[outs[i]].forEach((u) => net.down.add(u));
+                        await tap(app, step);
+                        await app.blockSyncsEndedForTests();
+                    }
+                    net.down.clear();
+                    const wish = order[order.length - 1] === 'unblock' ? [] : ['H'];
+                    // No round that reaches every held community runs here: each community's own across round alone.
+                    for (const community of [HELD, IN_USE]) {
+                        await acrossRound(app, community);
+                        const list = listOf(community, ana.publicKey);
+                        const owed = await app.blocksOwedAt(community);
+                        if (JSON.stringify(list) !== JSON.stringify(wish) || owed) {
+                            wrong.push(`${order.join(' → ')} (out: ${outs.join(', ')}) at ${community}: holds [${list}], owed after its round ${owed}; latest change says [${wish}]`);
+                        }
+                    }
+                    if (!blockAndReportRequests().every((s) => s.signedBy === ana.publicKey)) wrong.push(`${order.join(' → ')} (out: ${outs.join(', ')}): a request not in Ana's name`);
+                }
+            }
+            expect(runs).toBe(2 * 16 + 4 * 64);
+            expect(wrong).toEqual([]);
+        }, 120_000);
+    });
+
     describe('the background sync (services/background-task.ts → syncOwedBlocks)', () => {
         it('nothing owed anywhere: nothing is sent, not even a read', async () => {
             const app = await phoneHolding(['in use', 'held and reachable']);

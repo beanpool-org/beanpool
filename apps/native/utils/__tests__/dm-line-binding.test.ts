@@ -101,9 +101,15 @@ vi.mock('../crypto', async (orig) => ({
 import { dmLineSigOf, dmLineSigVerifies } from '@beanpool/core';
 // Old chat's photos and cards: the frozen 1.2.36 lines (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
 import { DM_OLD_LINES, DM_OLD_LINE_TIMES, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '@beanpool/core/dm-line-vectors';
-import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, isLockedGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer, markDmPeerVerified, removeDmPeerVerification } from '../db';
+import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, isLockedGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer, markDmPeerVerified, removeDmPeerVerification } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE, DM_UNPLACED_LINE } from '../dm-lock';
+
+/**
+ * Rule 5's card, as the DM screen reads it (app/chat/[id].tsx: getDmKeyChange's `unplaced`, which turns the box off with
+ * DM_UNPLACED_LINE): first sight found lines it couldn't place and no single key is listed, so there is no key to continue with.
+ */
+const unplacedCard = async (id: string): Promise<boolean> => !!(await getDmKeyChange(id))?.unplaced;
 import { dmKeyChangeCopy } from '../dm-key-change';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
 import { routeChat } from '../chat-route';
@@ -2365,7 +2371,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         await p13();
         expect(await isDmKeyChangePending(dm.id)).toBe(false);
         await movedTo(dm, puppet, [ben], 1);
-        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect(await unplacedCard(dm.id)).toBe(false);
         // Every line reads: Ben's and Ana's under the former key, PUPPET's under the pin.
         expect(await texts(dm.id)).toEqual(['Shall I cancel the order?', 'No', 'New phone, same Ben. What is the door code?']);
         expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual(wentTo(puppet));
@@ -2411,7 +2417,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         await restoredPhone();
         expect(await isDmKeyChangePending(dm.id)).toBe(false);
         await pinnedByListing(dm, k2);
-        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect(await unplacedCard(dm.id)).toBe(false);
         // The lines no key placed keep their own mark; K2's reads.
         expect(await texts(dm.id)).toEqual([NOT_VERIFIED, NOT_VERIFIED, 'New phone. Still on for Saturday?']);
         expect(await sendTo(dm.id, 'Hello?', [k2, ben, puppet])).toEqual(wentTo(k2));
@@ -2419,7 +2425,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         await syncMessages(ana.publicKey);
         // §2.8: after a rule-5 pin, older lines stay unread even when the node later names their key; the pin stays.
         expect(await isDmKeyChangePending(dm.id)).toBe(false);
-        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect(await unplacedCard(dm.id)).toBe(false);
         await pinnedByListing(dm, k2);
         expect(await sendTo(dm.id, 'Hello again', [k2, ben])).toEqual(wentTo(k2));
     });
@@ -2458,7 +2464,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         // Nothing is offered, so no tap moves it.
         for (const k of [ben, puppet, k2]) expect(await acceptOfferedPeer(dm.id, k.publicKey)).toBe(false);
         await pinnedByListing(dm, k2);
-        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect(await unplacedCard(dm.id)).toBe(false);
         expect((await texts(dm.id)).filter((t: string) => t === NOT_VERIFIED).length).toBe(unopened);
         expect(await texts(dm.id)).toContain('New phone. Still on for Saturday?');
         expect(await sendTo(dm.id, 'Yes, Saturday', [k2, ben, puppet])).toEqual(wentTo(k2));
@@ -2751,7 +2757,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
             await syncMessages(ana.publicKey);
             expect(rowsIn(dm.id)).toBe(70);
             expect(await isDmKeyChangePending(dm.id)).toBe(false);
-            expect(await isDmUnplaced(dm.id)).toBe(false);
+            expect(await unplacedCard(dm.id)).toBe(false);
             if (when === 'held at the update') {
                 // The window held at the update ends in 20 lines that place no key: rule 5, and with one key listed that key
                 // is pinned (T9): no former, no notice.
@@ -2798,7 +2804,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         node.serve = () => [...puppets, ...bens];
         await restoredPhone();
         expect(await isDmKeyChangePending(dm.id)).toBe(false);
-        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect(await unplacedCard(dm.id)).toBe(false);
         await pinnedByListing(dm, puppet);
         // What Ana meets here: the only lines that read are the listed key's (PUPPET's 20); Ben's own 30 are the ones that
         // couldn't be verified. Rule 5's composer line (kept for a record with no single key listed) never says the chat
@@ -3348,7 +3354,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
         sealed(puppet, ana, dm, 'New phone, same Ben. What is the door code?');
         deleted = [ben.publicKey];
         await syncMessages(ana.publicKey);
-        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect(await unplacedCard(dm.id)).toBe(false);
         await carriedOnFrom(dm.id, ben);
         expect(await sendTo(dm.id, 'The code is 4821')).toEqual(goes);
     });
@@ -3603,7 +3609,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
         // DESIGN-dm-key-signal-model §2.3 row 5: a heldLost mark with one listed key becomes a pin on it, by the listing,
         // checked (never judged: no lines were kept to judge on), no former and no notice (no key was ever placed).
         expect(await isDmKeyChangePending(dm.id)).toBe(false);
-        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect(await unplacedCard(dm.id)).toBe(false);
         expect(pinOf(dm.id)).toEqual({ peer: puppet.publicKey, since: expect.any(String), by: 'listing', checked: true });
         expect(await keyNotices(dm)).toEqual([]);
         expect(await sendTo(dm.id, 'The code is 4821')).toEqual(goes);
@@ -3678,7 +3684,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
             // DESIGN-dm-key-signal-model §2.4: rule 5 (no key places the lines) with one key listed pins that key, by the
             // listing, checked, with no former and no notice; no rule-5 record is kept, so the held lines go in that write.
             const k2Pin = { peer: k2.publicKey, since: expect.any(String), by: 'listing', checked: true };
-            expect(await isDmUnplaced(dm.id)).toBe(false);
+            expect(await unplacedCard(dm.id)).toBe(false);
             expect(pinOf(dm.id)).toEqual(k2Pin);
             expect(await keyNotices(dm)).toEqual([]);
             expect(h.store.get(LINES())).toBe('{}');
@@ -6383,19 +6389,19 @@ describe('Signal\'s model through the real sync (DESIGN-dm-key-signal-model §6 
         expect(await keyNotices(dm)).toHaveLength(1);
     });
 
-    it('T15 † a stored rule-5 record, no sync yet: isDmUnplaced reads it as the Inbox tag and the banner do (dmEntryWaitsForMember): one key listed waits for nobody (the screen\'s check pins it), no single key listed waits; the read writes nothing (#3267 review)', async () => {
+    it('T15 † a stored rule-5 record, no sync yet: the Inbox tag reads it as the banner does (dmEntryWaitsForMember): one key listed waits for nobody (the screen\'s check pins it), no single key listed waits; the tag\'s read writes nothing (#3267 review)', async () => {
         await anaHoldsTheChat();
         for (const listed of [k2.publicKey, null]) {
             editStoredPins(ana, (pins) => { pins[dm.id.toLowerCase()] = { unplaced: true, since: '2026-11-01T00:00:00.000Z', listed }; });
             restarted();
             const stored = h.store.get(dmPeerPinsStoreKey(ana.publicKey, FILE_A));
             const waits = listed === null;
-            expect({ listed: !!listed, unplaced: await isDmUnplaced(dm.id) }).toEqual({ listed: !!listed, unplaced: waits });
-            expect(h.store.get(dmPeerPinsStoreKey(ana.publicKey, FILE_A))).toBe(stored);
             expect({ listed: !!listed, tag: await tagOf(dm.id) }).toEqual({ listed: !!listed, tag: waits });
+            expect(h.store.get(dmPeerPinsStoreKey(ana.publicKey, FILE_A))).toBe(stored);
             // The screen's check agrees: one key listed becomes the pin on it, no card; no single key listed is rule 5's card.
-            expect({ listed: !!listed, card: !!(await getDmKeyChange(dm.id))?.unplaced }).toEqual({ listed: !!listed, card: waits });
-            expect({ listed: !!listed, after: await isDmUnplaced(dm.id) }).toEqual({ listed: !!listed, after: waits });
+            expect({ listed: !!listed, card: await unplacedCard(dm.id) }).toEqual({ listed: !!listed, card: waits });
+            expect({ listed: !!listed, after: await unplacedCard(dm.id) }).toEqual({ listed: !!listed, after: waits });
+            expect({ listed: !!listed, tagAfter: await tagOf(dm.id) }).toEqual({ listed: !!listed, tagAfter: waits });
             if (listed) expect(pinOf(dm.id)).toMatchObject({ peer: k2.publicKey, by: 'listing' });
         }
     });

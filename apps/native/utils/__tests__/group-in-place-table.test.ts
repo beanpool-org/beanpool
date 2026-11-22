@@ -30,8 +30,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 
 const h = vi.hoisted(() => ({
     dir: '', store: new Map<string, string>(), me: { publicKey: '', privateKey: '' },
-    /** The next writes of `file` that read as `sql`: `hit` as each is run, and SQLite refuses it when `refuse`. */
-    cut: null as null | { file: string; sql: RegExp; times: number; refuse: boolean; hit: () => void },
+    /** The next writes of `file` that read as `sql` (past the first `skip`): `hit` as each is run, and SQLite refuses it when `refuse`. */
+    cut: null as null | { file: string; sql: RegExp; times: number; refuse: boolean; hit: () => void; skip?: number },
 }));
 
 vi.mock('expo-sqlite', async () => {
@@ -45,7 +45,7 @@ vi.mock('expo-sqlite', async () => {
             return {
                 runAsync: async (q: string, p?: unknown) => {
                     const cut = h.cut;
-                    if (cut && cut.file === name && cut.times > 0 && cut.sql.test(q)) {
+                    if (cut && cut.file === name && cut.times > 0 && cut.sql.test(q) && !(cut.skip && cut.skip-- > 0)) {
                         cut.times--;
                         cut.hit();
                         if (cut.refuse) throw new Error('database is locked');
@@ -148,6 +148,10 @@ interface Server {
     epochs: any[]; lines: any[]; wordsIn: string[]; left: boolean;
     /** It answers the chat with no `encryption` and has no keys: a node that dropped the lock. */
     unlocked?: boolean;
+    /** It answers the chat locked, and refuses this phone its keys. */
+    noKeys?: boolean;
+    /** Epochs whose record is served unsigned by its maker, until each is asked for by name. */
+    badRecords?: Set<number>;
     /** The current key doesn't fit the roster: the next member to write makes a new one. */
     stale?: boolean;
     /** Epochs whose wrap for me is served as another's doing, until it is refused; and those refused. */
@@ -188,13 +192,13 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     if (p === at && method === 'GET') return answer(200, { id: g, name: 'Garden Crew', memberCount: 2, viewerRole: 'member' });
     if (p === `${at}/members` && method === 'GET') return answer(200, [me, peer].map((m, i) => ({ memberPubkey: m.publicKey, callsign: i ? 'Dana' : 'Me', status: 'active', role: 'member' })));
     if (p === `${at}/guests`) return answer(200, { guests: s.guests ?? [], on: !!s.guests });
-    if (s.unlocked && p.startsWith(`${at}/keys`)) return answer(404, { error: 'not here' });
+    if ((s.unlocked || s.noKeys) && p.startsWith(`${at}/keys`)) return answer(404, { error: 'not here' });
     const refusing = new RegExp(`^${at}/keys/(\\d+)/reject$`).exec(p);
     if (refusing && method === 'POST') { (s.rejected ??= []).push(Number(refusing[1])); s.junk?.delete(Number(refusing[1])); return answer(200, { success: true }); }
     if (p === `${at}/keys` && method === 'GET') {
         const after = Number(u.searchParams.get('after') ?? 0);
         const only = u.searchParams.get('epochs')?.split(',').map(Number);
-        const epochs = s.epochs.filter((e) => (only ? only.includes(e.epoch) : e.epoch > after));
+        const epochs = s.epochs.filter((e) => (only ? only.includes(e.epoch) : e.epoch > after)).map((e) => (s.badRecords?.has(e.epoch) && !only ? { ...e, reason: 'join' } : e));
         return answer(200, {
             current: s.epochs.length ? s.epochs[s.epochs.length - 1].epoch : null, stale: !!s.stale, fromEpoch: s.epochs.length ? 1 : null,
             roster: [me.publicKey, peer.publicKey].sort(), epochs: epochs.map(({ wraps: _w, ...e }) => e),
@@ -868,11 +872,29 @@ describe('a group\'s keys: every write x every way it is refused, then opened ag
         expect(onDisk().epochs).toEqual([1, 2]);
         await opened(A);
         expect([servers[A].rejected, onDisk().epochs, parted()]).toEqual([[2], [1], []]);
+        // The good one's own put refused: asked for again at the next opening, not a minute later.
+        h.cut = { file: A_FILE, sql: /INTO group_chat_epochs/, times: 1, refuse: true, hit: () => {} };
+        expect(texts(await opened(A))).not.toContain('under key 2');
+        expect([h.cut.times, parted()]).toEqual([0, []]);
+        h.cut = null;
         expect(texts(await opened(A))).toEqual(['my first line', 'under key 2']);
         await db.leaveChatInPlace(A);
         await restart();
         db.enterChatInPlace(A);
         expect(texts(await opened(A))).toEqual(['my first line', 'under key 2']);
+        await db.leaveChatInPlace(A);
+    });
+
+    it('a record its maker never signed, whose good copy\'s put is refused: not counted as asked for, so the next opening asks again and reads', async () => {
+        await danaWrites('under key 2');
+        servers[A].badRecords = new Set([2]);
+        db.enterChatInPlace(A);
+        h.cut = { file: A_FILE, sql: /INTO group_chat_epochs/, times: 1, skip: 1, refuse: true, hit: () => {} };
+        expect(texts(await opened(A))).not.toContain('under key 2');
+        expect([h.cut.times, parted()]).toEqual([0, []]);
+        h.cut = null;
+        expect(texts(await opened(A))).toEqual(['my first line', 'under key 2']);
+        expect(parted()).toEqual([]);
         await db.leaveChatInPlace(A);
     });
 
@@ -988,6 +1010,14 @@ describe('the sticky lock: on disk before any of the chat is shown or sent; a gr
             expect(texts(await opened(A))).not.toContain('my first line');
             await db.leaveChatInPlace(A);
             expect(onDisk()).toMatchObject({ epochs: [], after: 0, highest: 0, locked: true });
+        }],
+        ['in use, never opened: the node refused it the keys and answered its chat locked to this phone\'s own ask', async () => {
+            await switchPhoneTo(A);
+            servers[A].noKeys = true;
+            await expect(db.insertMessage(g, me.publicKey, 'readable?')).rejects.toThrow();
+            servers[A].noKeys = false;
+            expect(onDisk()).toEqual({ epochs: [], after: 0, highest: 0, locked: true, signers: 0 });
+            await switchPhoneTo(B);
         }],
         ['in use, SQLite refuses the mark once and every key; the next answer marks it', async () => {
             await switchPhoneTo(A);

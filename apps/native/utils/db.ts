@@ -8344,7 +8344,9 @@ async function nodeChatAnswer(groupId: string, community?: ChatCommunity): Promi
         if (!res.ok) return null;
         const answer = await res.json().catch(() => null);
         if (!answer || typeof answer !== 'object') return null;
-        return chatIsLocked(answer) ? 'locked' : 'unlocked';
+        if (!chatIsLocked(answer)) return 'unlocked';
+        await noteGroupLocked(groupId, community);
+        return 'locked';
     } catch {
         return null;
     }

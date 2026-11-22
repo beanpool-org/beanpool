@@ -2427,6 +2427,259 @@ describe('a group\'s sealed line in the file is evidence its node can\'t hide or
     });
 });
 
+// ── The max review of #3358, its last round: U1 and U2 (scratch/lanes/followups/small-followups.md) ─────────────────────
+
+describe('a sync\'s own lock mark: never for an account on its way off the phone (U1), and known to this run the moment it is put (U2)', () => {
+    const LINE = 'c4d2c0de-0000-4000-8000-000000000003';
+    /** A's server lists the group's chat and serves one sealed line of it, while it says the chat isn't locked. `id`: the chat's id as the server writes it. */
+    function servesSealed(id: string = g): void {
+        const conversation = { id, type: 'group_thread', name: 'Garden Crew', createdBy: peer.publicKey, createdAt: '2026-11-20T00:00:00.000Z', participants: [me.publicKey, peer.publicKey] };
+        const line = { id: LINE, authorPubkey: peer.publicKey, ciphertext: 'c2VhbGVk', nonce: `${GROUP_NONCE_PREFIX}abc`, type: 'text', metadata: JSON.stringify({ epoch: 1 }), timestamp: '2026-11-21T00:00:00.000Z' };
+        servers[A].also = (method, p) => {
+            if (method !== 'GET') return undefined;
+            if (p === `/api/messages/conversations/${me.publicKey}`) return { conversations: [conversation], requests: { conversations: [] }, deletedAccounts: [] };
+            if (p === `/api/messages/${id}`) return { conversation, messages: [line] };
+            return undefined;
+        };
+    }
+    /** A in use, its copy holding the group's row and no key, mark or line of it; its server serves the sealed line. */
+    async function inA(): Promise<void> {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        servesSealed();
+        await db.getDb();
+    }
+    /** Every row of the group's keys in `file`, the verify memo's included. */
+    const keyRows = (file: string): string[] => {
+        if (!fs.existsSync(fileOn(file))) return [];
+        const out: string[] = [];
+        into(file, (sql) => {
+            for (const t of ['group_chat_key_state', 'group_chat_epochs', 'group_line_signers', 'group_line_verdicts']) {
+                for (const r of sql.prepare(`SELECT group_id FROM ${t}`).all() as any[]) out.push(`${t}: ${r.group_id}`);
+            }
+        });
+        return out;
+    };
+    const signOut = () => db.clearDB({ identityLeaves: true });
+    const pageAsked = (m: string, p: string) => m === 'GET' && p === `/api/messages/${g}`;
+    const listAsked = (m: string, p: string) => m === 'GET' && p === `/api/messages/conversations/${me.publicKey}`;
+    const RUNS: Array<[string, () => Promise<boolean>]> = [
+        ['the chat\'s own poll', () => db.syncSingleConversation(g)],
+        ['the conversations\' sync', () => db.syncMessages(me.publicKey)],
+    ];
+    const ON_ITS_WAY: Array<[string, () => Promise<boolean>, (m: string, p: string) => boolean]> = [
+        ['the chat\'s own poll, its page', RUNS[0][1], pageAsked],
+        ['the conversations\' sync, its list', RUNS[1][1], listAsked],
+        ['the conversations\' sync, its page', RUNS[1][1], pageAsked],
+    ];
+    // The eight moments of the N1 rows: n turns after the leave's clear began, and once it is done with the key still here.
+    const MOMENTS: Array<[string, (letGo: () => void) => Promise<unknown>]> = [
+        ...[0, 1, 2, 3, 5, 8, 13].map((n) => [`${n} turns after the clear began`, async (letGo: () => void) => {
+            const clearing = signOut();
+            await ticks(n);
+            letGo();
+            await clearing;
+        }] as [string, (letGo: () => void) => Promise<unknown>]),
+        ['once the clear is done, the key still on the phone', async (letGo) => { await signOut(); letGo(); }],
+    ];
+
+    it.each(ON_ITS_WAY.flatMap(([name, run, held]) => MOMENTS.map(([when, go]) => [name, when, run, held, go] as const)))('%s on its way, the leave\'s clear begun; it lands %s: no row of the group\'s keys is left', async (_n, _w, run, held, go) => {
+        await inA();
+        const answer = holdNext(held);
+        const syncing = run().catch(() => false);
+        await answer.asked;
+        await go(answer.letGo);
+        expect(await syncing, 'nothing of it written').toBe(false);
+        await settle();
+        expect(keyRows(A_FILE)).toEqual([]);
+    });
+
+    it.each(RUNS)('%s begun during the whole leave, after its clear, the key still on the phone: nothing of it is written', async (_n, run) => {
+        await inA();
+        await whileAccountLeaves(async () => {
+            await signOut();
+            expect(await run()).toBe(false);
+            await settle();
+            expect(keyRows(A_FILE)).toEqual([]);
+        });
+        expect(keyRows(A_FILE)).toEqual([]);
+    });
+
+    it.each(RUNS)('%s after a leave that failed, the account still here: the sealed line and its mark, as before', async (_n, run) => {
+        await inA();
+        await expect(whileAccountLeaves(async () => { throw new Error('not taken off'); })).rejects.toThrow('not taken off');
+        expect(await run()).toBe(true);
+        expect([marked(A_FILE), (rowsOf(A_FILE)!.messages as any[]).filter((r) => r.id === LINE).length]).toEqual([true, 1]);
+    });
+
+    it('a ring of before the leave, the phone set to A again after it: its verify memo writes no row; a ring of now does (the class of U1)', async () => {
+        await inA();
+        const before = await db.groupKeyringFor(g);
+        await signOut();
+        await switchPhoneTo(A);
+        await db.getDb();
+        before.memo.add('a verdict');
+        await settle();
+        expect(keyRows(A_FILE)).toEqual([]);
+        (await db.groupKeyringFor(g)).memo.add('a verdict');
+        await settle();
+        expect(keyRows(A_FILE)).toEqual([`group_line_verdicts: ${me.publicKey}/${g}`]);
+    });
+
+    const ASKS_HERE = { isHeldGroupChat: db.isHeldGroupChat, isLockedGroupChat: db.isLockedGroupChat, knownDmConversationId: db.knownDmConversationId, getConversationKind: db.getConversationKind };
+    it.each(RUNS)('%s stores the first sealed line of a chat whose ring read its file before: locked at once, with no restart; its row called an event\'s then opens as a group\'s; nothing readable; the other community\'s copy is not told (U2)', async (_n, run) => {
+        await inA();
+        expect(await db.isLockedGroupChat(g), 'read before: never locked').toBe(false);
+        await run();
+        expect(marked(A_FILE)).toBe(true);
+        expect(await db.isLockedGroupChat(g)).toBe(true);
+        expect(await (await db.groupKeyringFor(g)).neverLocked()).toBe(null);
+        into(A_FILE, (sql) => { sql.prepare("UPDATE conversations SET type = 'event_thread' WHERE id = ?").run(g); });
+        expect((await routeChat(ASKS_HERE, g, {})).view).toBe('group');
+        await everyReadable();
+        expect(wordsOut()).toEqual(NOTHING);
+        // Only that copy's: B's ring of the id hears nothing of A's line.
+        await switchPhoneTo(B);
+        await db.getDb();
+        expect(await db.isLockedGroupChat(g)).toBe(false);
+    });
+
+    /** `send` with `land` run (to its end) as its request is signed: after every file read, before it leaves. */
+    async function asSigned(send: Send, land: () => Promise<unknown>): Promise<{ out: { v?: unknown; e?: any }; landed: number }> {
+        let landed = 0;
+        let landing: Promise<unknown> | null = null;
+        const sign = vi.mocked(buildSignedHeaders);
+        const real = sign.getMockImplementation()!;
+        sign.mockImplementation(async (...args: any[]) => {
+            if (args[0] === 'POST' && /message|edit|send/.test(args[1]) && landed++ === 0) await (landing = land());
+            return (real as any)(...args);
+        });
+        try {
+            const out = await send.run().then((v) => ({ v }), (e) => ({ e }));
+            await settle();
+            await landing;
+            await settle();
+            return { out, landed };
+        } finally {
+            sign.mockImplementation(real);
+        }
+    }
+    const AS_SIGNED: Array<[string, () => Promise<unknown>]> = [
+        ['the chat\'s own poll stores its first sealed line', () => db.syncSingleConversation(g)],
+        ['the conversations\' sync stores its first sealed line', () => db.syncMessages(me.publicKey)],
+        ['its file takes the mark, which this run\'s memory never heard of', async () => { mark(A_FILE); }],
+    ];
+    const GOES = SENDS.filter((x) => x.readable.includes('group_thread'));
+    it.each(GOES.flatMap((x) => AS_SIGNED.map(([what, land]) => [x.name, what, x, land] as const)))('%s, and as its request is signed: %s: it doesn\'t leave (the first sighting, U2)', async (_n, _w, send, land) => {
+        await inA();
+        const { out, landed } = await asSigned(send, land);
+        expect(landed, 'it landed').toBe(1);
+        expect(wordsOut()).toEqual(NOTHING);
+        if (send.fn === 'insertMessage') {
+            // The DM screen's line is kept as not sent, for the member to see.
+            const row = (rowsOf(A_FILE)!.messages as any[]).find((r) => r.id === out.v);
+            expect(JSON.parse(row.metadata).__sendState).toBe('failed');
+        } else {
+            expect(out.e?.message).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
+        }
+    });
+
+    it.each(GOES)('%s, nothing landing as it is signed: it goes readable, as to any chat never locked (the contrast)', async (send) => {
+        await inA();
+        const { out, landed } = await asSigned(send, async () => {});
+        expect([landed, out.e?.message ?? null]).toEqual([1, null]);
+        expect(wordsOut()[A]).toEqual([WORDS]);
+    });
+
+    // ── Review of #3371 (finding 3): what only one guard stops, each with its own row ──
+
+    // A ring made while the account leaves, after the clear put the others away: it was never put away. While the leave runs
+    // the key store refuses every write by itself (groupKeyStore asks at each one); once it is over the store takes them
+    // again, so only the ring's own memory of the leave stops its memo (group-chat-keys.ts `memo`, its accountStays half).
+    it.each([['during the leave', true], ['with no leave around the clear (the contrast)', false]] as const)('a ring made after a clear %s, the phone set to A again: once that is over, its verify memo writes a row only if no leave was around its making', async (_n, leaves) => {
+        await inA();
+        const madeAfterTheClear = async () => {
+            await signOut();
+            await switchPhoneTo(A);
+            await db.getDb();
+            return db.groupKeyringFor(g);
+        };
+        const ring = await (leaves ? whileAccountLeaves(madeAfterTheClear) : madeAfterTheClear());
+        ring.memo.add('a verdict');
+        await settle();
+        expect(keyRows(A_FILE)).toEqual(leaves ? [] : [`group_line_verdicts: ${me.publicKey}/${g}`]);
+    });
+
+    // A link or a push may carry the chat's id in capitals: the run's memory is told of the ring's own id, as the mark is.
+    it.each([
+        ['the chat\'s own poll', () => db.syncSingleConversation(g.toUpperCase())],
+        ['the conversations\' sync, its list naming the chat in capitals', () => db.syncMessages(me.publicKey)],
+    ] as Array<[string, () => Promise<boolean>]>)('%s, by its id in capitals: its first sealed line stored, the ring of the id says locked at once (U2)', async (_n, run) => {
+        await inA();
+        expect(g.toUpperCase(), 'an id with letters in it').not.toBe(g);
+        servesSealed(g.toUpperCase());
+        expect(await db.isLockedGroupChat(g), 'read before: never locked').toBe(false);
+        expect(await run()).toBe(true);
+        expect(marked(A_FILE)).toBe(true);
+        expect(await db.isLockedGroupChat(g)).toBe(true);
+        expect(await db.isLockedGroupChat(g.toUpperCase())).toBe(true);
+        await everyReadable();
+        expect(wordsOut()).toEqual(NOTHING);
+    });
+
+    /**
+     * `send` refused once for want of a profile photo, the profile put right (pushProfileToServer: a bio waits here), and sent
+     * again (_signedRequest's one retry); `land` run to its end as that second sending is signed.
+     */
+    async function healedThenSigned(send: Send, land: () => Promise<unknown>): Promise<{ out: { v?: unknown; e?: any }; landed: number; refused: number; healed: number }> {
+        into(A_FILE, (sql) => { sql.prepare('INSERT OR REPLACE INTO members (public_key, callsign, bio) VALUES (?, ?, ?)').run(me.publicKey, 'Me', 'Grows beans'); });
+        let refused = 0;
+        let healed = 0;
+        let signed = 0;
+        let landed = 0;
+        let landing: Promise<unknown> | null = null;
+        /** The line's own request: a group's, an event's or an enterprise's line, or a thread's edit. */
+        const sending = /(\/chat\/message|\/thread\/message|\/api\/messages\/edit)$/;
+        const realFetch = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementation(async (url: string, init: any = {}) => {
+            const p = new URL(url).pathname;
+            if (init.method === 'POST' && p === '/api/profile/update') { healed++; return answer(200, { success: true, profile: { callsign: 'Me' } }); }
+            if (init.method === 'POST' && sending.test(p) && refused++ === 0) return answer(403, { error: 'Please set a profile photo before you post here.' });
+            return realFetch(url, init);
+        });
+        const sign = vi.mocked(buildSignedHeaders);
+        const realSign = sign.getMockImplementation()!;
+        sign.mockImplementation(async (...args: any[]) => {
+            if (args[0] === 'POST' && sending.test(args[1]) && ++signed === 2) { landed++; await (landing = land()); }
+            return (realSign as any)(...args);
+        });
+        try {
+            const out = await send.run().then((v) => ({ v }), (e) => ({ e }));
+            await settle();
+            await landing;
+            await settle();
+            return { out, landed, refused, healed };
+        } finally {
+            sign.mockImplementation(realSign);
+            fetchMock.mockImplementation(realFetch);
+        }
+    }
+    const HEALS = GOES.filter((x) => x.fn !== 'insertMessage' && x.fn !== 'editMessage');
+    it.each(HEALS.flatMap((x) => AS_SIGNED.map(([what, land]) => [x.name, what, x, land] as const)))('%s, refused for a profile photo, the profile put right, and as it is signed again: %s: the second sending doesn\'t leave either (U2)', async (_n, _w, send, land) => {
+        await inA();
+        const { out, landed, refused, healed } = await healedThenSigned(send, land);
+        expect({ landed, healed, sent: refused }, 'signed again after the heal, and never sent again').toEqual({ landed: 1, healed: 1, sent: 1 });
+        expect(out.e?.message).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
+        expect(wordsOut()).toEqual(NOTHING);
+    });
+    it.each(HEALS.map((x) => [x.name, x] as const))('%s, refused for a profile photo, the profile put right, nothing landing as it is signed again: it goes readable (the contrast)', async (_n, send) => {
+        await inA();
+        const { out, landed, refused, healed } = await healedThenSigned(send, async () => {});
+        expect({ landed, healed, sent: refused, error: out.e?.message ?? null }).toEqual({ landed: 1, healed: 1, sent: 2, error: null });
+        expect(wordsOut()[A]).toEqual([WORDS]);
+    });
+});
+
 describe('another community\'s locked answer for an id never sends a direct chat\'s line down a group\'s path here (T2)', () => {
     it.each([['answered locked elsewhere', true], ['not (the contrast)', false]] as const)('%s: a line on an id no memory here knows yet: refused as a direct chat\'s, no group asked for, nothing readable', async (_n, elsewhere) => {
         await switchPhoneTo(A);

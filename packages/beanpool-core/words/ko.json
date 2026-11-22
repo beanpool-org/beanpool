@@ -2815,7 +2815,7 @@
   "Your community's server didn't answer, so this bill may have been paid. Press Pay again to find out: it is never paid twice.": "커뮤니티 서버가 응답하지 않아서 이 청구서가 지급됐을 수도 있어요. 확인하려면 지급을 다시 누르세요: 두 번 지급되는 일은 절대 없어요.",
   "Your community's server didn't answer, so this bill may have been withdrawn. Press Withdraw again to find out.": "커뮤니티 서버가 응답하지 않아서 이 청구서가 철회됐을 수도 있어요. 확인하려면 철회를 다시 누르세요.",
   "Your community's server didn't answer, so your report may have gone. Send it again to find out.": "커뮤니티 서버가 응답하지 않아서 신고가 전달됐을 수도 있어요. 확인하려면 다시 보내세요.",
-  "Add a bill for them (optional)": "이 사람에게 청구서 추가(선택)",
+  "Add a bill for them (optional)": "이 사람에게 청구서 추가 (선택)",
   "Could not add the bill": "청구서를 추가할 수 없었어요",
   "No answer": "응답 없음",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "응답이 돌아오지 않아서 초대가 만들어졌는지 알 수 없어요. 온라인일 때 같은 청구서로 다시 시도하세요: 만들어졌다면 두 번째 초대가 아니라 그 초대를 받게 돼요. 청구서는 오프라인 티켓과 함께 보낼 수 없어요.",

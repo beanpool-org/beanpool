@@ -12,7 +12,8 @@ import { noteStandingHere } from '../utils/standing-here';
  *                 oddly. We deliberately do NOT act on this — never punish a flaky
  *                 connection by treating it as a rejection.
  *  - 'member'   : the node confirmed membership, a suspended account's too: it stays in the app, and Message sends nothing
- *                 across from here while it lasts (utils/standing-here.ts).
+ *                 across from here while it lasts (utils/message-anyone.ts, which asks for itself; with no answer it goes
+ *                 by what was noted here: utils/standing-here.ts).
  *  - 'stranger' : the node is reachable and definitively says this key is NOT a member
  *                 (or refuses it as one: 403 `members_only` / `private_preview`).
  *  - 'closed'   : the node closed this key's account there (403 `account_closed`: removed, or

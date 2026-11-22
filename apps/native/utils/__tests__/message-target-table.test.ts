@@ -8,7 +8,9 @@
  * held, across open / request / declined, across dead because its person is here, across to a held community or to a lost
  * name, and the same in a held community's file) x (the community in use: a member's, a suspended member's or a guest's look,
  * taking messages from other communities or not, or with no address of its own to send from) x (a block: on the phone's list, seen only on another
- * community's own list, none) -> where Message goes, as Contacts and New message go there (utils/message-anyone.ts).
+ * community's own list, none) -> where Message goes, as Contacts and New message go there (utils/message-anyone.ts). The
+ * suspended member is one the app heard of, and one it has not asked about (an ordinary switch asks nothing: #3360 review F1),
+ * which the tap itself must hear; what the app last heard x what the tap hears has its own table below.
  *
  * The wanted targets are written out by hand (WANT, and each address's `who` and `quiet`), never worked out by the rule: they
  * are the precedence the review gives. What a community answers now decides; with no answer the copies count only where the
@@ -263,7 +265,7 @@ const membershipAnswer = (server: Server): Response => (server.removed.has(ME)
     : new Response(JSON.stringify(server.members.has(ME)
         ? { isMember: true, callsign: 'Me', standing: server.suspended.has(ME) ? 'suspended' : 'member' }
         : { isMember: false, callsign: null, isRecovering: false, recoveryStatus: null }), { status: 200 }));
-/** The app asked the community in use how the account stands there, as it does at launch and when it comes to the front (app/NodeStatusContext.tsx). */
+/** The app asked the community in use how the account stands there, as it does at launch and when it comes to the front (app/NodeStatusContext.tsx); after an ordinary switch it has not. */
 const appAsked = async () => noteStandingHere(ME, RIVERSIDE, (await membershipAnswerOf(membershipAnswer(SERVERS.riverside)))!);
 /** How the account stands in the held community. A removed member, and a visitor, are none of its members; a suspended one is. */
 const REMOVE = () => { SERVERS.hillside.members.delete(ME); SERVERS.hillside.removed.add(ME); };
@@ -331,14 +333,16 @@ const across = (file: string, home: string, state: 'open' | 'request' | 'decline
  * / openHeld: the chat across that exists, in the file in use / the held community's. new: one made across from the link.
  * switch: nothing opens; to switch to the link's address is offered. off (no-home or not-member where that is why) /
  * no-community: refused. The member, off column is also where the account is suspended in the one in use: nothing goes across.
+ * `noted`: the app has asked it; else only the tap does, so not in the quiet rows.
  * QUIET: the same where neither answers and the chat's own home is then unsure (left out: as WANT).
  */
 const STATES = {
     'a member\'s, takes messages across': { as: 'member', on: true, home: true, column: 0, off: 'off' },
     'a member\'s, takes none across': { as: 'member', on: false, home: true, column: 1, off: 'off' },
     'a member\'s, its switch on, no address of its own to send from': { as: 'member', on: true, home: false, column: 1, off: 'no-home' },
-    'a suspended member\'s, takes messages across': { as: 'suspended', on: true, home: true, column: 1, off: 'not-member' },
-    'a suspended member\'s, takes none across': { as: 'suspended', on: false, home: true, column: 1, off: 'off' },
+    'a suspended member\'s, takes messages across': { as: 'suspended', on: true, home: true, column: 1, off: 'not-member', noted: true },
+    'a suspended member\'s, takes none across': { as: 'suspended', on: false, home: true, column: 1, off: 'off', noted: true },
+    'a suspended member\'s the app has not asked about, takes messages across': { as: 'suspended', on: true, home: true, column: 1, off: 'not-member', noted: false },
     'a guest\'s look, takes messages across': { as: 'guest', on: true, home: true, column: 2, off: 'off' },
     'a guest\'s look, takes none across': { as: 'guest', on: false, home: true, column: 2, off: 'off' },
 } as const;
@@ -382,7 +386,7 @@ const ANSWERS = { 'they answer': true, 'neither answers': false } as const;
 /** Not a member of the held one: it says so only where it answers, and a block is asked before anything (one column of it). */
 const STANDINGS = (answers: boolean) => Object.entries(HELD_AS).filter(([held]) => answers || held === 'a member of the held one');
 const ROWS = ADDRESSES.flatMap((address) => Object.entries(ANSWERS).flatMap(([answer, answers]) => (!answers && !address.quiet ? [] : Object.entries(CHATS).flatMap(([chats, { set, WANT, QUIET, OUT, VISITOR }]) =>
-    Object.entries(STATES).flatMap(([state, s]) => STANDINGS(answers).flatMap(([held, stand]) => Object.entries(BLOCKS).filter(([block]) => stand === HELD_AS['a member of the held one'] || block === 'no block').map(([block, b]) => {
+    Object.entries(STATES).filter(([, s]) => answers || !('noted' in s) || s.noted).flatMap(([state, s]) => STANDINGS(answers).flatMap(([held, stand]) => Object.entries(BLOCKS).filter(([block]) => stand === HELD_AS['a member of the held one'] || block === 'no block').map(([block, b]) => {
         const who = answers ? (address.doubt?.includes(chats) ? 'unsure' : address.who) : address.quiet!;
         const wants = !answers ? QUIET ?? WANT : held === 'a member of the held one' ? WANT : held === 'removed from the held one' ? OUT : VISITOR ?? OUT;
         const code = wants[s.column].split(' ')[WHO.indexOf(who)];
@@ -391,7 +395,7 @@ const ROWS = ADDRESSES.flatMap((address) => Object.entries(ANSWERS).flatMap(([an
 
 describe('Message on the phone: where it goes, and a line can go from there', () => {
     it('the table is the whole of it: every address, answer, chat, state, standing in the held one, and block', () => {
-        expect(ROWS.length).toBe(((25 + 23) * 3 + 25 * 3) * 17 * 7);
+        expect(ROWS.length).toBe(((25 + 23) * 3 + 25 * 3) * 17 * 7 + (25 * 3 + 25 * 3) * 17);
     });
 
     // Named in full: a title made by it.each is cut short.
@@ -406,7 +410,7 @@ describe('Message on the phone: where it goes, and a line can go from there', ()
         }
         if (state.as === 'suspended') {
             SERVERS.riverside.suspended.add(ME);
-            await appAsked();
+            if (state.noted) await appAsked();
         }
         set();
         stand();
@@ -723,6 +727,8 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
 
     // ── a held community the member was removed from: it stays on the phone, its chats too ──
     const STANDS = `${HILLSIDE}${MEMBERSHIP}${ME}`;
+    const STANDS_HERE = `${RIVERSIDE}${MEMBERSHIP}${ME}`;
+    const standingAsked = () => phone.asked.filter((u) => u.includes(MEMBERSHIP));
     it.each([
         { name: 'it answers that it closed the account', set: REMOVE, want: 'new' },
         { name: 'retired there as an empty duplicate', set: () => {}, says: [403, { code: 'account_retired' }], want: 'new' },
@@ -770,16 +776,25 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         expect(word(await message(at(FARAWAY)))).toBe('new');
     });
 
-    it('asked at most once a tap, and only where it decides: never beside a chat here, nor for a contact of neither with no chat', async () => {
+    it('asked at most once a tap, and only where it decides: the one in use for a chat across there, the held one for its own; neither beside a direct chat here', async () => {
         saysNow(); heard(); SERVERS.faraway.members.add(K);
         expect(word(await message(at(FARAWAY)))).toBe('new');
-        expect(phone.asked.filter((u) => u.includes(MEMBERSHIP))).toEqual([]);
+        expect(standingAsked()).toEqual([STANDS_HERE]);
+        phone.asked.length = 0;
+        expect(word(await message(at(FARAWAY)))).toBe('open');
+        expect(standingAsked()).toEqual([STANDS_HERE]);
+        phone.asked.length = 0;
         phone.directHere = [dm('d-here')]; phone.directHeld = [dm('d-held')]; SERVERS.riverside.members.add(K); SERVERS.hillside.members.add(K);
         expect(word(await message(at(HILLSIDE)))).toBe('here');
-        expect(phone.asked.filter((u) => u.includes(MEMBERSHIP))).toEqual([]);
+        expect(standingAsked()).toEqual([]);
         phone.directHere = [];
         expect(word(await message(at('https://hill.example')))).toBe('held');
-        expect(phone.asked.filter((u) => u.includes(MEMBERSHIP))).toEqual([STANDS]);
+        expect(standingAsked()).toEqual([STANDS]);
+        phone.asked.length = 0;
+        // Started here: its server's own refusal, so nothing is asked of it.
+        phone.directHeld = []; phone.files.clear();
+        expect(word(await message(at(RIVERSIDE)))).toBe('here');
+        expect(standingAsked()).toEqual([]);
     });
 
     it('a standing that does not come in time: as this phone holds it, after the deadline and no later', async () => {
@@ -835,23 +850,22 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         expect(nowhere(got)).toBeNull();
         expect(made()).toEqual([expect.objectContaining({ peerHome: 'faraway.example', state: 'open' })]);
         expect(phone.files.get(HILLSIDE)?.size).toBe(1);
-        expect(phone.asked.filter((u) => u.includes(MEMBERSHIP))).toEqual([STANDS]);
+        expect(standingAsked()).toEqual([STANDS, STANDS_HERE]);
         phone.files.delete(RIVERSIDE);
         SERVERS.hillside.suspended.clear();
         expect(word(await message(at(FARAWAY)))).toBe('openHeld');
     });
 
-    it('suspended in the community in use: a chat across there is none to open and none is made, with nothing asked; a held one\'s opens; lifted, as before', async () => {
+    it('suspended in the community in use, asked at the tap: a chat across there is none to open and none is made; a held one\'s opens; lifted, as before, at once', async () => {
         saysNow(); heard();
         SERVERS.riverside.suspended.add(ME); SERVERS.faraway.members.add(K);
-        await appAsked();
         expect(word(await message(at(FARAWAY)))).toBe('not-member');
         expect(made()).toEqual([]);
+        expect(standingAsked()).toEqual([STANDS_HERE]);
         across(RIVERSIDE, 'faraway.example')();
         expect(word(await message(at(FARAWAY)))).toBe('not-member');
         // Nothing made or reopened: the chat stays in Chat as it is.
         expect(made()).toEqual([expect.objectContaining({ state: 'open' })]);
-        expect(phone.asked.filter((u) => u.includes(MEMBERSHIP))).toEqual([]);
         // A direct chat here is theirs to answer in, and a chat across a held community carries is written in there.
         phone.directHere = [dm('d-here')]; SERVERS.riverside.members.add(K);
         expect(word(await message(at(FARAWAY)))).toBe('here');
@@ -862,8 +876,45 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         expect(nowhere(there)).toBeNull();
         phone.files.delete(HILLSIDE);
         SERVERS.riverside.suspended.clear();
-        await appAsked();
         expect(word(await message(at(FARAWAY)))).toBe('open');
+    });
+
+    it('suspended in the community in use while the phone can\'t reach it, as a tap heard before: still none to open and none made', async () => {
+        saysNow(); heard();
+        SERVERS.riverside.suspended.add(ME); SERVERS.faraway.members.add(K);
+        expect(word(await message(at(FARAWAY)))).toBe('not-member');
+        phone.info.clear();
+        expect(word(await message(at(FARAWAY)))).toBe('not-member');
+        across(RIVERSIDE, 'faraway.example')();
+        expect(word(await message(at(FARAWAY)))).toBe('not-member');
+        expect(made()).toEqual([expect.objectContaining({ state: 'open' })]);
+    });
+
+    it('the one in use does not say how the account stands in time: as the app last heard it, after the one deadline and no later, as the chat is made too', async () => {
+        saysNow(); heard();
+        SERVERS.faraway.members.add(K);
+        // The first one loads the modules it needs, before the clock is held.
+        expect(word(await message(at(FARAWAY)))).toBe('new');
+        vi.useFakeTimers();
+        try {
+            vi.stubGlobal('fetch', (_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+            }));
+            for (const [chat, noted, want] of [[true, false, 'open'], [true, true, 'not-member'], [false, false, 'new'], [false, true, 'not-member']] as const) {
+                resetStandingHereForTests();
+                if (noted) noteStandingHere(ME, RIVERSIDE, SAID_SUSPENDED);
+                if (!chat) phone.files.clear(); else across(RIVERSIDE, 'faraway.example')();
+                let got: Target | null = null;
+                void message(at(FARAWAY)).then((to) => { got = to; });
+                // The chat there is asked about first, then (no chat counted) the one to be made: one deadline each.
+                await vi.advanceTimersByTimeAsync(4_900);
+                expect(got, `${chat} ${noted}`).toBeNull();
+                await vi.advanceTimersByTimeAsync(chat && noted ? 5_300 : 200);
+                expect(got && word(got), `${chat} ${noted}`).toBe(want);
+            }
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('what each refusal says, on Contacts and New message alike', () => {
@@ -876,18 +927,57 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         ]);
     });
 
-    it.each([
-        { name: 'another community said it', note: () => noteStandingHere(ME, HILLSIDE, { kind: 'member', suspended: true }), want: 'open' },
-        { name: 'it said it of another account', note: () => noteStandingHere(K, RIVERSIDE, { kind: 'member', suspended: true }), want: 'open' },
-        { name: 'it said it, however its address is spelled', note: () => noteStandingHere(ME, 'https://Riverside.example:443/', { kind: 'member', suspended: true }), want: 'not-member' },
-        { name: 'it said it, then that the account is a member', note: () => { noteStandingHere(ME, RIVERSIDE, { kind: 'member', suspended: true }); noteStandingHere(ME, RIVERSIDE, { kind: 'member' }); }, want: 'open' },
-        { name: 'it said it, then that it knows no such member', note: () => { noteStandingHere(ME, RIVERSIDE, { kind: 'member', suspended: true }); noteStandingHere(ME, RIVERSIDE, { kind: 'stranger', recovering: false }); }, want: 'open' },
-        { name: 'it said nothing yet', note: () => {}, want: 'open' },
-    ])('what the app last heard of the account in the community in use: $name -> $want', async ({ note, want }) => {
-        saysNow(); heard(); across(RIVERSIDE, 'faraway.example')();
-        note();
-        expect(word(await message(at(FARAWAY)))).toBe(want);
-    });
+    // ── what the app last heard of the account in the community in use x what it says at the tap x the chat there ──
+    const SAID_SUSPENDED = { kind: 'member', suspended: true } as const;
+    const NOTED: Array<{ noted: string; note: () => void; suspended: boolean }> = [
+        { noted: 'nothing', note: () => {}, suspended: false },
+        { noted: 'suspended', note: () => noteStandingHere(ME, RIVERSIDE, SAID_SUSPENDED), suspended: true },
+        { noted: 'suspended, its address spelled otherwise', note: () => noteStandingHere(ME, 'https://Riverside.example:443/', SAID_SUSPENDED), suspended: true },
+        { noted: 'suspended, then another community answered that the account is a member there', note: () => { noteStandingHere(ME, RIVERSIDE, SAID_SUSPENDED); noteStandingHere(ME, HILLSIDE, { kind: 'member' }); }, suspended: true },
+        { noted: 'suspended, then a member, as another account', note: () => { noteStandingHere(ME, RIVERSIDE, SAID_SUSPENDED); noteStandingHere(K, RIVERSIDE, { kind: 'member' }); }, suspended: true },
+        { noted: 'a member, then suspended', note: () => { noteStandingHere(ME, RIVERSIDE, { kind: 'member' }); noteStandingHere(ME, RIVERSIDE, SAID_SUSPENDED); }, suspended: true },
+        { noted: 'suspended, then a member', note: () => { noteStandingHere(ME, RIVERSIDE, SAID_SUSPENDED); noteStandingHere(ME, RIVERSIDE, { kind: 'member' }); }, suspended: false },
+        { noted: 'suspended, then no member, its address spelled otherwise', note: () => { noteStandingHere(ME, RIVERSIDE, SAID_SUSPENDED); noteStandingHere(ME, 'https://Riverside.example/', { kind: 'stranger', recovering: false }); }, suspended: false },
+        { noted: 'suspended, by another community', note: () => noteStandingHere(ME, HILLSIDE, SAID_SUSPENDED), suspended: false },
+        { noted: 'suspended, as another account', note: () => noteStandingHere(K, RIVERSIDE, SAID_SUSPENDED), suspended: false },
+    ];
+    /** `takes`: whether a line across goes from there by that answer; null: not a definite one, so as the app last heard. */
+    const SAYS: Array<{ says: string; answer: [number, unknown] | null; takes: boolean | null }> = [
+        { says: 'a member', answer: [200, { isMember: true, callsign: 'Me', standing: 'member' }], takes: true },
+        { says: 'a member, nothing of how it stands (an older server)', answer: [200, { isMember: true, callsign: 'Me' }], takes: true },
+        { says: 'suspended', answer: [200, { isMember: true, callsign: 'Me', standing: 'suspended' }], takes: false },
+        { says: 'no member', answer: [200, { isMember: false, isRecovering: false }], takes: false },
+        { says: 'no member, its reads for members only', answer: [403, { code: 'members_only' }], takes: false },
+        { says: 'closed', answer: [403, { code: 'account_closed' }], takes: false },
+        { says: 'retired as an empty duplicate', answer: [403, { code: 'account_retired' }], takes: false },
+        { says: 'its key replaced by a re-key', answer: [403, { code: 'key_invalidated' }], takes: false },
+        { says: 'no member, a recovery under way: not settled, and no longer a suspended member', answer: [200, { isMember: false, isRecovering: true }], takes: true },
+        { says: 'signed by another key', answer: [403, { code: 'not_your_key' }], takes: null },
+        { says: 'busy', answer: [503, { error: 'busy' }], takes: null },
+        { says: 'no JSON', answer: [200, null], takes: null },
+        { says: 'nothing: no answer', answer: null, takes: null },
+    ];
+    const CHAT_HERE = { 'no chat': null, 'an open one': 'open', 'a request': 'request', 'a declined one': 'declined' } as const;
+    it.each(NOTED.flatMap((n) => SAYS.flatMap((s) => Object.entries(CHAT_HERE).map(([chat, state]) => ({ ...n, ...s, chat, state })))))(
+        'the app last heard: $noted; the tap hears: $says; across there: $chat', async ({ note, suspended, answer, takes, state }) => {
+            saysNow(); heard(); SERVERS.faraway.members.add(K);
+            if (state) across(RIVERSIDE, 'faraway.example', state)();
+            note();
+            const real = fetch;
+            vi.stubGlobal('fetch', async (url: string) => {
+                if (url !== STANDS_HERE) return real(url);
+                phone.asked.push(url);
+                if (!answer) throw new Error('no answer');
+                return new Response(answer[1] === null ? '<html>' : JSON.stringify(answer[1]), { status: answer[0] });
+            });
+            const before = onDisk();
+            const got = await message(at(FARAWAY));
+            const goes = takes ?? !suspended;
+            expect(word(got)).toBe(!goes ? 'not-member' : state === 'open' || state === 'request' ? 'open' : 'new');
+            // Asked before anything is opened or made; refused, nothing is made or reopened.
+            expect(standingAsked()).toContain(STANDS_HERE);
+            if (!goes) expect(onDisk()).toEqual(before);
+        });
 
     // ── the address it is reached at is where its requests go: the one set to, or the saved row, never the record's `using` ──
     const LEFT_BEHIND = (list: string[]) => setCommunityIndex([record('https://leftriver.example', 'https://leftriver.example', 'peer-riverside', list, ['riverside.example'])]);

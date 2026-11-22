@@ -3,7 +3,8 @@
  * A member whose account is suspended in the community in use (the probe's `standing`: server routes/community.ts, review of
  * #3359): the app's own ask (app/NodeStatusContext.tsx, at launch and each time it comes to the front) still says 'member', so
  * nothing of theirs is taken away and no not-recognised screen is shown, and notes it for Message (utils/standing-here.ts), which
- * then sends nothing across from here. Only a definite answer changes what was noted.
+ * goes by it where it gets no answer of its own at the tap (message-after-switch-standing.test.ts). Only a definite answer
+ * changes what was noted.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';

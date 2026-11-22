@@ -20,9 +20,11 @@
  *
  * Nor in a held community that removed the member: it stays on this phone, its chats too, and its server refuses the account
  * everything (403). So one that decides where Message goes is asked how the account stands there ({@link standingNow}); where
- * it was removed, the rule goes on as for a community the phone doesn't hold, and a visitor there has only the direct chats
- * already there. No answer: as this phone holds it, a member's. The community in use is asked by the app itself (an account it
- * closed is sent to the not-recognised screen: app/NodeStatusContext.tsx).
+ * it was removed, the rule goes on as for a community the phone doesn't hold, and a visitor there, or a member whose account
+ * there is suspended, has only the direct chats already there. No answer: as this phone holds it, a member's. The community in
+ * use is asked by the app itself (app/NodeStatusContext.tsx): an account it closed is sent to the not-recognised screen, and
+ * from one it says is suspended nothing goes across (utils/standing-here.ts). A new direct chat there is its server's to
+ * refuse, with its words: none is made.
  *
  * On a guest's look (the phone set to a community it only visits as a guest, nodes.ts isGuestCopy) there is no community in
  * use (core's `setTo` null): nothing there is shared, and no chat across is weighed or made in its copy ({@link
@@ -32,12 +34,13 @@
  * Chat reads; Marty 22 Nov, the S7 rule) is refused, with the words the across path already said, and nothing opens or is made.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { acrossChatListed, messagePathFor, whoseName, type KnownChat, type MessageLink, type MessagePath, type WhoseName } from '@beanpool/core';
+import { FIND_WORDS, acrossChatListed, messagePathFor, t, whoseName, type KnownChat, type MessageLink, type MessagePath, type WhoseName } from '@beanpool/core';
 import type { getConversations } from './db';
 import { askedNow, doubted, keptAsOne, keptNames, keptNamesWith, type PhoneNames } from './community-homes';
 import { readMembershipAnswer } from './membership-answer';
 import type { NodeProfile } from './node-profile';
 import { sameCommunity } from './push-pins';
+import { suspendedHere } from './standing-here';
 
 /** A chat of the community in use as Chat's list has it (db.ts getConversations): the fields Message reads. */
 export type HereChat = Pick<Awaited<ReturnType<typeof getConversations>>[number], 'id' | 'type' | 'peerPubkey' | 'peerKeys'>;
@@ -102,10 +105,14 @@ export async function blockedForMessage(me: string, keys: readonly string[]): Pr
 const STANDING_MS = 5_000;
 
 /**
- * How the account stands in a community: a member; not one (a visitor's row answers in a direct chat it has, starts none, and
- * sends nothing across from there); or removed (closed or retired there, or its key replaced): its server takes nothing of it.
+ * How the account stands in a community: a member; one that only answers, in a direct chat it has, starts none and sends
+ * nothing across from there (a visitor's row, or a member whose account there is suspended); or removed (closed or retired
+ * there, or its key replaced): its server takes nothing of it.
  */
-export type Standing = 'member' | 'visitor' | 'removed';
+export type Standing = 'member' | 'visitor' | 'suspended' | 'removed';
+
+/** Whether an account so standing only answers, in the direct chats it has ({@link Standing}). */
+const onlyAnswers = (standing: Standing | null | undefined): boolean => standing === 'visitor' || standing === 'suspended';
 
 /** How the account stands in `community`, asked now (the membership probe, signed by its key: membership-probe.ts). Null: no answer in time. */
 export async function standingNow(me: string, community: string): Promise<Standing | null> {
@@ -116,7 +123,7 @@ export async function standingNow(me: string, community: string): Promise<Standi
         const res = await fetchMembership(community, me, stop.signal);
         const body: unknown = await res.json().catch(() => null);
         const answer = readMembershipAnswer(res.status, body);
-        if (answer?.kind === 'member') return 'member';
+        if (answer?.kind === 'member') return answer.suspended ? 'suspended' : 'member';
         if (answer?.kind === 'closed') return 'removed';
         // A recovery under way there for this key: not settled, so as this phone holds it.
         if (answer?.kind === 'stranger') return answer.recovering ? null : 'visitor';
@@ -159,16 +166,17 @@ export async function messagePathOnPhone(me: string, links: readonly MessageLink
     let whose = whoseOf(names);
     const over = (from: readonly string[]): MessagePath => messagePathFor({
         links: weighed, chats, setTo, look, held: from, blocked, whose,
-        // Not heard from yet: its chats across still count (only a community that says it takes none is left out).
-        takesAcross: (c) => { const profile = profileOf(names, c); return !profile || acrossRefusal(profile, outsideMessagesOn) === null; },
+        // Not heard from yet: its chats across still count (only a community that says it takes none is left out, and the one in
+        // use once it says this account is suspended: its server refuses every line across).
+        takesAcross: (c) => { const profile = profileOf(names, c); return !(c === setTo && suspendedHere(me, c)) && (!profile || acrossRefusal(profile, outsideMessagesOn) === null); },
     });
     /** How the account stands in each held community asked so far (null: no answer, so as this phone holds it: a member's). */
     const standing = new Map<string, Standing | null>();
-    /** The rule over the held communities the account may write in (`without`: one left out); where it is a visitor, only a direct chat there counts. */
+    /** The rule over the held communities the account may write in (`without`: one left out); where it only answers, only a direct chat there counts. */
     const path = (without: string | null = null): MessagePath => {
         const from = others.filter((c) => c !== without && standing.get(c) !== 'removed');
         const to = over(from);
-        return to.open === 'existing' && to.chat.kind === 'direct' ? to : over(from.filter((c) => standing.get(c) !== 'visitor'));
+        return to.open === 'existing' && to.chat.kind === 'direct' ? to : over(from.filter((c) => !onlyAnswers(standing.get(c))));
     };
     /** {@link path}, once every held community that would change it by being left out has been asked how the account stands there. */
     const settled = async (): Promise<MessagePath> => {
@@ -236,15 +244,28 @@ function acrossRefusal(profile: NodeProfile | null, on: (features: NodeProfile['
 }
 
 /** What became of an across chat asked for: opened (its id); the person is in the community in use after all (`here`, their key); or why not (`uncertain`: whose the address is can't be said). */
-export type AcrossOpened = { chatId: string } | { here: string } | { refused: 'no-community' | 'off' | 'no-home' | 'blocked' | 'uncertain' };
+export type AcrossOpened = { chatId: string } | { here: string } | { refused: AcrossRefused };
+export type AcrossRefused = 'no-community' | 'off' | 'no-home' | 'not-member' | 'blocked' | 'uncertain';
+
+/** What Message says where nothing goes across, on every screen; not for `uncertain`, whose screen offers what it can. */
+export function acrossRefusedWords(refused: Exclude<AcrossRefused, 'uncertain'>): string {
+    switch (refused) {
+        case 'off': return t("This community doesn't take messages from other communities.");
+        case 'no-home': return t("This community's server knows none of its own names yet, so it can't send to another community.");
+        // The words its server refuses the line in (routes/relay.ts), and the web's.
+        case 'not-member': return t(FIND_WORDS.notAMember);
+        case 'blocked': return t('You have blocked this user. Messaging is disabled.');
+        case 'no-community': return t('Connect to your community to start a chat.');
+    }
+}
 
 /**
  * A chat across with someone in a community the phone shares none with, made from the contact's link as an address card
  * makes one (outside-mail.ts openChatFromCard: kept in the community in use's file, open, named as the link names them; a
  * declined one there is opened again, and one kept with another home goes to the link's now). Refused with no community in
  * use (a guest's look included: its copy is not the member's, and its server would refuse the line), where the community
- * in use doesn't take messages from other communities or has no address of its own to send from, or for someone the account
- * blocked; nothing is made then. Nor when the link's address is one of the community in use's own (asked now, always: a name
+ * in use doesn't take messages from other communities, has no address of its own to send from, or says the account is
+ * suspended there (its server refuses the line), or for someone the account blocked; nothing is made then. Nor when the link's address is one of the community in use's own (asked now, always: a name
  * it took on since this phone last heard), where the direct chat here is theirs: its server refuses every line across to one
  * of its own names. Nor when whose the address is can't be said for certain (utils/community-homes.ts).
  */
@@ -261,6 +282,7 @@ export async function openAcrossChat(target: { key: string; home: string; name: 
     if (whose.whose === 'uncertain' || await doubted(names, target.home, target.key, ctx.nodeUrl)) return { refused: 'uncertain' };
     const refused = acrossRefusal(profileOf(names, ctx.nodeUrl), outsideMessagesOn);
     if (refused) return { refused };
+    if (suspendedHere(ctx.identity.publicKey, inFront)) return { refused: 'not-member' };
     const { openChatFromCard } = await import('./outside-mail');
     const chatId = await openChatFromCard(ctx, { key: target.key, home: target.home, name: target.name });
     return chatId ? { chatId } : { refused: 'blocked' };

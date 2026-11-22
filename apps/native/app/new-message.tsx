@@ -24,7 +24,7 @@ import { useContactsRecord } from '../utils/use-contacts';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal, isNoCopyInPlace } from '../utils/db';
 import { heldCommunityList, heldPeopleMatching, type HeldPerson } from '../utils/held-chats';
 import { sameCommunity } from '../utils/push-pins';
-import { existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
+import { acrossRefusedWords, existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { membersByKey, outsideMessagesOn } from '../utils/node-profile';
 import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
@@ -338,7 +338,7 @@ export default function NewMessageScreen() {
             if (path.open === 'across') {
                 const opened = await openAcrossChat(path);
                 if ('chatId' in opened) { router.replace(`/outside-chat/${opened.chatId}`); return; }
-                if ('refused' in opened) throw new Error(opened.refused === 'off' ? t("This community doesn't take messages from other communities.") : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.") : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : opened.refused === 'uncertain' ? t('Please try again.') : '');
+                if ('refused' in opened) throw new Error(opened.refused === 'uncertain' ? t('Please try again.') : acrossRefusedWords(opened.refused));
             }
             const fromNode = nodeResults.find(m => m.public_key === pubkey);
             if (fromNode) await keepCards([fromNode]);

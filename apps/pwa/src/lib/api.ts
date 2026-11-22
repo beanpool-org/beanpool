@@ -774,7 +774,11 @@ export async function getCommunityHealth(): Promise<CommunityHealth> {
     return request('GET', '/api/community/health');
 }
 
-export async function checkMembership(publicKey: string): Promise<{ isMember: boolean; callsign: string | null }> {
+/**
+ * This community's answer to the key's own membership probe. `standing`, to a member: 'suspended' while their account is
+ * suspended or paused (still a member; this community refuses their lines to other communities and a new chat), else 'member'.
+ */
+export async function checkMembership(publicKey: string): Promise<{ isMember: boolean; callsign: string | null; standing?: 'member' | 'suspended' }> {
     return request('GET', `/api/community/membership/${encodeURIComponent(publicKey)}`);
 }
 

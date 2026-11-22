@@ -4,13 +4,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { fetchMembership } from '../utils/membership-probe';
 import { membershipAnswerOf } from '../utils/membership-answer';
+import { noteStandingHere } from '../utils/standing-here';
 
 /**
  * Whether the active community node recognises this identity as a member.
  *  - 'unknown'  : not checked yet, no node set, or the node was unreachable / answered
  *                 oddly. We deliberately do NOT act on this — never punish a flaky
  *                 connection by treating it as a rejection.
- *  - 'member'   : the node confirmed membership.
+ *  - 'member'   : the node confirmed membership, a suspended account's too: it stays in the app, and Message sends nothing
+ *                 across from here while it lasts (utils/standing-here.ts).
  *  - 'stranger' : the node is reachable and definitively says this key is NOT a member
  *                 (or refuses it as one: 403 `members_only` / `private_preview`).
  *  - 'closed'   : the node closed this key's account there (403 `account_closed`: removed, or
@@ -67,6 +69,7 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
             const res = await fetchMembership(url, identity, controller.signal);
             clearTimeout(timeoutId);
             const answer = await membershipAnswerOf(res);
+            if (answer) noteStandingHere(identity.publicKey, url, answer);
             // No definite answer (an odd status, a body that isn't the probe's): don't treat it as a rejection.
             const result: NodeRecognition = !answer ? 'unknown'
                 : answer.kind === 'member' ? 'member'

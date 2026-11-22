@@ -17,7 +17,7 @@ import { GROUP_HOLD_EVENT_TEXT, readableLineTo } from '../lib/group-hold';
 import { fakeGroupNode, person, type FakeGroupNode } from '../lib/group-chat-fake-node.test-support';
 import { resetPendingChatLinesForTest } from '../lib/pending-chat-lines';
 import { makeEpochRecord } from '../lib/group-chat-crypto';
-import { resetAccountEpochForTest } from '../lib/account-epoch';
+import { endAccountEpoch, resetAccountEpochForTest } from '../lib/account-epoch';
 import { epochEndsInAnotherTab } from '../lib/another-tab';
 
 if (typeof window !== 'undefined' && window.HTMLElement) window.HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -285,10 +285,13 @@ describe('a locked answer is kept as seen', () => {
     });
 
     // A chat with an epoch is the usual locked one: its answer goes on to the keys, which raise the highest (#3362's
-    // review, W1). Another tab's Sign Out this page hasn't heard yet leaves this page open on the chat.
-    const SIGN_OUTS: { name: string; leave: () => void }[] = [
-        { name: 'in this tab', leave: () => { cleanup(); forgetGroupKeys(); } },
-        { name: "in another tab, not heard here yet", leave: () => { epochEndsInAnotherTab('signed-out', { heard: false }); } },
+    // review, W1), unless the page has gone (an unmounted page drops a late answer before its keys). `pageUp`: the
+    // chat is still on screen as the answer lands: this tab's Sign Out has only begun (its first step ends the epoch),
+    // or another tab's hasn't been heard here yet.
+    const SIGN_OUTS: { name: string; pageUp: boolean; leave: () => void }[] = [
+        { name: 'in this tab, the page gone', pageUp: false, leave: () => { cleanup(); forgetGroupKeys(); } },
+        { name: 'in this tab, the page still up', pageUp: true, leave: () => { endAccountEpoch('signed-out'); } },
+        { name: 'in another tab, not heard here yet', pageUp: true, leave: () => { epochEndsInAnotherTab('signed-out', { heard: false }); } },
     ];
     for (const withEpoch of [false, true]) {
         for (const s of SIGN_OUTS) {
@@ -303,8 +306,8 @@ describe('a locked answer is kept as seen', () => {
                 s.leave();
                 letGo();
                 await settle();
-                // The answer was taken in after the Sign Out (with an epoch, its keys asked for), and wrote nothing.
-                if (withEpoch) expect(node.calls.slice(asked).some((c) => c.method === 'GET' && c.path.includes('/keys'))).toBe(true);
+                // The answer was taken in after the Sign Out (with an epoch and the page up, its keys asked for), and wrote nothing.
+                if (withEpoch && s.pageUp) expect(node.calls.slice(asked).some((c) => c.method === 'GET' && c.path.includes('/keys'))).toBe(true);
                 expect(mem.dump(LOCK_DB, 'locks')).toEqual({});
                 await expect(readableLineTo(G)).rejects.toMatchObject({ code: 'refused' });
             });

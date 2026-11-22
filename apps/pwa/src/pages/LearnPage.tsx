@@ -570,13 +570,19 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
     const [fixSent, setFixSent] = useState(false);
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<string | null>(null);
+    // Which showing of a page this is, for what lands after it: an answer or a read that comes back once another page is open, this
+    // one is read again, or it is gone, is dropped, as this effect's own read is (review of #3353, N6).
+    const showing = useRef(0);
+    // The read after "photos changed" alone, numbered: an older one is dropped for a newer one, or for any answer shown since.
+    const reread = useRef(0);
     useEffect(() => {
         let live = true;
+        showing.current += 1;
         setState(null);
         setHelped(null); setStillRight(false); setMarking(null); setEditing(null); setRefusal(null);
         const read = preview ? Promise.resolve(samplePosts().find((p) => p.id === id) ?? null) : getLearnPost(id);
         read.then((post) => { if (live) setState({ id, post }); }, () => { if (live) setState('failed'); });
-        return () => { live = false; };
+        return () => { live = false; showing.current += 1; };
     }, [id, preview, tries]);
 
     const header = <Header title={upperCase(t(KNOWLEDGE_NAMES.kind))} label onBack={onBack} />;
@@ -585,25 +591,31 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
      * whether the writer is a Local guide (only a read of the page by id does), so the page keeps what it knew rather than
      * reading a pressed tap as taken back or dropping the writer's badge.
      */
-    const showAnswer = (next: LearnPost) => setState((prev) => {
-        const was = prev && prev !== 'failed' ? prev.post?.knowledge : undefined;
-        const kept = {
-            ...(next.knowledge.helpedByMe === undefined && was?.helpedByMe !== undefined ? { helpedByMe: was.helpedByMe } : {}),
-            ...(next.knowledge.writerLocalGuide === undefined && was?.writerLocalGuide !== undefined ? { writerLocalGuide: was.writerLocalGuide } : {}),
-        };
-        return { id, post: Object.keys(kept).length ? { ...next, knowledge: { ...next.knowledge, ...kept } } : next };
-    });
+    const showAnswer = (next: LearnPost) => {
+        reread.current += 1;
+        setState((prev) => {
+            const was = prev && prev !== 'failed' ? prev.post?.knowledge : undefined;
+            const kept = {
+                ...(next.knowledge.helpedByMe === undefined && was?.helpedByMe !== undefined ? { helpedByMe: was.helpedByMe } : {}),
+                ...(next.knowledge.writerLocalGuide === undefined && was?.writerLocalGuide !== undefined ? { writerLocalGuide: was.writerLocalGuide } : {}),
+            };
+            return { id, post: Object.keys(kept).length ? { ...next, knowledge: { ...next.knowledge, ...kept } } : next };
+        });
+    };
     /** One action: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
-    const act = async (go: () => Promise<unknown>, after?: () => void) => {
+    const act = async <A,>(go: () => Promise<A>, after?: (answer: A) => void) => {
         if (busy) return;
+        const here = showing.current;
         setBusy(true);
         setRefusal(null);
         try {
-            const answer = (await go()) as { post?: LearnPost } | undefined;
-            if (answer?.post?.knowledge) showAnswer(answer.post);
-            after?.();
+            const answer = await go();
+            if (showing.current !== here) return;
+            const post = (answer as { post?: LearnPost } | undefined)?.post;
+            if (post?.knowledge) showAnswer(post);
+            after?.(answer);
         } catch (e) {
-            setRefusal(learnRefusalText(e));
+            if (showing.current === here) setRefusal(learnRefusalText(e));
         } finally {
             setBusy(false);
         }
@@ -651,18 +663,22 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                         initial={{ title: opened.title, body: opened.description, topic: opened.category, place: opened.knowledge.place ?? '', sources: ownKnowledgeSources(opened.knowledge.sources), freeTags: opened.freeTags ?? [] }}
                         pagePhotos={fix ? [] : (opened.photos ?? []).filter((p): p is string => typeof p === 'string')}
                         onSend={async (input) => {
-                            if (fix) { await suggestLearnFix(opened, input); setFixSent(true); return; }
+                            const here = showing.current;
+                            if (fix) { await suggestLearnFix(opened, input); if (showing.current === here) setFixSent(true); return; }
                             let answer: { post?: LearnPost } | undefined;
                             try {
                                 answer = await editLearnPage(opened, input);
                             } catch (e) {
                                 // Another owner or admin changed the page's photos after this form opened: the page behind the form is
-                                // read again, so opening Edit again ("Open it again.") starts from the photos it has now.
-                                if ((e as { code?: unknown } | null)?.code === 'photos_changed') {
-                                    getLearnPost(id).then((p) => { if (p) setState({ id, post: p }); }, () => {});
+                                // read again, so opening Edit again ("Open it again.") starts from the photos it has now. Only while that
+                                // page is still the one on screen, and unless a later read or a Save's answer showed it since.
+                                if ((e as { code?: unknown } | null)?.code === 'photos_changed' && showing.current === here) {
+                                    const mine = ++reread.current;
+                                    getLearnPost(id).then((p) => { if (p && showing.current === here && reread.current === mine) setState({ id, post: p }); }, () => {});
                                 }
                                 throw e;
                             }
+                            if (showing.current !== here) return;
                             if (answer?.post?.knowledge) showAnswer(answer.post); else setTries((n) => n + 1);
                             setEditing(null);
                         }} />
@@ -765,7 +781,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         {acts.helped && (
                             <button type="button" data-testid="learn-post-helped" aria-pressed={helpedMine} disabled={busy}
-                                onClick={() => void act(() => markLearnHelped(post.id, !helpedMine).then((h) => setHelped({ n: h.helped, mine: h.helpedByMe })))}
+                                onClick={() => void act(() => markLearnHelped(post.id, !helpedMine), (h) => setHelped({ n: h.helped, mine: h.helpedByMe }))}
                                 className={`${TOOL} ${helpedMine ? '!bg-bp-chip-learn-tint !text-bp-chip-learn-ink !border-bp-ink-learn' : ''}`}>
                                 {helpedMine ? t('👍 Helped ✓') : t('👍 This helped')}
                             </button>

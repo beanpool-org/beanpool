@@ -10,6 +10,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { READ_TIMEOUT_MS, wantsFill, word } from '@beanpool/core';
 import type { NodeProfile } from './node-profile';
+import { photoOnCommunity } from './photo-address';
 import { EVENT_TYPES_QUERY } from './events';
 import { marketSecondRow, type MarketTypeFilter } from './market-filters';
 
@@ -43,10 +44,10 @@ export function normalizeServerPosts(data: unknown, anchorUrl: string): any[] {
             try { photosArr = JSON.parse(p.photos); } catch { photosArr = []; }
         }
         if (Array.isArray(photosArr)) {
-            photosArr = photosArr.map((url: string) => url && url.startsWith('/') ? `${anchorUrl}${url}` : url);
+            photosArr = photosArr.map((url: string) => photoOnCommunity(anchorUrl, url));
         }
         const bannerUrl = p.authorBannerUrl || p.author_banner_url || null;
-        const absoluteBannerUrl = bannerUrl && bannerUrl.startsWith('/') ? `${anchorUrl}${bannerUrl}` : bannerUrl;
+        const absoluteBannerUrl = bannerUrl && photoOnCommunity(anchorUrl, bannerUrl);
         return {
             ...p,
             photos: photosArr,

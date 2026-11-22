@@ -2,6 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -34,7 +37,11 @@ vi.mock('expo-router', () => ({
 }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: any) => createElement('div', null, children) }));
-vi.mock('expo-image', () => ({ Image: () => null }));
+// A picture is drawn as an <img> with its address and its label, so the Edit's list (slice 4) can be read.
+vi.mock('expo-image', async () => {
+    const { createElement: el } = await import('react');
+    return { Image: ({ source, accessibilityLabel }: any) => el('img', { src: source?.uri, 'aria-label': accessibilityLabel }) };
+});
 vi.mock('react-native', async () => {
     const { createElement: el } = await import('react');
     const host = (tag: string) => function Host(props: Record<string, any>) {
@@ -76,6 +83,8 @@ vi.mock('../../components/learn/useLearnWriter', () => ({
     forgetLearnRole: vi.fn(async () => {}),
 }));
 vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
+// The form's Edit draws a page's pictures against the node's address (learn-keep.ts pagePhotoUri): read from the phone's store on a device.
+vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => 'https://node.test') }));
 // The form's Tags field (Learn's tags) is the Market's picker, whose icons and sheet need a device: it stands in here, and
 // learn-tags-render.test.ts and tag-picker-sheet-render.test.ts hold it.
 vi.mock('../../components/TagPicker', () => ({ TagPicker: () => null }));
@@ -112,7 +121,9 @@ vi.mock('expo-modules-core', () => ({ requireNativeModule: vi.fn(() => ({})), re
 
 import { pseudoLocalise, setLanguage } from '@beanpool/core';
 import { KnowledgeDetail } from '../../components/learn/KnowledgeDetail';
-import { editBody, fixBody, formOfPage, pageActions } from '../../components/learn/learn-keep';
+import { DeviceEventEmitter } from 'react-native';
+import { signedGet } from '../db';
+import { LEARN_PAGE_READ, editBody, fixBody, formOfPage, pageActions } from '../../components/learn/learn-keep';
 import NewKnowledgeScreen from '../../app/learn/new';
 
 const page = (extra: Record<string, unknown> = {}, k: Record<string, unknown> = {}) => ({
@@ -515,5 +526,200 @@ describe('a refusal shows the node\'s own sentence, never a success it didn\'t g
         await click('learn-new-send');
         expect(q('learn-new-problem')!.textContent).toBe(refuse.message);
         expect(has('learn-new-done-screen')).toBe(false);
+    });
+});
+
+
+// Learn web pictures, slice 4 (DESIGN-learn-web-pictures-fable.md §9; Marty, 22 Nov 2026, "All six of Fable's picks"): the phone's
+// Edit lists the page's pictures with Remove photo and sends the kept ones as the page gave them, as the web's slice 3 does; Edit
+// and Suggest a fix leave the node's credit rows out. The web's twin: apps/pwa/src/pages/LearnPage.write.test.tsx "taking a
+// picture off a page".
+describe('an Edit takes a picture off a page; the forms leave the node\'s credit rows out (learn web pictures, slice 4)', () => {
+    const ADDR = [0, 1, 2].map((n) => `/api/marketplace/posts/tip/photos/${n}?v=1&k=key${n}`);
+    const COMMONS = (f: string) => `https://commons.wikimedia.org/wiki/File:${f}`;
+    const OWN = [{ url: 'https://council.example/tip', label: 'Council tip page' }, { url: 'https://council.example/bins', label: 'Bins' }];
+    const CREDITS = [{ url: COMMONS('Tip.jpg'), label: '📷 1 · Jane Doe · CC BY-SA 4.0', photo: 1 }, { url: COMMONS('Bins.jpg'), label: '📷 3 · CC0', photo: 3 }];
+    const pictured = (extra: Record<string, unknown> = {}) => page({ photos: [...ADDR], ...extra }, { sources: [...OWN, ...CREDITS] });
+    const CHANGED = 'This page’s photos changed. Open it again.';
+    const openEdit = async () => {
+        h.checks = true;
+        h.pages = [pictured()];
+        h.byId = fromNode(pictured());
+        h.params = { edit: 'tip' };
+        await show(createElement(NewKnowledgeScreen));
+    };
+    const toggle = (i: number) => q(`learn-new-photo-toggle-${i}`)!;
+    const rows = () => Array.from(q('learn-new-page-photos')!.querySelectorAll('[data-testid^="learn-new-page-photo-"]'))
+        .map((r) => `${r.getAttribute('data-testid')!.replace('learn-new-page-photo-', '')}:${r.querySelector('img')?.getAttribute('src')}`);
+    const edits = () => h.sent.filter((x) => x.path.endsWith('/edit'));
+    const emitted = () => (DeviceEventEmitter.emit as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === LEARN_PAGE_READ).map((c) => c[1]);
+
+    it('Edit on a page with 3 pictures: each shows, drawn from the node, with Remove photo naming its number; nothing to add one', async () => {
+        await openEdit();
+        expect(rows()).toEqual(ADDR.map((a) => `kept:https://node.test${a}`));
+        expect(q('learn-new-page-photos')!.textContent).toContain('A photo you remove is taken off this page for everyone when you save.');
+        expect([0, 1, 2].map((i) => toggle(i).textContent)).toEqual(['Remove photo', 'Remove photo', 'Remove photo']);
+        // A screen reader hears which picture each button is for (review of #3353, N6), after the words on it, so voice control finds it
+        // by what it shows (review of #3355), and each picture its number.
+        expect([0, 1, 2].map((i) => toggle(i).getAttribute('aria-label'))).toEqual(['Remove photo, Photo 1', 'Remove photo, Photo 2', 'Remove photo, Photo 3']);
+        expect(Array.from(q('learn-new-page-photos')!.querySelectorAll('img')).map((i) => i.getAttribute('aria-label'))).toEqual(['Photo 1', 'Photo 2', 'Photo 3']);
+        expect(has('learn-new-add-photo')).toBe(false);
+    });
+
+    it('Remove the second, Save: the node is sent pictures 1 and 3 as the page gave them, and its answer goes to the page behind', async () => {
+        await openEdit();
+        await click('learn-new-photo-toggle-1');
+        expect(rows().map((r) => r.split(':')[0])).toEqual(['kept', 'off', 'kept']);
+        expect(toggle(1).textContent).toBe('Keep this photo');
+        expect(toggle(1).getAttribute('aria-label')).toBe('Keep this photo, Photo 2');
+        await click('learn-new-send');
+        expect(edits()).toHaveLength(1);
+        expect(edits()[0].body.photos).toEqual([ADDR[0], ADDR[2]]);
+        expect(router.back).toHaveBeenCalled();
+        expect(emitted()).toHaveLength(1);
+        expect(emitted()[0].id).toBe('tip');
+    });
+
+    it('Keep this photo puts it back: an Edit that takes nothing off sends no picture list', async () => {
+        await openEdit();
+        await click('learn-new-photo-toggle-0');
+        await click('learn-new-photo-toggle-0');
+        type('learn-new-title', 'How the tip works now');
+        await click('learn-new-send');
+        expect(edits()).toHaveLength(1);
+        expect(edits()[0].body).not.toHaveProperty('photos');
+        expect(edits()[0].body.title).toBe('How the tip works now');
+    });
+
+    it('every picture removed: an empty list', async () => {
+        await openEdit();
+        for (const i of [0, 1, 2]) await click(`learn-new-photo-toggle-${i}`);
+        await click('learn-new-send');
+        expect(edits()[0].body.photos).toEqual([]);
+    });
+
+    it('leaving without saving sends nothing', async () => {
+        await openEdit();
+        await click('learn-new-photo-toggle-2');
+        await click('learn-new-back');
+        expect(h.sent).toEqual([]);
+        expect(router.back).toHaveBeenCalled();
+    });
+
+    it('"This page\'s photos changed": the node\'s words; the page behind is read again; Save again sends the list the form opened on, never one built from the re-read', async () => {
+        await openEdit();
+        const readsBefore = vi.mocked(signedGet).mock.calls.length;
+        // Another admin took picture 1 off meanwhile: the node now holds the old pictures 2 and 3, at places 0 and 1, new versions.
+        const now = [ADDR[1].replace('v=1', 'v=5').replace('/1?', '/0?'), ADDR[2].replace('v=1', 'v=5').replace('/2?', '/1?')];
+        h.byId = fromNode(pictured({ photos: now, updatedAt: '2026-11-22T00:00:00.000Z' }));
+        h.refuse = { status: 409, message: CHANGED, code: 'photos_changed' };
+        await click('learn-new-photo-toggle-1');
+        await click('learn-new-send');
+        expect(q('learn-new-problem')!.textContent).toBe(CHANGED);
+        expect(router.back).not.toHaveBeenCalled();
+        expect(vi.mocked(signedGet).mock.calls.length).toBe(readsBefore + 1);
+        expect(emitted().map((p) => p.photos)).toEqual([now]);
+        // The form still shows the pictures it opened on, the same one marked off.
+        expect(rows()).toEqual([`kept:https://node.test${ADDR[0]}`, `off:https://node.test${ADDR[1]}`, `kept:https://node.test${ADDR[2]}`]);
+        await click('learn-new-send');
+        expect(edits().map((e) => e.body.photos)).toEqual([[ADDR[0], ADDR[2]], [ADDR[0], ADDR[2]]]);
+        expect(q('learn-new-problem')!.textContent).toBe(CHANGED);
+    });
+
+    it('another refusal is shown in the node\'s words and reads nothing again', async () => {
+        await openEdit();
+        const readsBefore = vi.mocked(signedGet).mock.calls.length;
+        h.refuse = { status: 503, message: 'This server is a standby copy of the community, so it can’t take this.', code: 'standby' };
+        await click('learn-new-photo-toggle-0');
+        await click('learn-new-send');
+        expect(q('learn-new-problem')!.textContent).toBe('This server is a standby copy of the community, so it can’t take this.');
+        expect(vi.mocked(signedGet).mock.calls.length).toBe(readsBefore);
+        expect(emitted()).toEqual([]);
+    });
+
+    it('Edit on a page with 2 own sources and 2 credits: the form shows 2 rows, and what is sent holds 2', async () => {
+        await openEdit();
+        expect([0, 1, 2, 3].map((i) => has(`learn-new-link-url-${i}`))).toEqual([true, true, false, false]);
+        expect([0, 1].map((i) => value(`learn-new-link-label-${i}`))).toEqual(['Council tip page', 'Bins']);
+        await click('learn-new-send');
+        expect(edits()[0].body.sources).toEqual(OWN);
+    });
+
+    it('Suggest a fix on the same page: 2 rows, no picture list; nothing changed in the sources sends none; a changed one sends the 2', async () => {
+        h.pages = [pictured()];
+        h.params = { fix: 'tip' };
+        await show(createElement(NewKnowledgeScreen));
+        expect([0, 1, 2, 3].map((i) => has(`learn-new-link-url-${i}`))).toEqual([true, true, false, false]);
+        expect(has('learn-new-page-photos')).toBe(false);
+        type('learn-new-note', 'Closed on Mondays');
+        await click('learn-new-send');
+        expect(h.sent).toEqual([{ method: 'POST', path: '/api/knowledge/drafts', body: { fixOf: 'tip', note: 'Closed on Mondays' } }]);
+        const p = pictured() as any;
+        expect(fixBody(p, { ...formOfPage(p), sources: [OWN[0], { ...OWN[1], label: 'Bin days' }] }, 'x').sources).toEqual([OWN[0], { ...OWN[1], label: 'Bin days' }]);
+        expect(editBody(p, formOfPage(p)).sources).toEqual(OWN);
+    });
+
+    it('a page with no picture: no list', async () => {
+        h.checks = true;
+        h.byId = fromNode(page());
+        h.params = { edit: 'tip' };
+        await show(createElement(NewKnowledgeScreen));
+        expect(has('learn-new-send')).toBe(true);
+        expect(has('learn-new-page-photos')).toBe(false);
+    });
+
+    it('the page behind shows the page an Edit hands back at once, and ignores another page\'s', async () => {
+        as('checker');
+        await showPage();
+        expect(host.textContent).toContain('How recycling works at the tip');
+        const handBack = async (p: Record<string, unknown>) => {
+            await act(async () => { for (const l of h.listeners.filter((x) => x.event === LEARN_PAGE_READ)) (l.fn as (x: unknown) => void)(p); });
+            await settle();
+        };
+        await handBack(page({ id: 'another', title: 'Another page', updatedAt: '2026-11-22T00:00:00.000Z' }));
+        expect(host.textContent).not.toContain('Another page');
+        await handBack(page({ title: 'The tip, as edited', updatedAt: '2026-11-22T00:00:00.000Z' }));
+        expect(host.textContent).toContain('The tip, as edited');
+    });
+
+    it('in the member\'s language: the list\'s words go through t()', async () => {
+        setLanguage('xx');
+        try {
+            await openEdit();
+            expect(q('learn-new-page-photos')!.textContent).toContain(pseudoLocalise('A photo you remove is taken off this page for everyone when you save.'));
+            expect(toggle(0).textContent).toBe(pseudoLocalise('Remove photo'));
+            await click('learn-new-photo-toggle-0');
+            expect(toggle(0).textContent).toBe(pseudoLocalise('Keep this photo'));
+            const named = (shown: string, n: number) => pseudoLocalise('{list}, {item}')
+                .replace('{list}', pseudoLocalise(shown)).replace('{item}', pseudoLocalise('Photo {n}').replace('{n}', String(n)));
+            expect(toggle(0).getAttribute('aria-label')).toBe(named('Keep this photo', 1));
+            expect(toggle(1).getAttribute('aria-label')).toBe(named('Remove photo', 2));
+        } finally {
+            setLanguage('en');
+        }
+    });
+
+    // In every language the app ships, kept or taken off: the button's name holds the words on it, whole, and its picture's number.
+    const WORDS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'words');
+    const CORE_WORDS = path.resolve(WORDS, '../../../packages/beanpool-core/words');
+    const LANGUAGES = readdirSync(WORDS).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length));
+    it('reads every language the phone ships', () => { expect(LANGUAGES).toHaveLength(24); });
+    it.each(LANGUAGES)('%s: each button is named by the words on it, then its picture', async (language) => {
+        setLanguage(language as any, [WORDS, CORE_WORDS].map((dir) => JSON.parse(readFileSync(path.join(dir, `${language}.json`), 'utf8'))));
+        try {
+            await openEdit();
+            await click('learn-new-photo-toggle-0');
+            for (const i of [0, 1, 2]) {
+                const name = toggle(i).getAttribute('aria-label')!;
+                expect(toggle(i).textContent!.trim()).not.toBe('');
+                expect(name.startsWith(toggle(i).textContent!), `"${name}" holds "${toggle(i).textContent}"`).toBe(true);
+                expect(name).toContain(String(i + 1));
+            }
+            expect(new Set([0, 1, 2].map((i) => toggle(i).getAttribute('aria-label'))).size).toBe(3);
+            // Not the English: the words came from that language's catalog.
+            expect(toggle(0).textContent).not.toBe('Keep this photo');
+        } finally {
+            setLanguage('en');
+        }
     });
 });

@@ -3,12 +3,14 @@
  * owner's or admin's "＋ Add local knowledge" that publishes at once, My suggestions with "Take it back", To check with Approve,
  * the assistant's tick and "Not this one", and the doors that open each screen straight. What it sends, and what it never does.
  */
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import * as api from '../lib/api';
 import { learnFrontOf, learnSearchOf, type LearnPost } from '../lib/learn';
 import type { BeanPoolIdentity } from '../lib/identity';
-import type { KnowledgeDraftMine, KnowledgeDraftToCheck, KnowledgeDraftWhole, KnowledgePhotoCredit } from '@beanpool/core';
+import { setLanguage, type KnowledgeDraftMine, type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgePhotoCredit } from '@beanpool/core';
 import { LearnPage, type LearnTarget } from './LearnPage';
 
 const info = vi.hoisted(() => ({ current: null as null | Record<string, unknown> }));
@@ -555,8 +557,38 @@ describe('an owner or admin', () => {
             expect(shown).toHaveLength(3);
             expect(shown.map((f) => f.querySelector('img')?.getAttribute('src'))).toEqual(ADDR);
             expect(toggles().map((b) => b.textContent)).toEqual(['Remove photo', 'Remove photo', 'Remove photo']);
+            // A screen reader hears which picture each button is for (review of #3353, N6), after the words on it, so voice control
+            // finds it by what it shows (review of #3355).
+            expect(toggles().map((b) => b.getAttribute('aria-label'))).toEqual(['Remove photo, Photo 1', 'Remove photo, Photo 2', 'Remove photo, Photo 3']);
+            fireEvent.click(toggles()[1]);
+            expect(screen.getByRole('button', { name: 'Keep this photo, Photo 2' })).toBe(toggles()[1]);
+            fireEvent.click(toggles()[1]);
             expect(screen.getByTestId('learn-form-page-photos').textContent).toContain('A photo you remove is taken off this page for everyone when you save.');
             expect(screen.queryByLabelText('Add photo')).toBeNull();
+        });
+
+        // In every language the app ships, kept or taken off: the button's name holds the words on it, whole, and its picture's number.
+        const WORDS = path.resolve(__dirname, '../../words');
+        const CORE_WORDS = path.resolve(WORDS, '../../../packages/beanpool-core/words');
+        const LANGUAGES = readdirSync(WORDS).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length));
+        it('reads every language the web ships', () => { expect(LANGUAGES).toHaveLength(24); });
+        it.each(LANGUAGES)('%s: each button is named by the words on it, then its picture', async (language) => {
+            setLanguage(language as never, [WORDS, CORE_WORDS].map((dir) => JSON.parse(readFileSync(path.join(dir, `${language}.json`), 'utf8'))));
+            try {
+                await openEdit();
+                fireEvent.click(toggles()[0]);
+                toggles().forEach((b, i) => {
+                    const name = b.getAttribute('aria-label')!;
+                    expect(b.textContent!.trim()).not.toBe('');
+                    expect(name.startsWith(b.textContent!), `"${name}" holds "${b.textContent}"`).toBe(true);
+                    expect(name).toContain(String(i + 1));
+                });
+                expect(new Set(toggles().map((b) => b.getAttribute('aria-label'))).size).toBe(3);
+                // Not the English: the words came from that language's catalog.
+                expect(toggles()[0].textContent).not.toBe('Keep this photo');
+            } finally {
+                setLanguage('en');
+            }
         });
 
         it('Remove the second, Save: sends the other two, each as the page gave it, and the page shows them', async () => {
@@ -618,6 +650,156 @@ describe('an owner or admin', () => {
             fireEvent.click(screen.getByTestId('learn-post-edit'));
             await wait();
             expect(screen.getAllByTestId('learn-form-page-photo').map((f) => f.querySelector('img')?.getAttribute('src'))).toEqual(node.posts[0].photos);
+        });
+
+        it('Save again after "photos changed", the form still open: the list is the one the form opened on, never one built from the re-read page (review of #3353, N1)', async () => {
+            await openEdit();
+            node.refuse = { status: 409, error: 'This page’s photos changed. Open it again.', code: 'photos_changed' };
+            // Another admin took picture 1 off meanwhile: the node now holds the old pictures 2 and 3, at places 0 and 1, new versions.
+            node.posts = [{ ...pictured(), photos: [ADDR[1].replace('v=1', 'v=5').replace('/1?', '/0?'), ADDR[2].replace('v=1', 'v=5').replace('/2?', '/1?')] }];
+            fireEvent.click(toggles()[1]);
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            // The form still shows the pictures it opened on, the same one marked off.
+            expect(screen.getAllByTestId('learn-form-page-photo').map((f) => `${f.getAttribute('data-kept')}:${f.querySelector('img')?.getAttribute('src')}`))
+                .toEqual([`true:${ADDR[0]}`, `false:${ADDR[1]}`, `true:${ADDR[2]}`]);
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            expect(writes().map((w) => w.body.photos)).toEqual([[ADDR[0], ADDR[2]], [ADDR[0], ADDR[2]]]);
+        });
+
+        // The read after "photos changed" is slow and something else is on screen when it lands (review of #3353, N6): it is dropped.
+        describe('an answer that lands after its page has moved on', () => {
+            const BINS = { ...PAGE, id: 'bins', title: 'When the bins go out', photos: [], knowledge: { ...PAGE.knowledge, helped: 1 } } as LearnPost;
+            /** Holds what `held` says, until `land()` (the last asked first): the node answers it as it stood when it was asked (or as `given` says). */
+            const hold = (held: (method: string, path: string) => boolean, given?: () => unknown) => {
+                const answer = request.getMockImplementation()! as (method: string, path: string, body?: unknown) => Promise<unknown>;
+                const waiting: Array<() => void> = [];
+                request.mockImplementation((async (method: string, path: string, body?: unknown) => {
+                    if (!held(method, path)) return answer(method, path, body);
+                    const asked = given ? null : await answer(method, path, body);
+                    await new Promise<void>((r) => waiting.push(r));
+                    return given ? given() : asked;
+                }) as never);
+                return { count: () => waiting.length, land: async () => { waiting.splice(0).reverse().forEach((r) => r()); await wait(); } };
+            };
+            const openPage = async () => {
+                node.posts = [pictured(), BINS];
+                node.role = 'owner';
+                const view = render(<LearnPage {...props} target={{ kind: 'page', id: 'tip' }} />);
+                await wait();
+                return { go: async (id: string) => { view.rerender(<LearnPage {...props} target={{ kind: 'page', id }} />); await wait(); }, leave: () => view.unmount() };
+            };
+            const shows = () => screen.queryByTestId('learn-post')?.querySelector('h2')?.textContent ?? 'no page';
+            const refusedSave = async () => {
+                fireEvent.click(screen.getByTestId('learn-post-edit'));
+                await wait();
+                node.refuse = { status: 409, error: 'This page’s photos changed. Open it again.', code: 'photos_changed' };
+                fireEvent.click(toggles()[1]);
+                fireEvent.click(screen.getByTestId('learn-form-send'));
+                await wait();
+            };
+
+            it('another page opened meanwhile (a bell line): that page stays, never "Loading..."', async () => {
+                const page = await openPage();
+                const read = hold((m, p) => m === 'GET' && p.includes('id=tip'));
+                await refusedSave();
+                expect(read.count()).toBe(1);
+                await page.go('bins');
+                expect(shows()).toBe('When the bins go out');
+                await read.land();
+                expect(shows()).toBe('When the bins go out');
+                expect(screen.queryByText('Loading...')).toBeNull();
+            });
+
+            it('a Save that went through meanwhile: the page shows its answer, not the older read', async () => {
+                await openPage();
+                const read = hold((m, p) => m === 'GET' && p.includes('id=tip'));
+                await refusedSave();
+                fireEvent.click(screen.getAllByRole('button', { name: /back/i })[0]);
+                await wait();
+                node.refuse = null;
+                fireEvent.click(screen.getByTestId('learn-post-edit'));
+                await wait();
+                fireEvent.click(toggles()[1]);
+                fireEvent.click(toggles()[2]);
+                fireEvent.click(screen.getByTestId('learn-form-send'));
+                await wait();
+                expect(screen.getByTestId('learn-post-photos').querySelectorAll('img')).toHaveLength(1);
+                await read.land();
+                expect(screen.getByTestId('learn-post-photos').querySelectorAll('img')).toHaveLength(1);
+            });
+
+            it("an action's answer shown meanwhile: the older read does not put the page back", async () => {
+                await openPage();
+                const read = hold((m, p) => m === 'GET' && p.includes('id=tip'));
+                await refusedSave();
+                fireEvent.click(screen.getAllByRole('button', { name: /back/i })[0]);
+                await wait();
+                node.refuse = null;
+                const tap = hold((m, p) => m === 'POST' && p.endsWith('/checked'), () => ({ post: { ...pictured(), title: 'Checked today' } }));
+                fireEvent.click(screen.getByTestId('learn-post-still-right'));
+                await wait();
+                await tap.land();
+                expect(shows()).toBe('Checked today');
+                await read.land();
+                expect(shows()).toBe('Checked today');
+            });
+
+            it('two refused Saves: the later read is the one shown, whichever lands last', async () => {
+                await openPage();
+                const read = hold((m, p) => m === 'GET' && p.includes('id=tip'));
+                await refusedSave();
+                // The second asks again once the page holds one picture; the first, asked when it held three, lands last.
+                node.posts = [{ ...pictured(), photos: [ADDR[0]] }];
+                fireEvent.click(screen.getByTestId('learn-form-send'));
+                await wait();
+                expect(read.count()).toBe(2);
+                await read.land();
+                fireEvent.click(screen.getAllByRole('button', { name: /back/i })[0]);
+                await wait();
+                expect(screen.getByTestId('learn-post-photos').querySelectorAll('img')).toHaveLength(1);
+            });
+
+            it('Learn left meanwhile: nothing is drawn and nothing is said', async () => {
+                const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+                const page = await openPage();
+                const read = hold((m, p) => m === 'GET' && p.includes('id=tip'));
+                await refusedSave();
+                page.leave();
+                await read.land();
+                expect(errors).not.toHaveBeenCalled();
+            });
+
+            it('a Save answered once another page is open is not drawn on it', async () => {
+                const page = await openPage();
+                const save = hold((m, p) => m === 'POST' && p.endsWith('/edit'));
+                fireEvent.click(screen.getByTestId('learn-post-edit'));
+                await wait();
+                fireEvent.click(toggles()[0]);
+                fireEvent.click(screen.getByTestId('learn-form-send'));
+                await wait();
+                await page.go('bins');
+                await save.land();
+                expect(shows()).toBe('When the bins go out');
+                expect(screen.queryByTestId('learn-post-photos')).toBeNull();
+            });
+
+            it.each([
+                ['its count', () => ({ helped: 41, helpedByMe: true })],
+                ['its refusal', () => { throw Object.assign(new Error('This is your own page.'), { status: 403, code: 'own_page' }); }],
+            ] as Array<[string, () => unknown]>)('"This helped" answered once another page is open: %s is not shown there', async (_what, given) => {
+                const page = await openPage();
+                const tap = hold((m, p) => m === 'POST' && p.endsWith('/helped'), given);
+                fireEvent.click(screen.getByTestId('learn-post-helped'));
+                await wait();
+                expect(tap.count()).toBe(1);
+                await page.go('bins');
+                const before = screen.getByTestId('learn-post').parentElement!.textContent;
+                await tap.land();
+                expect(shows()).toBe('When the bins go out');
+                expect(screen.getByTestId('learn-post').parentElement!.textContent).toBe(before);
+            });
         });
 
         it('a page with no picture shows no list; Suggest a fix shows none either', async () => {

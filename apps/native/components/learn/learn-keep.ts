@@ -3,9 +3,15 @@
  * the node is #3203): the page's words, who is offered which action, and what "Suggest a fix" sends. The web says the same in
  * apps/pwa/src/lib/learn.ts (learnPageActions, learnFixToSend) with the same sentences. Pure: the screens are
  * components/learn/KnowledgeDetail.tsx and app/learn/new.tsx.
+ *
+ * Pictures on a page (DESIGN-learn-web-pictures-fable.md §9 slice 4; Marty, 22 Nov 2026, "All six of Fable's picks"): an owner's
+ * or admin's Edit lists the page's pictures, each with Remove photo, and sends the ones it keeps, each as the page gave it
+ * (pagePhotosKept), as the web's LearnForm does. Edit and Suggest a fix list and send the page's own sources only: the node's
+ * credit rows for its pictures are never in a form (formOfPage).
  */
-import { KNOWLEDGE_LIMITS, knowledgeTagsDiffer, word } from '@beanpool/core';
+import { KNOWLEDGE_LIMITS, knowledgeTagsDiffer, ownKnowledgeSources, t, word } from '@beanpool/core';
 import type { KnowledgePage } from '../../utils/learn-copy';
+import { photoOnCommunity } from '../../utils/photo-address';
 import { knowledgeFormBody, type KnowledgeFormValues } from './learn-write';
 
 export const LEARN_KEEP = {
@@ -28,6 +34,11 @@ export const LEARN_KEEP = {
     // An owner's or admin's "Edit" opens on the node's page: not reached, it says so (the words other screens already say).
     unreached: word("Couldn't reach your community. Check your connection and try again."),
     again: word('Try again'),
+    // An owner's or admin's Edit of a page with pictures (slice 4): the web's words for the same list (LearnForm).
+    photosLine: word('A photo you remove is taken off this page for everyone when you save.'),
+    keepPhoto: word('Keep this photo'),
+    /** Which picture: its own label, and after its button's words in the name a screen reader and voice control hear (photoToggleName). */
+    photoN: word('Photo {n}'),
 } as const;
 
 /** Which of a page's actions a reader is offered (§2.4). */
@@ -61,14 +72,18 @@ export function pageActions(f: { signedIn: boolean; live: boolean; own: boolean;
     };
 }
 
-/** The form filled with a page as it shows: "Suggest a fix" and "Edit" start from it. Never its photos (a fix changes words). */
+/**
+ * The form filled with a page as it shows: "Suggest a fix" and "Edit" start from it. Never its photos (a fix changes words; an
+ * Edit lists them apart, pagePhotosOf). Its own sources only: a credit row the node wrote for a picture (core KnowledgeSource
+ * `photo`) is the node's, so the form neither shows it nor sends it, and the node keeps it whatever is sent (§6.3).
+ */
 export function formOfPage(page: KnowledgePage): KnowledgeFormValues {
     return {
         title: page.title ?? '',
         body: page.description ?? '',
         topic: page.category ?? '',
         place: page.knowledge?.place ?? '',
-        sources: (page.knowledge?.sources ?? []).map((s) => ({ url: s.url, label: s.label ?? '' })),
+        sources: ownKnowledgeSources(page.knowledge?.sources ?? []).map((s) => ({ url: s.url, label: s.label ?? '' })),
         photos: [],
         freeTags: [...(page.freeTags ?? [])],
     };
@@ -97,12 +112,66 @@ export function fixBody(page: KnowledgePage, form: KnowledgeFormValues, note: st
 }
 
 /**
- * What an owner's or admin's "Edit" sends: the whole form, its tags included ([] takes them off), in the page's own language
- * (the writer's, §2.8), never photos.
+ * A page's pictures as the page gave them (`photos`: the node's addresses, `/api/marketplace/posts/<id>/photos/<n>?v=…&k=…`),
+ * what an Edit lists, in order. Kept as given, never resolved or rebuilt: the node matches each it is sent back by its place and
+ * its version (apps/server engine/knowledge.ts keptPagePhotos).
  */
-export function editBody(page: KnowledgePage, form: KnowledgeFormValues): Record<string, unknown> {
+export function pagePhotosOf(page: KnowledgePage | null | undefined): string[] {
+    return (page?.photos ?? []).filter((p): p is string => typeof p === 'string' && p.trim() !== '');
+}
+
+/**
+ * The pictures an Edit keeps, from `pictures` (pagePhotosOf of the page the form opened on: a snapshot, never the page as a later
+ * read or sync left it) and the places taken off: null when none was taken off, so an Edit of the words alone sends no list and
+ * never meets another owner's or admin's photo change; [] when every one was. After the node's "This page's photos changed"
+ * (409 `photos_changed`) the form still holds the same snapshot and the same marks, so a second Save is refused again and never
+ * takes off a picture nobody chose (review of #3353, N1).
+ */
+export function pagePhotosKept(pictures: readonly string[], takenOff: readonly number[]): string[] | null {
+    if (!takenOff.some((i) => i >= 0 && i < pictures.length)) return null;
+    return pictures.filter((_, i) => !takenOff.includes(i));
+}
+
+/**
+ * What the button beside a picture is called: the words it shows first, whole ("Remove photo", "Keep this photo", in any language),
+ * then which picture, so voice control finds it by the words on it and a screen reader hears which of them it is (review of #3355).
+ * The web's LearnForm names its own the same way.
+ */
+export function photoToggleName(shown: string, i: number): string {
+    return t('{list}, {item}', { list: shown, item: t(LEARN_KEEP.photoN, { n: i + 1 }) });
+}
+
+/**
+ * Where a picture of a page is drawn from, on the page (KnowledgeDetail), in its Edit's list, on its row and on the Pulse's card alike:
+ * the address of the community the page came from (`community`) in front of a path the node gave (utils/photo-address.ts, as the copy's
+ * listings and pages), an http(s) address or a `data:` picture as it is, anything else not drawn. Only for drawing: what is sent back
+ * is the address as the page gave it (pagePhotosKept).
+ */
+export function pagePhotoUri(src: string | null | undefined, community: string | null | undefined): string | null {
+    if (typeof src !== 'string') return null;
+    const given = src.trim();
+    const at = given.startsWith('//') ? given : photoOnCommunity(community, given);
+    return /^(https?:\/\/|data:image\/)/i.test(at) ? at : null;
+}
+
+/**
+ * What an owner's or admin's "Edit" sends: the whole form, its tags included ([] takes them off), in the page's own language
+ * (the writer's, §2.8), never a new photo. `keep` (pagePhotosKept): when a picture was taken off, the pictures the page keeps,
+ * each as the page gave it; the node takes the rest off for everyone, or refuses, 409 `photos_changed`, when another owner or
+ * admin changed them after the form opened. Null: no list, and the pictures stay as they are.
+ */
+export function editBody(page: KnowledgePage, form: KnowledgeFormValues, keep: readonly string[] | null = null): Record<string, unknown> {
     const words: Record<string, unknown> = { ...knowledgeFormBody({ ...form, photos: [] }, '') };
     delete words.photos;
     delete words.lang;
-    return { ...words, place: words.place ?? '', freeTags: [...(form.freeTags ?? [])], ...(page.knowledge?.lang ? { lang: page.knowledge.lang } : {}) };
+    return {
+        ...words, place: words.place ?? '', freeTags: [...(form.freeTags ?? [])], ...(page.knowledge?.lang ? { lang: page.knowledge.lang } : {}),
+        ...(keep ? { photos: [...keep] } : {}),
+    };
 }
+
+/**
+ * The event an Edit hands the node's page back on (its answer after a save, or the page read again after "This page's photos
+ * changed"), so the page behind the form shows it at once, until the phone's copy catches up (KnowledgeDetail's `answered`).
+ */
+export const LEARN_PAGE_READ = 'learn_page_read';

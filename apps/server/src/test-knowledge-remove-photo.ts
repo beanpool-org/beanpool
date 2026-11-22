@@ -7,9 +7,10 @@
  * The design's table, one row a case, each on a page made fresh with pictures 1, 2, 3 (three different images) and the node's
  * credits on 1 and 3 (publishKnowledge's `credits`, as Approve gives them):
  *
- *  1. Nothing said (an old app, a 1.4.7 phone): 1 2 3, 📷 1 and 📷 3; nothing deleted, no address moves.
+ *  1. Nothing said (an old app, a 1.4.7 phone), or `photos: null`: 1 2 3, 📷 1 and 📷 3; nothing deleted, no address moves.
  *  2. Keeps 1 2 3: the same.
  *  3. Keeps 1 3: 1 3, 📷 1 and 📷 2 (picture 3's credit follows it); picture 2's address answers 404 at once, its stored copy goes.
+ *     The same on rows that name no sha256, and on rows that keep their bytes inline.
  *  4. Keeps 2 3: 2 3, 📷 2; picture 1's stored copy is deleted after the change, unless another row still names it.
  *  5. Keeps 2: 2, no credit.
  *  6. Keeps none: no picture (the apps show the topic's), no credit.
@@ -32,7 +33,8 @@
  *     file page stays.
  * 14. Where the line is (engine/knowledge.ts creditShaped): every label the node writes (each open licence, a maker, none, one
  *     cut short) on every Commons file page it writes is dropped, a hidden character in its head included; a Commons file page
- *     in a person's own words, a camera with no number or with a year, and a "📷 n ·" label on any other address stay.
+ *     in a person's own words, a camera with no number or with a year, and a "📷 n ·" label on any other address (a Wikipedia
+ *     file page, a Commons category page) stay.
  *
  * Run: SERVER_SUITES_ONLY=test-knowledge-remove-photo TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -60,6 +62,7 @@ import { cleanKnowledgeInput, publishKnowledge } from './engine/knowledge.js';
 import { KNOWLEDGE_ABOUT, checkAssistantKnowledgeDraft } from './engine/knowledge-drafts.js';
 import { COMMONS_OPEN_LICENCES, commonsFilePage } from './agent/commons-pictures.js';
 import { getImageStore } from './storage/image-store.js';
+import { photoDataOf } from './storage/image-columns.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
@@ -196,6 +199,10 @@ async function main(): Promise<void> {
         assert(same(creditsOf(p.id).map(([n, f]) => [n, f]), [[1, C1.file], [3, C3.file]]), `1. credits 📷 1 and 📷 3 (${JSON.stringify(creditsOf(p.id))})`);
         assert(same(rows.map((x) => x.updated_at), p.rows.map((x) => x.updated_at)) && tombstonesOf(p.id).length === 0 && p.rows.every((x) => objectThere(x.storage_key)),
             '1. nothing deleted: no tombstone, every stored copy there, no address moved');
+        // `photos: null` says no list too: the words save and every picture stays, never a 400 (review of #3353, N2).
+        const nulled = await edit(owen, p.id, { title: 'The lookout, a null list', photos: null });
+        assert(nulled.status === 200 && storedRow(p.id).title === 'The lookout, a null list' && same(picturesOf(p.id, p.bytes), [1, 2, 3])
+            && same(photoRows(p.id).map((x) => x.updated_at), p.rows.map((x) => x.updated_at)), `1. photos: null is no list: the words save, pictures 1 2 3 untouched (${show(nulled)})`);
     }
 
     // ── 2. Keeps 1 2 3 ────────────────────────────────────────────────────────────────────────
@@ -246,6 +253,24 @@ async function main(): Promise<void> {
         const r = await edit(owen, p.id, { photos: [page.photos[0], page.photos[2]] });
         assert(r.status === 200 && same(creditsOf(p.id).map(([n, f]) => [n, f]), [[1, C1.file], [2, C3.file]]),
             `3. rows with no sha256: 📷 1 = picture 1's, 📷 2 = picture 3's, never one picture's credit on another (${JSON.stringify(creditsOf(p.id))})`);
+    }
+    {
+        // The same on a page whose rows keep their bytes inline, not yet moved to the image store: each row's own bytes are its
+        // picture, never one key for every inline row (review of #3353, N2: no row reached that branch).
+        const p = freshPage();
+        const store = getImageStore();
+        for (const r of db.prepare('SELECT * FROM post_photos WHERE post_id = ? ORDER BY order_num').all(p.id) as any[]) {
+            db.prepare('UPDATE post_photos SET photo_data = ?, storage_key = NULL, sha256 = NULL, bytes = NULL, mime = NULL, updated_at = ? WHERE post_id = ? AND order_num = ?')
+                .run(photoDataOf(r, store), r.updated_at, p.id, r.order_num);
+        }
+        const inline = photoRows(p.id);
+        require_(inline.length === 3 && inline.every((x) => x.photo_data && !x.storage_key && !x.sha256) && new Set(inline.map((x) => x.photo_data)).size === 3,
+            'a page whose three rows keep their own bytes inline');
+        const page = await readPage(p.id);
+        const r = await edit(owen, p.id, { photos: [page.photos[0], page.photos[2]] });
+        assert(r.status === 200 && same(creditsOf(p.id).map(([n, f]) => [n, f]), [[1, C1.file], [2, C3.file]]),
+            `3. rows with their bytes inline: 📷 1 = picture 1's, 📷 2 = picture 3's (${show(r)} ${JSON.stringify(creditsOf(p.id))})`);
+        assert(same(photoRows(p.id).map((x) => x.photo_data), [inline[0].photo_data, inline[2].photo_data]), '3. rows with their bytes inline: pictures 1 and 3 stay, in order');
     }
 
     // ── 4. Keeps 2 3 ──────────────────────────────────────────────────────────────────────────
@@ -531,6 +556,10 @@ async function main(): Promise<void> {
             ['a camera with no number', { url: C1.url.replace('Lookout_one', 'Lookout_dawn'), label: '📷 The lookout at dawn' }],
             ['a camera and a year, no picture\'s number', { url: C1.url.replace('Lookout_one', 'Old_jetty'), label: '📷 2019 · the old jetty' }],
             ['a "📷 n ·" label on any other address', { url: 'https://parks.example/photo-2', label: '📷 2 · Parks staff · CC BY 4.0' }],
+            // The pair is the line: the node's label on a file page that isn't Commons', or on a Commons page that isn't a file's,
+            // is a person's own (review of #3353, N2: without the host check, or the File: check, no row noticed).
+            ['the node\'s label on a Wikipedia file page', { url: 'https://en.wikipedia.org/wiki/File:Lookout_one.jpg', label: label(1, C1) }],
+            ['the node\'s label on a Commons category page', { url: 'https://commons.wikimedia.org/wiki/Category:Headlands', label: label(1, C1) }],
         ];
         for (const [what, row] of kept) assert(keeps(row), `14. kept: ${what}`);
     }

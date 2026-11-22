@@ -4,7 +4,7 @@
  * there are no valid photos, and disables paging gracefully for a single photo.
  * With `onOpen`, a tap on a photo asks the page to show that photo whole (DESIGN-detail-pages-fable.md §2.6, slice DP4).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     View,
     Pressable,
@@ -38,9 +38,20 @@ function isValid(p: any): p is string {
 export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen }: Props) {
     const [width, setWidth] = useState(0);
     const [index, setIndex] = useState(0);
+    const scroller = useRef<ScrollView>(null);
 
     const valid = (photos || []).filter(isValid);
-    if (valid.length === 0) return null;
+    const count = valid.length;
+    // The list can get shorter while the carousel stays drawn (a Learn page's Edit taking a photo off, #3355 review): the place
+    // swiped to must come back inside it, the counter and dots at once ("3 / 2" with no dot lit otherwise) and the scroll
+    // itself (Android's horizontal scroll view keeps its offset when its content shrinks, leaving an empty frame).
+    const shown = count > 0 ? Math.min(index, count - 1) : 0;
+    useEffect(() => {
+        if (count === 0 || index <= count - 1) return;
+        setIndex(count - 1);
+        if (width > 0) scroller.current?.scrollTo({ x: (count - 1) * width, animated: false });
+    }, [count, index, width]);
+    if (count === 0) return null;
 
     const single = valid.length === 1;
 
@@ -54,6 +65,7 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
     return (
         <View style={[styles.wrap, { height, borderRadius }]} onLayout={onLayout}>
             <ScrollView
+                ref={scroller}
                 horizontal
                 pagingEnabled={!single}
                 scrollEnabled={!single}
@@ -89,12 +101,12 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
                 <>
                     <View style={styles.counter} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden={true}>
                         <Text style={styles.counterText}>
-                            {index + 1} / {valid.length}
+                            {shown + 1} / {valid.length}
                         </Text>
                     </View>
                     <View style={styles.dots} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden={true}>
                         {valid.map((_, i) => (
-                            <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
+                            <View key={i} style={[styles.dot, i === shown && styles.dotActive]} />
                         ))}
                     </View>
                 </>

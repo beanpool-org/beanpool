@@ -31,6 +31,7 @@ import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
 import { createHeldCopies } from './held-copies';
 import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
+import { photoOnCommunity } from './photo-address';
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
@@ -1291,7 +1292,9 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
  * is beyond this member: it holds only what the node sent.
  */
 export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; includeGroupsOf?: string; allScopes?: boolean }) {
-    let database = await waitForInit();
+    // The copy and its address taken together (chatCopyForRequest), in every listing read: a read cut across by a switch never puts
+    // one community's photo, and its key, on the other's address.
+    let { database, anchorUrl } = await chatCopyForRequest();
     // A held card is the author's face, even when it has none: a photo the author removed must not fall back to the
     // face the listing carried when the node last sent it (getMyPosts and getPost read it the same way).
     let query = `
@@ -1344,7 +1347,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
     } catch (err: any) {
         if (err?.message?.includes('closed') || String(err).includes('closed')) {
             console.warn('[DB] getPosts caught closed database connection, retrying with fresh connection...');
-            database = await getDb();
+            ({ database, anchorUrl } = await chatCopyForRequest());
             if (params.length > 0) {
                 rows = await database.getAllAsync(query, params);
             } else {
@@ -1354,8 +1357,6 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
             throw err;
         }
     }
-
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
 
     // Fetch local user votes for poll rows so userVotedOptionId is preserved across reloads
     const pollRows = rows.filter(r => r.type === 'poll');
@@ -1428,14 +1429,14 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
             try {
                 r.photos = JSON.parse(r.photos);
                 if (Array.isArray(r.photos)) {
-                    r.photos = r.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+                    r.photos = r.photos.map((p: string) => photoOnCommunity(anchorUrl, p));
                 }
             } catch (e) { r.photos = []; }
         }
         // Its enterprise's shop banner, on the node's address as its photos are: the card's picture when it has none of
         // its own (utils/market-card-picture.ts).
         const banner: string | null = r.carried_banner || null;
-        r.authorBannerUrl = banner && banner.startsWith('/') ? `${anchorUrl}${banner}` : banner;
+        r.authorBannerUrl = banner && photoOnCommunity(anchorUrl, banner);
         return r;
     });
 }
@@ -1443,7 +1444,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
 /** The signed-in member's OWN posts, INCLUDING paused ones (which getPosts hides from the feed).
  *  Used by "My Posts" so a member can see and re-activate a paused Offer. */
 export async function getMyPosts(pubkey: string) {
-    const database = await waitForInit();
+    const { database, anchorUrl } = await chatCopyForRequest();
     const rows = await database.getAllAsync(`
         SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, CASE WHEN m.public_key IS NOT NULL THEN m.avatar_url ELSE p.carried_avatar END as author_avatar, m.joined_at
         FROM posts p
@@ -1451,7 +1452,6 @@ export async function getMyPosts(pubkey: string) {
         WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused') AND p.type != 'event'
         ORDER BY p.created_at DESC
     `, [pubkey]) as any[];
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
     return rows.map((r: any) => {
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
@@ -1460,7 +1460,7 @@ export async function getMyPosts(pubkey: string) {
         if (typeof r.photos === 'string') {
             try {
                 r.photos = JSON.parse(r.photos);
-                if (Array.isArray(r.photos)) r.photos = r.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+                if (Array.isArray(r.photos)) r.photos = r.photos.map((p: string) => photoOnCommunity(anchorUrl, p));
             } catch (e) { r.photos = []; }
         }
         return r;
@@ -1552,9 +1552,8 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
  * photo's URL must be that node's. Resolves whether the screens were told to reload.
  */
 export async function refreshPostForPhoto(id: string, photoUrl: string): Promise<boolean> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
-    if (!anchorUrl || !photoUrl.startsWith(`${anchorUrl}/`)) return false;
-    const database = await waitForInit();
+    const { database, anchorUrl } = await chatCopyForRequest();
+    if (!anchorUrl || !photoUrl.startsWith(photoOnCommunity(anchorUrl, '/'))) return false;
     return refreshCachedPost(database, anchorUrl, id);
 }
 
@@ -1587,8 +1586,7 @@ export async function getListingItems(id: string): Promise<{ unitsLeft: number |
 }
 
 export async function getPost(id: string) {
-    const database = await waitForInit();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
+    const { database, anchorUrl } = await chatCopyForRequest();
     
     // Background fetch to ensure the local DB has the latest post status.
     // Upserts so a post we've never synced (e.g. opened via a chat's "View Post"
@@ -1624,7 +1622,7 @@ export async function getPost(id: string) {
             try {
                 row.photos = JSON.parse(row.photos);
                 if (Array.isArray(row.photos)) {
-                    row.photos = row.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+                    row.photos = row.photos.map((p: string) => photoOnCommunity(anchorUrl, p));
                 }
             } catch (e) { row.photos = []; }
         }
@@ -1724,7 +1722,7 @@ const otherKeysSql = (conversation = 'c.id') =>
     `(SELECT group_concat(cpk.public_key) FROM conversation_participants cpk WHERE cpk.conversation_id = ${conversation} AND cpk.public_key != ?)`;
 
 export async function getConversations(myPubkey: string) {
-    const database = await getDb();
+    const { database, anchorUrl } = await chatCopyForRequest();
     const rows = await database.getAllAsync<any>(`
         SELECT c.id, c.name, c.post_id, c.type as convType, c.request as request, c.created_at as createdAt,
                COALESCE(p.title, c.post_title) as postTitle,
@@ -1792,7 +1790,6 @@ export async function getConversations(myPubkey: string) {
         ORDER BY timestamp DESC
     `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
     
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
     // Pre-load identity so encrypted DM previews can be decrypted below.
     const previewIdentity = await loadIdentity();
     // A DM's newest line opens under the key this phone pinned for it (utils/dm-peer-pins.ts), as its thread does: never
@@ -1881,7 +1878,7 @@ export async function getConversations(myPubkey: string) {
                 const arr = Array.isArray(row.postPhotos) ? row.postPhotos : JSON.parse(row.postPhotos);
                 if (arr.length > 0) {
                     const firstPhoto = arr[0];
-                    postPhoto = firstPhoto && firstPhoto.startsWith('/') ? `${anchorUrl}${firstPhoto}` : firstPhoto;
+                    postPhoto = firstPhoto && photoOnCommunity(anchorUrl, firstPhoto);
                 }
             } catch {}
         }
@@ -2264,7 +2261,7 @@ export async function getHeldOutsideChats(myPubkey: string, community: string): 
 /** A photo's address on `community`'s server: a path its node stored ("/uploads/…") is that server's, never the one in use. */
 function onCommunity(community: string, value: unknown): string | null {
     if (typeof value !== 'string' || !value.trim() || value === 'null' || value === 'undefined') return null;
-    return value.startsWith('/') ? `${community.replace(/\/+$/, '')}${value}` : value;
+    return photoOnCommunity(community, value);
 }
 
 /**
@@ -5123,31 +5120,37 @@ async function writeKnowledgePost(txn: SQLite.SQLiteDatabase, p: any): Promise<v
         [p.id, typeof p.category === 'string' ? p.category : '', JSON.stringify(p), checkedAt, p.updatedAt ?? p.updated_at ?? p.createdAt ?? null, showing ? 1 : 0]);
 }
 
-/** Every page of Local knowledge this phone holds that is showing, as the node sent it. Learn groups and orders them (utils/learn-copy.ts). */
-export async function getKnowledgePosts(): Promise<any[]> {
-    const database = await waitForInit();
-    const rows = await database.getAllAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE active = 1');
-    const pages: any[] = [];
-    for (const r of rows) {
-        try {
-            pages.push(JSON.parse(r.post));
-        } catch {
-            // A row that doesn't read is no page; the next sync writes it again.
-        }
-    }
-    return pages;
-}
-
-/** One page this phone holds, showing, or null. */
-export async function getKnowledgePost(id: string): Promise<any | null> {
-    const database = await waitForInit();
-    const row = await database.getFirstAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE id = ? AND active = 1', [id]);
-    if (!row) return null;
+/**
+ * A page as the copy holds it, its pictures' paths put on `community`, the community whose copy it is, as a listing's are (getPost):
+ * the copy keeps a page as the node sent it, paths and all, so a page kept by an earlier build draws its pictures too (review of
+ * #3355). Null when the row doesn't read: it is no page, and the next sync writes it again.
+ */
+function knowledgePageOf(post: string, community: string | null): any | null {
     try {
-        return JSON.parse(row.post);
+        const page = JSON.parse(post);
+        if (!page || !Array.isArray(page.photos)) return page ?? null;
+        return { ...page, photos: page.photos.map((p: unknown) => (typeof p === 'string' ? photoOnCommunity(community, p) : p)) };
     } catch {
         return null;
     }
+}
+
+/**
+ * Every page of Local knowledge this phone holds that is showing, as the node sent it, its pictures on the community's own address
+ * (knowledgePageOf). The copy and its address are taken together (chatCopyForRequest), so a page read as the phone switches community
+ * is never drawn from the other one's address. Learn groups and orders them (utils/learn-copy.ts).
+ */
+export async function getKnowledgePosts(): Promise<any[]> {
+    const { database, anchorUrl } = await chatCopyForRequest();
+    const rows = await database.getAllAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE active = 1');
+    return rows.map((r) => knowledgePageOf(r.post, anchorUrl)).filter((page) => page !== null);
+}
+
+/** One page this phone holds, showing, its pictures on its community's own address (as getKnowledgePosts), or null. */
+export async function getKnowledgePost(id: string): Promise<any | null> {
+    const { database, anchorUrl } = await chatCopyForRequest();
+    const row = await database.getFirstAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE id = ? AND active = 1', [id]);
+    return row ? knowledgePageOf(row.post, anchorUrl) : null;
 }
 
 /**
@@ -10916,8 +10919,7 @@ export interface MarketplaceTransaction {
 }
 
 export async function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): Promise<MarketplaceTransaction[]> {
-    const database = await getDb();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
+    const { database, anchorUrl } = await chatCopyForRequest();
     let query = `
         SELECT mt.*, COALESCE(p.title, mt.post_title) as postTitle, p.photos as postPhotos, m1.callsign as buyerCallsign, m1.avatar_url as buyerAvatar, m2.callsign as sellerCallsign, m2.avatar_url as sellerAvatar,
                p.type as postType, p.author_pubkey as postAuthorPublicKey,
@@ -10948,9 +10950,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
                 if (arr.length > 0) coverImg = arr[0]; 
             } catch {}
         }
-        if (coverImg && coverImg.startsWith('/')) {
-            coverImg = `${anchorUrl}${coverImg}`;
-        }
+        if (coverImg) coverImg = photoOnCommunity(anchorUrl, coverImg);
         return {
             id: r.id, 
             postId: r.post_id, 
@@ -11219,8 +11219,7 @@ export async function getRecentChatMembers(myPubkey: string, limit = 10): Promis
  * explicitly not in v1 (§1, §5); when it arrives it gets an events section of its own, date first.
  */
 export async function getMemberPosts(pubkey: string) {
-    const database = await waitForInit();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
+    const { database, anchorUrl } = await chatCopyForRequest();
     const rows = await database.getAllAsync<any>(`
         SELECT * FROM posts
         WHERE author_pubkey = ? AND status = 'active' AND COALESCE(type, '') != 'event'
@@ -11231,9 +11230,9 @@ export async function getMemberPosts(pubkey: string) {
         if (typeof r.photos === 'string') {
             try {
                 r.photos = JSON.parse(r.photos);
-                // Resolve relative photo paths against the active node (same as getPosts/getPost)
+                // Its photos' paths on this copy's own community (same as getPosts/getPost)
                 if (Array.isArray(r.photos)) {
-                    r.photos = r.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+                    r.photos = r.photos.map((p: string) => photoOnCommunity(anchorUrl, p));
                 }
             } catch (e) { r.photos = []; }
         }
@@ -11375,10 +11374,11 @@ export interface GroupMemberItem {
  * Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE). `withStatus`: the thrown error also
  * carries the answer's `status`, and `unsaid` when the node gave no words of its own, so a screen can tell a refusal
  * (403, said in the node's words) from a blip. Opt-in: other callers' errors stay exactly as they were. `signal` lets the
- * caller give up on the request (the tool copy's, at its answer limit); without one, nothing changes.
+ * caller give up on the request (the tool copy's, at its answer limit); without one, nothing changes. `anchorUrl`: the
+ * community asked, when the caller needs to know which one answered (as signedGet's); left out, the one the phone is on now.
  */
-export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any, opts?: { withStatus?: boolean; signal?: AbortSignal }) {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any, opts?: { withStatus?: boolean; signal?: AbortSignal; anchorUrl?: string | null }) {
+    const anchorUrl = opts?.anchorUrl !== undefined ? opts.anchorUrl : await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
     const identity = await loadIdentity();

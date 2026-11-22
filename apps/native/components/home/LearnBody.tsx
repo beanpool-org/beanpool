@@ -9,11 +9,14 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { LEARN_HOME_WORDS, t, tn, formatCount, type LearnHomeLines } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
+import { rowOnCommunity } from '../../utils/photo-address';
 import { KnowledgeRowCard } from '../learn/KnowledgeRowCard';
 import { FabAware, HomeButton, HomeLink, HomeRow } from './HomeParts';
 
-export function LearnBody({ lines, community, colors, now, onOpen, onSeeAll, onToCheck, onAddFirst, onKeep }: {
+export function LearnBody({ lines, nodeUrl, community, colors, now, onOpen, onSeeAll, onToCheck, onAddFirst, onKeep }: {
     lines: LearnHomeLines;
+    /** The address of the community whose answer the rows came in: their pictures are paths on it. */
+    nodeUrl: string | null;
     /** The community's name, for "Add the first thing worth knowing about {community}". */
     community: string;
     colors: AppColors;
@@ -46,7 +49,7 @@ export function LearnBody({ lines, community, colors, now, onOpen, onSeeAll, onT
             {lines.rows.length > 0 && (
                 <View style={{ gap: 8, marginTop: 2 }}>
                     {lines.rows.map(row => (
-                        <KnowledgeRowCard key={row.id} row={row} fresh={row.isNew === true} now={now} onPress={() => onOpen(row.id)} testID={`home-learn-${row.id}`} />
+                        <KnowledgeRowCard key={row.id} row={rowOnCommunity(nodeUrl, row)} fresh={row.isNew === true} now={now} onPress={() => onOpen(row.id)} testID={`home-learn-${row.id}`} />
                     ))}
                 </View>
             )}

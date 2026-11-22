@@ -16,6 +16,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SHOP_FEATURED_MAX, formatCount, formatDate, formatHundredths, freePriceWords, isHundredths, isShopCategory, t, tn, tierIndexForName, TIER_LEVELS, type ShopCategory, type TierName } from '@beanpool/core';
 import { signedGet } from './db';
+import { photoOnCommunity } from './photo-address';
 import { readShop, type MyShop } from './shop';
 import { TIER_WORDS } from './trust-tier';
 
@@ -52,7 +53,7 @@ export function readShopfrontListing(raw: unknown, anchor: string): ShopfrontLis
     const p = raw as Record<string, unknown>;
     if (typeof p.id !== 'string' || !p.id || (p.type !== 'offer' && p.type !== 'need')) return null;
     const first = Array.isArray(p.photos) ? p.photos[0] : null;
-    const photo = typeof first === 'string' && first.trim() ? (first.startsWith('/') ? `${anchor}${first}` : first) : null;
+    const photo = typeof first === 'string' && first.trim() ? photoOnCommunity(anchor, first) : null;
     return {
         id: p.id,
         type: p.type,
@@ -290,11 +291,12 @@ export async function readShopPage(id: string): Promise<ShopPageRead> {
 
 async function readListings(path: string): Promise<ShopfrontListing[] | null> {
     try {
-        const res = await signedGet(path);
+        // The community asked, taken with the ask: the listings' photos are paths on it, wherever the phone is once it answers.
+        const anchor = (await AsyncStorage.getItem('beanpool_anchor_url')) ?? '';
+        const res = await signedGet(path, { anchorUrl: anchor });
         if (!res.ok) return null;
         const json = await res.json().catch(() => null);
         if (!Array.isArray(json)) return null;
-        const anchor = (await AsyncStorage.getItem('beanpool_anchor_url')) ?? '';
         return json.map((row) => readShopfrontListing(row, anchor)).filter((l): l is ShopfrontListing => !!l);
     } catch {
         return null;

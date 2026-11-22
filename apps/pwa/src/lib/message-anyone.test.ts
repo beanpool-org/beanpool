@@ -23,7 +23,10 @@ const web = vi.hoisted(() => ({
     unblocked: [] as string[],
     opened: [] as Array<{ chatId: string; peer: { key: string; home: string; name: string | null } }>,
 }));
-vi.mock('./api', () => ({ nodeAddress: () => web.here }));
+// What the community says of itself (its info), asked now or as the page read it; outsideOn null: it can't be read.
+const info = vi.hoisted(() => ({ read: async () => ({}) as Record<string, unknown> }));
+vi.mock('./api', () => ({ nodeAddress: () => web.here, getCommunityInfo: () => info.read(), checkMembership: async () => ({ isMember: true, callsign: null }) }));
+vi.mock('./visitor-lobby-gate', () => ({ communityInfoOnce: () => info.read() }));
 vi.mock('./blocklist', () => ({
     getBlocklistStatus: () => ({ loaded: web.loaded, error: null }),
     loadBlocklist: async () => {
@@ -62,6 +65,10 @@ const HELD_ON_PHONE = 'https://hillside.example';
 const BLOCKED_WORDS = 'You have blocked this user. Messaging is disabled.';
 
 beforeEach(() => {
+    info.read = async () => {
+        if (web.outsideOn === null) throw new Error('not read');
+        return { features: { outsideMessages: web.outsideOn } };
+    };
     web.across = []; web.noContext = false; web.outsideOn = true; web.opened = [];
     web.blocked = []; web.loaded = true; web.readFails = false; web.unblocked = [];
 });

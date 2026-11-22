@@ -542,6 +542,22 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         expect(bypassing()).toEqual([]);
     });
 
+    // #3354 review, round 4: on a guest's look New message refused a person in its own "Recently Chatted", where main opened the
+    // chat. The chat the visitor already has there opens; with none, none is started (its server would refuse it) and it says so.
+    it.each([
+        { name: 'a chat there already: it opens, nothing is started and nothing is said', chats: {}, said: [] as string[] },
+        { name: 'no chat there: none is started, and it says to connect to your community', chats: { getConversations: [] }, said: [pseudoLocalise('Error'), pseudoLocalise('Connect to your community to start a chat.')] },
+    ])("the New message picker on a guest's look, $name", async ({ chats, said }) => {
+        net.answer = community(chats);
+        store.map.set('beanpool_guest_nodes', JSON.stringify([NODE]));
+        await renderIn('xx', createElement(NewMessageScreen));
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
+        expect(net.calls).toContain('db.getConversations');
+        expect(net.calls).not.toContain('db.createConversationApi');
+        expect(alerts.said).toEqual(said);
+        expect(bypassing()).toEqual([]);
+    });
+
     it("the New message picker, a conversation the node won't open (a paused account): its words, never nothing", async () => {
         net.answer = community({ getConversations: [], createConversationApi: new Error(PAUSED_OPEN_WORDS) });
         await renderIn('xx', createElement(NewMessageScreen));

@@ -70,7 +70,8 @@ export function memberTookPart(chat: Pick<LetInChat, 'memberWrote' | 'acceptedBy
  */
 export function chatLetsInKey(chat: Pick<LetInChat, 'others' | 'sealedTo'>, me: string): string | null {
     const others = chat.others.filter((k) => !!k && k !== me);
-    const key = chat.sealedTo || (others.length === 1 ? others[0] : null);
+    // A seal kept, even an empty one, is the chat's word: only with none kept does its one other person count (the phone's rule since S3b).
+    const key = chat.sealedTo ?? (others.length === 1 ? others[0] : null);
     return key && key !== me ? key : null;
 }
 

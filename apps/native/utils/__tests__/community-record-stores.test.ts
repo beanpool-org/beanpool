@@ -46,6 +46,7 @@ const STORES: Record<string, Kind> = {
     dmVerifiedKeysStoreKey: PHONE,
     MESSAGE_REQUESTS_STORE_PREFIX: PHONE,
     MESSAGE_REQUESTS_SEEN_STORE_PREFIX: PHONE,
+    GROUP_UNSENT_STORE_PREFIX: PHONE,
     PUSH_TOKEN_STORE_KEY: PHONE,
     PUSH_STAMP_STORE_KEY: PHONE,
     IDENTITY_THIS_DEVICE_STORE_KEY: PHONE,
@@ -74,6 +75,7 @@ const STORES: Record<string, Kind> = {
 
     messageRequestsStoreKey: FILE,
     messageRequestsSeenStoreKey: FILE,
+    groupUnsentStoreKey: FILE,
     dmPeerPinsStoreKey: FILE,
     dmPeerPinsSetAsideStoreKey: FILE,
     dmConversationsSeenStoreKey: FILE,

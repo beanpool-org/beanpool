@@ -98,7 +98,9 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: ({ avatarUrl }: 
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'line-in-place' }));
 vi.mock('expo-image-picker', () => ({ requestCameraPermissionsAsync: vi.fn(), launchCameraAsync: vi.fn(), launchImageLibraryAsync: vi.fn() }));
 vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
-vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => { }), removeItem: vi.fn(async () => { }), getAllKeys: vi.fn(async () => []) } }));
+// The phone's own store, kept across a remount (a relaunch) and emptied before each row.
+const kv = vi.hoisted(() => new Map<string, string>());
+vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async (k: string) => kv.get(k) ?? null), setItem: vi.fn(async (k: string, v: string) => { kv.set(k, v); }), removeItem: vi.fn(async (k: string) => { kv.delete(k); }), getAllKeys: vi.fn(async () => [...kv.keys()]) } }));
 vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/cache/' }));
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn() }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => null) }));
@@ -165,6 +167,7 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     calls.list.length = 0;
+    kv.clear();
     calls.refuse.clear();
     calls.answer.clear();
     bits.rows.length = 0;
@@ -296,6 +299,54 @@ describe('a group\'s chat in place (GroupChatView inPlace)', () => {
         await act(async () => { root.render(null); });
         expect(of('leaveChatInPlace')).toEqual([[A]]);
     });
+
+    for (const dark of [false, true]) {
+        it(`${dark ? 'dark' : 'light'}, walk-s6: a line its key never reached this phone for stays "not delivered" across a relaunch, with Resend and Discard; Discard keeps nothing`, async () => {
+            theme.dark = dark;
+            calls.refuse.set('postGroupChatMessage', 'This chat\'s key hasn\'t reached this phone yet.');
+            await open();
+            await act(async () => { await bits.composer.onSend('Can I take Tuesday on the roster?'); });
+            await settle();
+            const failed = () => bits.rows.filter((r) => r.item?.text === 'Can I take Tuesday on the roster?').pop()?.item;
+            expect(failed()?.sendState).toBe('failed');
+            // The app killed and opened again: the screen comes back with nothing in memory.
+            await act(async () => { root.unmount(); });
+            bits.rows.length = 0;
+            root = createRoot(host);
+            await open();
+            expect(failed()?.sendState, 'still there, not delivered').toBe('failed');
+            // Its key came, and its node lists the line once it has it: Resend goes with the same id (stored once), and
+            // nothing is kept unsent after.
+            calls.refuse.delete('postGroupChatMessage');
+            const ids = () => of('postGroupChatMessage').map((a) => a[2]);
+            const first = ids()[0];
+            calls.answer.set('getGroupChat', {
+                messages: [{ id: first, authorPubkey: ME, type: 'text', nonce: 'group-xc20p-v1:x', ciphertext: 'x', metadata: { epoch: 1 }, timestamp: '2026-11-22T00:02:00.000Z' }],
+                group: { name: 'Garden Crew', avatarUrl: null }, encryption: { current: 1, stale: false, fromEpoch: 1 }, canPost: true, isConvenor: true,
+            });
+            const pressFailed = async (text: string) => {
+                const row = bits.rows.filter((r) => r.item?.text === text).pop();
+                await act(async () => { row.onPressBubble({}); });
+                await settle();
+                const [title, , buttons] = alerts.alert.mock.calls.pop()!;
+                expect([title, buttons.map((b: any) => b.text)]).toEqual(['Message not delivered', ['Discard', 'Resend', 'Cancel']]);
+                return buttons;
+            };
+            await act(async () => { await (await pressFailed('Can I take Tuesday on the roster?'))[1].onPress(); });
+            await settle();
+            expect(ids()).toEqual([first, first]);
+            const unsent = () => [...kv.keys()].filter((k) => k.startsWith('beanpool_group_unsent:'));
+            expect(unsent(), 'its node holds it').toEqual([]);
+            // Another refused, then discarded: none kept either.
+            calls.refuse.set('postGroupChatMessage', 'not yet');
+            await act(async () => { await bits.composer.onSend('and Wednesday'); });
+            await settle();
+            expect(unsent().length).toBe(1);
+            await act(async () => { (await pressFailed('and Wednesday'))[0].onPress(); });
+            await settle();
+            expect(unsent(), 'discarded').toEqual([]);
+        });
+    }
 
     it('a reply, a reaction, an edit, a delete, a removal, a report and a mute each name its own community', async () => {
         await open();

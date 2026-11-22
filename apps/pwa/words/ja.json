@@ -4502,6 +4502,7 @@
   "The voice recorder didn't load in this browser. Nothing was recorded. You can still type a message.": "このブラウザでは音声レコーダーを読み込めませんでした。何も録音されていません。メッセージの入力はできます。",
   "This browser can't record voice messages. The phone app can.": "このブラウザではボイスメッセージを録音できません。スマホアプリなら録音できます。",
   "This topic is closed, so it takes no new replies.": "このトピックは閉じられているので、新しい返信はできません。",
+  "Only this group’s convenors and members write here. You can read it.": "ここに書き込めるのは、このグループのまとめ役とメンバーだけです。読むことはできます。",
   "This voice message can't be played in this browser.": "このブラウザではこのボイスメッセージを再生できません。",
   "This voice message can't be played.": "このボイスメッセージは再生できません。",
   "This voice message can't be sent. Record it again.": "このボイスメッセージは送信できません。もう一度録音してください。",

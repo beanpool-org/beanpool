@@ -26,6 +26,7 @@
  *   phone since its list was read, or with that answer still on its way, is never accepted quietly, nor one whose opener they
  *   blocked since; each is checked at the accept itself.
  */
+import { contactsCouldLetIn, letInAmong } from '@beanpool/core';
 import { blockListReadThisRun, neverLetInQuietly, readBlockLists, type BlockLists } from './blocklist';
 import { getLetInHere, isAnsweredByMember } from './db';
 import { heldLetIn } from './held-chats';
@@ -67,25 +68,21 @@ async function contactsLetIn(me: string): Promise<Set<string>> {
 }
 
 /**
- * Which of some keys the member let in: the copies read once at the first ask, the contacts only for a key they don't let in.
- * Only a person's key now (#3319 review F1): never a key any copy's pins say was replaced or is in question (db.ts
- * notCurrentOfPins), whichever source names it. None when a copy or its pins can't be read.
+ * Which of some keys the member let in, by core's rule (@beanpool/core let-in.ts): the copies' facts read once at the first
+ * ask, the contacts only for a key they don't let in. Only a person's key now (#3319 review F1): never a key any copy's pins
+ * say was replaced or is in question (db.ts notCurrentOfPins), whichever source names it. None when a copy or its pins can't
+ * be read.
  */
 function letInReader(me: string): (keys: readonly string[]) => Promise<Set<string>> {
-    let copies: Promise<{ letIn: Set<string>; notCurrent: Set<string> } | null> | null = null;
+    let copies: Promise<{ byFacts: Set<string>; notCurrent: Set<string> } | null> | null = null;
     return async (keys) => {
         copies ??= Promise.all([getLetInHere(me), heldLetIn(me)]).then(([here, held]) => (here && held
-            ? { letIn: new Set([...here.letIn, ...held.letIn]), notCurrent: new Set([...here.notCurrent, ...held.notCurrent]) }
+            ? { byFacts: new Set([...here.letIn, ...held.letIn]), notCurrent: new Set([...here.notCurrent, ...held.notCurrent]) }
             : null));
         const read = await copies;
         if (!read) return new Set();
-        const current = keys.filter((k) => !read.notCurrent.has(k));
-        const found = new Set(current.filter((k) => read.letIn.has(k)));
-        if (current.some((k) => !found.has(k))) {
-            const contacts = await contactsLetIn(me);
-            for (const k of current) if (contacts.has(k)) found.add(k);
-        }
-        return found;
+        // Core's rule (@beanpool/core let-in.ts letInAmong): the contacts opened only when they could let in more.
+        return letInAmong(keys, contactsCouldLetIn(keys, read) ? { ...read, contacts: await contactsLetIn(me) } : read);
     };
 }
 

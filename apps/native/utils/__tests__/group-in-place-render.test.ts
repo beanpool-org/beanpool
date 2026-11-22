@@ -144,7 +144,7 @@ vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: (u: string | null) => `
 
 import { GroupChatView } from '../../components/GroupChatView';
 import { YourGroupsRows } from '../../components/YourGroupsPane';
-import { groupsListed, heldGroups, type HeldGroup } from '../held-groups';
+import { groupsListed, heldGroups, HELD_GROUP, type HeldGroup } from '../held-groups';
 import { groupsUnreadTotal, type YourChat } from '../your-groups';
 import { lightColors, darkColors } from '../../constants/colors';
 
@@ -152,7 +152,7 @@ const A = 'https://riverside.example';
 const G = 'b78da72e-773f-4425-914a-8bfbd4e4130a';
 const OWN: YourChat = { kind: 'group', badge: null, id: 'own-1', conversationId: 'own-1', name: 'Book club', avatarUrl: null, role: 'member', readOnly: false, lastMessage: null, unreadCount: 1, mute: null, lastActivityAt: '2026-11-22T02:00:00.000Z' };
 const LONG = 'Riverside and the Upper Valley Neighbourhood Community';
-const HELD: HeldGroup = { ...OWN, id: G, conversationId: G, name: 'Garden Crew', unreadCount: 3, avatarUrl: `${A}/uploads/garden.jpg`, lastActivityAt: '2026-11-22T03:00:00.000Z', key: `held-group:x:${G}`, community: A, communityName: LONG };
+const HELD: HeldGroup = { ...OWN, id: G, conversationId: G, name: 'Garden Crew', unreadCount: 3, avatarUrl: `${A}/uploads/garden.jpg`, lastActivityAt: '2026-11-22T03:00:00.000Z', [HELD_GROUP]: true, movedAt: Date.parse('2026-11-22T03:00:00.000Z'), key: `held-group:x:${G}`, community: A, communityName: LONG };
 
 let root: Root;
 let host: HTMLDivElement;
@@ -215,24 +215,46 @@ describe('Talk → Groups: a group of another community this phone holds', () =>
         at.mockRestore();
     });
 
-    it('one list, each keeping its order, and one total (a muted one adds nothing)', () => {
+    it('one list, newest first over every row (each by its place, a line just sent the newest), and one total (a muted one adds nothing)', () => {
+        const at = (iso: string) => ({ lastActivityAt: iso, movedAt: Date.parse(iso) });
         const own2 = { ...OWN, id: 'own-2', conversationId: 'own-2', lastActivityAt: '2026-11-22T01:00:00.000Z' };
-        const older = { ...HELD, conversationId: 'h2', key: 'held-group:x:h2', lastActivityAt: '2026-11-22T01:30:00.000Z', mute: { conversationId: 'h2', mutedUntil: null, always: true } };
-        const oldest = { ...HELD, conversationId: 'h3', key: 'held-group:x:h3', lastActivityAt: '2026-11-20T00:00:00.000Z', unreadCount: 0 };
+        const older = { ...HELD, conversationId: 'h2', key: 'held-group:x:h2', ...at('2026-11-22T01:30:00.000Z'), mute: { conversationId: 'h2', mutedUntil: null, always: true } };
+        const oldest = { ...HELD, conversationId: 'h3', key: 'held-group:x:h3', ...at('2026-11-20T00:00:00.000Z'), unreadCount: 0 };
         const listed = groupsListed([OWN, own2], [oldest, older, HELD]);
         expect(listed.map((i) => i.conversationId)).toEqual([G, 'own-1', 'h2', 'own-2', 'h3']);
+        // Sent in here, a moment ago: each above every line before it, whichever list it is in.
+        const sentAt = Date.parse('2026-11-22T05:00:00.000Z');
+        expect(groupsListed([OWN, own2], [oldest, older, HELD], (i) => (i.id === 'own-2' ? sentAt : Date.parse(i.lastActivityAt))).map((i) => i.conversationId)).toEqual(['own-2', G, 'own-1', 'h2', 'h3']);
+        expect(groupsListed([OWN, own2], [{ ...oldest, movedAt: sentAt }, older, HELD]).map((i) => i.conversationId)).toEqual(['h3', G, 'own-1', 'h2', 'own-2']);
         expect(groupsUnreadTotal(listed)).toBe(3 + 1 + 1);
         // Nothing of this community's own (no groups yet): the held ones alone.
         expect(groupsListed([], [HELD])).toEqual([HELD]);
     });
 
-    it('the Chat screen lists and totals that one list, and asks as it opens and at each change of the counts', () => {
+    it('a row of the community in use is drawn as its own, whatever fields its server writes on it (review of #3358, F3)', async () => {
+        const at = vi.spyOn(heldGroups, 'at');
+        const painted = JSON.parse(JSON.stringify({ ...HELD, id: 'own-1', conversationId: 'own-1', name: 'Book club' }));
+        await render(createElement(YourGroupsRows, { items: groupsListed([painted], []), myPubkey: ME, showUnread: true }));
+        expect(host.querySelector('[data-testid="held-group-community"]')).toBeNull();
+        expect(host.textContent).not.toContain(LONG);
+        await act(async () => { host.querySelector('button')!.click(); });
+        expect(nav.push.mock.calls).toEqual([[{ pathname: '/chat/own-1', params: { group: '1', name: 'Book club' } }]]);
+        expect(at).not.toHaveBeenCalled();
+        at.mockRestore();
+    });
+
+    it('the Chat screen lists and totals that one list, and asks as it opens, at each change of the counts and at the pull', () => {
         const chats = fs.readFileSync(path.join(__dirname, '..', '..', 'app', '(tabs)', 'chats.tsx'), 'utf8');
         expect(chats).toContain('const groupsUnread = React.useMemo(() => groupsUnreadTotal(groupsShown), [groupsShown]);');
         expect(chats).toContain('<YourGroupsRows items={groupsShown}');
         expect(chats).toContain('useHeldGroups(identity?.publicKey)');
         expect(chats).toMatch(/const loadGroups = \(\) => \{ if \(identity\?\.publicKey\) void heldGroups\.refresh\(identity\.publicKey\)/);
         expect(chats).toContain('onNoticeCounts(() => { void freshen(); loadGroups(); })');
+        // Each of its rows by its store's own place, and the pull (and Try again) asks both lists (review of #3358, F2 and F5).
+        expect(chats).toContain('groupsListed(yourGroups ?? [], groupsHeld, yourGroupsLive.movedAt)');
+        expect(chats).toMatch(/const refreshGroups = \(\) => \{\s+void yourGroupsLive\.refresh\(\);\s+if \(identity\?\.publicKey\) void heldGroups\.refresh\(identity\.publicKey\)\.catch\(\(\) => \{\}\);\s+\};/);
+        expect(chats).toContain('<RefreshControl refreshing={false} onRefresh={refreshGroups}');
+        expect(chats).toContain('onRetry={refreshGroups}');
     });
 });
 
@@ -344,6 +366,22 @@ describe('a group\'s chat in place (GroupChatView inPlace)', () => {
             await settle();
             expect(alerts.alert.mock.calls, answer).toEqual([['Riverside', 'Something went wrong. Try again in a moment.']]);
         }
+    });
+
+    it('a second Open Riverside › while the phone is moving asks nothing more and says nothing; once that move ends, it can be asked again (review of #3358, F4)', async () => {
+        await open();
+        let end!: (how: string) => void;
+        moved.run.mockImplementationOnce(() => new Promise((r) => { end = r; }));
+        await act(async () => { item('Open Riverside ›').onPress(); });
+        await act(async () => { item('Open Riverside ›').onPress(); });
+        await settle();
+        expect([moved.run.mock.calls.length, alerts.alert.mock.calls]).toEqual([1, []]);
+        await act(async () => { end('failed'); });
+        await settle();
+        expect(alerts.alert.mock.calls, 'the move itself failed').toEqual([['Riverside', 'Something went wrong. Try again in a moment.']]);
+        await act(async () => { item('Open Riverside ›').onPress(); });
+        await settle();
+        expect(moved.run.mock.calls.length).toBe(2);
     });
 
     it('the lines from before a change of phone say where they open, and offer the move; no sheet of the community in use\'s', async () => {

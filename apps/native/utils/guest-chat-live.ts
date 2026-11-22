@@ -167,13 +167,16 @@ export function guestRosterRows(groupId: string, now = Date.now(), community?: s
     if (kept && now - kept.at < 60_000) return kept.rows;
     const rows = (async (): Promise<GuestNameRows> => {
         const ctx = await outsideContext(community).catch(() => null);
-        // Nothing read (the chat left as it was asked), or not kept below: asked again at the next opening, never a minute's wait.
+        // Nothing to ask through, or the file refused its part below (the chat left as it was asked): asked again at the next opening.
         if (!ctx) { guestRowsMemo.delete(memo); return NO_ROWS; }
         const metaKey = `${GUEST_NAMES_META}:${groupId}:${ctx.identity.publicKey}`;
-        const before = await ctx.store.getMeta(metaKey).catch(() => null);
+        let unread = false;
+        const before = await ctx.store.getMeta(metaKey).catch(() => { unread = true; return null; });
         const listed = await fetchGroupGuests(groupId, community).then((g) => g.guests, () => null);
         const out = guestNameRows(before, listed, Date.now());
-        if (out.json !== null) await ctx.store.setMeta(metaKey, out.json).catch(() => { guestRowsMemo.delete(memo); });
+        // Names kept that couldn't be read are never written over: the ones no longer listed are only there.
+        if (unread) guestRowsMemo.delete(memo);
+        else if (out.json !== null) await ctx.store.setMeta(metaKey, out.json).catch(() => { guestRowsMemo.delete(memo); });
         return { shown: out.shown, named: out.named };
     })().catch(() => NO_ROWS);
     guestRowsMemo.set(memo, { at: now, rows });

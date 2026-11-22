@@ -26,6 +26,7 @@ import { LISTED_ADDRESS_FIELDS } from './listed-address-fields';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError, readDmSeen } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode, getSavedNodes, isGuestCopy } from './nodes';
+import { isMuted } from './your-groups';
 import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -2751,11 +2752,15 @@ export async function oldestUnreadAt(conversationId: string, myPubkey: string, c
     }
 }
 
-/** The phone's own read marker (the Talk tab's badge counts from it); no request. */
-export async function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity) {
+/**
+ * The phone's own read marker (the Talk tab's badge counts from it); no request. Resolves, for a direct chat read in place
+ * (`community`), to how many of the lines it marked that community counts as unread (as its held row counts them: core
+ * countsAsUnreadSql); 0 otherwise.
+ */
+export async function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity): Promise<number> {
     const copy = await chatReadFor(community);
     // In place, only a direct chat that community's copy holds (#3305 review F1): nothing marked for any other id.
-    if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return;
+    if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return 0;
     const database = copy.database;
     const hasUnread = await database.getFirstAsync<{ id: string }>(
         `SELECT m.id FROM messages m
@@ -2766,7 +2771,18 @@ export async function markConversationReadLocally(conversationId: string, myPubk
          LIMIT 1`,
         [myPubkey, conversationId, myPubkey]
     );
-    if (!hasUnread) return;
+    if (!hasUnread) return 0;
+    // A message request for me isn't in that community's number (its server lists it apart): none of its lines are counted.
+    const counted = copy.inPlace ? await database.getFirstAsync<{ n: number }>(
+        `SELECT COUNT(m.id) AS n FROM messages m
+         JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
+         JOIN conversations c ON c.id = m.conversation_id AND ${NOT_A_REQUEST_FOR_ME('c.request')} = 1
+         WHERE m.conversation_id = ?
+           AND m.author_pubkey != ?
+           AND m.timestamp > IFNULL(cp.last_read_at, '2000-01-01')
+           AND ${countsAsUnreadSql('m')}`,
+        [myPubkey, myPubkey, conversationId, myPubkey, myPubkey],
+    ).catch(() => null) : null;
 
     const now = new Date().toISOString();
     await database.runAsync(
@@ -2774,10 +2790,19 @@ export async function markConversationReadLocally(conversationId: string, myPubk
         [now, conversationId, myPubkey]
     );
     emitAppEvent(CONVERSATION_READ_LOCALLY_EVENT, { conversationId, myPubkey });
+    return Math.max(0, Number(counted?.n) || 0);
 }
 
+/**
+ * `file\nconversationId` → a direct chat's lines read here in place that its community's server hasn't taken the read of yet:
+ * they leave that community's number (the "· Switch" line's, notice-counts.ts noteReadInPlace) once its mark-read answers.
+ */
+const _readInPlaceOwed = new Map<string, number>();
+
 export async function markConversationRead(conversationId: string, myPubkey: string, community?: ChatCommunity) {
-    await markConversationReadLocally(conversationId, myPubkey, community);
+    const lines = await markConversationReadLocally(conversationId, myPubkey, community);
+    const owedKey = community ? `${getDatabaseFilenameForNode(community)}\n${conversationId}` : null;
+    if (owedKey && lines > 0) _readInPlaceOwed.set(owedKey, (_readInPlaceOwed.get(owedKey) ?? 0) + lines);
 
     // Push the read cursor to the server so the PEER's device can render the
     // double-tick. Without this the receipt loop never leaves this phone. A chat open in place: to its own community.
@@ -2787,6 +2812,14 @@ export async function markConversationRead(conversationId: string, myPubkey: str
         chatCopyForRequest(community)
             .then((here) => onlyDmInPlace(here, conversationId))
             .then((here) => _signedRequest('/api/messages/mark-read', { pubkey: myPubkey, conversationId }, here.anchorUrl))
+            .then(() => {
+                const owed = owedKey ? _readInPlaceOwed.get(owedKey) ?? 0 : 0;
+                if (!owedKey || !community || owed <= 0) return;
+                _readInPlaceOwed.delete(owedKey);
+                // A push told of each of its lines, unless the chat is muted as this phone last heard it.
+                const pushed = isMuted(getKnownChatMute(conversationId)) ? 0 : owed;
+                void import('./notice-counts').then((m) => m.noteReadInPlace(AsyncStorage, community, owed, pushed)).catch(() => {});
+            })
             .catch(() => { _lastReadPushAt[conversationId] = 0; /* offline — retry on next call */ });
     }
 }
@@ -10725,10 +10758,12 @@ async function dealStep(
         if (!stays()) throw new Error(OTHER_ACCOUNT_SINCE_CHAT_OPENED_TEXT);
         if (here.inPlace && !here.openNow()) throw new NoCopyInPlaceError();
     };
-    // No await from this look to the note below: of two taps at once, one asks.
+    // No await from this look to the note below: of two taps at once, one asks. One that joins a step on its way gets that
+    // step's answer with its OWN copy: a tap in use beside one in place on the same file refreshes the balance and the
+    // screens in use as its own step would (#3363 N3).
     const key = [here.file, me, endpoint, JSON.stringify(payload)].join('\n');
     const running = _dealStepsInFlight.get(key);
-    if (running) return running;
+    if (running) return running.then(({ res }) => ({ res, here }));
     const run = (async () => {
         const res = await _signedRequest(endpoint, payload, { address: here.anchorUrl ?? '', leaving, signer: me });
         if (kept) {
@@ -10750,24 +10785,36 @@ async function dealStep(
     return run;
 }
 
+/**
+ * Tell the screens in use of a deal step the node has answered. It never throws: the step is done by then, and a refresh
+ * that fails must not report a release or a cancel the node took as refused (the member would tap again).
+ */
+function tellScreensOfDealStep(...events: string[]): void {
+    try {
+        const { DeviceEventEmitter } = require('react-native');
+        for (const e of events) DeviceEventEmitter.emit(e);
+    } catch (e: any) {
+        console.warn(`[Escrow] Could not tell the screens of a deal step: ${e?.message || e}`);
+    }
+}
+
 /** Release a deal's Beans (its payer). `community`: a deal of a chat open in place, asked of its own community ({@link dealStep}). */
 export async function completeMarketplaceTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, community?: ChatCommunity) {
     // Awaits the local write so callers (and any screen they navigate to) read a consistent status.
-    const { res, here } = await dealStep(community, confirmerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/complete', { transactionId, confirmerPublicKey, finalHours }, async (database, at) => {
+    const { res, here } = await dealStep(community, confirmerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/complete', { transactionId, confirmerPublicKey, finalHours }, async (database) => {
         const postParam = await database.getFirstAsync<{ repeatable: number, id: string }>('SELECT id, repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
         if (postParam && postParam.repeatable !== 1) {
             await database.runAsync("UPDATE posts SET status = 'completed' WHERE pending_transaction_id = ?", [transactionId]);
         }
         await database.runAsync("UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?", [new Date().toISOString(), transactionId]);
-        if (at.inPlace) return;
-        // Emit events so Ledger screen refreshes immediately
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('transaction_completed');
-        DeviceEventEmitter.emit('sync_data_updated');
     });
     console.log(`[Escrow] Server complete response: success=${res?.success}, txId=${res?.transaction?.id}`);
-    // A balance is asked of the community in use: another community's deal (in place, or the phone has moved on) asks it for none.
-    if (here.inPlace || !here.openNow()) return res;
+    // The screens in use hear of a step in use (this caller's own copy, never a shared step's: #3363 N3), and so does the
+    // balance; a deal in place, or one the phone has moved on from, asks the community in use for none.
+    if (here.inPlace) return res;
+    // Emit events so Ledger screen refreshes immediately
+    tellScreensOfDealStep('transaction_completed', 'sync_data_updated');
+    if (!here.openNow()) return res;
     // Balance refreshes are network round-trips — keep them off the caller's critical path
     const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
     const sellerPubkey = res?.transaction?.sellerPublicKey || null;
@@ -10779,16 +10826,15 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
 
 /** Cancel a hold (either side): the Beans go back to the payer. `community`: as {@link completeMarketplaceTransaction}. */
 export async function cancelMarketplaceTransaction(transactionId: string, cancellerPublicKey: string, community?: ChatCommunity) {
-    const { res } = await dealStep(community, cancellerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/cancel', { transactionId, cancellerPublicKey }, async (database, at) => {
+    const { res, here } = await dealStep(community, cancellerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/cancel', { transactionId, cancellerPublicKey }, async (database) => {
         const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
         if (postParam && postParam.repeatable !== 1) {
             await database.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE pending_transaction_id = ?", [transactionId]);
         }
         await database.runAsync("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?", [transactionId]);
-        if (at.inPlace) return;
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('sync_data_updated');
     });
+    // As a release: the screens in use hear of this caller's own step in use.
+    if (!here.inPlace) tellScreensOfDealStep('sync_data_updated');
     return res;
 }
 
@@ -10800,7 +10846,7 @@ export async function cancelMarketplaceTransaction(transactionId: string, cancel
  * community's to keep it (the chat left, the phone switched, an account leaving): nothing then shows as that community's word.
  * In use: nothing asked (the phone's own sync keeps those).
  */
-export async function syncDealsBetween(myPubkey: string, peerPubkey: string, community: ChatCommunity): Promise<Map<string, { postAuthorPublicKey?: string | null; postType?: string | null }> | null> {
+export async function syncDealsBetween(myPubkey: string, peerPubkey: string, community: ChatCommunity): Promise<Map<string, { postAuthorPublicKey?: string | null; postType?: string | null; status?: string | null }> | null> {
     if (!community) return null;
     const stays = accountStays();
     const controller = new AbortController();
@@ -10822,7 +10868,8 @@ export async function syncDealsBetween(myPubkey: string, peerPubkey: string, com
         } finally {
             releaseSyncLock();
         }
-        return new Map(ours.map((r: any) => [r.id as string, { postAuthorPublicKey: r.postAuthorPublicKey ?? null, postType: r.postType ?? null }]));
+        // Its status too: a step is offered only on a deal its copy holds as this answer says it is (#3363 N1).
+        return new Map(ours.map((r: any) => [r.id as string, { postAuthorPublicKey: r.postAuthorPublicKey ?? null, postType: r.postType ?? null, status: typeof r.status === 'string' ? r.status : null }]));
     } catch (e: any) {
         console.warn(`[Deals] Could not read the deals of a chat in place: ${e?.message || e}`);
         return null;

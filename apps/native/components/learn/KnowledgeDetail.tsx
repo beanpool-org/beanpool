@@ -33,6 +33,10 @@ import { reportAbuse, signedGet, signedRequestWithMethod } from '../../utils/db'
 import { Alert } from '../../utils/keyboard-alert';
 import { useLearnMode } from '../../utils/use-learn-mode';
 import { reportedAlertBody } from '../../utils/reportReasons';
+import { withGlyphsThisPhoneHas } from '../../utils/glyphs-here';
+
+/** The page's own space under its last line, over the navigation bar's (insets.bottom). */
+const CONTENT_BOTTOM_DP = 48;
 import { signedRequestWords } from '../signed-request-lines';
 import { LANGUAGE_NAMES } from '../../utils/language-choice';
 import type { KnowledgePage } from '../../utils/learn-copy';
@@ -178,7 +182,7 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
         backArrow: { fontSize: 22, fontWeight: '600', color: colors.brand.primary, marginTop: -2 },
         backText: { fontSize: 16, fontWeight: '600', color: colors.brand.primary },
         kind: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '800', letterSpacing: 1, color: colors.chip.learn.fg, marginRight: 44 },
-        content: { padding: 16, paddingBottom: 48, gap: 12 },
+        content: { padding: 16, paddingBottom: CONTENT_BOTTOM_DP, gap: 12 },
         chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
         title: { fontSize: 24, fontWeight: '800', color: colors.text.heading },
         written: { fontSize: 13, color: colors.text.secondary },
@@ -248,7 +252,8 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                 </Pressable>
                 <Text style={styles.kind} accessibilityRole="header">{inCapitalsOf(t(KNOWLEDGE_NAMES.kind))}</Text>
             </View>
-            <ScrollView contentContainerStyle={styles.content}>
+            {/* Its last lines clear the navigation bar the page is drawn under (walk-s6: "Checked…" and "Thank …" under Android 8's). */}
+            <ScrollView contentContainerStyle={[styles.content, { paddingBottom: CONTENT_BOTTOM_DP + insets.bottom }]}>
                 <View style={styles.chips}>
                     <ChipText bg="learn">{t(LEARN_LINES.emojiTopic, { emoji: topic.emoji, topic: inCapitalsOf(t(topic.label)) })}</ChipText>
                     {pinned ? <ChipText bg="learn">{t(LEARN_LINES.pinned)}</ChipText> : null}
@@ -313,7 +318,7 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                             handOverSend({ to: page.authorPublicKey ?? '', note: knowledgeThankNote(page.title ?? '') });
                             router.push('/(tabs)/ledger');
                         }}>
-                        <Text style={styles.toolText}>{t(KNOWLEDGE_THANK.button, { name: page.authorCallsign ?? '' })}</Text>
+                        <Text style={styles.toolText}>{withGlyphsThisPhoneHas(t(KNOWLEDGE_THANK.button, { name: page.authorCallsign ?? '' }))}</Text>
                     </Pressable>
                 ) : null}
                 {/* The forum's topics that link this page (forum slice F9, "From the forum"): only those this member may read. */}

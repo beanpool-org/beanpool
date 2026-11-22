@@ -290,6 +290,46 @@ for (const dark of [false, true]) describe(`${dark ? 'dark' : 'light'}, 320 dp �
         expect(moved.run.mock.calls.map((c) => c.slice(0, 3))).toEqual([[RIVER, '/post/p-saw?txId=tx-ask', ME.publicKey]]);
         expect(nav.went, 'nothing opens in the community in use').toEqual([]);
     });
+
+    it('#3363 N1: a deal its community now says is completed (released elsewhere) offers no Release while the copy is read back, nor after a read that still holds it pending', async () => {
+        const releaseOf = () => buttons().find((b) => b.textContent?.startsWith('Release')) ?? null;
+        for (const after of ['held open', 'still pending'] as const) {
+            let answered = false;
+            let readBack!: (rows: any[]) => void;
+            const back = new Promise<any[]>((r) => { readBack = r; });
+            await open([HELD], undefined, {
+                over: {
+                    syncDealsBetween: async () => { answered = true; return new Map([[HELD.txId, { status: 'completed' }]]); },
+                    getDealsBetween: async () => (answered ? (after === 'held open' ? back : [HELD]) : [HELD]),
+                },
+            });
+            expect(of('syncDealsBetween').length, after).toBeGreaterThan(0);
+            expect(host.textContent, after).toContain('Borrow a long ladder');
+            expect([releaseOf(), host.textContent?.includes('Action needed: release the Beans')], after).toEqual([null, false]);
+            expect(moneyCalls(), after).toEqual([]);
+            if (after === 'held open') {
+                await act(async () => { readBack([{ ...HELD, status: 'completed' }]); });
+                await settle();
+                expect(releaseOf(), 'the completed row, as read back').toBeNull();
+            }
+            await act(async () => { root.unmount(); });
+            root = createRoot(host);
+        }
+    });
+
+    it('#3363 N2: a listing id from that community in any shape but an id offers no move, and one in the shape of an id moves to its own route', async () => {
+        for (const postId of ['../wallet?send=1', 'p saw', 'p/../../admin', '']) {
+            await open([{ ...ASKED, postId }], all(ASKED));
+            expect(buttons().filter((b) => b.textContent === `Open ${NAME} ›`), JSON.stringify(postId)).toEqual([]);
+            await act(async () => { root.unmount(); });
+            root = createRoot(host);
+        }
+        expect(moved.run).not.toHaveBeenCalled();
+        await open([ASKED], all(ASKED));
+        await press(reading(`Open ${NAME} ›`), 'Open');
+        await answerAlert(`Open ${NAME} ›`);
+        expect(moved.run.mock.calls.map((c) => c.slice(0, 2))).toEqual([[RIVER, '/post/p-saw?txId=tx-ask']]);
+    });
 });
 
 describe('a step on a deal of a chat in place: asked as at home, then handed the deal\'s own community', () => {

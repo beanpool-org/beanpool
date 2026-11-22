@@ -56,8 +56,11 @@ const hit = (number: number, excerpt: string, over: Record<string, unknown> = {}
     excerpt, ...over,
 });
 
-/** `gone`: the topic ft-1 isn't there for this member any more (its opening post removed with no reply, or its writer blocked). */
-let state: { front: any; topics: any[]; posts: any[]; waiting: any[]; gone: boolean };
+/**
+ * `gone`: the topic ft-1 isn't there for this member any more (its opening post removed with no reply, or its writer blocked).
+ * `read`: what the topic's own read adds to ft-1, never a list row (engine/forum.ts forumTopic: canReply, sectionArchived).
+ */
+let state: { front: any; topics: any[]; posts: any[]; waiting: any[]; gone: boolean; read: Record<string, unknown> };
 /** The node's refusal as lib/api.ts request throws it: its words, its status and its code. */
 const refusal = (status: number, code: string, words: string) => Object.assign(new Error(words), { status, code });
 function standIn(c: Call): unknown {
@@ -70,7 +73,7 @@ function standIn(c: Call): unknown {
         const after = Number(new URLSearchParams(c.path.split('?')[1] ?? '').get('after') ?? 0);
         const rest = state.posts.filter((x) => x.number > after);
         const posts = rest.slice(0, 30);
-        return { topic: state.topics[0], posts, next: rest.length > 30 ? posts[posts.length - 1].number : null, lastRead: 1 };
+        return { topic: { ...state.topics[0], ...state.read }, posts, next: rest.length > 30 ? posts[posts.length - 1].number : null, lastRead: 1 };
     }
     if (c.method === 'POST' && p === '/api/forum/topics/ft-1/follow') { state.topics[0] = { ...state.topics[0], follow: c.body.follow }; return { follow: c.body.follow }; }
     if (c.method === 'POST' && /^\/api\/forum\/posts\/fp-\d+\/remove$/.test(p)) {
@@ -104,7 +107,7 @@ beforeEach(() => {
     node.calls.length = 0;
     node.role = 'member';
     node.answer = standIn;
-    state = { front: front(), topics: [topic('ft-1', 'Seed swap ideas', { unread: true, follow: 'following' }), topic('ft-2', 'Welcome: start here', { pinned: true, replyCount: 1 })], posts: [post(1, 'Who has beans to swap?'), post(2, 'I have runner beans.', { writer: { publicKey: 'ben-key', name: 'Ben' } })], waiting: [], gone: false };
+    state = { front: front(), topics: [topic('ft-1', 'Seed swap ideas', { unread: true, follow: 'following' }), topic('ft-2', 'Welcome: start here', { pinned: true, replyCount: 1 })], posts: [post(1, 'Who has beans to swap?'), post(2, 'I have runner beans.', { writer: { publicKey: 'ben-key', name: 'Ben' } })], waiting: [], gone: false, read: {} };
 });
 afterEach(() => { cleanup(); vi.mocked(blockUser).mockReset(); vi.mocked(blockUser).mockImplementation(async () => true); });
 
@@ -257,6 +260,37 @@ describe('a topic', () => {
         expect(within(menu).getByRole('button', { name: 'Remove' })).toBeInTheDocument();
         expect(screen.getByTestId('forum-closed')).toBeInTheDocument();
         expect(screen.queryByTestId('forum-reply-box')).toBeNull();
+    });
+
+    // Review of #3339: the node refuses a reply in an archived section (engine/forum.ts) and from a member who only reads a
+    // group's section (assertWritesIn), though the topic itself is open. The topic's own read says so (canReply,
+    // sectionArchived) and the web follows it, as the phone's app/forum/[id].tsx does: no box, no Reply, one line saying why.
+    for (const [why, read, line, words] of [
+        ['an open topic in an archived section', { canReply: false, sectionArchived: true }, 'forum-closed', 'This topic is closed, so it takes no new replies.'],
+        ["an open topic in a group's section this member only reads (an observer)", { canReply: false, sectionArchived: false }, 'forum-reads-only',
+            'Only this group’s convenors and members write here. You can read it.'],
+    ] as const) {
+        it(`${why}: no reply box and no Reply, and one line says why`, async () => {
+            state.read = read;
+            await openTopic();
+            expect(screen.getByTestId(line)).toHaveTextContent(words);
+            expect(screen.queryByTestId(line === 'forum-closed' ? 'forum-reads-only' : 'forum-closed')).toBeNull();
+            expect(screen.queryByTestId('forum-reply')).toBeNull();
+            fireEvent.click(screen.getByTestId('forum-post-menu-2'));
+            const menu = screen.getByTestId('forum-menu');
+            expect(within(menu).queryByRole('button', { name: 'Reply' })).toBeNull();
+            expect(within(menu).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+        });
+    }
+
+    it('an open topic the node says takes a reply (canReply): the box and Reply, and no line', async () => {
+        state.read = { canReply: true, sectionArchived: false };
+        await openTopic();
+        expect(screen.getByTestId('forum-reply-box')).toBeInTheDocument();
+        expect(screen.queryByTestId('forum-closed')).toBeNull();
+        expect(screen.queryByTestId('forum-reads-only')).toBeNull();
+        fireEvent.click(screen.getByTestId('forum-post-menu-2'));
+        expect(within(screen.getByTestId('forum-menu')).getByRole('button', { name: 'Reply' })).toBeInTheDocument();
     });
 
     it('a writer\'s name opens their profile by key, only through onOpenProfile', async () => {

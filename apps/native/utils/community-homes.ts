@@ -45,10 +45,11 @@ export function addressesOf(community: string, profile: NodeProfile | null, inUs
     const listed = record?.peerId && list && list.peerId === record.peerId && Array.isArray(list.addresses) ? list.addresses : [];
     const says = [...homesOfCommunity(using, profile), ...listed];
     const refused = record ? Object.keys(record.refused ?? {}) : [];
+    const answeredElse = new Set(refused.map((a) => addressOf(a)));
     const before = formerHomesOf(using, profile);
     // Heard what it goes by now: an address the record alone holds is no proof any more. One it says it had before is that.
     const now = profile?.addresses?.length ? new Set(says.map((a) => addressOf(a))) : null;
-    const proof = (a: string) => a === using || (!refused.includes(a) && (!now || now.has(addressOf(a))));
+    const proof = (a: string) => a === using || (!answeredElse.has(addressOf(a)) && (!now || now.has(addressOf(a))));
     const known = (record ? recordAddresses(record) : []).filter((a) => proof(a) || (member && !before.includes(addressOf(a) ?? '')));
     return { community, known, says, before, refused: inUse ? [] : refused };
 }
@@ -81,17 +82,36 @@ export async function addressesFor(
     return recordAlone && await memberThere(community, keys, inUse) ? whole : said;
 }
 
+/** Whether `address` is the one the phone keeps or reaches `community` at, whatever it says of itself. */
+export function reachedAt(community: string, address: string): boolean {
+    const using = communityRecordOf(community)?.using;
+    return communityNamed([{ community, known: using ? [using] : [] }])(address) !== null;
+}
+
 /**
  * Whether `address` (a home, a link), where the person with `key` is, names the community in use at `community`, by any of
- * its addresses, and no other community this phone saved that goes by it now: the check made as a chat across is
- * (message-anyone.ts openAcrossChat), and the address card's.
+ * its addresses: the check made as a chat across is (message-anyone.ts openAcrossChat), and the address card's. One it goes
+ * by now is its own whoever else says so: its server refuses every line there. One it had before is not, when another
+ * community this phone saved goes by it now.
  */
 export async function namesCommunityInUse(community: string, address: string, key: string, profile?: NodeProfile | null): Promise<boolean> {
     const said = profile === undefined ? await keptProfileOf(community) : profile;
     const communities = [await addressesFor(community, said, true, [key], [address])];
+    if (communityNamed([{ ...communities[0], before: [] }])(address) !== null) return true;
+    if (communityNamed(communities)(address) === null) return false;
     const saved = await import('./nodes').then((m) => m.getSavedNodes()).catch(() => []);
     for (const { url } of saved) {
         if (url && !keptAsOne(community, url)) communities.push(await addressesFor(url, await keptProfileOf(url), false, [key], [address]));
     }
     return communityNamed(communities)(address) === community;
+}
+
+/**
+ * Why no chat across is made from `card` (the address card's check, Message's rule too), or null: its person is in the
+ * community in use at `community` (`home`: its home as this phone signs as it, or null), where the direct chat is theirs; or
+ * that community says it has no address of its own, so its server sends no line.
+ */
+export async function cardRefusal(community: string, card: { key: string; home: string }, home: string | null): Promise<'here' | 'no-home' | null> {
+    if (card.home === home || await namesCommunityInUse(community, card.home, card.key)) return 'here';
+    return (await keptProfileOf(community))?.noHome ? 'no-home' : null;
 }

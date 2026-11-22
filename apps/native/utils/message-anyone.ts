@@ -27,7 +27,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { acrossChatListed, communityNamed, messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
 import type { getConversations } from './db';
-import { addressesFor, keptAsOne, keptProfileOf, namesCommunityInUse } from './community-homes';
+import { addressesFor, keptAsOne, keptProfileOf, namesCommunityInUse, reachedAt } from './community-homes';
+import { communityRecordOf } from './community-index';
 import type { NodeProfile } from './node-profile';
 import { sameCommunity } from './push-pins';
 
@@ -113,13 +114,30 @@ export async function messagePathOnPhone(me: string, links: readonly MessageLink
     for (const c of [...(inFront ? [inFront] : []), ...others]) says.set(c, await keptProfileOf(c));
     const { outsideMessagesOn } = await import('./node-profile');
     const named = [...links.map((l) => l.community), ...chats.map((c) => (c.kind === 'across' ? c.home : null))];
-    const communities = await Promise.all([...says].map(([c, profile]) => addressesFor(c, profile, c === inFront, keys, named)));
-    return messagePathFor({
-        links, chats, setTo, look, held: others, blocked,
-        whose: communityNamed(communities),
-        // Not heard from yet: its chats across still count (only a community that says it takes none is left out).
-        takesAcross: (c) => { const profile = says.get(c); return !profile || acrossRefusal(profile, outsideMessagesOn) === null; },
-    });
+    const pathBySays = async (): Promise<MessagePath> => {
+        const communities = [];
+        // One after another: each held read closes the handles Chat doesn't need (held-chats.ts).
+        for (const [c, profile] of says) communities.push(await addressesFor(c, profile, c === inFront, keys, named));
+        return messagePathFor({
+            links, chats, setTo, look, held: others, blocked,
+            whose: communityNamed(communities),
+            // Not heard from yet: its chats across still count (only a community that says it takes none is left out).
+            takesAcross: (c) => { const profile = says.get(c); return !profile || acrossRefusal(profile, outsideMessagesOn) === null; },
+        });
+    };
+    // A chat to start where the link's address is the community's only by its own word: its word is asked now ({@link
+    // openAcrossChat} asks as a chat across is made), since a name it lost after this phone last heard is another's, and the
+    // chat would reach no one. No answer, or one that says nothing of its addresses: as this phone keeps it.
+    const asked = new Set<string>();
+    for (;;) {
+        const path = await pathBySays();
+        if (path.open !== 'shared' || asked.has(path.community) || links.some((l) => l.key === path.key && reachedAt(path.community, l.community))) return path;
+        asked.add(path.community);
+        const { profileNow } = await import('./outside-chat-live');
+        const fresh = await profileNow(communityRecordOf(path.community)?.using ?? path.community).catch(() => null);
+        if (!fresh?.addresses) return path;
+        says.set(path.community, fresh);
+    }
 }
 
 /**

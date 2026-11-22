@@ -83,7 +83,7 @@ vi.mock('../db', () => {
 import { relayConversationId, type MessageLink } from '@beanpool/core';
 import { makeCommunityRecord, resetCommunityIndexForTests, setCommunityIndex, type CommunityRecord } from '../community-index';
 import { existingChatRoute, messagePathOnPhone, openAcrossChat } from '../message-anyone';
-import { namesCommunityInUse } from '../community-homes';
+import { cardRefusal, namesCommunityInUse } from '../community-homes';
 import { readNodeProfile } from '../node-profile';
 
 const RIVERSIDE = 'https://riverside.example';
@@ -496,12 +496,86 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         expect(made()).toEqual([]);
     });
 
+    it('the same address however the record spells it: one that answered as something else is no proof', async () => {
+        setCommunityIndex([{ ...record('https://MetRiver.example/', RIVERSIDE, 'peer-riverside', 'listedriver.example'), refused: { 'https://metriver.example': { at: 1, why: 'key' } } }]);
+        phone.copyOf = () => new Set();
+        expect(word(await message(at('https://metriver.example')))).toBe('off');
+        expect(made()).toEqual([]);
+    });
+
+    it.each([
+        { name: 'the one in use', url: 'https://formerriver.example', lose: () => { TOLD.riverside.formerAddresses = []; SERVERS.riverside.names = SERVERS.riverside.names.filter((n) => n !== 'formerriver.example'); }, host: 'formerriver.example' },
+        { name: 'the one in use, one it went by', url: 'https://river.example', lose: () => { TOLD.riverside.addresses = ['riverside.example']; SERVERS.riverside.names = SERVERS.riverside.names.filter((n) => n !== 'river.example'); }, host: 'river.example' },
+        { name: 'the held one', url: 'https://formerhill.example', lose: () => { TOLD.hillside.formerAddresses = []; SERVERS.hillside.names = SERVERS.hillside.names.filter((n) => n !== 'formerhill.example'); }, host: 'formerhill.example' },
+        { name: 'the held one, one it went by', url: 'https://hill.example', lose: () => { TOLD.hillside.addresses = ['hillside.example']; SERVERS.hillside.names = SERVERS.hillside.names.filter((n) => n !== 'hill.example'); }, host: 'hill.example' },
+    ])('a name lost since this phone last heard ($name): asked now, so across to the one that holds it', async ({ url, lose, host }) => {
+        saysNow(); kept();
+        lose(); SERVERS.lakeside.names.push(host); SERVERS.lakeside.members.add(K);
+        saysNow();
+        const got = await message(at(url));
+        expect(word(got)).toBe('new');
+        expect(nowhere(got)).toBeNull();
+    });
+
+    it('lost by the one in use since, and said by the held one before this phone last heard of it, which lost it too: each is asked, so across', async () => {
+        TOLD.riverside.addresses.push('twice.example'); TOLD.hillside.addresses.push('twice.example');
+        saysNow(); kept();
+        TOLD.riverside.addresses.pop(); TOLD.hillside.addresses.pop();
+        SERVERS.lakeside.names.push('twice.example'); SERVERS.lakeside.members.add(K);
+        saysNow();
+        const got = await message(at('https://twice.example'));
+        expect(word(got)).toBe('new');
+        expect(nowhere(got)).toBeNull();
+    });
+
+    it('asked now, a community that says nothing of its addresses (or does not answer): what this phone keeps decides; at the address it is reached at, nothing is asked', async () => {
+        saysNow(); kept(); SERVERS.riverside.members.add(K); SERVERS.hillside.members.add(K);
+        phone.info.set(RIVERSIDE, { profile: 'local', features: { outsideMessages: true } });
+        phone.info.delete(HILLSIDE);
+        expect(word(await message(at('https://formerriver.example')))).toBe('here');
+        expect(word(await message(at('https://formerhill.example')))).toBe('held');
+        const asked: string[] = [];
+        saysNow(); kept();
+        vi.stubGlobal('fetch', async (url: string) => { asked.push(url); throw new Error('no answer'); });
+        expect(word(await message(at(RIVERSIDE)))).toBe('here');
+        expect(word(await message(at(HILLSIDE)))).toBe('held');
+        expect(asked).toEqual([]);
+        expect(word(await message(at('https://river.example')))).toBe('here');
+        expect(asked).toEqual([`${RIVERSIDE}/api/community/info`]);
+    });
+
+    it('the address card: here, no address of its own to send from, or on to the box, as Message has it', async () => {
+        saysNow(); kept();
+        const card = (home: string) => ({ key: K, home });
+        expect(await cardRefusal(RIVERSIDE, card('riverside.example'), 'riverside.example')).toBe('here');
+        for (const home of ['river.example', 'formerriver.example', 'listedriver.example']) expect(await cardRefusal(RIVERSIDE, card(home), null)).toBe('here');
+        for (const home of ['lostriver.example', 'takenriver.example', 'faraway.example', 'hillside.example']) expect(await cardRefusal(RIVERSIDE, card(home), 'riverside.example')).toBeNull();
+        // One its server says is its own now is refused there, whoever else says so, and this phone's record agrees.
+        TOLD.riverside.addresses.push('oldhill.example'); TOLD.hillside.addresses.push('oldhill.example');
+        saysNow(); kept();
+        expect(await cardRefusal(RIVERSIDE, card('oldhill.example'), 'riverside.example')).toBe('here');
+        SERVERS.riverside.home = false;
+        saysNow(); kept();
+        expect(await cardRefusal(RIVERSIDE, card('faraway.example'), null)).toBe('no-home');
+        expect(await cardRefusal(RIVERSIDE, card('river.example'), null)).toBe('here');
+    });
+
     it('a name an older server lists as former that a held community goes by now: never the community in use, asked as the chat is made and by the address card', async () => {
         saysNow(); kept(); SERVERS.hillside.members.add(K);
         expect(await namesCommunityInUse(RIVERSIDE, 'takenriver.example', K)).toBe(false);
         expect(await namesCommunityInUse(RIVERSIDE, 'lostriver.example', K)).toBe(false);
         expect(await namesCommunityInUse(RIVERSIDE, 'formerriver.example', K)).toBe(true);
         expect(await openAcrossChat({ key: K, home: 'takenriver.example', name: 'Ana' })).not.toEqual({ here: K });
+    });
+
+    it('two say an address is theirs now, and the record of the held one holds it: in place there, whoever the copy has', async () => {
+        TOLD.hillside.addresses.push('oldhill.example');
+        TOLD.riverside.addresses.push('oldhill.example');
+        saysNow(); kept(); SERVERS.hillside.members.add(K);
+        phone.copyOf = () => new Set();
+        const got = await message(at('https://oldhill.example'));
+        expect(word(got)).toBe('held');
+        expect(nowhere(got)).toBeNull();
     });
 
     it('two communities that each had a name before, neither going by it now: the one in use', async () => {

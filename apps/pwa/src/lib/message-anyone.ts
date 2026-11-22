@@ -62,14 +62,22 @@ export async function messagePathOnWeb(links: readonly MessageLink[], direct: re
             .map((key) => ({ kind: 'direct' as const, community: here, id: c.id, key }))),
         ...across.map((c) => ({ kind: 'across' as const, community: null, id: c.id, key: c.peerKey, home: c.peerHome })),
     ];
-    const info = links.length && !blocked ? await communityInfoKept() : null;
-    // Asked only where a chat across is weighed. Not read yet: its chats across still count (only a community that says it takes none is left out).
-    const takesAcross = ctx && across.length ? (!info || acrossRefusal(info) === null) && await memberHere(ctx.identity.publicKey) : true;
-    return messagePathFor({
+    const kept = links.length && !blocked ? await communityInfoKept() : null;
+    // Asked only where a chat across is weighed.
+    const member = ctx && across.length ? await memberHere(ctx.identity.publicKey) : true;
+    const pathBy = (info: CommunityInfo | null): MessagePath => messagePathFor({
         links, chats, setTo: here || null, look: null, held: [], blocked,
         whose: namedHere(info),
-        takesAcross: () => takesAcross,
+        // Not read yet: its chats across still count (only a community that says it takes none is left out).
+        takesAcross: () => member && (!info || acrossRefusal(info) === null),
     });
+    const path = pathBy(kept);
+    // A chat to start here where a link's address is this community's only by its own word, as this page read it: asked now
+    // (openAcrossOnWeb asks as a chat across is made), since a name it lost while the page was open is another's, and the
+    // chat would reach no one. No answer, or one that says nothing of its addresses: as this page read it.
+    if (path.open !== 'shared' || links.some((l) => l.key === path.key && namedHere(null)(l.community) !== null)) return path;
+    const now = await communityInfoNow();
+    return now?.addresses ? pathBy(now) : path;
 }
 
 /** What became of an across chat asked for: opened (its id); the person is in this community after all (`here`, their key); or why not. */

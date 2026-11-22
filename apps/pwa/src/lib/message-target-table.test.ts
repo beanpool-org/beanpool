@@ -239,6 +239,31 @@ describe('Message on the web: what the table\'s fixed world cannot hold', () => 
         }
     });
 
+    // ── round 5: a name lost while the page was open ──
+    it.each([
+        { name: 'a name it had before', url: 'https://formerriver.example', lose: () => { TOLD.formerAddresses = []; }, host: 'formerriver.example' },
+        { name: 'one it went by', url: 'https://river.example', lose: () => { TOLD.addresses = ['riverside.example']; }, host: 'river.example' },
+    ])('lost since this page read its info ($name): asked now, so across to the community that holds it', async ({ url, lose, host }) => {
+        web.kept = says();
+        lose(); SERVERS.riverside.names = SERVERS.riverside.names.filter((n) => n !== host);
+        SERVERS.lakeside.names.push(host); SERVERS.lakeside.members.add(K);
+        web.now = says();
+        const got = await message(url);
+        expect(word(got)).toBe('new');
+        expect(whyNotWritable(got as Exclude<Target, { at: 'refused' }>)).toBeNull();
+    });
+
+    it('asked now, a community that says nothing of its addresses: what this page read decides; at its own address nothing is asked', async () => {
+        const api = await import('./api');
+        web.kept = says(); SERVERS.riverside.members.add(K);
+        web.now = { features: { outsideMessages: true } };
+        expect(word(await message('https://formerriver.example'))).toBe('here');
+        const asked = vi.spyOn(api, 'getCommunityInfo');
+        expect(word(await message(HERE))).toBe('here');
+        expect(asked).not.toHaveBeenCalled();
+        asked.mockRestore();
+    });
+
     // ── round 5: the membership ask and the page's own read have the same deadline ──
     it.each([
         { name: 'a chat across there is', set: () => across('faraway.example')(), url: FARAWAY, want: 'open' },

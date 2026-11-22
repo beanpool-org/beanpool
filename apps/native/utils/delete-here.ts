@@ -265,8 +265,20 @@ export function lastCommunityLine(plan: Extract<DeletePlan, { kind: 'last' }>, h
 }
 
 /**
+ * After {@link vaultCopyStaysLine}'s words for a sign-in's copy, or for a copy the phone doesn't know of: the vault removed
+ * nothing ({@link removeVaultCopies} asks for every copy at once), so a half kept for a community's admins stays too, and
+ * Account Protection's Disconnect (one sign-in's copy) never takes it; its Remove does. The phone keeps one value per account
+ * (utils/vault.ts `noteVaultCopy`): a sign-in's copy known says nothing of a half beside it, so the half is named with "If".
+ */
+const ADMINS_HALF_STAYS_TOO =
+    "If the vault also keeps half of a locked copy of your key for your community's admins, that half stays too. It is " +
+    'removed the same way, at Settings → Account Protection → Remove.';
+
+/**
  * The community deleted the account at the member's last one, but BeanPool's key vault did not remove its copy, so
- * nothing on the phone was wiped ({@link DeleteOutcome} 'vault-copy-stays'): above Try Again and Delete Anyway.
+ * nothing on the phone was wiped ({@link DeleteOutcome} 'vault-copy-stays'): above Try Again and Delete Anyway. Each copy
+ * that may stay is named: the admins' half alone where that is all the phone knows of; otherwise a sign-in's copy, known or
+ * not, and any half for the admins beside it ({@link ADMINS_HALF_STAYS_TOO}).
  */
 export function vaultCopyStaysLine(hereName: string, outcome: Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>): string {
     // Only the admins' half is known (no sign-in's copy): it is no sign-in's, and no sign-in can bring the key back to remove it.
@@ -284,7 +296,7 @@ export function vaultCopyStaysLine(hereName: string, outcome: Extract<DeleteOutc
         'key can remove it, and your key is still on this phone, so you can try again.\n\n' +
         'Delete Anyway takes your key off this phone and leaves that copy at the vault, locked to your sign-in. To ' +
         'remove it later, you would need your key back (with your 12 words or that sign-in) and a community that has ' +
-        'you, to reach Settings → Account Protection → Disconnect.';
+        `you, to reach Settings → Account Protection → Disconnect. ${ADMINS_HALF_STAYS_TOO}`;
 }
 
 const keyAnd = (hasWords: boolean) => (hasWords ? "This phone's key and 12 words" : "This phone's key");

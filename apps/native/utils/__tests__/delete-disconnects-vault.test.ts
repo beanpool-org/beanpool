@@ -39,7 +39,7 @@ vi.mock('../db', () => ({ clearDB: vi.fn(async () => {}), closeDB: vi.fn(async (
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn() }));
 
-import type { SealedShare } from '@beanpool/core';
+import { VAULT_COMMUNITY_PROVIDER, type SealedShare } from '@beanpool/core';
 import { clearDB } from '../db';
 import {
     deleteAccountHere, finishLastDelete, lastCommunityLine, planDelete, vaultCopyStaysLine, type DeleteOutcome,
@@ -54,6 +54,10 @@ const BELLINGEN = 'https://bellingen.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 /** What a copy holds doesn't matter to a delete. */
 const SOME_COPY = { sealed: 'not opened here' } as unknown as SealedShare;
+/** After a sign-in's copy, known or not: the half kept for the community's admins stays too (delete-here.ts vaultCopyStaysLine). */
+const ADMINS_HALF_TOO =
+    "If the vault also keeps half of a locked copy of your key for your community's admins, that half stays too. It is " +
+    'removed the same way, at Settings → Account Protection → Remove.';
 
 interface Net {
     vault: FakeVault;
@@ -247,10 +251,44 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
             'remove it, and your key is still on this phone, so you can try again.\n\n' +
             'Delete Anyway takes your key off this phone and leaves that copy at the vault, locked to your sign-in. To ' +
             'remove it later, you would need your key back (with your 12 words or that sign-in) and a community that has ' +
-            'you, to reach Settings → Account Protection → Disconnect.');
+            'you, to reach Settings → Account Protection → Disconnect. ' + ADMINS_HALF_TOO);
         expect(vaultCopyStaysLine('Mullum', stays(false))).toMatch(
             /^Your account at Mullum was deleted, but BeanPool's key vault may keep a locked copy of your key, if you linked Google, Apple or Facebook: it couldn't be removed/);
     });
+
+    // Sweep 14 (review of #3345 and #3330 r2: "name the copy that actually stays", for a sign-in's copy, the admins' half,
+    // and both). The vault removed nothing, so a half kept for the community's admins stays beside a sign-in's copy too, and
+    // Account Protection's Disconnect (one sign-in's) never takes it. On main the line named the sign-in's copy and
+    // Disconnect alone. [what the phone knows, what it stores (vault.ts noteVaultCopy), copyKnown].
+    for (const [knows, stored, copyKnown] of [
+        ["a sign-in's copy (it says nothing of a half beside it)", '1', true],
+        ['nothing (a phone restored with the 12 words)', null, false],
+    ] as const) {
+        it(`both a sign-in's copy and the admins' half at the vault, the phone knowing ${knows}: the line names both, and each one's way out`, async () => {
+            const net = network('stranger');
+            await kimsPhone(net);
+            net.vault.copies.set(`${VAULT_COMMUNITY_PROVIDER}:${'ab'.repeat(32)}:${kim.publicKey}`, {
+                provider: VAULT_COMMUNITY_PROVIDER, sub: `${'ab'.repeat(32)}:${kim.publicKey}`, pubkey: kim.publicKey, clientCopy: SOME_COPY,
+                pushTokens: [], lastReleasedAt: null, day: '2026-10-01', community: { nodeKey: 'ab'.repeat(32), half: 'not opened here', ref: 'riverside-ref' },
+            });
+            if (stored) mem.async.set(vaultCopyKnownStoreKey(kim.publicKey), stored);
+            else mem.async.delete(vaultCopyKnownStoreKey(kim.publicKey));
+            net.vault.unreachable = true;
+
+            const outcome = await deleteAccountHere(kim, await planDelete(kim.publicKey));
+
+            expect(outcome).toMatchObject({ kind: 'vault-copy-stays', copyKnown, communityOnly: false });
+            const line = vaultCopyStaysLine('Riverside', outcome as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>);
+            expect(line).toMatch(copyKnown ? /still keeps a locked copy of your key, from a sign-in you linked/ : /may keep a locked copy of your key, if you linked Google, Apple or Facebook/);
+            expect(line).toMatch(/→ Disconnect\./);
+            expect(line.endsWith(` ${ADMINS_HALF_TOO}`)).toBe(true);
+
+            // Delete Anyway: every copy stays at the vault, the admins' half among them, as the line said.
+            net.vault.unreachable = false;
+            expect(await finishLastDelete(kim, 'delete-anyway')).toEqual({ kind: 'wiped' });
+            expect(net.vault.copiesOf(kim.publicKey).map((c) => c.provider).sort()).toEqual(['apple', VAULT_COMMUNITY_PROVIDER, 'google']);
+        });
+    }
 
     it("a phone that knows only the half kept for its community's admins is told about that half, never a sign-in", async () => {
         // The vault's copy is the admins' half alone (vault.ts noteVaultCopy 'c': a community copy, no sign-in's). Review

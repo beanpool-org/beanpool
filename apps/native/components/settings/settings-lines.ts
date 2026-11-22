@@ -207,15 +207,20 @@ export function lastCommunityWords(plan: Extract<DeletePlan, { kind: 'last' }>, 
     return t('{sentence} {next}', { sentence: line, next: vault });
 }
 
-/** delete-here.ts vaultCopyStaysLine: the account is deleted, the vault kept its copy, the key is still on the phone. */
+/**
+ * delete-here.ts vaultCopyStaysLine: the account is deleted, the vault kept its copy, the key is still on the phone. A
+ * sign-in's copy, known or not, is followed by the admins' half that may stay beside it (delete-here.ts ADMINS_HALF_STAYS_TOO).
+ */
 export function vaultCopyStaysWords(hereName: string, outcome: Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>): string {
     const values = { here: hereName, reason: settingsLineWords(outcome.reason) };
     if (outcome.copyKnown && outcome.communityOnly) {
         return t("Your account at {here} was deleted, but BeanPool's key vault still keeps half of a locked copy of your key, the half for your community's admins: it couldn't be removed ({reason}). Only your key can remove it, and your key is still on this phone, so you can try again.\n\nDelete Anyway takes your key off this phone and leaves that half at the vault. To remove it later, you would need your key back and a community that has you, to reach Settings → Account Protection → Remove.", values);
     }
-    return outcome.copyKnown
+    const signIn = outcome.copyKnown
         ? t("Your account at {here} was deleted, but BeanPool's key vault still keeps a locked copy of your key, from a sign-in you linked: it couldn't be removed ({reason}). Only your key can remove it, and your key is still on this phone, so you can try again.\n\nDelete Anyway takes your key off this phone and leaves that copy at the vault, locked to your sign-in. To remove it later, you would need your key back (with your 12 words or that sign-in) and a community that has you, to reach Settings → Account Protection → Disconnect.", values)
         : t("Your account at {here} was deleted, but BeanPool's key vault may keep a locked copy of your key, if you linked Google, Apple or Facebook: it couldn't be removed ({reason}). Only your key can remove it, and your key is still on this phone, so you can try again.\n\nDelete Anyway takes your key off this phone and leaves that copy at the vault, locked to your sign-in. To remove it later, you would need your key back (with your 12 words or that sign-in) and a community that has you, to reach Settings → Account Protection → Disconnect.", values);
+    const half = t("If the vault also keeps half of a locked copy of your key for your community's admins, that half stays too. It is removed the same way, at Settings → Account Protection → Remove.");
+    return t('{sentence} {next}', { sentence: signIn, next: half });
 }
 
 /** delete-here.ts deletedButLine: the node deleted the account, the phone could not finish. */

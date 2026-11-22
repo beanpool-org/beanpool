@@ -418,7 +418,7 @@ export default function WelcomeScreen() {
      * the code and the address in hand.
      */
     const [namedByInvite, setNamedByInvite] = useState<{ code: string; at: string } | null>(null);
-    /** The address the invite named turned out not to do (no community there, not answering): the box is drawn, to put it right. */
+    /** The address the invite named turned out not to do (no community there, not answering, not the inviter's), or is being typed: the box is drawn, to put it right. */
     const [addressAsked, setAddressAsked] = useState(false);
     /** An invite arrived, naming its community (`at`) or not. The same code typed again alone still has the community its link named. */
     const noteInviteAddress = useCallback((invite: string, at: string | null | undefined) => {

@@ -287,7 +287,7 @@ export const VAULT_COPIES_REMOVE_PATH = 'Settings → Account Protection → Whe
  * phone keeps one value per account (utils/vault.ts `noteVaultCopy`): a sign-in's copy known says nothing of a half beside
  * it, so the half is named with "If".
  */
-const ADMINS_HALF_STAYS_TOO =
+export const ADMINS_HALF_STAYS_TOO =
     "If the vault also keeps half of a locked copy of your key for your community's admins, that half stays too. It is " +
     'removed on the same screen.';
 

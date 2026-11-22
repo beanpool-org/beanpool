@@ -113,6 +113,8 @@ interface GroupChatView {
     error: unknown;
     nodeSaysLocked: boolean;
     seenLocked: boolean;
+    /** Taken for locked only because this browser's record couldn't be read (lib/group-chat-lines.ts groupChatNotice). */
+    lockUnread: boolean;
     thread: OpenedGroupThread | null;
     roster: DisplayRosterRow[];
 }
@@ -1162,35 +1164,44 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     /**
+     * A group's chat answer, and whether this browser keeps the chat a DM. The DM guard's line check runs over its lines
+     * before the group route takes them: a DM this browser knows, or one whose lines are encrypted, stays a DM whatever the
+     * node calls it; a group held locked here still wins (review of #1816, finding 1; lib/group-hold.ts). A locked
+     * answer is kept as seen before anything else is made of it, one that lands after the member left the chat too.
+     */
+    async function readGroupChat(convId: string, limit?: number): Promise<{ answer: GroupChatAnswer | null; error: unknown; isDm: boolean }> {
+        let answer: GroupChatAnswer | null = null;
+        let error: unknown = null;
+        try {
+            answer = await (limit === undefined ? getGroupChat(convId) : getGroupChat(convId, limit));
+        } catch (e) {
+            error = e;
+        }
+        const isDm = holdConversation({ id: convId, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), answer?.messages).type === 'dm';
+        if (!isDm && chatIsLocked(answer)) await groupRing(convId).noteLocked();
+        return { answer, error, isDm };
+    }
+
+    /**
      * A group's chat, read through its own route (GET /api/groups/:id/chat: its lock, the lines from this member's first
      * epoch on), its sealed lines opened and named here, and the roster the screen shows handed to the keyring (only
      * members in it are ever wrapped to). Keys missing for other members are handed over once per page.
      */
     async function loadGroupChat(convId: string, requestId: number): Promise<'dm' | boolean> {
-        let answer: GroupChatAnswer | null = null;
-        let error: unknown = null;
-        try {
-            answer = await getGroupChat(convId);
-        } catch (e) {
-            error = e;
-        }
+        const { answer, error, isDm } = await readGroupChat(convId);
         // Whether the read worked, for the backstop (loadMessages), whatever this screen then makes of it.
         const read = answer !== null;
         if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return read;
-        // The DM guard's line check runs over these lines before the group route takes them: a DM this browser knows, or
-        // one whose lines are encrypted, stays a DM whatever the node calls it; a group held locked here still wins
-        // (review of #1816, finding 1; lib/group-hold.ts).
-        const kept = holdConversation({ id: convId, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), answer?.messages);
-        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return read;
-        if (kept.type === 'dm') {
+        if (isDm) {
             setGroupChat(null);
             setActiveConv(prev => (prev && prev.id === convId ? { ...prev, type: 'dm' } : prev));
             return 'dm';
         }
         const ring = groupRing(convId);
         const nodeSaysLocked = chatIsLocked(answer);
-        if (nodeSaysLocked) await ring.noteLocked();
         const seenLocked = await ring.seenLocked();
+        const lockUnread = seenLocked && !ring.seenLockedInMemory();
+        if (seenLocked && !nodeSaysLocked) await ring.keepMark();
         let roster: DisplayRosterRow[] = [];
         // Guests no longer in the chat that this browser kept a name for: they name their old lines, nothing else.
         let formerGuests: DisplayRosterRow[] = [];
@@ -1229,7 +1240,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         });
         if (answer) noteReadLines(convId, uniqueMessages);
         setMessages(uniqueMessages);
-        setGroupChat({ id: convId, answer, error, nodeSaysLocked, seenLocked, thread, roster });
+        setGroupChat({ id: convId, answer, error, nodeSaysLocked, seenLocked, lockUnread, thread, roster });
         setChatMute(prev => chatMuteFromAnswer(answer, prev));
         if (answer) {
             await markReadIfNeeded(convId, answer.conversation?.unreadCount);
@@ -1518,17 +1529,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (!check) return;
         const { plan, chat, chatErr } = check;
         const text = draft.trim();
-        if (plan === 'readable') {
-            // A node from before locked chats, and a browser that never saw this group locked (§14.3): as it always was.
-            const { ciphertext, nonce } = encodePlaintext(text);
-            await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
-        } else {
-            try {
+        try {
+            if (plan === 'readable') {
+                // A node from before locked chats, and a browser that never saw this group locked (§14.3): as it always was.
+                const { ciphertext, nonce } = encodePlaintext(text);
+                await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce, conv.id);
+            } else {
                 await editSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, { groupId: groupIdKey(conv.id), messageId: wasEditing.id, metadata: wasEditing.metadata, text });
-            } catch (e) {
-                if (saidGroupRefusal(e, conv.id, chat, chatErr)) return;
-                throw e;
             }
+        } catch (e) {
+            if (saidGroupRefusal(e, conv.id, chat, chatErr)) return;
+            throw e;
         }
         // The edit went. Its words were never kept as a draft (useKeptDraft keeps nothing while an edit is under way); the box is
         // emptied only while the same opening of this chat shows, never another chat's, nor this one's opened again since.
@@ -1629,12 +1640,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 }
                 return answer;
             } catch (err: any) {
-                const refused = isDmNotLocked(err) || nodeSaidNo(err);
+                // Not sent: a readable line the last check stopped as it left (lib/group-hold.ts readableLineTo).
+                const stopped = err instanceof GroupChatKeyError;
+                const refused = stopped || isDmNotLocked(err) || nodeSaidNo(err);
                 if (!refused && await nodeHasLine(line, conv)) return 'taken';
                 // No line here now: its row came, and that is the answer.
                 if (isChatOnScreen(conv.id) && isPendingChatLine(line.id)) {
                     if (refused) wordsBack();
-                    if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
+                    if (stopped) setChatRefusal(err.message);
+                    else if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
                     else showChatError(err, t('Failed to send message'));
                 }
                 if (!refused) throw err;
@@ -1645,7 +1659,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     /** Whether the node's chat holds this line. No answer: not known, so no. */
     async function nodeHasLine(line: NewChatLine, conv: Conversation): Promise<boolean> {
-        const read = conv.type === 'group_thread' ? getGroupChat(conv.id) : getConversationMessages(conv.id);
+        const read = conv.type === 'group_thread' ? readGroupChat(conv.id).then((r) => r.answer) : getConversationMessages(conv.id);
         const answer = await read.catch(() => null);
         return !!answer?.messages?.some((m: ApiMessage) => m.id === line.id);
     }
@@ -1670,15 +1684,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      */
     async function groupSendCheck(conv: Conversation): Promise<{ plan: 'seal' | 'readable'; chat: GroupChatAnswer | null; chatErr: unknown } | null> {
         const ring = groupRing(conv.id);
-        let chat: GroupChatAnswer | null = null;
-        let chatErr: unknown = null;
-        try {
-            chat = await getGroupChat(conv.id, 1);
-        } catch (e) {
-            chatErr = e;
-        }
+        const { answer: chat, error: chatErr, isDm } = await readGroupChat(conv.id, 1);
         // A DM the node calls a group's chat (finding 1): nothing leaves by the group route; the page reopens it as the DM.
-        if (holdConversation({ id: conv.id, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), chat?.messages).type === 'dm') {
+        if (isDm) {
             sayRefusal(conv.id, GROUP_CHAT_IS_DM_TEXT);
             await loadMessages(conv.id);
             return null;
@@ -1803,7 +1811,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 } : m));
 
                 try {
-                    await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
+                    if (isNodeReadableChat(activeConv)) await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce, conv.id);
+                    else await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
                     // Emptied only while the same opening of this chat shows (as editInGroup's).
                     if (openingRef.current === opening) {
                         setEditingMessage(null);
@@ -1819,7 +1828,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             } catch (err: any) {
                 // An edit that didn't go keeps its words in the box; why is said only where it was written.
                 if (openingRef.current !== opening) return;
-                if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
+                if (err instanceof GroupChatKeyError) setChatRefusal(err.message);
+                else if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
                 else showChatError(err, t('Failed to edit message'));
             } finally {
                 setSending(false);
@@ -3825,7 +3835,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         padding: '0.4rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
                         fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-word',
                     }}>
-                        {groupLocked ? '🔒 ' : ''}{chatLineWords(groupChatNotice({ nodeSaysLocked: openGroup.nodeSaysLocked, seenLocked: openGroup.seenLocked, chatError: openGroup.answer ? null : openGroup.error }))}
+                        {groupLocked && !openGroup.lockUnread ? '🔒 ' : ''}{chatLineWords(groupChatNotice({ nodeSaysLocked: openGroup.nodeSaysLocked, seenLocked: openGroup.seenLocked, lockUnread: openGroup.lockUnread, chatError: openGroup.answer ? null : openGroup.error }))}
                         {openGroup.thread?.waitingForNextKey ? ` ${chatLineWords(GROUP_KEY_WAITING_TEXT)}` : ''}
                     </div>
                 )}

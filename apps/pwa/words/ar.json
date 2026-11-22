@@ -4636,7 +4636,7 @@
   "This month: {trades} · +{in} in · −{out} out": "هذا الشهر: {trades} · +{in} وارد · −{out} صادر",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "ردّ هذا الخادم بمحادثة مجموعة مقفلة، لا برسالة مباشرة، لذا لم يُفتح شيء.",
   "This node is serving an older key than one this app already holds.": "يقدم هذا الخادم مفتاحًا أقدم من المفتاح المحفوظ بالفعل في هذا التطبيق.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "يقول هذا الخادم الآن إن هذه المحادثة غير مقفلة. لقد احتفظ هذا المتصفح بمفاتيحها، لذا لا يزال يقفل كل رسالة، ولا يرسل أي شيء لا يستطيع قفله.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "يقول هذا الخادم الآن إن هذه المحادثة غير مقفلة. لقد رآها هذا المتصفح مقفلة، لذا لا يزال يقفل كل رسالة، ولا يرسل أي شيء لا يستطيع قفله.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "يفيد هذا الخادم بأن شخصًا ما يحمل مفتاح هذه المحادثة وهو ليس في قائمة أعضائها. لم يُرسل أي شيء.",
   "This project's deadline has passed: it takes no more pledges.": "انتهى الموعد النهائي لهذا المشروع: لم يعد يقبل تعهدات.",
   "This request is no longer open. You can ask again.": "لم يعد هذا الطلب مفتوحًا. يمكنك الطلب مجددًا.",

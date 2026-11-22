@@ -1,10 +1,16 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { pseudoLocalise, setLanguage } from '@beanpool/core';
 import * as api from '../lib/api';
+import * as identityLib from '../lib/identity';
 import * as sync from '../lib/sync';
+import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { indexedDbGroupLockStore, resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
+import { forgetGroupKeys, resetAnsweredLockedForTest } from '../lib/group-chat-keys';
+import { GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
 
 // Mock dependencies
 vi.mock('../lib/avatar', () => ({
@@ -350,6 +356,73 @@ describe('Enterprise Discussion Thread (PWA)', () => {
         fireEvent.click(postButton);
 
         expect(postSpy).toHaveBeenCalledWith('enterprise-bakery-pubkey', 'Will volunteer for sourdough batch');
+    });
+
+    // The discussion is sent readable, so it passes the one check for that (lib/group-hold.ts readableLineTo, asked by the
+    // real lib/api.ts here): its id is a chat this browser may have seen locked, whatever the node calls it.
+    describe('words that go readable', () => {
+        const bakery = 'enterprise-bakery-pubkey';
+        const WORDS = 'Will volunteer for sourdough batch';
+        let posted: string[] = [];
+        beforeEach(() => {
+            posted = [];
+            vi.stubGlobal('indexedDB', memoryIndexedDB());
+            resetGroupChatLockStoreForTest();
+            forgetGroupKeys();
+            resetAnsweredLockedForTest();
+            vi.spyOn(identityLib, 'loadIdentity').mockResolvedValue(mockCitizenIdentity);
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: { id: bakery, type: 'enterprise_thread' }, messages: [], readOnly: false });
+            vi.stubGlobal('fetch', vi.fn(async (url: string, opts: RequestInit = {}) => {
+                if (opts.method === 'POST') posted.push(`${url} ${String(opts.body)}`);
+                return new Response(JSON.stringify({ success: true, message: {} }), { status: 200 });
+            }));
+        });
+        afterEach(() => { setLanguage('en'); vi.unstubAllGlobals(); });
+
+        async function post() {
+            render(<TreasuryDetailPage identity={mockCitizenIdentity} pubkey={bakery} onBack={() => {}} />);
+            const input = await screen.findByPlaceholderText('Message the enterprise...') as HTMLInputElement;
+            fireEvent.change(input, { target: { value: WORDS } });
+            fireEvent.click(screen.getByRole('button', { name: 'Post' }));
+            return input;
+        }
+        const sentReadable = () => posted.filter((p) => p.includes('/thread/message') && p.includes(WORDS));
+
+        it('never seen locked: posted, as ever', async () => {
+            const input = await post();
+            await waitFor(() => expect(sentReadable()).toHaveLength(1));
+            await waitFor(() => expect(input.value).toBe(''));
+        });
+
+        it('the id is a chat this browser has seen locked: nothing is posted, the words stay, and it says why', async () => {
+            await indexedDbGroupLockStore.markLocked(`${mockCitizenIdentity.publicKey}/${bakery}`);
+            const input = await post();
+            expect(await screen.findByText(GROUP_HOLD_EVENT_TEXT)).toBeTruthy();
+            expect(input.value).toBe(WORDS);
+            expect(sentReadable()).toEqual([]);
+        });
+
+        it("the record of locked chats can't be read: nothing is posted, and it says so", async () => {
+            vi.stubGlobal('indexedDB', undefined);
+            resetGroupChatLockStoreForTest();
+            const input = await post();
+            expect(await screen.findByText(GROUP_HOLD_UNREAD_TEXT)).toBeTruthy();
+            expect(input.value).toBe(WORDS);
+            expect(sentReadable()).toEqual([]);
+        });
+
+        it("it says why in the reader's language", async () => {
+            await indexedDbGroupLockStore.markLocked(`${mockCitizenIdentity.publicKey}/${bakery}`);
+            render(<TreasuryDetailPage identity={mockCitizenIdentity} pubkey={bakery} onBack={() => {}} />);
+            const input = await screen.findByPlaceholderText('Message the enterprise...');
+            fireEvent.change(input, { target: { value: WORDS } });
+            setLanguage('xx');
+            fireEvent.click(screen.getByRole('button', { name: 'Post' }));
+            await waitFor(() => expect(document.body.textContent).not.toContain(GROUP_HOLD_EVENT_TEXT));
+            await waitFor(() => expect(document.body.textContent).toContain(pseudoLocalise(GROUP_HOLD_EVENT_TEXT)));
+            expect(sentReadable()).toEqual([]);
+        });
     });
 
     it('renders read-only state for wound-up enterprise and hides posting form', async () => {

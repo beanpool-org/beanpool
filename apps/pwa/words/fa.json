@@ -4096,7 +4096,7 @@
   "This month: {trades} · +{in} in · −{out} out": "این ماه: {trades} · +{in} ورودی · −{out} خروجی",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "این سرور با گفتگوی یک گروه قفل‌شده پاسخ داد، نه پیام مستقیم، پس چیزی باز نشد.",
   "This node is serving an older key than one this app already holds.": "این گره کلیدی قدیمی‌تر از کلیدی را ارائه می‌دهد که این برنامه در اختیار دارد.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "این سرور اکنون می‌گوید این گفتگو قفل نیست. این مرورگر کلیدهایش را نگه داشته، پس همچنان هر پیام را قفل می‌کند و چیزی را که نتواند قفل کند نمی‌فرستد.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "این سرور اکنون می‌گوید این گفتگو قفل نیست. این مرورگر آن را قفل‌شده دیده است، پس همچنان هر پیام را قفل می‌کند و چیزی را که نتواند قفل کند نمی‌فرستد.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "این گره می‌گوید شخصی کلید این گفتگو را دارد که در فهرست اعضای آن نیست. چیزی ارسال نشد.",
   "This project's deadline has passed: it takes no more pledges.": "مهلت این پروژه گذشته است: دیگر تعهدی نمی‌پذیرد.",
   "This request is no longer open. You can ask again.": "این درخواست دیگر باز نیست. می‌توانید دوباره درخواست بدهید.",

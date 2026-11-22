@@ -4096,7 +4096,7 @@
   "This month: {trades} · +{in} in · −{out} out": "Αυτόν τον μήνα: {trades} · +{in} εισροές · −{out} εκροές",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "Ο διακομιστής απάντησε με συνομιλία κλειδωμένης ομάδας, όχι με απευθείας μήνυμα, οπότε δεν άνοιξε τίποτα.",
   "This node is serving an older key than one this app already holds.": "Αυτός ο διακομιστής παρέχει παλαιότερο κλειδί από αυτό που έχει ήδη αυτή η εφαρμογή.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "Ο διακομιστής λέει τώρα ότι αυτή η συνομιλία δεν είναι κλειδωμένη. Αυτό το πρόγραμμα περιήγησης έχει κρατήσει τα κλειδιά της, οπότε εξακολουθεί να κλειδώνει κάθε μήνυμα και δεν στέλνει τίποτα που δεν μπορεί να κλειδώσει.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Ο διακομιστής λέει τώρα ότι αυτή η συνομιλία δεν είναι κλειδωμένη. Αυτό το πρόγραμμα περιήγησης την έχει δει κλειδωμένη, οπότε εξακολουθεί να κλειδώνει κάθε μήνυμα και δεν στέλνει τίποτα που δεν μπορεί να κλειδώσει.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "Αυτός ο διακομιστής αναφέρει ότι κάποιος κατέχει το κλειδί αυτής της συνομιλίας χωρίς να είναι στη λίστα μελών της. Δεν στάλθηκε τίποτα.",
   "This project's deadline has passed: it takes no more pledges.": "Η προθεσμία αυτού του έργου έχει περάσει: δεν δέχεται άλλες δεσμεύσεις.",
   "This request is no longer open. You can ask again.": "Αυτό το αίτημα δεν είναι πλέον ανοιχτό. Μπορείς να ζητήσεις ξανά.",

@@ -620,7 +620,8 @@ describe('6. an invite link on a waiting phone, handed here by the root layout',
         // A found invite skips the box (onboarding §3.1 B): the name screen, greeted, with no invite box on it.
         expect(byId('invite-greeting')).toBeTruthy();
         expect(field('Invite link or code')).toBeUndefined();
-        expect(field('Community name or node address')?.value).toBe(RIVERSIDE);
+        // Nor the address: the link named it (walk 148). Join goes there, below.
+        expect(field('Community name or node address')).toBeUndefined();
         // The account's name, as Join with an invite fills it.
         expect(field('Your name or nickname')?.value).toBe('River Kid');
         await press('Join');

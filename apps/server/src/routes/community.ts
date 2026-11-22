@@ -955,6 +955,12 @@ const MEMBERSHIP_PROBE_NOT_YOURS = 'A community tells only the key itself whethe
 // member: the apps read `isMember: false` as "join here", and joining with an invite or through the open door makes
 // that same row a member's (engine/members.ts registerMemberInternal).
 //
+// `standing`, to a member: 'suspended' while their account is suspended or disabled, else 'member', by the test POST
+// /api/mail/send takes a line across by (readsAsMember), and in Home's own words for it (routes/home-answer.ts). A suspended
+// member is still a member (`isMember`: the apps read false as "join here", and it keeps its Beans, deals and chats), but no
+// member for writing: it answers in the direct chats it has, and its server refuses a line across and a new chat. Message
+// reads it (the apps' message-anyone.ts), so it never opens a chat that can't be written in.
+//
 // Answered only to a request signed by the key it asks about, on every node, the global one included (multi-community
 // review F3, 2026-10-01). One key is a person's on every community, and members see each other's keys: answered to
 // anyone, the probe let whoever holds a key ask every community whether that person is in it, and watch a recovery. An
@@ -979,7 +985,7 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
     if (member && !isVisitorKey(member.publicKey)) {
         // The key's own signer: its name too (the web app adopting its own, lib/member-name.ts; the phone's restore,
         // native db.ts fetchNodeCallsign).
-        ctx.body = { isMember: true, callsign: member.callsign };
+        ctx.body = { isMember: true, callsign: member.callsign, standing: readsAsMember(actor) ? 'member' : 'suspended' };
     } else {
         ctx.body = {
             isMember: false,

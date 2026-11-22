@@ -27,6 +27,7 @@ vi.mock('react-native', async () => {
         StyleSheet: { create: (s: unknown) => s },
     };
 });
+vi.mock('../../app/ThemeContext', async () => { const { lightColors } = await import('../../constants/colors'); return { useTheme: () => ({ theme: 'light', colors: lightColors }) }; });
 vi.mock('expo-image', async () => { const React = await import('react'); return { Image: (p: any) => React.createElement('img', { src: p.source?.uri }) }; });
 
 import { PhotoCarousel } from '../../components/PhotoCarousel';

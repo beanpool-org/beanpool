@@ -39,7 +39,7 @@ import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser, withoutBlockedPe
 import { createConversationApi, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace } from '../utils/db';
 import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { communitySwitchUnderWay, switchCommunity } from '../utils/use-communities';
-import { anchorUrl, existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
+import { acrossRefusedWords, anchorUrl, existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
 import { messageInHeldCommunity, takeMessageAfterSwitch } from '../utils/message-after-switch';
 import { getPendingOnboarding } from '../utils/onboarding-state';
 import { useNodeStatus } from './NodeStatusContext';
@@ -463,9 +463,7 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
             if ('chatId' in opened) router.push(`/outside-chat/${opened.chatId}`);
             else if ('here' in opened) await message(opened.here);
             else if (opened.refused === 'uncertain') offerSwitch(c.name, links.find((l) => nodeHomeOf(l.community) === path.home)?.community ?? `https://${path.home}`);
-            else Alert.alert(t('Message', undefined, 'button: write to'), opened.refused === 'off' ? t("This community doesn't take messages from other communities.")
-                : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.")
-                : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : t('Connect to your community to start a chat.'));
+            else Alert.alert(t('Message', undefined, 'button: write to'), acrossRefusedWords(opened.refused));
         }
     };
     const action = (c: Contact) => {

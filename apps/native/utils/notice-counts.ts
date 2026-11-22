@@ -276,7 +276,7 @@ export async function readNoticeRequests(storage: Pick<Storage, 'getItem'>): Pro
 /**
  * How many of each community's lines a push told the member of, by its address, as far as the phone knows: the pushes since
  * it last answered, or what it last said a push would tell (`alerts`). Never an event's chat's, nor a muted chat's. On the
- * same terms as {@link readNoticeCounts}, none at 0. For Chat's "· Switch" lines (held-groups.ts noticesBesideEvents).
+ * same terms as {@link readNoticeCounts}, none at 0. For Chat's "· Switch" lines (held-groups.ts noticesBesideHeldChats).
  */
 export async function readNoticeAlerts(storage: Pick<Storage, 'getItem'>): Promise<Record<string, number>> {
     const numbers = await readNoticeCounts(storage);
@@ -294,17 +294,30 @@ export async function readNoticeAlerts(storage: Pick<Storage, 'getItem'>): Promi
 }
 
 /**
- * `lines` of `community`'s were read there in place (slice S6: an event's chat, opened with no switch): its number falls by
- * them now, as its next answer will say. Only what its server counted, never the pushes' own tally: an event's chat pushes
- * nothing. Nothing for the community in use, or one with no number. Never throws.
+ * `lines` of `community`'s were read there in place, with no switch (slices S2 and S6: a direct chat, a group's or an event's
+ * chat), once its server took the read: its number falls by them now, as its next answer will say. `pushed`: how many of them
+ * a push told of (a group's or a direct chat's not muted; never an event's), which leave the pushes' tally and what it said a
+ * push would tell as well. What a push told of that wasn't read here stays: its number never falls below those lines
+ * (`alerts` less `pushed`), for an event's lines its last count may not have held yet (Chat asks the list on open, with no
+ * round: review of #3364). Nothing for the community in use, or one with no number. Never throws.
  */
-export async function noteReadInPlace(storage: Storage, community: string, lines: number): Promise<void> {
+export async function noteReadInPlace(storage: Storage, community: string, lines: number, pushed: number = 0): Promise<void> {
     await update(storage, (tallies, active) => {
         const at = communityAddress(community);
         const tally = at && at !== active ? tallies[at] : undefined;
-        if (!tally?.server || !(lines > 0)) return false;
-        tally.server = Math.max(0, tally.server - lines);
-        return true;
+        if (!tally || !(lines > 0)) return false;
+        const told = Math.min(lines, pushed > 0 ? pushed : 0);
+        const was = JSON.stringify(tally);
+        if (tally.server) {
+            // Not known what a push told of (a tally from before `alerts`): all of them, so nothing an event's is taken off.
+            const toldElsewhere = Math.max(0, (tally.alerts ?? tally.server) - told);
+            tally.server = Math.max(0, tally.server - lines, Math.min(tally.server, toldElsewhere));
+        }
+        if (told > 0) {
+            if (tally.alerts) tally.alerts = Math.max(0, tally.alerts - told);
+            tally.n = Math.max(0, tally.n - told);
+        }
+        return JSON.stringify(tally) !== was;
     });
 }
 

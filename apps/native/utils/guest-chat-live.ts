@@ -122,8 +122,8 @@ export async function leaveGuestChatNow(id: string): Promise<boolean> {
 export interface GroupGuest { key: string; home: string; name: string; state: 'invited' | 'in' | 'left' | 'removed' }
 
 /** The group's guests as I may see them (a convenor: invited and in; a member: in), and whether guests are on here. */
-export async function fetchGroupGuests(groupId: string): Promise<{ guests: GroupGuest[]; on: boolean }> {
-    const ctx = await outsideContext();
+export async function fetchGroupGuests(groupId: string, community?: string | null): Promise<{ guests: GroupGuest[]; on: boolean }> {
+    const ctx = await outsideContext(community);
     if (!ctx) return { guests: [], on: false };
     const body = await answerOf(await signedGet(ctx.nodeUrl, `/api/groups/${encodeURIComponent(groupId)}/guests`, ctx.identity as BeanPoolIdentity));
     return { guests: Array.isArray(body?.guests) ? body.guests : [], on: body?.on === true };
@@ -160,19 +160,21 @@ const NO_ROWS: GuestNameRows = { shown: [], named: [] };
  * name alone; `named`, every other guest this phone kept a row for (they left, were removed, or the group's guests closed),
  * named on their old lines with "no longer in this group". Only `shown` may be given a key. Read at most once a minute.
  */
-export function guestRosterRows(groupId: string, now = Date.now()): Promise<GuestNameRows> {
-    const kept = guestRowsMemo.get(groupId);
+export function guestRosterRows(groupId: string, now = Date.now(), community?: string | null): Promise<GuestNameRows> {
+    // `community` (slice S6): a group in place, its guests as its own community lists them, kept in that community's file.
+    const memo = community ? `${community}\n${groupId}` : groupId;
+    const kept = guestRowsMemo.get(memo);
     if (kept && now - kept.at < 60_000) return kept.rows;
     const rows = (async (): Promise<GuestNameRows> => {
-        const ctx = await outsideContext().catch(() => null);
+        const ctx = await outsideContext(community).catch(() => null);
         if (!ctx) return NO_ROWS;
         const metaKey = `${GUEST_NAMES_META}:${groupId}:${ctx.identity.publicKey}`;
         const before = await ctx.store.getMeta(metaKey).catch(() => null);
-        const listed = await fetchGroupGuests(groupId).then((g) => g.guests, () => null);
+        const listed = await fetchGroupGuests(groupId, community).then((g) => g.guests, () => null);
         const out = guestNameRows(before, listed, Date.now());
         if (out.json !== null) await ctx.store.setMeta(metaKey, out.json).catch(() => {});
         return { shown: out.shown, named: out.named };
     })().catch(() => NO_ROWS);
-    guestRowsMemo.set(groupId, { at: now, rows });
+    guestRowsMemo.set(memo, { at: now, rows });
     return rows;
 }

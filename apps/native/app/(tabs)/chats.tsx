@@ -36,6 +36,7 @@ import { MessageRequestsRow } from '../../components/MessageRequestsRow';
 import { useRequestsUnseen } from '../../utils/requests-seen';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
+import { groupsListed, heldGroups, useHeldGroups } from '../../utils/held-groups';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { openNoticeIn } from '../../utils/push-notice-switch';
 import { CHAT_MESSAGES_ROUTE } from '../../utils/push-notice-check';
@@ -111,7 +112,11 @@ export default function ChatsScreen() {
     const yourGroupsLive = useYourGroups(identity?.publicKey);
     const yourGroups = yourGroupsLive.items;
     // A muted chat keeps its own grey count but does not add to the switch's total (WhatsApp's rule).
-    const groupsUnread = React.useMemo(() => groupsUnreadTotal(yourGroups), [yourGroups]);
+    // The groups of every other community this phone holds (slice S6, utils/held-groups.ts): listed with them, each with its
+    // community's name and own count, in the same total.
+    const groupsHeld = useHeldGroups(identity?.publicKey);
+    const groupsShown = React.useMemo(() => groupsListed(yourGroups ?? [], groupsHeld), [yourGroups, groupsHeld]);
+    const groupsUnread = React.useMemo(() => groupsUnreadTotal(groupsShown), [groupsShown]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     // The member's private contacts (DESIGN-private-contacts-fable.md §3.1): the button in the search row, its one-time line
@@ -293,14 +298,17 @@ export default function ChatsScreen() {
             if (!identity?.publicKey || !view.inView()) return;
             if ((await refreshHeldWhereRose(identity.publicKey, rows, view)).length > 0 && view.inView()) await loadHeld();
         };
+        // The held communities' groups (slice S6): asked as Chat opens and at each change of the counts, no poll.
+        const loadGroups = () => { if (identity?.publicKey) void heldGroups.refresh(identity.publicKey).catch(() => {}); };
         void loadHeld().then(freshen);
         void loadAcross();
+        loadGroups();
         // Their across mail fetched into their own files (slice S4): every held community, whatever its server last said, side
         // by side; the list read again after a round that changed anything.
         if (identity?.publicKey) void syncHeldMailNow().catch(() => 0);
         const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void loadHeld(); void loadAcross(); });
         const acrossSub = DeviceEventEmitter.addListener(OUTSIDE_CHATS_UPDATED, () => { void loadAcross(); });
-        const countsSub = onNoticeCounts(() => { void freshen(); });
+        const countsSub = onNoticeCounts(() => { void freshen(); loadGroups(); });
         // The beat while Chat stays in view and the app is in front (#3312 review F1): a held community with its alerts off
         // (no number to rise) refreshes on it, and a list read that failed is asked again. One pass at a time, no loop.
         let beating = false;
@@ -1100,7 +1108,7 @@ export default function ChatsScreen() {
 
     if (talkView === 'groups') {
         const paneState = yourGroupsPaneState(yourGroups, yourGroupsLive.error);
-        const hasAny = paneState === 'list';
+        const hasAny = paneState === 'list' || groupsHeld.length > 0;
         return (
             <View style={styles.safeArea}>
                 {/* Keyed on empty/non-empty so flipping between them starts from the top. */}
@@ -1120,8 +1128,8 @@ export default function ChatsScreen() {
                     )}
                     {paneState === 'loading' && <YourGroupsLoading />}
                     {paneState === 'error' && <YourGroupsError message={yourGroupsLive.error || t('Could not load your groups.')} onRetry={yourGroupsLive.refresh} />}
-                    {paneState === 'list' && <YourGroupsRows items={yourGroups || []} myPubkey={identity?.publicKey} showUnread />}
-                    {paneState === 'empty' && <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push(FIND_GROUPS_HREF)} />}
+                    {hasAny && <YourGroupsRows items={groupsShown} myPubkey={identity?.publicKey} showUnread />}
+                    {paneState === 'empty' && !hasAny && <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push(FIND_GROUPS_HREF)} />}
                 </Animated.ScrollView>
                 {createGroup.modal}
             </View>

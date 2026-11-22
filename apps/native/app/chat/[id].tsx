@@ -9,7 +9,6 @@ import { dealStateWords, dealStep, formatHundredths, freePriceWords, itemDealTit
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { leaveScreen } from '../../utils/leave-screen';
 import { PUSH_RECEIVED_EVENT } from '../../utils/app-events';
 
@@ -30,8 +29,9 @@ import { dmKeyBannerMaxHeight, dmKeyCodeShowsVerified } from '../../utils/dm-key
 import { keyCodeOf } from '../../utils/key-code';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
-import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
+import { routeChat, screenIdOf, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
 import { chatInPlaceRoute, type ChatInPlaceRoute } from '../../utils/held-chats';
+import { openInCommunity } from '../../utils/open-in-community';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { dmPeerName, isDmBlocked } from '../../utils/dm-blocked';
@@ -162,6 +162,8 @@ export default function ChatRoute() {
     // A direct chat of another community this phone holds, read and written there in place (slice S2): its screen reaches
     // that community by name for everything.
     if (id && community && !placedNow) return null;
+    // A group of that community (slice S6): the group's chat, its id as the node makes it.
+    if (id && placedNow?.open === 'in-place' && placedNow.kind === 'group') return <GroupChatView kind="group" id={screenIdOf(String(id))} initialName={name} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
     if (id && placedNow?.open === 'in-place') return <ChatScreen id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
     if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;
     if (!id || !route || route.for !== String(id)) return null;
@@ -202,18 +204,7 @@ function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) 
         setMoveNote(null);
         setMoving(true);
         try {
-            // Asked only on the tap: the switch and its guards, as Chat's held rows move (app/(tabs)/chats.tsx openHeldChat).
-            const [{ openNoticeIn }, { switchCommunity, communitySwitchUnderWay }, { getPendingOnboarding }] = await Promise.all([
-                import('../../utils/push-notice-switch'), import('../../utils/use-communities'), import('../../utils/onboarding-state'),
-            ]);
-            const result = await openNoticeIn(move.community, null, async () => `/chat/${id}` as const, {
-                storage: AsyncStorage,
-                publicKey: identity.publicKey,
-                joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
-                switchUnderWay: communitySwitchUnderWay,
-                switchTo: switchCommunity,
-                recheck,
-            });
+            const result = await openInCommunity(move.community, `/chat/${id}`, identity.publicKey, recheck);
             if (result !== 'switched') setMoveNote(t("Something went wrong. Try again in a moment."));
         } finally {
             setMoving(false);

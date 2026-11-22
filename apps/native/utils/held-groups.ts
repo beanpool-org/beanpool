@@ -1,0 +1,156 @@
+/**
+ * Talk → Groups' rows from every other community this phone holds (slice S6, scratch/fable-design/DESIGN-no-switch-messaging-fable.md
+ * §3, §6): each group the member is in there, with that community's name and its own unread count, opened in place
+ * (components/GroupChatView.tsx `inPlace`). Each community is asked for its member's own list, signed for its name (utils/db.ts
+ * fetchHeldYourGroups), as Talk asks the one in use: one read as Chat opens and at each change of the notice counts, never a
+ * poll. Events and enterprises there are a later part of the slice: not listed here.
+ *
+ * Which communities: those Chat reads (held-chats.ts heldCommunityList), less any a guest's mark names under any spelling
+ * (it wouldn't open in place). One that doesn't answer keeps the rows it had; one the phone is now set to, no longer holds,
+ * or another account's, has none at once, before any answer. One store per community (your-groups-store.ts), so a read, a
+ * send or a mute in place shows on its own row and never on the same id in another.
+ */
+import { useSyncExternalStore } from 'react';
+import { chatTimeMs } from '@beanpool/core';
+import { getDatabaseFilenameForNode, isGuestCopy } from './nodes';
+import { createYourGroupsStore, type YourGroupsStore } from './your-groups-store';
+import type { YourChat } from './your-groups';
+
+/** A group of another community this phone holds: its row, and where it opens. */
+export interface HeldGroup extends YourChat {
+    /** The row's key: never that of a group in the community in use, nor of the same id in another. */
+    key: string;
+    /** The community's address, as the saved list has it. */
+    community: string;
+    communityName: string;
+}
+
+/** How long one community's list is waited for. */
+export const HELD_GROUPS_ASK_MS = 10_000;
+
+interface Place { file: string; url: string; name: string; store: YourGroupsStore; stop: () => void }
+
+let owner: string | null = null;
+let places: Place[] = [];
+let rows: HeldGroup[] = [];
+const listeners = new Set<() => void>();
+
+function emit(): void {
+    const next = places.flatMap(({ file, url, name, store }) => (store.getState().items ?? [])
+        .filter((item) => item.kind === 'group')
+        .map((item) => ({ ...item, key: `held-group:${file}:${item.conversationId}`, community: url, communityName: name })));
+    if (JSON.stringify(next) === JSON.stringify(rows)) return;
+    rows = next;
+    listeners.forEach((l) => l());
+}
+
+function placeOf(me: string, file: string, url: string, name: string): Place {
+    const store = createYourGroupsStore(async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), HELD_GROUPS_ASK_MS);
+        try {
+            const { fetchHeldYourGroups } = await import('./db');
+            const items = await fetchHeldYourGroups(me, url, controller.signal);
+            // Not answered: the rows it had stay (the store keeps its items on a failure).
+            if (!items) throw new Error('not answered');
+            return { items, totalUnread: 0 };
+        } finally {
+            clearTimeout(timer);
+        }
+    });
+    return { file, url, name, store, stop: store.subscribe(emit) };
+}
+
+function drop(gone: Place[]): void {
+    for (const place of gone) place.stop();
+    places = places.filter((p) => !gone.includes(p));
+}
+
+/** What a group's chat in place tells its own row: never the row of the same id in the community in use, or in another. */
+export interface HeldGroupRow {
+    markRead(conversationId: string): void;
+    noteSent(conversationId: string): void;
+    setMute: YourGroupsStore['setMute'];
+}
+const NO_ROW: HeldGroupRow = { markRead: () => {}, noteSent: () => {}, setMute: () => {} };
+
+export const heldGroups = {
+    getState: (): HeldGroup[] => rows,
+    subscribe(listener: () => void): () => void {
+        listeners.add(listener);
+        return () => { listeners.delete(listener); };
+    },
+    /** `community`'s rows, as last answered. */
+    rowsOf(community: string): HeldGroup[] {
+        const file = getDatabaseFilenameForNode(community);
+        return rows.filter((r) => getDatabaseFilenameForNode(r.community) === file);
+    },
+    /** `community`'s own list, for a chat of it in place. */
+    at(community: string): HeldGroupRow {
+        const file = getDatabaseFilenameForNode(community);
+        return places.find((p) => p.file === file)?.store ?? NO_ROW;
+    },
+    /** The member left the group there: its row goes now, not at the next answer. */
+    forget(community: string, conversationId: string): void {
+        const file = getDatabaseFilenameForNode(community);
+        rows = rows.filter((r) => r.conversationId !== conversationId || getDatabaseFilenameForNode(r.community) !== file);
+        listeners.forEach((l) => l());
+        void places.find((p) => p.file === file)?.store.refresh();
+    },
+    /** Ask each held community for `me`'s list there. Rows of one no longer held, or of another account, go before any answer. */
+    async refresh(me: string): Promise<void> {
+        if (owner !== me) {
+            drop([...places]);
+            owner = me;
+            emit();
+        }
+        const held: Place[] = [];
+        // Loaded as Chat asks: a chat's screen imports this for its own row alone.
+        const { heldCommunityList } = await import('./held-chats');
+        for (const { url, name } of await heldCommunityList()) {
+            if (await isGuestCopy(url).catch(() => true)) continue;
+            const file = getDatabaseFilenameForNode(url);
+            const kept = places.find((p) => p.file === file);
+            held.push(kept && kept.url === url && kept.name === name ? kept : placeOf(me, file, url, name));
+        }
+        // Another account signed in while the list was read: its own refresh decides.
+        if (owner !== me) {
+            for (const place of held) if (!places.includes(place)) place.stop();
+            return;
+        }
+        drop(places.filter((p) => !held.includes(p)));
+        places = held;
+        emit();
+        await Promise.all(held.map((p) => p.store.refresh()));
+    },
+};
+
+const NONE: HeldGroup[] = [];
+/** The held communities' group rows, as they stand: `myPubkey`'s only, so another account never sees the last one's, not even for a frame. */
+export function useHeldGroups(myPubkey?: string | null): HeldGroup[] {
+    const all = useSyncExternalStore(heldGroups.subscribe, heldGroups.getState);
+    return myPubkey && owner === myPubkey ? all : NONE;
+}
+
+/**
+ * Talk → Groups' one list: the community in use's rows and the held ones, newest line first. Each list keeps its own order
+ * (the one in use holds a line just sent at its top); a held row takes its place among them by its newest line.
+ */
+export function groupsListed(own: readonly YourChat[], held: readonly HeldGroup[]): Array<YourChat | HeldGroup> {
+    const rest = [...held].sort((a, b) => chatTimeMs(b.lastActivityAt) - chatTimeMs(a.lastActivityAt));
+    const out: Array<YourChat | HeldGroup> = [];
+    for (const item of own) {
+        while (rest.length && chatTimeMs(rest[0].lastActivityAt) > chatTimeMs(item.lastActivityAt)) out.push(rest.shift()!);
+        out.push(item);
+    }
+    return [...out, ...rest];
+}
+
+export function isHeldGroup(item: YourChat | HeldGroup): item is HeldGroup {
+    return typeof (item as HeldGroup).community === 'string' && typeof (item as HeldGroup).key === 'string';
+}
+
+/** The chat screen's params for a held group opened in place: its id, its community by address, and the names shown on the way in. */
+export function heldGroupParams(item: HeldGroup): Record<string, string> {
+    return { id: item.conversationId, community: item.community, communityName: item.communityName, group: '1', name: item.name };
+}

@@ -1184,7 +1184,7 @@ describe('what else a chat in place writes, refused as it is left', () => {
 });
 
 describe('Talk → Groups\' rows in one order: newest first, the member\'s own line included, in use and held alike (review of #3358, F2)', () => {
-    const row = (id: string, at: string): YourChat => ({ kind: 'group', badge: null, id, conversationId: id, name: id, avatarUrl: null, role: 'member', readOnly: false, lastMessage: null, unreadCount: 0, mute: null, lastActivityAt: at });
+    const row_ = (id: string, at: string): YourChat => ({ kind: 'group', badge: null, id, conversationId: id, name: id, avatarUrl: null, role: 'member', readOnly: false, lastMessage: null, unreadCount: 0, mute: null, lastActivityAt: at });
     const listed = () => groupsListed(yourGroupsStore.getState().items ?? [], heldGroups.getState(), yourGroupsStore.movedAt).map((i) => i.conversationId);
     const held = (id: string) => heldGroups.at(heldGroups.getState().find((r) => r.conversationId === id)!.community);
     /** `hours` from this phone's clock now, as a server writes a time. */
@@ -1196,9 +1196,9 @@ describe('Talk → Groups\' rows in one order: newest first, the member\'s own l
     async function lists(ahead = 0): Promise<void> {
         await switchPhoneTo(C);
         await switchPhoneTo(B);
-        servers[B].listed = [row('own-new', T(ahead - 2)), row('own-old', T(ahead - 50))];
-        servers[A].listed = [row('a-new', T(ahead - 1)), row('a-old', T(ahead - 75))];
-        servers[C].listed = [row('c-mid', T(ahead - 3))];
+        servers[B].listed = [row_('own-new', T(ahead - 2)), row_('own-old', T(ahead - 50))];
+        servers[A].listed = [row_('a-new', T(ahead - 1)), row_('a-old', T(ahead - 75))];
+        servers[C].listed = [row_('c-mid', T(ahead - 3))];
         yourGroupsStore.reset();
         await yourGroupsStore.refresh();
         await heldGroups.refresh(me.publicKey);
@@ -1229,14 +1229,31 @@ describe('Talk → Groups\' rows in one order: newest first, the member\'s own l
         expect(listed(), 'asked again, the line not there yet').toEqual(order);
     });
 
+    it('a chat\'s row taken before its community\'s list was read still moves, reads and mutes the row there is; a community renamed keeps its rows and the sends in them', async () => {
+        const row = heldGroups.at(A);
+        await lists();
+        row.noteSent('a-old');
+        expect(listed()[0]).toBe('a-old');
+        // Its saved name changed: drawn at the next ask, its list the same one.
+        const saved = JSON.parse(h.store.get('beanpool_saved_nodes') ?? '[]') as any[];
+        h.store.set('beanpool_saved_nodes', JSON.stringify(saved.map((n) => (n.url === A ? { ...n, alias: 'Renamed' } : n))));
+        servers[A].listed = [{ ...row_('a-new', T(-1)), unreadCount: 2 }, row_('a-old', T(-75))];
+        await askAgain();
+        expect(heldGroups.getState().find((r) => r.conversationId === 'a-new')).toMatchObject({ communityName: 'Renamed', unreadCount: 2 });
+        expect(listed()[0], 'the send still counts').toBe('a-old');
+        row.markRead('a-new');
+        row.setMute('a-new', { conversationId: 'a-new', mutedUntil: null, always: true });
+        expect(heldGroups.getState().find((r) => r.conversationId === 'a-new')).toMatchObject({ unreadCount: 0, mute: { always: true } });
+    });
+
     it('once its community shows the line, that line\'s own time counts, held or in use; a newer line in any of them is above it', async () => {
         await lists();
         held('a-old').noteSent('a-old');
         yourGroupsStore.noteSent('own-old');
         expect(listed().slice(0, 2)).toEqual(['own-old', 'a-old']);
-        servers[A].listed = [row('a-old', T(0.1)), row('a-new', T(-1))];
-        servers[B].listed = [row('own-old', T(0.2)), row('own-new', T(-2))];
-        servers[C].listed = [row('c-mid', T(0.5))];
+        servers[A].listed = [row_('a-old', T(0.1)), row_('a-new', T(-1))];
+        servers[B].listed = [row_('own-old', T(0.2)), row_('own-new', T(-2))];
+        servers[C].listed = [row_('c-mid', T(0.5))];
         await askAgain();
         expect(listed()).toEqual(['c-mid', 'own-old', 'a-old', 'a-new', 'own-new']);
     });
@@ -1244,13 +1261,13 @@ describe('Talk → Groups\' rows in one order: newest first, the member\'s own l
     it('a send settled by an answer whose rows are the ones already shown moves its chat\'s place all the same', async () => {
         await lists();
         // Dana's line gets there first, in an answer asked before the send; then the send; then the very same answer, asked after it.
-        servers[B].listed = [row('own-new', T(-2)), row('own-old', T(-50))];
+        servers[B].listed = [row_('own-new', T(-2)), row_('own-old', T(-50))];
         const asking = holdNext((m, p) => m === 'GET' && p === '/api/your-groups');
         const first = yourGroupsStore.refresh();
         await asking.asked;
         await new Promise((r) => setTimeout(r, 5));
         yourGroupsStore.noteSent('own-old');
-        servers[B].listed = [row('own-old', T(-0.5)), row('own-new', T(-2))];
+        servers[B].listed = [row_('own-old', T(-0.5)), row_('own-new', T(-2))];
         asking.letGo();
         await first;
         expect(listed()[0]).toBe('own-old');
@@ -1262,7 +1279,7 @@ describe('Talk → Groups\' rows in one order: newest first, the member\'s own l
 
     it('a community no longer held counts no more: a line sent in one in use takes the top of what is drawn, not of what was', async () => {
         await lists();
-        servers[A].listed = [row('a-new', T(24 * 100))];
+        servers[A].listed = [row_('a-new', T(24 * 100))];
         await heldGroups.refresh(me.publicKey);
         h.store.set('beanpool_guest_nodes', JSON.stringify([A]));
         await heldGroups.refresh(me.publicKey);
@@ -1273,7 +1290,7 @@ describe('Talk → Groups\' rows in one order: newest first, the member\'s own l
 
     it('F3: a row of the community in use is never another community\'s, whatever its server writes on it; a held row always is', async () => {
         await lists();
-        servers[B].listed = [{ ...row('own-new', T(-2)), key: 'held-group:x:own-new', community: A, communityName: 'Riverside', movedAt: Date.now() + 1e10 }];
+        servers[B].listed = [{ ...row_('own-new', T(-2)), key: 'held-group:x:own-new', community: A, communityName: 'Riverside', movedAt: Date.now() + 1e10 }];
         await yourGroupsStore.refresh();
         const all = groupsListed(yourGroupsStore.getState().items!, heldGroups.getState(), yourGroupsStore.movedAt);
         expect(all.map((i) => [i.conversationId, isHeldGroup(i)])).toEqual([['a-new', true], ['own-new', false], ['c-mid', true], ['a-old', true]]);

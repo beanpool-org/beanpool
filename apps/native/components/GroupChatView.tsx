@@ -200,7 +200,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     const voiceHere = !at && voiceLinesOn(profile?.features);
     const voiceHereRef = useRef(voiceHere);
     voiceHereRef.current = voiceHere;
-    // This phone has held a key of this group: the chat is locked here whatever the node says (group-chat-lines).
+    // This phone has held a key of this group, or seen it locked: the chat is locked here whatever the node says (group-chat-lines).
     const [seenLocked, setSeenLocked] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -387,7 +387,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
                 setSeenLocked(held);
                 let answer = served;
                 if (!chatIsLocked(served)) {
-                    // The node says the chat isn't locked. A phone that never held its key believes it (an old node);
+                    // The node says the chat isn't locked. A phone that never held its key, nor saw it locked, believes it (an old node);
                     // one that did keeps it locked, and reads it by the keys it holds (review of #1788, finding 4).
                     if (!held) { setThread(null); return; }
                     const st = await ring.sync().catch(() => null);
@@ -426,7 +426,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;
     const canPost = !!view?.canPost && !!me;
-    // Locked by what this phone has verified, not by the node's word alone: once it held a key, always (finding 4).
+    // Locked by what this phone keeps, not by the node's word now: once it held a key or saw it locked, always (finding 4).
     const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
     // Photos are sealed on this phone: a locked group chat only, and not while a line is being edited.
     // Not in place (slice S6): a photo is sent from its own community.

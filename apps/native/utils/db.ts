@@ -8368,7 +8368,7 @@ async function editRefusal(groupId: string, community?: ChatCommunity): Promise<
 }
 
 /**
- * A group chat line sealed by the keyring's pre-seal rules; 'readable' only when this phone never held the group's keys
+ * A group chat line sealed by the keyring's pre-seal rules; 'readable' only when this phone never held the group's keys, nor saw it locked,
  * and the node's own chat answer for it has no `encryption` (a node from before locked chats, §14.3); null when the
  * conversation isn't a group's (a DM, an event's or an enterprise's thread).
  */
@@ -8399,7 +8399,7 @@ async function sealForGroupConversation(conversationId: string, text: string, li
         sealedUnder = await ring.prepareToSeal();
     } catch (e) {
         // A 404 is an old node (no keys route) or a new one refusing this phone its keys (not a member). Readable words go
-        // only to an old node, by its own chat answer (no `encryption`), and only while this phone never held a key of
+        // only to an old node, by its own chat answer (no `encryption`), and only while this phone never held a key of, nor saw locked,
         // this group (review of #1788, finding 4; director's decision b).
         if (e instanceof GroupKeysRequestError && e.status === 404) {
             if (held || await ring.seenLocked()) throw await heldGroupRefusal(conversationId);
@@ -11936,7 +11936,7 @@ export async function postGroupChatPhoto(
 }
 
 /**
- * Send a line in a group's chat. With `lock` (the chat is locked), or once this phone has held a key of this group
+ * Send a line in a group's chat. With `lock` (the chat is locked), or once this phone has held a key of this group or seen it locked
  * whatever the node's answer says (review of #1788, finding 4): sealed on this phone under the group's key
  * (utils/group-chat-lines.ts sendSealedGroupLine), or refused with a sentence. Otherwise a node from before locked chats,
  * which takes `{ text }` as it always did (§14.3).

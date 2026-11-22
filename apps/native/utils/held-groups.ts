@@ -2,8 +2,8 @@
  * Talk → Groups' rows from every other community this phone holds (slice S6, scratch/fable-design/DESIGN-no-switch-messaging-fable.md
  * §3, §6): each group the member is in there, with that community's name and its own unread count, opened in place
  * (components/GroupChatView.tsx `inPlace`). Each community is asked for its member's own list, signed for its name (utils/db.ts
- * fetchHeldYourGroups), as Talk asks the one in use: one read as Chat opens and at each change of the notice counts, never a
- * poll. Events and enterprises there are a later part of the slice: not listed here.
+ * fetchHeldYourGroups), as Talk asks the one in use: one read as Chat opens, at each change of the notice counts and at the
+ * member's pull, never a poll. Events and enterprises there are a later part of the slice: not listed here.
  *
  * Which communities: those Chat reads (held-chats.ts heldCommunityList), less any a guest's mark names under any spelling
  * (it wouldn't open in place). One that doesn't answer keeps the rows it had; one the phone is now set to, no longer holds,
@@ -84,7 +84,6 @@ export interface HeldGroupRow {
     noteSent(conversationId: string): void;
     setMute: YourGroupsStore['setMute'];
 }
-const NO_ROW: HeldGroupRow = { markRead: () => {}, noteSent: () => {}, setMute: () => {} };
 
 export const heldGroups = {
     getState: (): HeldGroup[] => rows,
@@ -97,10 +96,15 @@ export const heldGroups = {
         const file = getDatabaseFilenameForNode(community);
         return rows.filter((r) => getDatabaseFilenameForNode(r.community) === file);
     },
-    /** `community`'s own list, for a chat of it in place. */
+    /** `community`'s own list, for a chat of it in place: the list there is at each call (a chat keeps this while it is open). */
     at(community: string): HeldGroupRow {
         const file = getDatabaseFilenameForNode(community);
-        return places.find((p) => p.file === file)?.store ?? NO_ROW;
+        const list = () => places.find((p) => p.file === file)?.store;
+        return {
+            markRead: (id) => list()?.markRead(id),
+            noteSent: (id) => list()?.noteSent(id),
+            setMute: (id, mute) => list()?.setMute(id, mute),
+        };
     },
     /** The member left the group there: its row goes now, and stays gone until that community has answered without it. */
     forget(community: string, conversationId: string): void {
@@ -132,7 +136,9 @@ async function heldNow(me: string): Promise<Place[]> {
         if (await isGuestCopy(url).catch(() => true)) continue;
         const file = getDatabaseFilenameForNode(url);
         const kept = places.find((p) => p.file === file);
-        held.push(kept && kept.url === url && kept.name === name ? kept : placeOf(me, file, url, name));
+        // A new name is drawn on the list there is: its rows and the member's sends in it stay.
+        if (kept) kept.name = name;
+        held.push(kept && kept.url === url ? kept : placeOf(me, file, url, name));
     }
     drop(places.filter((p) => !held.includes(p)));
     places = held;

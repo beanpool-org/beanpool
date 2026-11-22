@@ -19,8 +19,8 @@
  * member's membership are hidden unopened.
  *
  * Old node (§14.3): a chat answer with no `encryption` is a node from before locked chats. The phone then sends and reads
- * as it always did, and never shows the chat as locked: no false success. But once this phone has held a key of the group
- * (GroupKeyring.seenLocked), the chat stays locked here whatever the node says later: nothing readable is ever sent to
+ * as it always did, and never shows the chat as locked: no false success. But once this phone has held a key of the group,
+ * or has seen its chat answered locked (GroupKeyring.seenLocked), the chat stays locked here whatever the node says later: nothing readable is ever sent to
  * it again, and the screen says why in the phone's own words, never the node's (review of #1788, finding 4; director's
  * decision b).
  */

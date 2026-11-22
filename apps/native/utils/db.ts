@@ -10788,6 +10788,19 @@ async function dealStep(
     return run;
 }
 
+/**
+ * Tell the screens in use of a deal step the node has answered. It never throws: the step is done by then, and a refresh
+ * that fails must not report a release or a cancel the node took as refused (the member would tap again).
+ */
+function tellScreensOfDealStep(...events: string[]): void {
+    try {
+        const { DeviceEventEmitter } = require('react-native');
+        for (const e of events) DeviceEventEmitter.emit(e);
+    } catch (e: any) {
+        console.warn(`[Escrow] Could not tell the screens of a deal step: ${e?.message || e}`);
+    }
+}
+
 /** Release a deal's Beans (its payer). `community`: a deal of a chat open in place, asked of its own community ({@link dealStep}). */
 export async function completeMarketplaceTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, community?: ChatCommunity) {
     // Awaits the local write so callers (and any screen they navigate to) read a consistent status.
@@ -10803,9 +10816,7 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
     // balance; a deal in place, or one the phone has moved on from, asks the community in use for none.
     if (here.inPlace) return res;
     // Emit events so Ledger screen refreshes immediately
-    const { DeviceEventEmitter } = require('react-native');
-    DeviceEventEmitter.emit('transaction_completed');
-    DeviceEventEmitter.emit('sync_data_updated');
+    tellScreensOfDealStep('transaction_completed', 'sync_data_updated');
     if (!here.openNow()) return res;
     // Balance refreshes are network round-trips — keep them off the caller's critical path
     const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
@@ -10826,10 +10837,7 @@ export async function cancelMarketplaceTransaction(transactionId: string, cancel
         await database.runAsync("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?", [transactionId]);
     });
     // As a release: the screens in use hear of this caller's own step in use.
-    if (!here.inPlace) {
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('sync_data_updated');
-    }
+    if (!here.inPlace) tellScreensOfDealStep('sync_data_updated');
     return res;
 }
 
